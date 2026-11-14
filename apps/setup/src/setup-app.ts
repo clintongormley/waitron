@@ -504,7 +504,6 @@ function describeThrottle(params: Record<string, unknown> | undefined): Message 
 
 /** The owner's words for each refusal a rebuild from the bucket can meet whose params add nothing. */
 const BUCKET_ERROR_MESSAGES: Record<string, StringKey> = {
-  "restore.archive_resource_limit": "shell.restore.archive_resource_limit",
   ...FIRST_SETUP_ERROR_MESSAGES,
   "backup.stream_kit_invalid": "shell.bucket.kit_invalid",
   "restore.stream_pointer_missing": "shell.bucket.pointer_missing",

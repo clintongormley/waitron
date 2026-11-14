@@ -369,12 +369,6 @@ async function matchesResetProof(
   );
 }
 
-/**
- * The refusals every restore route (archive, Cloud and bucket) meets from the same validation, so
- * each code answers one status on all three: a copy or key that cannot be opened is 422 (those
- * three rows are in `PROVISION_STATUS`, spread here); an environment or schema conflict, or an old
- * server that may still be selling, is 409.
- */
 const ARCHIVE_RESTORE_STATUS: Record<string, ContentfulStatusCode> = {
   ...PROVISION_STATUS,
   "restore.environment_mismatch": 409,

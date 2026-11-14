@@ -2,12 +2,16 @@ import { createReadStream } from "node:fs";
 import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import zlib from "node:zlib";
+import { syncBuiltinESMExports } from "node:module";
 import { gzipSync, gunzipSync } from "node:zlib";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { compressArchive, decodeArchiveFile } from "./backup-compression.js";
 import { START_FREE_SPACE_FLOOR } from "./start-space.js";
 const roots: string[] = [];
 afterEach(async () => {
+  vi.restoreAllMocks();
+  syncBuiltinESMExports();
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 async function fixture(bytes: Uint8Array) {
@@ -97,4 +101,30 @@ it("honours cancellation during decoding and compression", async () => {
       /* drain */
     }
   }).rejects.toMatchObject({ name: "AbortError" });
+});
+
+it("keeps half of the free space for extracting the decoded database", async () => {
+  const f = await fixture(gzipSync(Buffer.alloc(100_000)));
+  await expect(
+    decodeArchiveFile(f.input, f.output, {
+      statfs: async () => ({ bavail: START_FREE_SPACE_FLOOR + 150_000, frsize: 1 }),
+    }),
+  ).rejects.toMatchObject({ code: "restore.archive_resource_limit" });
+  expect(await readdir(f.root)).toEqual(["input"]);
+  expect(
+    await decodeArchiveFile(f.input, f.output, {
+      statfs: async () => ({ bavail: START_FREE_SPACE_FLOOR + 200_000, frsize: 1 }),
+    }),
+  ).toBe(f.output);
+  expect((await stat(f.output)).size).toBe(100_000);
+});
+it("keeps a decoder memory failure distinct from a corrupt archive", async () => {
+  const f = await fixture(gzipSync(Buffer.from("archive")));
+  const error = Object.assign(new Error("decoder memory"), { code: "Z_MEM_ERROR" });
+  vi.spyOn(zlib, "createGunzip").mockImplementation(() => {
+    throw error;
+  });
+  syncBuiltinESMExports();
+  await expect(decodeArchiveFile(f.input, f.output)).rejects.toBe(error);
+  expect(await readdir(f.root)).toEqual(["input"]);
 });

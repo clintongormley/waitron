@@ -327,30 +327,36 @@ it.each(
   },
 );
 
-it("keeps the archive choice after admission is refused", async () => {
-  const { el, posts } = await mount({
-    backup: true,
-    backupRefusal: "handover.copy_predates_destination",
-  });
-  await authenticate(el);
-  const input = q<HTMLInputElement>(el, 'input[name="handover-backup"]');
-  expect(input).not.toBeNull();
-  const files = new DataTransfer();
-  files.items.add(new File(["archive"], "venue.enc"));
-  input.files = files.files;
-  input.dispatchEvent(new Event("change", { bubbles: true }));
-  await el.updateComplete;
-  q(el, "[data-test=emergency-backup]").click();
-  await vi.waitFor(() =>
-    expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
-      t("handover.emergency.backup_too_old"),
-    ),
-  );
-  expect(q<HTMLInputElement>(el, 'input[name="handover-backup"]').files?.[0]?.name).toBe(
-    "venue.enc",
-  );
-  expect(posts.some(({ path }) => path.endsWith("/declare"))).toBe(false);
-});
+it.each([
+  ["handover.copy_predates_destination", "handover.emergency.backup_too_old", "en-GB"],
+  ["restore.archive_resource_limit", "shell.restore.archive_resource_limit", "en-GB"],
+  ["restore.archive_resource_limit", "shell.restore.archive_resource_limit", "es-ES"],
+] as const)(
+  "keeps the archive choice after admission is refused: %s",
+  async (code, key, locale) => {
+    setLocale(locale);
+    const { el, posts } = await mount({
+      backup: true,
+      backupRefusal: code,
+    });
+    await authenticate(el);
+    const input = q<HTMLInputElement>(el, 'input[name="handover-backup"]');
+    expect(input).not.toBeNull();
+    const files = new DataTransfer();
+    files.items.add(new File(["archive"], "venue.enc"));
+    input.files = files.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    await el.updateComplete;
+    q(el, "[data-test=emergency-backup]").click();
+    await vi.waitFor(() =>
+      expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(t(key)),
+    );
+    expect(q<HTMLInputElement>(el, 'input[name="handover-backup"]').files?.[0]?.name).toBe(
+      "venue.enc",
+    );
+    expect(posts.some(({ path }) => path.endsWith("/declare"))).toBe(false);
+  },
+);
 
 it.each(["en-GB", "es-ES"])(
   "requires all emergency declarations and explains the one-way choice in %s",

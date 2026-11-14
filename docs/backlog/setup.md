@@ -410,6 +410,8 @@ a day, seed 1, produced 1,061,224 rows and a 1,268,463,901-byte encrypted backup
 15,221,566,812 bytes (14,516.42 MiB); the year figure is a linear estimate.
 The backup used synthetic identity files and empty media folders. Even the measured month
 exceeds the setup upload limit of 256 MiB. The streamed-upload plan still needs watcher clearance.
+_14 November 2026, A1533: the compressed month below fits the 256 MiB upload budget;
+this earlier raw measurement predates compression._
 
 A second build with the same profile and revision measured 1,296,785,408 database bytes.
 `dbstat` assigns 782,790,656 bytes (60.36%) to `print_jobs`, or 789,913,600 (60.91%)

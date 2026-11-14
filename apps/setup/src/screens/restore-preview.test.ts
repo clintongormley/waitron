@@ -1,7 +1,7 @@
 import { LitElement } from "lit";
 import { afterEach, expect, it, vi } from "vitest";
 import { SetupApi } from "../api/client.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { SetupRestoreScreen } from "./restore-screen.js";
 
@@ -195,3 +195,22 @@ it("shows a refusal beside the review action and allows another attempt", async 
   review(el);
   await vi.waitFor(() => expect(child(el)!.shadowRoot!.textContent).toContain("Amber Hill"));
 });
+
+it.each(["en-GB", "es-ES"])(
+  "explains capacity when reviewing an uploaded backup (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const { el } = await mount(async () =>
+      Response.json({ error: { code: "restore.archive_resource_limit" } }, { status: 507 }),
+    );
+    await fill(el);
+    review(el);
+    await vi.waitFor(() => {
+      const actions = child(el)!.shadowRoot!.querySelector("wt-form-actions")!;
+      expect(actions.shadowRoot!.querySelector("[data-error]")?.textContent).toContain(
+        t("shell.restore.archive_resource_limit"),
+      );
+    });
+    expect(child(el)!.shadowRoot!.querySelector("[data-test=selected-copy]")).toBeNull();
+  },
+);

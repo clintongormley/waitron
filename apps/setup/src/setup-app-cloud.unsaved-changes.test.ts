@@ -5,7 +5,7 @@ import type { CloudRecoveryView, SetupApi } from "./api/client.js";
 import type { SetupCloudRestoreScreen } from "./screens/cloud-restore-screen.js";
 import type { WtUnsavedChanges } from "@waitron/ui/src/components/wt-unsaved-changes.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
-import { setLocale } from "./i18n/t.js";
+import { setLocale, t } from "./i18n/t.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -108,6 +108,16 @@ describe("setup Cloud restore leave lifecycle", () => {
     expect((el as unknown as { draft: { admin: { email: string } } }).draft.admin.email).toBe(
       "root@example.test",
     );
+  });
+  it("explains capacity on Cloud restore without blaming the copy", async () => {
+    const { el, form, api } = await mount();
+    await load(el, form);
+    vi.mocked(api.restoreFromCloud).mockRejectedValue({ code: "restore.archive_resource_limit" });
+    action(form, "restore");
+    await expect
+      .poll(() => formOf(el)?.errorMessage)
+      .toBe(t("shell.restore.archive_resource_limit"));
+    expect(screen(el)).toBe("cloud-restore");
   });
   it("acknowledged Restore submits directly and leaves no child warning", async () => {
     const { el, form, api } = await mount();

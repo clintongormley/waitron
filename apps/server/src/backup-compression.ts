@@ -57,7 +57,9 @@ export async function decodeArchiveFile(
     if (
       error instanceof Error &&
       "code" in error &&
-      (String(error.code).startsWith("Z_") || error.code === "ERR_TRAILING_JUNK_AFTER_STREAM_END")
+      ["Z_DATA_ERROR", "Z_BUF_ERROR", "ERR_TRAILING_JUNK_AFTER_STREAM_END"].includes(
+        String(error.code),
+      )
     )
       throw new AppError("backup.archive_invalid", { reason: "compression_invalid" });
     throw error;

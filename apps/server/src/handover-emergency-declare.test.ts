@@ -1,3 +1,5 @@
+import { gzipSync } from "node:zlib";
+import * as freeSpace from "./free-bytes.js";
 import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
@@ -253,6 +255,25 @@ it("uploads a checked archive, waits for restart, then signs its provenance and 
   );
 });
 
+it("answers a compressed-backup capacity refusal with 507", async () => {
+  const space = vi.spyOn(freeSpace, "freeBytes").mockResolvedValue(0);
+  try {
+    const s = service("https://spare.example", {
+      backup: {
+        readRecoveryKey: async () => backupKey,
+        environment: "preproduction",
+        migrationsRoot: null,
+        restart: vi.fn(),
+      },
+    });
+    const bytes = encryptArtifact(gzipSync(packArchive([])), backupKey);
+    const answer = await s.post(upload({ signIn: request.signIn }, bytes), true, "backup");
+    expect(answer.status).toBe(507);
+    expect(answer.body.error?.code).toBe("restore.archive_resource_limit");
+  } finally {
+    space.mockRestore();
+  }
+});
 it.each(["https", "password", "operation", "source"])(
   "refuses a backup at the %s boundary without staging",
   async (boundary) => {

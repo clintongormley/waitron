@@ -84,7 +84,11 @@ import { assertSafeEntryName } from "./restore-entry-guard.js";
 import type { StateSecretFiles } from "./state-secrets.js";
 import type { RebuildSource } from "./rebuild-first-start.js";
 import { endRestoreFlow, publishRestoreFlow } from "./restore-flow.js";
-import { ARCHIVE_VALIDATE_PREFIX, RESTORE_ADMISSION_PREFIX } from "./restore-staging-dirs.js";
+import {
+  ARCHIVE_INPUT_PREFIX,
+  ARCHIVE_VALIDATE_PREFIX,
+  RESTORE_ADMISSION_PREFIX,
+} from "./restore-staging-dirs.js";
 import { unpackStateFiles } from "./state-secrets.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
 import { clearSelectedCopy } from "./handover-copy-selection.js";
@@ -271,7 +275,7 @@ export async function validateArtifact(
   let encryptedDir: string | undefined;
   try {
     await mkdir(deps.stagingDir, { recursive: true, mode: 0o700 });
-    encryptedDir = await mkdtemp(join(deps.stagingDir, "archive-input-"));
+    encryptedDir = await mkdtemp(join(deps.stagingDir, ARCHIVE_INPUT_PREFIX));
     const artifactPath = join(encryptedDir, "artifact");
     await writeFile(artifactPath, deps.artifact, { mode: VENUE_FILE_MODE, flag: "wx" });
     return await validateArtifactFile({ ...deps, artifactPath });

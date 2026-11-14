@@ -5146,7 +5146,7 @@ File decryption completes GCM authentication before parsing the archive, because
 plaintext must never reach placement. Gzip is detected only after authentication; raw WBA1 stays
 accepted for the separate Cloud writer. Compressed output is limited to half the free scratch
 bytes above the 256 MiB start reserve, so unpacking can hold both the decoded archive and
-its extracted database. Unknown free space refuses validation. Compressed plaintext is removed
+its extracted database. Unknown free space refuses validation of compressed input. Compressed plaintext is removed
 before unpacking. Uploaded ciphertext is staged separately and removed as validation returns
 or throws; the returned database copy keeps its own cleanup. Capacity refusals use
 `restore.archive_resource_limit`, distinct from malformed-archive refusals. Metadata reads share limits of 4096 entries, 4096 UTF-8 name

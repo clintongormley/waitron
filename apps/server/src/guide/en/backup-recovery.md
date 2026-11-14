@@ -99,6 +99,9 @@ Cloud, choose **Start Cloud recovery**, enter the code the page shows in your Wa
 (**Open Waitron Cloud**), then choose **Check approval**. Cloud recovery requires a supported
 recovery service.
 
+Choose a box with enough free disk space for the recovered database and the temporary copies
+needed to open the backup.
+
 Then choose **Review backup**. The page shows the selected backup: its source, business, venue,
 date, node and server key. Check those details before continuing. Keep production and
 preproduction separate.

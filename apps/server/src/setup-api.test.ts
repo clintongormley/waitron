@@ -1890,6 +1890,23 @@ describe("the archive and Cloud restore routes, on the refusals they share with 
     expect(seen).toEqual(SHARED_RESTORE_REFUSALS.map(([error, status]) => [error.code, status]));
   });
 
+  it("answers archive staging capacity with 507", async () => {
+    const app = new Hono();
+    mountSetup(
+      app,
+      {
+        environment: "preproduction",
+        stageRestore: vi.fn().mockRejectedValue(new AppError("restore.archive_resource_limit", {})),
+        requestRestart: vi.fn(),
+      },
+      noopLog,
+    );
+    const response = await postRestore(app, Uint8Array.from([1]));
+    expect(response.status).toBe(507);
+    expect(await response.json()).toEqual({
+      error: { code: "restore.archive_resource_limit", params: {} },
+    });
+  });
   it("answers the refusals a Cloud restore shares with the rebuild with the same statuses", async () => {
     const requestId = "3728e560-fbb2-41aa-8c2b-d21f3ce1ce92";
     const pointId = "9f41b8b8-b14e-472a-8eb4-f9259b80f0d1";

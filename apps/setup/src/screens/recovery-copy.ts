@@ -62,7 +62,7 @@ export class SetupRecoveryCopy extends LitElement {
   @property({ type: Boolean }) oldBoxGone = false;
   @state() private preview?: RecoveryBackupPreview;
   @state() private busy = false;
-  @state() private error?: "key" | "environment" | "file" | "kit" | "failed";
+  @state() private error?: "key" | "environment" | "file" | "kit" | "capacity" | "failed";
   #attempt = 0;
   #previewCurrent?: () => boolean;
   #staged?: StagedCopy;
@@ -262,17 +262,19 @@ export class SetupRecoveryCopy extends LitElement {
         const error = cause as ApiError | undefined;
         const field = error?.params?.field;
         this.error =
-          error?.code === "recovery.passphrase_invalid" || field === "recoveryKey"
-            ? "key"
-            : error?.code === "restore.environment_mismatch" || field === "environment"
-              ? "environment"
-              : error?.code === "backup.artifact_invalid" ||
-                  error?.code === "backup.archive_invalid" ||
-                  field === "artifact"
-                ? "file"
-                : error?.code === "backup.stream_kit_invalid" || field === "kit"
-                  ? "kit"
-                  : "failed";
+          error?.code === "restore.archive_resource_limit"
+            ? "capacity"
+            : error?.code === "recovery.passphrase_invalid" || field === "recoveryKey"
+              ? "key"
+              : error?.code === "restore.environment_mismatch" || field === "environment"
+                ? "environment"
+                : error?.code === "backup.artifact_invalid" ||
+                    error?.code === "backup.archive_invalid" ||
+                    field === "artifact"
+                  ? "file"
+                  : error?.code === "backup.stream_kit_invalid" || field === "kit"
+                    ? "kit"
+                    : "failed";
         this.#notifyRefusal(error);
       }
     } finally {
@@ -316,6 +318,7 @@ export class SetupRecoveryCopy extends LitElement {
       file: "restore.preview_file_error",
       kit: "restore.preview_kit_error",
       failed: "restore.preview_failed",
+      capacity: "shell.restore.archive_resource_limit",
     } as const;
     return html` ${
         preview === undefined
