@@ -1029,6 +1029,7 @@ describe("configuration transfer database path", () => {
       new Date("2026-09-09T00:00:00.000Z"),
       versions,
     );
+    expect(transferred.tables.products![0]!.unit_id).toEqual(expect.stringMatching(/.+/));
     expect(transferred.venue.fullSeriesCode).toBe("FF");
     expect(transferred.venue.taxpayerDomicile).toBe("Calle Fiscal 8, 28001 Madrid");
     expect(transferred.venue).not.toHaveProperty("tillName");

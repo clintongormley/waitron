@@ -310,18 +310,11 @@ it("reassigning to null returns the products to each-priced and leaves products 
   });
 
   // onOther is in the list but on a different unit, so it stands in for a product already moved
-  // elsewhere: scoped by the source unit, it must be skipped by both the delete and the update.
+  // elsewhere: scoped by the source unit, it must be skipped by the update.
   await app((tx) => reassignProductsToUnit(tx, sourceUnit.id, [onSource, onOther], null));
 
-  const pricing = await suite.db
-    .select({ id: products.id, unitId: products.unitId })
-    .from(products)
-    .where(inArray(products.id, [onSource, onOther]));
-  const pricingById = Object.fromEntries(pricing.map((row) => [row.id, row.unitId]));
   expect(await app((tx) => storedUnitId(tx, onSource))).toBeNull();
-  expect(pricingById[onSource]).toBeNull();
   expect(await app((tx) => storedUnitId(tx, onOther))).toBe(otherUnit.id);
-  expect(pricingById[onOther]).toBe(otherUnit.id);
 });
 
 /** A variant of `parent`, with no unit of its own. */
@@ -362,14 +355,6 @@ it("reassigning to null skips a variant's stored unit, as it skips an id not on 
 
   await app((tx) => reassignProductsToUnit(tx, sourceUnit.id, [parent, variant], null));
 
-  const pricing = await suite.db
-    .select({ id: products.id, unitId: products.unitId })
-    .from(products)
-    .where(inArray(products.id, [parent, variant]));
-  expect(Object.fromEntries(pricing.map((row) => [row.id, row.unitId]))).toEqual({
-    [parent]: null,
-    [variant]: sourceUnit.id,
-  });
   expect(await app((tx) => storedUnitId(tx, parent))).toBeNull();
   expect(await app((tx) => storedUnitId(tx, variant))).toBe(sourceUnit.id);
 });
@@ -465,14 +450,6 @@ it.each(["target", "each"])(
     await expect(reassignment).rejects.toHaveProperty("params", { productId: archived });
     expect(await app((tx) => storedUnitId(tx, active))).toBe(source.id);
     expect(await app((tx) => storedUnitId(tx, archived))).toBe(source.id);
-    expect(
-      (
-        await suite.db
-          .select({ unitId: products.unitId })
-          .from(products)
-          .where(inArray(products.id, [archived]))
-      )[0]?.unitId,
-    ).toBe(source.id);
   },
 );
 

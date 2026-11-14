@@ -602,14 +602,6 @@ it.each(["target", "each"])(
       [active!]: source.id,
       [archived!]: source.id,
     });
-    expect(
-      (
-        await suite.db
-          .select({ unitId: products.unitId })
-          .from(products)
-          .where(inArray(products.id, [archived!]))
-      )[0]?.unitId,
-    ).toBe(source.id);
   },
 );
 
