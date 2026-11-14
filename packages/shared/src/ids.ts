@@ -48,7 +48,6 @@ function brandId<B extends string>(value: string, kind: B): Branded<string, B> {
   return normaliseUuid(value, kind) as Branded<string, B>;
 }
 
-/** Kept only for fiscal-verifactu's unedited write-path.e2e.test.ts; A1301 schema slices drop it */
 export const deviceId = (value: string): DeviceId => brandId(value, "DeviceId");
 export const nodeId = (value: string): NodeId => brandId(value, "NodeId");
 export const seriesId = (value: string): SeriesId => brandId(value, "SeriesId");

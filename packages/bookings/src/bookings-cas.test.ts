@@ -21,14 +21,14 @@ import "./errors.js";
 const suite = useVenueDb({ migrations: BOOKINGS_TEST_MIGRATIONS, timeoutMs: 60_000 });
 const LOCALE = "es-ES";
 
-async function setupVenue(db: Database): Promise<{ cfg: {}; createdBy: string }> {
+async function setupVenue(db: Database): Promise<{ createdBy: string }> {
   await seedVenue(db, {
     name: "Front counter",
     invoiceLocales: [LOCALE],
     operationDescription: "Restaurant service",
   });
   await seedNode(db);
-  return { cfg: {}, createdBy: await seedPerson(db) };
+  return { createdBy: await seedPerson(db) };
 }
 
 /** An ACTIVE dining table for the venue (createTable's raw equivalent — the verb lives in

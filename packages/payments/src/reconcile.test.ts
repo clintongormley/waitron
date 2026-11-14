@@ -82,8 +82,7 @@ async function capture(seeded: Seeded, paymentRef: string, externalRef: string, 
   );
 }
 
-async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
-  const {} = seeded;
+async function seedSecondTill(): Promise<Seeded> {
   // A raw insert runs no drizzle `$defaultFn`, so `id` and the timestamps are supplied by hand.
   const stamp = new Date().toISOString();
   const node2 = await suite.db.execute<{ id: string }>(sql`
@@ -225,7 +224,7 @@ describe("reconcilePayments", () => {
 
   it("aggregates per class across devices — payments on two devices make one incident", async () => {
     const seeded = await seedWorkingOrder(suite.db, freshNif());
-    const second = await seedSecondTill(seeded);
+    const second = await seedSecondTill();
     await capture(seeded, "p1", "ext-1");
     await capture(second, "p2", "ext-2", "20.00");
     const result = await reconcilePayments(deps(new FakeSettlementReport([])), PERIOD, NOW);

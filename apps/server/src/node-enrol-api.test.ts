@@ -23,15 +23,13 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-interface Tenant {}
-
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
   return `${String(78_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-async function seedTestVenue(): Promise<Tenant> {
+async function seedTestVenue(): Promise<void> {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: nextNif(), legalName: "Deli Test SL" });
@@ -40,7 +38,6 @@ async function seedTestVenue(): Promise<Tenant> {
     invoiceLocales: ["es-ES"],
     operationDescription: "Venta en establecimiento",
   });
-  return {};
 }
 
 beforeAll(async () => {

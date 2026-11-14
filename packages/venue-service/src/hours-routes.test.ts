@@ -58,7 +58,7 @@ const noopLog: Logger = () => {};
 
 interface Fixture {
   app: Hono;
-  cfg: {};
+
   restaurant: HoursSubject;
   deli: HoursSubject;
   bar: HoursSubject;
@@ -133,7 +133,6 @@ async function fixture(): Promise<Fixture> {
       1,
     );
     return {
-      cfg: {},
       departmentIds: { restaurant: restaurant!.id, deli: deli!.id },
       restaurant: { kind: "station" as const, id: restaurantStation!.id },
       deli: { kind: "station" as const, id: deliStation!.id },

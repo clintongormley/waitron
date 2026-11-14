@@ -779,6 +779,7 @@ the season painter continues saving through the season-week route._
   venue has any sale, working order or daily close. Hours keeps wall times and date keys as stored and
   reads again on a `locations` change; allowing a change after trading would need its own
   decision on what stored hours mean.
+  _2026-11-14 (A1308 5h):_ the old table is removed. Hours now observes venue settings through its existing subscription.
 - **Venue details (A261 step 7, #1281).** Changes needing another fiscal/geographic context or
   history removal use a separately approved setup/reset instead. Later
   Hours/holidays/menu builds retain their own compatibility tests.

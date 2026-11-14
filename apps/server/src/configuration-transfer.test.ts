@@ -5876,7 +5876,6 @@ describe("special days in a configuration transfer", () => {
   const AT = new Date("2026-10-06T10:00:00Z");
 
   interface Named {
-    cfg: {};
     departments: Map<string, string>;
     stations: Map<string, string>;
   }
@@ -5887,7 +5886,6 @@ describe("special days in a configuration transfer", () => {
     const stationRows = await db.execute<{ id: string; name: string }>(sql`
       select id, name from kitchen_stations `);
     return {
-      cfg: {},
       departments: new Map(departmentRows.rows.map((row) => [row.name, row.id])),
       stations: new Map(stationRows.rows.map((row) => [row.name, row.id])),
     };

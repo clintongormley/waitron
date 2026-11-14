@@ -167,3 +167,5 @@ The watcher cleared these implementation details in Lane E's local `questions.md
 - 12:57: finish the removal without another size stop, with no new test behaviour or product change, and report additions and deletions separately in the PR. This supersedes the earlier size estimates.
 
 These are watcher clearances inside the existing request, not new owner approvals of this design. The old format-1 capture is retired with its removed schema; the outdated-format check uses a version-1 envelope. `parseConfigurationBundle` rejects the version before inspecting its fields (`packages/provisioning/src/configuration-transfer.ts`). The format-9 checks retain the same outdated refusal with the same version.
+
+The watcher cleared updating the english-only exact-count guard to 1152 at 14:07, because this slice deletes its old format-1 fixture. The owner's A1308 instruction, “build all of it as planned”, is recorded in [the build order](2026-11-08-a1308-build-order.md); the watcher pointed the reviews to that record at the same time.

@@ -61,7 +61,7 @@ async function venue(closedOn: readonly (readonly number[])[] = [[1]]) {
       city: "Sevilla",
     });
   const suffix = existing.revision === 0 ? "" : ` ${randomUUID()}`;
-  const cfg: {} = {};
+
   return run(async (tx) => {
     const menuId = (await createCatalogue(tx, { name: `Menu ${randomUUID()}` })).id;
     const { document } = await buildMenuDocument(tx, menuId);
@@ -92,7 +92,7 @@ async function venue(closedOn: readonly (readonly number[])[] = [[1]]) {
     const seasons = Object.fromEntries(
       (await readSeasons(tx)).map((season) => [englishSeasonName(season.name, "es"), season.id]),
     );
-    return { cfg, seasons };
+    return { seasons };
   });
 }
 
@@ -301,7 +301,7 @@ describe("the Opening hours year read", () => {
 });
 
 async function monthVenue() {
-  const { cfg } = await venue([]);
+  await venue([]);
   return run(async (tx) => {
     const menuId = (await createCatalogue(tx, { name: `Menu ${randomUUID()}` })).id;
     const { document } = await buildMenuDocument(tx, menuId);
@@ -351,7 +351,6 @@ async function monthVenue() {
       { seasonId: seasons.Winter },
     );
     return {
-      cfg,
       seasons,
       diningDepartment,
       barDepartment,
@@ -879,7 +878,7 @@ describe("the season days read", () => {
 describe("a past day's range around a start change", () => {
   const AFTER_RETURN = new Date("2026-11-02T12:00:00Z");
   async function lateSaturday() {
-    const { cfg } = await venue([]);
+    await venue([]);
     await seedBusinessDay(suite.db, { dayCutover: "05:00:00" });
     await run(async (tx) => {
       await tx
@@ -926,7 +925,7 @@ describe("a past day's range around a start change", () => {
         2,
         AFTER_RETURN,
       );
-      return { cfg, diningDepartment, lunch, dinner, terrace: zone!.id };
+      return { diningDepartment, lunch, dinner, terrace: zone!.id };
     });
   }
   const october = () => run((tx) => readOpeningHoursMonth(tx, "2026-10", AFTER_RETURN));

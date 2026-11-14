@@ -209,7 +209,7 @@ async function autumnVenue() {
     timeZone: "Europe/Madrid",
     dayCutover: "06:00",
   });
-  const cfg: {} = {};
+
   const zone = await seedZone(db, { name: "Terrace", displayOrder: 0 });
   const stored = await db
     .insert(seasons)
@@ -251,7 +251,6 @@ async function autumnVenue() {
     zoneWeek[2] = [{ startsAt: "15:00", endsAt: "18:00" }];
     await writeZoneSeasonWeeks(tx, zone!.id, [ids.autumn, ids.winter], zoneWeek);
     return {
-      cfg,
       restaurant,
       bar,
       terrace: zone!.id,

@@ -45,7 +45,7 @@ async function seedVenueCfg(
   name: string,
   invoiceLocales: string[] = ["en-GB"],
   options: { tenant?: boolean; province?: string } = {},
-): Promise<{}> {
+): Promise<void> {
   const venue = {
     name,
     invoiceLocales,
@@ -58,7 +58,6 @@ async function seedVenueCfg(
     await seedVenueSettings(db, { name, province, invoiceLocales, operationDescription });
     await seedBusinessDay(db);
   }
-  return {};
 }
 
 async function seedCourse(name: string, displayOrder: number, active = true): Promise<string> {

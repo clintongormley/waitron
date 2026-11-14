@@ -16,20 +16,18 @@ import { createPrinter, listPrinters, updatePrinter } from "./printers.js";
 import type { PaperWidth } from "./layout.js";
 import type { PrintTransport } from "./printers.js";
 
-type PrintConfig = {};
 import "./errors.js";
 
 // The CHECK and the partial UNIQUE have their own cases in `packages/db/src/schema/printing.test.ts`;
 // this suite covers the error codes those refusals are mapped onto.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
-async function setup(): Promise<PrintConfig> {
+async function setup(): Promise<void> {
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: ["es-ES"],
     operationDescription: "Sale on premises",
   });
-  return {};
 }
 
 function asTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {

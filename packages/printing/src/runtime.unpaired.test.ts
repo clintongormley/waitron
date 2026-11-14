@@ -14,19 +14,17 @@ import {
 } from "./runtime.js";
 import { createPrinter, updatePrinter } from "./printers.js";
 import { enqueuePrintJob } from "./outbox.js";
-type PrintConfig = {};
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 const MAC = "5A:4A:45:D4:FB:BB";
 
-async function setup(): Promise<PrintConfig> {
+async function setup(): Promise<void> {
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: ["es-ES"],
     operationDescription: "Sale on premises",
   });
-  return {};
 }
 
 async function seedAgent(name: string): Promise<string> {

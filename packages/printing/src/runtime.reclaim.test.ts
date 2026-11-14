@@ -8,19 +8,17 @@ import { claimPrintJobs, runAgentOnce } from "./runtime.js";
 import { createPrinter } from "./printers.js";
 import { enqueuePrintJob } from "./outbox.js";
 import { FakeSink } from "@waitron/print-agent";
-type PrintConfig = {};
 
 // `claimed_at` is compared as a string, so every aged stamp below is written in the one ISO-8601
 // spelling the cutoff uses.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
-async function setup(): Promise<PrintConfig> {
+async function setup(): Promise<void> {
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: ["es-ES"],
     operationDescription: "Sale on premises",
   });
-  return {};
 }
 
 async function seedAgent(): Promise<string> {

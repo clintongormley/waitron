@@ -60,7 +60,6 @@ const at = new Date("2026-11-02T12:00:00Z");
 /** Saves a new special day on `date` painting the fixture's department (period) or zone (closed). */
 const paintDate = (
   v: {
-    cfg: {};
     departmentId: string;
     periodId: string;
     zoneId?: string;
@@ -206,7 +205,7 @@ async function fixture(
     } else {
       await seasonDay(tx, { departmentId, seasonId, weekday: 3, periodId, ranges });
     }
-    return { cfg: {}, departmentId, periodId, seasonId, specialDayId, zoneId };
+    return { departmentId, periodId, seasonId, specialDayId, zoneId };
   });
 }
 const range = (startsAt: string, endsAt: string) => ({ startsAt, endsAt });
@@ -242,7 +241,7 @@ async function seasonDay(
 /** Raw special-day rows painting one department, bypassing the special-day writer's checks. */
 async function paintedDay(
   tx: Transaction,
-  v: { cfg: {}; departmentId: string },
+  v: { departmentId: string },
   day: {
     name: string;
     date: string;

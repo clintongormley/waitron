@@ -439,6 +439,8 @@ down rather than just the list. A package's suites can apply MORE than its set's
 though: `packages/workforce/src/migrations.test.ts` applies core also for the `tenants` row its
 setup seeds and the `locations` and `nodes` rows its cases seed (`seedLocation`, `seedNode`).
 
+_2026-11-14 (A1308 5h):_ the venue fixtures now write settings documents; the old table and helper are removed.
+
 **Adding a call site can turn a module's own suite red, and that is the point.** A set getting its
 first check may report real drift. Treat that as its own piece of work rather than something to fix
 in passing.

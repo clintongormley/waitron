@@ -66,7 +66,7 @@ async function venue(options: { oneSeason?: boolean } = {}) {
     timeZone: "Europe/Madrid",
     dayCutover: "06:00",
   });
-  const cfg: {} = {};
+
   const departmentId = await scoped(
     async (tx) => (await createDepartment(tx, { name: "Restaurant", orderStart: "table" })).id,
   );
@@ -96,7 +96,6 @@ async function venue(options: { oneSeason?: boolean } = {}) {
       ]),
     );
     return {
-      cfg,
       departmentId,
       sala: zones[0]!.id,
       terraza: zones[1]!.id,

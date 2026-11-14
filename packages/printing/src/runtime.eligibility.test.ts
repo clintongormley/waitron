@@ -8,19 +8,17 @@ import { esc } from "./escpos.js";
 import { claimPrintJobs, reportPrintJob } from "./runtime.js";
 import { createPrinter } from "./printers.js";
 import { endMovedPrintJob, enqueuePrintJob } from "./outbox.js";
-type PrintConfig = {};
 
 const SETTING = { paperWidth: "58mm", resolution: "180dpi" } as const;
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
-async function setup(): Promise<PrintConfig> {
+async function setup(): Promise<void> {
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: ["es-ES"],
     operationDescription: "Sale on premises",
   });
-  return {};
 }
 
 async function seedAgent(name: string): Promise<string> {

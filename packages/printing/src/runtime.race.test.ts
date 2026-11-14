@@ -10,7 +10,6 @@ import { createPrinter } from "./printers.js";
 import { enqueuePrintJob } from "./outbox.js";
 import { FakeSink } from "@waitron/print-agent";
 import type { PrinterTarget, Transport } from "@waitron/print-agent";
-type PrintConfig = {};
 
 /**
  * Two agents pulling one venue's queue deliver each job at most once.
@@ -21,13 +20,12 @@ type PrintConfig = {};
  */
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
-async function setup(): Promise<PrintConfig> {
+async function setup(): Promise<void> {
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: ["es-ES"],
     operationDescription: "Sale on premises",
   });
-  return {};
 }
 
 async function seedAgent(name: string): Promise<string> {

@@ -38,7 +38,6 @@ beforeAll(() => {
 const AT = new Date("2026-10-06T10:00:00Z");
 
 interface Fixture {
-  cfg: {};
   restaurant: HoursSubject;
   deli: HoursSubject;
   bar: HoursSubject;
@@ -55,7 +54,7 @@ async function fixture(): Promise<Fixture> {
       timeZone: "Europe/Madrid",
       dayCutover: "06:00:00",
     });
-    const cfg = {};
+
     const department = (name: string, isDefault = false) => ({
       name,
       tradingName: name,
@@ -93,7 +92,6 @@ async function fixture(): Promise<Fixture> {
       1,
     );
     return {
-      cfg,
       departmentIds: { restaurant: restaurant!.id, deli: deli!.id },
       restaurant: { kind: "station", id: restaurantStation!.id },
       deli: { kind: "station", id: deliStation!.id },

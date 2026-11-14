@@ -19,7 +19,6 @@ import {
 } from "./printer-delete-jobs.js";
 import { createPrinter } from "./printers.js";
 import { enqueuePrintJob } from "./outbox.js";
-type PrintConfig = {};
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
@@ -30,13 +29,12 @@ const FRESH = NOW.toISOString();
 const EXPIRED = new Date(NOW.getTime() - PRINT_JOB_LEASE_MS - 1_000).toISOString();
 const DELETED_AT = "2026-10-10T09:00:00.000Z";
 
-async function setup(): Promise<PrintConfig> {
+async function setup(): Promise<void> {
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: ["es-ES"],
     operationDescription: "Sale on premises",
   });
-  return {};
 }
 
 async function seedAgent(name: string): Promise<string> {

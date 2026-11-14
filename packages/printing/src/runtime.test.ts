@@ -15,7 +15,6 @@ import { createPrinter } from "./printers.js";
 import { enqueuePrintJob } from "./outbox.js";
 import { FakeSink } from "@waitron/print-agent";
 import type { PrinterTarget, Transport } from "@waitron/print-agent";
-type PrintConfig = {};
 
 const SETTING = { paperWidth: "58mm", resolution: "180dpi" } as const;
 
@@ -31,9 +30,8 @@ async function seedFixtureVenue(name: string): Promise<void> {
   });
 }
 
-async function setup(): Promise<PrintConfig> {
+async function setup(): Promise<void> {
   await seedFixtureVenue("Bar");
-  return {};
 }
 
 async function seedAgent(name = "Kitchen agent"): Promise<string> {

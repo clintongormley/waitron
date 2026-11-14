@@ -155,7 +155,7 @@ async function setCountry(tx: Transaction, country: string) {
     .onConflictDoUpdate({ target: tenants.id, set: { country } });
 }
 
-async function venue(address: Address = {}): Promise<{}> {
+async function venue(address: Address = {}): Promise<void> {
   return withTransaction(db, async (tx) => {
     await setCountry(tx, address.country ?? "ZZ");
     await seedVenue(tx, {
@@ -165,7 +165,6 @@ async function venue(address: Address = {}): Promise<{}> {
       province: address.province === undefined ? "Northshire" : address.province,
       city: address.city === undefined ? "Villa Real" : address.city,
     });
-    return {};
   });
 }
 

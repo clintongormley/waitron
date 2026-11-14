@@ -57,7 +57,7 @@ export const section = (sectionId: string): MemberRef => ({ kind: "section", sec
  * internal and customer names differ, so a read of the wrong one fails.
  */
 export async function menusFixture(db: Database): Promise<MenusFixture> {
-  const {} = await seedVenueWithSeries(db);
+  await seedVenueWithSeries(db);
   await seedLegacySellingUnits(db);
   return withTransaction(db, async (tx) => {
     await seedLibraryImages(tx, "lemonade.jpg", "large.jpg");

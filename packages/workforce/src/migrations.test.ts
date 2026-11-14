@@ -31,8 +31,7 @@ import {
 const suite = useVenueDb({
   resetPerTest: false,
 
-  // (`seedFixtureVenue`, `seedNode`), and for `persons`, which the cases write and workforce's tables
-  // reference.
+  // Core supplies the settings, nodes and persons that these fixtures write.
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
@@ -248,7 +247,7 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
   }
 
   it("stores a draft roster version defaulting status to draft with a null published_at", async () => {
-    const {} = await seedWorkforcePerson();
+    await seedWorkforcePerson();
     const versionId = await insertRosterVersion(suite.db, {});
     const rows = await suite.db.execute<{ status: string; published_at: string | null }>(sql`
       select status, published_at from roster_versions where id = ${versionId}`);
@@ -307,7 +306,7 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
   });
 
   it("allows two DRAFT versions for the same period — the published-only index is partial", async () => {
-    const {} = await seedWorkforcePerson();
+    await seedWorkforcePerson();
     await insertRosterVersion(suite.db, {
       periodStart: "2026-05-11",
       periodEnd: "2026-05-17",
@@ -427,14 +426,14 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
   });
 
   it("rejects a shift_template with an empty label", async () => {
-    const {} = await seedWorkforcePerson();
+    await seedWorkforcePerson();
     const error = await captureError(() => insertShiftTemplate(suite.db, { label: "" }));
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(error)).toMatch(/shift_templates_label_ck/);
   });
 
   it("rejects a shift_template weekday outside 0–6", async () => {
-    const {} = await seedWorkforcePerson();
+    await seedWorkforcePerson();
     const error = await captureError(() => insertShiftTemplate(suite.db, { weekday: -1 }));
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(error)).toMatch(/shift_templates_weekday_ck/);

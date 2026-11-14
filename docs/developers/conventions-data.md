@@ -1632,6 +1632,8 @@ is checked by nothing when the row is written, and its refusal moved to accept, 
 (`devices` or `print_agents`) still holds a key to `locations`. Never weaken a classification to make
 this guard pass — that is the one wrong answer §2.1 rules out.
 
+_2026-11-14 (A1308 5h):_ the historical location target described above has been removed, after slices 5a–5g moved its consumers. See [the drop plan](../superpowers/plans/2026-11-08-a1308-5h-locations-drop.md).
+
 _2026-09-24:_ five of the six keys were on identity tables that slice-2 Task 1b reclassified
 `state` (`sessions` to `persons` and `tills`; `management_sessions`, `totp_enrollments` and
 `google_oidc_states` to `persons`). Their keys were not restored; `docs/backlog.md` lists that as

@@ -55,7 +55,7 @@ async function venue() {
     operationDescription: "Hospitality",
     timeZone: "Europe/Madrid",
   });
-  const cfg: {} = {};
+
   const zone = await seedZone(db, { name: "Dining room", displayOrder: 0 });
   return scoped(async (tx) => {
     const departmentId = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" }))
@@ -68,7 +68,6 @@ async function venue() {
       return (await saveMenuPeriod(tx, departmentId, { name, menuId, staffMenuIds: [] })).id;
     };
     return {
-      cfg,
       departmentId,
       zoneId: zone!.id,
       lunch: await period("Lunch"),
