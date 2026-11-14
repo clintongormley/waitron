@@ -1,4 +1,4 @@
-# Dialog close waits — draft plan
+# Dialog close waits — plan
 
 Smallest usable result: tests await the target dialog's `wt-close` or the screen's resulting close event before checking close-driven effects, keeping every behavioral assertion.
 
@@ -6,7 +6,9 @@ Original ask, verbatim from `/Users/clintongormley/waitron-campaign-i/queue.md`,
 > The ask: find the tests that close a dialog and then check after a single flush, and make each wait for the wt-close event or the screen's resulting close event (CLAUDE.md §4). wt-dialog.test.ts's "closes on a real Escape press" waits for wt-close; the stays-open tests keep their timer. List every changed file in the PR. Test-only. Plan first only if the search finds more than about 15 sites.
 
 The owner's initiating message authorises the campaign, finish-branch and land-branch, not this design.
-This draft needs driver verification, Claude review and watcher clearance before build; menus exceeds about 15 close paths.
+Claude reviewed the draft on 14 November 2026; the driver applied its smaller-route corrections.
+The watcher cleared commit `71878ff38b` at 02:19 in the lane’s local `questions.md`.
+The broad candidate count below is not a defect count; calendar day-box actions and Escape paths exceeded about 15 event-owned paths.
 
 1. Finish the narrow audit before editing tests. Classify every entry in
    `/Users/clintongormley/waitron-campaign-i/receipts/dialog-close-20261114/candidates.json`
