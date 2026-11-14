@@ -44,7 +44,8 @@ before this cannot be restored or imported."
    orders within one kind. A reviewer confirms by reading those three readers, and the clock suites
    run it. The only assertions that move are the `seq` values listed below.
 2. **A deleted test that held something else.** `clock-stop-restarts.test.ts` also holds the
-   latest-record query-plan case; Task 3 moves it before the file goes.
+   latest-record query-plan case; Task 3 moves it before the file goes. (2026-11-14: COV-FISCAL
+   deleted `latestRecordQuery` and that case, so there is nothing to move.)
 3. **`clock-confirmations.test.ts`** goes only because fi4a carried each of its cases into
    `schema/verifactu-history.test.ts` (fi4a, "Assertions that change, by design"). A reviewer
    checks the carried list against the file before it is deleted.
@@ -254,6 +255,9 @@ fi4a.
   fiscal history (A1308 fiscal 4b)".
 
 ### Task 3: keep the latest-record plan case
+
+2026-11-14: COV-FISCAL deleted `latestRecordQuery`, which no product code called, and this case
+with it. This task has nothing left to do.
 
 `clock-stop-restarts.test.ts:82-95`, "reads the latest record through the time index, sorting only
 the ties by id", pins `latestRecordQuery`'s plan (`clock-behind.ts`): after fi1,

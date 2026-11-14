@@ -14,6 +14,8 @@ import {
 } from "./handover-return.js";
 import { hasReturnedInvoices, returnedInvoices, storedBases } from "./returned-invoices.js";
 import { VERIFACTU_HANDOVER } from "./handover-summary.js";
+import { VerifactuBackend } from "./backend.js";
+import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
 const source = useVenueDb({ migrations: TEST_MIGRATIONS });
 const receiver = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -291,4 +293,24 @@ it("reports whether any newly returned invoice is recorded", async () => {
   await append(node, 2);
   await receive(node, await inventory(node));
   expect(await exists()).toBe(true);
+});
+
+it("answers the returned invoice through the backend's own methods", async () => {
+  const backend = new VerifactuBackend({
+    deploymentEnvironment: "production",
+    clock: steadyClock,
+    db: receiver.db,
+    resolveClient: staticResolver(fakeClient),
+  });
+  const node = await fixture();
+  const id = await append(node, 1);
+  await receive(node, await inventory(node));
+
+  expect(await withTransaction(receiver.db, (tx) => backend.hasReturnedInvoices(tx))).toBe(true);
+  const rows = await withTransaction(receiver.db, (tx) =>
+    backend.returnedInvoices(tx, { offset: 0, limit: 101 }),
+  );
+  expect(rows.map((row) => [row.recordId, row.invoiceNumber, row.sourceNodeId])).toEqual([
+    [id, "A/1", node.nodeId],
+  ]);
 });

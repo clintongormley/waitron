@@ -388,6 +388,16 @@ describe("latestClockStep", () => {
     await expect(latest()).resolves.toBeNull();
   });
 
+  it("answers the step the backend's confirmClockStep recorded, with the values sent", async () => {
+    await sale(R - 5 * M);
+    const input = request(R + H);
+    const recorded = await withTransaction(suite.db, (tx) => backend.confirmClockStep(tx, input));
+
+    expect(recorded.confirmation).toMatchObject({ source: "admin", confirmedAt: iso(R + H) });
+    expect(await rows()).toHaveLength(1);
+    await expect(latest()).resolves.toEqual({ confirmedAt: iso(R + H), stepMs: input.stepMs });
+  });
+
   it("answers the step written last, by its order, not by its date", async () => {
     await sale(R - 5 * H);
     await step(request(R + H));
