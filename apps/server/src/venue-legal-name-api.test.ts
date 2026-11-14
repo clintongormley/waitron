@@ -2,7 +2,7 @@ import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { taxpayer, withTransaction } from "@waitron/db";
+import { readActivityForSubject, taxpayer, withTransaction } from "@waitron/db";
 import type { FiscalContribution } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -72,6 +72,9 @@ describe("changing the taxpayer's legal name", () => {
     });
     expect((await get.json()).issuer.legalName).toBe("Deli Nueva SL");
     expect(await taxpayerRow()).toEqual({ ...before, legalName: "Deli Nueva SL" });
+    const entries = await readActivityForSubject(suite.db, { kind: "taxpayer", id: "1" });
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ kind: "taxpayer.legal_name_changed", personId: suite.db.all<{ id: string }>(sql`select id from persons where display_name = 'The Manager'`)[0]!.id, data: { from: original, to: "Deli Nueva SL" } });
   });
 
   it("refuses a stale expected name and writes nothing", async () => {

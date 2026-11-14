@@ -20,13 +20,6 @@ export const PURPOSES = {
    * it is re-provisioned (see `rotateCredentials`).
    */
   "fiscal.aeat": ["pfxBase64", "passphrase", "certKind"],
-  /** DEPRECATED: nothing seals or reads it any more. Kept because a purpose name is never deleted
-   * or renamed. */
-  "sync.mirror_token": ["token"],
-  /** DEPRECATED: nothing seals it in the venue's vault any more; a box's signing key lives in its
-   * own `node.db` (`./node-signing-key.ts`). Kept because a purpose name is never deleted or
-   * renamed. */
-  "membership.node_key": ["privateKey"],
   /**
    * An absent `endpoint` (Amazon itself) or `prefix` is sealed as `-` because every field must be non-empty.
    */

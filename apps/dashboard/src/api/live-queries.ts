@@ -526,12 +526,11 @@ export const QUERY_DEPENDENCIES = {
   ],
   getReceiptLanguage: ["settings.business_day", "settings.venue"],
   getVenueDefaults: ["settings.business_day", "settings.venue", "settings.menu"],
-  getVenuePrivacy: ["taxpayer"],
+  getVenuePrivacy: ["settings.venue"],
   getProfile: ["persons", "webauthn_credentials"],
   // The venue's name; the language list itself is fixed.
-  getLocales: ["taxpayer"],
-  // `taxpayer` holds the venue's privacy page, which this answer carries.
-  getGoogleConfig: ["google_config", "taxpayer"],
+  getLocales: ["settings.venue"],
+  getGoogleConfig: ["google_config", "settings.venue"],
   getEmailInbox: ["email_inbox"],
   // `removable` reads whether the machine has a `nodes` row here, so a new row moves it too.
   listServers: ["node_membership", "nodes"],

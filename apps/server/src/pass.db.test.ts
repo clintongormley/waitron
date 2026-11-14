@@ -47,7 +47,7 @@ describe("one composed pass against a migrated database", () => {
   it("reads credentials, sweeps reconcile and writes the ledger", async () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, ring, {
+      putCredential(tx, ring, { personId: null,
         purpose: "payments.stripe",
         value: {
           secretKey: "sk_test_probe",
@@ -123,7 +123,7 @@ describe("one composed pass against a migrated database", () => {
     // Provisioned for `fiscal.aeat`, not `payments.stripe`: with no credential at all this would pass
     // even without `credentialProvisioned`'s `purpose` filter.
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, ring, {
+      putCredential(tx, ring, { personId: null,
         purpose: "fiscal.aeat",
         value: { pfxBase64: "AAAA", passphrase: "p", certKind: "sello" },
       }),

@@ -116,10 +116,11 @@ const PROBE_LIMIT_MS = 60_000;
 export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "backup.stream_failed");
 
-  const authorize = async (c: Context): Promise<void> => {
+  const authorize = async (c: Context): Promise<string> => {
     const sessionId = requireManagementSession(c);
-    await withTransaction(deps.db, async (tx) => {
-      await authorizeManager(tx, { managementSessionId: sessionId, permission: "system.manage" });
+    return withTransaction(deps.db, async (tx) => {
+      const { authorizedBy } = await authorizeManager(tx, { managementSessionId: sessionId, permission: "system.manage" });
+      return authorizedBy;
     });
   };
   const guardPrimary = (): void => {
@@ -230,7 +231,7 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
   // the host's own read of the settings.
   app.put("/api/backup/stream", (c) =>
     run(c, log, async () => {
-      await authorize(c);
+      const personId = await authorize(c);
       guardPrimary();
       await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
       await refuseWhilePaired(deps.node);
@@ -256,7 +257,7 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
           await refuseWhilePaired(nodeTx);
           await withTransaction(deps.db, async (tx) => {
             await ensureStreamId(tx);
-            await putCredential(tx, deps.ring, {
+            await putCredential(tx, deps.ring, { personId,
               purpose: STREAM_PURPOSE,
               value: streamSettingsPayload({ bucket }),
             });
@@ -296,12 +297,12 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
   // What is already in the bucket stays there; the owner deletes it at the provider.
   app.delete("/api/backup/stream", (c) =>
     run(c, log, async () => {
-      await authorize(c);
+      const personId = await authorize(c);
       guardPrimary();
       await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
       return deps.turns(async () => {
         guardPrimary();
-        await withTransaction(deps.db, (tx) => deleteCredential(tx, { purpose: STREAM_PURPOSE }));
+        await withTransaction(deps.db, (tx) => deleteCredential(tx, { personId, purpose: STREAM_PURPOSE }));
         await deps.stream.reload();
         return c.json(await view());
       });

@@ -73,13 +73,13 @@ beforeEach(async () => {
 const inTx = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
 const storeStream = () =>
   inTx((tx) =>
-    putCredential(tx, RING, {
+    putCredential(tx, RING, { personId: null,
       purpose: STREAM_PURPOSE,
       value: streamSettingsPayload({ bucket: BUCKET }),
     }),
   );
 const storeArchives = (settings: Omit<ArchiveSettings, "revision"> = ARCHIVES) =>
-  inTx((tx) => writeArchiveSettings(tx, RING, settings));
+  inTx((tx) => writeArchiveSettings(tx, RING, settings, null));
 
 describe("the bucket part", () => {
   it("carries the restore code for the stored bucket, the backup key and the server's signing key", async () => {
@@ -131,7 +131,7 @@ describe("the bucket part", () => {
 
   it("names the bucket's own address when it has one, in Spanish", async () => {
     await inTx((tx) =>
-      putCredential(tx, RING, {
+      putCredential(tx, RING, { personId: null,
         purpose: STREAM_PURPOSE,
         value: streamSettingsPayload({
           bucket: { ...BUCKET, endpoint: "https://s3.example.net:9000" },
@@ -238,7 +238,7 @@ describe("the archives part", () => {
 
   it("fails as backup.archive_settings_unreadable when the stored record cannot be read", async () => {
     await inTx((tx) =>
-      putCredential(tx, RING, { purpose: ARCHIVE_PURPOSE, value: { settings: "{not json" } }),
+      putCredential(tx, RING, { personId: null, purpose: ARCHIVE_PURPOSE, value: { settings: "{not json" } }),
     );
     const built = await inTx((tx) => buildArchivesPart(tx, context));
     expect(built.part.failure).toEqual(partFailure("en", "backup.archive_settings_unreadable", {}));
@@ -288,7 +288,7 @@ describe("the archives part", () => {
     const keyless = { ...context, env: {} };
     expect((await inTx((tx) => buildArchivesPart(tx, keyless))).part.state).toBe("absent");
     await inTx((tx) =>
-      putCredential(tx, RING, { purpose: ARCHIVE_PURPOSE, value: { settings: "{not json" } }),
+      putCredential(tx, RING, { personId: null, purpose: ARCHIVE_PURPOSE, value: { settings: "{not json" } }),
     );
     expect((await inTx((tx) => buildArchivesPart(tx, keyless))).failedWith).toBe(
       "backup.archive_settings_unreadable",

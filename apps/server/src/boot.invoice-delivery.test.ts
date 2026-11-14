@@ -535,7 +535,7 @@ describe("invoice email worker at trading boot", () => {
       await savePrivacyContact(tx, {
         privacyNoticeUrl: "https://example.com/privacy",
         privacyEmail: "privacy@example.com",
-      });
+      }, null);
     });
     const [taxpayerRow] = await suite.db.select({ legalName: taxpayer.legalName }).from(taxpayer);
     const smtp = await smtpFixture();

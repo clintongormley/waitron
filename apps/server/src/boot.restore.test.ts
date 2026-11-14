@@ -527,7 +527,7 @@ describe("startServer, against a migrated venue directory", () => {
     // with the reason `no_membership`, so `first_start_pending` shows it was held first.
     await withTransaction(db, async (tx) => {
       await ensureStreamId(tx);
-      await putCredential(tx, loadKeyRing(KEY_ENV), {
+      await putCredential(tx, loadKeyRing(KEY_ENV), { personId: null,
         purpose: STREAM_PURPOSE,
         value: {
           endpoint: "https://127.0.0.1:1",

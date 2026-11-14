@@ -91,7 +91,7 @@ beforeAll(async () => {
   for (const configured of [false, true]) {
     await withTransaction(suite.db, async (tx) => {
       if (configured) await saveSmtpForTest(tx, ring, SMTP);
-      else await deleteCredential(tx, { purpose: "email.smtp" });
+      else await deleteCredential(tx, { personId: null, purpose: "email.smtp" });
     });
     const status = { failedSince: null, errorCode: null };
     expect(

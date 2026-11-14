@@ -286,10 +286,11 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
   const run = createErrorBoundary(STATUS, "backup.failed");
   const buildBackend = deps.buildBackend ?? buildBackupBackend;
 
-  const authorize = async (c: Context): Promise<void> => {
+  const authorize = async (c: Context): Promise<string> => {
     const sessionId = requireManagementSession(c);
-    await withTransaction(deps.db, async (tx) => {
-      await authorizeManager(tx, { managementSessionId: sessionId, permission: "system.manage" });
+    return withTransaction(deps.db, async (tx) => {
+      const { authorizedBy } = await authorizeManager(tx, { managementSessionId: sessionId, permission: "system.manage" });
+      return authorizedBy;
     });
   };
 
@@ -310,9 +311,9 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     await deps.stream.reload(() => persist(() => writeRecoveryKey(deps.stateDir, key)));
   };
 
-  const storeSettings = (settings: Omit<ArchiveSettings, "revision">): Promise<void> =>
+  const storeSettings = (settings: Omit<ArchiveSettings, "revision">, personId: string): Promise<void> =>
     persist(async () => {
-      await withTransaction(deps.db, (tx) => writeArchiveSettings(tx, deps.ring, settings));
+      await withTransaction(deps.db, (tx) => writeArchiveSettings(tx, deps.ring, settings, personId));
     });
 
   /** Runs outside every transaction; a failure is reported, not thrown, because the write stands. */
@@ -401,7 +402,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
 
   app.post("/api/backup/apply", (c) =>
     run(c, log, async () => {
-      await authorize(c);
+      const personId = await authorize(c);
       guardWritable();
       await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
       const body = await readApplyBody(c);
@@ -485,7 +486,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         if (held.key === undefined) {
           await persistKey({ recoveryKey, keyRotatedAt: undefined });
         }
-        await storeSettings(settings);
+        await storeSettings(settings, personId);
         const reloadErrorCode =
           (await reloadAfterWrite()) ?? deps.supervisor.current().loadErrorCode ?? undefined;
         // The effective key is what the box will actually encrypt under. If a partial env override (or
@@ -503,7 +504,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
 
   app.post("/api/backup/disable", (c) =>
     run(c, log, async () => {
-      await authorize(c);
+      const personId = await authorize(c);
       guardWritable();
       await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
       return deps.turns(async () => {
@@ -514,7 +515,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         }
         const held = read.settings;
         if (held === null) throw requestInvalid("config");
-        await storeSettings({ ...withoutRevision(held), enabled: false });
+        await storeSettings({ ...withoutRevision(held), enabled: false }, personId);
         return writeAnswer(c, await reloadAfterWrite());
       });
     }),
@@ -536,7 +537,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
   // revision and reloads. With no readable record and nothing loaded, only the key file changes.
   app.post("/api/backup/rotate", (c) =>
     run(c, log, async () => {
-      await authorize(c);
+      const personId = await authorize(c);
       guardWritable();
       await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
       const { recoveryKey } = await readRotateBody(c);
@@ -565,7 +566,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         if (held !== null) {
           try {
             await withTransaction(deps.db, (tx) =>
-              writeArchiveSettings(tx, deps.ring, withoutRevision(held)),
+              writeArchiveSettings(tx, deps.ring, withoutRevision(held), personId),
             );
           } catch (error) {
             log("warn", "backup.rotation_metadata_failed", { errorCode: codeOf(error) });

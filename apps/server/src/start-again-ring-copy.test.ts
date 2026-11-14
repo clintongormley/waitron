@@ -198,7 +198,7 @@ it("after a Move and a completed join as a spare, the moved rows open with the r
       sealNodeSigningKeyTx(tx, ownRing, MOVED_NODE_ID, signing.privateKey),
     );
     await withTransaction(found.venue, (tx) =>
-      putCredential(tx, ownRing, { purpose: "payments.sumup", value: SUMUP }),
+      putCredential(tx, ownRing, { personId: null, purpose: "payments.sumup", value: SUMUP }),
     );
   } finally {
     await found.close();

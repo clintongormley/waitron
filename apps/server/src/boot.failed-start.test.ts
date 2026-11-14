@@ -787,7 +787,7 @@ describe("a start that fails after the venue folder is opened gives the folder b
           schedule: { kind: "interval", ms: 3_600_000 },
           retention: { count: 7, days: 30 },
           destinationTimeoutMs: 900_000,
-        }),
+        }, null),
       );
     } finally {
       await store.close();

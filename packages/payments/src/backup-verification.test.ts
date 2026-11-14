@@ -184,7 +184,7 @@ async function credential(
   dbs = [original.db, restored.db],
 ) {
   for (const db of dbs)
-    await withTransaction(db, (tx) => putCredential(tx, ring, { purpose, value }));
+    await withTransaction(db, (tx) => putCredential(tx, ring, { personId: null, purpose, value }));
 }
 function corrupt(db: Database, statement: string) {
   const triggers = db.all<{ name: string; sql: string }>(

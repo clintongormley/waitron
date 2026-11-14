@@ -53,6 +53,7 @@ import "./errors.js";
 import { assertImportedStationTimings } from "./kitchen-timing.js";
 import {
   privacyContactChecked,
+  readPrivacyContact,
   savePrivacyContact,
   type PrivacyContact,
 } from "./privacy-contact.js";
@@ -97,8 +98,6 @@ export async function buildConfigurationBundle(
     taxId: string;
     legalName: string;
     taxpayerDomicile: string | null;
-    privacyNoticeUrl: string | null;
-    privacyEmail: string | null;
     seriesCode: string | null;
     fullSeriesCode: string | null;
     rectificativeSeriesCode: string | null;
@@ -106,7 +105,6 @@ export async function buildConfigurationBundle(
     select
       t.country, t.tax_id as "taxId", t.legal_name as "legalName",
       t.taxpayer_domicile as "taxpayerDomicile",
-      t.privacy_notice_url as "privacyNoticeUrl", t.privacy_email as "privacyEmail",
       max(s.code) filter (where s.purpose = 'standard') as "seriesCode",
       max(s.code) filter (where s.purpose = 'full') as "fullSeriesCode",
       max(s.code) filter (where s.purpose = 'rectificative') as "rectificativeSeriesCode"
@@ -129,8 +127,6 @@ export async function buildConfigurationBundle(
     taxId,
     legalName,
     taxpayerDomicile,
-    privacyNoticeUrl,
-    privacyEmail,
     seriesCode,
     fullSeriesCode,
     rectificativeSeriesCode,
@@ -157,7 +153,7 @@ export async function buildConfigurationBundle(
       fullSeriesCode,
       rectificativeSeriesCode,
     },
-    privacyContact: { privacyNoticeUrl, privacyEmail },
+    privacyContact: (await readPrivacyContact(db))!,
     contentLanguages:
       doc.contentLanguages === null
         ? null
@@ -1002,7 +998,7 @@ export async function importConfigurationTables(
         : privacyContactChecked("privacyNoticeUrl", privacyNoticeUrl),
     privacyEmail:
       privacyEmail === null ? null : privacyContactChecked("privacyEmail", privacyEmail),
-  });
+  }, null);
   await saveVenueFields(
     tx,
     {

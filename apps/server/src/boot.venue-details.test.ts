@@ -103,7 +103,7 @@ async function prepareBox(
       schedule: { kind: "interval", ms: 86_400_000 },
       retention: { count: 7, days: 30 },
       destinationTimeoutMs: 900_000,
-    }),
+    }, null),
   );
   const [admin] = await seedPersons(suite.db, {
     displayName: "Email Clock Admin",

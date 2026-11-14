@@ -232,7 +232,7 @@ async function evidence(app: Hono): Promise<Record<string, unknown>> {
 }
 
 const write = (ring: KeyRing, settings: Omit<ArchiveSettings, "revision">) =>
-  withTransaction(suite.db, (tx) => writeArchiveSettings(tx, ring, settings));
+  withTransaction(suite.db, (tx) => writeArchiveSettings(tx, ring, settings, null));
 
 const recordNow = () => readArchiveSettingsWithMeta(suite.db, RING).then((r) => r.meta);
 
@@ -243,7 +243,7 @@ const storeKey = (sc: Scenario, key: string) =>
  * refuses a payload that is not the purpose's fields. */
 async function storeRaw(plaintext: string): Promise<void> {
   await withTransaction(suite.db, (tx) =>
-    putCredential(tx, RING, { purpose: ARCHIVE_PURPOSE, value: { settings: "{}" } }),
+    putCredential(tx, RING, { personId: null, purpose: ARCHIVE_PURPOSE, value: { settings: "{}" } }),
   );
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", Buffer.alloc(32, 7), iv);
@@ -264,7 +264,7 @@ const destDir = () => mkdtempSync(join(tmpdir(), "settings-evidence-dest-"));
 
 afterEach(async () => {
   for (const stop of cleanup.splice(0)) await stop().catch(() => {});
-  await withTransaction(suite.db, (tx) => deleteCredential(tx, { purpose: ARCHIVE_PURPOSE }));
+  await withTransaction(suite.db, (tx) => deleteCredential(tx, { personId: null, purpose: ARCHIVE_PURPOSE }));
 });
 
 describe("GET /api/backup/settings-evidence", () => {
@@ -335,7 +335,7 @@ describe("GET /api/backup/settings-evidence", () => {
     const { json } = archiveRecord(folderSettings(destDir()));
     const bad = { ...JSON.parse(json), retention: { count: 0, days: 30 } };
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING, {
+      putCredential(tx, RING, { personId: null,
         purpose: ARCHIVE_PURPOSE,
         value: { settings: JSON.stringify(bad) },
       }),
@@ -576,7 +576,7 @@ describe("GET /api/backup/settings-evidence", () => {
     const sc = await scenario();
     const sup = makeSupervisor(sc);
     await sup.reload();
-    await withTransaction(suite.db, (tx) => deleteCredential(tx, { purpose: ARCHIVE_PURPOSE }));
+    await withTransaction(suite.db, (tx) => deleteCredential(tx, { personId: null, purpose: ARCHIVE_PURPOSE }));
 
     const body = await evidence(buildApp(sup, sc));
     expect(body).toMatchObject({

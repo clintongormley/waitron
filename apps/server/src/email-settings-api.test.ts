@@ -679,7 +679,7 @@ it("reads stored settings and delivery mode from the same turn before a queued r
   await started;
   const reading = request(app, venue.admin);
   const removing = withTransaction(suite.db, (tx) =>
-    deleteCredential(tx, { purpose: "email.smtp" }),
+    deleteCredential(tx, { personId: null, purpose: "email.smtp" }),
   );
   release();
   await held;
@@ -801,7 +801,7 @@ describe("removing saved SMTP settings", () => {
     const app = mount();
     expect((await request(app, venue.admin, settings)).status).toBe(200);
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, ring, { purpose: "backup.archive", value: { settings: "{}" } }),
+      putCredential(tx, ring, { personId: null, purpose: "backup.archive", value: { settings: "{}" } }),
     );
     const [archive] = await suite.db
       .select()

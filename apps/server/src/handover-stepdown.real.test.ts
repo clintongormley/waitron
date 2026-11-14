@@ -216,7 +216,7 @@ describe("a card sale in flight when the box steps down", () => {
     const later = new Date(Date.now() + 60 * 60_000).toISOString();
     await suite.db.execute(sql`update envios set proximo_intento_en = ${later}`);
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, ring, {
+      putCredential(tx, ring, { personId: null,
         purpose: "payments.stripe",
         value: {
           secretKey: "sk_test_stepdown",

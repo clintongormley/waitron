@@ -16,7 +16,6 @@
   ],
   "settings": ["packages/db/src/settings.ts"],
   "taxpayer": [
-    "packages/provisioning/src/privacy-contact.ts",
     "packages/provisioning/src/taxpayer-name.ts",
     "packages/provisioning/src/venue-apply.ts"
   ],

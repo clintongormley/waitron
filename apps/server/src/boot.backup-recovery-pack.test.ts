@@ -100,7 +100,7 @@ async function seedVenueWithBackupSettings(): Promise<void> {
   const ring = loadKeyRing(KEY_ENV);
   await withTransaction(suite.db, async (tx) => {
     await ensureStreamId(tx);
-    await putCredential(tx, ring, {
+    await putCredential(tx, ring, { personId: null,
       purpose: STREAM_PURPOSE,
       value: streamSettingsPayload({ bucket: BUCKET }),
     });
@@ -116,7 +116,7 @@ async function seedVenueWithBackupSettings(): Promise<void> {
       schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 30 } },
       retention: { count: 7, days: 30 },
       destinationTimeoutMs: 15 * 60 * 1000,
-    });
+    }, null);
   });
 }
 

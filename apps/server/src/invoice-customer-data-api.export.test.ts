@@ -129,7 +129,7 @@ describe("the invoice customer download, end to end", () => {
   it("ends the README with the venue's saved privacy page, and names none once it is cleared", async () => {
     const page = "https://example.com/privacy";
     const store = (privacyNoticeUrl: string | null) =>
-      withTransaction(suite.db, (tx) => savePrivacyContact(tx, { privacyNoticeUrl }));
+      withTransaction(suite.db, (tx) => savePrivacyContact(tx, { privacyNoticeUrl }, null));
     onTestFinished(async () => {
       await store(null);
     });

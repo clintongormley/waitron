@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   loadKeyRing,
   readNodeSigningKey,
-  tryGetCredential,
   type KeyRing,
 } from "@waitron/credentials";
 import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
@@ -77,7 +76,7 @@ describe("establishReservedStandbyIdentity", () => {
       ),
     );
     expect(await readNodeSigningKey(suite.node, RING, standby.nodeId)).toBeNull();
-    expect(await tryGetCredential(suite.db, RING, { purpose: "membership.node_key" })).toBeNull();
+    expect(await suite.db.execute<{ n: number }>(sql`select count(*) as n from venue_credentials where purpose = 'membership.node_key'`).rows[0]!.n).toBe(0);
     const reservations = await suite.db.select().from(fiscalReservations);
     expect(reservations).toHaveLength(1);
     expect(reservations[0]?.installationIdentity).toBe("P000042");
@@ -150,7 +149,7 @@ describe("establishReservedStandbyIdentity", () => {
     );
     expect(node.rows).toEqual([{ public_key: first.publicKey }]);
     expect(await suite.db.select().from(fiscalReservations)).toEqual(reservationsBefore);
-    expect(await tryGetCredential(suite.db, RING, { purpose: "membership.node_key" })).toBeNull();
+    expect(await suite.db.execute<{ n: number }>(sql`select count(*) as n from venue_credentials where purpose = 'membership.node_key'`).rows[0]!.n).toBe(0);
     expect(await readNodeSigningKey(suite.node, RING, first.nodeId)).toBeNull();
   });
 

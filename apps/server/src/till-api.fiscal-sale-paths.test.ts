@@ -348,7 +348,7 @@ async function holdReader(deviceId: string, readerId: string): Promise<void> {
  * path's pre-check reads only its presence). */
 async function connectStripe(): Promise<void> {
   await withTransaction(suite.db, (tx) =>
-    putCredential(tx, RING, {
+    putCredential(tx, RING, { personId: null,
       purpose: "payments.stripe",
       value: {
         secretKey: "sk_test_x",

@@ -273,3 +273,20 @@ unexported `sealCredentialRowTx(tx: Transaction, ring: KeyRing, purpose: Purpose
 - [ ] **Step 4: Run** Finish-line items 2, 4, 5 — PASS.
 - [ ] **Step 5:** `pnpm protection-list list --out <B>`; `compare`; paste and mark the report.
 - [ ] **Step 6: Commit** `git commit -s -m "credentials: saves and removals leave an activity entry; two dead purposes go"`.
+
+## Build corrections, 2026-11-15
+
+The watcher cleared actor threading and the retired-purpose assertions on 14 November at 21:25,
+and the required venue defaults and reset notice at 22:57 (Lane H questions.md).
+The first reset line is "Every venue is reset: core; database backups from before this cannot be restored".
+Configuration format 31 and the bundle shape stay unchanged; no old-export compatibility claim is made.
+The stream and archive authorization helpers return their existing authorizedBy result for the
+settings save and recovery-key settings rewrite. SMTP passes the existing personId through env4's
+shared saveSmtpSettings. The purpose inventory removes the two retired names and their acceptance
+cases become isPurpose=false cases. Existing sample rows use backup.archive with the same sentinel
+in its settings field; node-key absence checks read the vault row count directly.
+The venue document's exact defaults and fixtures gain the two required nullable privacy fields.
+Privacy storage assertions read the document while retaining the identity and stored-value checks.
+The watcher cleared up to 1,200 gross handwritten lines on 15 November at 00:19 for this scope,
+including explicit null actor arguments in existing fixtures and formatter reflows. Mechanical
+argument changes are counted separately in the pull request.

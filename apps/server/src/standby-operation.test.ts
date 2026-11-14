@@ -16,7 +16,7 @@ import {
 } from "@waitron/db";
 import { NODE_MIGRATIONS, readNodeMode, setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { loadKeyRing, readNodeSigningKey, tryGetCredential } from "@waitron/credentials";
+import { loadKeyRing, readNodeSigningKey } from "@waitron/credentials";
 import { generateNodeKeyPair } from "@waitron/membership";
 import {
   readOperationAuthority,
@@ -334,9 +334,9 @@ describe("opaque authenticated standby carriers", () => {
     );
     expect(
       await withTransaction(suite.db, (tx) =>
-        tryGetCredential(tx, RING, { purpose: "membership.node_key" }),
+        tx.execute<{ n: number }>(sql`select count(*) as n from venue_credentials where purpose = 'membership.node_key'`).rows[0]!.n,
       ),
-    ).toBeNull();
+    ).toBe(0);
     expect(await readNodeSigningKey(suite.node, RING, args.standby.nodeId)).toBeNull();
   });
 
@@ -736,9 +736,9 @@ describe("opaque authenticated standby carriers", () => {
     );
     expect(
       await withTransaction(suite.db, (tx) =>
-        tryGetCredential(tx, RING, { purpose: "membership.node_key" }),
+        tx.execute<{ n: number }>(sql`select count(*) as n from venue_credentials where purpose = 'membership.node_key'`).rows[0]!.n,
       ),
-    ).toBeNull();
+    ).toBe(0);
   });
 
   it("rolls back promotion if the trading-settings write fails", async () => {
@@ -842,8 +842,8 @@ it("collects outside establishment evidence before sealing the spare's key", asy
     operations: {
       async prepare(operation, run) {
         expect(
-          await tryGetCredential(suite.db, RING, { purpose: "membership.node_key" }),
-        ).toBeNull();
+          await suite.db.execute<{ n: number }>(sql`select count(*) as n from venue_credentials where purpose = 'membership.node_key'`).rows[0]!.n,
+        ).toBe(0);
         await withTransaction(suite.db, (tx) => seedVenueSettings(tx, { name: "Source checked" }));
         return run({ ...operation, input: { prepared: "establishment" } });
       },

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { eq, exists } from "drizzle-orm";
 import {
   nowIso,
+  recordActivity,
   taxpayer,
   withNodeTransaction,
   withTransaction,
@@ -87,14 +88,19 @@ export async function tryGetCredential(
 export async function putCredential(
   tx: Transaction,
   ring: KeyRing,
-  params: { purpose: Purpose; value: Record<string, unknown> },
+  params: { purpose: Purpose; value: Record<string, unknown>; personId: string | null },
 ): Promise<void> {
-  validatePayload(params.purpose, params.value);
-  const sealed = seal(ring.current.key, aadFor(params.purpose), JSON.stringify(params.value));
+  const keyVersion = await sealCredentialRowTx(tx, ring, params.purpose, params.value);
+  await recordActivity(tx, { kind: "credentials.saved", subjectId: params.purpose, personId: params.personId, data: { keyVersion } });
+}
+
+async function sealCredentialRowTx(tx: Transaction, ring: KeyRing, purpose: Purpose, value: Record<string, unknown>): Promise<number> {
+  validatePayload(purpose, value);
+  const sealed = seal(ring.current.key, aadFor(purpose), JSON.stringify(value));
   await tx
     .insert(venueCredentials)
     .values({
-      purpose: params.purpose,
+      purpose: purpose,
       ciphertext: sealed.ciphertext,
       iv: sealed.iv,
       authTag: sealed.authTag,
@@ -112,6 +118,7 @@ export async function putCredential(
         updatedAt: nowIso(),
       },
     });
+  return ring.current.version;
 }
 
 /**
@@ -176,11 +183,13 @@ export async function readCredentialMeta(
 }
 
 /** True when a row was removed, false when there was none. */
-export async function deleteCredential(tx: Transaction, ref: CredentialRef): Promise<boolean> {
+export async function deleteCredential(tx: Transaction, ref: CredentialRef & { personId: string | null }): Promise<boolean> {
   const removed = await tx
     .delete(venueCredentials)
     .where(eq(venueCredentials.purpose, ref.purpose))
-    .returning({ purpose: venueCredentials.purpose });
+    .returning({ keyVersion: venueCredentials.keyVersion });
+  if (removed[0])
+    await recordActivity(tx, { kind: "credentials.removed", subjectId: ref.purpose, personId: ref.personId, data: { keyVersion: removed[0].keyVersion } });
   return removed.length > 0;
 }
 
@@ -267,7 +276,7 @@ export async function rotateCredentials(
       await withTransaction(db, async (tx) => {
         const value = await tryGetCredential(tx, ring, { purpose });
         if (value === null) return;
-        await putCredential(tx, ring, { purpose, value });
+        await sealCredentialRowTx(tx, ring, purpose, value);
         result.rotated += 1;
       });
     }

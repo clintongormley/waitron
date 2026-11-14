@@ -164,7 +164,7 @@ function observeStart(options: StartCase): () => Observed {
     if (options.localSecondary === true) await setSingletonRole(nodeHandles, box, "secondary");
     const ring = loadKeyRing(KEY_ENV);
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, ring, {
+      putCredential(tx, ring, { personId: null,
         purpose: "payments.stripe",
         value: {
           secretKey: "sk_test_collection",

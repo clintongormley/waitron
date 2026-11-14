@@ -50,7 +50,7 @@ useVenueDb({
     );
     managerCookie = `${MANAGEMENT_COOKIE}=${session.token}`;
     await withTransaction(db, (tx) =>
-      putCredential(tx, RING, {
+      putCredential(tx, RING, { personId: null,
         purpose: "payments.stripe",
         value: {
           secretKey: "sk_test_ok",

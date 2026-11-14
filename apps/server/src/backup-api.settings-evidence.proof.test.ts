@@ -219,7 +219,7 @@ const post = (app: Hono, path: string, body: unknown) =>
   });
 
 const write = (settings: Omit<ArchiveSettings, "revision">) =>
-  withTransaction(suite.db, (tx) => writeArchiveSettings(tx, RING, settings));
+  withTransaction(suite.db, (tx) => writeArchiveSettings(tx, RING, settings, null));
 
 const hex = (_key: string, value: unknown) =>
   value instanceof Uint8Array ? Buffer.from(value).toString("hex") : value;
@@ -304,8 +304,8 @@ afterEach(async () => {
   recordRead.fail = undefined;
   for (const stop of cleanup.splice(0)) await stop().catch(() => {});
   await withTransaction(suite.db, async (tx) => {
-    await deleteCredential(tx, { purpose: ARCHIVE_PURPOSE });
-    await deleteCredential(tx, { purpose: STREAM_PURPOSE });
+    await deleteCredential(tx, { personId: null, purpose: ARCHIVE_PURPOSE });
+    await deleteCredential(tx, { personId: null, purpose: STREAM_PURPOSE });
   });
 });
 
@@ -555,7 +555,7 @@ describe("GET /api/backup/settings-evidence proofs", () => {
       destinations: [...settings.destinations, { kind: "s3", id: "bucket", bucket: BUCKET }],
     });
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING, {
+      putCredential(tx, RING, { personId: null,
         purpose: STREAM_PURPOSE,
         value: streamSettingsPayload({
           bucket: {
@@ -609,7 +609,7 @@ describe("GET /api/backup/settings-evidence proofs", () => {
     const endpointPassword = "review-password-secret";
     // Written as the sealed credential: `writeArchiveSettings` refuses this record.
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING, {
+      putCredential(tx, RING, { personId: null,
         purpose: ARCHIVE_PURPOSE,
         value: {
           settings: JSON.stringify({

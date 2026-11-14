@@ -110,7 +110,7 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
         const { authorizedBy } = await authorize(tx, c, "system.box_admin");
         if (!editable) throw new AppError("email.settings_not_allowed", {});
         await requireFreshManagementSignIn(tx, requireManagementSession(c));
-        await deleteCredential(tx, { purpose: "email.smtp" });
+        await deleteCredential(tx, { personId: authorizedBy, purpose: "email.smtp" });
         const { revision } = await readSettings(tx, MAIL_SETTINGS);
         await saveSettings(tx, MAIL_SETTINGS, {
           doc: { from: null },

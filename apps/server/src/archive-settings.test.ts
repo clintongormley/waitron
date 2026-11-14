@@ -563,8 +563,8 @@ describe("stored archive settings", () => {
   });
 
   it("mints a new revision on every write and reads back the latest", async () => {
-    const first = await withTransaction(suite.db, (tx) => writeArchiveSettings(tx, ring, input));
-    const second = await withTransaction(suite.db, (tx) => writeArchiveSettings(tx, ring, input));
+    const first = await withTransaction(suite.db, (tx) => writeArchiveSettings(tx, ring, input, null));
+    const second = await withTransaction(suite.db, (tx) => writeArchiveSettings(tx, ring, input, null));
     expect(second.revision).not.toBe(first.revision);
     expect(second).toEqual({ ...input, revision: second.revision });
     expect(await readArchiveSettings(suite.db, ring)).toEqual(second);
@@ -573,16 +573,16 @@ describe("stored archive settings", () => {
   it("refuses to store settings that do not validate", async () => {
     await expect(
       withTransaction(suite.db, (tx) =>
-        writeArchiveSettings(tx, ring, { ...input, destinations: [] }),
+        writeArchiveSettings(tx, ring, { ...input, destinations: [] }, null),
       ),
     ).rejects.toSatisfy(isSettingsInvalid);
     expect(await readArchiveSettings(suite.db, ring)).toBeNull();
   });
 
   it("refuses a tampered stored record with the domain code", async () => {
-    const written = await withTransaction(suite.db, (tx) => writeArchiveSettings(tx, ring, input));
+    const written = await withTransaction(suite.db, (tx) => writeArchiveSettings(tx, ring, input, null));
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, ring, {
+      putCredential(tx, ring, { personId: null,
         purpose: ARCHIVE_PURPOSE,
         value: { settings: JSON.stringify({ ...written, enabled: 1 }) },
       }),
@@ -598,7 +598,7 @@ describe("stored archive settings", () => {
       meta: null,
       settings: null,
     });
-    const written = await withTransaction(suite.db, (tx) => writeArchiveSettings(tx, ring, input));
+    const written = await withTransaction(suite.db, (tx) => writeArchiveSettings(tx, ring, input, null));
     const read = await readArchiveSettingsWithMeta(suite.db, ring);
     expect(read.settings).toEqual(written);
     expect(read.meta).toEqual({
@@ -609,7 +609,7 @@ describe("stored archive settings", () => {
   });
 
   it("throws today's code for a key number the box does not hold, carrying the failed row's digest", async () => {
-    await withTransaction(suite.db, (tx) => writeArchiveSettings(tx, ring, input));
+    await withTransaction(suite.db, (tx) => writeArchiveSettings(tx, ring, input, null));
     const otherNumber = loadKeyRing({
       WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
       WAITRON_CREDENTIALS_KEY_VERSION: "2",
@@ -627,9 +627,9 @@ describe("stored archive settings", () => {
   });
 
   it("carries the failed row's digest when the record does not parse", async () => {
-    const written = await withTransaction(suite.db, (tx) => writeArchiveSettings(tx, ring, input));
+    const written = await withTransaction(suite.db, (tx) => writeArchiveSettings(tx, ring, input, null));
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, ring, {
+      putCredential(tx, ring, { personId: null,
         purpose: ARCHIVE_PURPOSE,
         value: { settings: JSON.stringify({ ...written, retention: { count: 0, days: 30 } }) },
       }),

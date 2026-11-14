@@ -1,5 +1,4 @@
-import { eq } from "drizzle-orm";
-import { taxpayer, type Transaction } from "@waitron/db";
+import { readSettings, saveSettings, VENUE_SETTINGS, type Transaction } from "@waitron/db";
 import {
   AppError,
   privacyContactProblem,
@@ -22,33 +21,24 @@ export function privacyContactChecked(field: PrivacyContactField, raw: string): 
   return value;
 }
 
-/** The taxpayer row's privacy contact, or null when there is no taxpayer row. */
 export async function readPrivacyContact(tx: Transaction): Promise<PrivacyContact | null> {
-  const [row] = await tx
-    .select({ privacyNoticeUrl: taxpayer.privacyNoticeUrl, privacyEmail: taxpayer.privacyEmail })
-    .from(taxpayer)
-    .where(eq(taxpayer.id, 1));
-  return row ?? null;
+  const saved = await readSettings(tx, VENUE_SETTINGS);
+  if (saved.revision === 0) return null;
+  return { privacyNoticeUrl: saved.doc.privacyNoticeUrl, privacyEmail: saved.doc.privacyEmail };
 }
 
-/**
- * Writes the given columns alone, on the taxpayer row; returns the stored pair, or null when there
- * is no taxpayer row. It drops keys whose value is `undefined` first; with no value left it writes
- * nothing and returns `readPrivacyContact(tx)`, because drizzle's `.set()` throws `No values to
- * set` for `{}` and for `{ privacyEmail: undefined }` alike. Takes checked values: it throws no
- * code of its own.
- */
 export async function savePrivacyContact(
   tx: Transaction,
   changes: Partial<PrivacyContact>,
+  personId: string | null,
 ): Promise<PrivacyContact | null> {
+  const saved = await readSettings(tx, VENUE_SETTINGS);
+  if (saved.revision === 0) return null;
   const values: Partial<PrivacyContact> = {};
   if (changes.privacyNoticeUrl !== undefined) values.privacyNoticeUrl = changes.privacyNoticeUrl;
   if (changes.privacyEmail !== undefined) values.privacyEmail = changes.privacyEmail;
-  if (Object.keys(values).length === 0) return readPrivacyContact(tx);
-  const [row] = await tx.update(taxpayer).set(values).where(eq(taxpayer.id, 1)).returning({
-    privacyNoticeUrl: taxpayer.privacyNoticeUrl,
-    privacyEmail: taxpayer.privacyEmail,
-  });
-  return row ?? null;
+  if (Object.keys(values).length > 0)
+    await saveSettings(tx, VENUE_SETTINGS, { doc: { ...saved.doc, ...values }, expectedRevision: saved.revision, personId });
+  return { privacyNoticeUrl: values.privacyNoticeUrl === undefined ? saved.doc.privacyNoticeUrl : values.privacyNoticeUrl,
+    privacyEmail: values.privacyEmail === undefined ? saved.doc.privacyEmail : values.privacyEmail };
 }

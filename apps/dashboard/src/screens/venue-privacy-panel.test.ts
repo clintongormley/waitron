@@ -445,7 +445,7 @@ it("a live read delivering a new stored pair updates the read view", async () =>
   const r = rig();
   const el = await mount(r.api);
   r.state.stored = { ...STORED };
-  r.liveData.invalidate([{ type: "taxpayer" }]);
+  r.liveData.invalidate([{ type: "settings.venue" }]);
   await expect
     .poll(() => rows(el))
     .toEqual([
@@ -459,7 +459,7 @@ it("during an edit an untouched draft follows a live read", async () => {
   const el = await mount(r.api);
   await edit(el);
   r.state.stored = { ...STORED };
-  r.liveData.invalidate([{ type: "taxpayer" }]);
+  r.liveData.invalidate([{ type: "settings.venue" }]);
   await expect.poll(() => input(el, "privacyNoticeUrl")!.value).toBe("https://example.com/privacy");
   expect(input(el, "privacyEmail")!.value).toBe("privacy@example.com");
   await el.updateComplete;
@@ -472,7 +472,7 @@ it("after an untouched draft follows a live read, Save sends only the field type
   const el = await mount(r.api);
   await edit(el);
   r.state.stored = { ...STORED };
-  r.liveData.invalidate([{ type: "taxpayer" }]);
+  r.liveData.invalidate([{ type: "settings.venue" }]);
   await expect.poll(() => input(el, "privacyNoticeUrl")!.value).toBe("https://example.com/privacy");
   await type(el, "privacyEmail", "typed@example.com");
   await save(el);
@@ -488,7 +488,7 @@ it("during an edit a changed draft keeps what was typed when a live read arrives
   await type(el, "privacyEmail", "typed@example.com");
   const reads = r.api.getVenuePrivacy.mock.calls.length;
   r.state.stored = { ...STORED };
-  r.liveData.invalidate([{ type: "taxpayer" }]);
+  r.liveData.invalidate([{ type: "settings.venue" }]);
   await expect.poll(() => r.api.getVenuePrivacy.mock.calls.length).toBe(reads + 1);
   await flush(el);
   expect(input(el, "privacyEmail")!.value).toBe("typed@example.com");
@@ -563,7 +563,7 @@ it("a read begun before a successful save does not put back the old email", asyn
   const el = await mountWithLeave(r.api);
   const stale = deferred<VenuePrivacy>();
   r.api.getVenuePrivacy.mockImplementationOnce(() => stale.promise);
-  r.liveData.invalidate([{ type: "taxpayer" }]);
+  r.liveData.invalidate([{ type: "settings.venue" }]);
   await expect.poll(() => r.api.getVenuePrivacy.mock.calls.length).toBe(2);
   await edit(el);
   await type(el, "privacyEmail", "new@example.com");
@@ -589,7 +589,7 @@ it("a save answer that arrives after a newer live value ends on the newer value"
   await save(el);
   const reads = r.api.getVenuePrivacy.mock.calls.length;
   r.state.stored = { ...STORED, privacyEmail: "second@example.com" };
-  r.liveData.invalidate([{ type: "taxpayer" }]);
+  r.liveData.invalidate([{ type: "settings.venue" }]);
   await expect.poll(() => r.api.getVenuePrivacy.mock.calls.length).toBe(reads + 1);
   await frame();
   await flush(el);
@@ -611,7 +611,7 @@ it("a live read begun during the save that answers after it does not leave the s
   const late = deferred<VenuePrivacy>();
   r.api.getVenuePrivacy.mockImplementationOnce(() => late.promise);
   const reads = r.api.getVenuePrivacy.mock.calls.length;
-  r.liveData.invalidate([{ type: "taxpayer" }]);
+  r.liveData.invalidate([{ type: "settings.venue" }]);
   await expect.poll(() => r.api.getVenuePrivacy.mock.calls.length).toBe(reads + 1);
   r.state.stored = { ...STORED, privacyEmail: "second@example.com" };
   pending.resolve({ ...STORED, privacyEmail: "first@example.com" });
@@ -726,7 +726,7 @@ it.each(["answer", "failure"] as const)(
     await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
     await expect.poll(() => r.background.getVenuePrivacy.mock.calls.length).toBe(1);
     r.state.stored = { ...STORED, privacyEmail: "later@example.com" };
-    r.liveData.invalidate([{ type: "taxpayer" }]);
+    r.liveData.invalidate([{ type: "settings.venue" }]);
     await expect.poll(() => savedEmail(el)).toBe("later@example.com");
     if (outcome === "answer") reread.resolve({ ...STORED, privacyEmail: "new@example.com" });
     else reread.reject({ code: "server.unavailable" });
@@ -880,7 +880,7 @@ async function savedOverNewerLiveValueThenFollowUpFails(
     const parent = el.parentNode!;
     el.remove();
     parent.appendChild(el);
-  } else r.liveData.invalidate([{ type: "taxpayer" }]);
+  } else r.liveData.invalidate([{ type: "settings.venue" }]);
   await expect.poll(() => r.background.getVenuePrivacy.mock.calls.length).toBe(reads + 1);
   await expect
     .poll(() => (el as unknown as { model?: VenuePrivacy }).model?.privacyEmail)
@@ -935,7 +935,7 @@ it("a live read shown after a failed follow-up read stops the tries", async () =
   const r = withBackground();
   try {
     const el = await savedOverNewerLiveValueThenFollowUpFails(r);
-    r.liveData.invalidate([{ type: "taxpayer" }]);
+    r.liveData.invalidate([{ type: "settings.venue" }]);
     await expect.poll(() => savedEmail(el)).toBe("second@example.com");
     expect(q(el, "[data-test=read-error]")).toBeNull();
     const reads = r.background.getVenuePrivacy.mock.calls.length;

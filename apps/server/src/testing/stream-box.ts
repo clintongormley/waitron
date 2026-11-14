@@ -162,7 +162,7 @@ export async function switchOnStreaming(
   const store = await openVenueDatabase(dirs.venue);
   try {
     await withTransaction(store.venue, (tx) =>
-      putCredential(tx, ring, {
+      putCredential(tx, ring, { personId: null,
         purpose: "backup.stream",
         value: streamSettingsPayload({ bucket: streaming.bucket }),
       }),

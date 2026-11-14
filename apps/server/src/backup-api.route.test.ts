@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { SingletonRole } from "@waitron/db";
-import { withTransaction } from "@waitron/db";
+import { readActivityForSubject, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin } from "@waitron/identity";
@@ -334,8 +334,8 @@ afterEach(async () => {
   for (const stop of cleanup.splice(0)) await stop().catch(() => {});
   // The suite shares one database, and both records are one per venue.
   await withTransaction(suite.db, async (tx) => {
-    await deleteCredential(tx, { purpose: ARCHIVE_PURPOSE });
-    await deleteCredential(tx, { purpose: "backup.stream" });
+    await deleteCredential(tx, { personId: null, purpose: ARCHIVE_PURPOSE });
+    await deleteCredential(tx, { personId: null, purpose: "backup.stream" });
   });
   bucket = new FakeBucket();
 });
@@ -698,6 +698,13 @@ describe("backup admin routes", () => {
       body: JSON.stringify({ recoveryKey: KEY_2 }),
     });
     expect(rot.status).toBe(200);
+    const manager = suite.db.all<{ id: string }>(sql`select id from persons where email = ${MANAGER_EMAIL}`)[0]!;
+    const events = await readActivityForSubject(suite.db, { kind: "credential", id: ARCHIVE_PURPOSE });
+    expect(events.slice(-2).map(({ kind, personId, data }) => ({ kind, personId, data }))).toEqual([
+      { kind: "credentials.saved", personId: manager.id, data: { keyVersion: 1 } },
+      { kind: "credentials.saved", personId: manager.id, data: { keyVersion: 1 } },
+    ]);
+
     const body = await rot.json();
     expect(body.keyFingerprint).toBe(keyFingerprint(KEY_2));
     expect(typeof body.keyRotatedAt).toBe("string"); // rotation stamped
@@ -1598,7 +1605,7 @@ describe("backup admin routes", () => {
     } finally {
       release();
       await Promise.allSettled([apply, save]);
-      await withTransaction(suite.db, (tx) => deleteCredential(tx, { purpose: "backup.stream" }));
+      await withTransaction(suite.db, (tx) => deleteCredential(tx, { personId: null, purpose: "backup.stream" }));
     }
   }, 60_000);
 
@@ -1621,7 +1628,7 @@ describe("backup admin routes", () => {
 
     async function storeStream(): Promise<void> {
       await withTransaction(suite.db, (tx) =>
-        putCredential(tx, RING, {
+        putCredential(tx, RING, { personId: null,
           purpose: "backup.stream",
           value: streamSettingsPayload({ bucket: STREAM_BUCKET }),
         }),
@@ -1847,7 +1854,7 @@ describe("backup admin routes", () => {
       const [destination] = held.destinations as Extract<BackupDestination, { kind: "s3" }>[];
       // Written as the sealed credential: `writeArchiveSettings` would refuse this record.
       await withTransaction(suite.db, (tx) =>
-        putCredential(tx, RING, {
+        putCredential(tx, RING, { personId: null,
           purpose: ARCHIVE_PURPOSE,
           value: {
             settings: JSON.stringify({
@@ -2110,7 +2117,7 @@ describe("backup admin routes", () => {
      * would: `putCredential` refuses a payload that is not the purpose's fields. */
     async function storeRawArchive(plaintext: string): Promise<void> {
       await withTransaction(suite.db, (tx) =>
-        putCredential(tx, RING, { purpose: ARCHIVE_PURPOSE, value: { settings: "{}" } }),
+        putCredential(tx, RING, { personId: null, purpose: ARCHIVE_PURPOSE, value: { settings: "{}" } }),
       );
       const iv = randomBytes(12);
       const cipher = createCipheriv("aes-256-gcm", RING_KEY, iv);
@@ -2130,7 +2137,7 @@ describe("backup admin routes", () => {
         WAITRON_CREDENTIALS_KEY_VERSION: version,
       });
       await withTransaction(suite.db, (tx) =>
-        putCredential(tx, other, { purpose: ARCHIVE_PURPOSE, value: { settings: "{}" } }),
+        putCredential(tx, other, { personId: null, purpose: ARCHIVE_PURPOSE, value: { settings: "{}" } }),
       );
     };
 
@@ -2140,7 +2147,7 @@ describe("backup admin routes", () => {
         "backup.archive_settings_invalid",
         () =>
           withTransaction(suite.db, (tx) =>
-            putCredential(tx, RING, { purpose: ARCHIVE_PURPOSE, value: { settings: "{}" } }),
+            putCredential(tx, RING, { personId: null, purpose: ARCHIVE_PURPOSE, value: { settings: "{}" } }),
           ),
       ],
       ["credentials.decrypt_failed", sealedUnder("1")],
@@ -2194,7 +2201,7 @@ describe("backup admin routes", () => {
       const held = (await readSealed())!;
       // Readable as a sealed payload, but refused as settings because of its time limit alone.
       await withTransaction(suite.db, (tx) =>
-        putCredential(tx, RING, {
+        putCredential(tx, RING, { personId: null,
           purpose: ARCHIVE_PURPOSE,
           value: { settings: JSON.stringify({ ...held, destinationTimeoutMs: 1 }) },
         }),
@@ -2541,7 +2548,7 @@ describe("backup admin routes", () => {
             WAITRON_CREDENTIALS_KEY_VERSION: "2",
           });
           await withTransaction(suite.db, (tx) =>
-            putCredential(tx, other, {
+            putCredential(tx, other, { personId: null,
               purpose: "backup.stream",
               value: streamSettingsPayload({ bucket: STREAM_BUCKET }),
             }),
@@ -2783,7 +2790,7 @@ describe("backup admin routes", () => {
       } finally {
         suite.db.run(sql.raw("drop trigger refuse_rotation"));
       }
-      await withTransaction(suite.db, (tx) => deleteCredential(tx, { purpose: ARCHIVE_PURPOSE }));
+      await withTransaction(suite.db, (tx) => deleteCredential(tx, { personId: null, purpose: ARCHIVE_PURPOSE }));
       const keyOnly = await primaryApp({
         stream: {
           reload: async (write) => {
@@ -3074,7 +3081,7 @@ describe("backup admin routes", () => {
         const { sc, post } = await primaryApp();
         await writeRecoveryKey(sc.stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
         await withTransaction(suite.db, (tx) =>
-          putCredential(tx, RING, { purpose: ARCHIVE_PURPOSE, value: { settings: "{}" } }),
+          putCredential(tx, RING, { personId: null, purpose: ARCHIVE_PURPOSE, value: { settings: "{}" } }),
         );
         const stored = () =>
           withTransaction(suite.db, (tx) =>

@@ -99,7 +99,7 @@ function fakeMakeStripe(
 async function seedStripe(value: Record<string, string>): Promise<void> {
   await seedTaxpayer(suite.db);
   await withTransaction(suite.db, (tx) =>
-    putCredential(tx, ring, { purpose: "payments.stripe", value }),
+    putCredential(tx, ring, { personId: null, purpose: "payments.stripe", value }),
   );
 }
 
@@ -486,7 +486,7 @@ describe("deferredStripeClient", () => {
       code: "credentials.missing",
     });
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, ring, { purpose: "payments.stripe", value: FOUR_FIELDS }),
+      putCredential(tx, ring, { personId: null, purpose: "payments.stripe", value: FOUR_FIELDS }),
     );
     await client.cancelReaderAction("tmr_abc");
     expect(calls.cancelled).toEqual(["tmr_abc"]);

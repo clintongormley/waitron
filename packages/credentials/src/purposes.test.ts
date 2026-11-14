@@ -14,10 +14,8 @@ describe("PURPOSES", () => {
       "backup.stream",
       "email.smtp",
       "fiscal.aeat",
-      "membership.node_key",
       "payments.stripe",
       "payments.sumup",
-      "sync.mirror_token",
     ]);
   });
 
@@ -101,24 +99,8 @@ describe("payments.sumup purpose", () => {
   });
 });
 
-describe("sync.mirror_token purpose", () => {
-  it("is a known purpose whose payload field is `token`", () => {
-    expect(isPurpose("sync.mirror_token")).toBe(true);
-    expect(PURPOSES["sync.mirror_token"]).toEqual(["token"]);
-  });
-  it("validatePayload accepts a token and rejects a payload missing it", () => {
-    expect(() => validatePayload("sync.mirror_token", { token: "abc" })).not.toThrow();
-    expect(() => validatePayload("sync.mirror_token", {})).toThrow();
-  });
-});
-
-describe("membership.node_key purpose", () => {
-  it("membership.node_key requires exactly privateKey", () => {
-    expect(isPurpose("membership.node_key")).toBe(true);
-    expect(() => validatePayload("membership.node_key", { privateKey: "PK_B64" })).not.toThrow();
-    expect(() => validatePayload("membership.node_key", {})).toThrow(); // missing
-    expect(() => validatePayload("membership.node_key", { privateKey: "x", extra: "y" })).toThrow(); // unexpected
-  });
+it.each(["sync.mirror_token", "membership.node_key"])("refuses retired purpose %s", (purpose) => {
+  expect(isPurpose(purpose)).toBe(false);
 });
 
 describe("isPurpose", () => {

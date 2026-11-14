@@ -246,9 +246,9 @@ describe("allocated fiscal standby contract", () => {
       WAITRON_CREDENTIALS_KEY_VERSION: "1",
     });
     await withTransaction(db, (tx) =>
-      putCredential(tx, ring, {
-        purpose: "membership.node_key",
-        value: { privateKey: "held-primary-test-key" },
+      putCredential(tx, ring, { personId: null,
+        purpose: "backup.archive",
+        value: { settings: "held-primary-test-key" },
       }),
     );
     const keysBefore = await db.select().from(venueCredentials);

@@ -111,7 +111,7 @@ useVenueDb({
     // The dashboard asks a stuck payment's provider only when it is connected: the fake is served
     // under the Stripe seat's credential, which the webhook's secret also comes from.
     await withTransaction(db, (tx) =>
-      putCredential(tx, RING, {
+      putCredential(tx, RING, { personId: null,
         purpose: "payments.stripe",
         value: {
           secretKey: "sk_test_ok",

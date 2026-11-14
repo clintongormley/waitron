@@ -93,7 +93,7 @@ async function seedIdentity(db: Database): Promise<void> {
       schedule: { kind: "interval", ms: 3_600_000 },
       retention: { count: 7, days: 30 },
       destinationTimeoutMs: 900_000,
-    }),
+    }, null),
   );
   await seedVenueSettings(db, {
     name: "Loc",

@@ -64,6 +64,8 @@ export async function seedVenueSettings(
         contentLanguages: null,
         defaultContentLanguage: null,
         holidayArea: null,
+        privacyNoticeUrl: null,
+        privacyEmail: null,
         addressLine1: null,
         addressLine2: null,
         postalCode: null,

@@ -113,7 +113,7 @@ describe("readCertificateCard", () => {
   it("answers the vault's revision and nothing installed when the vault has no install row", async () => {
     await seedTenantNodeSif(suite.db);
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, testRing(), {
+      putCredential(tx, testRing(), { personId: null,
         purpose: "fiscal.aeat",
         value: { pfxBase64: "AAAA", passphrase: "x", certKind: "sello" },
       }),

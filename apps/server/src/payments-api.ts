@@ -944,12 +944,12 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         },
         payload,
       );
-      await gated(sessionId, async (tx) => {
+      await gated(sessionId, async (tx, personId) => {
         await requireFreshManagementSignIn(tx, sessionId);
         // Validate the seat-assembled payload against the purpose's declared fields before sealing, so
         // a provider that returns a wrong-shaped payload fails loudly rather than sealing junk.
         validatePayload(seat.credentialPurpose, sealedPayload);
-        await putCredential(tx, deps.ring, {
+        await putCredential(tx, deps.ring, { personId,
           purpose: seat.credentialPurpose,
           value: sealedPayload,
         });
@@ -1006,7 +1006,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = c.req.param("id");
-      await gated(sessionId, async (tx) => {
+      await gated(sessionId, async (tx, personId) => {
         const seat = cardProviderById(deps.providers, id); // payment.provider_unknown on a bad id
         // Refused while an active reader uses this provider; delete those readers first.
         const active = await tx
@@ -1017,7 +1017,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           throw new AppError("payment.provider_in_use", { activeReaders: active.length });
         }
         await requireFreshManagementSignIn(tx, sessionId);
-        await deleteCredential(tx, { purpose: seat.credentialPurpose });
+        await deleteCredential(tx, { personId, purpose: seat.credentialPurpose });
       });
       deps.pool.evict(id);
       return c.body(null, 204);

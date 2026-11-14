@@ -775,7 +775,7 @@ describe("refuseIfArchiveSourceLive", () => {
       const store = await openVenueDatabase(dirname(file));
       try {
         await withTransaction(store.venue, (tx) =>
-          putCredential(tx, ring, {
+          putCredential(tx, ring, { personId: null,
             purpose: STREAM_PURPOSE,
             value: streamSettingsPayload({ bucket: settingsBucket }),
           }),

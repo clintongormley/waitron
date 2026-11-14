@@ -1,8 +1,10 @@
-import { isUuid } from "@waitron/shared";
+import { privacyContactProblem, isUuid } from "@waitron/shared";
 import { DEFAULT_TIME_ZONE } from "./schema/taxpayer.js";
 import { defineSettingsDocument, type SettingsParse } from "./settings.js";
 
 export interface VenueSettings {
+  privacyNoticeUrl: string | null;
+  privacyEmail: string | null;
   cloudVenueId: string | null;
   streamId: string | null;
   name: string;
@@ -30,6 +32,8 @@ export const VENUE_SETTINGS = defineSettingsDocument<VenueSettings>({
   version: 1,
   transfers: false,
   defaults: () => ({
+    privacyNoticeUrl: null,
+    privacyEmail: null,
     cloudVenueId: null,
     streamId: null,
     name: "",
@@ -58,6 +62,8 @@ export const VENUE_SETTINGS = defineSettingsDocument<VenueSettings>({
     ] as const;
     for (const field of Object.keys(value))
       if (
+        field !== "privacyNoticeUrl" &&
+        field !== "privacyEmail" &&
         field !== "cloudVenueId" &&
         field !== "streamId" &&
         field !== "name" &&
@@ -122,9 +128,16 @@ export const VENUE_SETTINGS = defineSettingsDocument<VenueSettings>({
     }
     for (const field of addressFields)
       if (value[field] !== null && typeof value[field] !== "string") return { ok: false, field };
+    for (const field of ["privacyNoticeUrl", "privacyEmail"] as const) {
+      const contact = value[field];
+      if ((contact !== null && typeof contact !== "string") || privacyContactProblem(field, contact as string | null) !== undefined)
+        return { ok: false, field };
+    }
     return {
       ok: true,
       doc: {
+        privacyNoticeUrl: value.privacyNoticeUrl as string | null,
+        privacyEmail: value.privacyEmail as string | null,
         cloudVenueId: (value.cloudVenueId as string | null | undefined) ?? null,
         streamId: (value.streamId as string | null | undefined) ?? null,
         name: value.name.trim(),

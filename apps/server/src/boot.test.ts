@@ -2436,7 +2436,7 @@ describe("startServer, against a migrated venue directory", () => {
     const port = await freePort();
     await withTransaction(sharedDb, async (tx) => {
       await ensureStreamId(tx);
-      await putCredential(tx, loadKeyRing(KEY_ENV), {
+      await putCredential(tx, loadKeyRing(KEY_ENV), { personId: null,
         purpose: STREAM_PURPOSE,
         value: {
           endpoint: "https://127.0.0.1:1",
@@ -2474,7 +2474,7 @@ describe("startServer, against a migrated venue directory", () => {
         await server.close();
       }
     } finally {
-      await withTransaction(sharedDb, (tx) => deleteCredential(tx, { purpose: STREAM_PURPOSE }));
+      await withTransaction(sharedDb, (tx) => deleteCredential(tx, { personId: null, purpose: STREAM_PURPOSE }));
     }
   }, 60_000);
 
@@ -2955,7 +2955,7 @@ describe("startServer, against a migrated venue directory", () => {
     });
     const material = mintMtlsMaterial();
     await withTransaction(sharedDb, (tx) =>
-      putCredential(tx, loadKeyRing(KEY_ENV), {
+      putCredential(tx, loadKeyRing(KEY_ENV), { personId: null,
         purpose: "fiscal.aeat",
         value: {
           pfxBase64: material.clientPfx.toString("base64"),
@@ -3517,7 +3517,7 @@ describe("startServer — what a trading boot wires behind its management routes
         },
       });
     } finally {
-      await liveFixture(httpPort(), (tx) => deleteCredential(tx, { purpose: "email.smtp" }));
+      await liveFixture(httpPort(), (tx) => deleteCredential(tx, { personId: null, purpose: "email.smtp" }));
     }
   });
 

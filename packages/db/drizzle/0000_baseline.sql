@@ -42,8 +42,6 @@ CREATE TABLE `taxpayer` (
 	`tax_id` text NOT NULL,
 	`legal_name` text NOT NULL,
 	`taxpayer_domicile` text,
-	`privacy_notice_url` text,
-	`privacy_email` text,
 	`created_at` text NOT NULL,
 	CONSTRAINT "taxpayer_singleton_ck" CHECK("taxpayer"."id" = 1)
 );

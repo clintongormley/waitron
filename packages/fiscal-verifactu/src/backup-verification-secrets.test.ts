@@ -131,7 +131,7 @@ function both(run: (db: DatabaseSync) => void) {
 }
 async function replace(value: Record<string, string>) {
   await withTransaction(suite.db, (tx) =>
-    putCredential(tx, ring, { purpose: "fiscal.aeat", value }),
+    putCredential(tx, ring, { personId: null, purpose: "fiscal.aeat", value }),
   );
   const row = suite.db.all<Record<string, string | number | Uint8Array>>(
     sql`select ciphertext,iv,auth_tag,key_version from venue_credentials where purpose='fiscal.aeat'`,

@@ -186,7 +186,7 @@ function observeStart(options: { restricted: boolean }): () => Observed {
     );
     await withTransaction(suite.db, async (tx) => {
       await ensureStreamId(tx);
-      await putCredential(tx, ring, {
+      await putCredential(tx, ring, { personId: null,
         purpose: STREAM_PURPOSE,
         value: {
           endpoint: "-",

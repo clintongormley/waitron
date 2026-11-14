@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  readActivityForSubject,
   CORE_MIGRATIONS,
   withNodeTransaction,
   withTransaction,
@@ -67,10 +68,12 @@ beforeEach(async () => {
 describe("rotateCredentials", () => {
   it("re-seals every row onto the current key and advances its version", async () => {
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { personId: null, purpose: "payments.stripe", value: STRIPE }),
     );
 
+    const history = await readActivityForSubject(suite.db, { kind: "credential", id: "payments.stripe" });
     const result = await rotateCredentials(suite.db, RING_BOTH, suite.node);
+    expect(await readActivityForSubject(suite.db, { kind: "credential", id: "payments.stripe" })).toEqual(history);
     expect(result.rotated).toBe(1);
     expect(result.alreadyCurrent).toBe(0);
 
@@ -87,7 +90,7 @@ describe("rotateCredentials", () => {
 
   it("is idempotent — a second run rotates nothing", async () => {
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, {
+      putCredential(tx, RING_V1, { personId: null,
         purpose: "fiscal.aeat",
         value: { pfxBase64: "AA", passphrase: "p", certKind: "sello" },
       }),
@@ -105,10 +108,10 @@ describe("rotateCredentials", () => {
     // is necessarily on `previous`, so this cannot tell "select by the row's key_version" from
     // "always try `previous`". store.test.ts's "serves a row on either ring member" pins that.
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { personId: null, purpose: "payments.stripe", value: STRIPE }),
     );
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_BOTH, {
+      putCredential(tx, RING_BOTH, { personId: null,
         purpose: "fiscal.aeat",
         value: { pfxBase64: "AA", passphrase: "p", certKind: "sello" },
       }),
@@ -125,7 +128,7 @@ describe("rotateCredentials", () => {
 
   it("refuses to run without a previous key when rows still need one", async () => {
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { personId: null, purpose: "payments.stripe", value: STRIPE }),
     );
     const error = await captured(() => rotateCredentials(suite.db, RING_V2_ONLY, suite.node));
     expect(hasCode(error, "credentials.key_version_unknown")).toBe(true);
@@ -162,7 +165,7 @@ describe("rotateCredentials", () => {
     // registry has since retired reaches rotation. The row is raw bytes, never decrypted: only the
     // iv/auth-tag LENGTH checks need satisfying.
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { personId: null, purpose: "payments.stripe", value: STRIPE }),
     );
     await withTransaction(suite.db, (tx) =>
       tx.insert(venueCredentials).values({
@@ -189,7 +192,7 @@ describe("rotateCredentials", () => {
     // committing in between leaves a listed row with nothing to read. The wrapper deletes the row
     // as the second transaction (that row's re-seal) opens, which is where a concurrent delete lands.
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { personId: null, purpose: "payments.stripe", value: STRIPE }),
     );
     let transactions = 0;
     const db = suite.db;
@@ -232,7 +235,7 @@ describe("rotateCredentials", () => {
 
   it("refuses while node.db holds a pair link, and re-seals nothing", async () => {
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { personId: null, purpose: "payments.stripe", value: STRIPE }),
     );
     await withNodeTransaction(suite.node, async (tx) => {
       await sealNodeSigningKeyTx(tx, RING_V1, NODE, SIGNING_KEY);

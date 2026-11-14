@@ -1005,7 +1005,7 @@ describe("waitron-restore restore <artifact>, the old server's bucket", () => {
       });
       await withTransaction(copy.venue, ensureStreamId);
       await withTransaction(copy.venue, (tx) =>
-        putCredential(tx, ring, {
+        putCredential(tx, ring, { personId: null,
           purpose: STREAM_PURPOSE,
           value: streamSettingsPayload({ bucket: KIT.bucket }),
         }),

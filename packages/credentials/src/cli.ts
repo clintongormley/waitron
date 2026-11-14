@@ -136,7 +136,7 @@ async function set(argv: string[], deps: CliDeps): Promise<number> {
 
   try {
     await withTransaction(deps.db, (tx) =>
-      putCredential(tx, deps.ring, { purpose, value: payload }),
+      putCredential(tx, deps.ring, { personId: null, purpose, value: payload }),
     );
   } catch (error) {
     return reportFailure(error, deps);
@@ -178,7 +178,7 @@ async function remove(argv: string[], deps: CliDeps): Promise<number> {
     deps.io.stderr("Use the dashboard's Email settings to save or remove SMTP settings.");
     return 2;
   }
-  const deleted = await withTransaction(deps.db, (tx) => deleteCredential(tx, { purpose }));
+  const deleted = await withTransaction(deps.db, (tx) => deleteCredential(tx, { personId: null, purpose }));
   if (!deleted) {
     // Non-zero: "there was nothing there" is a different outcome from "removed it", and a script
     // that de-provisions a purpose should be able to tell them apart.

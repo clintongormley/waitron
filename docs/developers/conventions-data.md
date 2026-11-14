@@ -1019,11 +1019,10 @@ those six `node.db` tables under another node id; the main box's joining route
 `waitron-credentials rotate` reach `node_signing_key`; a handover (`apps/server/src/handover-store.ts`, and the server's files that call `appendHandoverEventTx` directly) reaches `node_handover_operations` and `node_handover_events`, and a stepdown (`apps/server/src/handover-stepdown.ts`) reaches `node_handover_restriction`; and the dashboard's legal-name change
 (`PUT /management-api/venue-details/legal-name`, owner A494) reaches `taxpayer` through
 `packages/provisioning/src/taxpayer-name.ts`, which updates `legal_name` alone, and the
-dashboard's privacy contact (`PUT /management-api/venue-privacy`, A980 S1a) reaches it through
-`packages/provisioning/src/privacy-contact.ts`, which updates `privacy_notice_url` and
-`privacy_email` alone; a configuration import reaches the same writer for those two columns
-(A980 S1a2). Each does it by calling into one of the
-files `scripts/write-path-tables.json` names, which is where such a write is allowed to live.
+dashboard's privacy contact (`PUT /management-api/venue-privacy`) and configuration imports use
+`packages/provisioning/src/privacy-contact.ts` to save the two privacy fields in `settings.venue`.
+Only `taxpayer-name.ts` and `venue-apply.ts` write `taxpayer`, as
+`scripts/write-path-tables.json` requires.
 Keeping them in a handful of named files is the whole of the property now, because no connection
 makes the distinction for us any more.
 
