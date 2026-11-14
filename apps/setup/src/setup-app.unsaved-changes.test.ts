@@ -6,8 +6,9 @@ import type { ConfigurationPreview, ProvisionBody, SetupApi } from "./api/client
 import type { SetupLiveSourceScreen } from "./screens/live-source-screen.js";
 import type { SetupAdminScreen } from "./screens/admin-screen.js";
 import type { WtInput } from "@waitron/ui/src/components/wt-input.js";
+import type { WtFileInput } from "@waitron/ui/src/components/wt-file-input.js";
 import type { WtUnsavedChanges } from "@waitron/ui/src/components/wt-unsaved-changes.js";
-import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
+import { chooseFiles, cleanupWidgets, drawnFileName, mountWidget } from "./widgets/test-helpers.js";
 import { setLocale } from "./i18n/t.js";
 
 afterEach(() => {
@@ -886,12 +887,16 @@ async function sourcePassphrase(source: SetupLiveSourceScreen, value: string) {
     );
   await source.updateComplete;
 }
+const sourcePicker = (source: SetupLiveSourceScreen) =>
+  source.shadowRoot!.querySelector<WtFileInput>("wt-file-input")!;
+const sourcePicked = (source: SetupLiveSourceScreen): File[] => sourcePicker(source).files;
+async function sourceDrawn(source: SetupLiveSourceScreen): Promise<string | null> {
+  await source.updateComplete;
+  await sourcePicker(source).updateComplete;
+  return drawnFileName(sourcePicker(source));
+}
 function sourceFile(source: SetupLiveSourceScreen, file?: File) {
-  const input = source.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!;
-  const selection = new DataTransfer();
-  if (file) selection.items.add(file);
-  input.files = selection.files;
-  input.dispatchEvent(new Event("change"));
+  chooseFiles(sourcePicker(source), ...(file ? [file] : []));
 }
 function startEmpty(source: SetupLiveSourceScreen) {
   source.shadowRoot!.querySelector<HTMLElement>("[data-test=empty]")!.click();
@@ -940,9 +945,8 @@ describe("setup Start empty and import draft", () => {
       expect((el as unknown as State).screen).toBe("live-source");
       expect((el as unknown as State).draft).toEqual(original);
       await choose(el, "keep");
-      expect(
-        source.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!.files![0],
-      ).toBe(artifact);
+      expect(sourcePicked(source)[0]).toBe(artifact);
+      expect(await sourceDrawn(source)).toBe("authored.waitron-config");
       expect(source.shadowRoot!.querySelector<WtInput>("wt-input")!.value).toBe(
         "authored passphrase",
       );
@@ -953,9 +957,8 @@ describe("setup Start empty and import draft", () => {
       await expect
         .poll(() => (el as unknown as State).screen)
         .toBe(route === "empty" ? "admin" : "mode");
-      expect(
-        source.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!.files!.length,
-      ).toBe(0);
+      expect(sourcePicked(source).length).toBe(0);
+      expect(await sourceDrawn(source)).toBeNull();
       expect(source.shadowRoot!.querySelector<WtInput>("wt-input")!.value).toBe("");
       expect((el as unknown as State).draft).toEqual(
         route === "empty" ? { ...original, configurationImport: false } : original,
@@ -993,9 +996,8 @@ describe("setup Start empty and import draft", () => {
     expect(source.shadowRoot!.querySelector<WtInput>("wt-input")!.value).toBe(
       "authored passphrase",
     );
-    expect(source.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!.files![0]).toBe(
-      artifact,
-    );
+    expect(sourcePicked(source)[0]).toBe(artifact);
+    expect(await sourceDrawn(source)).toBe("refused.waitron-config");
   });
 });
 
@@ -1061,9 +1063,8 @@ describe("setup import draft lifecycle", () => {
     await expect.poll(() => warning(el).open).toBe(true);
     await sourcePassphrase(source, "newer passphrase");
     await expect.poll(() => warning(el).open).toBe(false);
-    expect(source.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!.files![0]).toBe(
-      artifact,
-    );
+    expect(sourcePicked(source)[0]).toBe(artifact);
+    expect(await sourceDrawn(source)).toBe("file-only.waitron-config");
     startEmpty(source);
     await expect.poll(() => warning(el).open).toBe(true);
     await choose(el, "keep");
@@ -1201,7 +1202,7 @@ describe("setup taxpayer choice", () => {
   });
 });
 
-it("discard after import restores the accepted file identity in the native selection", async () => {
+it("discard after import restores the accepted file in the picker", async () => {
   const { el, source, api } = await liveSource();
   let accept!: (preview: ConfigurationPreview) => void;
   const stage = vi.fn().mockImplementation(
@@ -1220,14 +1221,11 @@ it("discard after import restores the accepted file identity in the native selec
   sourceFile(source, newer);
   accept(importedConfiguration);
   await expect.poll(() => warning(el).open).toBe(true);
-  expect(source.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!.files![0]).toBe(
-    newer,
-  );
+  expect(sourcePicked(source)[0]).toBe(newer);
   await choose(el, "discard");
   await expect.poll(() => (el as unknown as State).screen).toBe("configuration-preview");
-  expect(source.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!.files![0]).toBe(
-    submitted,
-  );
+  expect(sourcePicked(source)[0]).toBe(submitted);
+  expect(await sourceDrawn(source)).toBe("same.waitron-config");
   expect(stage).toHaveBeenCalledExactlyOnceWith(submitted, "submitted passphrase");
   expect(unload()).toBe(true);
 });

@@ -1,4 +1,4 @@
-import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, focusFirstInvalid, leaveCoordinatorFor, type DraftScope } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
@@ -6,10 +6,12 @@ import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
+import "@waitron/ui/src/components/wt-file-input.js";
 import { passwordIcon } from "../password-icon.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
+import { fileInputCopy } from "../file-input-copy.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
-import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
+import { actionsStyles, fieldStyles } from "../form-styles.js";
 import {
   dispatchConfigurationRequested,
   dispatchSetupGoto,
@@ -22,7 +24,6 @@ export class SetupLiveSourceScreen extends LitElement {
   static override styles = [
     baseStyles,
     fieldStyles,
-    errorStyles,
     actionsStyles,
     css`
       :host {
@@ -56,12 +57,6 @@ export class SetupLiveSourceScreen extends LitElement {
         this.artifact = value.artifact;
         this.passphrase = value.passphrase;
         this.attempted = false;
-        const input = this.shadowRoot?.querySelector<HTMLInputElement>("input[type=file]");
-        if (input) {
-          const selection = new DataTransfer();
-          if (value.artifact) selection.items.add(value.artifact);
-          input.files = selection.files;
-        }
       },
     });
     this.#scope?.commit(this.#baseline);
@@ -158,31 +153,27 @@ export class SetupLiveSourceScreen extends LitElement {
       <wt-card raised data-test="import-form">
         <h1>${t("live_source.heading")}</h1>
         <p>${t("live_source.intro")}</p>
-        <label class="field">
-          ${t("live_source.export")} <span aria-hidden="true">*</span>
-          <wt-help-tooltip aria-label=${t("live_source.export_help_label")}
+        <wt-file-input
+          class="field"
+          name="configuration-export"
+          label=${t("live_source.export")}
+          required
+          .files=${this.artifact ? [this.artifact] : []}
+          .copy=${fileInputCopy()}
+          .locale=${currentLocale()}
+          .error=${this.#artifactMissing ? t("live_source.export_missing") : ""}
+          ?invalid=${this.#artifactMissing}
+          @wt-change=${(event: CustomEvent<{ files: File[] }>) => {
+            event.stopPropagation();
+            if (!this.isConnected) return;
+            this.artifact = event.detail.files[0];
+            this.#scope?.changed();
+          }}
+        >
+          <wt-help-tooltip slot="help" aria-label=${t("live_source.export_help_label")}
             >${t("live_source.export_help")}</wt-help-tooltip
           >
-          <input
-            name="configuration-export"
-            type="file"
-            required
-            aria-invalid=${this.#artifactMissing ? "true" : "false"}
-            aria-describedby=${this.#artifactMissing ? "configuration-export-error" : nothing}
-            @change=${(event: Event) => {
-              if (!this.isConnected) return;
-              this.artifact = (event.currentTarget as HTMLInputElement).files?.[0];
-              this.#scope?.changed();
-            }}
-          />
-        </label>
-        ${
-          this.#artifactMissing
-            ? html`<p id="configuration-export-error" class="error" data-test="field-error">
-                ${t("live_source.export_missing")}
-              </p>`
-            : nothing
-        }
+        </wt-file-input>
         <wt-input
           class="field"
           name="export-passphrase"

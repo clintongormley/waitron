@@ -1,8 +1,9 @@
 import { LitElement } from "lit";
+import type { WtFileInput } from "@waitron/ui";
 import { afterEach, expect, it, vi } from "vitest";
 import { SetupApi } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { chooseFiles, cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { SetupRestoreScreen } from "./restore-screen.js";
 
 const saved = {
@@ -25,11 +26,7 @@ async function fill(
   file = new File(["encrypted-copy"], "selected.backup"),
   key = "archive-secret",
 ) {
-  const picker = screen.shadowRoot!.querySelector<HTMLInputElement>("[data-test=artifact]")!;
-  const files = new DataTransfer();
-  files.items.add(file);
-  picker.files = files.files;
-  picker.dispatchEvent(new Event("change"));
+  chooseFiles(screen.shadowRoot!.querySelector("[data-test=artifact]")!, file);
   const input = screen
     .shadowRoot!.querySelector("[data-test=recovery-key]")!
     .shadowRoot!.querySelector<HTMLInputElement>("input")!;
@@ -118,7 +115,7 @@ it.each(["file", "key", "environment"])(
       await fill(
         el,
         changed === "key"
-          ? el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=artifact]")!.files![0]
+          ? el.shadowRoot!.querySelector<WtFileInput>("[data-test=artifact]")!.files[0]!
           : new File(["other-copy"], "other.backup"),
         changed === "key" ? "different-key" : "archive-secret",
       );

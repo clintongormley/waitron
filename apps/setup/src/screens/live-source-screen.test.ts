@@ -1,7 +1,8 @@
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { WtFileInput } from "@waitron/ui";
 import { setLocale } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { chooseFiles, cleanupWidgets, fileControl, mountWidget } from "../widgets/test-helpers.js";
 import { SetupLiveSourceScreen } from "./live-source-screen.js";
 
 afterEach(cleanupWidgets);
@@ -9,13 +10,10 @@ afterEach(cleanupWidgets);
 const q = (el: SetupLiveSourceScreen, sel: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(sel);
 
-function chooseExport(el: SetupLiveSourceScreen, file: File): void {
-  const input = q(el, "input[type=file]") as HTMLInputElement;
-  const transfer = new DataTransfer();
-  transfer.items.add(file);
-  input.files = transfer.files;
-  input.dispatchEvent(new Event("change"));
-}
+const exportPicker = (el: SetupLiveSourceScreen) =>
+  el.shadowRoot!.querySelector<WtFileInput>("wt-file-input")!;
+const exportControl = (el: SetupLiveSourceScreen) => fileControl(exportPicker(el));
+const chooseExport = (el: SetupLiveSourceScreen, file: File) => chooseFiles(exportPicker(el), file);
 
 async function typePassphrase(el: SetupLiveSourceScreen, value: string): Promise<void> {
   q(el, "wt-input")!.dispatchEvent(
@@ -24,11 +22,11 @@ async function typePassphrase(el: SetupLiveSourceScreen, value: string): Promise
   await el.updateComplete;
 }
 
-/** The export's message under its field, then the passphrase's, which `wt-input` shows under itself. */
+/** The export's message, which `wt-file-input` shows under itself, then the passphrase's, which
+ * `wt-input` shows under itself. */
 function fieldErrors(el: SetupLiveSourceScreen): string[] {
-  const exportErrors = [...el.shadowRoot!.querySelectorAll("[data-test=field-error]")].map((node) =>
-    node.textContent!.trim(),
-  );
+  const exportError = exportPicker(el).error;
+  const exportErrors = exportError === "" ? [] : [exportError];
   const passphrase = (q(el, "wt-input") as HTMLElement & { error: string }).error;
   return [...exportErrors, ...(passphrase === "" ? [] : [passphrase])];
 }
@@ -76,9 +74,7 @@ describe("SetupLiveSourceScreen", () => {
     expect(requested).not.toHaveBeenCalled();
     expect((await bottomElement(el))?.getAttribute("role")).toBe("alert");
     expect(fieldErrors(el)).toHaveLength(2);
-    expect(el.shadowRoot!.querySelector("input[type=file]")?.getAttribute("name")).toBe(
-      "configuration-export",
-    );
+    expect(exportControl(el).getAttribute("name")).toBe("configuration-export");
   });
 
   it("requests the import with the chosen export and a twelve-character passphrase", async () => {
@@ -118,7 +114,21 @@ describe("SetupLiveSourceScreen", () => {
     chooseExport(el, EXPORT);
     await el.updateComplete;
     expect(fieldErrors(el)).toEqual(["Enter a passphrase of at least 12 characters."]);
-    expect(q(el, "input[type=file]")!.getAttribute("aria-invalid")).toBe("false");
+    await exportPicker(el).updateComplete;
+    expect(exportControl(el).getAttribute("aria-invalid")).toBe("false");
+  });
+
+  it("rings a missing export in the danger colour after Import is pressed", async () => {
+    const { el, host } = await mountWidget<SetupLiveSourceScreen>("setup-live-source-screen", {});
+    host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
+    q(el, "[data-test=import]")!.click();
+    await el.updateComplete;
+    const picker = exportPicker(el);
+    await picker.updateComplete;
+    expect(picker.invalid).toBe(true);
+    const field = picker.shadowRoot!.querySelector("[part=field]")!;
+    expect(field.hasAttribute("data-invalid")).toBe(true);
+    expect(getComputedStyle(field).boxShadow).toContain("rgb(4, 5, 6)");
   });
 
   it("clears the passphrase error once the passphrase is edited", async () => {
@@ -161,7 +171,7 @@ describe("SetupLiveSourceScreen", () => {
       );
       expect(await bottomOf(el)).toBe(FIX_FIELDS);
       expect(q(el, "[data-test=import]")!.hasAttribute("disabled")).toBe(true);
-      await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(q(el, "input[type=file]")));
+      await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(q(el, "wt-file-input")));
     });
 
     it("marks the passphrase again when it is shortened after the press, and gives Import back once both are fixed", async () => {

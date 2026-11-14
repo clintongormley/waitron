@@ -1,8 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import type { WtFileInput } from "@waitron/ui";
 import { setLocale } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import {
+  chooseFiles,
+  cleanupWidgets,
+  drawnFileName,
+  fileControl,
+  mountWidget,
+} from "../widgets/test-helpers.js";
 import type { RestoreRequestDetail } from "../events.js";
 import { SetupRestoreScreen } from "./restore-screen.js";
 
@@ -16,6 +23,14 @@ const BACKUP = new File(["encrypted"], "waitron.backup");
 const keyControl = (el: SetupRestoreScreen): HTMLInputElement =>
   q(el, "[data-test=recovery-key]")!.shadowRoot!.querySelector("input")!;
 
+const artifactPicker = (el: SetupRestoreScreen) => q<WtFileInput>(el, "[data-test=artifact]")!;
+const chooseBackup = (el: SetupRestoreScreen, backup: File) =>
+  chooseFiles(artifactPicker(el), backup);
+
+/** The box `wt-file-input` draws its rings on. */
+const fileField = (el: SetupRestoreScreen): Element =>
+  artifactPicker(el).shadowRoot!.querySelector("[part=field]")!;
+
 function typeKey(el: SetupRestoreScreen, value: string): void {
   const key = keyControl(el);
   key.value = value;
@@ -27,9 +42,7 @@ async function fill(
   decisions: { artifact?: boolean; recoveryKey?: boolean; acknowledge?: boolean },
 ): Promise<void> {
   if (decisions.artifact) {
-    const file = q<HTMLInputElement>(el, "[data-test=artifact]")!;
-    Object.defineProperty(file, "files", { value: [BACKUP] });
-    file.dispatchEvent(new Event("change"));
+    chooseBackup(el, BACKUP);
   }
   if (decisions.recoveryKey) typeKey(el, "recovery-key");
   if (decisions.acknowledge) {
@@ -52,15 +65,15 @@ async function bottomOf(el: SetupRestoreScreen): Promise<string> {
 function fieldMessages(el: SetupRestoreScreen): string[] {
   return [
     ...el.shadowRoot!.querySelectorAll<HTMLElement & { error?: string }>(
-      "p.error[id$='-error'], wt-input, wt-combobox",
+      "p.error[id$='-error'], wt-file-input, wt-input, wt-combobox",
     ),
   ]
     .map((node) => (node instanceof HTMLParagraphElement ? node.textContent! : node.error!).trim())
     .filter((message) => message !== "");
 }
 
-function expectDangerRing(input: HTMLInputElement): void {
-  expect(getComputedStyle(input).boxShadow).toContain("rgb(4, 5, 6)");
+function expectDangerRing(box: Element): void {
+  expect(getComputedStyle(box).boxShadow).toContain("rgb(4, 5, 6)");
 }
 
 const FIX_FIELDS = "Correct the highlighted fields to continue.";
@@ -90,9 +103,7 @@ describe("SetupRestoreScreen", () => {
   it("emits the artifact, recovery key, environment and acknowledgement", async () => {
     const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
     const artifact = new File(["encrypted"], "waitron.backup");
-    const file = q<HTMLInputElement>(el, "[data-test=artifact]")!;
-    Object.defineProperty(file, "files", { value: [artifact] });
-    file.dispatchEvent(new Event("change"));
+    chooseBackup(el, artifact);
     typeKey(el, "recovery-key");
     const ack = q<HTMLInputElement>(el, "[data-test=acknowledge]")!;
     ack.checked = true;
@@ -283,7 +294,9 @@ describe("SetupRestoreScreen", () => {
       request,
       liveUnknown: true,
     });
-    expect(q<HTMLInputElement>(el, "[data-test=artifact]")!.files?.[0]).toBe(BACKUP);
+    expect(artifactPicker(el).files[0]).toBe(BACKUP);
+    await artifactPicker(el).updateComplete;
+    expect(drawnFileName(artifactPicker(el))).toBe("waitron.backup");
     expect(q<HTMLInputElement>(el, "[data-test=recovery-key]")!.value).toBe("recovery-key");
     expect(q<HTMLSelectElement>(el, "[data-test=environment]")!.value).toBe("preproduction");
     expect(q<HTMLInputElement>(el, "[data-test=acknowledge]")!.checked).toBe(true);
@@ -313,9 +326,7 @@ describe("SetupRestoreScreen", () => {
     });
     expect(q<HTMLInputElement>(el, "[data-test=old-box-gone]")!.checked).toBe(true);
     const other = new File(["other"], "other.backup");
-    const file = q<HTMLInputElement>(el, "[data-test=artifact]")!;
-    Object.defineProperty(file, "files", { value: [other] });
-    file.dispatchEvent(new Event("change"));
+    chooseBackup(el, other);
     await el.updateComplete;
     expect(q(el, "[data-test=live-warning]")).toBeNull();
     const listener = vi.fn();
@@ -391,29 +402,31 @@ describe("SetupRestoreScreen", () => {
     it("rings a missing backup file only after Restore is pressed, and not once one is chosen", async () => {
       const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
       host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
-      const file = q<HTMLInputElement>(el, "[data-test=artifact]")!;
-      expect(getComputedStyle(file).boxShadow).toBe("none");
+      const picker = artifactPicker(el);
+      expect(getComputedStyle(fileField(el)).boxShadow).not.toContain("rgb(4, 5, 6)");
       q(el, "[data-test=restore]")!.click();
       await el.updateComplete;
-      expectDangerRing(file);
+      await picker.updateComplete;
+      expectDangerRing(fileField(el));
       await fill(el, { artifact: true });
-      expect(getComputedStyle(file).boxShadow).toBe("none");
+      await picker.updateComplete;
+      expect(getComputedStyle(fileField(el)).boxShadow).not.toContain("rgb(4, 5, 6)");
     });
 
-    it("keeps the keyboard focus ring on a missing backup file, beside the danger ring", async () => {
+    // The shared field draws no focus ring of its own; its red line stands in while it is invalid
+    // (design-system.md, Forms → Focus).
+    it("keeps keyboard focus on a missing backup file under the danger ring", async () => {
       const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
       host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
-      host.style.setProperty("--wt-color-focus", "rgb(7, 8, 9)");
       q(el, "[data-test=restore]")!.click();
       await el.updateComplete;
-      const file = q<HTMLInputElement>(el, "[data-test=artifact]")!;
+      await artifactPicker(el).updateComplete;
+      const file = fileControl(artifactPicker(el));
       await userEvent.keyboard("{Shift}");
       file.focus();
       expect(file.matches(":focus-visible")).toBe(true);
-      const style = getComputedStyle(file);
-      expect(style.outlineStyle).toBe("solid");
-      expect(style.outlineColor).toBe("rgb(7, 8, 9)");
-      expectDangerRing(file);
+      expect(el.shadowRoot!.activeElement).toBe(q(el, "[data-test=artifact]"));
+      expectDangerRing(fileField(el));
     });
   });
 
@@ -455,7 +468,7 @@ describe("SetupRestoreScreen", () => {
     });
 
     it.each([
-      ["artifact", (el: SetupRestoreScreen) => q(el, "[data-test=artifact]")!],
+      ["artifact", (el: SetupRestoreScreen) => fileControl(artifactPicker(el))],
       [
         "environment",
         (el: SetupRestoreScreen) =>
@@ -489,7 +502,8 @@ describe("SetupRestoreScreen", () => {
         invalidField: "artifact",
       });
       host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
-      expectDangerRing(q<HTMLInputElement>(el, "[data-test=artifact]")!);
+      await artifactPicker(el).updateComplete;
+      expectDangerRing(fileField(el));
     });
 
     it("drops it when the named field changes", async () => {
@@ -546,7 +560,9 @@ describe("SetupRestoreScreen in Spanish", () => {
     setLocale("es-ES");
     const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
     expect(q(el, "h1")!.textContent).toBe("Restaurar desde una copia de seguridad");
-    expect(el.shadowRoot!.textContent).toContain("Archivo de copia de seguridad");
+    const picker = artifactPicker(el);
+    await picker.updateComplete;
+    expect(picker.shadowRoot!.textContent).toContain("Archivo de copia de seguridad");
     expect(q(el, "[data-test=restore]")!.textContent).toBe("Restaurar la copia");
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;

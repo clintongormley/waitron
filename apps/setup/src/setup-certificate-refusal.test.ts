@@ -7,7 +7,16 @@ import { venue, wizardApi } from "../test/first-setup-browser.js";
 import { setLocale, t } from "./i18n/t.js";
 import type { StringKey } from "./i18n/strings.js";
 import type { SetupCertScreen } from "./screens/cert-screen.js";
-import { mountWidget, cleanupWidgets, expectNoA11yViolations } from "./widgets/test-helpers.js";
+import {
+  chooseFiles,
+  mountWidget,
+  cleanupWidgets,
+  expectNoA11yViolations,
+  fileControl,
+  fileError,
+} from "./widgets/test-helpers.js";
+
+const pfxError = (root: ShadowRoot) => fileError(root.querySelector("[data-test=pfx]")!);
 
 const mounted: HTMLElement[] = [];
 it.each(["en-GB", "es-ES"])(
@@ -58,14 +67,13 @@ for (const locale of ["en-GB", "es-ES"]) {
     const passphrase = root.querySelector<HTMLElement & { error: string }>(
       "[data-test=passphrase]",
     )!;
-    const pfxError = root.querySelector("[data-test=pfx-field-error]");
     const sentence = t(`cert.refusal.${reason}` as StringKey);
-    expect(field === "passphrase" ? passphrase.error : pfxError?.textContent?.trim()).toBe(
+    expect(field === "passphrase" ? passphrase.error : pfxError(root)?.textContent?.trim()).toBe(
       sentence,
     );
-    expect(
-      root.querySelector<HTMLInputElement>("[data-test=pfx]")!.getAttribute("aria-invalid"),
-    ).toBe(field === "pfxBase64" ? "true" : "false");
+    expect(fileControl(root.querySelector("[data-test=pfx]")!).getAttribute("aria-invalid")).toBe(
+      field === "pfxBase64" ? "true" : "false",
+    );
     const actions = root.querySelector<HTMLElement & { error: string }>("wt-form-actions")!;
     expect(actions.error).toBe(t("cert.fix_fields"));
     expect(
@@ -74,7 +82,7 @@ for (const locale of ["en-GB", "es-ES"]) {
     await userEvent.click(root.querySelector<HTMLElement>("[data-test=next]")!);
     await el.updateComplete;
     expect(passphrase.error).toBe("");
-    expect(root.querySelector("[data-test=pfx-field-error]")).toBeNull();
+    expect(pfxError(root)).toBeNull();
   });
 }
 
@@ -141,9 +149,7 @@ it("retires an earlier accepted readiness answer when provisioning refuses the c
   await screen(app, "review");
   emit(app, "provision-requested");
   const refused = await screen(app, "cert");
-  expect(refused.shadowRoot!.querySelector("[data-test=pfx-field-error]")!.textContent).toContain(
-    t("cert.refusal.expired"),
-  );
+  expect(pfxError(refused.shadowRoot!)!.textContent).toContain(t("cert.refusal.expired"));
   await userEvent.click(refused.shadowRoot!.querySelector<HTMLElement>("[data-test=next]")!);
   const retry = await screen(app, "fiscal-test");
   expect(retry.shadowRoot!.querySelector("[data-test=continue]")).toBeNull();
@@ -197,11 +203,10 @@ it.each([false, true])(
     await screen(app, "venue");
     emit(app, "setup-advance");
     const cert = await screen(app, "cert");
-    const files = new DataTransfer();
-    files.items.add(new File(["SYNTHETIC-certificate"], "company.p12"));
-    const input = cert.shadowRoot!.querySelector<HTMLInputElement>("[data-test=pfx]")!;
-    input.files = files.files;
-    input.dispatchEvent(new Event("change"));
+    chooseFiles(
+      cert.shadowRoot!.querySelector("[data-test=pfx]")!,
+      new File(["SYNTHETIC-certificate"], "company.p12"),
+    );
     await expect
       .poll(() => cert.shadowRoot!.querySelector("[data-test=file-status]"))
       .not.toBeNull();
@@ -221,7 +226,7 @@ it.each([false, true])(
     >("[data-test=passphrase]")!;
     expect(passphrase.error).toBe("The certificate passphrase is incorrect.");
     expect(passphrase.value).toBe("SYNTHETIC-wrong");
-    expect(refused.shadowRoot!.querySelector("[data-test=pfx-field-error]")).toBeNull();
+    expect(pfxError(refused.shadowRoot!)).toBeNull();
     const next = refused.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
       "[data-test=next]",
     )!;

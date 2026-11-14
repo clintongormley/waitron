@@ -60,12 +60,6 @@ export async function damaged(pack: File): Promise<File> {
   return new File([bytes], pack.name, { type: pack.type });
 }
 
-/** Chooses `file` in a native file input, as a person picking it would. */
-export function choose(input: HTMLInputElement, file: File): void {
-  Object.defineProperty(input, "files", { value: [file], configurable: true });
-  input.dispatchEvent(new Event("change"));
-}
-
 /**
  * A text file whose read waits for `release`. Once released, a text file's read does no further
  * I/O, so one timer turn afterwards has let it finish.

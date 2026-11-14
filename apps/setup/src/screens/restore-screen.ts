@@ -5,6 +5,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
+import "@waitron/ui/src/components/wt-file-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { passwordIcon } from "../password-icon.js";
 import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
@@ -13,7 +14,8 @@ import {
   dispatchRestoreRequested,
   dispatchSetupGoto,
 } from "../events.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
+import { fileInputCopy } from "../file-input-copy.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { oldBoxQuestion } from "./old-box-question.js";
 import { SetupApi } from "../api/client.js";
@@ -38,11 +40,6 @@ export class SetupRestoreScreen extends LitElement {
     css`
       :host {
         display: block;
-      }
-      /* A box-shadow, not an outline, so the shared keyboard focus ring still draws outside it. */
-      input[type="file"][aria-invalid="true"] {
-        box-shadow: 0 0 0 var(--wt-field-line-width-active) var(--wt-color-danger);
-        border-radius: var(--wt-radius-sm);
       }
     `,
   ];
@@ -109,10 +106,6 @@ export class SetupRestoreScreen extends LitElement {
         this.acknowledged = false;
         this.oldBoxGone = false;
         this.attempted = false;
-        const files = new DataTransfer();
-        if (form.artifact) files.items.add(form.artifact);
-        this.shadowRoot!.querySelector<HTMLInputElement>("[data-test=artifact]")!.files =
-          files.files;
       },
     });
     this.#scope?.commit(this.#baseline);
@@ -140,12 +133,6 @@ export class SetupRestoreScreen extends LitElement {
 
   override updated(changed: PropertyValues<this>): void {
     this.#registerScope();
-    // A file input cannot be bound; without this it would read "No file chosen" beside a kept file.
-    if (changed.has("request") && this.request !== undefined) {
-      const files = new DataTransfer();
-      files.items.add(this.request.artifact);
-      this.shadowRoot!.querySelector<HTMLInputElement>("[data-test=artifact]")!.files = files.files;
-    }
     if (changed.has("invalidField") && this.#refusalUnder() !== undefined) {
       void focusFirstInvalid(this.shadowRoot!);
     }
@@ -265,25 +252,27 @@ export class SetupRestoreScreen extends LitElement {
       </p>
       <p>${t("restore.intro")}</p>
       <p>${t("restore.replace_warning")}</p>
-      <label class="field">
-        ${t("restore.backup_file")} <span aria-hidden="true">*</span>
-        <wt-help-tooltip aria-label=${t("restore.backup_file_help_label")}
+      <wt-file-input
+        class="field"
+        name="backup"
+        label=${t("restore.backup_file")}
+        required
+        data-test="artifact"
+        .files=${this.artifact ? [this.artifact] : []}
+        .copy=${fileInputCopy()}
+        .locale=${currentLocale()}
+        .error=${artifactError ?? ""}
+        ?invalid=${artifactError !== undefined}
+        @wt-change=${(event: CustomEvent<{ files: File[] }>) => {
+          event.stopPropagation();
+          this.artifact = event.detail.files[0];
+          this.#edited("artifact");
+        }}
+      >
+        <wt-help-tooltip slot="help" aria-label=${t("restore.backup_file_help_label")}
           >${t("restore.backup_file_help")}</wt-help-tooltip
         >
-        <input
-          name="backup"
-          type="file"
-          required
-          aria-invalid=${artifactError === undefined ? "false" : "true"}
-          aria-describedby="artifact-error"
-          data-test="artifact"
-          @change=${(event: Event) => {
-            this.artifact = (event.currentTarget as HTMLInputElement).files?.[0];
-            this.#edited("artifact");
-          }}
-        />
-      </label>
-      ${artifactError === undefined ? nothing : html`<p class="error" id="artifact-error">${artifactError}</p>`}
+      </wt-file-input>
       <wt-input
         class="field"
         label=${t("restore.recovery_key")}

@@ -459,7 +459,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   (#837). Give them operator words, grouped, or keep the table names.
   [Detail](backlog/setup.md#the-configuration-preview-names-what-it-will-copy-by-database-table)
 
-- **File input sweep** (bundle of 2, size M). [Detail](backlog/setup.md#bundle-file-input-sweep)
+- **File input sweep** (bundle of 1, size M). [Detail](backlog/setup.md#bundle-file-input-sweep)
 
 - **A237. Nothing guards the hint-or-"?" rule across screens (owner 2026-10-03)** — OPEN.
 

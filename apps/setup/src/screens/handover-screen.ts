@@ -9,6 +9,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-textarea.js";
+import "@waitron/ui/src/components/wt-file-input.js";
 import { baseStyles, focusFirstInvalid } from "@waitron/ui";
 import {
   SetupApi,
@@ -20,6 +21,7 @@ import {
 import { makeSetupId } from "../random-id.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
+import { fileInputCopy } from "../file-input-copy.js";
 
 const activated = (status?: HandoverStatus) =>
   status?.role === "destination" &&
@@ -39,7 +41,8 @@ export class SetupHandoverScreen extends LitElement {
         overflow-wrap: anywhere;
       }
       wt-input,
-      wt-textarea {
+      wt-textarea,
+      wt-file-input {
         display: block;
         margin-bottom: var(--wt-space-3);
       }
@@ -613,17 +616,19 @@ export class SetupHandoverScreen extends LitElement {
         this.#isEmergency && !this.#declared && !this.copyPreview?.operation
           ? html`
               <p>${t("handover.emergency.backup_intro")}</p>
-              <label
-                >${t("handover.emergency.backup_file")}
-                <input
-                  name="handover-backup"
-                  type="file"
-                  ?disabled=${this.busy}
-                  @change=${(event: Event) => {
-                    this.backup = (event.currentTarget as HTMLInputElement).files?.[0];
-                    this.actionError = "";
-                  }}
-              /></label>
+              <wt-file-input
+                name="handover-backup"
+                label=${t("handover.emergency.backup_file")}
+                .files=${this.backup ? [this.backup] : []}
+                .copy=${fileInputCopy()}
+                .locale=${currentLocale()}
+                ?disabled=${this.busy}
+                @wt-change=${(event: CustomEvent<{ files: File[] }>) => {
+                  event.stopPropagation();
+                  this.backup = event.detail.files[0];
+                  this.actionError = "";
+                }}
+              ></wt-file-input>
               ${
                 this.needsBackupKey
                   ? html`<wt-input

@@ -1,8 +1,14 @@
 import { afterEach, expect, it, vi } from "vitest";
 import type { LitElement } from "lit";
+import type { WtFileInput } from "@waitron/ui";
 import { SetupApi } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import {
+  chooseFiles,
+  cleanupWidgets,
+  drawnFileName,
+  mountWidget,
+} from "../widgets/test-helpers.js";
 import { SetupHandoverScreen } from "./handover-screen.js";
 
 const signIn = { email: "owner@example.com", password: "correct horse", totp: "123456" };
@@ -260,6 +266,31 @@ afterEach(() => {
   saved.operationId = "emergency-one";
 });
 
+it("draws the backup picker's words in the chooser's language, not the browser's", async () => {
+  const { el } = await mount({ backup: true });
+  await authenticate(el);
+  setLocale("es-ES");
+  await el.updateComplete;
+  const picker = q<WtFileInput>(el, 'wt-file-input[name="handover-backup"]');
+  expect(picker).not.toBeNull();
+  await picker.updateComplete;
+  const words = picker.shadowRoot!.textContent!;
+  expect(words).toContain(t("file_input.drop", "es-ES"));
+  expect(words).toContain(t("file_input.choose", "es-ES"));
+  expect(words).not.toContain(t("file_input.choose", "en-GB"));
+});
+
+it("writes the chosen backup's size in the chooser's language", async () => {
+  setLocale("es-ES");
+  const { el } = await mount({ backup: true });
+  await authenticate(el);
+  const picker = q<WtFileInput>(el, 'wt-file-input[name="handover-backup"]');
+  chooseFiles(picker, new File([new Uint8Array(48_200)], "venue.enc"));
+  await el.updateComplete;
+  await picker.updateComplete;
+  expect(picker.shadowRoot!.textContent!).toContain("48,2 kB");
+});
+
 it.each(
   ["en-GB", "es-ES"].flatMap((locale) =>
     ["light", "dark"].map((theme) => ({ locale, theme: theme as "light" | "dark" })),
@@ -275,12 +306,9 @@ it.each(
         theme === "dark" ? "recovery.passphrase_invalid" : "handover.backup_key_missing",
     });
     await authenticate(el);
-    const input = q<HTMLInputElement>(el, 'input[name="handover-backup"]');
+    const input = q(el, 'wt-file-input[name="handover-backup"]');
     expect(input).not.toBeNull();
-    const files = new DataTransfer();
-    files.items.add(new File(["archive"], "venue.enc"));
-    input.files = files.files;
-    input.dispatchEvent(new Event("change", { bubbles: true }));
+    chooseFiles(input, new File(["archive"], "venue.enc"));
     await el.updateComplete;
     q(el, "[data-test=emergency-backup]").click();
     await vi.waitFor(() => expect(q(el, '[name="handover-backup-key"]')).not.toBeNull());
@@ -332,7 +360,7 @@ it.each([
   ["restore.archive_resource_limit", "shell.restore.archive_resource_limit", "en-GB"],
   ["restore.archive_resource_limit", "shell.restore.archive_resource_limit", "es-ES"],
 ] as const)(
-  "keeps the archive choice after admission is refused: %s",
+  "keeps the archive choice after admission is refused: %s (%s, %s)",
   async (code, key, locale) => {
     setLocale(locale);
     const { el, posts } = await mount({
@@ -340,20 +368,18 @@ it.each([
       backupRefusal: code,
     });
     await authenticate(el);
-    const input = q<HTMLInputElement>(el, 'input[name="handover-backup"]');
+    const input = q(el, 'wt-file-input[name="handover-backup"]');
     expect(input).not.toBeNull();
-    const files = new DataTransfer();
-    files.items.add(new File(["archive"], "venue.enc"));
-    input.files = files.files;
-    input.dispatchEvent(new Event("change", { bubbles: true }));
+    chooseFiles(input, new File(["archive"], "venue.enc"));
     await el.updateComplete;
     q(el, "[data-test=emergency-backup]").click();
     await vi.waitFor(() =>
       expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(t(key)),
     );
-    expect(q<HTMLInputElement>(el, 'input[name="handover-backup"]').files?.[0]?.name).toBe(
-      "venue.enc",
-    );
+    const picker = q<WtFileInput>(el, 'wt-file-input[name="handover-backup"]');
+    expect(picker.files[0]?.name).toBe("venue.enc");
+    await picker.updateComplete;
+    expect(drawnFileName(picker)).toBe("venue.enc");
     expect(posts.some(({ path }) => path.endsWith("/declare"))).toBe(false);
   },
 );

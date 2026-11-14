@@ -5,6 +5,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-textarea.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
+import "@waitron/ui/src/components/wt-file-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
 import {
@@ -16,7 +17,8 @@ import { SetupApi, type ApiError, type RecoveryBackupPreview } from "../api/clie
 import type { RecoveryEntryField } from "./recovery-allocation.js";
 import { SetupRecoveryCopy } from "./recovery-copy.js";
 import { bucketCodeFromFile, type PackFileRefusal } from "../pack-file-input.js";
-import { t, format } from "../i18n/t.js";
+import { currentLocale, t, format } from "../i18n/t.js";
+import { fileInputCopy } from "../file-input-copy.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { oldBoxQuestion } from "./old-box-question.js";
 
@@ -54,11 +56,6 @@ export class SetupRestoreBucketScreen extends LitElement {
       .sensitive {
         font-weight: var(--wt-font-weight-bold);
       }
-      input[type="file"] {
-        display: block;
-        max-width: 100%;
-        margin-top: var(--wt-space-2);
-      }
       wt-textarea::part(control) {
         font-family: var(--wt-font-family-mono);
         font-size: var(--wt-font-size-sm);
@@ -94,6 +91,7 @@ export class SetupRestoreBucketScreen extends LitElement {
   @state() private previewLiveSince?: string;
   @state() private previewLiveUnknown = false;
   @state() private packRefusal?: PackFileRefusal;
+  @state() private kitFile?: File;
   #baseline?: BucketForm;
   #scope?: DraftScope<BucketForm>;
   #fileRead = 0;
@@ -130,7 +128,7 @@ export class SetupRestoreBucketScreen extends LitElement {
         this.oldBoxGone = false;
         this.venueConfirmed = false;
         this.attempted = false;
-        this.shadowRoot!.querySelector<HTMLInputElement>("[data-test=kit-file]")!.value = "";
+        this.kitFile = undefined;
       },
     });
     this.#scope?.commit(this.#baseline);
@@ -279,8 +277,10 @@ export class SetupRestoreBucketScreen extends LitElement {
     });
   }
 
-  async #readFile(event: Event): Promise<void> {
-    const file = (event.currentTarget as HTMLInputElement).files?.[0];
+  async #readFile(event: CustomEvent<{ files: File[] }>): Promise<void> {
+    event.stopPropagation();
+    const file = event.detail.files[0];
+    this.kitFile = file;
     const read = ++this.#fileRead;
     if (file === undefined) return;
     const chosen = await bucketCodeFromFile(file);
@@ -357,22 +357,18 @@ export class SetupRestoreBucketScreen extends LitElement {
       <p>${t("restore_bucket.intro")}</p>
       <p>${t("restore.replace_warning")}</p>
       <p class="sensitive" data-test="kit-sensitive">${t("restore_bucket.sensitive")}</p>
-      <label class="field">
-        ${t("restore_bucket.kit_file")}
-        <input
-          name="recovery-kit-file"
-          type="file"
-          data-test="kit-file"
-          aria-invalid=${packError === undefined ? "false" : "true"}
-          aria-describedby=${packError === undefined ? nothing : "kit-file-error"}
-          @change=${(e: Event) => void this.#readFile(e)}
-        />
-      </label>
-      ${
-        packError === undefined
-          ? nothing
-          : html`<p class="error" id="kit-file-error">${packError}</p>`
-      }
+      <wt-file-input
+        class="field"
+        name="recovery-kit-file"
+        label=${t("restore_bucket.kit_file")}
+        data-test="kit-file"
+        .files=${this.kitFile ? [this.kitFile] : []}
+        .copy=${fileInputCopy()}
+        .locale=${currentLocale()}
+        .error=${packError ?? ""}
+        ?invalid=${packError !== undefined}
+        @wt-change=${(event: CustomEvent<{ files: File[] }>) => void this.#readFile(event)}
+      ></wt-file-input>
       <wt-textarea
         class="field"
         label=${t("restore_bucket.kit")}

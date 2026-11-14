@@ -11,13 +11,15 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
+import "@waitron/ui/src/components/wt-file-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { passwordIcon } from "../password-icon.js";
 import { currentLocale, format, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
+import { fileInputCopy } from "../file-input-copy.js";
 import { certificateExportHelp } from "../certificate-export-help.js";
-import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
+import { actionsStyles, fieldStyles } from "../form-styles.js";
 import { dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { AeatCertDraft, ProvisionBody } from "../api/client.js";
@@ -72,7 +74,6 @@ export class SetupCertScreen extends LitElement {
   static override styles = [
     baseStyles,
     fieldStyles,
-    errorStyles,
     actionsStyles,
     css`
       a {
@@ -86,23 +87,6 @@ export class SetupCertScreen extends LitElement {
       }
       :host {
         display: block;
-      }
-
-      .field.file > span {
-        display: block;
-        margin-bottom: var(--wt-space-1);
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
-      }
-
-      input[type="file"] {
-        font: inherit;
-        color: var(--wt-color-text);
-        width: 100%;
-      }
-
-      .field.file[invalid] > span {
-        color: var(--wt-color-danger);
       }
 
       .file-status {
@@ -185,10 +169,6 @@ export class SetupCertScreen extends LitElement {
         this.#pendingFile = form.pendingFile;
         this.fileReadFailed = form.fileReadFailed;
         this.attempted = false;
-        const files = new DataTransfer();
-        if (form.selectedFile) files.items.add(form.selectedFile);
-        const input = this.shadowRoot?.querySelector<HTMLInputElement>("[data-test=pfx]");
-        if (input) input.files = files.files;
       },
     });
     this.#scope?.commit(this.#baseline);
@@ -220,10 +200,10 @@ export class SetupCertScreen extends LitElement {
     this.certKind = cert.certKind ?? this.certKind;
   }
 
-  async #onFileChange(event: Event): Promise<void> {
+  async #onFileChange(event: CustomEvent<{ files: File[] }>): Promise<void> {
+    event.stopPropagation();
     if (this.refusal?.field === "pfxBase64") this.refusalCleared = true;
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
+    const file = event.detail.files[0];
     const generation = ++this.#fileGeneration;
     this.#selectedFile = file ?? null;
     this.#pendingFile = file ?? null;
@@ -320,31 +300,24 @@ export class SetupCertScreen extends LitElement {
           >${t("cert.guide")}</a
         >
       </p>
-      <label class="field file" ?invalid=${errors.pfx !== undefined}>
-        <span
-          >${t("cert.file_label")} *
-          <wt-help-tooltip aria-label=${t("cert.file_help_label")}
-            >${t("cert.file_help")}</wt-help-tooltip
-          ></span
+      <wt-file-input
+        class="field"
+        name="certificate-file"
+        label=${t("cert.file_label")}
+        accept=".pfx,.p12"
+        required
+        data-test="pfx"
+        .files=${this.#selectedFile ? [this.#selectedFile] : []}
+        .copy=${fileInputCopy()}
+        .locale=${currentLocale()}
+        .error=${errors.pfx ?? ""}
+        ?invalid=${errors.pfx !== undefined}
+        @wt-change=${(event: CustomEvent<{ files: File[] }>) => void this.#onFileChange(event)}
+      >
+        <wt-help-tooltip slot="help" aria-label=${t("cert.file_help_label")}
+          >${t("cert.file_help")}</wt-help-tooltip
         >
-        <input
-          name="certificate-file"
-          type="file"
-          accept=".pfx,.p12"
-          required
-          aria-invalid=${errors.pfx === undefined ? "false" : "true"}
-          aria-describedby=${errors.pfx === undefined ? nothing : "certificate-file-error"}
-          data-test="pfx"
-          @change=${(e: Event) => void this.#onFileChange(e)}
-        />
-      </label>
-      ${
-        errors.pfx === undefined
-          ? nothing
-          : html`<p id="certificate-file-error" class="error" data-test="pfx-field-error">
-              ${errors.pfx}
-            </p>`
-      }
+      </wt-file-input>
       ${
         this.pfxBase64 !== ""
           ? html`<p class="file-status" data-test="file-status">

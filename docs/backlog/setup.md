@@ -492,15 +492,12 @@ that operation's reader. Do not remove exact-content checks to make a large file
 
 ## Bundle: File input sweep
 
-2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size M, from the backlog review of 2026-11-06.
 
-- **A missing configuration export on the setup wizard's live-source screen gets no red ring.** The
-  backup restore screen's file input draws one (A523); `live-source-screen.ts` marks its file input
-  `aria-invalid` but has no style for it.
 - **File pickers the browser still draws show "Choose File / No file chosen" in the browser's
-  language**, not the chooser's. Left: the setup app's certificate, restore, bucket restore and
-  live source screens, the dashboard's node recovery panel, and the fiscal first-setup, recovery
-  key and offline custodian pages. `wt-file-input` hides that control and draws its own words.
+  language**, not the chooser's. Left: the dashboard's node recovery panel, and the fiscal
+  first-setup, recovery key and offline custodian pages. `wt-file-input` hides that control and
+  draws its own words.
 
 ## Starter courses for Italy
 

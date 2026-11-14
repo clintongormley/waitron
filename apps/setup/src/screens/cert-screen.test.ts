@@ -1,9 +1,16 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import {
+  chooseFiles,
+  cleanupWidgets,
+  fileControl,
+  fileError,
+  mountWidget,
+} from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./cert-screen.js";
+import type { WtFileInput } from "@waitron/ui";
 import type { SetupCertScreen } from "./cert-screen.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { ProvisionBody } from "../api/client.js";
@@ -22,6 +29,9 @@ function collect(host: HTMLElement): Emitted[] {
 }
 
 const q = (el: SetupCertScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
+
+const pfxError = (el: SetupCertScreen) => fileError(q(el, "[data-test=pfx]")!);
+const pfxControl = (el: SetupCertScreen) => fileControl(q(el, "[data-test=pfx]")!);
 
 /** The form's one message above Next, shown by `wt-form-actions`. */
 async function bottomOf(el: SetupCertScreen): Promise<string> {
@@ -56,12 +66,8 @@ async function waitForFileLoaded(el: SetupCertScreen): Promise<void> {
 async function chooseFile(el: SetupCertScreen, source: number[], name = "cert.pfx"): Promise<void> {
   const bytes = new Uint8Array(new ArrayBuffer(source.length));
   bytes.set(source);
-  const input = q(el, "[data-test=pfx]") as HTMLInputElement;
   const file = new File([bytes], name, { type: "application/x-pkcs12" });
-  const dt = new DataTransfer();
-  dt.items.add(file);
-  input.files = dt.files;
-  input.dispatchEvent(new Event("change"));
+  chooseFiles(q(el, "[data-test=pfx]")!, file);
   await waitForFileLoaded(el);
 }
 
@@ -101,7 +107,7 @@ describe("setup-cert-screen", () => {
 
   it("gives every certificate field a stable name", async () => {
     const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
-    expect((q(el, "[data-test=pfx]") as HTMLInputElement).name).toBe("certificate-file");
+    expect(pfxControl(el).name).toBe("certificate-file");
     expect((q(el, "[data-test=certKind]") as HTMLSelectElement).name).toBe("certificate-kind");
   });
 
@@ -204,14 +210,12 @@ describe("setup-cert-screen", () => {
     expect(status.textContent).not.toContain(EXPECTED_BASE64);
   });
 
-  it("clears the loaded file when the picker is emptied", async () => {
+  it("clears the loaded file when an empty file choice arrives", async () => {
     const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
     await chooseFile(el, PFX_SOURCE);
     expect(q(el, "[data-test=file-status]")).not.toBeNull();
 
-    const input = q(el, "[data-test=pfx]") as HTMLInputElement;
-    input.files = new DataTransfer().files;
-    input.dispatchEvent(new Event("change"));
+    chooseFiles(q(el, "[data-test=pfx]")!);
     await el.updateComplete;
     expect(q(el, "[data-test=file-status]")).toBeNull();
   });
@@ -226,11 +230,10 @@ describe("setup-cert-screen", () => {
     expect(await bottomOf(el)).toBe(FIX_FIELDS);
     const actions = q(el, "wt-form-actions")!;
     expect(actions.shadowRoot!.querySelector("[data-error][role=alert]")).not.toBeNull();
-    expect(q(el, ".field.file")!.hasAttribute("invalid")).toBe(true);
-    expect(q(el, "[data-test=pfx-field-error]")).not.toBeNull();
-    expect((q(el, "[data-test=pfx]") as HTMLInputElement).getAttribute("aria-invalid")).toBe(
-      "true",
-    );
+    await el.shadowRoot!.querySelector<WtFileInput>("[data-test=pfx]")!.updateComplete;
+    expect(q(el, "[data-test=pfx]")!.hasAttribute("invalid")).toBe(true);
+    expect(pfxError(el)).not.toBeNull();
+    expect(pfxControl(el).getAttribute("aria-invalid")).toBe("true");
   });
 
   it("blocks Next when the passphrase is blank, marking it invalid", async () => {
@@ -347,14 +350,10 @@ describe("setup-cert-screen", () => {
     try {
       const { el, host } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
       const events = collect(host);
-      const input = q(el, "[data-test=pfx]") as HTMLInputElement;
       const file = new File([new Uint8Array([1, 2, 3])], "cert.pfx", {
         type: "application/x-pkcs12",
       });
-      const dt = new DataTransfer();
-      dt.items.add(file);
-      input.files = dt.files;
-      input.dispatchEvent(new Event("change"));
+      chooseFiles(q(el, "[data-test=pfx]")!, file);
       // Let the microtask (onerror), the catch, and the re-render settle.
       await new Promise((r) => setTimeout(r, 0));
       await el.updateComplete;
@@ -364,9 +363,7 @@ describe("setup-cert-screen", () => {
       q(el, "[data-test=next]")!.click();
       await el.updateComplete;
       expect(events).toEqual([]);
-      expect(q(el, "[data-test=pfx-field-error]")!.textContent).toContain(
-        "couldn't read that file",
-      );
+      expect(pfxError(el)!.textContent).toContain("couldn't read that file");
     } finally {
       globalThis.FileReader = RealFileReader;
       window.removeEventListener("unhandledrejection", onReject);
@@ -382,7 +379,7 @@ describe("setup-cert-screen form errors", () => {
     const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
     expect(await bottomOf(el)).toBe("");
     expect(next(el).hasAttribute("disabled")).toBe(false);
-    expect(q(el, "[data-test=pfx-field-error]")).toBeNull();
+    expect(pfxError(el)).toBeNull();
     expect(q(el, "[data-test=passphrase]")!.getAttribute("error")).toBe("");
   });
 
@@ -392,9 +389,7 @@ describe("setup-cert-screen form errors", () => {
     await el.updateComplete;
     await new Promise((resolve) => setTimeout(resolve));
 
-    expect(q(el, "[data-test=pfx-field-error]")!.textContent?.trim()).toBe(
-      "Choose the certificate file.",
-    );
+    expect(pfxError(el)!.textContent?.trim()).toBe("Choose the certificate file.");
     expect(q(el, "[data-test=passphrase]")!.getAttribute("error")).toBe(
       "Enter the certificate passphrase.",
     );
@@ -420,7 +415,7 @@ describe("setup-cert-screen form errors", () => {
 
     await typePassphrase(el, "unlock-2026");
     await chooseFile(el, PFX_SOURCE);
-    expect(q(el, "[data-test=pfx-field-error]")).toBeNull();
+    expect(pfxError(el)).toBeNull();
     expect(await bottomOf(el)).toBe("");
     expect(next(el).hasAttribute("disabled")).toBe(false);
     next(el).click();
@@ -432,11 +427,7 @@ describe("setup-cert-screen form errors", () => {
     const RealFileReader = globalThis.FileReader;
     globalThis.FileReader = FailingFileReader as unknown as typeof FileReader;
     try {
-      const input = q(el, "[data-test=pfx]") as HTMLInputElement;
-      const dt = new DataTransfer();
-      dt.items.add(new File([new Uint8Array([1])], "cert.pfx"));
-      input.files = dt.files;
-      input.dispatchEvent(new Event("change"));
+      chooseFiles(q(el, "[data-test=pfx]")!, new File([new Uint8Array([1])], "cert.pfx"));
       await new Promise((r) => setTimeout(r, 0));
       await el.updateComplete;
     } finally {
@@ -447,9 +438,9 @@ describe("setup-cert-screen form errors", () => {
   it("says nothing about a failed read, and leaves Next working, before the first press", async () => {
     const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
     await chooseUnreadableFile(el);
-    expect(q(el, "[data-test=pfx-field-error]")).toBeNull();
-    expect(q(el, ".field.file")!.hasAttribute("invalid")).toBe(false);
-    expect(q(el, "[data-test=pfx]")!.getAttribute("aria-invalid")).toBe("false");
+    expect(pfxError(el)).toBeNull();
+    expect(q(el, "[data-test=pfx]")!.hasAttribute("invalid")).toBe(false);
+    expect(pfxControl(el).getAttribute("aria-invalid")).toBe("false");
     expect(await bottomOf(el)).toBe("");
     expect(next(el).hasAttribute("disabled")).toBe(false);
   });
@@ -460,12 +451,12 @@ describe("setup-cert-screen form errors", () => {
     await chooseUnreadableFile(el);
     next(el).click();
     await el.updateComplete;
-    expect(q(el, "[data-test=pfx-field-error]")!.textContent).toContain("couldn't read that file");
+    expect(pfxError(el)!.textContent).toContain("couldn't read that file");
     expect(await bottomOf(el)).toBe(FIX_FIELDS);
     expect(next(el).hasAttribute("disabled")).toBe(true);
 
     await chooseFile(el, PFX_SOURCE);
-    expect(q(el, "[data-test=pfx-field-error]")).toBeNull();
+    expect(pfxError(el)).toBeNull();
     expect(await bottomOf(el)).toBe("");
     expect(next(el).hasAttribute("disabled")).toBe(false);
   });
@@ -592,9 +583,7 @@ describe("setup-cert-screen in Spanish", () => {
       ).toEqual(["Sello electrónico", "Representante"]);
       q(el, "[data-test=next]")!.click();
       await el.updateComplete;
-      expect(q(el, "[data-test=pfx-field-error]")!.textContent?.trim()).toBe(
-        "Elige el archivo del certificado.",
-      );
+      expect(pfxError(el)!.textContent?.trim()).toBe("Elige el archivo del certificado.");
       expect(q(el, "[data-test=next]")!.textContent).toBe("Siguiente");
     } finally {
       ua.mockRestore();
