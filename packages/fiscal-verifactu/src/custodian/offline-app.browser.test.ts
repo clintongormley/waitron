@@ -329,6 +329,8 @@ for (const theme of ["light", "dark"] as const)
     await click("Check saved file");
     await uploadRaw(el, "saved-file", file);
     await fill(el, "passphrase", "wrong passphrase");
+    await el.updateComplete;
+    expect(drawnFileName(picker(el, "saved-file"))).toBe("saved-file.json");
     enter("passphrase");
     await expect
       .element(
@@ -340,6 +342,8 @@ for (const theme of ["light", "dark"] as const)
         ),
       )
       .toBeVisible();
+    await el.updateComplete;
+    expect(drawnFileName(picker(el, "saved-file"))).toBeNull();
     await uploadRaw(el, "saved-file", file);
     await fill(el, "passphrase", custodyPassphrase);
     enter("passphrase");

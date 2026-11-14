@@ -219,6 +219,10 @@ it("updates an already open form when the language changes", async () => {
     setLocale("es-ES");
     await el.updateComplete;
     expect(el.shadowRoot!.textContent).toContain("Kit de recuperación del nodo");
+    const picker = q<WtFileInput>(el, "register-file");
+    await picker.updateComplete;
+    expect(picker.shadowRoot!.textContent).toContain(t("file_input.choose", "es-ES"));
+    expect(picker.shadowRoot!.textContent).not.toContain(t("file_input.choose", "en-GB"));
   } finally {
     setLocale(old);
   }
