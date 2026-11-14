@@ -7,7 +7,6 @@ export { CALENDAR_COLOURS, type CalendarColour } from "@waitron/shared";
 
 export type CalendarTone = "public_holiday" | "special_day" | "closed" | "standard";
 
-/** A public holiday fact for a date, supplied by a `HolidayReader` (`./hours.ts`) when one is given. */
 export interface HolidayFact {
   id: string;
   date: LocalDate;
