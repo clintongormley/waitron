@@ -206,6 +206,8 @@ Screen: Dashboard alerts bell (incident history where applicable). Fix: [fiscal-
 
 Wording: `apps/dashboard/src/i18n/alert-messages.ts:137` and `apps/dashboard/src/i18n/alert-messages.ts:138`.
 
+Reworded 2026-11-14 (W41s-9 evidence step): the words above no longer end with a support referral; they say the invoice was still recorded, that sales and sending to AEAT carry on, and to keep the box running and note when it appeared. No page shows this alert's evidence (watcher, 2026-11-14 03:20). Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `chain.verification_failed`.
+
 State: A fiscal backend returned stored-chain integrity issues during issuance. This proves an integrity failure was detected, not that a product bug is the only cause. Receipt: `packages/core/src/record-sale.ts:205`; `packages/core/src/record-correction.ts:240`; `packages/core/src/record-void.ts:55`; `packages/core/src/record-substitution.ts:163`.
 
 Route: Missing: preserve evidence and offer an administrator investigation/recovery route. Do not edit stored records, reset invoice numbers or promise a backup repairs the chain.
@@ -237,6 +239,8 @@ Screen: Dashboard alerts bell (incident history where applicable). Fix: [fiscal-
 | ES | La AEAT ha respondido a un envío con un número de líneas distinto del de registros de facturación que Waitron envió, así que Waitron no ha aplicado ninguna y volverá a enviar cada uno salvo que esté en espera un registro anterior de su cadena. Contacta con soporte. |
 
 Wording: `apps/dashboard/src/i18n/alert-messages.ts:202` and `apps/dashboard/src/i18n/alert-messages.ts:203`.
+
+Reworded 2026-11-14 (W41s-9 evidence step): the words above no longer end with a support referral; they say the records sent and AEAT's lines are on **Reporting → Fiscal filing**, and the bell's Go to opens that page. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.respuesta_descuadrada`.
 
 State: The resolved submission reply reports a line-count mismatch and records an incident. An external malformed reply can cause it. Receipt: `packages/fiscal-verifactu/src/drain.ts:1399`.
 
@@ -333,6 +337,8 @@ Screen: Dashboard alerts bell (incident history where applicable). Fix: [fiscal-
 | ES | Un registro de facturación tiene un problema que la AEAT acepta, aunque puede señalarlo. Contacta con soporte. |
 
 Wording: `apps/dashboard/src/i18n/alert-messages.ts:234` and `apps/dashboard/src/i18n/alert-messages.ts:235`.
+
+Reworded 2026-11-14 (W41s-9 evidence step): the words above no longer end with a support referral; they say the record went out as usual and the invoice and fields involved are on **Reporting → Fiscal filing**, and the bell's Go to opens that page. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.record_flagged`.
 
 State: Local validation returns non-total warnings and records them. Validation warnings alone do not establish a product bug. Receipt: `packages/fiscal-verifactu/src/chain.ts:231`.
 
@@ -941,8 +947,12 @@ Logs are in `/Users/clintongormley/waitron-campaign-e/receipts/a1089-fiscal-inte
 These local fixtures do not qualify live AEAT, a complete chain audit, persistent repair or a rendered
 inspection screen. The proposal separates saved evidence from fresh reads, offers sign-in at the
 action and a safe Stop, and grants no write or repair authority. The owner retired the separate
-evidence screen on 2026-11-10: its evidence goes on Reporting → Fiscal filing as one small step.
-The product referrals remain open.
+evidence screen on 2026-11-10. Since W41s-9's evidence step (2026-11-14), **Reporting → Fiscal
+filing** lists open local validation warnings under **Warnings**, with the invoice where exactly one
+record of the sale was made in the warning's second, and the bell's alerts open it. Saved
+predecessor-check issues have no section (watcher, 2026-11-14 03:20); their alert was reworded
+without a support referral. A persistent repair or decision route remains open and needs its own
+owner decision.
 
 ### fiscal-cases
 
@@ -981,9 +991,11 @@ The logs report **23**, **56** and **20** passing cases respectively; the first 
 real XML client, not live AEAT, an end-to-end inspection journey or a persistent-repair qualification.
 No original assertion, fiscal record, guard or production source changes in this milestone.
 
-**Still open:** the owner retired the separate evidence screen on 2026-11-10: its evidence goes on
-Reporting → Fiscal filing as one small step; persistent response repair stays open. Keep the support
-wording in scope until an actual action exists. Inspection must distinguish the first retained
+**Still open:** the owner retired the separate evidence screen on 2026-11-10. Since W41s-9's
+evidence step (2026-11-14), **Reporting → Fiscal filing** lists open reply mismatches under
+**Warnings** with the records sent, their state now and AEAT's first-kept lines, the bell's alert
+opens it, and the alert no longer refers to support. Persistent response repair stays open and
+needs its own owner decision. Inspection must distinguish the first retained
 warning from freshly read submission state; it cannot reconstruct replies that were never kept.
 A malformed reply does not establish a Waitron bug or authorise a reset, altered chain, new invoice
 number, reordered batch or manual retry. W41s-8/W41s-9 retain their separate authority and gates.
