@@ -18,6 +18,8 @@ import { describe, expect, test } from "vitest";
 const ROOT = join(import.meta.dirname, "..");
 const ROOTS = ["apps", "packages"];
 const GLOBALS = new Set(["window", "globalThis"]);
+const TRIVIA = String.raw`(?:[\s\u0085\u200B]|/\*[^*]*\*+(?:[^*/][^*]*\*+)*/|//[^\r\n\u2028\u2029]*[\r\n\u2028\u2029])*`;
+const POSSIBLE_READ = new RegExp(String.raw`history${TRIVIA}(?:\?\.|\.)${TRIVIA}length`);
 
 function isBrowserHistory(node: ts.Expression): boolean {
   if (ts.isIdentifier(node)) return node.text === "history";
@@ -31,6 +33,8 @@ function isBrowserHistory(node: ts.Expression): boolean {
 
 /** Lines of `source` that read the browser's global `history.length`. */
 export function historyLengthReads(source: string): number[] {
+  // Escaped identifiers need the parser's decoded spelling.
+  if (!source.includes("\\u") && !POSSIBLE_READ.test(source)) return [];
   const file = ts.createSourceFile("x.ts", source, ts.ScriptTarget.Latest, true);
   const lines = new Set<number>();
   const visit = (node: ts.Node) => {
@@ -73,6 +77,33 @@ describe("historyLengthReads", () => {
     expect(historyLengthReads("/** `history.length` cannot show a push. */")).toEqual([]);
     expect(historyLengthReads('const s = "history.length";')).toEqual([]);
   });
+
+  test("keeps findings across trivia, optional reads and identifier escapes", () => {
+    for (const [source, lines] of [
+      ["\nhistory \t. length;", [2]],
+      ["history/* first\nsecond */./* third\nfourth */length;", [1]],
+      ["history// first\n.length;", [1]],
+      ["history// first\r.length;", [1]],
+      ["history// first\r\n.// second\u2028length;", [1]],
+      ["history// first\u2029.length;", [1]],
+      ["history\u0085.length;", [1]],
+      ["history.\u200blength;", [1]],
+      ["history\u00a0.length;", [1]],
+      ["history.\ufefflength;", [1]],
+      ["history?.length;", [1]],
+      ["window.history?.length;", [1]],
+      ["globalThis?.history?.length;", [1]],
+      [String.raw`h\u0069story.length;`, [1]],
+      [String.raw`history.l\u0065ngth;`, [1]],
+      [String.raw`\u{68}istory.length;`, [1]],
+      ["history.length;\nhistory.length; history.length;", [1, 2]],
+      ["other.history /* comment */ .length;", []],
+      ['const text = "history /* comment */ .length";', []],
+      ["/* history?.length; */", []],
+    ] as const) {
+      expect(historyLengthReads(source), JSON.stringify(source)).toEqual(lines);
+    }
+  });
 });
 
 describe("the tree", () => {
@@ -87,7 +118,6 @@ describe("the tree", () => {
     const found: string[] = [];
     for (const file of files) {
       const source = readFileSync(file, "utf8");
-      if (!source.includes("history") && !source.includes("\\u")) continue;
       for (const line of historyLengthReads(source)) {
         found.push(`${relative(ROOT, file)}:${line}`);
       }
