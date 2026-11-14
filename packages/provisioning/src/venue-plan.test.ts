@@ -413,13 +413,18 @@ describe("planVenue", () => {
   });
 
   it("canonicalizes country/taxId case and leading/trailing whitespace so es/ES reads as the SAME taxpayer", () => {
-    const canonicalTaxpayer = planVenue(request({ country: "ES", taxId: "B12345678" }), MODULES).find(
-      (a) => a.kind === "ensure-taxpayer",
-    );
+    const canonicalTaxpayer = planVenue(
+      request({ country: "ES", taxId: "B12345678" }),
+      MODULES,
+    ).find((a) => a.kind === "ensure-taxpayer");
     const messyTaxpayer = planVenue(request({ country: "es", taxId: " b12345678 " }), MODULES).find(
       (a) => a.kind === "ensure-taxpayer",
     );
-    expect(messyTaxpayer).toMatchObject({ kind: "ensure-taxpayer", country: "ES", taxId: "B12345678" });
+    expect(messyTaxpayer).toMatchObject({
+      kind: "ensure-taxpayer",
+      country: "ES",
+      taxId: "B12345678",
+    });
     expect(messyTaxpayer).toEqual(canonicalTaxpayer);
   });
 

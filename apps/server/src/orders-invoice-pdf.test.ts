@@ -5,7 +5,13 @@ import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { invoiceDeliveries, invoicePdfDownloads, invoiceSeries, sales, taxpayer } from "@waitron/db";
+import {
+  invoiceDeliveries,
+  invoicePdfDownloads,
+  invoiceSeries,
+  sales,
+  taxpayer,
+} from "@waitron/db";
 import { recordSale } from "@waitron/core";
 import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";

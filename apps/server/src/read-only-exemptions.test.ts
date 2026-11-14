@@ -337,7 +337,11 @@ beforeAll(async () => {
         binding: {
           operationId: MIRROR_OPERATION_ID,
           scenario: "controlled",
-          venue: { country: taxpayer!.country, taxId: taxpayer!.taxId, environment: "preproduction" },
+          venue: {
+            country: taxpayer!.country,
+            taxId: taxpayer!.taxId,
+            environment: "preproduction",
+          },
           sourceNodeId: MAIN_BOX.nodeId,
           destinationNodeId: sId,
           membership: {

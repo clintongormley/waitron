@@ -395,7 +395,9 @@ it.each(["missing", "different"] as const)(
   async (state) => {
     const f = await fixture();
     await suite.db.execute(
-      state === "missing" ? sql`delete from taxpayer` : sql`update taxpayer set tax_id = '89890001K'`,
+      state === "missing"
+        ? sql`delete from taxpayer`
+        : sql`update taxpayer set tax_id = '89890001K'`,
     );
     await expect(run(f, f.client, { year: "2026", month: "08" })).rejects.toThrow(
       "reconciliation requires the scoped venue taxpayer",

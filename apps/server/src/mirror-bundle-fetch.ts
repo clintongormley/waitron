@@ -42,8 +42,14 @@ function isEncodedKeyRing(value: unknown): boolean {
 
 function isMirrorBundle(value: unknown): value is MirrorBundle {
   if (!isRecord(value)) return false;
-  const { designated, taxpayer, primaryNode, reservedIdentity, moduleOverrides, wireguardPublicKey } =
-    value;
+  const {
+    designated,
+    taxpayer,
+    primaryNode,
+    reservedIdentity,
+    moduleOverrides,
+    wireguardPublicKey,
+  } = value;
   if (
     !hasStrings(value, [
       "boxHostname",

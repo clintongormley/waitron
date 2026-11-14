@@ -710,9 +710,10 @@ describe("catalogue operations", () => {
       expect((await listProducts(tx, cat.id)).find((x) => x.id === p.id)!.active).toBe(false);
       return { cat, p };
     });
-    await expect(asVenue((tx) => updateProduct(tx, p.id, { active: true }))).rejects.toMatchObject(
-      { code: "product.archived", params: { productId: p.id } },
-    );
+    await expect(asVenue((tx) => updateProduct(tx, p.id, { active: true }))).rejects.toMatchObject({
+      code: "product.archived",
+      params: { productId: p.id },
+    });
     expect(
       (await asVenue((tx) => listProducts(tx, cat.id))).find((x) => x.id === p.id)!.active,
     ).toBe(false);

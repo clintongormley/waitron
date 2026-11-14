@@ -47,7 +47,9 @@ export async function deferredCloseVenue(db: Database) {
       offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
     )
   ).zoneId;
-  await inTx(venue, (tx) => tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" }));
+  await inTx(venue, (tx) =>
+    tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" }),
+  );
   return deferredCloseKit(venue, counterZone);
 }
 

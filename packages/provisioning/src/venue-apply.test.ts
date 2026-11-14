@@ -892,9 +892,9 @@ describe("applyVenue", () => {
     const withoutTaxpayer = planVenue(request(), ALL_MODULES).filter(
       (a) => a.kind !== "ensure-taxpayer",
     );
-    await expect(applyVenue(withoutTaxpayer, { db: suite.db, modules: ALL_MODULES })).rejects.toThrow(
-      "applyVenue: plan is missing ensure-taxpayer",
-    );
+    await expect(
+      applyVenue(withoutTaxpayer, { db: suite.db, modules: ALL_MODULES }),
+    ).rejects.toThrow("applyVenue: plan is missing ensure-taxpayer");
   });
 
   it("refuses a plan with no create-node — a venue that files nothing is not complete", async () => {

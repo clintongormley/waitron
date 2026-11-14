@@ -316,9 +316,9 @@ describe("the detector itself", () => {
   });
 
   it("still reads a line of code that carries a trailing comment", () => {
-    expect(writes("await tx.insert(taxpayer).values(row); // see the provisioner", "taxpayer")).toBe(
-      true,
-    );
+    expect(
+      writes("await tx.insert(taxpayer).values(row); // see the provisioner", "taxpayer"),
+    ).toBe(true);
   });
 
   // A string literal holding a comment opener must not take the code beneath it with it.
@@ -341,7 +341,9 @@ describe("the detector itself", () => {
   // Each of these would otherwise fail a push that had nothing to do with a database.
   it("says nothing about a comment that follows code on its line", () => {
     expect(writes("const x = 1; // update nodes when set", "nodes")).toBe(false);
-    expect(writes("const x = 1; /* insert into taxpayer (id) values (1) */", "taxpayer")).toBe(false);
+    expect(writes("const x = 1; /* insert into taxpayer (id) values (1) */", "taxpayer")).toBe(
+      false,
+    );
     expect(writes("function f(/* insert into taxpayer */ a) {}", "taxpayer")).toBe(false);
   });
 

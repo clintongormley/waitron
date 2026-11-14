@@ -644,7 +644,11 @@ describe("a real offer beside a real promotion on a real start", () => {
           binding: {
             operationId: OPERATION_ID,
             scenario: "controlled",
-            venue: { country: taxpayer!.country, taxId: taxpayer!.taxId, environment: "production" },
+            venue: {
+              country: taxpayer!.country,
+              taxId: taxpayer!.taxId,
+              environment: "production",
+            },
             sourceNodeId: MIRROR_ORIGIN_NODE_ID,
             destinationNodeId: seed.nodeId,
             membership: {

@@ -844,7 +844,9 @@ export class VerifactuBackend implements FiscalBackend {
   private async taxpayer(tx: Transaction): Promise<{ legalName: string }> {
     const row = await readTaxpayer(tx);
     if (row === null) {
-      throw new Error("taxpayer is empty: a venue cannot file a record with no taxpayer to file as");
+      throw new Error(
+        "taxpayer is empty: a venue cannot file a record with no taxpayer to file as",
+      );
     }
     return row;
   }

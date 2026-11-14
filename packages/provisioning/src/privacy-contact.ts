@@ -50,6 +50,9 @@ export async function savePrivacyContact(
     .update(taxpayer)
     .set(values)
     .where(eq(taxpayer.id, 1))
-    .returning({ privacyNoticeUrl: taxpayer.privacyNoticeUrl, privacyEmail: taxpayer.privacyEmail });
+    .returning({
+      privacyNoticeUrl: taxpayer.privacyNoticeUrl,
+      privacyEmail: taxpayer.privacyEmail,
+    });
   return row ?? null;
 }

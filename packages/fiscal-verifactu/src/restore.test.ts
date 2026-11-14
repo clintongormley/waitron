@@ -1,7 +1,13 @@
 import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, beforeEach, afterEach, describe, expect, it, vi } from "vitest";
-import { deployment, invoiceSeries, readTaxpayer, withTransaction, type Database } from "@waitron/db";
+import {
+  deployment,
+  invoiceSeries,
+  readTaxpayer,
+  withTransaction,
+  type Database,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { isAppError } from "@waitron/shared";
 import type { ProvisionedNode } from "@waitron/module";

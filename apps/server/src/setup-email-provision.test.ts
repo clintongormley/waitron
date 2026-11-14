@@ -270,8 +270,7 @@ describe("setup provision email credential", () => {
   });
   it("resumes both credential seals when SMTP storage fails after the fiscal seal", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-email-seal-failure-"));
-    await suite.db
-      .run(sql`create trigger test_email_seal_failure before insert on venue_credentials
+    await suite.db.run(sql`create trigger test_email_seal_failure before insert on venue_credentials
       when new.purpose = 'email.smtp' begin select raise(abort, 'fixture storage refusal'); end`);
     try {
       const operations = createSetupOperationStore(dir);

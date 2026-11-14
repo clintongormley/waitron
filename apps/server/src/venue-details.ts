@@ -90,7 +90,11 @@ export async function readVenueDetails(
   const venue = await readVenue(tx);
   const taxpayer = await readTaxpayer(tx);
   if (taxpayer === null) throw new AppError("venue.not_found", {});
-  const issuer = { country: taxpayer.country, legalName: taxpayer.legalName, taxId: taxpayer.taxId };
+  const issuer = {
+    country: taxpayer.country,
+    legalName: taxpayer.legalName,
+    taxId: taxpayer.taxId,
+  };
   const pack = getCountryPack(issuer.country);
   const { rows } = await tx.execute<{ sales: number; orders: number; closes: number }>(sql`
     select exists(select 1 from sales limit 1) as sales,

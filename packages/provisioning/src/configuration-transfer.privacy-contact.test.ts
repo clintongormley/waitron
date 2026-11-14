@@ -247,5 +247,7 @@ it("an import with no taxpayer row finishes and creates none", async () => {
   await withTransaction(suite.db, (tx) =>
     importConfigurationTables(tx, configurationBundle(), [], {}),
   );
-  expect((await suite.db.execute(sql`select count(*) as n from taxpayer`)).rows).toEqual([{ n: 0 }]);
+  expect((await suite.db.execute(sql`select count(*) as n from taxpayer`)).rows).toEqual([
+    { n: 0 },
+  ]);
 });

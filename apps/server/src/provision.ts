@@ -127,7 +127,11 @@ export async function provisionVenue(
   const ensure = plan.find((a) => a.kind === "ensure-taxpayer");
   const present = await readTaxpayerIdentities(deps.ownerDb);
   if (ensure !== undefined && ensure.kind === "ensure-taxpayer") {
-    assertNoForeignTaxpayer(present, { country: ensure.country, taxId: ensure.taxId }, deps.database);
+    assertNoForeignTaxpayer(
+      present,
+      { country: ensure.country, taxId: ensure.taxId },
+      deps.database,
+    );
   }
   if (present.length > 0) {
     throw new AppError("setup.already_provisioned", {});

@@ -1377,7 +1377,9 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
     await stageStreamRestore(deps);
     const staged = new DatabaseSync(join(deps.stateDir, "flows/restore/venue.db"));
     try {
-      expect(staged.prepare("select tax_id from taxpayer").all()).toEqual([{ tax_id: "89890001K" }]);
+      expect(staged.prepare("select tax_id from taxpayer").all()).toEqual([
+        { tax_id: "89890001K" },
+      ]);
     } finally {
       staged.close();
     }

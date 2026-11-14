@@ -736,7 +736,9 @@ describe("runCli venue", () => {
     });
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
     expect(code).toBe(1);
-    expect(h.lines.join("\n")).toContain(`provisioning.foreign_taxpayer {"database":"${VENUE_DIR}"}`);
+    expect(h.lines.join("\n")).toContain(
+      `provisioning.foreign_taxpayer {"database":"${VENUE_DIR}"}`,
+    );
     expect(h.readTaxpayers).toHaveBeenCalledTimes(1);
     expect(h.applyVenue).not.toHaveBeenCalled();
     expect(h.closes()).toBe(1);

@@ -1,7 +1,13 @@
 import { generateKeyPairSync } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import { beforeEach, expect, it, vi } from "vitest";
-import { deployment, invoiceSeries, taxpayer, withTransaction, type Transaction } from "@waitron/db";
+import {
+  deployment,
+  invoiceSeries,
+  taxpayer,
+  withTransaction,
+  type Transaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   withOperationAuthority,

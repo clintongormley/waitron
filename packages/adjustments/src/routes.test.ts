@@ -5,7 +5,11 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction, workingOrderLines, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTaxpayer, seedVenue, seedWorkingOrder as seedOrder } from "@waitron/db/testing/seed.js";
+import {
+  seedTaxpayer,
+  seedVenue,
+  seedWorkingOrder as seedOrder,
+} from "@waitron/db/testing/seed.js";
 import {
   hashPin,
   persons,
