@@ -265,7 +265,10 @@ const REBUILT_COLUMN_ORDER: Record<string, readonly (readonly string[])[]> = {
     ["created_at", "request_kind"],
   ],
   payment_refunds: [["created_at", "provider_refund_ref"]],
-  payments: [["state", "requested_amount"]],
+  payments: [
+    ["state", "requested_amount"],
+    ["card_scheme", "external_provider", "external_machine"],
+  ],
   persons: [
     ["first_names", "display_name_folded"],
     ["pending_email", "email_folded"],
@@ -844,6 +847,16 @@ for (const locale of ["en", "es"] as const) {
         [
           "payments",
           { name: "requested_amount", type: "INTEGER", notnull: 0, dflt_value: null, pk: 0 },
+          null,
+        ],
+        [
+          "payments",
+          { name: "external_provider", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
+          null,
+        ],
+        [
+          "payments",
+          { name: "external_machine", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
           null,
         ],
         [
