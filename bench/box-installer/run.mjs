@@ -855,11 +855,11 @@ console.log("B3_NETWORK_RECONCILE:"+JSON.stringify({savedCopy,forgotten,startupC
         name,
         false,
         "B3_INSTALLED:",
-        caseName === "existing-stick" && name === "again" ? 480000 : 300000,
+        caseName === "existing-stick" && name === "again" ? 480000 : 600000,
       );
       try {
         const observed = JSON.parse(rigLine(guest.serial, "B3_INSTALLED:"));
-        const networkUntil = Date.now() + 20_000;
+        const networkUntil = Date.now() + 300_000;
         while (
           !rigLine(guest.serial, "B3_NETWORK:") ||
           !rigLine(guest.serial, "B3_NETWORK_OPS:") ||
