@@ -1,3 +1,4 @@
+import { WAL_SUFFIX } from "@waitron/store";
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -64,7 +65,8 @@ function copyDatabase(referenceDir: string, control: Control, dir: string): stri
   mkdirSync(dir, { recursive: true });
   const target = join(dir, `${control.database}.db`);
   copyFileSync(source, target);
-  if (existsSync(`${source}-wal`)) copyFileSync(`${source}-wal`, `${target}-wal`);
+  if (existsSync(`${source}${WAL_SUFFIX}`))
+    copyFileSync(`${source}${WAL_SUFFIX}`, `${target}${WAL_SUFFIX}`);
   return target;
 }
 

@@ -5,6 +5,10 @@ import {
   SCRATCH_DIR,
   RESTORE_FLOW_DIR,
   SETUP_OPERATION_FILE,
+  VENUE_FILE,
+  NODE_FILE,
+  TRADING_ENV_FILE,
+  TRADING_ENV_REPLACED_SUFFIX,
 } from "@waitron/store";
 import {
   assertNoStartAgainDeletion,
@@ -23,12 +27,6 @@ import {
   stat,
   unlink,
 } from "node:fs/promises";
-import {
-  VENUE_FILE,
-  NODE_FILE,
-  TRADING_ENV_FILE,
-  TRADING_ENV_REPLACED_SUFFIX,
-} from "@waitron/store";
 import { wipeVenueDatabases } from "./db-wipe.js";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
@@ -96,7 +94,7 @@ import {
 } from "./restore-flow.js";
 const ARTIFACT = "artifact";
 const KEY = "key";
-const STREAM_DB = "venue.db";
+const STREAM_DB = VENUE_FILE;
 const STREAM_ENTRIES = "entries";
 const STREAM_PLACEMENT = "placement.db";
 const SETUP_OPERATION = SETUP_OPERATION_FILE;

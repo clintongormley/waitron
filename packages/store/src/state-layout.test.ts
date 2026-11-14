@@ -13,10 +13,30 @@ it("a plain reset keeps exactly tls and records", () => {
 
 it("every constant is in the table", () => {
   const names = layout.STATE_LAYOUT.map((entry) => entry.name);
+  const suffixes = new Set([
+    "TRADING_ENV_REPLACED_SUFFIX",
+    "WAL_SUFFIX",
+    "SHM_SUFFIX",
+    "JOURNAL_SUFFIX",
+    "LITESTREAM_META_SUFFIX",
+    "INCOMING_SUFFIX",
+  ]);
+  const venueNames = new Set([
+    "VENUE_FILE",
+    "NODE_FILE",
+    "VENUE_WAL_FILE",
+    "NODE_WAL_FILE",
+    "VENUE_LOCK_FILE",
+    "VENUE_HOLDER_FILE",
+    "MIGRATIONS_LOCK_FILE",
+    "VENUE_LITESTREAM_DIR",
+    "REPLACED_DATABASE_PREFIX",
+  ]);
   for (const [key, value] of Object.entries(layout)) {
-    if (typeof value !== "string" || key === "TRADING_ENV_REPLACED_SUFFIX") continue;
-    const path =
-      key === "STREAM_RESTORE_PREFIX" || key === "RESTORE_ENTRY_PREFIX"
+    if (typeof value !== "string" || suffixes.has(key)) continue;
+    const path = venueNames.has(key)
+      ? `${layout.VENUE_DIR_NAME}/${value}`
+      : key === "STREAM_RESTORE_PREFIX" || key === "RESTORE_ENTRY_PREFIX"
         ? `${layout.SCRATCH_DIR}/${value}`
         : value;
     expect(

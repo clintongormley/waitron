@@ -1,6 +1,15 @@
-import { RECORDS_DIR } from "@waitron/store";
+import {
+  RECORDS_DIR,
+  VENUE_FILE,
+  NODE_FILE,
+  SECRETS_ENV_FILE,
+  BACKUP_ROOM_NOTE_FILE,
+  WAL_SUFFIX,
+  SHM_SUFFIX,
+  JOURNAL_SUFFIX,
+} from "@waitron/store";
 import { mkdirDurable } from "./fs-atomic.js";
-import { SECRETS_ENV_FILE } from "@waitron/store";
+
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
 import { basename, dirname, join, relative, sep } from "node:path";
@@ -16,7 +25,7 @@ import { readStartAgainMarker } from "./first-setup-start-again-deletion.js";
 import type { StartAgainUnit } from "./first-setup-start-again-leftovers.js";
 import { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
 import { syncFolder } from "./folder-sync.js";
-import { BACKUP_ROOM_NOTE_FILE } from "@waitron/store";
+
 import "./errors.js";
 
 export interface SetAsideIo {
@@ -324,8 +333,8 @@ export async function movePiece(
   }
 }
 
-const DATABASES = new Set(["venue.db", "node.db"]);
-const SIDE_SUFFIXES = ["-wal", "-shm", "-journal"] as const;
+const DATABASES = new Set([VENUE_FILE, NODE_FILE]);
+const SIDE_SUFFIXES = [WAL_SUFFIX, SHM_SUFFIX, JOURNAL_SUFFIX] as const;
 
 /**
  * Before a database's main file, its last piece, moves: a side file still at its source. The

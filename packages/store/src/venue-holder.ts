@@ -1,3 +1,4 @@
+import { VENUE_HOLDER_FILE } from "./state-layout.js";
 import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -7,7 +8,7 @@ import { join } from "node:path";
  * holder from a frozen one. Written only by the process holding the lock and removed on its last
  * release; a holder that dies leaves it for the next holder to overwrite.
  */
-export const VENUE_HOLDER_FILE = "venue.holder.json";
+export { VENUE_HOLDER_FILE } from "./state-layout.js";
 
 export const VENUE_HOLDER_KINDS = [
   "server",

@@ -252,6 +252,7 @@ COPY --from=build --chown=waitron:waitron \
   /src/apps/server/dist/backup-verification.js \
   /src/apps/server/dist/fiscal-certificate-diagnosis.js \
   /src/apps/server/dist/upgrade-checks.js \
+  /src/apps/server/dist/state-layout.js \
   /src/apps/server/dist/bin-restore.js \
   /src/apps/server/dist/bin-rejoin.js \
   /src/apps/server/dist/bin-break-glass.js \
@@ -271,6 +272,7 @@ COPY --from=build --chown=waitron:waitron \
   /src/apps/server/dist/backup-verification.js.NOTICES.txt \
   /src/apps/server/dist/fiscal-certificate-diagnosis.js.NOTICES.txt \
   /src/apps/server/dist/upgrade-checks.js.NOTICES.txt \
+  /src/apps/server/dist/state-layout.js.NOTICES.txt \
   /src/apps/server/dist/bin-restore.js.NOTICES.txt \
   /src/apps/server/dist/bin-rejoin.js.NOTICES.txt \
   /src/apps/server/dist/bin-break-glass.js.NOTICES.txt \

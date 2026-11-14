@@ -1,4 +1,5 @@
-import { TRADING_ENV_FILE } from "@waitron/store";
+import { INCOMING_SUFFIX as STAGED_SECRET_SUFFIX, TRADING_ENV_FILE } from "@waitron/store";
+
 import { rename, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { AppError, isAppError } from "@waitron/shared";
@@ -11,7 +12,7 @@ import "./errors.js";
 
 const SECRETS_PREFIX = "secrets/";
 
-export const STAGED_SECRET_SUFFIX = ".incoming";
+export { INCOMING_SUFFIX as STAGED_SECRET_SUFFIX } from "@waitron/store";
 /** A killed restore can leave `.incoming`, `.incoming.tmp` and
  * `.restore-previous` files beside the secrets. One killed while publishing can leave a target
  * missing, with the box's old file as `.restore-previous` and the backup's as `.incoming`. The next

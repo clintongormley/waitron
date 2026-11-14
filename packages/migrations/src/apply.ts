@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { openVenueDatabase, removeChangeFeed, runMigrations, type Database } from "@waitron/db";
 import { AppError, sqliteFailureOf } from "@waitron/shared";
-import { installAppendOnlyTriggers, openLock } from "@waitron/store";
+import { installAppendOnlyTriggers, openLock, MIGRATIONS_LOCK_FILE } from "@waitron/store";
 import type { VenueMigrationOptions } from "./manifest.js";
 import { appliedSchemaVersion, type MigrationFiles } from "./schema-version.js";
 import "./errors.js";
@@ -19,7 +19,7 @@ import "./errors.js";
  * connection or killing the holder releases it; a lock file would survive a crash and wedge every
  * later boot.
  */
-const LOCK_FILE = "migrations.lock";
+const LOCK_FILE = MIGRATIONS_LOCK_FILE;
 
 /**
  * How long a second migrator waits before SQLite refuses it with `database is locked`: a bound on

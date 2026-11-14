@@ -4,7 +4,7 @@ import { canonicalize } from "@waitron/membership";
 import { sha256Hex } from "@waitron/handover";
 import { checkHandoverCopy, collectHandoverSummaries, type WaitronModule } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { openBackupQuery } from "@waitron/store";
+import { openBackupQuery, VENUE_FILE } from "@waitron/store";
 import { isCopyIntact } from "./handover-integrity.js";
 
 export interface EmergencyCopy {
@@ -18,7 +18,7 @@ export async function checkEmergencyCopy(deps: {
   venueDir: string;
   modules: readonly WaitronModule[];
 }): Promise<EmergencyCopy> {
-  const path = join(deps.venueDir, "venue.db");
+  const path = join(deps.venueDir, VENUE_FILE);
   if (!(await isCopyIntact(path))) throw new AppError("handover.copy_damaged", {});
   const copy = await openBackupQuery(path);
   try {

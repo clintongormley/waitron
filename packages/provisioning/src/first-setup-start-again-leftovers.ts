@@ -1,5 +1,14 @@
-import { RECOVERY_LOCK_FILE } from "@waitron/store";
-import { FIRST_SETUP_FILE } from "@waitron/store";
+import {
+  RECOVERY_LOCK_FILE,
+  VENUE_FILE,
+  NODE_FILE,
+  MIGRATIONS_LOCK_FILE,
+  FIRST_SETUP_FILE,
+  WAL_SUFFIX,
+  SHM_SUFFIX,
+  JOURNAL_SUFFIX,
+} from "@waitron/store";
+
 import { createHash } from "node:crypto";
 import { lstat, readdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -49,13 +58,13 @@ type Roots = { stateDir: string; venueDir: string };
 
 const RECORDS = "first-setup-resolutions";
 const SETUP_RECORD = FIRST_SETUP_FILE;
-const DATABASES = ["venue.db", "node.db"] as const;
-const SIDE_PIECES = ["-wal", "-shm", "-journal"] as const;
+const DATABASES = [VENUE_FILE, NODE_FILE] as const;
+const SIDE_PIECES = [WAL_SUFFIX, SHM_SUFFIX, JOURNAL_SUFFIX] as const;
 const LOCKS = new Set([
   "venue.lock",
   "venue.lock-journal",
   "venue.holder.json",
-  "migrations.lock",
+  MIGRATIONS_LOCK_FILE,
   RECOVERY_LOCK_FILE,
 ]);
 const STEP = /^step-\d{6}$/;
@@ -108,7 +117,7 @@ function draftsOf(
   };
   for (const finding of findings) {
     if (finding.kind === "wal") {
-      const database = finding.name.slice(0, -"-wal".length);
+      const database = finding.name.slice(0, -WAL_SUFFIX.length);
       add({
         root: "venue",
         path: database,

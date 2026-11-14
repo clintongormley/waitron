@@ -1,3 +1,4 @@
+import { VENUE_FILE } from "@waitron/store";
 import { open, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
@@ -60,7 +61,7 @@ export async function unpackArchiveFile(
   options?: { requireExactEnd?: true },
 ): Promise<ArchiveInputEntry[]> {
   const file = await open(path, "r");
-  const databasePath = join(scratchDir, "venue.db");
+  const databasePath = join(scratchDir, VENUE_FILE);
   let ownedDatabase = false;
   try {
     const size = (await file.stat()).size;

@@ -2280,7 +2280,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#every-read-route-now-takes-the-venues-exclusive-write-lock-and-issues-a-delete)
 
 
-- **Raw engine imports and hand-spelled file names** (bundle of 2, size S, waits for another entry). [Detail](backlog/architecture.md#bundle-raw-engine-imports-and-hand-spelled-file-names)
 
 - **Loose ends left by A483 (#1544).** OPEN. A start migrates, re-protects and checks only the
   modules switched on.

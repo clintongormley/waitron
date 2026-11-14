@@ -1,3 +1,4 @@
+import { VENUE_FILE, NODE_FILE } from "./state-layout.js";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -44,16 +45,6 @@ export {
   setVenueWatchdogLogFile,
 } from "./venue-liveness.js";
 import { createWriteQueue } from "./write-queue.js";
-
-export const VENUE_FILE = "venue.db";
-export const NODE_FILE = "node.db";
-export const DATABASE_FILES = [VENUE_FILE, NODE_FILE] as const;
-export const WAL_SUFFIX = "-wal";
-/**
- * SQLite's write-ahead side files, named by suffixing a database file's path. A committed row can
- * live in `-wal` alone, so they are part of the database.
- */
-export const SIDE_FILE_SUFFIXES = [WAL_SUFFIX, "-shm"] as const;
 
 export interface VenueStoreConfig<
   TVenueSchema extends Record<string, unknown>,

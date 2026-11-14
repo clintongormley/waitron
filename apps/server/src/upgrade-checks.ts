@@ -1,3 +1,4 @@
+import { VENUE_FILE, NODE_FILE } from "@waitron/store";
 import { once } from "node:events";
 import { join } from "node:path";
 import { catalogues, lockVenueDatabase, openVenueDatabase, withTransaction } from "@waitron/db";
@@ -69,7 +70,7 @@ export async function checkUpgradeData(config: ServerConfig, env: NodeJS.Process
         db,
         options.flatMap((set) => set.appendOnlyTables ?? []),
       );
-      for (const file of ["venue.db", "node.db"]) {
+      for (const file of [VENUE_FILE, NODE_FILE]) {
         if (!(await isCopyIntact(join(config.venueDir, file))))
           throw new Error(`Upgrade integrity check failed: ${file}`);
       }

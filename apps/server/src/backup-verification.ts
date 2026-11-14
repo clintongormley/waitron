@@ -18,6 +18,7 @@ import {
   withVerificationVenueCopy,
   VerificationVenueCopyCleanupError,
   type BackupQuery,
+  VENUE_FILE,
 } from "@waitron/store";
 import { placeBackupData } from "./backup-data-placement.js";
 import {
@@ -290,7 +291,7 @@ export async function verifyBackupArtifact(
         },
       );
       await boundary();
-      const placedPath = join(venueDir, "venue.db");
+      const placedPath = join(venueDir, VENUE_FILE);
       if (!integrity(placedPath)) refuse("invalid", "sqlite_integrity");
       const placementKeys = await verifyBackupKeyPlacement(validated.secretEntries, stateDir);
       if (placementKeys !== "passed")

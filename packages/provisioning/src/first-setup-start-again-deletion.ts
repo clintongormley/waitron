@@ -11,6 +11,13 @@ import {
   TRADING_ENV_FILE,
   FIRST_FISCAL_DOCUMENTS_DIR,
   BACKUP_ROOM_NOTE_FILE,
+  VENUE_WAL_FILE,
+  NODE_WAL_FILE,
+  VENUE_FILE,
+  SHM_SUFFIX,
+  NODE_FILE,
+  JOURNAL_SUFFIX,
+  VENUE_LITESTREAM_DIR,
 } from "@waitron/store";
 import { createHash } from "node:crypto";
 import { lstat, readFile, readdir } from "node:fs/promises";
@@ -48,15 +55,15 @@ const HASH = /^[a-f0-9]{64}$/;
 const RECORDS = "first-setup-resolutions";
 const DOCUMENTS = FIRST_FISCAL_DOCUMENTS_DIR;
 const STEP = /^step-\d{6}$/;
-const WAL_FILES = ["venue.db-wal", "node.db-wal"] as const;
+const WAL_FILES = [VENUE_WAL_FILE, NODE_WAL_FILE] as const;
 // A journal left beside a later database would be rolled into it on its first read-write open.
 const SIDE_FILES = [
-  "venue.db-wal",
-  "venue.db-shm",
-  "node.db-wal",
-  "node.db-shm",
-  "venue.db-journal",
-  "node.db-journal",
+  VENUE_WAL_FILE,
+  `${VENUE_FILE}${SHM_SUFFIX}`,
+  NODE_WAL_FILE,
+  `${NODE_FILE}${SHM_SUFFIX}`,
+  `${VENUE_FILE}${JOURNAL_SUFFIX}`,
+  `${NODE_FILE}${JOURNAL_SUFFIX}`,
 ] as const;
 const RESTORE_RECORD = join(RESTORE_FLOW_DIR, "record.json");
 const REFUSED = {
@@ -68,7 +75,7 @@ const REFUSED = {
     MODULES_FILE,
     CLOUD_REPLACEMENT_FILE,
   ],
-  venue: [".venue.db-litestream", RECORDS],
+  venue: [VENUE_LITESTREAM_DIR, RECORDS],
 } as const;
 
 type Root = "venue" | "state";
@@ -134,7 +141,7 @@ const entryName = (name: string) =>
 function listed(root: Root, name: string): boolean {
   const parts = name.split("/");
   if (!parts.every(entryName)) return false;
-  if (root === "venue") return parts.length === 1 && ["venue.db", "node.db"].includes(name);
+  if (root === "venue") return parts.length === 1 && [VENUE_FILE, NODE_FILE].includes(name);
   if ([MODULE_PREPARATION_STATE_FILE, ...HELD_ONLY].includes(name)) return true;
   if (name.startsWith(`${SETUP_FLOW_DIR}/`)) {
     const flow = name.slice(SETUP_FLOW_DIR.length + 1).split("/");
@@ -205,8 +212,8 @@ function parseMarker(value: unknown): StartAgainMarker {
     stateDir,
     files: parsed,
     wal: {
-      "venue.db-wal": wal["venue.db-wal"] === null ? null : fingerprint(wal["venue.db-wal"]),
-      "node.db-wal": wal["node.db-wal"] === null ? null : fingerprint(wal["node.db-wal"]),
+      "venue.db-wal": wal[VENUE_WAL_FILE] === null ? null : fingerprint(wal[VENUE_WAL_FILE]),
+      "node.db-wal": wal[NODE_WAL_FILE] === null ? null : fingerprint(wal[NODE_WAL_FILE]),
     },
   };
 }
@@ -272,8 +279,8 @@ async function itemsOnDisk(roots: Roots, options: Options = {}): Promise<Item[]>
     }
     return found;
   };
-  await file("venue", "venue.db");
-  await file("venue", "node.db");
+  await file("venue", VENUE_FILE);
+  await file("venue", NODE_FILE);
   for (const name of SIDE_FILES) {
     const path = join(roots.venueDir, name);
     if (await present(path)) items.push({ kind: "side", path });
@@ -365,8 +372,8 @@ export async function startAgainMarkerFor(
     ...canonical,
     files,
     wal: {
-      "venue.db-wal": await wal("venue.db-wal").catch(rethrow),
-      "node.db-wal": await wal("node.db-wal").catch(rethrow),
+      "venue.db-wal": await wal(VENUE_WAL_FILE).catch(rethrow),
+      "node.db-wal": await wal(NODE_WAL_FILE).catch(rethrow),
     },
   });
 }
@@ -520,7 +527,7 @@ export async function assertStartAgainAllowedOnDisk(
     if (error instanceof AppError) throw notReady(error.reason ?? error.code, "unexpected");
     throw notReady(`check failed: ${codeOf(error)} ${pathOf(error) ?? ""}`, "unreadable");
   }
-  const node = join(canonical.venueDir, "node.db");
+  const node = join(canonical.venueDir, NODE_FILE);
   if (await exists(node)) {
     const opened = await openImmutableWhenWalEmpty(node);
     if (opened.kind === "wal") throw notReady("node.db-wal holds pages", "unexpected");

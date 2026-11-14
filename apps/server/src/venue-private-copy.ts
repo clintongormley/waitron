@@ -1,3 +1,4 @@
+import { VENUE_FILE, WAL_SUFFIX, JOURNAL_SUFFIX, SHM_SUFFIX } from "@waitron/store";
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { join } from "node:path";
@@ -41,10 +42,10 @@ export async function copyVenueFiles(
       await input.close();
     }
   }
-  const present = await copy("venue.db");
+  const present = await copy(VENUE_FILE);
   let sidecar = false;
-  for (const suffix of ["-wal", "-journal", "-shm"])
-    sidecar = (await copy(`venue.db${suffix}`)) || sidecar;
+  for (const suffix of [WAL_SUFFIX, JOURNAL_SUFFIX, SHM_SUFFIX])
+    sidecar = (await copy(`${VENUE_FILE}${suffix}`)) || sidecar;
   if (!present && sidecar) refuse();
   return present;
 }

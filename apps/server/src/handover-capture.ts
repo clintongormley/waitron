@@ -1,4 +1,4 @@
-import { HANDOVER_DIR } from "@waitron/store";
+import { HANDOVER_DIR, VENUE_FILE, openBackupQuery, type BackupQuery } from "@waitron/store";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdir, rm, stat } from "node:fs/promises";
@@ -27,7 +27,7 @@ import {
   readHandoverRestriction,
 } from "@waitron/node-db";
 import { AppError } from "@waitron/shared";
-import { openBackupQuery, type BackupQuery } from "@waitron/store";
+
 import { errnoOf } from "./errno.js";
 import { buildNodeLocalManifest } from "./handover-manifest.js";
 import { findHandoverEnvelope, HANDOVER_EVENT } from "./handover-store.js";
@@ -60,7 +60,7 @@ export function journalDigest(hashes: readonly string[]): string {
 
 /** Where a stepped-down box keeps the final copy of venue.db its indicator describes. */
 export function finalCopyPath(stateDir: string, operationId: string): string {
-  return join(stateDir, HANDOVER_DIR, operationId, "venue.db");
+  return join(stateDir, HANDOVER_DIR, operationId, VENUE_FILE);
 }
 
 const JOURNAL_TABLE = /^__drizzle_migrations_[a-z_]+$/;

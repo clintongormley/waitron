@@ -1,3 +1,4 @@
+import { VENUE_FILE } from "@waitron/store";
 import { execFileSync } from "node:child_process";
 import {
   appendFileSync,
@@ -25,7 +26,6 @@ export const COPY_DIR = "last-day";
 export const SESSION_FILE = "bench-session.json";
 export const VOLUME_FILE = "volume.json";
 export const REQUEST_TIMINGS_FILE = "request-timings.jsonl";
-const VENUE_FILE = "venue.db";
 
 export interface BuildYearOptions {
   /** An absolute folder outside the repository; the build owns everything in it. */

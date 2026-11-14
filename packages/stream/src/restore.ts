@@ -1,3 +1,4 @@
+import { VENUE_FILE } from "@waitron/store";
 import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { AppError } from "@waitron/shared";
@@ -58,7 +59,7 @@ async function sizeOf(path: string): Promise<number> {
  */
 export async function restoreGeneration(args: RestoreGenerationArgs): Promise<void> {
   const configDir = args.configDir ?? join(dirname(args.outPath), ".litestream-restore");
-  const namedPath = join(configDir, "venue.db");
+  const namedPath = join(configDir, VENUE_FILE);
   const config = litestreamConfig({
     dbPath: namedPath,
     replicaUrl: replicaUrl(args.bucket, args.venueId, args.generation),

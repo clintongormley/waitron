@@ -1,5 +1,6 @@
 import { RECOVERY_LOCK_FILE } from "@waitron/store";
 import { join } from "node:path";
+// The store lock uses a blocking busy timeout; recovery polls so the server can keep answering.
 import { DatabaseSync } from "node:sqlite";
 import { isLocked } from "@waitron/db";
 

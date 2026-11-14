@@ -18,7 +18,7 @@ import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
-import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SCRIPT = join(HERE, "..", "deploy", "waitron.sh");
@@ -142,7 +142,7 @@ case "$1" in
         [ "\${WT_READ_ERROR}" = "1" ] && exit 1
         # Answered by what the command NAMES, so a read pointed at the wrong file reads empty.
         case "$args" in
-          *venue.db*) echo "\${WT_DB_STAMP}" ;;
+          *state-layout.js*) echo "\${WT_DB_STAMP}" ;;
           *trading.env*) echo "\${WT_TRADING_ENV}" ;;
         esac ;;
       exec)
@@ -2343,7 +2343,7 @@ describe("waitron.sh reset", () => {
 
   // Refusal must also fire on the stamp signal alone (trading.env empty). The refusal alone does not
   // prove the stamp was READ — an unreadable stamp also refuses, by failing closed — so the case pins
-  // the read itself: the stub answers only a command naming a venue.db, and the log has to show that
+  // the read itself: the stub answers only a command loading state-layout.js, and the log has to show that
   // command.
   it("refuses on a production box (stamp signal) and removes no volume", () => {
     const sb = sandbox({ tradingEnv: "", dbStamp: "production" });
@@ -2351,7 +2351,7 @@ describe("waitron.sh reset", () => {
     const r = run(sb, ["reset", "--yes"]);
     expect(r.status).not.toBe(0);
     expect(r.stderr).toMatch(/PRODUCTION/);
-    expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^run\b.*venue\.db/));
+    expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^run\b.*state-layout\.js/));
     expect(readFileSync(sb.log, "utf8")).not.toMatch(/docker volume rm/);
   });
 
@@ -2688,6 +2688,23 @@ describe("the trading.env reader inside waitron.sh", () => {
 // RUN it against databases built here. The three states are the three `is_production` distinguishes:
 // a value, a clean "nothing there", and a read that failed.
 describe("the venue stamp reader inside waitron.sh", () => {
+  const layoutDir = mkdtempSync(join(tmpdir(), "waitron-stamp-layout-"));
+  afterAll(() => rmSync(layoutDir, { recursive: true, force: true }));
+  beforeAll(() => {
+    const built = spawnSync(
+      "pnpm",
+      [
+        "--filter",
+        "@waitron/server",
+        "exec",
+        "node",
+        "../../scripts/bundle-node.mjs",
+        `../../packages/store/src/state-layout.ts=${join(layoutDir, "state-layout.js")}`,
+      ],
+      { cwd: join(HERE, ".."), encoding: "utf8", timeout: 30_000 },
+    );
+    expect(built.status, built.stdout + built.stderr).toBe(0);
+  }, 35_000);
   const READER = (() => {
     const m = /VENUE_STAMP_JS='([\s\S]*?)'\n/.exec(readFileSync(SCRIPT, "utf8"));
     if (!m) throw new Error("deploy/waitron.sh no longer assigns VENUE_STAMP_JS in single quotes");
@@ -2713,6 +2730,7 @@ describe("the venue stamp reader inside waitron.sh", () => {
 
   const readStamp = (env) =>
     spawnSync(process.execPath, ["-e", READER], {
+      cwd: layoutDir,
       encoding: "utf8",
       env: { ...process.env, WAITRON_VENUE_DIR: "", WAITRON_STATE_DIR: "", ...env },
     });
