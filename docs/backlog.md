@@ -657,6 +657,12 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   on the new pages, or delete it where the page makes it moot (the phone-width colour names may
   be). A1539's line about prep-station hours links to the Periods page. No migration. Not started.
 
+- **A1540. Clarify the Calendar Show option spacing report (owner, 2026-11-14).** Shared action
+  and choice appearance and grouped-option indent are built. The reported uneven option gaps
+  did not reproduce: the real Calendar layout measured zero gaps between options, 27 px only
+  where a group heading sits, and 48 px rows, the same before and after. The owner still needs
+  to identify the spacing they saw. Watcher retained this point on 14 November at 21:43.
+
 - **A1537. Calendar: show opening hours plainly, keep the period detail in the Week, and make the
   Week's days open (owner, 2026-11-14).** No migration. Not started.
   - **The day pop-up and the Month view show only the times each department and zone is open, with

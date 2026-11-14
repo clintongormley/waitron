@@ -146,7 +146,6 @@ export class WtButton extends LitElement {
   // control in `form.elements`. Forms are handled in JS via `wt-change`, not native submission.
   // Full form association via ElementInternals is out of scope for this component.
 
-  // Menu items keep the shared row-actions appearance; other buttons may style this part.
   override render() {
     return html`
       <button

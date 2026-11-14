@@ -5644,7 +5644,7 @@ bill columns and reader status.
 
 `scripts/action-menu-styles.test.ts` guards literal menu fragments, subclass callers and its named
 helper list. It rejects reserved alignment-property overrides, menu-rooted item CSS, and explicit
-item alignment, size and ghost attributes. Dynamic selectors, new detached helpers and class-only
+item alignment, size and ghost attributes. Dynamic values/selectors, new detached helpers and class-only
 CSS need review; the guard does not inspect rendered appearance. Rich alerts panels and forms are
 outside it. A link (`<a href>`) slotted into the popover takes the secondary button's border,
 background, padding, centred label, hover border and focus ring — from `wt-row-actions` itself, and stays a link. One marked

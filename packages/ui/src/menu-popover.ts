@@ -7,7 +7,7 @@ export interface MenuPopoverParts {
 }
 
 export const menuOptionStyles = css`
-  .option {
+  :where([role="menu"]) > .option {
     display: block;
     width: 100%;
     min-height: var(--wt-tap-min);
@@ -22,20 +22,20 @@ export const menuOptionStyles = css`
     cursor: pointer;
   }
 
-  .option:hover {
+  :where([role="menu"]) > .option:hover {
     background: var(--wt-color-bg);
   }
 
-  .option[aria-checked="true"] {
+  :where([role="menu"]) > .option[aria-checked="true"] {
     border-color: var(--wt-color-border);
     background: var(--wt-color-surface-lifted);
   }
 
-  .option:focus-visible {
+  :where([role="menu"]) > .option:focus-visible {
     outline: var(--wt-focus-ring);
     outline-offset: var(--wt-focus-offset);
   }
-  .option[aria-disabled="true"] {
+  :where([role="menu"]) > .option[aria-disabled="true"] {
     color: var(--wt-color-text-muted);
     background: transparent;
     cursor: not-allowed;

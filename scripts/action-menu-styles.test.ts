@@ -27,7 +27,7 @@ const helpers: Record<string, string[]> = {
   ],
 };
 
-// Literal menu fragments and named helpers only; dynamic selectors, detached new helpers and
+// Literal menu fragments and named helpers only; dynamic values/selectors, detached new helpers and
 // class-only CSS need review. Native choice content layout and rich panels are outside this guard.
 function violations(path: string, source: string): string[] {
   const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);

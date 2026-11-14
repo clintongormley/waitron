@@ -467,7 +467,7 @@ export class ModifiersScreen extends LitElement {
             ><wt-button data-test=${`edit-${row}-${list.id}`} @click=${() => this.#edit(kind, list)}
               >${t("action.edit")}</wt-button
             ><wt-button
-              variant=${kind === "options" ? "danger" : "ghost"}
+              variant=${kind === "options" ? "danger" : "secondary"}
               data-test=${`delete-${row}-${list.id}`}
               @click=${() => this.#openModal("delete", kind, list)}
               >${t("action.delete")}</wt-button
