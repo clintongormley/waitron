@@ -567,12 +567,12 @@ describe("setup-done-screen", () => {
     });
     expect(q(el, "h1")!.textContent!.trim()).toBe("Este servidor se está uniendo");
     expect(q(el, "[data-test=break-glass] h2")!.textContent!.trim()).toBe(
-      "Guarda ahora tu código de emergencia",
+      "Guarda ahora tu clave del servidor",
     );
     const warning = q(el, "[data-test=break-glass-warning]")!.textContent!.replace(/\s+/g, " ");
     expect(warning).toContain("Se muestra una sola vez y no se volverá a mostrar.");
     expect(warning).toContain(
-      "Lo necesitarás si algún día este servidor tiene que sustituir al principal.",
+      "La necesitarás si algún día este servidor tiene que sustituir al principal.",
     );
     expect(warning).not.toContain("pase a ser el principal");
     expect(q(el, "[data-test=break-glass-secret]")!.textContent).toBe("bg-9f3a");
@@ -584,7 +584,7 @@ describe("setup-done-screen", () => {
     const el = await mountDone(() => new Promise(() => {}), { breakGlassSecret: "bg-9f3a" });
     const warning = q(el, "[data-test=break-glass-warning]")!.textContent!.replace(/\s+/g, " ");
     expect(warning).toContain(
-      "Lo necesitas para que este servidor pase a ser el principal si no se puede contactar con el principal actual.",
+      "La necesitas para que este servidor pase a ser el principal si no se puede contactar con el principal actual.",
     );
     expect(warning).not.toContain("sustituir al principal");
   });

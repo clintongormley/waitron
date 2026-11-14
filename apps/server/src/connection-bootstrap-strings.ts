@@ -5,7 +5,7 @@ export const CONNECTION_TEXT = {
     title: "Set up secure connection",
     intro: "Reconnect to the venue network and use your server’s known address.",
     publicOnly:
-      "Do not enter passwords or recovery keys here. Reopen HTTPS without warnings before recovering setup.",
+      "Do not enter passwords, recovery keys or server keys here. Reopen HTTPS without warnings before recovering setup.",
     repair: "Set up secure connection",
     reconnect: "Reconnect",
     needed: "The server’s secure connection needs repair.",
@@ -45,7 +45,7 @@ export const CONNECTION_TEXT = {
     title: "Configurar conexión segura",
     intro: "Conéctate a la red del local y usa la dirección conocida de tu servidor.",
     publicOnly:
-      "No introduzcas contraseñas ni claves de recuperación aquí. Abre HTTPS sin avisos antes de recuperar la configuración.",
+      "No introduzcas contraseñas, claves de recuperación ni claves del servidor aquí. Abre HTTPS sin avisos antes de recuperar la configuración.",
     repair: "Configurar conexión segura",
     reconnect: "Reconectar",
     needed: "La conexión segura del servidor necesita reparación.",

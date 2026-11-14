@@ -71,7 +71,7 @@ ningún agente ve, se puede mover igual, y allí se cancela. Las demás impresio
 
 En **Impresoras**, abre **Agentes** y elige **Eliminar** en el menú del agente. Las impresoras accesibles solo a través de este agente no pueden imprimir hasta que lo añadas de nuevo; siguen en la lista.
 
-Para usar un agente en el que sigas confiando, elige **Añadir un agente** y **Añadir** junto a su nombre guardado, incluido el agente marcado como **En esta caja**. Los trabajos que sigan pendientes pueden imprimirse cuando vuelva.
+Para usar un agente en el que sigas confiando, elige **Añadir un agente** y **Añadir** junto a su nombre guardado, incluido el agente marcado como **En este servidor**. Los trabajos que sigan pendientes pueden imprimirse cuando vuelva.
 
 Para añadir otro agente, sigue los pasos de **Añadir un agente** y comprueba su número. Tras vincular un agente nuevo, busca y añade de nuevo sus impresoras A4.
 

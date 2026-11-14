@@ -76,7 +76,7 @@ If your server cannot serve its saved connection certificate, open its known HTT
 venue network and choose **Set up secure connection**. The public page is also at
 `/setup/connection`; interrupted setup opens it in a separate tab so your password draft stays in
 place. The HTTP page offers managed certificate repair, a read-only **Check again** and **Stop**
-for the current browser attempt. Do not enter a password, recovery key or private certificate there.
+for the current browser attempt. Do not enter a password, recovery key, server key or private certificate there.
 
 Repair keeps the existing certificate authority when its certificate and signing key remain usable.
 If your device already trusts that authority, keep its installed certificate. If the authority is lost

@@ -18,7 +18,7 @@ en cada inicio hasta que un administrador [deje que siga sin él](servers.md#car
 
 Antes de empezar, comprueba dos cosas en el servidor principal:
 
-- Tiene una clave de recuperación de las copias, que el servidor de reserva necesita. Si nunca se han
+- Tiene una clave de recuperación, que el servidor de reserva necesita. Si nunca se han
   activado las copias de seguridad, abre **Copias de seguridad** y elige **Activar las copias**.
 - **Copia continua en tu bucket** está desactivada. El local copia sus cambios en un solo sitio a
   la vez, y el servidor de reserva ocupa ese sitio. Para añadirlo de todos modos, elige

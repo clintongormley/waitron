@@ -2089,9 +2089,9 @@ export const en = {
   "node_pack.register": "Allocation register",
   "node_pack.secret_warning": "Keep this secret pack outside the server and its backups.",
   "node_pack.old_key_warning":
-    "Older backups restore their older node key. Keep that paper until no older backup remains.",
+    "Older backups restore their older server key. Keep that paper until no older backup remains.",
   "node_pack.archive_key_warning":
-    "This is the node key. The backup file has a separate encryption key.",
+    "This is the server key. The backup file opens with the separate recovery key.",
   "node_pack.snapshot_warning":
     "This register is a snapshot and may be out of date. Reprinting never frees used names. Consult the current outside register before recovery.",
   "node_pack.file": "Signed allocation register",
@@ -2100,7 +2100,7 @@ export const en = {
   "node_pack.print": "Printable copy",
   "node_pack.failed": "The recovery pack could not be created.",
   "node_pack.intro":
-    "Use the current node key and the signed register from its custodian. No bucket or subscription is needed.",
+    "Use the current server key and the signed register from its custodian. No bucket or subscription is needed.",
   "node_pack.clear": "Clear pack",
   "backup.configuration.title": "Configuration export",
   "backup.configuration.explanation":
@@ -6264,9 +6264,9 @@ export const es: Record<StringKey, string> = {
   "node_pack.secret_warning":
     "Guarda este kit secreto fuera del servidor y de sus copias de seguridad.",
   "node_pack.old_key_warning":
-    "Las copias antiguas restauran su clave de nodo anterior. Conserva ese papel hasta que no quede ninguna copia antigua.",
+    "Las copias antiguas restauran su clave del servidor anterior. Conserva ese papel hasta que no quede ninguna copia antigua.",
   "node_pack.archive_key_warning":
-    "Esta es la clave del nodo. El archivo de copia tiene otra clave de cifrado.",
+    "Esta es la clave del servidor. El archivo de copia se abre con la clave de recuperación, que es otra.",
   "node_pack.snapshot_warning":
     "Este registro es una instantánea y puede estar desactualizado. Reimprimirlo no libera nombres usados. Consulta el registro externo actual antes de recuperar.",
   "node_pack.file": "Registro de asignaciones firmado",
@@ -6275,7 +6275,7 @@ export const es: Record<StringKey, string> = {
   "node_pack.print": "Copia para imprimir",
   "node_pack.failed": "No se pudo crear el kit de recuperación.",
   "node_pack.intro":
-    "Usa la clave actual del nodo y el registro firmado de su custodio. No necesitas un bucket ni una suscripción.",
+    "Usa la clave del servidor actual y el registro firmado de su custodio. No necesitas un bucket ni una suscripción.",
   "node_pack.clear": "Borrar kit",
   "backup.configuration.title": "Exportar la configuración",
   "backup.configuration.explanation":

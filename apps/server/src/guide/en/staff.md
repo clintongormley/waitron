@@ -38,7 +38,7 @@ login, disable or re-enable their account, or change an email, role or account s
 This includes changing your own email in **Users**. Creating, copying, editing or deleting an
 access role also needs this confirmation. Names, telephone numbers and PIN resets do not need
 this confirmation. You also confirm before you change backups, download recovery files, show the
-backup recovery key, or export configuration or another staff member's data. The same window
+recovery key, or export configuration or another staff member's data. The same window
 covers connecting or disconnecting payment providers, changing the mail server or Cloud
 connection, turning on remote access, preparing a replacement box, installing a tax certificate,
 changing the legal name and removing a server. Use your password or passkey, plus an

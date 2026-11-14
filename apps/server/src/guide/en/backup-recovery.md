@@ -42,7 +42,7 @@ Over a plain connection neither works: set up the secure connection first.
 
 Once the setup is deleted the box restarts. After **Recover from backup**, **Reconnect** opens "Join
 or recover an existing restaurant", where you choose **Restore from backup** or **Restore from my
-bucket**, as on a new box; restoring needs the backup's own key and its server key. After
+bucket**, as on a new box; restoring needs the recovery key and that backup's server key. After
 **Start again**, **Reconnect** opens "Set up this Waitron server", where you choose how to set up
 this box. If the page is reloaded before you press **Reconnect**, it does not remember which you
 chose and opens its first screen. If that screen asks "Is this page secure?", press **Continue to
@@ -98,7 +98,7 @@ Then choose **Review backup**. The page shows the selected backup: its source, b
 date, node and server key. Check those details before continuing. Keep production and
 preproduction separate.
 
-The backup's key, the bucket kit and the Cloud approval give access to a copy. You still need that
+The recovery key, the bucket kit and the Cloud approval give access to a copy. You still need that
 copy's named server key to authenticate recovery.
 
 On a test server restored from Waitron Cloud, if **Cloud services** says the saved reconnection

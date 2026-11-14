@@ -186,12 +186,12 @@ it("shows a refusal beside the review action and allows another attempt", async 
   await vi.waitFor(() =>
     expect(
       child(el)!.shadowRoot!.querySelector("wt-form-actions")!.shadowRoot!.textContent,
-    ).toContain("Check the backup file's encryption key."),
+    ).toContain("Check the recovery key."),
   );
   expect(
     el.shadowRoot!.querySelector<HTMLElement & { error: string }>("[data-test=recovery-key]")!
       .error,
-  ).toBe("Check the backup file's encryption key.");
+  ).toBe("Check the recovery key.");
   review(el);
   await vi.waitFor(() => expect(child(el)!.shadowRoot!.textContent).toContain("Amber Hill"));
 });

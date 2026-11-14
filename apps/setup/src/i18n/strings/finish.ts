@@ -62,7 +62,7 @@ export const finishEn = {
     "Any that were opened at an IP address (for example by scanning a QR code) must be opened again: go to /setup/trust on this server, scan its QR code, and set the device up again.",
   "done.devices.print_agent":
     "A print agent on this server reconnects by itself. One on another computer that was given an IP address needs its Server address changed on its own page, at port 9110 on that computer.",
-  "done.break_glass.heading": "Save your break-glass code now",
+  "done.break_glass.heading": "Save your server key now",
   "done.break_glass.key_name": "Server key {date} · {code}",
   "done.break_glass.backups":
     "Older backups need the key from that time. Keep it until those backups are deleted.",
@@ -141,16 +141,16 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
     "Los que se abrieron en una dirección IP (por ejemplo, escaneando un código QR) hay que volver a abrirlos: ve a /setup/trust en este servidor, escanea su código QR y vuelve a configurar el dispositivo.",
   "done.devices.print_agent":
     "Un agente de impresión en este servidor se vuelve a conectar solo. Si está en otro ordenador y se le dio una dirección IP, hay que cambiar su «Server address» en su propia página, en el puerto 9110 de ese ordenador.",
-  "done.break_glass.heading": "Guarda ahora tu código de emergencia",
+  "done.break_glass.heading": "Guarda ahora tu clave del servidor",
   "done.break_glass.key_name": "Clave del servidor {date} · {code}",
   "done.break_glass.backups":
     "Las copias antiguas necesitan la clave de entonces. Consérvala hasta que se borren esas copias.",
   "done.break_glass.warning":
-    "Anótalo y guárdalo fuera de línea. Se muestra una sola vez y no se volverá a mostrar.",
+    "Anótala y guárdala fuera de línea. Se muestra una sola vez y no se volverá a mostrar.",
   "done.break_glass.promote":
-    "Lo necesitas para que este servidor pase a ser el principal si no se puede contactar con el principal actual.",
+    "La necesitas para que este servidor pase a ser el principal si no se puede contactar con el principal actual.",
   "done.break_glass.take_over":
-    "Lo necesitarás si algún día este servidor tiene que sustituir al principal.",
+    "La necesitarás si algún día este servidor tiene que sustituir al principal.",
   "done.joining.heading": "Este servidor se está uniendo",
   "done.joining.body":
     "El inicio de sesión en el servidor principal del restaurante ha funcionado. Este servidor recibe ahora su primera copia de los datos del restaurante desde el principal, por la red del restaurante; no hace falta internet. Puede tardar unos minutos. Se reinicia solo cuando tiene la copia y después espera como servidor en espera. El principal sigue vendiendo todo el tiempo.",

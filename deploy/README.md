@@ -662,9 +662,9 @@ command against it treat that entrypoint differently:
 
   **A filing node also needs its fiscal recovery operation.** Follow
   [Recover a filing box](../docs/developers/offline-fiscal-restore.md) to supply the selected
-  backup's node key, a fresh allocation and current outside evidence. The source examples below
+  backup's server key, a fresh allocation and current outside evidence. The source examples below
   show archive and bucket access only; add that procedure's recovery override and credentials
-  when restoring Veri*Factu. The archive encryption key alone does not authorise activation.
+  when restoring Veri*Factu. The recovery key alone does not authorise activation.
 
   ```bash
   docker compose run --rm -v "$PWD/recovery-pack.pdf:/recovery-pack.pdf:ro" --entrypoint node app \
@@ -705,8 +705,8 @@ command against it treat that entrypoint differently:
   from that time. A replaced key can work again on the restored box, while its replacement
   can be refused. Keep the older paper until every backup made before the replacement has
   been deleted. When the restored copy contains a key name, `restore.recovery_key_selected`
-  names the paper you need. The server key authenticates recovery; the separate backup encryption
-  key opens the backup file.
+  names the paper you need. The server key authenticates recovery; the separate recovery key opens
+  the backup file.
 
   A restore that fails while it writes the backup's secrets or moves its database into place
   leaves the box's database, identity file (`trading.env`) and other secrets as they were. One that

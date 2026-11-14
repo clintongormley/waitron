@@ -48,7 +48,7 @@ ninguna: configura antes la conexión segura.
 Cuando se ha borrado la configuración, el servidor se reinicia. Después de **Recuperar desde una
 copia**, **Reconectar** abre «Unirse a un restaurante existente o recuperarlo», donde eliges
 **Restaurar desde una copia de seguridad** o **Restaurar desde mi bucket**, como en un servidor nuevo;
-restaurar necesita la clave de la propia copia y su clave del servidor. Después de
+restaurar necesita la clave de recuperación y la clave del servidor de esa copia. Después de
 **Empezar de nuevo**, **Reconectar** abre «Configura este servidor Waitron», donde eliges cómo
 configurar este servidor. Si se recarga la página antes de pulsar **Reconectar**, no recuerda cuál
 elegiste y abre su primera pantalla. Si esa pantalla pregunta «¿Es segura esta página?», pulsa
@@ -109,8 +109,8 @@ Después elige **Revisar copia**. La página muestra la copia elegida: su origen
 local, la fecha, el nodo y la clave del servidor. Compruébalos antes de continuar.
 Mantén separados producción y preproducción.
 
-La clave de la copia, el kit del bucket y la aprobación de Cloud dan acceso a una copia. También
-necesitas su clave del servidor para identificarte.
+La clave de recuperación, el kit del bucket y la aprobación de Cloud dan acceso a una copia. También
+necesitas la clave del servidor de esa copia para identificarte.
 
 En un servidor de prueba restaurado desde Waitron Cloud, si **Servicios Cloud** dice que no se puede
 leer la solicitud guardada de reconexión, elige **Obtener una nueva solicitud de reconexión** y pide
