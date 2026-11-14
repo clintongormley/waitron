@@ -19,10 +19,10 @@ import {
 import { AppError, type SupportedLocale } from "@waitron/shared";
 import { FULL_DISK_BYTES } from "./boot-failure.js";
 import { escapeHtml } from "./html-page.js";
-import { RECOVERY_PAGE_WORDS } from "./i18n/recovery-page.js";
-import { OPERATOR_TEXT, type RecoveryDeps } from "./recovery-surface.js";
+import { OPERATOR_WORDS, RECOVERY_PAGE_WORDS } from "./i18n/recovery-page.js";
+import { START_AGAIN_PAGE_WORDS } from "./i18n/start-again-page.js";
+import type { RecoveryDeps } from "./recovery-surface.js";
 import {
-  START_AGAIN_PAGE_TEXT,
   mountStartAgainChoice,
   movedFolder,
   renderStartAgainSection,
@@ -124,17 +124,17 @@ describe("renderStartAgainSection", () => {
       const html = render({ locale, secure: false });
       expect(html, locale).not.toMatch(/<input\b/);
       expect(html, locale).not.toMatch(/<form\b/);
-      expect(html, locale).toContain(escapeHtml(START_AGAIN_PAGE_TEXT[locale].insecureForm));
+      expect(html, locale).toContain(escapeHtml(START_AGAIN_PAGE_WORDS[locale].insecureForm));
       expect(listed(html), locale).toEqual(["venue/venue.db"]);
     }
     const secure = render();
     expect(secure).toContain('<input type="password"');
-    expect(secure).not.toContain(escapeHtml(START_AGAIN_PAGE_TEXT["en-GB"].insecureForm));
+    expect(secure).not.toContain(escapeHtml(START_AGAIN_PAGE_WORDS["en-GB"].insecureForm));
   });
 
   it("with secure: false, draws the bottom message under the insecure-form text, and still no password box", () => {
     for (const locale of LANGS) {
-      const text = START_AGAIN_PAGE_TEXT[locale];
+      const text = START_AGAIN_PAGE_WORDS[locale];
       const html = render({ locale, secure: false, message: { kind: "insecure" } });
       const message = `<p id="start-again-message">${escapeHtml(text.insecure)}</p>`;
       expect(html, locale).toContain(message);
@@ -147,11 +147,11 @@ describe("renderStartAgainSection", () => {
   });
 
   it("names the choice group with a legend marked required, in both languages", () => {
-    expect(START_AGAIN_PAGE_TEXT["en-GB"].choiceLegend).toBe("What should the box do? *");
-    expect(START_AGAIN_PAGE_TEXT["es-ES"].choiceLegend).toBe("¿Qué debe hacer el equipo? *");
+    expect(START_AGAIN_PAGE_WORDS["en-GB"].choiceLegend).toBe("What should the box do? *");
+    expect(START_AGAIN_PAGE_WORDS["es-ES"].choiceLegend).toBe("¿Qué debe hacer el equipo? *");
     for (const locale of LANGS) {
       const html = render({ locale });
-      const legend = `<fieldset>\n<legend>${escapeHtml(START_AGAIN_PAGE_TEXT[locale].choiceLegend)}</legend>`;
+      const legend = `<fieldset>\n<legend>${escapeHtml(START_AGAIN_PAGE_WORDS[locale].choiceLegend)}</legend>`;
       expect(html, locale).toContain(legend);
       expect(html.indexOf(legend), locale).toBeLessThan(html.indexOf('type="radio"'));
       expect(html.indexOf(legend), locale).toBeGreaterThan(html.indexOf('type="password"'));
@@ -160,7 +160,7 @@ describe("renderStartAgainSection", () => {
 
   it("a moved answer draws no form: no password, no radios, no Continue", () => {
     for (const locale of LANGS) {
-      const text = START_AGAIN_PAGE_TEXT[locale];
+      const text = START_AGAIN_PAGE_WORDS[locale];
       const html = render({ locale, message: { kind: "moved", folder: "state/<i>aside</i>" } });
       expect(html, locale).toContain(
         `<p id="start-again-message">${escapeHtml(text.moved("state/<i>aside</i>"))}</p>`,
@@ -179,10 +179,10 @@ describe("renderStartAgainSection", () => {
       const lines = listed(html);
       expect(lines, locale).toHaveLength(51);
       expect(lines[49], locale).toBe("state/found-49.json");
-      expect(lines[50], locale).toBe(escapeHtml(START_AGAIN_PAGE_TEXT[locale].more(3)));
+      expect(lines[50], locale).toBe(escapeHtml(START_AGAIN_PAGE_WORDS[locale].more(3)));
     }
-    expect(START_AGAIN_PAGE_TEXT["en-GB"].more(3)).toBe("and 3 more");
-    expect(START_AGAIN_PAGE_TEXT["es-ES"].more(3)).toBe("y 3 más");
+    expect(START_AGAIN_PAGE_WORDS["en-GB"].more(3)).toBe("and 3 more");
+    expect(START_AGAIN_PAGE_WORDS["es-ES"].more(3)).toBe("y 3 más");
     const exactly50 = listed(render({ survey: survey(units.slice(0, 50)) }));
     expect(exactly50).toHaveLength(50);
     expect(exactly50.at(-1)).toBe("state/found-49.json");
@@ -212,7 +212,7 @@ describe("renderStartAgainSection", () => {
 
   it("shows each choice's title in bold, its detail, and Move's unsent line", () => {
     for (const locale of LANGS) {
-      const text = START_AGAIN_PAGE_TEXT[locale];
+      const text = START_AGAIN_PAGE_WORDS[locale];
       const html = render({ locale });
       const keep = html.indexOf(`<strong>${escapeHtml(text.keepTitle)}</strong>`);
       const keepDetail = html.indexOf(escapeHtml(text.keepDetail));
@@ -238,7 +238,7 @@ describe("renderStartAgainSection", () => {
     for (const locale of LANGS) {
       const html = render({ locale });
       expect(html, locale).toContain(
-        `<p><button type="submit">${escapeHtml(START_AGAIN_PAGE_TEXT[locale].continue)}</button></p>\n</form>`,
+        `<p><button type="submit">${escapeHtml(START_AGAIN_PAGE_WORDS[locale].continue)}</button></p>\n</form>`,
       );
     }
   });
@@ -251,13 +251,13 @@ describe("renderStartAgainSection", () => {
   });
 
   it("names the page's Retry button in full and quoted in every English message that sends you to it", () => {
-    const text = START_AGAIN_PAGE_TEXT["en-GB"];
+    const text = START_AGAIN_PAGE_WORDS["en-GB"];
     for (const [kind, message] of Object.entries({
       filesChanged: text.filesChanged,
       notOffered: text.notOffered,
       diskFull: text.diskFull,
       notFinished: text.notFinished,
-      moveUnfinished: OPERATOR_TEXT["setup.start_again_move_unfinished"]?.["en-GB"].action,
+      moveUnfinished: OPERATOR_WORDS["setup.start_again_move_unfinished"]?.["en-GB"].action,
     })) {
       expect(message, kind).toContain("Press “Retry a normal boot”");
       expect(message, kind).not.toMatch(/Press Retry\b/);
@@ -266,10 +266,10 @@ describe("renderStartAgainSection", () => {
 
   it("the full-disk and forgotten-password words end with the restore-a-backup clause, in both languages", () => {
     for (const key of ["diskFull", "forgotten"] as const) {
-      expect(START_AGAIN_PAGE_TEXT["en-GB"][key], key).toMatch(
+      expect(START_AGAIN_PAGE_WORDS["en-GB"][key], key).toMatch(
         /these files included, unless a backup is restored afterwards\.$/,
       );
-      expect(START_AGAIN_PAGE_TEXT["es-ES"][key], key).toMatch(
+      expect(START_AGAIN_PAGE_WORDS["es-ES"][key], key).toMatch(
         /también estos archivos, salvo que después se restaure una copia de seguridad\.$/,
       );
     }
@@ -281,7 +281,7 @@ describe("renderStartAgainSection", () => {
     const bottomOf = (html: string) => html.match(/<p id="start-again-message">([^<]*)<\/p>/)?.[1];
     const continueAt = (html: string) => html.indexOf('<button type="submit">');
     for (const locale of LANGS) {
-      const text = START_AGAIN_PAGE_TEXT[locale];
+      const text = START_AGAIN_PAGE_WORDS[locale];
       const bottomOnly: Array<[StartAgainMessage, string]> = [
         [{ kind: "filesChanged" }, text.filesChanged],
         [{ kind: "notOffered" }, text.notOffered],
@@ -338,23 +338,23 @@ describe("renderStartAgainSection", () => {
       expect(bottomOf(none)).toBeUndefined();
       expect(none).not.toContain("aria-invalid");
     }
-    expect(START_AGAIN_PAGE_TEXT["en-GB"].throttled(1)).toBe(
+    expect(START_AGAIN_PAGE_WORDS["en-GB"].throttled(1)).toBe(
       "Too many wrong passwords. Try again in 1 minute. Nothing was changed.",
     );
-    expect(START_AGAIN_PAGE_TEXT["en-GB"].throttled(4)).toBe(
+    expect(START_AGAIN_PAGE_WORDS["en-GB"].throttled(4)).toBe(
       "Too many wrong passwords. Try again in 4 minutes. Nothing was changed.",
     );
-    expect(START_AGAIN_PAGE_TEXT["es-ES"].throttled(1)).toBe(
+    expect(START_AGAIN_PAGE_WORDS["es-ES"].throttled(1)).toBe(
       "Demasiadas contraseñas incorrectas. Vuelve a intentarlo dentro de 1 minuto. No se ha cambiado nada.",
     );
-    expect(START_AGAIN_PAGE_TEXT["es-ES"].throttled(4)).toBe(
+    expect(START_AGAIN_PAGE_WORDS["es-ES"].throttled(4)).toBe(
       "Demasiadas contraseñas incorrectas. Vuelve a intentarlo dentro de 4 minutos. No se ha cambiado nada.",
     );
   });
 
   it("a Spanish string differs from its English twin for every key", () => {
-    const english = START_AGAIN_PAGE_TEXT["en-GB"];
-    const spanish = START_AGAIN_PAGE_TEXT["es-ES"];
+    const english = START_AGAIN_PAGE_WORDS["en-GB"];
+    const spanish = START_AGAIN_PAGE_WORDS["es-ES"];
     expect(Object.keys(spanish).sort()).toEqual(Object.keys(english).sort());
     const sample = (text: typeof english) => ({
       ...text,
@@ -371,7 +371,7 @@ describe("renderStartAgainSection", () => {
 
   it("sends nobody to someone else, in either language", () => {
     for (const locale of ["en-GB", "es-ES"] as const) {
-      const text = START_AGAIN_PAGE_TEXT[locale];
+      const text = START_AGAIN_PAGE_WORDS[locale];
       const sampled = {
         ...text,
         more: text.more(3),
@@ -951,7 +951,7 @@ describe("mountStartAgainChoice", () => {
     mountStartAgainChoice(
       app,
       { roots: attempt.roots, survey: found, onFinished: () => Promise.resolve() },
-      (view) => OPERATOR_TEXT[view.code]![view.locale].title,
+      (view) => OPERATOR_WORDS[view.code]![view.locale].title,
       log,
     );
     const response = await post(app, {
@@ -960,7 +960,7 @@ describe("mountStartAgainChoice", () => {
       listed: found.digest,
     });
     expect(response.status).toBe(200);
-    expect(await response.text()).toBe(OPERATOR_TEXT["setup.start_again_kept"]!["en-GB"].title);
+    expect(await response.text()).toBe(OPERATOR_WORDS["setup.start_again_kept"]!["en-GB"].title);
     const logged = JSON.stringify(log.mock.calls);
     expect(logged).not.toContain(START_AGAIN_ADMIN.displayName);
     expect(logged).not.toContain(START_AGAIN_ADMIN.email);
@@ -1013,7 +1013,7 @@ describe("mountStartAgainChoice", () => {
     expect(body).not.toContain("notFinished");
     expect(body).toContain(
       escapeHtml(
-        START_AGAIN_PAGE_TEXT["en-GB"].moved(
+        START_AGAIN_PAGE_WORDS["en-GB"].moved(
           movedFolder({ state: "records/set-aside/s1/state", venue: "records/set-aside/s1/venue" }),
         ),
       ),
@@ -1031,8 +1031,8 @@ describe("mountStartAgainChoice", () => {
           "keep",
           () => Promise.resolve({ choice: "keep" as const }),
           [
-            `<h1>${escapeHtml(OPERATOR_TEXT["setup.start_again_kept"]![locale].title)}</h1>`,
-            `<p>${escapeHtml(OPERATOR_TEXT["setup.start_again_kept"]![locale].action)}</p>`,
+            `<h1>${escapeHtml(OPERATOR_WORDS["setup.start_again_kept"]![locale].title)}</h1>`,
+            `<p>${escapeHtml(OPERATOR_WORDS["setup.start_again_kept"]![locale].action)}</p>`,
           ],
         ],
         [
@@ -1041,7 +1041,7 @@ describe("mountStartAgainChoice", () => {
           [
             `<h1>${escapeHtml(RECOVERY_PAGE_WORDS[locale].heading)}</h1>`,
             `<p>${escapeHtml(
-              START_AGAIN_PAGE_TEXT[locale].moved(
+              START_AGAIN_PAGE_WORDS[locale].moved(
                 movedFolder({
                   state: "records/set-aside/s1/state",
                   venue: "records/set-aside/s1/venue",

@@ -25,11 +25,11 @@ import {
   START_AGAIN_ADMIN_PASSWORD,
   startAgainAttempt,
 } from "@waitron/provisioning/testing/start-again-attempt";
-import { START_AGAIN_PAGE_TEXT } from "./recovery-start-again.js";
+import { START_AGAIN_PAGE_WORDS } from "./i18n/start-again-page.js";
 import { closeListener } from "./close-listener.js";
 import { freePorts } from "./testing/free-ports.js";
 import { escapeHtml } from "./html-page.js";
-import { OPERATOR_TEXT } from "./recovery-surface.js";
+import { OPERATOR_WORDS } from "./i18n/recovery-page.js";
 import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
@@ -519,7 +519,7 @@ async function expectRefusedPage(port: number, code: keyof typeof REFUSED_TEXT) 
   expect(en.body).not.toMatch(/disk/i);
   const es = await overHttps(port, "/", "es-ES");
   expect(es.status).toBe(200);
-  const spanish = OPERATOR_TEXT[code]!["es-ES"];
+  const spanish = OPERATOR_WORDS[code]!["es-ES"];
   for (const text of [spanish.title, spanish.action, STATUS_ES])
     expect(es.body).toContain(escapeHtml(text));
   expect(es.body).not.toMatch(/disco/i);
@@ -720,7 +720,7 @@ it.each(MODES)(
       listed: listed!,
     });
     expect(answer.status).toBe(200);
-    const [movedLead] = START_AGAIN_PAGE_TEXT["en-GB"].moved("\0").split("\0");
+    const [movedLead] = START_AGAIN_PAGE_WORDS["en-GB"].moved("\0").split("\0");
     expect(answer.body).toContain(`${escapeHtml(movedLead!)}state/records/set-aside/`);
     await vi.waitFor(() => expect(started.restart).toHaveBeenCalledOnce());
     if (mode === "supervised") expect(started.restart).toHaveBeenCalledWith(0);
@@ -733,7 +733,7 @@ const FOUND_FILES = "setup.start_again_files_found" as const;
 const KEPT = "setup.start_again_kept" as const;
 const CHOICE_FORM = 'action="/recovery-api/start-again"';
 const titleOf = (code: typeof FOUND_FILES | typeof KEPT, locale: "en-GB" | "es-ES") =>
-  escapeHtml(OPERATOR_TEXT[code]![locale].title);
+  escapeHtml(OPERATOR_WORDS[code]![locale].title);
 
 /** The digest the page's form carries for the files it lists. */
 async function listedOn(port: number) {
@@ -766,14 +766,14 @@ it.each(MODES)(
       const page = await overHttps(started.port, "/", locale);
       expect(page.status).toBe(200);
       expect(page.body).toContain(titleOf(FOUND_FILES, locale));
-      expect(page.body).toContain(escapeHtml(OPERATOR_TEXT[FOUND_FILES]![locale].action));
-      expect(page.body).toContain(escapeHtml(START_AGAIN_PAGE_TEXT[locale].filesFound));
+      expect(page.body).toContain(escapeHtml(OPERATOR_WORDS[FOUND_FILES]![locale].action));
+      expect(page.body).toContain(escapeHtml(START_AGAIN_PAGE_WORDS[locale].filesFound));
       expect(page.body).toContain("<li>venue/venue.db</li>");
       expect(page.body).toContain(CHOICE_FORM);
-      expect(page.body).toContain(`${escapeHtml(START_AGAIN_PAGE_TEXT[locale].password)} *`);
+      expect(page.body).toContain(`${escapeHtml(START_AGAIN_PAGE_WORDS[locale].password)} *`);
       expect(page.body).toContain('type="password"');
-      expect(page.body).toContain(escapeHtml(START_AGAIN_PAGE_TEXT[locale].keepTitle));
-      expect(page.body).toContain(escapeHtml(START_AGAIN_PAGE_TEXT[locale].moveTitle));
+      expect(page.body).toContain(escapeHtml(START_AGAIN_PAGE_WORDS[locale].keepTitle));
+      expect(page.body).toContain(escapeHtml(START_AGAIN_PAGE_WORDS[locale].moveTitle));
     }
     expect(JSON.parse((await overHttps(started.port, "/recovery-api/status")).body)).toMatchObject({
       level: "recovery",
@@ -818,7 +818,7 @@ it.each(MODES)(
     for (const locale of ["en-GB", "es-ES"] as const) {
       const page = (await overHttps(next.port, "/", locale)).body;
       expect(page).toContain(titleOf(KEPT, locale));
-      expect(page).toContain(escapeHtml(OPERATOR_TEXT[KEPT]![locale].action));
+      expect(page).toContain(escapeHtml(OPERATOR_WORDS[KEPT]![locale].action));
       expect(page).not.toContain(titleOf(FOUND_FILES, locale));
       expect(page).not.toContain(CHOICE_FORM);
       expect(page).not.toContain('type="password"');
@@ -854,7 +854,7 @@ it.each(MODES)(
     });
     expect(answer.body).toContain(
       escapeHtml(
-        START_AGAIN_PAGE_TEXT["en-GB"].moved(`state/${START_AGAIN_SET_ASIDE_DIR}/${stem}`),
+        START_AGAIN_PAGE_WORDS["en-GB"].moved(`state/${START_AGAIN_SET_ASIDE_DIR}/${stem}`),
       ),
     );
     await vi.waitFor(() => expect(started.restart).toHaveBeenCalledOnce());
@@ -898,7 +898,7 @@ it.each(MODES)(
         listed,
       });
       expect(answer.status).toBe(409);
-      expect(answer.body).toContain(escapeHtml(START_AGAIN_PAGE_TEXT["en-GB"].filesChanged));
+      expect(answer.body).toContain(escapeHtml(START_AGAIN_PAGE_WORDS["en-GB"].filesChanged));
     }
     expect(await filesUnder(baseOf(f))).toEqual(before);
     expect(await readFile(join(f.venueDir, "venue.db"), "utf8")).toBe("a different found database");
@@ -919,7 +919,7 @@ it.each(MODES)(
         listed,
       });
       expect(answer.status).toBe(403);
-      expect(answer.body).toContain(escapeHtml(START_AGAIN_PAGE_TEXT["en-GB"].wrongPassword));
+      expect(answer.body).toContain(escapeHtml(START_AGAIN_PAGE_WORDS["en-GB"].wrongPassword));
     }
     const retry = await overHttps(started.port, "/recovery-api/retry", "en-GB", "POST");
     expect(retry).toEqual({ status: 200, body: JSON.stringify({ ok: true }) });
@@ -936,7 +936,7 @@ it.each(MODES)(
     const retryAfter = Number(seventh.headers["retry-after"]);
     expect(retryAfter).toBeGreaterThan(0);
     expect(retryAfter).toBeLessThanOrEqual(60);
-    expect(seventh.body).toContain(escapeHtml(START_AGAIN_PAGE_TEXT["en-GB"].throttled(1)));
+    expect(seventh.body).toContain(escapeHtml(START_AGAIN_PAGE_WORDS["en-GB"].throttled(1)));
     expect(await readFile(join(f.venueDir, "venue.db"), "utf8")).toBe("found database");
     expect(await readStartAgainChoices(f.stateDir, f.attempt)).toEqual([]);
     expect(next.restart).not.toHaveBeenCalled();

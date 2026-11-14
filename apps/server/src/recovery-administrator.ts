@@ -1,5 +1,6 @@
 import { escapeHtml } from "./html-page.js";
 import { ENVIRONMENT_RECOVERY_TEXT } from "./i18n/recovery-page.js";
+import { START_AGAIN_PAGE_WORDS } from "./i18n/start-again-page.js";
 import type { Hono } from "hono";
 import { verifyPassword } from "@waitron/identity";
 import { beginStartAgainGuess } from "@waitron/provisioning";
@@ -18,7 +19,6 @@ import {
   movedPage,
   bottomText,
   passwordInput,
-  START_AGAIN_PAGE_TEXT,
   type StartAgainMessage,
 } from "./recovery-start-again.js";
 import { outgoingOf, restartAfterResponse } from "./restart-after-response.js";
@@ -162,7 +162,7 @@ export function renderEnvironmentSection(input: {
   passwordId?: string;
 }): string {
   const { locale, secure, message } = input;
-  const shared = START_AGAIN_PAGE_TEXT[locale];
+  const shared = START_AGAIN_PAGE_WORDS[locale];
   const passwordId = input.passwordId ?? "start-again-password";
   const errorId = input.passwordId ? `${passwordId}-error` : "environment-password-error";
   const text = input.text ?? ENVIRONMENT_RECOVERY_TEXT[locale];

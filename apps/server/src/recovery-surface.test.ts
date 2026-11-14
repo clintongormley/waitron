@@ -19,15 +19,10 @@ import {
   refusedWhileRunning,
   type RecoveryState,
 } from "./recovery-state.js";
-import {
-  GENERIC_TEXT,
-  OPERATOR_TEXT,
-  recoveryApp,
-  startAgainDraw,
-  type RecoveryDeps,
-} from "./recovery-surface.js";
+import { recoveryApp, startAgainDraw, type RecoveryDeps } from "./recovery-surface.js";
+import { GENERIC_WORDS, OPERATOR_WORDS } from "./i18n/recovery-page.js";
 import { escapeHtml } from "./html-page.js";
-import { START_AGAIN_PAGE_TEXT } from "./recovery-start-again.js";
+import { START_AGAIN_PAGE_WORDS } from "./i18n/start-again-page.js";
 import { DECLARATION_LINK_WORDS } from "./i18n/declaration-page.js";
 
 const state = afterFailure(
@@ -303,8 +298,8 @@ const SPANISH_CHROME = [
 
 describe("the page's language", () => {
   const code = "migrations.set_missing";
-  const english = OPERATOR_TEXT[code]!["en-GB"];
-  const spanish = OPERATOR_TEXT[code]!["es-ES"];
+  const english = OPERATOR_WORDS[code]!["en-GB"];
+  const spanish = OPERATOR_WORDS[code]!["es-ES"];
 
   it("is Spanish, and only Spanish, when the browser prefers Spanish", async () => {
     const res = await pageResponse(code, { acceptLanguage: SPANISH });
@@ -485,7 +480,7 @@ describe("a box that lost its own record", () => {
 describe("curated operator text", () => {
   // Through `escapeHtml`: curated strings are escaped too, so an apostrophe renders as `&#39;`.
   it("renders the title and action for every code in the table, in each language", async () => {
-    for (const [code, text] of Object.entries(OPERATOR_TEXT)) {
+    for (const [code, text] of Object.entries(OPERATOR_WORDS)) {
       for (const [lang, acceptLanguage] of LOCALES) {
         const body = await pageFor(code, undefined, acceptLanguage);
         expect(body, `${code} in ${lang}`).toContain(escapeHtml(text[lang].title));
@@ -497,8 +492,8 @@ describe("curated operator text", () => {
   // A Spanish half copied from the English would render and pass every other case.
   it("has a Spanish title and action for every entry that differ from the English", () => {
     for (const [code, text] of [
-      ...Object.entries(OPERATOR_TEXT),
-      ["generic", GENERIC_TEXT] as const,
+      ...Object.entries(OPERATOR_WORDS),
+      ["generic", GENERIC_WORDS] as const,
     ]) {
       expect(text["es-ES"].title, code).not.toBe(text["en-GB"].title);
       expect(text["es-ES"].action, code).not.toBe(text["en-GB"].action);
@@ -516,8 +511,8 @@ describe("curated operator text", () => {
 
   it("never suggests wiping anything, in either language", () => {
     for (const [code, text] of [
-      ...Object.entries(OPERATOR_TEXT),
-      ["generic", GENERIC_TEXT] as const,
+      ...Object.entries(OPERATOR_WORDS),
+      ["generic", GENERIC_WORDS] as const,
     ]) {
       expect(text["en-GB"].action, code).not.toMatch(/\bwipe\b|\berase\b|\bdelete\b|\breset\b/i);
       expect(text["es-ES"].action, code).not.toMatch(NEVER_WIPE_ES);
@@ -527,7 +522,7 @@ describe("curated operator text", () => {
   // The reader has no terminal and often no backup, so a restore action must say what reinstalling
   // without one costs.
   it("tells an operator with no backup what reinstalling loses", () => {
-    const restoreActions = Object.entries(OPERATOR_TEXT).filter(([, text]) =>
+    const restoreActions = Object.entries(OPERATOR_WORDS).filter(([, text]) =>
       /restore it from a backup, or reinstall/i.test(text["en-GB"].action),
     );
     expect(restoreActions.length).toBeGreaterThan(0);
@@ -539,11 +534,11 @@ describe("curated operator text", () => {
   });
 
   it("tells an operator with no backup what reinstalling loses, in Spanish", () => {
-    const restoreActions = Object.entries(OPERATOR_TEXT).filter(([, text]) =>
+    const restoreActions = Object.entries(OPERATOR_WORDS).filter(([, text]) =>
       /restáurala desde una copia de seguridad, o reinstala/i.test(text["es-ES"].action),
     );
     expect(restoreActions.map(([code]) => code).sort()).toEqual(
-      Object.entries(OPERATOR_TEXT)
+      Object.entries(OPERATOR_WORDS)
         .filter(([, text]) => /restore it from a backup, or reinstall/i.test(text["en-GB"].action))
         .map(([code]) => code)
         .sort(),
@@ -595,7 +590,7 @@ describe("curated operator text", () => {
       "node.state_missing",
     ];
     const missing = [...classified, ...persistedByRunEntry, ...fromBootByHand].filter(
-      (code) => code !== "unknown" && !(code in OPERATOR_TEXT),
+      (code) => code !== "unknown" && !(code in OPERATOR_WORDS),
     );
     expect(missing).toEqual([]);
   });
@@ -683,7 +678,7 @@ describe("curated operator text", () => {
   });
 
   it("the full-disk page names nobody to ask, in English and Spanish", () => {
-    const text = OPERATOR_TEXT["storage.disk_full"]!;
+    const text = OPERATOR_WORDS["storage.disk_full"]!;
     for (const lang of ["en-GB", "es-ES"] as const) {
       expect(text[lang].title, lang).not.toMatch(/whoever installed|quien instaló/i);
       expect(text[lang].action, lang).not.toMatch(/whoever installed|quien instaló/i);
@@ -711,7 +706,7 @@ describe("curated operator text", () => {
 
   // A retry or restart can fix a volume that did not come up; nothing else at the box can.
   it("offers a database_unreachable both a retry and a restart, then names the fault", () => {
-    const text = OPERATOR_TEXT["provisioning.database_unreachable"];
+    const text = OPERATOR_WORDS["provisioning.database_unreachable"];
     expect(text).toBeDefined();
     expect(text!["en-GB"].action).toMatch(/retry/i);
     expect(text!["en-GB"].action).toContain(
@@ -726,7 +721,7 @@ describe("curated operator text", () => {
 
   // The Spanish action names the button by the label the Spanish page gives it.
   it("names the Spanish button by its Spanish label wherever a Spanish action says to press it", () => {
-    const pressing = Object.entries(OPERATOR_TEXT).filter(([, text]) =>
+    const pressing = Object.entries(OPERATOR_WORDS).filter(([, text]) =>
       /\bpulsa\b/i.test(text["es-ES"].action),
     );
     expect(pressing.length).toBeGreaterThan(0);
@@ -738,7 +733,7 @@ describe("curated operator text", () => {
 
   // A cold restore runs the migrations itself, so it can raise `migrations.incomplete`.
   it("does not answer a partly-updated database with the restore that can raise it", () => {
-    const text = OPERATOR_TEXT["migrations.incomplete"];
+    const text = OPERATOR_WORDS["migrations.incomplete"];
     expect(text).toBeDefined();
     expect(text!["en-GB"].action).not.toMatch(/restore it from a backup, or reinstall/i);
     expect(text!["en-GB"].action).toMatch(/^This is a fault in Waitron\. /);
@@ -750,24 +745,24 @@ describe("curated operator text", () => {
 
   // A failure reading or counting the recovery state is logged with its code alone.
   it("does not promise the generic failure's reason was written down anywhere", () => {
-    expect(GENERIC_TEXT["en-GB"].action).not.toMatch(/read the reason/i);
-    expect(GENERIC_TEXT["en-GB"].action).toMatch(/this is a fault in Waitron or this box/i);
-    expect(GENERIC_TEXT["es-ES"].action).not.toMatch(/registro|motivo/i);
-    expect(GENERIC_TEXT["es-ES"].action).toMatch(/es un fallo de Waitron o de este equipo/i);
+    expect(GENERIC_WORDS["en-GB"].action).not.toMatch(/read the reason/i);
+    expect(GENERIC_WORDS["en-GB"].action).toMatch(/this is a fault in Waitron or this box/i);
+    expect(GENERIC_WORDS["es-ES"].action).not.toMatch(/registro|motivo/i);
+    expect(GENERIC_WORDS["es-ES"].action).toMatch(/es un fallo de Waitron o de este equipo/i);
   });
 
   it("renders the generic line for a code it does not know, without throwing", async () => {
     for (const [lang, acceptLanguage] of LOCALES) {
       const body = await pageFor("some.code.invented.later", undefined, acceptLanguage);
-      expect(body).toContain(escapeHtml(GENERIC_TEXT[lang].title));
-      expect(body).toContain(escapeHtml(GENERIC_TEXT[lang].action));
+      expect(body).toContain(escapeHtml(GENERIC_WORDS[lang].title));
+      expect(body).toContain(escapeHtml(GENERIC_WORDS[lang].action));
     }
   });
 
   it("renders the generic line when no failure has been recorded at all", async () => {
     for (const [lang, acceptLanguage] of LOCALES) {
       const body = await pageFor(null, undefined, acceptLanguage);
-      expect(body).toContain(escapeHtml(GENERIC_TEXT[lang].title));
+      expect(body).toContain(escapeHtml(GENERIC_WORDS[lang].title));
     }
   });
 
@@ -777,7 +772,7 @@ describe("curated operator text", () => {
     for (const code of ["toString", "constructor", "__proto__", "valueOf"]) {
       for (const [lang, acceptLanguage] of LOCALES) {
         const body = await pageFor(code, undefined, acceptLanguage);
-        expect(body).toContain(escapeHtml(GENERIC_TEXT[lang].title));
+        expect(body).toContain(escapeHtml(GENERIC_WORDS[lang].title));
         expect(body).not.toContain("undefined");
       }
     }
@@ -928,7 +923,7 @@ describe("what brings a refused placing back", () => {
 
 describe("a restore whose database could not be put in place, if it is the last failure", () => {
   it("names the fault, and sends the operator to the failed start's details on this page", async () => {
-    const text = OPERATOR_TEXT["restore.placement_failed"];
+    const text = OPERATOR_WORDS["restore.placement_failed"];
     expect(text).toBeDefined();
     expect(text!["en-GB"].action).toMatch(/^This is a fault in Waitron or this box's disk\. /);
     expect(text!["en-GB"].action).toContain("Why the last start failed");
@@ -943,7 +938,7 @@ describe("a restore whose database could not be put in place, if it is the last 
 
 describe("a start refused because the only copy of the database may be in a set-aside folder", () => {
   it("says the database was moved aside by a restore and names the fault", async () => {
-    const text = OPERATOR_TEXT["restore.database_set_aside"];
+    const text = OPERATOR_WORDS["restore.database_set_aside"];
     expect(text).toBeDefined();
     expect(text!["en-GB"].title).toMatch(/moved aside/i);
     expect(text!["en-GB"].action).toMatch(/^This is a fault in Waitron or this box's disk\. /);
@@ -1081,7 +1076,7 @@ describe("the last failed start's detail", () => {
 });
 
 describe("a migration the engine refused", () => {
-  const text = OPERATOR_TEXT["migrations.apply_failed"];
+  const text = OPERATOR_WORDS["migrations.apply_failed"];
 
   it("says the database could not be updated, and that this is a fault in Waitron", () => {
     expect(text).toBeDefined();
@@ -1460,7 +1455,7 @@ describe("a start refused before it began", () => {
   it("neither refused start sends the person to someone else, in either language", () => {
     for (const row of ROWS) {
       for (const lang of ["en-GB", "es-ES"] as const) {
-        const action = OPERATOR_TEXT[row.code]![lang].action;
+        const action = OPERATOR_WORDS[row.code]![lang].action;
         expect(action, `${row.code} ${lang}`).not.toMatch(/whoever installed/i);
         expect(action, `${row.code} ${lang}`).not.toMatch(/quien instaló/i);
       }
@@ -1474,7 +1469,7 @@ describe("a start refused before it began", () => {
     expect(NEVER_DELETE_ES.test("Quítalo.")).toBe(true);
     expect(NEVER_DELETE_EN.test("Delete these files.")).toBe(true);
     expect(NEVER_DELETE_ES.test("Borra estos archivos.")).toBe(true);
-    const strings = (text: (typeof START_AGAIN_PAGE_TEXT)[keyof typeof START_AGAIN_PAGE_TEXT]) =>
+    const strings = (text: (typeof START_AGAIN_PAGE_WORDS)[keyof typeof START_AGAIN_PAGE_WORDS]) =>
       Object.entries({
         ...text,
         more: text.more(3),
@@ -1483,25 +1478,25 @@ describe("a start refused before it began", () => {
       });
     const checked = { "en-GB": NEVER_DELETE_EN, "es-ES": NEVER_DELETE_ES } as const;
     for (const lang of ["en-GB", "es-ES"] as const) {
-      const entries = strings(START_AGAIN_PAGE_TEXT[lang]);
+      const entries = strings(START_AGAIN_PAGE_WORDS[lang]);
       expect(entries.length, lang).toBe(27);
       for (const [key, value] of entries) {
         expect(typeof value, `${lang} ${key}`).toBe("string");
         if (key === "moveDetail") continue;
         expect(value, `${lang} ${key}`).not.toMatch(checked[lang]);
       }
-      expect(START_AGAIN_PAGE_TEXT[lang].moveDetail, lang).toMatch(checked[lang]);
+      expect(START_AGAIN_PAGE_WORDS[lang].moveDetail, lang).toMatch(checked[lang]);
     }
-    expect(START_AGAIN_PAGE_TEXT["en-GB"].moveDetail).toBe(
+    expect(START_AGAIN_PAGE_WORDS["en-GB"].moveDetail).toBe(
       "The files are moved, unchanged, into a new folder on the box, and the rest of the interrupted setup is removed. The box then starts a new first setup, where you can recover from a backup or set up again.",
     );
-    expect(START_AGAIN_PAGE_TEXT["es-ES"].moveDetail).toBe(
+    expect(START_AGAIN_PAGE_WORDS["es-ES"].moveDetail).toBe(
       "Los archivos se mueven, sin cambios, a una carpeta nueva del equipo, y se quita el resto de la configuración interrumpida. Después el equipo empieza una configuración inicial nueva, donde puedes recuperar desde una copia de seguridad o configurar de nuevo.",
     );
   });
 
   it("the unfinished Move names the Retry button the page draws, never tells the person to reinstall, and says reinstalling loses the moved files", async () => {
-    const text = OPERATOR_TEXT["setup.start_again_move_unfinished"]!;
+    const text = OPERATOR_WORDS["setup.start_again_move_unfinished"]!;
     for (const [lang, retry, moved] of [
       ["en-GB", "Retry a normal boot", "the files moved aside"],
       ["es-ES", "«Reintentar un arranque normal»", "los archivos apartados"],
@@ -1517,7 +1512,7 @@ describe("a start refused before it began", () => {
   });
 
   it("the unfinished Start again line never tells the person to reinstall, and says what reinstalling loses", () => {
-    const text = OPERATOR_TEXT["setup.start_again_incomplete"]!;
+    const text = OPERATOR_WORDS["setup.start_again_incomplete"]!;
     expect(text["en-GB"].action).not.toMatch(/(^|[.!?]\s+)Reinstall\b/);
     expect(text["en-GB"].action).toContain("lost");
     expect(text["es-ES"].action).not.toMatch(/(^|[.!?]\s+)Reinstala\b/);
@@ -1552,9 +1547,9 @@ describe("recoveryApp's Start again choice", () => {
     ],
     digest: "d".repeat(64),
   };
-  const FOUND = OPERATOR_TEXT["setup.start_again_files_found"]!["en-GB"];
-  const KEPT = OPERATOR_TEXT["setup.start_again_kept"]!["en-GB"];
-  const WORDS = START_AGAIN_PAGE_TEXT["en-GB"];
+  const FOUND = OPERATOR_WORDS["setup.start_again_files_found"]!["en-GB"];
+  const KEPT = OPERATOR_WORDS["setup.start_again_kept"]!["en-GB"];
+  const WORDS = START_AGAIN_PAGE_WORDS["en-GB"];
   const FORM_ACTION = 'action="/recovery-api/start-again"';
   const RETRY_ACTION = 'action="/recovery-api/retry"';
 
@@ -1681,7 +1676,7 @@ describe("recoveryApp's Start again choice", () => {
 
   it("a Move that failed after its record answers 409 with the move-unfinished page in each language, no choice form, no restart, and GET / stays on it", async () => {
     for (const locale of ["en-GB", "es-ES"] as const) {
-      const text = OPERATOR_TEXT["setup.start_again_move_unfinished"]![locale];
+      const text = OPERATOR_WORDS["setup.start_again_move_unfinished"]![locale];
       const { app: surface, onFinished } = app(() =>
         Promise.reject(new AppError("setup.start_again_move_unfinished", {})),
       );
@@ -1707,9 +1702,9 @@ describe("recoveryApp's Start again choice", () => {
         expect(page, locale).toContain(escapeHtml(text.title));
         expect(page, locale).toContain(escapeHtml(text.action));
         expect(page, locale).not.toContain(
-          escapeHtml(OPERATOR_TEXT["setup.start_again_files_found"]![locale].title),
+          escapeHtml(OPERATOR_WORDS["setup.start_again_files_found"]![locale].title),
         );
-        expect(page, locale).not.toContain(escapeHtml(START_AGAIN_PAGE_TEXT[locale].filesFound));
+        expect(page, locale).not.toContain(escapeHtml(START_AGAIN_PAGE_WORDS[locale].filesFound));
         expect(page, locale).not.toContain(FORM_ACTION);
         expect(page, locale).not.toContain("<fieldset");
         expect(page, locale).not.toContain('type="password"');
@@ -1720,7 +1715,7 @@ describe("recoveryApp's Start again choice", () => {
   });
 
   it("a logger that throws on the failed-choice warning still leaves GET / on the move-unfinished page", async () => {
-    const unfinished = OPERATOR_TEXT["setup.start_again_move_unfinished"]!["en-GB"];
+    const unfinished = OPERATOR_WORDS["setup.start_again_move_unfinished"]!["en-GB"];
     const throwingOnFailure: RecoveryDeps["log"] = (_level, event) => {
       if (event === "recovery.start_again_choice_failed") throw new Error("log sink failed");
     };
@@ -1736,7 +1731,7 @@ describe("recoveryApp's Start again choice", () => {
   });
 
   it("after a Move that failed after its record, a later Keep or Move is answered with the move-unfinished page and chooses nothing", async () => {
-    const unfinished = OPERATOR_TEXT["setup.start_again_move_unfinished"]!["en-GB"];
+    const unfinished = OPERATOR_WORDS["setup.start_again_move_unfinished"]!["en-GB"];
     const chooser = vi
       .fn<NonNullable<StartAgain["choose"]>>()
       .mockRejectedValueOnce(new AppError("setup.start_again_move_unfinished", {}))
@@ -1782,8 +1777,8 @@ describe("recoveryApp's Start again choice", () => {
 
   it("after Move, the answer in each language says only that Start again finished: no files-found title or action, and no Retry", async () => {
     for (const locale of ["en-GB", "es-ES"] as const) {
-      const found = OPERATOR_TEXT["setup.start_again_files_found"]![locale];
-      const words = START_AGAIN_PAGE_TEXT[locale];
+      const found = OPERATOR_WORDS["setup.start_again_files_found"]![locale];
+      const words = START_AGAIN_PAGE_WORDS[locale];
       const { app: surface } = app(MOVED);
       const answer = await surface.request(
         "/recovery-api/start-again",
@@ -1815,8 +1810,8 @@ describe("recoveryApp's Start again choice", () => {
 
   it("after Move, GET / in each language draws the moved answer: no files-found title or action, no form, no Retry", async () => {
     for (const locale of ["en-GB", "es-ES"] as const) {
-      const found = OPERATOR_TEXT["setup.start_again_files_found"]![locale];
-      const words = START_AGAIN_PAGE_TEXT[locale];
+      const found = OPERATOR_WORDS["setup.start_again_files_found"]![locale];
+      const words = START_AGAIN_PAGE_WORDS[locale];
       const { app: surface } = app(MOVED);
       expect((await choose(surface, "move")).status, locale).toBe(200);
       const after = await surface.request("/", { headers: { "Accept-Language": locale } }, tls());

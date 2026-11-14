@@ -98,7 +98,7 @@ import { mountPrintApi } from "./print-api.js";
 import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
 import { timeRecordPersonalData } from "./personal-data-time-record.js";
 import { mountInvoiceCustomerDataApi } from "./invoice-customer-data-api.js";
-import { START_AGAIN_PAGE_TEXT } from "./recovery-start-again.js";
+import { START_AGAIN_PAGE_WORDS } from "./i18n/start-again-page.js";
 import { escapeHtml } from "./html-page.js";
 import {
   createStaffNoticeLog,
@@ -1610,7 +1610,7 @@ describe("a Start again choice on a real full disk", () => {
       small.fill();
       expect(small.free()).toBeLessThan(65_536);
 
-      const diskFull = escapeHtml(START_AGAIN_PAGE_TEXT["en-GB"].diskFull);
+      const diskFull = escapeHtml(START_AGAIN_PAGE_WORDS["en-GB"].diskFull);
       // A wrong password is answered diskFull, not wrongPassword.
       for (const password of ["not-the-password", START_AGAIN_ADMIN_PASSWORD]) {
         const answer = await postFormOver(port!, ca, "/recovery-api/start-again", {
@@ -1620,7 +1620,9 @@ describe("a Start again choice on a real full disk", () => {
         });
         expect(answer.status).toBe(409);
         expect(answer.body).toContain(`<p id="start-again-message">${diskFull}</p>`);
-        expect(answer.body).not.toContain(escapeHtml(START_AGAIN_PAGE_TEXT["en-GB"].wrongPassword));
+        expect(answer.body).not.toContain(
+          escapeHtml(START_AGAIN_PAGE_WORDS["en-GB"].wrongPassword),
+        );
         expect(answer.body).toContain('value="move" required checked');
       }
 

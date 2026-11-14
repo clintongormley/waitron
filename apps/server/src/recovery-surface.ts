@@ -17,13 +17,13 @@ import { LOG_FILE_NAME } from "@waitron/db";
 import type { StartAgainSurvey, chooseStartAgainLeftovers } from "@waitron/provisioning";
 import type { Statfs } from "./free-bytes.js";
 import {
-  GENERIC_TEXT,
+  GENERIC_WORDS,
   ENVIRONMENT_RECOVERY_TEXT,
   HOLDER_STALLED,
-  OPERATOR_TEXT,
+  OPERATOR_WORDS,
   RECOVERY_PAGE_WORDS,
   holderStalledText,
-  type OperatorText,
+  type OperatorWords,
 } from "./i18n/recovery-page.js";
 import { DECLARATION_LINK_WORDS } from "./i18n/declaration-page.js";
 import { resolveLoginLocale } from "./login-locale.js";
@@ -46,13 +46,7 @@ import {
   type EnvironmentView,
 } from "./recovery-environment.js";
 
-export {
-  BOOT_INCOMPLETE,
-  GENERIC_TEXT,
-  HOLDER_STALLED,
-  OPERATOR_TEXT,
-  type OperatorText,
-} from "./i18n/recovery-page.js";
+export { BOOT_INCOMPLETE, HOLDER_STALLED } from "./i18n/recovery-page.js";
 
 const MAX_LOG_LINES = 200;
 
@@ -139,13 +133,13 @@ async function readLog(logDir: string): Promise<LogView> {
  * `Object.hasOwn`: the code comes from a file on the box, and a code of `toString` would otherwise
  * find an inherited function and crash the one page a failed box can still serve.
  */
-function operatorText(state: RecoveryState): OperatorText {
+function operatorText(state: RecoveryState): OperatorWords {
   const { lastErrorCode } = state;
   if (lastErrorCode === HOLDER_STALLED) return holderStalledText(state.holderKind);
-  if (lastErrorCode === null) return GENERIC_TEXT;
-  if (!Object.hasOwn(OPERATOR_TEXT, lastErrorCode)) return GENERIC_TEXT;
-  const entries: Readonly<Record<string, OperatorText | undefined>> = OPERATOR_TEXT;
-  return entries[lastErrorCode] ?? GENERIC_TEXT;
+  if (lastErrorCode === null) return GENERIC_WORDS;
+  if (!Object.hasOwn(OPERATOR_WORDS, lastErrorCode)) return GENERIC_WORDS;
+  const entries: Readonly<Record<string, OperatorWords | undefined>> = OPERATOR_WORDS;
+  return entries[lastErrorCode] ?? GENERIC_WORDS;
 }
 
 function triggerLines(

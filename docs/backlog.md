@@ -2347,8 +2347,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **Full-invoice recipient: comma refusal and country code names** (bundle of 2, 1 important, size S). [Detail](backlog/architecture.md#bundle-full-invoice-recipient-comma-refusal-and-country-code-names)
 
-- **Recovery wording into `i18n`, with table names to match** (bundle of 2, size S). [Detail](backlog/architecture.md#bundle-recovery-wording-into-i18n-with-table-names-to-match)
-
 - **Spanish text in a server test venue, for A913's English-only audit.**
   `apps/server/src/testing/bill-venue.ts` names its products "Paella" and "Caña", and in the look
   test's venue the Spanish refund dialog shows the reason "Mistake" in English. Found by A798-B
