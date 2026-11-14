@@ -563,7 +563,7 @@ reset and operator gates; this entry does not start that job.
 
 OPEN.
 
-- [Switched-off modules' append-only protection](#unselected-fiscal-modules-append-only-tables-are-neither-re-protected-nor-checked).
+- [Unselected fiscal modules' append-only protection](#unselected-fiscal-modules-append-only-tables-are-neither-re-protected-nor-checked).
 - **Putting back a changed append-only trigger is a hand-typed command.** Retry cannot clear
   `append_only.triggers_changed` for a changed trigger; the installer runs the `node -e` drop in
   `deploy/README.md` (_When the page names `append_only.triggers_changed`_) and then presses

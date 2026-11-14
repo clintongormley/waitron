@@ -2422,8 +2422,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 
 
-- **Loose ends left by A483 (#1544).** OPEN. A start migrates, re-protects and checks only the
-  modules switched on.
+- **Loose ends left by A483 (#1544).** Unselected fiscal protection, changed-trigger repair and
+  the recursive-trigger check remain open.
   [Detail](backlog/architecture.md#loose-ends-left-by-a483-1544).
 
 - **Nothing stops two queries being started at once on one transaction.** The rule and its receipt
