@@ -3621,6 +3621,13 @@ export class PrintersScreen extends LitElement {
       if (!agentChoices.has(agent.id)) agentChoices.set(agent.id, agent.name);
     }
     const agentFallbacks = ["gone", "unknown", "cloud"];
+    const agentLabels = [...agentChoices].filter(([id]) => !agentFallbacks.includes(id));
+    const agentLabel = (id: string, name: string) => {
+      const host = this.agents.find((agent) => agent.id === id)?.host;
+      return host && agentLabels.some(([other, label]) => other !== id && label === name)
+        ? `${name} (${host})`
+        : name;
+    };
     const columns: DataTableColumn<PrinterTableRow>[] = [
       {
         key: "name",
@@ -3681,14 +3688,16 @@ export class PrintersScreen extends LitElement {
             countLabel: (count) => fill("printers.filter_agent_count", { count: String(count) }),
           },
           value: (r) => agentOf(r).id,
-          options: [
-            ...[...agentChoices]
-              .filter(([id]) => !agentFallbacks.includes(id))
-              .map(([value, label]) => ({ value, label })),
-            ...agentFallbacks
-              .filter((id) => agentChoices.has(id))
-              .map((value) => ({ value, fixed: true, label: agentChoices.get(value)! })),
-          ],
+          // Until the printers agents have seen are read, those printers count as "unknown"; no
+          // options keeps a saved agent choice waiting rather than letting the table drop it.
+          options: this.loading
+            ? []
+            : [
+                ...agentLabels.map(([value, name]) => ({ value, label: agentLabel(value, name) })),
+                ...agentFallbacks
+                  .filter((id) => agentChoices.has(id))
+                  .map((value) => ({ value, fixed: true, label: agentChoices.get(value)! })),
+              ],
         },
         cell: (r) => {
           if (r.kind === "a4")
@@ -3943,7 +3952,12 @@ export class PrintersScreen extends LitElement {
           value: (j) => j.status,
           options: JOB_STATUSES.map((status) => ({ value: status, label: jobStatusName(status) })),
         },
-        searchValue: (j) => jobStatusName(j.status),
+        searchValue: (j) =>
+          [
+            jobStatusName(j.status),
+            j.lastError === null ? "" : jobReason(j.lastError),
+            j.waitReason === undefined ? "" : codeMessage(j.waitReason),
+          ].join(" "),
         cell: (j) =>
           html`<span part=${`job-status job-${j.status}`} data-test=${`job-status-${j.id}`}
               >${jobStatusName(j.status)}</span

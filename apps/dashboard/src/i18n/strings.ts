@@ -822,10 +822,10 @@ export const en = {
   "content_gaps.search": "Search names",
   "content_gaps.name": "Name",
   "content_gaps.kind": "Kind",
-  "content_gaps.kind_all": "All kinds",
+  "content_gaps.kind_all": "Any kind",
   "content_gaps.kind_count": "{count} kinds",
   "content_gaps.reason": "Why",
-  "content_gaps.reason_all": "All reasons",
+  "content_gaps.reason_all": "Any reason",
   "content_gaps.partial": "Partly translated",
   "content_gaps.absent": "No customer-facing name",
   "content_gaps.open": "Open",
@@ -1605,7 +1605,7 @@ export const en = {
   "staff.filter_current_help_label": "About current users",
   "staff.filter_current_help":
     "Current users are everyone who has not been disabled: active users, and pending users (invited, but yet to finish setting up their account).",
-  "staff.filter_all_statuses": "All statuses",
+  "staff.filter_all_statuses": "Any status",
   "staff.badge_password": "Password",
   "staff.badge_totp": "TOTP",
   "staff.invitation_sent":
@@ -1639,7 +1639,7 @@ export const en = {
   "units.precision_usage_unavailable":
     "Could not check which extras lists and menus use this unit.",
   "units.measure": "Measures a quantity (ml, g…) — no extras",
-  "units.filter_precision_all": "All precisions",
+  "units.filter_precision_all": "Any precision",
   "units.filter_precision_count": "{count} precisions",
   "units.actions": "Actions",
   "units.empty": "No units yet.",
@@ -5063,10 +5063,10 @@ export const es: Record<StringKey, string> = {
   "content_gaps.search": "Buscar nombres",
   "content_gaps.name": "Nombre",
   "content_gaps.kind": "Tipo",
-  "content_gaps.kind_all": "Todos los tipos",
+  "content_gaps.kind_all": "Cualquier tipo",
   "content_gaps.kind_count": "{count} tipos",
   "content_gaps.reason": "Motivo",
-  "content_gaps.reason_all": "Todos los motivos",
+  "content_gaps.reason_all": "Cualquier motivo",
   "content_gaps.partial": "Traducido a medias",
   "content_gaps.absent": "Sin nombre para el cliente",
   "content_gaps.open": "Abrir",
@@ -5867,7 +5867,7 @@ export const es: Record<StringKey, string> = {
   "staff.filter_current_help_label": "Acerca de los usuarios actuales",
   "staff.filter_current_help":
     "Los usuarios actuales son todos los que no están deshabilitados: los activos y los pendientes (invitados que aún no han terminado de configurar su cuenta).",
-  "staff.filter_all_statuses": "Todos los estados",
+  "staff.filter_all_statuses": "Cualquier estado",
   "staff.badge_password": "Contraseña",
   "staff.badge_totp": "TOTP",
   "staff.invitation_sent":
@@ -5901,7 +5901,7 @@ export const es: Record<StringKey, string> = {
   "units.precision_usage_unavailable":
     "No se pudo comprobar qué listas de extras y cartas usan esta unidad.",
   "units.measure": "Mide una cantidad (ml, g…) — sin extras",
-  "units.filter_precision_all": "Todas las precisiones",
+  "units.filter_precision_all": "Cualquier precisión",
   "units.filter_precision_count": "{count} precisiones",
   "units.actions": "Acciones",
   "units.empty": "Todavía no hay unidades.",

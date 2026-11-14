@@ -2126,21 +2126,26 @@ describe("printers-screen", () => {
     { locale: "en", del: "Delete", title: "Delete print agent?", add: "Add" },
     { locale: "es-ES", del: "Eliminar", title: "¿Eliminar agente de impresión?", add: "Añadir" },
   ])("words agent Delete and Add in $locale", async ({ locale, del, title, add }) => {
+    const before = currentLocale();
     setLocale(locale);
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
-      api: stubApi(),
-    });
-    await flush(el);
-    expect(text(el, "[data-test=revoke-agent-a1]")).toBe(del);
-    q(el, "[data-test=revoke-agent-a1]")!.click();
-    await flush(el);
-    expect(deepQuery(q(el, "[data-test=delete-agent-modal]")!.shadowRoot!, "h2")!.textContent).toBe(
-      title,
-    );
-    await clickAndAwaitClose(el, "delete-agent-modal", "delete-cancel");
-    q(el, "[data-test=open-add-agent]")!.click();
-    await flush(el);
-    expect(text(el, "[data-test=allow-agent-a2]")).toBe(add);
+    try {
+      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+        api: stubApi(),
+      });
+      await flush(el);
+      expect(text(el, "[data-test=revoke-agent-a1]")).toBe(del);
+      q(el, "[data-test=revoke-agent-a1]")!.click();
+      await flush(el);
+      expect(
+        deepQuery(q(el, "[data-test=delete-agent-modal]")!.shadowRoot!, "h2")!.textContent,
+      ).toBe(title);
+      await clickAndAwaitClose(el, "delete-agent-modal", "delete-cancel");
+      q(el, "[data-test=open-add-agent]")!.click();
+      await flush(el);
+      expect(text(el, "[data-test=allow-agent-a2]")).toBe(add);
+    } finally {
+      setLocale(before);
+    }
   });
 
   it("cancels an agent Delete without changing it", async () => {
@@ -13852,7 +13857,7 @@ describe("searching and filtering the printer tables", () => {
     lastError: null,
   };
 
-  async function mountTables(): Promise<PrintersScreen> {
+  async function mountTables(overrides: Partial<DashboardApi> = {}): Promise<PrintersScreen> {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
       api: stubApi({
         listAgents: vi.fn().mockResolvedValue(activeAgents),
@@ -13863,6 +13868,7 @@ describe("searching and filtering the printer tables", () => {
           ),
         listPagePrinters: vi.fn().mockResolvedValue([officePrinter]),
         listRecentJobs: vi.fn().mockResolvedValue([...jobs, barJob]),
+        ...overrides,
       }),
     });
     await flush(el);
@@ -13910,7 +13916,12 @@ describe("searching and filtering the printer tables", () => {
     };
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
       api: stubApi({
-        listAgents: vi.fn().mockResolvedValue(activeAgents),
+        listAgents: vi
+          .fn()
+          .mockResolvedValue([
+            ...activeAgents,
+            { ...activeAgents[1]!, id: "a4", host: "10.0.0.21" },
+          ]),
         listPagePrinters: vi.fn().mockResolvedValue([officePrinter, twin]),
       }),
     });
@@ -13918,9 +13929,13 @@ describe("searching and filtering the printer tables", () => {
     const filter = filterOf(el, "printers-table", "agent") as HTMLElement & {
       options: { value: string; label: string }[];
     };
-    expect(filter.options.filter((o) => o.label === "Terrace agent").map((o) => o.value)).toEqual([
-      "a3",
-      "a4",
+    expect(
+      filter.options
+        .filter((o) => o.label.startsWith("Terrace agent"))
+        .map((o) => [o.value, o.label]),
+    ).toEqual([
+      ["a3", "Terrace agent (10.0.0.20)"],
+      ["a4", "Terrace agent (10.0.0.21)"],
     ]);
     await chooseOptions(filter, ["a4"]);
     await flush(el);
@@ -13929,32 +13944,29 @@ describe("searching and filtering the printer tables", () => {
 
   it("keeps the agent chosen for printers no agent has seen when the language changes", async () => {
     const before = currentLocale();
+    setLocale("en");
     try {
       const el = await mountTables();
-      const filter = filterOf(el, "printers-table", "agent") as HTMLElement & {
-        options: { value: string; label: string }[];
-      };
-      expect(filter.options.find((o) => o.value === "unknown")?.label).toBe(
-        t("printers.agent_unknown"),
-      );
-      await chooseOptions(filter, ["unknown"]);
+      type AgentFilter = HTMLElement & { options: { value: string; label: string }[] };
+      const unseen = (filterOf(el, "printers-table", "agent") as AgentFilter).options.find(
+        (o) => o.label === "No recent observation",
+      )!;
+      await chooseOptions(filterOf(el, "printers-table", "agent"), [unseen.value]);
       await flush(el);
       expect(rowKeys(el, "printers-table").sort()).toEqual(["receipt:p1", "receipt:p3"]);
-      setLocale("en");
+      setLocale("es-ES");
       el.requestUpdate();
       await flush(el);
       const table = tableOf(el, "printers-table") as HTMLElement & {
         filterValues(key: string): string[];
       };
-      expect(table.filterValues("agent")).toEqual(["unknown"]);
+      expect(table.filterValues("agent")).toEqual([unseen.value]);
       expect(rowKeys(el, "printers-table").sort()).toEqual(["receipt:p1", "receipt:p3"]);
       expect(
-        (
-          filterOf(el, "printers-table", "agent") as HTMLElement & {
-            options: { value: string; label: string }[];
-          }
-        ).options.find((o) => o.value === "unknown")?.label,
-      ).toBe(t("printers.agent_unknown"));
+        (filterOf(el, "printers-table", "agent") as AgentFilter).options.find(
+          (o) => o.value === unseen.value,
+        )?.label,
+      ).toBe("Sin observaciones recientes");
     } finally {
       setLocale(before);
     }
@@ -13972,6 +13984,58 @@ describe("searching and filtering the printer tables", () => {
         expect(rowKeys(el, "jobs-table")).toEqual(["j1"]);
         await searchTable(el, "jobs-table", jobStatusName("queued"));
         expect(rowKeys(el, "jobs-table")).toEqual(["j3"]);
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+
+  it("keeps a saved agent choice while the printers agents have seen are still being read", async () => {
+    sessionStorage.setItem(
+      "waitron.printers.table",
+      JSON.stringify({ filters: { agent: ["a3"] } }),
+    );
+    let answer!: (devices: DiscoveredPrinter[]) => void;
+    const seenLater = new Promise<DiscoveredPrinter[]>((resolve) => (answer = resolve));
+    const el = await mountTables({
+      listPagePrinters: vi.fn().mockResolvedValue([]),
+      listDiscoveredPrinters: vi.fn().mockReturnValue(seenLater),
+    });
+    answer([{ ...discovered[1]!, agentId: "a3", agentName: "Terrace agent" }]);
+    await flush(el);
+    const table = tableOf(el, "printers-table") as HTMLElement & {
+      filterValues(key: string): string[];
+    };
+    expect(table.filterValues("agent")).toEqual(["a3"]);
+    expect(rowKeys(el, "printers-table")).toEqual(["receipt:p3"]);
+    expect(JSON.parse(sessionStorage.getItem("waitron.printers.table")!).filters).toEqual({
+      agent: ["a3"],
+    });
+  });
+
+  it.each(["en", "es-ES"])(
+    "narrows the print queue to the jobs whose shown reason matches the search (%s)",
+    async (locale) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const el = await mountTables({
+          listRecentJobs: vi
+            .fn()
+            .mockResolvedValue([
+              ...jobs,
+              barJob,
+              { ...barJob, id: "j4", waitReason: "printer.not_visible" },
+              { ...jobs[0]!, id: "j5", lastError: "print_job.drawer_expired" },
+            ]),
+        });
+        await selectTab(el, "queue");
+        await searchTable(el, "jobs-table", "printer offline");
+        expect(rowKeys(el, "jobs-table")).toEqual(["j1"]);
+        await searchTable(el, "jobs-table", codeMessage("printer.not_visible"));
+        expect(rowKeys(el, "jobs-table")).toEqual(["j4"]);
+        await searchTable(el, "jobs-table", codeMessage("print_job.drawer_expired"));
+        expect(rowKeys(el, "jobs-table")).toEqual(["j5"]);
       } finally {
         setLocale(before);
       }

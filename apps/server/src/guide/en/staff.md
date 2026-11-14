@@ -109,7 +109,7 @@ your data, ask the venue.
 ## Download another person's data {#person-data}
 
 As an admin, you can download another person's copy of their data, for example when someone who
-has left asks for it. On **Users**, set **Status** to **All statuses** if the person
+has left asks for it. On **Users**, set **Status** to **Any status** if the person
 is disabled, open their row menu and choose **Download their data**. You get the same files the
 person gets from **Copy of your data**, with its `README.txt` in the language the person chose,
 or the venue's language if they have not chosen one. Managers do not see this action. Waitron

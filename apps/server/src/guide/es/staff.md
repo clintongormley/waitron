@@ -118,7 +118,7 @@ sobre tus datos, pregunta al local.
 
 Como administrador, puedes descargar la copia de los datos de otra persona, por ejemplo cuando
 alguien que ya no trabaja en el local la pide. En
-**Usuarios**, elige **Todos los estados** en **Estado** si la persona está deshabilitada, abre el
+**Usuarios**, elige **Cualquier estado** en **Estado** si la persona está deshabilitada, abre el
 menú de su fila y elige **Descargar sus datos**. Recibes los mismos archivos que la persona
 obtiene con **Copia de tus datos**, con su `README.txt` en el idioma que eligió la persona o, si
 no eligió ninguno, en el idioma del local. Los gerentes no ven esta acción. Waitron no guarda una
