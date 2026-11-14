@@ -248,12 +248,29 @@ describe("installed boot evidence", () => {
       change: null,
       bootCopy: { state: "pending", reason: null, failure: null },
     },
+    networkOperations: {
+      scan: { ok: false, reason: "no_wifi" },
+      join: { ok: false, reason: "no_wifi" },
+    },
     networkInterfaces: { eth0: [{ address: "192.0.2.8", internal: false }] },
   };
   it("accepts the installed services and a second boot keeping identity", async () => {
     const { installedFailures } = await import("./recipe-setup.mjs");
     expect(installedFailures(expected, "installed-root", first, first)).toEqual([]);
   });
+  it.each([
+    undefined,
+    { scan: { ok: false, reason: "unknown_request" }, join: { ok: false, reason: "no_wifi" } },
+    { scan: { ok: false, reason: "no_wifi" }, join: { ok: true } },
+  ])(
+    "rejects missing or incorrectly dispatched installed Wi-Fi operations (%j)",
+    async (networkOperations) => {
+      const { installedFailures } = await import("./recipe-setup.mjs");
+      expect(
+        installedFailures(expected, "installed-root", { ...first, networkOperations }, first),
+      ).toContain("host-network-operations");
+    },
+  );
   it.each([
     { network: undefined },
     { network: { ok: false, reason: "host_failed" } },

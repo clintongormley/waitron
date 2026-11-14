@@ -67,6 +67,14 @@ export function installedFailures(expected, installedUuid, first, again) {
         .some((entry) => entry.internal === false && entry.address === boot.network.wired?.address)
     )
       failures.push("host-network");
+    if (
+      ["scan", "join"].some(
+        (verb) =>
+          boot.networkOperations?.[verb]?.ok !== false ||
+          boot.networkOperations[verb].reason !== "no_wifi",
+      )
+    )
+      failures.push("host-network-operations");
     if (!installedUuid || installedUuid === expected.uuid || boot.uuid !== installedUuid)
       failures.push("root-uuid");
     if (!boot.luksUuid || boot.luksUuid === boot.uuid || boot.luksUuid !== first.luksUuid)

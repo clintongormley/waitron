@@ -17,7 +17,7 @@ const empty = {
   wired: { connected: false, address: null },
   wifi: { connectedSsidHex: null, savedSsidHex: null },
   change: null,
-  bootCopy: { state: "pending", reason: null, failure: null },
+  bootCopy: { state: "failed", reason: null, failure: "io-failed" },
 };
 
 it("answers a host without radios through the executable without exposing command output", () => {
@@ -267,4 +267,165 @@ it("shares three seconds across commands and caps output without invoking a shel
   time = 3000;
   expect(() => run("busctl", [])).toThrow();
   expect(exec).toHaveBeenCalledTimes(2);
+});
+
+it("scans fresh access points, preserving bytes and choosing the strongest duplicate", async () => {
+  const { handleNetworkRequest } = await import("./network-host.mjs");
+  const base = host();
+  let scans = 0;
+  const run = vi.fn(async (command, args) => {
+    if (command === "nmcli") {
+      expect(args).toEqual(["--wait", "10", "device", "wifi", "rescan", "ifname", "wlan0"]);
+      scans++;
+      return "";
+    }
+    if (args.at(-1) === "LastScan") return JSON.stringify(typed("x", scans));
+    if (args.at(-1) === "GetAllAccessPoints")
+      return JSON.stringify(
+        typed("ao", [["/ap/weak", "/ap/strong", "/ap/hidden", "/ap/sae", "/ap/open"]]),
+      );
+    if (
+      args.includes("/ap/weak") ||
+      args.includes("/ap/strong") ||
+      args.includes("/ap/hidden") ||
+      args.includes("/ap/sae") ||
+      args.includes("/ap/open")
+    ) {
+      const path = args[4];
+      const data = path.endsWith("hidden")
+        ? [[], 100, 0, 0]
+        : path.endsWith("sae")
+          ? [[66], 80, 0, 0x400]
+          : path.endsWith("open")
+            ? [[67], 20, 0, 0]
+            : [[0, 255, 195, 40, 92], path.endsWith("strong") ? 90 : 30, 0x100, 0];
+      return data.map((v) => JSON.stringify(typed("unused", v))).join("\n");
+    }
+    return base(command, args);
+  });
+  expect(typeof handleNetworkRequest).toBe("function");
+  const reply = await handleNetworkRequest(
+    'network.scan {"actor":{"source":"person","person":"waiter-1"}}',
+    { run },
+  );
+  expect(JSON.parse(reply)).toEqual({
+    ok: true,
+    networks: [
+      { ssidHex: "00ffc3285c", signal: 90, security: "wpa-psk" },
+      { ssidHex: "42", signal: 80, security: "sae" },
+      { ssidHex: "43", signal: 20, security: "other" },
+    ],
+  });
+});
+
+it("refuses a scan without a radio", async () => {
+  const { handleNetworkRequest } = await import("./network-host.mjs");
+  expect(typeof handleNetworkRequest).toBe("function");
+  expect(
+    JSON.parse(
+      await handleNetworkRequest('network.scan {"actor":{"source":"person","person":"waiter-1"}}', {
+        run: async () => JSON.stringify(typed("ao", [[]])),
+      }),
+    ),
+  ).toEqual({ ok: false, reason: "no_wifi" });
+});
+
+it("reports persisted live-change and boot-copy outcomes alongside the current link observations", async () => {
+  const { handleNetworkRead } = await import("./network-host.mjs");
+  const status = {
+    change: { kind: "join", ssidHex: "41", state: "applied", reason: null },
+    bootCopy: { state: "failed", reason: null, failure: "mount-unverified" },
+  };
+  const reply = JSON.parse(
+    await handleNetworkRead(line, { run: host(), readStatus: async () => status }),
+  );
+  expect(reply.change).toEqual({ kind: "join", ssidHex: "41", state: "applied", reason: null });
+  expect(reply.bootCopy).toEqual({ state: "failed", reason: null, failure: "mount-unverified" });
+  expect(reply.wired).toEqual({ connected: true, address: "192.0.2.8" });
+});
+
+it.each([
+  'network.join {"ssidHex":"41","keyMgmt":"wpa-psk","psk":"restaurant-key","hidden":false,"actor":{"source":"server"}}',
+  'network.join {"ssidHex":"41","keyMgmt":"wpa-psk","psk":"short","hidden":false,"actor":{"source":"person","person":"owner"}}',
+  "network.scan {}",
+])("rejects malformed or inadmissible network requests before any command (%s)", async (line) => {
+  const { handleNetworkRequest } = await import("./network-host.mjs");
+  const run = vi.fn();
+  expect(JSON.parse(await handleNetworkRequest(line, { run })).ok).toBe(false);
+  expect(run).not.toHaveBeenCalled();
+});
+
+it("answers busy before scanning while a join is pending", async () => {
+  const { handleNetworkRequest } = await import("./network-host.mjs");
+  const run = vi.fn();
+  const answer = await handleNetworkRequest(
+    'network.scan {"actor":{"source":"person","person":"owner"}}',
+    {
+      run,
+      readStatus: async () => ({
+        change: { kind: "join", ssidHex: "41", state: "running", reason: null },
+        bootCopy: { state: "pending", reason: null, failure: null },
+      }),
+    },
+  );
+  expect(JSON.parse(answer)).toEqual({ ok: false, reason: "busy" });
+  expect(run).not.toHaveBeenCalled();
+});
+
+it("keeps the canonical read path and rejects a not-yet-implemented forget", async () => {
+  const { handleNetworkRequest } = await import("./network-host.mjs");
+  expect(JSON.parse(await handleNetworkRequest(line, { run: host() })).wired).toEqual({
+    connected: true,
+    address: "192.0.2.8",
+  });
+  expect(
+    JSON.parse(
+      await handleNetworkRequest(
+        'network.forget {"ssidHex":"41","actor":{"source":"person","person":"owner"}}',
+      ),
+    ),
+  ).toEqual({ ok: false, reason: "unknown_request" });
+});
+
+it("refuses a fresh scan that never completes instead of returning cached access points", async () => {
+  const { handleNetworkRequest } = await import("./network-host.mjs");
+  const { performance } = await import("node:perf_hooks");
+  const now = vi.spyOn(performance, "now").mockReturnValueOnce(0).mockReturnValue(11000);
+  onTestFinished(() => now.mockRestore());
+  const base = host();
+  const run = async (command, args) =>
+    args.at(-1) === "LastScan"
+      ? JSON.stringify(typed("x", 0))
+      : command === "nmcli"
+        ? ""
+        : base(command, args);
+  expect(
+    JSON.parse(
+      await handleNetworkRequest('network.scan {"actor":{"source":"person","person":"owner"}}', {
+        run,
+        readStatus: async () => ({ change: null }),
+      }),
+    ),
+  ).toEqual({ ok: false, reason: "host_failed" });
+});
+
+it("refuses partial device properties and a radio already used as a hotspot", async () => {
+  const { handleNetworkRequest } = await import("./network-host.mjs");
+  const request = 'network.scan {"actor":{"source":"person","person":"owner"}}';
+  expect(
+    JSON.parse(
+      await handleNetworkRequest(request, {
+        run: host({ mode: 3 }),
+        readStatus: async () => ({ change: null }),
+      }),
+    ),
+  ).toEqual({ ok: false, reason: "no_wifi" });
+  const base = host();
+  const run = async (command, args) =>
+    args.includes("DeviceType") ? JSON.stringify(typed("u", 2)) : base(command, args);
+  expect(
+    JSON.parse(
+      await handleNetworkRequest(request, { run, readStatus: async () => ({ change: null }) }),
+    ),
+  ).toEqual({ ok: false, reason: "host_failed" });
 });

@@ -1,0 +1,17 @@
+[Unit]
+Description=Apply or recover Waitron Wi-Fi changes and publish its boot copy
+After=NetworkManager.service waitron-disk-ready.service
+Requires=NetworkManager.service
+RequiresMountsFor=/var/lib/waitron-host /boot
+ConditionPathExists=/etc/waitron-dev-luks
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/waitron/waitron-box.sh --network-change
+TimeoutStartSec=110
+LimitCORE=0
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
