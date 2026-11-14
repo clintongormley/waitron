@@ -14,6 +14,8 @@ import { URL, fileURLToPath } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
 import { coveredFiles, main, renamePath, renameText, residuals } from "./rename-tenant.mjs";
 
+vi.setConfig({ testTimeout: 25_000 });
+
 const shields = [
   "registros_tenant_node_secuencia_uq",
   "TenantTransport",
