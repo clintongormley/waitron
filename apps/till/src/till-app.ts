@@ -9193,7 +9193,8 @@ export class TillApp extends LitElement {
       return;
     }
     await this.#refreshAfterWrite("station", "refresh.station");
-    if (session === this.#operatorSession) await this.#refreshWaiting();
+    if (session === this.#operatorSession)
+      await this.#refreshAfterWrite("waiting", "refresh.waiting");
   }
 
   /**
