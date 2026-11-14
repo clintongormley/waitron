@@ -197,7 +197,9 @@ own agent still enrols as a new row beside it, as it did before (read, not run).
 On 2026-10-05 A261-3 also observed "ResizeObserver loop completed with undelivered
 notifications" while running `src/widgets/folder-made-at.test.ts` and
 `src/widgets/catalogue-browser.test.ts`. Its cause on that path has not been established.
+
 _2026-11-14, A1308 mn1: that browser suite now lives at `src/widgets/product-browser.test.ts`._
+
 A349's Preview, price-table and navigation suites also logged the message.
 That comparison does not establish which observer causes it or its effect on the rendered screen.
 A487a also saw it in `src/components/wt-tabs` runs. Which test logs it was not looked for.

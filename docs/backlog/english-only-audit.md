@@ -1,6 +1,6 @@
 # A913 — non-English text in general code: the audit
 
-_2026-11-14, A1308 mn1: the cited server suites now use `menu-allergen-workflow.test.ts` and `seed-menus.ts`; the older names below record the audited tree._
+_2026-11-14, A1308 mn1: `catalogue-allergen-workflow.test.ts` is now `menu-allergen-workflow.test.ts`, and the seed script `seed-catalogue.ts` is now `seed-menus.ts`. The older names below record the audited tree._
 
 _2026-11-10, A1488: the working-time export writes its coded values and yes/no values as words in the file's language; the access-holder row in Bucket B records the earlier tree._
 

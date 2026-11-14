@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { URL } from "node:url";
+import { fileURLToPath, URL } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
 import { MOVES, main, movedPath, run } from "./rename-catalogue-paths.mjs";
 
@@ -168,6 +168,14 @@ it("rewrites the db export key and value without changing another package's key"
 
 it("leaves prose without paths byte-identical when the package moves", () => {
   const root = fixture({
+    "packages/catalogue/src/a.ts": "catalogue CatalogueScreen catalogues menu",
+  });
+  run({ root });
+  expect(read(root, "packages/menu/src/a.ts")).toBe("catalogue CatalogueScreen catalogues menu");
+});
+
+it("does not rewrite an empty package-relative path when the destination is nested", () => {
+  const root = fixture({
     "packages/catalogue/src/a.ts": 'const text = "catalogue CatalogueScreen catalogues menu";',
   });
   run({ root, moves: [["packages/catalogue/", "packages/menu/nested/"]] });
@@ -269,7 +277,7 @@ it("prints its summary and dry-run details when executed directly", () => {
   const command = (args) =>
     execFileSync(
       process.execPath,
-      [new URL("./rename-catalogue-paths.mjs", import.meta.url).pathname, ...args],
+      [fileURLToPath(new URL("./rename-catalogue-paths.mjs", import.meta.url)), ...args],
       { cwd: root, env, encoding: "utf8" },
     );
   expect(command(["--dry-run"])).toContain("packages/catalogue/src/a.ts -> packages/menu/src/a.ts");
@@ -328,8 +336,25 @@ it.each([
 it("runs the command through a symlink to its module", () => {
   const root = fixture({ "packages/catalogue/src/a.ts": "export {};" });
   const link = join(root, "rename.mjs");
-  symlinkSync(new URL("./rename-catalogue-paths.mjs", import.meta.url).pathname, link);
+  symlinkSync(fileURLToPath(new URL("./rename-catalogue-paths.mjs", import.meta.url)), link);
   const output = execFileSync(process.execPath, [link], { cwd: root, env, encoding: "utf8" });
   expect(output).toBe("moved 1, rewrote 0\n");
   expect(read(root, "packages/menu/src/a.ts")).toBe("export {};");
+});
+
+it("can be imported with a non-file command argument without running the rename", () => {
+  const root = fixture({ "packages/catalogue/src/a.ts": "export {};" });
+  const url = new URL("./rename-catalogue-paths.mjs", import.meta.url).href;
+  const output = execFileSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `const { run } = await import(${JSON.stringify(url)}); console.log(run({ root: process.cwd(), dryRun: true }).moved);`,
+      "/does-not-exist",
+    ],
+    { cwd: root, env, encoding: "utf8" },
+  );
+  expect(output).toBe("1\n");
+  expect(read(root, "packages/catalogue/src/a.ts")).toBe("export {};");
 });

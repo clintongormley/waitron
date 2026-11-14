@@ -213,5 +213,9 @@ export function main(args, root) {
   console.log(`moved ${result.moved}, rewrote ${result.rewrote}`);
 }
 
-if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url))
+if (
+  process.argv[1] &&
+  existsSync(process.argv[1]) &&
+  realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)
+)
   main(process.argv.slice(2), process.cwd());
