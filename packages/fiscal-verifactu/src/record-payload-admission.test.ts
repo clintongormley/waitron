@@ -73,6 +73,60 @@ it.each(unsupportedAlta)(
   },
 );
 
+/** An alta of the given type carrying an operation date, as a row ready to store. */
+function altaRowWithOperationDate(
+  type: Pick<AltaInput, "TipoFactura" | "TipoRectificativa" | "ImporteRectificacion">,
+) {
+  const pending = altaFor(node, saleId, 1, 1, "preproduction");
+  const corrective = type.TipoFactura === "R5" && {
+    FacturasRectificadas: [
+      {
+        IDEmisorFactura: TEST_NIF,
+        NumSerieFactura: "A/9",
+        FechaExpedicionFactura: new Date("2026-07-18T00:00:00+02:00"),
+      },
+    ],
+  };
+  const record = buildAltaRecord({
+    ...pending.input,
+    ...type,
+    ...corrective,
+    FechaOperacion: new Date("2026-07-18T00:00:00+02:00"),
+    Encadenamiento: { PrimerRegistro: "S" },
+  });
+  return toRegistroRow(record, {
+    origin: deviceOrigin(node.deviceId),
+    nodeId: node.nodeId,
+    sifId: node.sifId,
+    saleId,
+    secuencia: 1,
+    offsetMinutes: 120,
+    entorno: "preproduction",
+  });
+}
+
+it.each([
+  { name: "a simplified invoice", type: { TipoFactura: "F2" } },
+  { name: "a corrective by differences", type: { TipoFactura: "R5", TipoRectificativa: "I" } },
+] as const)("refuses to store an operation date on $name", ({ type }) => {
+  expect(() => altaRowWithOperationDate(type)).toThrow(
+    expect.objectContaining({
+      code: "fiscal.record_invalid",
+      params: { fields: ["FechaOperacion"], codes: ["UNSUPPORTED_FIELD"] },
+    }),
+  );
+});
+
+it("stores the operation date of a replacement corrective (R5 by replacement)", () => {
+  const row = altaRowWithOperationDate({
+    TipoFactura: "R5",
+    TipoRectificativa: "S",
+    ImporteRectificacion: { BaseRectificada: "0.00", CuotaRectificada: "0.00" },
+  });
+
+  expect(row.fechaOperacion).toBe("2026-07-18");
+});
+
 it.each([
   { field: "RefExterna", value: "operator-reference" },
   { field: "GeneradoPor", value: "E" },

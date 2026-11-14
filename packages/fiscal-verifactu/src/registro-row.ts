@@ -139,9 +139,13 @@ export function toRegistroRow(
         "IdAcuerdoSistemaInformatico",
       ] as const)
     : (["RefExterna", "GeneradoPor", "Generador"] as const);
-  const fields = unsupported.filter(
-    (field) => field in record && Reflect.get(record, field) !== undefined,
-  );
+  // Only a replacement corrective files the sale's real day apart from its own issue date.
+  const operationDateRefused =
+    isAlta(record) && (record.TipoFactura !== "R5" || record.TipoRectificativa !== "S");
+  const fields = [
+    ...unsupported,
+    ...(operationDateRefused ? (["FechaOperacion"] as const) : []),
+  ].filter((field) => field in record && Reflect.get(record, field) !== undefined);
   if (fields.length > 0) {
     throw new AppError("fiscal.record_invalid", {
       fields,

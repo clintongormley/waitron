@@ -864,7 +864,8 @@ it.each(["R1", "F3"] as const)(
   },
 );
 
-it("keeps a replacement's operation date while correcting its description", async () => {
+/** A refused replacement corrective (R5 "S") with an operation date, and its open case. */
+async function refusedReplacementCase() {
   const saleId = await seedSale(suite.db, node, 2);
   const filingCase = await withTransaction(suite.db, async (tx) => {
     const pending = altaFor(node, saleId, 2, 2, "preproduction");
@@ -895,6 +896,11 @@ it("keeps a replacement's operation date while correcting its description", asyn
       now: NOW,
     });
   });
+  return filingCase;
+}
+
+it("keeps a replacement's operation date while correcting its description", async () => {
+  const filingCase = await refusedReplacementCase();
   const before = await snapshot();
   expect(before.records[1]!.fechaOperacion).toBe("2026-07-18");
 
@@ -906,6 +912,26 @@ it("keeps a replacement's operation date while correcting its description", asyn
     fechaOperacion: "2026-07-18",
     descripcionOperacion: "Corrected restaurant service",
   });
+});
+
+it("refuses to carry a replacement's operation date into a version corrected by differences", async () => {
+  const filingCase = await refusedReplacementCase();
+  const before = await snapshot();
+
+  const res = await send({
+    ...body,
+    caseId: filingCase.id,
+    registroId: filingCase.registroId,
+    facts: { ...body.facts, correctionType: "I", correctionAmounts: null },
+  });
+
+  expect(await res.json()).toMatchObject({
+    error: {
+      code: "fiscal.record_invalid",
+      params: { fields: ["FechaOperacion"], codes: ["UNSUPPORTED_FIELD"] },
+    },
+  });
+  expect((await snapshot()).records).toEqual(before.records);
 });
 
 it("a refused record of the box this one took over from can be remedied here", async () => {
