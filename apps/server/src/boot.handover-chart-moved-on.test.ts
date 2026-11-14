@@ -1,10 +1,12 @@
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { openVenueDatabase } from "@waitron/db";
+import { readModuleConfig } from "./module-config.js";
+import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
-import { enabledModules, parseModuleConfig } from "@waitron/module";
+import { enabledModules } from "@waitron/module";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { signDocumentBody } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -84,10 +86,7 @@ async function spareEnv(): Promise<Record<string, string>> {
       recursive: true,
     });
   }
-  await writeFile(
-    join(spareState, "modules.json"),
-    JSON.stringify({ modules: { "fiscal-none": false } }),
-  );
+
   return {
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -356,10 +355,13 @@ describe("the emergency routes through a real spare start", () => {
       peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
       restart: () => {},
     });
-    const moduleConfig = parseModuleConfig(
-      JSON.parse(await readFile(join(dirs().spareState, "modules.json"), "utf8")),
-      ALL_MODULES,
-    );
+    const probe = await openVenueDatabase(dirs().spareVenue, { exclusive: false });
+    let moduleConfig;
+    try {
+      moduleConfig = await readModuleConfig(probe.venue);
+    } finally {
+      await probe.close();
+    }
     declaration.expectedCopy = await checkEmergencyCopy({
       venueDir: dirs().spareVenue,
       modules: enabledModules(ALL_MODULES, moduleConfig),

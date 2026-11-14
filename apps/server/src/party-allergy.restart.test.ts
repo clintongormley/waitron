@@ -1,10 +1,11 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { sessionCookieForTest } from "./testing/session-device.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
@@ -179,10 +180,7 @@ describe("A669 consideration through a server process restart", () => {
         await suite.db.run(sql`vacuum into ${join(venueDir, "venue.db")}`);
         const migrationsRoot = join(scratch, "migrations");
         await copyMigrationsRoot(migrationsRoot);
-        await writeFile(
-          join(scratch, "modules.json"),
-          JSON.stringify({ modules: { "fiscal-none": false } }),
-        );
+        await seedModuleSettings(venueDir, { "fiscal-none": false });
         const env: NodeJS.ProcessEnv = {
           ...Object.fromEntries(
             Object.entries(process.env).filter(([key]) => !key.startsWith("WAITRON_")),

@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomBytes } from "node:crypto";
 import {
@@ -1183,7 +1184,7 @@ describe("compareFinalCopy", () => {
 
     it("a spare's module settings changed after the offer are refused", async () => {
       const r = await rig();
-      await write(r.m2State, "modules.json", JSON.stringify({ modules: { "fiscal-none": false } }));
+      await seedModuleSettings(suite.db, { "fiscal-none": false });
       expect(await r.compareRow()).toEqual(refused("handover.modules_differ"));
     });
 
@@ -1205,9 +1206,11 @@ describe("compareFinalCopy", () => {
 
     it("a spare's own file that cannot be read is refused naming it", async () => {
       const r = await rig();
-      await write(r.m2State, "modules.json", "{not json");
+      await suite.db.execute(
+        sql`insert into settings (module, version, revision, doc, updated_at) values ('modules', 2, 1, '{}', ${new Date().toISOString()})`,
+      );
       expect(await r.compareRow()).toEqual(
-        refused("handover.destination_settings_unreadable", { file: "modules.json" }),
+        refused("handover.destination_settings_unreadable", { file: "settings:modules" }),
       );
     });
   });

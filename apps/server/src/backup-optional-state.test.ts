@@ -15,21 +15,11 @@ describe("collectOptionalStateFiles", () => {
 
   it("collects present optional files and skips absent ones", async () => {
     await writeFile(join(dir, "backup.env"), "ARCHIVE_FOLDER=/mnt/usb\n");
-    const out = await collectOptionalStateFiles(dir, ["backup.env", "modules.json"]);
-    expect(out).toEqual({ "backup.env": "ARCHIVE_FOLDER=/mnt/usb\n" }); // modules.json absent → skipped
+    const out = await collectOptionalStateFiles(dir, ["backup.env", "absent.txt"]);
+    expect(out).toEqual({ "backup.env": "ARCHIVE_FOLDER=/mnt/usb\n" }); // The missing entry is skipped.
   });
 
-  it("collects both when both are present", async () => {
-    await writeFile(join(dir, "backup.env"), "ARCHIVE_FOLDER=/mnt/usb\n");
-    await writeFile(join(dir, "modules.json"), '{"modules":{"fiscal-none":false}}\n');
-    const out = await collectOptionalStateFiles(dir, OPTIONAL_BACKUP_STATE);
-    expect(out).toEqual({
-      "backup.env": "ARCHIVE_FOLDER=/mnt/usb\n",
-      "modules.json": '{"modules":{"fiscal-none":false}}\n',
-    });
-  });
-
-  it("returns an empty map when every optional file is absent (backups off, all-modules-default)", async () => {
+  it("returns an empty map when every optional file is absent (backups off)", async () => {
     const out = await collectOptionalStateFiles(dir, OPTIONAL_BACKUP_STATE);
     expect(out).toEqual({});
   });

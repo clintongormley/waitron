@@ -1,3 +1,4 @@
+import { readModuleConfig } from "./module-config.js";
 import { dirname, join } from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -431,16 +432,14 @@ it("an ordinary retry with a changed email is refused before anything is written
   expect(f.counts()).toEqual({ applied: 1, publication: 1 });
 });
 
-it("an ordinary activation keeps a module switched off in the saved settings off in modules.json", async () => {
+it("an ordinary activation keeps a module switched off in the saved database settings off", async () => {
   const f = await fixture(
     undefined,
     parseModuleConfig({ modules: { bookings: false } }, ALL_MODULES),
   );
   await f.confirm();
   expect((await f.activate()).status).toBe(200);
-  expect(
-    JSON.parse(await readFile(join(f.stateDir, "modules.json"), "utf8")).modules.bookings,
-  ).toBe(false);
+  expect((await readModuleConfig(suite.db)).overrides.get("bookings")).toBe(false);
 });
 
 it("an ordinary retry from the publication step finishes without another activation", async () => {

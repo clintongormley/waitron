@@ -287,8 +287,7 @@ Test titles #653 could not touch in `boot.test.ts` carry the history tags
 
 The image ships with backups OFF, deliberately.
 
-Whole-state-volume capture today: the fatal `RECOVERY_FILES` plus the optional `backup.env` and
-`modules.json`; the replacement's private `cloud/recovery.json`, `cloud/replacement.json` and
+Whole-state-volume capture today: the fatal `RECOVERY_FILES` plus the optional `backup.env`; module selection travels inside `venue.db`; the replacement's private `cloud/recovery.json`, `cloud/replacement.json` and
 `cloud/connection.json` stay outside that named capture set and the captured ciphertext archive.
 The exclusion set for the deeper change is `scratch/`,
 `logs/`, the per-hardware `instance.env`, `recovery.json`, and its lock file `recovery.lock` with the `recovery.lock-journal` SQLite keeps beside it while held. Touches BR-2, BR-3 and the recovery

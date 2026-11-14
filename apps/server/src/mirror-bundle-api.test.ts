@@ -488,7 +488,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     },
   );
 
-  it("reads modules.json once for a join", async () => {
+  it("reads module settings once for a join", async () => {
     const { designated } = await setupVenue();
     const app = mountApp(designated);
     pause.moduleConfigReads = 0;

@@ -1,5 +1,6 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { randomUUID } from "node:crypto";
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
@@ -180,10 +181,7 @@ function observeStart(options: StartCase): () => Observed {
         recursive: true,
       });
     }
-    await writeFile(
-      join(scratch, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
+    await seedModuleSettings(suite.db, { "fiscal-none": false });
     const env: Record<string, string> = {
       ...KEY_ENV,
       WAITRON_HTTP_LANDING_PORT: "0",

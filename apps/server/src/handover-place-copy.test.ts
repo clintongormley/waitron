@@ -211,7 +211,13 @@ describe("placeAcceptedCopyAtStart", () => {
   ): Promise<void> {
     const nodeLocal: NodeLocalItem[] = [
       { item: "backup.env", where: "state", class: "transferred", treatment: "x", sha256: null },
-      { item: "modules.json", where: "state", class: "transferred", treatment: "x", sha256: null },
+      {
+        item: "settings:modules",
+        where: "venue.db",
+        class: "transferred",
+        treatment: "x",
+        sha256: null,
+      },
       {
         item: "secrets.env",
         where: "state",

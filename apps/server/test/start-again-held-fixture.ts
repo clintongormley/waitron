@@ -179,10 +179,8 @@ async function loseVenueDatabase(f: Held) {
   expect((await f.host.resolution.inspectFirstSetupResolution()).database).toBe("missing");
 }
 
-/** A held setup with its venue.db gone, and the modules.json activation wrote, which the missing path refuses. */
 async function missingHeldDatabase(): Promise<Held> {
   const f = await heldSetup();
-  await rm(join(f.roots.stateDir, "modules.json"));
   await loseVenueDatabase(f);
   return f;
 }

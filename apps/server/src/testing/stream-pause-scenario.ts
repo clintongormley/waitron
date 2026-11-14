@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../../test/module-settings.js";
 // The stream's pause at the side-file limit, end to end, with the real pinned Litestream, the bucket
 // its fixture names and sales posted to the running server's own sale route:
 //   - the bucket is frozen, so every call to it goes unanswered;
@@ -386,6 +387,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
         deviceId,
         offer,
       };
+      await seedModuleSettings(seeding.venue, { "fiscal-none": false });
     } finally {
       await seeding.close();
     }
@@ -399,10 +401,6 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
     await writeFile(
       join(stateDir, "backup.env"),
       formatEnvFile({ WAITRON_BACKUP_RECOVERY_KEY: "stream-pause-e2e-recovery-key" }),
-    );
-    await writeFile(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
     );
 
     // 3. The server boots with a small side-file limit and opens its generation.

@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -95,10 +95,7 @@ async function spareEnv(): Promise<Record<string, string>> {
       recursive: true,
     });
   }
-  await writeFile(
-    join(spareState, "modules.json"),
-    JSON.stringify({ modules: { "fiscal-none": false } }),
-  );
+
   return {
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
     WAITRON_CREDENTIALS_KEY_VERSION: "1",

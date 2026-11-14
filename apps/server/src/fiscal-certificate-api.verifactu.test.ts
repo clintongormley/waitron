@@ -1,5 +1,6 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { randomBytes } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { Hono } from "hono";
@@ -255,10 +256,7 @@ for (const [fiscal, box] of Object.entries(boxes)) {
         let server: StartedServer | undefined;
         try {
           await copyMigrationsRoot(join(scratch, "migrations"));
-          await writeFile(
-            join(scratch, "modules.json"),
-            JSON.stringify({ modules: { [box.disabled]: false } }),
-          );
+          await seedModuleSettings(suite.db, { [box.disabled]: false });
           const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
           const [port] = await freePorts(1);
           server = await startServer({

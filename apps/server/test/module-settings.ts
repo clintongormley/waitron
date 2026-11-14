@@ -47,3 +47,12 @@ export async function seedModuleSettings(
     await store.close();
   }
 }
+
+export async function seedModuleDocument(
+  db: Database,
+  doc: Record<string, unknown>,
+): Promise<void> {
+  await db.execute(sql`insert into settings (module, version, revision, doc, updated_at)
+    values ('modules', 1, 1, ${JSON.stringify(doc)}, ${new Date().toISOString()})
+    on conflict (module) do update set doc = excluded.doc, version = 1`);
+}

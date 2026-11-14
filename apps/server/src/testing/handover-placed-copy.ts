@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 // A spare whose venue.db is a real placed copy of the old box's database. Stand-ins: M1's stepdown
@@ -151,6 +152,8 @@ export function placedSpareFixture(boxes: {
   }
 
   async function setupBoxes() {
+    await seedModuleSettings(mainBox.db, { "fiscal-none": false });
+    await seedModuleSettings(spareBefore.db, { "fiscal-none": false });
     const { mainState, spareState, spareVenue } = dirs();
     for (const dir of [mainState, spareState, spareVenue]) await mkdir(dir);
     await mainBox.db

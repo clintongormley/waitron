@@ -135,6 +135,7 @@ export function mountHandoverDestinationApi(
           deps.stateDir,
           deps.ring,
           "handover.destination_settings_unreadable",
+          deps.db,
         );
         const difference = offerSettingsDifference(settings, own);
         if (difference !== null) throw new AppError(difference, {});

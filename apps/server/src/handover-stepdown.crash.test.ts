@@ -1,10 +1,11 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 // Power loss is a child process running the real server, killed with SIGKILL at the step under
 // test: no close, no stop of any duty, the store's handles dropped by the operating system. The
 // restart then runs in this process on the same folders, with AEAT replaced by a counting stand-in.
 // Each step is reached through a module the child swaps in at load, which writes a marker to file
 // descriptor 3 and kills its own process there, so a case that crashed earlier names the wrong marker.
 import { spawn, type ChildProcess } from "node:child_process";
-import { cp, mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
@@ -380,10 +381,7 @@ async function crashThenRestart(at: CrashPoint): Promise<Restarted> {
       recursive: true,
     });
   }
-  await writeFile(
-    join(scratch, "modules.json"),
-    JSON.stringify({ modules: { "fiscal-none": false } }),
-  );
+  await seedModuleSettings(suite.db, { "fiscal-none": false });
   // Records waiting for AEAT: a box that starts as a filing primary sends them. The child is started
   // without test submissions, so it files none of them.
   await seedPendingEnvios(suite.db, {

@@ -440,6 +440,7 @@ describe("the spare's handover duty in a full start", () => {
               scratch!,
               loadKeyRing(KEY_ENV),
               "handover.settings_unreadable",
+              suite.db,
             )) as unknown as CanonicalValue,
             imageMigrations: imageMigrationsDigest(null),
           },

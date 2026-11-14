@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../../test/module-settings.js";
 // A spare at `filing_assumed` or `copy_accepted`, and production's real entry to start it with, for
 // the test files that run a real start over placing the accepted copy.
 import { createHash } from "node:crypto";
@@ -222,6 +223,7 @@ export function placeCopyBoxes(deps: {
     const { mode = "mirror", state = "filing_assumed" } = options;
     beforeServerStarts();
     const venue = await setupVenue(suite.db);
+    await seedModuleSettings(suite.db, { "fiscal-none": false });
     const nodeId = venue.cfg.nodeId;
     const ring = loadKeyRing(KEY_ENV);
     await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, nodeId);
@@ -317,7 +319,13 @@ export function placeCopyBoxes(deps: {
 
     const nodeLocal: NodeLocalItem[] = [
       { item: "backup.env", where: "state", class: "transferred", treatment: "x", sha256: null },
-      { item: "modules.json", where: "state", class: "transferred", treatment: "x", sha256: null },
+      {
+        item: "settings:modules",
+        where: "venue.db",
+        class: "transferred",
+        treatment: "x",
+        sha256: null,
+      },
       {
         item: "secrets.env",
         where: "state",
@@ -393,10 +401,6 @@ export function placeCopyBoxes(deps: {
         recursive: true,
       });
     }
-    writeFileSync(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
     const env: Record<string, string> = {
       ...KEY_ENV,
       WAITRON_HTTP_LANDING_PORT: "0",

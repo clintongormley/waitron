@@ -689,7 +689,6 @@ it.each<[string, object, (roots: { venueDir: string; stateDir: string }) => Prom
     "flows/setup/operation.json",
     "flows/restore/record.json",
     "reset-request.json",
-    "modules.json",
     "cloud/replacement.json",
   ].map(
     (

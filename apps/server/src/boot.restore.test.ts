@@ -176,7 +176,6 @@ describe("startServer, against a migrated venue directory", () => {
         "manifest.json",
         "node.dump",
         ...RECOVERY_FILES.map((rel) => `secrets/${rel}`),
-        "secrets/modules.json",
       ]);
     } finally {
       await server.close();

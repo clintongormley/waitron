@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import {
   seedBusinessDay,
@@ -5,7 +6,7 @@ import {
   seedVenueSettings,
 } from "@waitron/db/testing/seed.js";
 import { cp, mkdtemp, rm } from "node:fs/promises";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -127,9 +128,7 @@ vi.mock("./run-server.js", async (importOriginal) => ({
   restartProcess: restartAsked,
 }));
 
-const FISCAL_NONE_OFF = JSON.stringify({ modules: { "fiscal-none": false } });
 const STATE_ROOT = mkdtempSync(join(tmpdir(), "waitron-promote-e2e-state-"));
-writeFileSync(join(STATE_ROOT, "modules.json"), FISCAL_NONE_OFF);
 
 const CREDENTIALS_KEY = Buffer.alloc(32, 5).toString("base64");
 const KEY_ENV = {
@@ -186,6 +185,7 @@ async function seedMirror(
   fixture: ReturnType<typeof allocationFixture>;
   origin: ReturnType<typeof generateNodeKeyPair>;
 }> {
+  await seedModuleSettings(admin, { "fiscal-none": false });
   await admin
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90222222F", legalName: "Promote E2E Cloud SL" })
@@ -267,6 +267,7 @@ async function seedMirror(
 
 /** What the promoted primary needs to ring a real cash sale; returns the offer to sell. */
 async function seedSaleVenue(admin: Database, nodeId: string): Promise<string> {
+  await seedModuleSettings(admin, { "fiscal-none": false });
   await seedLegacySellingUnits(admin);
   if (!(await admin.select({ id: persons.id }).from(persons).where(eq(persons.id, STAFF_ID)))[0]) {
     await seedPersons(admin, {
@@ -408,7 +409,7 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
     const mirrorPort = await freePort();
     const mirrorBase = `http://127.0.0.1:${mirrorPort}`;
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-e2e-main-state-"));
-    writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
+
     const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
     for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
 
@@ -600,7 +601,7 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
     const port = await freePort();
     const base = `http://127.0.0.1:${port}`;
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-e2e-bg-state-"));
-    writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
+
     const allocationEnv = await writeAllocationInput(stateDir, keyFixture, "promote");
     for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
 
@@ -664,7 +665,12 @@ describe("a real offer beside a real promotion on a real start", () => {
             },
           },
           authorisedBy: ADMIN_ID,
-          settings: await readOfferSettings(STATE_ROOT, RING, "handover.settings_unreadable"),
+          settings: await readOfferSettings(
+            STATE_ROOT,
+            RING,
+            "handover.settings_unreadable",
+            db[venue],
+          ),
           imageMigrations: imageMigrationsDigest(null),
         } as unknown as CanonicalValue,
         { nodeId: MIRROR_ORIGIN_NODE_ID, privateKey: seed.origin.privateKey },
@@ -717,7 +723,7 @@ describe("a real offer beside a real promotion on a real start", () => {
     await mintBreakGlassSecret({ venue: db[venue], node: stores[venue].node }, seed.nodeId);
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), `waitron-promote-e2e-${venue}-state-`));
-    writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
+
     const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
     for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
     const server = await startServer(

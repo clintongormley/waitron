@@ -1,7 +1,8 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 // The card capture is held by a stand-in card provider passed through `StartServerSeams.cardPool`:
 // the simulator holds a capture only on a Demo or Prepare box, and neither of those files with AEAT.
 import { randomUUID } from "node:crypto";
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
@@ -268,10 +269,7 @@ describe("a card sale in flight when the box steps down", () => {
         recursive: true,
       });
     }
-    await writeFile(
-      join(scratch, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
+    await seedModuleSettings(suite.db, { "fiscal-none": false });
     await suite.db.execute(sql`update card_readers set provider = 'stripe'`);
     // A reconcile recorded twenty days ago leaves every day since a gap, and one period a pass
     // keeps the rest due on every pass, so a pass nobody stopped reconciles again.

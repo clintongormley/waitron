@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 // A simulation of two boxes in one process, not physical qualification. It covers two boxes only:
 // each with its own folders, real start, real routes and real TLS on its own port; the runs say
@@ -45,7 +46,7 @@ import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js"
 // No dormant filing setup is created for M2: it writes its own at the real switch-on step, inside the
 // preparation route and under the switcher's sign-in.
 import { randomUUID } from "node:crypto";
-import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -576,10 +577,7 @@ async function twoBoxes(scratch: string): Promise<Boxes> {
     const stateDir = join(scratch, name);
     await mkdir(stateDir, { recursive: true });
     await ensureBoxSecrets({ stateDir, hostnames: ["localhost"], now: () => new Date() });
-    await writeFile(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
+
     return stateDir;
   };
   const m1State = await makeState("m1-state");
@@ -597,6 +595,7 @@ async function twoBoxes(scratch: string): Promise<Boxes> {
 
   beforeServerStarts();
   const venue = await provisionBillVenue(m1Files.db, { apply: applyWithFirstSetup(m1State) });
+  await seedModuleSettings(m1Files.db, { "fiscal-none": false });
   const m1Id: string = venue.cfg.nodeId;
   const m2Id = randomUUID();
   await stampDeployment(m1Files.db, "preproduction");

@@ -1,7 +1,8 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { hashPassword, startManagementSession } from "@waitron/identity";
 import { cp, mkdtemp, rm } from "node:fs/promises";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -170,10 +171,7 @@ describe("the read-only exemption list", () => {
 
 // Disables `fiscal-none` so a trading or mirror boot does not refuse `module.fiscal_slot_ambiguous`.
 const STATE_ROOT = mkdtempSync(join(tmpdir(), "waitron-exemptions-state-"));
-writeFileSync(
-  join(STATE_ROOT, "modules.json"),
-  JSON.stringify({ modules: { "fiscal-none": false } }),
-);
+
 const ORIGIN_NODE_ID = "77777777-7777-4777-8777-777777777777";
 const MAIN_BOX = { nodeId: "66666666-6666-4666-8666-666666666666", ...generateNodeKeyPair() };
 const MIRROR_OPERATION_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -209,6 +207,7 @@ async function seededVenue(): Promise<[string, string, Database, NodeDatabase]> 
   const store = await openVenueDatabase(directory);
   openStores.push(store);
   const db = store.venue;
+  await seedModuleSettings(db, { "fiscal-none": false });
   await seedVenue(db);
   const nodeId = await seedNode(db);
   await stampDeployment(db, "preproduction");
@@ -344,6 +343,7 @@ beforeAll(async () => {
           STATE_ROOT,
           RING,
           "handover.settings_unreadable",
+          sDb,
         )) as unknown as CanonicalValue,
         imageMigrations: imageMigrationsDigest(null),
       },

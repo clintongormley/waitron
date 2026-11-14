@@ -1149,12 +1149,18 @@ describe("startServer, against a migrated venue directory", () => {
       probe = await openVenueDatabase(venueDir);
       // A scalar subquery answers one row whose column is NULL when the table is missing, where an
       // empty result would also be what a query selecting nothing at all returns.
-      const bookingsReg = await probe.venue.execute<{ reg: string | null }>(
+      const bookingsReg = await probe.venue.execute<{
+        reg: string | null;
+        bookings: string | null;
+        persons: string | null;
+      }>(
         sql.raw(
-          `select (select name from sqlite_master where type = 'table' and name = '__drizzle_migrations_bookings') as reg`,
+          `select (select name from sqlite_master where type = 'table' and name = '__drizzle_migrations_bookings') as reg, (select name from sqlite_master where type = 'table' and name = 'bookings') as bookings, (select name from sqlite_master where type = 'table' and name = 'persons') as persons`,
         ),
       );
       expect(bookingsReg.rows[0]!.reg).toBeNull();
+      expect(bookingsReg.rows[0]!.bookings).toBeNull();
+      expect(bookingsReg.rows[0]!.persons).toBe("persons");
       // The filter kept every enabled set: `payments` is enabled by default.
       const payments = modulesWithSets(ALL_MODULES).find((m) => m.name === "payments")!;
       const paymentsExpected = expectedSchemaVersion(payments.migrations, migrationsRoot);

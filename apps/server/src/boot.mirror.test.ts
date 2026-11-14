@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { mkdirSync } from "node:fs";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
@@ -124,10 +125,7 @@ const TILL_ENV = {
 
 // Disables `fiscal-none` so a mirror boot does not refuse `module.fiscal_slot_ambiguous`.
 const STATE_ROOT = mkdtempSync(join(tmpdir(), "waitron-mirror-state-"));
-writeFileSync(
-  join(STATE_ROOT, "modules.json"),
-  JSON.stringify({ modules: { "fiscal-none": false } }),
-);
+
 const KEY_ENV = {
   // Keeps the plain-HTTP landing listener off privileged port 80.
   WAITRON_HTTP_LANDING_PORT: "0",
@@ -253,6 +251,7 @@ function running(pid: number): boolean {
 }
 
 async function seedIdentity(admin: Database): Promise<void> {
+  await seedModuleSettings(admin, { "fiscal-none": false });
   // `onConflictDoNothing` is untargeted: nothing here reads the result.
   await admin
     .insert(tenants)
@@ -939,10 +938,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     // Without the pending-adoption branch, this empty venue reaches the own-node lookup and
     // refuses server.node_config_invalid (WAITRON_NODE_ID), before serving its status surface.
     const stateDir = mkdtempSync(join(tmpdir(), "waitron-adopting-state-"));
-    writeFileSync(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
+
     // Inert: this database holds no row for this box, so `runFinishAdoption` logs
     // `adoption.establish_failed` and keeps the latch rather than failing the boot.
     writeFileSync(
@@ -1004,10 +1000,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
 
   it("a box still joining runs its store with the pair's key, serves the leaf the start repaired, and stops it on close", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "waitron-adopting-store-"));
-    writeFileSync(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
+
     writeFileSync(
       join(stateDir, "pending-adoption.json"),
       JSON.stringify({
@@ -1055,10 +1048,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
 
   it("a box still joining reissues, before it serves, a leaf that does not name it", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "waitron-adopting-leaf-"));
-    writeFileSync(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
+
     writeFileSync(
       join(stateDir, "pending-adoption.json"),
       JSON.stringify({

@@ -261,10 +261,7 @@ describe("startServer — background listeners and sinks that fail or close", ()
   it("serves the plain-HTTP landing page beside a trading boot that holds a minted leaf, and closes it with the server", async () => {
     const [port, landingPort] = await freePorts(2);
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-landing-"));
-    await writeFile(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
+
     await ensureBoxSecrets({
       stateDir,
       hostnames: ["waitron.local", "localhost"],
@@ -2443,10 +2440,7 @@ describe("startServer — the configuration export route in trading mode", () =>
       try {
         await seedTradingVenue(venue.store.venue);
         await venue.store.close();
-        await writeFile(
-          join(stateDir, "modules.json"),
-          JSON.stringify({ modules: { "fiscal-none": false } }),
-        );
+
         const port = await freePort();
         server = await startServer({
           ...KEY_ENV,

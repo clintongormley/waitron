@@ -124,7 +124,7 @@ function nodeLocalRow(raw: unknown, field: string): Record<string, unknown> {
 // Each is what a later check reads, so its absence must not read as a value both boxes share.
 const REQUIRED_STATE_FIELDS: readonly (readonly [string, string])[] = [
   ["backup.env", "sha256"],
-  ["modules.json", "sha256"],
+  ["settings:modules", "sha256"],
   ["secrets.env", "ringVersions"],
   ["module-preparation-state.json", "revisions"],
 ];
@@ -138,7 +138,7 @@ function nodeLocal(raw: unknown): void {
     seen.set(key, row);
   });
   for (const [item, field] of REQUIRED_STATE_FIELDS) {
-    const row = seen.get(`state/${item}`);
+    const row = seen.get(`${item === "settings:modules" ? "venue.db" : "state"}/${item}`);
     if (row === undefined) refuse(`nodeLocal.${item}`);
     if (!Object.hasOwn(row, field)) refuse(`nodeLocal.${item}.${field}`);
   }

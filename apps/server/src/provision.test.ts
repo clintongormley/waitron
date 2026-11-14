@@ -229,7 +229,7 @@ describe("provisionVenue", () => {
     expect(written.overrides.get("fiscal-verifactu")).toBe(true);
   });
 
-  it("a GB (no-regime) venue mints no SIF/chain and persists modules.json disabling fiscal-verifactu", async () => {
+  it("a GB (no-regime) venue mints no SIF/chain and persists module settings disabling fiscal-verifactu", async () => {
     const db = ownerDb();
     const config = venueModuleConfig(ALL_ENABLED, "GB-vat");
 

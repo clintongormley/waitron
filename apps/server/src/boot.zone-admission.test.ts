@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { once } from "node:events";
@@ -202,10 +203,7 @@ beforeEach(async () => {
     join(scratch, "dashboard/index.html"),
     '<html lang="en"><title>Synthetic dashboard</title><body>Dashboard fixture</body></html>',
   );
-  await writeFile(
-    join(scratch, "modules.json"),
-    JSON.stringify({ modules: { "fiscal-none": false } }),
-  );
+  await seedModuleSettings(suite.db, { "fiscal-none": false });
   const file = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
   env = {
     WAITRON_HTTP_LANDING_PORT: "0",

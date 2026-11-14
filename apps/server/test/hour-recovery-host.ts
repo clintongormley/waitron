@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "./module-settings.js";
 import "undici";
 import "@waitron/credentials";
 import "../src/node-identity.js";
@@ -317,6 +318,7 @@ export async function compareWith(
 }
 export async function archiveHost(kind: "archive" | "stream" = "archive") {
   const f = await host();
+  await seedModuleSettings(suite.db, { "fiscal-none": false });
   const manifest = await buildManifest({
     db: suite.db,
     node: suite.node,
@@ -340,12 +342,6 @@ export async function archiveHost(kind: "archive" | "stream" = "archive") {
       {
         name: "secrets/credentials.key",
         bytes: Buffer.from(Buffer.alloc(32, 7).toString("base64")),
-      },
-      {
-        name: "secrets/modules.json",
-        bytes: Buffer.from(
-          JSON.stringify({ modules: { "fiscal-verifactu": true, "fiscal-none": false } }),
-        ),
       },
     ]),
     "archive password",

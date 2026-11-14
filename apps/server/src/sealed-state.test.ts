@@ -88,7 +88,6 @@ const row = () => withTransaction(suite.db, (tx) => readSealedStateRow(tx, NODE_
 describe("collectSealedEntries", () => {
   it("carries every archive entry except the database copy, in the archive's order", async () => {
     await writeFile(join(stateDir, "backup.env"), "WAITRON_BACKUP_RECOVERY_KEY=x\n");
-    await writeFile(join(stateDir, "modules.json"), '{"modules":{}}\n');
     const entries = await collectSealedEntries({
       stateDir,
       modules: ALL_MODULES,
@@ -101,7 +100,6 @@ describe("collectSealedEntries", () => {
       "node.dump",
       ...REQUIRED,
       "secrets/backup.env",
-      "secrets/modules.json",
     ]);
     expect(JSON.parse(text(entries, "manifest.json"))).toEqual(MANIFEST);
     expect(text(entries, "secrets/secrets.env")).toBe("secrets.env-contents");
@@ -236,14 +234,14 @@ describe("createSealedStateRefresher", () => {
   it("replaces the row rather than adding one, and carries each file as it now reads", async () => {
     const refresher = createSealedStateRefresher(deps());
     await refresher.refresh();
-    await writeFile(join(stateDir, "modules.json"), '{"modules":{"fiscal-none":false}}\n');
+    await writeFile(join(stateDir, "backup.env"), "WAITRON_BACKUP_INTERVAL_SECONDS=120\n");
     await refresher.refresh();
     const count = await suite.db.execute<{ n: number }>(
       sql`select count(*) as n from node_sealed_state`,
     );
     expect(count.rows[0]!.n).toBe(1);
-    expect(text(unsealNodeState((await row())!, KEY), "secrets/modules.json")).toBe(
-      '{"modules":{"fiscal-none":false}}\n',
+    expect(text(unsealNodeState((await row())!, KEY), "secrets/backup.env")).toBe(
+      "WAITRON_BACKUP_INTERVAL_SECONDS=120\n",
     );
   });
 

@@ -1,7 +1,8 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { cp, mkdtemp, rm } from "node:fs/promises";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -63,9 +64,8 @@ vi.mock("undici", async (importOriginal) => {
 });
 
 // Disables `fiscal-none` so a trading or mirror boot does not refuse `module.fiscal_slot_ambiguous`.
-const FISCAL_NONE_OFF = JSON.stringify({ modules: { "fiscal-none": false } });
+
 const STATE_ROOT = mkdtempSync(join(tmpdir(), "waitron-promote-endpoint-state-"));
-writeFileSync(join(STATE_ROOT, "modules.json"), FISCAL_NONE_OFF);
 
 const CREDENTIALS_KEY = Buffer.alloc(32, 5).toString("base64");
 const KEY_ENV = {
@@ -127,6 +127,7 @@ function selfDoc(standing: "sell-only" | "serving-primary"): SignedMembershipDoc
 
 /** Includes a node identity, so a promote has a key to sign with. */
 async function seedIdentity(db: Database, node: NodeDatabase): Promise<void> {
+  await seedModuleSettings(db, { "fiscal-none": false });
   // `onConflictDoNothing` is untargeted: nothing here reads the result.
   await db
     .insert(tenants)
@@ -165,6 +166,7 @@ async function seedIdentity(db: Database, node: NodeDatabase): Promise<void> {
 
 /** A mirror holding its own dormant identity. */
 async function seedMirrorIdentity(db: Database, node: NodeDatabase): Promise<{ nodeId: string }> {
+  await seedModuleSettings(db, { "fiscal-none": false });
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90222222H", legalName: "Promote Endpoint Cloud SL" })
@@ -295,7 +297,6 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
     const port = await freePort();
 
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-endpoint-mirror-state-"));
-    writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
 
     const server = await startServer(
       {

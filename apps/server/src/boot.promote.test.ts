@@ -1,3 +1,4 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -89,9 +90,9 @@ const TILL_ENV = {
 };
 
 // Disables `fiscal-none` so a trading or mirror boot does not refuse `module.fiscal_slot_ambiguous`.
-const FISCAL_NONE_OFF = JSON.stringify({ modules: { "fiscal-none": false } });
+
 const STATE_ROOT = mkdtempSync(join(tmpdir(), "waitron-promote-state-"));
-writeFileSync(join(STATE_ROOT, "modules.json"), FISCAL_NONE_OFF);
+
 // `WAITRON_ENV: "production"` matches the deployment stamp and `seedPendingEnvios`'s default
 // `entorno`; otherwise the drain's environment guard refuses the seeded row before any submit.
 const KEY_ENV = {
@@ -124,6 +125,7 @@ const PROMOTE_RING = loadKeyRing({
 
 /** Includes a node identity, so the promote's membership-document mint has a key to sign with. */
 async function seedIdentity(db: Database, node: NodeDatabase): Promise<void> {
+  await seedModuleSettings(db, { "fiscal-none": false });
   // `onConflictDoNothing` is untargeted: nothing here reads the result.
   await db
     .insert(tenants)
@@ -360,6 +362,7 @@ async function seedMirrorIdentity(
   db: Database,
   node: NodeDatabase,
 ): Promise<{ nodeId: string; fixture: ReturnType<typeof allocationFixture> }> {
+  await seedModuleSettings(db, { "fiscal-none": false });
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90222222H", legalName: "Promote Cloud SL" })
@@ -434,7 +437,7 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
     const port = await freePort();
     // Its own state dir, so the rewritten `trading.env` can be read back.
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-mirror-state-"));
-    writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
+
     const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
     for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
 
@@ -584,7 +587,7 @@ describe("a mirror's promotion whose role write is lost", () => {
     const seed = await seedMirrorIdentity(db, node);
     const secret = await mintBreakGlassSecret({ venue: db, node }, seed.nodeId);
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-lost-role-"));
-    writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
+
     const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
     for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
     await node.execute(
@@ -647,7 +650,7 @@ describe("a mirror's promotion whose role write is lost", () => {
     const [venueDir, db, node] = await migratedVenue();
     const seed = await seedMirrorIdentity(db, node);
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-forged-chart-"));
-    writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
+
     const forger = generateNodeKeyPair();
     const body = {
       term: 4,
@@ -693,7 +696,7 @@ describe("a mirror's promote and the backup room note", () => {
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-note-state-"));
     const note = join(stateDir, BACKUP_ROOM_NOTE_FILE);
-    writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
+
     const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
     for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
 
@@ -771,7 +774,7 @@ describe("a mirror's promote and the backup room note", () => {
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-before-restart-state-"));
     const note = join(stateDir, BACKUP_ROOM_NOTE_FILE);
-    writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
+
     const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
     for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
     const steps: string[] = [];
@@ -836,7 +839,7 @@ describe("a mirror's promote and the backup room note", () => {
     const secret = await mintBreakGlassSecret({ venue: db, node }, seed.nodeId);
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-before-restart-state-"));
-    writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
+
     const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
     for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
     const restart = vi.fn();
@@ -893,7 +896,7 @@ describe("a mirror's promote and the backup room note", () => {
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-note-after-"));
     const note = join(stateDir, BACKUP_ROOM_NOTE_FILE);
-    writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
+
     const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
     for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
 

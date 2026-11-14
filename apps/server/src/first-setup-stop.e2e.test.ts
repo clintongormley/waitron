@@ -1,11 +1,12 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Hono } from "hono";
 import { expect, it, vi } from "vitest";
 import { MODULE } from "../test/first-fiscal.js";
-import { aTurn, ordinaryServer, type Server } from "../test/stop-route-server.js";
+import { ordinaryServer, type Server } from "../test/stop-route-server.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
-import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
+
 import { START_AGAIN_ROUTES } from "./setup-first-fiscal-api.js";
 
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
@@ -123,33 +124,26 @@ it.each([
   },
 );
 
-it.each([
-  [
-    "an activation-started setup beside an empty database and its published module selection",
-    async () => {
-      const s = await ordinaryServer();
-      await update(s, { kind: "activation-started" });
-      await writeFile(join(s.stateDir, "modules.json"), '{"modules":{}}\n', { mode: 0o600 });
-      return s;
-    },
-  ],
-])("%s: a state the repair page refuses is refused by the stop too", async (_, reach) => {
-  const s = await reach();
-  const ids = await s.ids();
-  const summary = await createFirstSetupResolutionActions({ ...roots(s), host: s.host })
-    .startAgainSummary(ids)
-    .then(
-      () => "accepted",
-      (error: { code: string }) => error.code,
-    );
-  expect(summary).not.toBe("accepted");
-  const before = await s.record();
-  const stopped = await s.stop(ids);
+it("stops and resets a setup holding only its module selection row", async () => {
+  const s = await ordinaryServer();
+  await update(s, { kind: "activation-started" });
+  await seedModuleSettings(s.venueDir, {});
+  const stopped = await s.stop(await s.ids());
+  expect(stopped.status).toBe(200);
+  const app = await repairEntry(s);
+  const ids = await repairIds(app);
+  const started = await s.post(app, START_AGAIN_ROUTES.startAgain.path, ids);
+  expect(started.status).toBe(200);
+  await onlyLockFiles(s);
+  expect(await s.host.store.read()).toBeNull();
+});
+
+it("published trading configuration still refuses stopping a setup with no committed venue", async () => {
+  const s = await ordinaryServer();
+  await update(s, { kind: "activation-started" });
+  await writeFile(join(s.stateDir, "trading.env"), "WAITRON_NODE_ID=published\n");
+  const stopped = await s.stop(await s.ids());
   expect(stopped.status).not.toBe(200);
-  expect(((await stopped.json()) as { error: { code: string } }).error.code).toBe(summary);
-  await aTurn();
-  expect(await s.record()).toEqual(before);
-  expect(s.requestRestart).not.toHaveBeenCalled();
 });
 
 it("the owner's tab is refused after another page stopped the setup", async () => {

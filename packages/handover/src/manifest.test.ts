@@ -34,7 +34,7 @@ describe("the node-local manifest", () => {
       "tls/ca.key|state|destination-owned",
       "tls/server.pem|state|destination-owned",
       "backup.env|state|transferred",
-      "modules.json|state|transferred",
+      "settings:modules|venue.db|transferred",
       "module-preparation-state.json|state|transferred",
       "module-evidence/<module>/<source>.json|state|source-only",
       ".venue.db-litestream/|venue-folder|rebuildable",

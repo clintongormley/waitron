@@ -324,6 +324,7 @@ async function settingsRefused(
       deps.stateDir,
       deps.ring,
       "handover.destination_settings_unreadable",
+      deps.db,
     );
   } catch (error) {
     return refusalOr(error, "handover.destination_settings_unreadable");
@@ -331,7 +332,7 @@ async function settingsRefused(
   const difference = offerSettingsDifference(
     {
       backupSettings: rowOf(body, "backup.env")?.sha256 ?? null,
-      moduleSettings: rowOf(body, "modules.json")?.sha256 ?? null,
+      moduleSettings: rowOf(body, "settings:modules")?.sha256 ?? null,
       ringVersions: rowOf(body, "secrets.env")?.ringVersions ?? [],
     },
     own,

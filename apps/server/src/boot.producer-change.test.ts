@@ -1,6 +1,7 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { cp, mkdtemp, rm } from "node:fs/promises";
-import { writeFileSync } from "node:fs";
+
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -137,10 +138,7 @@ async function poll<T>(predicate: () => T | undefined): Promise<T> {
 /** Starts a production server on the venue, with `taxId` as the running producer's tax number. */
 async function startWith(taxId: string | undefined) {
   const stateDir = await mkdtemp(join(tmpdir(), "waitron-producer-change-state-"));
-  writeFileSync(
-    join(stateDir, "modules.json"),
-    JSON.stringify({ modules: { "fiscal-none": false } }),
-  );
+  await seedModuleSettings(store.venue, { "fiscal-none": false });
   const before = process.env.WAITRON_PRODUCER_TAX_ID;
   if (taxId !== undefined) process.env.WAITRON_PRODUCER_TAX_ID = taxId;
   const port = await freePort();

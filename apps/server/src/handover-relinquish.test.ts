@@ -1,5 +1,6 @@
+import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { copyFile, cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { sql } from "drizzle-orm";
@@ -622,10 +623,7 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
         recursive: true,
       });
     }
-    await writeFile(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
+    await seedModuleSettings(db, { "fiscal-none": false });
     const database = db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
     return {
       ...KEY_ENV,
@@ -709,6 +707,7 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
           mainEnv.WAITRON_STATE_DIR!,
           ring,
           "handover.settings_unreadable",
+          mainBox.db,
         )) as unknown as CanonicalValue,
         imageMigrations: imageMigrationsDigest(null),
       },

@@ -383,7 +383,12 @@ export function mountHandoverSourceStartApi(
     // went bad or changed since is found only here.
     let settings: OfferSettings;
     try {
-      settings = await readOfferSettings(deps.stateDir, deps.ring, "handover.settings_unreadable");
+      settings = await readOfferSettings(
+        deps.stateDir,
+        deps.ring,
+        "handover.settings_unreadable",
+        deps.db,
+      );
     } catch (error) {
       return abandon(operationId, refusalOf(error));
     }
@@ -435,6 +440,7 @@ export function mountHandoverSourceStartApi(
       deps.stateDir,
       deps.ring,
       "handover.settings_unreadable",
+      deps.db,
     );
     const envelope: SignedHandoverEnvelope<CanonicalValue> = await signAsThisBox(deps, "stepdown", {
       binding: binding as unknown as CanonicalValue,

@@ -250,3 +250,14 @@ JSON, EISDIR and mode-0600 file checks. Default, enabled, unknown-module and rou
 assertions remain on the row. The fixture helper also accepts an already-open venue
 handle; directory fixtures migrate core only when `settings` is absent, so seeding
 cannot restore a deliberately dropped trigger before the boot under test.
+
+At 05:30 the watcher cleared one coherent PR up to 2,600 counted lines because the
+caller and fixture ports cannot land independently. At 05:43 the watcher cleared
+Start again removing a setup database holding only its module selection, with no
+committed venue or fiscal rows. The three corresponding refusal cases now check
+deletion; trading-configuration and retained-ledger refusals remain. The owner
+lands this slice. These are watcher clearances, not a separate owner design approval.
+
+At 06:09 the watcher cleared reuse of the failed-start fixture's migrated
+template row, saving selection again only for an explicit override. The timing
+comparison uses five runs on each side and the same 10% median stop.

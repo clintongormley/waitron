@@ -501,7 +501,8 @@ describe("adoptFromPrimary (mirror adopt)", () => {
         NO_HOOKS,
       );
       const digest = async (dir: string) =>
-        (await readOfferSettings(dir, RING, "handover.settings_unreadable")).backupSettings;
+        (await readOfferSettings(dir, RING, "handover.settings_unreadable", suite.db))
+          .backupSettings;
       expect(await digest(mainState)).not.toBeNull();
       expect(await digest(stateDir)).toBe(await digest(mainState));
     } finally {

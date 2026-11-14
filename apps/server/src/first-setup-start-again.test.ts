@@ -1348,7 +1348,6 @@ it.each<[string, (f: { stateDir: string; venueDir: string }) => Promise<unknown>
     "flows/setup/operation.json",
     "flows/restore/record.json",
     "reset-request.json",
-    "modules.json",
     "cloud/replacement.json",
   ].map((name): [string, (f: { stateDir: string; venueDir: string }) => Promise<unknown>] => [
     `state/${name}`,
@@ -1886,7 +1885,7 @@ it("lifetime: a restart of the repair listener leaves the choice record unchange
 
 it.each([
   ["a file or folder it does not expect", "layout unexpected: /venue/stray", "unexpected"],
-  ["a listed file it cannot hash", "check failed: EACCES /state/modules.json", "unreadable"],
+  ["a listed file it cannot hash", "check failed: EACCES /state/reset-request.json", "unreadable"],
 ] as const)(
   "a deletion marker refused for %s (%s) is setup.not_ready with cause %s, keeping the reason",
   (_label, reason, cause) => {

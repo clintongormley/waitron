@@ -1724,18 +1724,13 @@ describe("restore hooks (identity phase)", () => {
   });
 });
 
-// The two files are disk-only config, so this suite never opens what the restore placed — `migrate`
-// and `openDb` are both injected.
-describe("optional state (backup.env + modules.json) round-trip", () => {
+describe("backup settings and the database module list round-trip", () => {
   useTempDirs("waitron-optstate-");
   beforeEach(resetSeries); // the round-trips run the identity phase; re-arm the node's one live series
 
   const BACKUP_ENV = "ARCHIVE_FOLDER=/mnt/usb\nARCHIVE_RETAIN=7\n";
-  // A modules.json that disables the second fiscal-slot member, so exactly one regime is enabled.
-  const MODULES_JSON = `${JSON.stringify({ modules: { "fiscal-none": false } }, null, 2)}\n`;
   const OPTIONAL_ENTRIES: ArchiveEntry[] = [
     { name: "secrets/backup.env", bytes: Buffer.from(BACKUP_ENV) },
-    { name: "secrets/modules.json", bytes: Buffer.from(MODULES_JSON) },
   ];
 
   it("a restored box takes the module list from the archive's database", async () => {
@@ -1754,7 +1749,9 @@ describe("optional state (backup.env + modules.json) round-trip", () => {
     );
     const restored = await openVenueDatabase(venueDir);
     try {
-      expect([...(await readModuleConfig(restored.venue)).overrides]).toEqual([
+      const present = await readModuleConfig(restored.venue);
+      expect(fiscalSlot(enabledModules(ALL_MODULES, present), null).id).toBe("verifactu");
+      expect([...present.overrides]).toEqual([
         ["bookings", false],
         ["fiscal-none", false],
       ]);
@@ -1763,14 +1760,13 @@ describe("optional state (backup.env + modules.json) round-trip", () => {
     }
   });
 
-  it("restores both onto a FRESH state dir, leaving the box's OWN recovery.json untouched", async () => {
+  it("restores backup settings onto a FRESH state dir, leaving the box's OWN recovery.json untouched", async () => {
     // `recovery.json` is this box's own escalation counter and is never captured.
     await writeFile(join(stateDir, "recovery.json"), '{"failures":2}\n');
     await restoreFromArtifact(
       makeRestoreDeps({ artifact: buildArtifact([...FULL_ENTRIES, ...OPTIONAL_ENTRIES]) }),
     );
     expect(await readFile(join(stateDir, "backup.env"), "utf8")).toBe(BACKUP_ENV);
-    expect(await readFile(join(stateDir, "modules.json"), "utf8")).toBe(MODULES_JSON);
     expect(await readFile(join(stateDir, "recovery.json"), "utf8")).toBe('{"failures":2}\n');
   });
 
@@ -1785,10 +1781,9 @@ describe("optional state (backup.env + modules.json) round-trip", () => {
       }),
     );
     await expect(stat(join(stateDir, "backup.env"))).rejects.toMatchObject({ code: "ENOENT" });
-    expect(await readFile(join(stateDir, "modules.json"), "utf8")).toBe(MODULES_JSON);
   });
 
-  it("skipSecrets (rejoin) restores NEITHER file — a rejoining mirror keeps its own config", async () => {
+  it("skipSecrets (rejoin) keeps this box's backup settings", async () => {
     await restoreFromArtifact(
       makeRestoreDeps({
         skipSecrets: true,
@@ -1796,15 +1791,11 @@ describe("optional state (backup.env + modules.json) round-trip", () => {
       }),
     );
     await expect(stat(join(stateDir, "backup.env"))).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(stat(join(stateDir, "modules.json"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("a restore that MISSES modules.json makes the box REFUSE TO BOOT (fiscal slot ambiguous), not a silent regime flip", async () => {
-    // Without modules.json the box is at the all-enabled default, where both fiscal-slot members are
-    // on, and boot's `fiscalSlot` refuses rather than picking a regime.
+  it("a database with no modules row refuses an ambiguous fiscal slot", async () => {
     await restoreFromArtifact(makeRestoreDeps({ artifact: buildArtifact([...FULL_ENTRIES]) }));
-    await expect(stat(join(stateDir, "modules.json"))).rejects.toMatchObject({ code: "ENOENT" });
-    const missing = await readModuleConfig(stateDir);
+    const missing = await readModuleConfig(suite.db);
     let ambiguous: unknown;
     try {
       fiscalSlot(enabledModules(ALL_MODULES, missing), null);
@@ -1812,12 +1803,6 @@ describe("optional state (backup.env + modules.json) round-trip", () => {
       ambiguous = err;
     }
     expect(isAppError(ambiguous) && ambiguous.code).toBe("module.fiscal_slot_ambiguous");
-
-    await restoreFromArtifact(
-      makeRestoreDeps({ artifact: buildArtifact([...FULL_ENTRIES, ...OPTIONAL_ENTRIES]) }),
-    );
-    const present = await readModuleConfig(stateDir);
-    expect(fiscalSlot(enabledModules(ALL_MODULES, present), null).id).toBe("verifactu");
   });
 });
 

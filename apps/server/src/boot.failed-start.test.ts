@@ -306,7 +306,7 @@ async function seedVenueWithNode(directory: string): Promise<void> {
   const store = await openVenueDatabase(directory);
   try {
     const db = store.venue;
-    await seedModuleSettings(directory, { "fiscal-none": false });
+    await seedModuleSettings(db, { "fiscal-none": false });
     await db
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: "90444444J", legalName: "Failed Start SL" });
@@ -398,11 +398,11 @@ async function seededVenueDir(): Promise<string> {
 const moduleOverrides = new Map<string, Record<string, boolean>>();
 
 async function stateDir(
-  modules: Record<string, boolean> = { "fiscal-none": false },
+  modules?: Record<string, boolean>,
   { leaf = false }: { leaf?: boolean } = {},
 ) {
   const dir = await tempDir("waitron-failed-start-state-");
-  moduleOverrides.set(dir, modules);
+  if (modules !== undefined) moduleOverrides.set(dir, modules);
   if (leaf) await cp(join(leafTemplate, "tls"), join(dir, "tls"), { recursive: true });
   return dir;
 }
@@ -467,7 +467,8 @@ function failLandingAfterMdns(
 
 /** With `landing`, the landing port is drawn beside the HTTP one, so the two cannot coincide. */
 async function tradingEnv(venueDir: string, state: string, { landing = false } = {}) {
-  await seedModuleSettings(venueDir, moduleOverrides.get(state) ?? { "fiscal-none": false });
+  const overrides = moduleOverrides.get(state);
+  if (overrides !== undefined) await seedModuleSettings(venueDir, overrides);
   const [httpPort, landingPort] = await freePorts(landing ? 2 : 1);
   return {
     WAITRON_VENUE_DIR: venueDir,

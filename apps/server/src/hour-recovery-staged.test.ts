@@ -8,6 +8,7 @@ import {
   agreeInternet,
   clock,
 } from "../test/hour-recovery-host.js";
+import { seedModuleSettings } from "../test/module-settings.js";
 import { selectPastWaits } from "./testing/hour-test-clock.js";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
@@ -84,6 +85,7 @@ async function fiscalJournal() {
 /** The backup's schema and journal both end at today's last fiscal-verifactu step, one step
  * behind the code it is staged with. */
 async function olderBackup() {
+  await seedModuleSettings(suite.db, { "fiscal-verifactu": true, "fiscal-none": false });
   const manifest = await buildManifest({
     db: suite.db,
     node: suite.node,
@@ -113,12 +115,6 @@ async function olderBackup() {
       {
         name: "secrets/credentials.key",
         bytes: Buffer.from(Buffer.alloc(32, 7).toString("base64")),
-      },
-      {
-        name: "secrets/modules.json",
-        bytes: Buffer.from(
-          JSON.stringify({ modules: { "fiscal-verifactu": true, "fiscal-none": false } }),
-        ),
       },
     ]),
     "archive password",
