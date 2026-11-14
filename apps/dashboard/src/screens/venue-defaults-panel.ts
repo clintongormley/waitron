@@ -29,13 +29,6 @@ type Draft = Pick<VenueDefaults, "receiptLanguage" | "defaultProductVatClass">;
 type Field = keyof Draft;
 const FIELDS: readonly Field[] = ["receiptLanguage", "defaultProductVatClass"];
 const LANGUAGE_REFUSALS = new Set(["receipt.language_orders_open", "receipt.language_fixed"]);
-function languageRefusal(code: string, count: unknown): string {
-  if (code !== "receipt.language_orders_open" || typeof count !== "number")
-    return codeMessage(code);
-  return count === 1
-    ? t("receipts.language_orders_open_one")
-    : fill("receipts.language_orders_open", { count: String(count) });
-}
 
 function changes(expected: Draft, draft: Draft): Partial<Draft> {
   return Object.fromEntries(
@@ -255,7 +248,7 @@ export class VenueDefaultsPanel extends LitElement {
       const params = (error as { params?: { field?: unknown; count?: unknown } } | null)?.params;
       const field = params?.field;
       if (LANGUAGE_REFUSALS.has(code))
-        this.errors = { receiptLanguage: languageRefusal(code, params?.count) };
+        this.errors = { receiptLanguage: codeMessage(code, undefined, params) };
       else if (code === "management.request_invalid" && field === "receiptLanguage")
         this.errors = { receiptLanguage: t("receipts.language_invalid") };
       else if (code === "product.invalid" && field === "defaultProductVatClass")
