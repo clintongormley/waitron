@@ -34,7 +34,7 @@ import {
   units,
   updateUnit,
   writeContentLanguages,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter, updatePrinter, endDeletedPrinterJobs } from "@waitron/printing";
 import { thousandthsToDecimal } from "@waitron/shared";

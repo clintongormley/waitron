@@ -107,7 +107,7 @@ describe("appendToChain from many callers started together", () => {
     // the first is open. `withTransaction` (`packages/db/src/tenancy.ts`) runs its
     // body inside `db.withWriteLock`, and `packages/store/src/write-queue.ts` issues
     // `begin immediate` … `commit`, so the next caller's `begin` does not run until that `commit`
-    // has returned. Same observation as `racePair` in `packages/catalogue/test/fixtures.ts`,
+    // has returned. Same observation as `racePair` in `packages/menu/test/fixtures.ts`,
     // written out here because that helper lives in another package's test directory.
     // Control: with both bodies calling `appendToChain` directly instead of through
     // `withTransaction`, `secondStarted` was true and this case failed.

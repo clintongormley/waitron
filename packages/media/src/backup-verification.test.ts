@@ -18,7 +18,7 @@ import {
   menuVersionImages,
   menuDocumentHash,
   type MenuDocument,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { openBackupQuery } from "@waitron/store";
 import {
   validateBackupVerificationContribution,

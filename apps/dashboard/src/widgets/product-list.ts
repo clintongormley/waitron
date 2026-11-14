@@ -1,4 +1,4 @@
-import { unitPresentation } from "@waitron/catalogue/src/unit-presentation.js";
+import { unitPresentation } from "@waitron/menu/src/unit-presentation.js";
 import { DragEdgeScroll } from "@waitron/ui/src/drag-edge-scroll.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -59,7 +59,7 @@ import {
   type ModifierListChoice,
 } from "./product-editor-model.js";
 import { type CategorySummary, type Course, type Product } from "../api/client.js";
-import { EACH_UNIT_ID } from "@waitron/catalogue/src/unit-validation.js";
+import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 
 export const ROOT_KEY = "root";
 

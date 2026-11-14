@@ -32,7 +32,7 @@ import {
   updateAdjustmentReason,
   type AdjustmentAction,
 } from "@waitron/adjustments";
-import { localToday, rateLines, type GrossLines, type VatClass } from "@waitron/catalogue";
+import { localToday, rateLines, type GrossLines, type VatClass } from "@waitron/menu";
 import { insertCapturedPayment, SimulatorPaymentProvider } from "@waitron/payments";
 import { listStationNotices } from "@waitron/venue-service";
 import { decimal, subtractDecimal, sumDecimals, toScale, type Decimal } from "@waitron/shared";

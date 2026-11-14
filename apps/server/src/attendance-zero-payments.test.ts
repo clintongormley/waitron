@@ -9,7 +9,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
 import { AppError } from "@waitron/shared";
-import { updateProduct } from "@waitron/catalogue";
+import { updateProduct } from "@waitron/menu";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { payments } from "@waitron/payments";
 import { attendanceOperationFacts } from "@waitron/workforce";

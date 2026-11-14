@@ -20,7 +20,7 @@ import {
   productWithId,
   readOfferedExtraItemIds,
   staffPresentationName,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { AppError, normaliseUuid, compareStationNames } from "@waitron/shared";
 import { liveDocumentsByZone, resolveZoneContext } from "./operations.js";
 import {

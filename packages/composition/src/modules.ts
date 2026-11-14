@@ -21,7 +21,7 @@ import {
   CATALOGUE_CONFIGURATION_TRANSFER,
   CATALOGUE_PROVISIONING,
   GUEST_MENU_SETTINGS,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import {
   CORE_ALERTS,
   CORE_CLASSIFICATION,

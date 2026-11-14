@@ -6,7 +6,7 @@ import { createServer } from "node:net";
 import { beforeAll, afterAll, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
-import { writeContentLanguages } from "@waitron/catalogue";
+import { writeContentLanguages } from "@waitron/menu";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";

@@ -16,7 +16,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@waitron/catalogue": "workspace:*",
+    "@waitron/menu": "workspace:*",
     "@waitron/country": "workspace:*",
     "@waitron/country-packs": "workspace:*",
     "@waitron/diagnostics": "workspace:*",

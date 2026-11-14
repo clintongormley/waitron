@@ -24,7 +24,7 @@ import {
 } from "@waitron/shared";
 import { enqueuePrintJob } from "@waitron/printing";
 import { profileAllows } from "@waitron/layouts";
-import { readReceiptLanguage } from "@waitron/catalogue";
+import { readReceiptLanguage } from "@waitron/menu";
 import { formatPaymentSlip } from "./payment-slip.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { resolvePaymentSlipPrinter } from "./receipt-print.js";

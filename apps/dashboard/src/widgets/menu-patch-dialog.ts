@@ -30,9 +30,9 @@ import {
   fixedLanguages,
   parseMenuPatch,
   patchFieldValue,
-} from "@waitron/catalogue/src/menu-patch.js";
+} from "@waitron/menu/src/menu-patch.js";
 import type { MenuDocument } from "@waitron/shared";
-import { PATCH_FIELDS } from "@waitron/catalogue/src/menu-patch-types.js";
+import { PATCH_FIELDS } from "@waitron/menu/src/menu-patch-types.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -486,7 +486,7 @@ export class MenuPatchDialog extends LitElement {
 
   /** Takes a live read from the subscription or, with `reload`, from Reload, which moves the draft
    * even when it holds work. A later live version has a higher number (`nextNumber`,
-   * `refuseOvertaken` and `requeueAfter`, `packages/catalogue/src/menu-publication.ts`), so an
+   * `refuseOvertaken` and `requeueAfter`, `packages/menu/src/menu-publication.ts`), so an
    * answer numbered below the newest one known is a late read and is ignored. */
   #applyLive(answer: LiveMenu | null, reload = false): void {
     if (this.busy) {

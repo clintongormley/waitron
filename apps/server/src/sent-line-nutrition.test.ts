@@ -9,7 +9,7 @@ import {
   setProductVariants,
   updateProduct,
   writeProductModifiers,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { fireGroup, readCurrentOrders } from "./order-groups.js";

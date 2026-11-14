@@ -20,7 +20,7 @@ import {
   routingCells,
   type Transaction,
 } from "@waitron/db";
-import { categoryDetails, directIncludedMenus, loadSectionGraph } from "@waitron/catalogue";
+import { categoryDetails, directIncludedMenus, loadSectionGraph } from "@waitron/menu";
 import { AppError, createLabelComparator, type BusinessDayClock } from "@waitron/shared";
 import { starterName, type StarterStaffLanguage } from "@waitron/country-packs";
 

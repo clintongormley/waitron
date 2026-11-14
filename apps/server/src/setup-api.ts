@@ -278,7 +278,7 @@ const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   // A `provision-only` module (fiscal) is disabled in module settings.
   "module.provision_only_disabled": 409,
   // A configuration export with two categories in one place, or two Active products, sharing a
-  // name; 409, as catalogue-api.ts answers it.
+  // name; 409, as menu-api.ts answers it.
   "category.name_taken": 409,
   "product.name_taken": 409,
   // A configuration export or a restore copy that cannot be opened (the restore tables spread this).

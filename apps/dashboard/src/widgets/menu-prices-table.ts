@@ -24,8 +24,8 @@ import {
 } from "./menu-price-inheritance.js";
 import type { Setting } from "../api/client.js";
 import type { Decimal } from "@waitron/shared";
-import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
-import { clashesOf } from "@waitron/catalogue/src/menu-combine.js";
+import { isProductPrice } from "@waitron/menu/src/modifier-limits.js";
+import { clashesOf } from "@waitron/menu/src/menu-combine.js";
 import { stringToCents } from "@waitron/shared";
 import type {
   CategorySummary,

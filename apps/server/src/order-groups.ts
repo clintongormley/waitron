@@ -23,7 +23,7 @@ import {
   sql,
 } from "drizzle-orm";
 import type { Column, SQL } from "drizzle-orm";
-import { productUnits, staffPresentationName, unitOwnerJoin, units } from "@waitron/catalogue";
+import { productUnits, staffPresentationName, unitOwnerJoin, units } from "@waitron/menu";
 import { countsWholePortions } from "./order-state-counts.js";
 import {
   devices,

@@ -3,7 +3,7 @@ import {
   createCatalogue,
   menuDocumentHash,
   publishMenu,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
 import {

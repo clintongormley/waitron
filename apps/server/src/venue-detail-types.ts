@@ -1,4 +1,4 @@
-import type { VatClass } from "@waitron/catalogue";
+import type { VatClass } from "@waitron/menu";
 import type { BusinessDayClock } from "@waitron/shared";
 export interface VenueDetailValues {
   name: string;

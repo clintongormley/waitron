@@ -7,7 +7,7 @@ import {
   staffPresentationName,
   unitOwnerJoin,
   units,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import {
   kitchenStations,
   lineServiceCancellations,

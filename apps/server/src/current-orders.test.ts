@@ -22,7 +22,7 @@ import {
   createExtraList,
   createProduct,
   writeProductModifiers,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import {
   diningTables,
   orderGroups,

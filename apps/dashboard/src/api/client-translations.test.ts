@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type {
   TranslationCell,
   TranslationItemPage,
-} from "@waitron/catalogue/src/content-translation-types.js";
+} from "@waitron/menu/src/content-translation-types.js";
 import { DashboardApi } from "./client.js";
 
 const emptyPage: TranslationItemPage = {

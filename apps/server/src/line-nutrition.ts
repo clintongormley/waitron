@@ -6,7 +6,7 @@ import {
   parentJoin,
   parentProducts,
   type ProductAllergens,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 
 export interface LineNutrition {
   allergens: ProductAllergens | null;

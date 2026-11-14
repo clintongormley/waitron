@@ -1801,9 +1801,9 @@ below it; never a list inside an included menu. Its Move action is quiet until a
 chosen, and again if a live update takes the chosen one away; closing it with one chosen asks
 first (`draftScopeFor`, `menus-screen.structure-move.unsaved.test.ts`). Each sends one request: `POST
 /management-api/section-members/remove`, `POST /management-api/sections/delete` (`deleteSections`,
-`packages/catalogue/src/sections.ts`) and `POST /management-api/sections/:id/members/move-in`,
+`packages/menu/src/sections.ts`) and `POST /management-api/sections/:id/members/move-in`,
 which moves the member rows themselves, so a moved product keeps the menu's price for it and an
-included menu keeps its folder setting (`moveMembersInto`, `packages/catalogue/src/sections.ts`).
+included menu keeps its folder setting (`moveMembersInto`, `packages/menu/src/sections.ts`).
 A Move to section…, Remove from menu or Delete answered after another menu has been opened moves no
 focus there. A refusal that arrives once its confirm has closed — opening another menu closes it, and
 so does a live update that takes away every row it named — shows as "Your change to <menu> was not
@@ -1907,7 +1907,7 @@ the preceding controls where it fits. The table measures its own width, includin
 forwarded through slots, so a narrow list inside a wide page follows the same rule.
 Guards: the "Tab follows" and A462 Customise cases in
 `packages/ui/src/components/wt-data-table.test.ts` and
-`apps/dashboard/src/widgets/catalogue-browser.test.ts`.
+`apps/dashboard/src/widgets/product-browser.test.ts`.
 A frame after a width change, the table sets `stacked-search`; a hidden table measured 0 wide
 has no such attribute. Assigning or removing a forwarded search in an existing toolbar updates
 width tracking too. Guards: the hidden-table, forwarded-slot and "only while it is searchable"
@@ -2277,7 +2277,7 @@ update, still has the last word. A screen whose own hand-back runs only when foc
 usually no longer sees it lost, because the dialog has already moved it; it still does when nothing
 takes focus. Cases: `packages/ui/src/components/wt-dialog.test.ts`, and for a hand-back after the
 update the describe block "focus after the unit form opened from the unit chooser closes" in
-`apps/dashboard/src/screens/catalogue-screen.test.ts`. Use `wt-dialog` for a compact confirmation.
+`apps/dashboard/src/screens/products-screen.test.ts`. Use `wt-dialog` for a compact confirmation.
 
 Variant- and state-like properties (`variant`, `size`, `align`, `name`, `raised`, `disabled`,
 `loading`, `decorative`, `checked`, `invalid`, `open`) all reflect to attributes, which is what makes
@@ -2339,7 +2339,7 @@ closed on reload; an explicit category or product reveal opens only its ancestor
 
 Products leaves the mode by **Done** rather than Cancel, the one exception to the rule above. A drag
 made in the mode is saved as soon as it is dropped (`#drop`,
-`apps/dashboard/src/widgets/catalogue-browser.ts`), so Cancel would promise an undo it cannot give.
+`apps/dashboard/src/widgets/product-browser.ts`), so Cancel would promise an undo it cannot give.
 Done clears the selection, leaves the mode and puts focus back on Select, since Done
 itself disappears.
 
@@ -2381,7 +2381,7 @@ and current look and the tooltip beside them (Dashboard sidebar navigation). Gua
 `packages/ui/src/components/wt-icon-button.test.ts`, its sibling axe suite,
 `packages/ui/src/icon-button.test.ts`, `packages/ui/src/icon-button.touch.test.ts`, and the tooltip cases in
 `packages/ui/src/components/wt-data-table.test.ts`,
-`apps/dashboard/src/widgets/catalogue-browser.test.ts`,
+`apps/dashboard/src/widgets/product-browser.test.ts`,
 `apps/dashboard/src/screens/menus-screen.a11y.test.ts` and
 `apps/dashboard/src/dashboard-app.sidebar-fold.test.ts`.
 
@@ -3309,7 +3309,7 @@ held. A save with the switch off sends the switch alone, and the values stored f
 stay as they were. Its cases "switching off hides the names, colour and photo, and switching on
 shows the values again" and "submits only the switch when it is off" in
 `apps/dashboard/src/widgets/include-folder-form.test.ts`, and "leaves the stored overrides alone
-when none are sent" in `packages/catalogue/src/include-folder.db.test.ts`, hold it.
+when none are sent" in `packages/menu/src/include-folder.db.test.ts`, hold it.
 
 Give every field an explicit semantic `name`. Use the standard autocomplete purposes where they
 exist: `username` for a login email, `current-password` for a login password, and `new-password`
@@ -3712,13 +3712,13 @@ This command printed nothing:
 (a control over `apps/dashboard/src` printed 30 lines). The wider `grep -rln description` hits in
 those folders, read one by one, include no product description (they are names of lines, options,
 sections, products and units, the venue's operation description, and comments); under
-`packages/*/src` the first command's only product-description hits are in `packages/catalogue` and
+`packages/*/src` the first command's only product-description hits are in `packages/menu` and
 the column's declaration in `packages/db`. So the hint and the reader disagree in one way: the hint
 shows the default-language description in another language, while every reader carries nothing
 there — there is no printed menu text to match yet.
 Precedence on a variant with both: its own description wins, as (b) showed, and wins as one value
 across every language (the coalesce of the whole column in `effectiveProductColumns.description`,
-`packages/catalogue/src/variant-fallback.ts`, read, not run with a parent in a second language).
+`packages/menu/src/variant-fallback.ts`, read, not run with a parent in a second language).
 **Decided (owner, 2026-10-02):** a customer-name field in another language shows the
 default-language name as its hint, _"which is what we'd show on the menu anyway if it is missing"_
 (the owner's account of the menu; check it against the reader before relying on it). The kitchen

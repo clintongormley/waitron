@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { compareBackupTables } from "@waitron/db";
-import { sniffImageType } from "@waitron/catalogue";
+import { sniffImageType } from "@waitron/menu";
 import type { BackupVerificationContribution } from "@waitron/module";
 import type { BackupQuery, BackupValue } from "@waitron/store";
 import { MEDIA_TABLES } from "./tables.js";

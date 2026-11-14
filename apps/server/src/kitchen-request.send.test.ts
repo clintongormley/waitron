@@ -14,7 +14,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
-import { createProduct, readContentLanguages } from "@waitron/catalogue";
+import { createProduct, readContentLanguages } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   fireNewOrder,

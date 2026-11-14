@@ -353,7 +353,7 @@ it("refuses a pick bound that is not a whole number within the allowed limit", a
   const { el, host } = await mount({ value: addons });
   const submitted = record(host);
 
-  // Above `MAX_MODIFIER_INTEGER` (packages/catalogue/src/modifier-limits.ts).
+  // Above `MAX_MODIFIER_INTEGER` (packages/menu/src/modifier-limits.ts).
   await type(el, "min-picks", "2147483648");
   await click(el, "save");
 
@@ -428,7 +428,7 @@ it("refuses a price the product-price rule does not accept", async () => {
   const { el, host } = await mount({ value: addons });
   const submitted = record(host);
 
-  // `isProductPrice` (packages/catalogue/src/modifier-limits.ts) allows no leading zero and at most
+  // `isProductPrice` (packages/menu/src/modifier-limits.ts) allows no leading zero and at most
   // two decimals, so both of these are refused where `1.50` and `0.80` are not.
   await type(el, "item-0-price", "007");
   await click(el, "save");
@@ -2394,7 +2394,7 @@ function variant(name: string, flags: { active: boolean; available: boolean }) {
 }
 
 /** Wine's only Active variant is Unavailable, which the server still refuses
- * (`assertNoParentsWithVariants`, packages/catalogue/src/extras.ts); cider's only variant is
+ * (`assertNoParentsWithVariants`, packages/menu/src/extras.ts); cider's only variant is
  * Inactive, which it accepts. */
 const withVariants: Product[] = [
   ...products,
@@ -2534,7 +2534,7 @@ it("refuses to save a list holding a product with an Active variant, and saves o
 // Portion, in a column of its own beside Price
 
 /** The id a product read reports for a product sold by the unit (`EACH_UNIT_ID`,
- * packages/catalogue/src/unit-validation.ts). */
+ * packages/menu/src/unit-validation.ts). */
 const EACH_ID = "00000000-0000-0000-0000-000000000001";
 const EACH = {
   staffName: "Staff unit",

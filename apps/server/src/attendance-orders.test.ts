@@ -12,7 +12,7 @@ import { newId, withTransaction, workingOrderLines, workingOrders } from "@waitr
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
-import { createExtraList, createOptionList, writeProductModifiers } from "@waitron/catalogue";
+import { createExtraList, createOptionList, writeProductModifiers } from "@waitron/menu";
 import { AppError } from "@waitron/shared";
 import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";

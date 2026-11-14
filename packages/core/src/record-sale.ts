@@ -81,7 +81,7 @@ export interface RecordSaleInput {
    * figure the till displayed and the customer paid against. */
   total: string;
   lines: RecordSaleLine[];
-  /** A caller-supplied VAT breakdown (e.g. `@waitron/catalogue`'s gross-inclusive figures), handed
+  /** A caller-supplied VAT breakdown (e.g. `@waitron/menu`'s gross-inclusive figures), handed
    * to the fiscal backend at the cent, and refused with `sale.total_mismatch` unless it sums to
    * `total` both as given and at the cent. Derived from `lines` by `deriveVatBreakdown` when
    * absent. */

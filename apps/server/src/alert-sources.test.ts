@@ -5,7 +5,7 @@ import {
   contentSuggestionJobs,
   contentSuggestions,
   markSuggestionRunOpened,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   printAgents,

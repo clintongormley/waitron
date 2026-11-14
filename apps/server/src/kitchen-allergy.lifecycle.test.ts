@@ -25,7 +25,7 @@ import {
   createProduct,
   readContentLanguages,
   writeProductModifiers,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { routeProductTo } from "./testing/zone-offers.js";
 import { republishMenus } from "./testing/publish-menu.js";
 import { submitGroups, fireGroup } from "./order-groups.js";

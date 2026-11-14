@@ -12,7 +12,7 @@ import {
   type LeaveCoordinator,
   type LeaveReason,
 } from "@waitron/ui";
-import { foldName } from "@waitron/catalogue/src/name-uniqueness.js";
+import { foldName } from "@waitron/menu/src/name-uniqueness.js";
 import type { CatalogueSummary, DashboardApi } from "../api/client.js";
 import { fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";

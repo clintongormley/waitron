@@ -26,7 +26,7 @@ import {
   importConfigurationTables,
   validateConfigurationBundle,
 } from "./configuration-transfer.js";
-import { readDefaultCatalogueId } from "@waitron/catalogue";
+import { readDefaultCatalogueId } from "@waitron/menu";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const passphrase = "SYNTHETIC transfer passphrase";

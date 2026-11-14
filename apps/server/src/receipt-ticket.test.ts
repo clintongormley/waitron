@@ -1,5 +1,5 @@
 import { receiptLabelsFor } from "@waitron/country-packs";
-import { joinCustomerPresentationText } from "@waitron/catalogue";
+import { joinCustomerPresentationText } from "@waitron/menu";
 import {
   FEED_BEFORE_CUT,
   LOGO_MAX_HEIGHT_DOTS,
@@ -1295,7 +1295,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     // A unit's abbreviation map keeps bare content-language keys, never the invoice locales a line's
     // `descriptions` are keyed by, so the receipt must match the tag "es-ES" against the bare key
     // "es"; reading the first entry prints whichever language happens to come first. The first
-    // line's pairs are `EACH_UNIT`'s (`packages/catalogue/src/units.ts`), which print as a bare
+    // line's pairs are `EACH_UNIT`'s (`packages/menu/src/units.ts`), which print as a bare
     // count, so a venue's own unit carries the check.
     const result: TillSaleResult = {
       ...FILED_SALE,

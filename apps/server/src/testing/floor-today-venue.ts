@@ -13,7 +13,7 @@ import {
   floorZones,
   todayColumns,
 } from "@waitron/db";
-import { createCatalogue } from "@waitron/catalogue";
+import { createCatalogue } from "@waitron/menu";
 import {
   createDepartment,
   createServiceZone,

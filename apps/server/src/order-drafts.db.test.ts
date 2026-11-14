@@ -50,7 +50,7 @@ import {
   updateProduct,
   units,
   writeProductModifiers,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { persons } from "@waitron/identity";
 import { nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { OptionSelection } from "@waitron/shared";

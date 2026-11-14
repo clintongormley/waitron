@@ -8,7 +8,7 @@ import { DASHBOARD_ICONS } from "../icons.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
 import "./units-screen.js";
-import "./catalogue-screen.js";
+import "./products-screen.js";
 
 registerIcons(DASHBOARD_ICONS);
 afterEach(() => {

@@ -14,7 +14,7 @@ import {
   menuDocumentHash,
   NO_LIVE_FIELDS,
   publishMenu,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   catalogues,

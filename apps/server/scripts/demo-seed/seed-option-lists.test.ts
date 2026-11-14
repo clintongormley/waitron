@@ -6,8 +6,8 @@ import { describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { listAvailableProducts, listOptionLists, readProductModifiers } from "@waitron/catalogue";
-import { seedCatalogues } from "./seed-catalogue.js";
+import { listAvailableProducts, listOptionLists, readProductModifiers } from "@waitron/menu";
+import { seedCatalogues } from "./seed-menus.js";
 import { seedOptionLists } from "./seed-option-lists.js";
 import { CASA_DELGADO_ES } from "./testing/data.js";
 

@@ -2,7 +2,7 @@ import { readBillAdjustments } from "@waitron/adjustments";
 import type { Transaction } from "@waitron/db";
 import { sales, saleLines } from "@waitron/db";
 import { eq } from "drizzle-orm";
-import { readRecordedDocuments } from "@waitron/catalogue";
+import { readRecordedDocuments } from "@waitron/menu";
 import {
   addDecimal,
   basisPointsToDecimal,

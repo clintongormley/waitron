@@ -59,9 +59,6 @@ importers:
       '@simplewebauthn/browser':
         specifier: ^14.0.0
         version: 14.0.0
-      '@waitron/catalogue':
-        specifier: workspace:^
-        version: link:../../packages/catalogue
       '@waitron/country-packs':
         specifier: workspace:^
         version: link:../../packages/country-packs
@@ -74,6 +71,9 @@ importers:
       '@waitron/diagnostics':
         specifier: workspace:*
         version: link:../../packages/diagnostics
+      '@waitron/menu':
+        specifier: workspace:^
+        version: link:../../packages/menu
       '@waitron/printing':
         specifier: workspace:*
         version: link:../../packages/printing
@@ -181,9 +181,6 @@ importers:
       '@waitron/bookings':
         specifier: workspace:*
         version: link:../../packages/bookings
-      '@waitron/catalogue':
-        specifier: workspace:*
-        version: link:../../packages/catalogue
       '@waitron/composition':
         specifier: workspace:*
         version: link:../../packages/composition
@@ -226,6 +223,9 @@ importers:
       '@waitron/membership':
         specifier: workspace:*
         version: link:../../packages/membership
+      '@waitron/menu':
+        specifier: workspace:*
+        version: link:../../packages/menu
       '@waitron/migrations':
         specifier: workspace:*
         version: link:../../packages/migrations
@@ -456,9 +456,6 @@ importers:
 
   apps/till:
     dependencies:
-      '@waitron/catalogue':
-        specifier: workspace:*
-        version: link:../../packages/catalogue
       '@waitron/country':
         specifier: workspace:*
         version: link:../../packages/country
@@ -471,6 +468,9 @@ importers:
       '@waitron/fiscal':
         specifier: workspace:*
         version: link:../../packages/fiscal
+      '@waitron/menu':
+        specifier: workspace:*
+        version: link:../../packages/menu
       '@waitron/module':
         specifier: workspace:*
         version: link:../../packages/module
@@ -664,52 +664,6 @@ importers:
         specifier: ^4.1.12
         version: 4.1.12(@types/node@26.6.6)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
-  packages/catalogue:
-    dependencies:
-      '@waitron/core':
-        specifier: workspace:*
-        version: link:../core
-      '@waitron/country-packs':
-        specifier: workspace:*
-        version: link:../country-packs
-      '@waitron/db':
-        specifier: workspace:*
-        version: link:../db
-      '@waitron/fiscal':
-        specifier: workspace:*
-        version: link:../fiscal
-      '@waitron/migrations':
-        specifier: workspace:*
-        version: link:../migrations
-      '@waitron/module':
-        specifier: workspace:*
-        version: link:../module
-      '@waitron/shared':
-        specifier: workspace:*
-        version: link:../shared
-      '@waitron/store':
-        specifier: workspace:*
-        version: link:../store
-      '@waitron/sync-enrolment':
-        specifier: workspace:*
-        version: link:../sync-enrolment
-      drizzle-orm:
-        specifier: ^0.45.4
-        version: 0.45.4(@electric-sql/pglite@0.5.11)(@types/pg@8.23.1)(pg@8.23.1)
-    devDependencies:
-      '@types/node':
-        specifier: ^26.6.6
-        version: 26.6.6
-      '@vitest/coverage-v8':
-        specifier: ^4.1.12
-        version: 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
-      typescript:
-        specifier: ^7.0.0
-        version: 7.0.2
-      vitest:
-        specifier: ^4.1.12
-        version: 4.1.12(@types/node@26.6.6)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
-
   packages/composition:
     dependencies:
       '@waitron/adjustments':
@@ -718,9 +672,6 @@ importers:
       '@waitron/bookings':
         specifier: workspace:*
         version: link:../bookings
-      '@waitron/catalogue':
-        specifier: workspace:*
-        version: link:../catalogue
       '@waitron/credentials':
         specifier: workspace:*
         version: link:../credentials
@@ -745,6 +696,9 @@ importers:
       '@waitron/media':
         specifier: workspace:*
         version: link:../media
+      '@waitron/menu':
+        specifier: workspace:*
+        version: link:../menu
       '@waitron/module':
         specifier: workspace:*
         version: link:../module
@@ -1265,9 +1219,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^4.1.12
         version: 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
-      '@waitron/catalogue':
+      '@waitron/menu':
         specifier: workspace:*
-        version: link:../catalogue
+        version: link:../menu
       '@waitron/migrations':
         specifier: workspace:*
         version: link:../migrations
@@ -1421,9 +1375,6 @@ importers:
 
   packages/media:
     dependencies:
-      '@waitron/catalogue':
-        specifier: workspace:*
-        version: link:../catalogue
       '@waitron/dashboard-kit':
         specifier: workspace:*
         version: link:../dashboard-kit
@@ -1433,6 +1384,9 @@ importers:
       '@waitron/identity':
         specifier: workspace:*
         version: link:../identity
+      '@waitron/menu':
+        specifier: workspace:*
+        version: link:../menu
       '@waitron/module':
         specifier: workspace:*
         version: link:../module
@@ -1494,6 +1448,52 @@ importers:
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.6
+        version: 26.6.6
+      '@vitest/coverage-v8':
+        specifier: ^4.1.12
+        version: 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
+      typescript:
+        specifier: ^7.0.0
+        version: 7.0.2
+      vitest:
+        specifier: ^4.1.12
+        version: 4.1.12(@types/node@26.6.6)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+
+  packages/menu:
+    dependencies:
+      '@waitron/core':
+        specifier: workspace:*
+        version: link:../core
+      '@waitron/country-packs':
+        specifier: workspace:*
+        version: link:../country-packs
+      '@waitron/db':
+        specifier: workspace:*
+        version: link:../db
+      '@waitron/fiscal':
+        specifier: workspace:*
+        version: link:../fiscal
+      '@waitron/migrations':
+        specifier: workspace:*
+        version: link:../migrations
+      '@waitron/module':
+        specifier: workspace:*
+        version: link:../module
+      '@waitron/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@waitron/store':
+        specifier: workspace:*
+        version: link:../store
+      '@waitron/sync-enrolment':
+        specifier: workspace:*
+        version: link:../sync-enrolment
+      drizzle-orm:
+        specifier: ^0.45.4
+        version: 0.45.4(@electric-sql/pglite@0.5.11)(@types/pg@8.23.1)(pg@8.23.1)
     devDependencies:
       '@types/node':
         specifier: ^26.6.6
@@ -1878,12 +1878,12 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^4.1.12
         version: 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
-      '@waitron/catalogue':
-        specifier: workspace:*
-        version: link:../catalogue
       '@waitron/fiscal-verifactu':
         specifier: workspace:*
         version: link:../fiscal-verifactu
+      '@waitron/menu':
+        specifier: workspace:*
+        version: link:../menu
       '@waitron/venue-service':
         specifier: workspace:*
         version: link:../venue-service
@@ -2102,9 +2102,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^4.1.12
         version: 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
-      '@waitron/catalogue':
+      '@waitron/menu':
         specifier: workspace:*
-        version: link:../catalogue
+        version: link:../menu
       playwright:
         specifier: ^1.65.0
         version: 1.65.0
@@ -2262,9 +2262,6 @@ importers:
 
   packages/venue-service:
     dependencies:
-      '@waitron/catalogue':
-        specifier: workspace:*
-        version: link:../catalogue
       '@waitron/country':
         specifier: workspace:*
         version: link:../country
@@ -2280,6 +2277,9 @@ importers:
       '@waitron/identity':
         specifier: workspace:*
         version: link:../identity
+      '@waitron/menu':
+        specifier: workspace:*
+        version: link:../menu
       '@waitron/migrations':
         specifier: workspace:*
         version: link:../migrations

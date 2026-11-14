@@ -29,7 +29,7 @@ import {
   type SpreadLine,
   type SpreadResult,
 } from "@waitron/adjustments";
-import { staffPresentationName } from "@waitron/catalogue";
+import { staffPresentationName } from "@waitron/menu";
 import { insertInChunks, orderGroups, ticketItems, workingOrderLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {

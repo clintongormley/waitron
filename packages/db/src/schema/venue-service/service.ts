@@ -1,8 +1,8 @@
 import type { AllergenMap } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { check, foreignKey, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { menuItems } from "../catalogue/menu.js";
-import { menuVersions } from "../catalogue/publication.js";
+import { menuItems } from "../menu/menu.js";
+import { menuVersions } from "../menu/publication.js";
 import {
   count,
   enumCheck,

@@ -51,7 +51,7 @@ import {
   setProductVariants,
   updateOptionList,
   writeProductModifiers,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { loadKeyRing } from "@waitron/credentials";
@@ -123,7 +123,7 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import { recordSale } from "@waitron/core";
-import { categoryDetails, units, unitSeedStates } from "@waitron/catalogue";
+import { categoryDetails, units, unitSeedStates } from "@waitron/menu";
 import { availability, employments, shiftTemplates } from "@waitron/workforce";
 import { convenioConfig, resolveWorkTimeRuleset } from "@waitron/workforce-es";
 import { bookings } from "@waitron/bookings";

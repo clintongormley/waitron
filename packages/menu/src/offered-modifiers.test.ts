@@ -1,0 +1,676 @@
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
+import { eq, sql } from "drizzle-orm";
+import { CORE_MIGRATIONS, products as productRows, withTransaction } from "@waitron/db";
+import type { Transaction } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import {
+  assignCatalogueToVenue,
+  createCatalogue,
+  addProductToMenu,
+  createProduct,
+  listAvailableProducts,
+  listMenuOffers,
+  updateProduct,
+} from "./operations.js";
+import { createExtraList, updateExtraList } from "./extras.js";
+import { createOptionList, updateOptionList } from "./options.js";
+import { writeProductModifiers } from "./product-modifiers.js";
+import { setProductVariants } from "./variants.js";
+import { readOfferedExtraItemIds, readOfferedModifiers } from "./offered-modifiers.js";
+import * as extraProjection from "./extra-projection.js";
+import * as productModifiers from "./product-modifiers.js";
+import * as optionsModule from "./options.js";
+import { seedVenueWithSeries } from "../test/fixtures.js";
+import { EACH_UNIT } from "./units.js";
+import type { OfferedExtraItem } from "@waitron/shared";
+
+expectTypeOf<OfferedExtraItem["portion"]>().toEqualTypeOf<string>();
+expectTypeOf<OfferedExtraItem["unit"]>().toEqualTypeOf<{
+  id: string;
+  staffName: string;
+  staffAbbreviation: string;
+  name: Record<string, string>;
+  abbreviation: Record<string, string>;
+  precision: number;
+  hardwareUnit: "kg" | "g" | "mg" | null;
+}>();
+
+const fx = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
+
+const RARE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const WELL = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+
+/**
+ * Every name below is DIFFERENT text from its two siblings — staff, customer-facing and kitchen —
+ * so a read that takes the wrong one of a trio fails rather than passing on a shared string
+ * (CLAUDE.md §3). The same goes for the unit prices: each product's own price is unlike every list
+ * item's, so an item paired with the wrong product's row shows up as the wrong money.
+ */
+const products = {
+  burger: {
+    name: "burger staff",
+    customerName: { en: "Chargrilled burger" },
+    kitchenName: "BURG",
+    unitPrice: "9.00",
+    vatClass: "general" as const,
+  },
+  bacon: {
+    name: "bacon staff",
+    customerName: { en: "Smoked streaky bacon" },
+    kitchenName: "BCN",
+    unitPrice: "3.00",
+    vatClass: "reduced" as const,
+    allergens: { mustard: {} },
+    dietaryDeclarations: ["halal" as const],
+  },
+  cheese: {
+    name: "cheese staff",
+    customerName: { en: "Aged manchego" },
+    kitchenName: "CHS",
+    unitPrice: "2.00",
+    vatClass: "general" as const,
+    allergens: { milk: {} },
+    dietaryDeclarations: ["vegetarian" as const],
+  },
+  olives: {
+    name: "olives staff",
+    customerName: { en: "Gordal olives" },
+    kitchenName: "OLV",
+    unitPrice: "1.25",
+    vatClass: "reduced" as const,
+  },
+};
+
+const ids: Record<keyof typeof products, string> = {
+  burger: "",
+  bacon: "",
+  cheese: "",
+  olives: "",
+};
+let catalogueId = "";
+/** The burger's one `menu_items` row — the offer a diner orders from. */
+let offerId = "";
+
+beforeEach(async () => {
+  await seedVenueWithSeries(fx.db);
+  await run(async (tx) => {
+    const menu = await createCatalogue(tx, { name: "Deli" });
+    catalogueId = menu.id;
+    for (const [key, fields] of Object.entries(products)) {
+      const product = await createProduct(tx, {
+        catalogueId: menu.id,
+        categoryId: null,
+        unitId: null,
+        ...fields,
+      });
+      ids[key as keyof typeof ids] = product.id;
+    }
+    const offer = await addProductToMenu(tx, {
+      menuId: menu.id,
+      productId: ids.burger,
+      grossPrice: "9.50",
+    });
+    offerId = offer.id;
+    await assignCatalogueToVenue(tx, menu.id);
+  });
+});
+
+/**
+ * Bacon is priced by the list item (1.50, over the product's 3.00), cheese has to borrow its
+ * product's own 2.00, and olives is the list item again (0.75, over 1.25).
+ */
+const toppings = () => ({
+  name: "Toppings staff",
+  customerName: { en: "Add a topping" },
+  kitchenName: "TOP",
+  minPicks: 1,
+  maxPicks: 3,
+  items: [
+    { productId: ids.bacon, price: "1.50", maxQuantity: 2, preselected: true },
+    { productId: ids.cheese },
+    { productId: ids.olives, price: "0.75" },
+  ],
+});
+
+const cooked = () => ({
+  name: "Cooked staff",
+  customerName: { en: "How would you like it?" },
+  kitchenName: "COOK",
+  defaultLabelId: RARE,
+  labels: [
+    {
+      id: RARE,
+      name: "Medium rare staff",
+      customerName: { en: "Pink in the middle" },
+      kitchenName: "MR",
+      available: true,
+    },
+    {
+      id: WELL,
+      name: "Well done staff",
+      customerName: { en: "Cooked right through" },
+      kitchenName: "WD",
+      available: true,
+    },
+  ],
+});
+
+/** Create the two lists and attach them to the burger in the order given. */
+const attach = async (
+  tx: Transaction,
+  order: ("options" | "extras")[],
+): Promise<{ optionsId: string; extrasId: string }> => {
+  const options = await createOptionList(tx, cooked(), "en");
+  const extras = await createExtraList(tx, toppings(), "en");
+  await writeProductModifiers(
+    tx,
+    ids.burger,
+    order.map((kind) => ({ kind, id: kind === "options" ? options.id : extras.id })),
+  );
+  return { optionsId: options.id, extrasId: extras.id };
+};
+
+describe("what a product offers", () => {
+  it("keeps an extra's portion and effective unit in the offer", async () => {
+    await run((tx) => attach(tx, ["extras"]));
+
+    const offered = await run((tx) =>
+      readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: null }]),
+    );
+    const [list] = offered.get(ids.burger)!;
+    expect(list!.kind).toBe("extras");
+    if (list!.kind !== "extras") return;
+    expect(list!.items[0]).toMatchObject({
+      productId: ids.bacon,
+      portion: "1.000",
+      unit: { precision: 0, abbreviation: { en: "ea" } },
+    });
+  });
+
+  it("walks the product's own attachment order", async () => {
+    const seeded = await run(async (tx) => {
+      return attach(tx, ["options", "extras"]);
+    });
+
+    const offered = await run(async (tx) => {
+      return readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: null }]);
+    });
+
+    expect(offered.get(ids.burger)!.map((entry) => [entry.kind, entry.id])).toEqual([
+      ["options", seeded.optionsId],
+      ["extras", seeded.extrasId],
+    ]);
+  });
+
+  it("reverses the walk when the attachment order is reversed", async () => {
+    const seeded = await run(async (tx) => {
+      return attach(tx, ["extras", "options"]);
+    });
+
+    const offered = await run(async (tx) => {
+      return readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: null }]);
+    });
+
+    expect(offered.get(ids.burger)!.map((entry) => [entry.kind, entry.id])).toEqual([
+      ["extras", seeded.extrasId],
+      ["options", seeded.optionsId],
+    ]);
+  });
+
+  it("gives the options list its own three names, its labels' three names and its default", async () => {
+    const seeded = await run(async (tx) => {
+      return attach(tx, ["options", "extras"]);
+    });
+
+    const offered = await run(async (tx) => {
+      return readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: null }]);
+    });
+
+    expect(offered.get(ids.burger)![0]).toEqual({
+      kind: "options",
+      id: seeded.optionsId,
+      name: "Cooked staff",
+      customerName: { en: "How would you like it?" },
+      kitchenName: "COOK",
+      defaultLabelId: RARE,
+      labels: [
+        {
+          id: RARE,
+          name: "Medium rare staff",
+          customerName: { en: "Pink in the middle" },
+          kitchenName: "MR",
+          available: true,
+        },
+        {
+          id: WELL,
+          name: "Well done staff",
+          customerName: { en: "Cooked right through" },
+          kitchenName: "WD",
+          available: true,
+        },
+      ],
+    });
+  });
+
+  it("prices each item from the list item and then the product, and carries the product's own facts", async () => {
+    const seeded = await run(async (tx) => {
+      return attach(tx, ["extras", "options"]);
+    });
+
+    const offered = await run(async (tx) => {
+      return readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: null }]);
+    });
+
+    expect(offered.get(ids.burger)![0]).toEqual({
+      kind: "extras",
+      id: seeded.extrasId,
+      name: "Toppings staff",
+      customerName: { en: "Add a topping" },
+      kitchenName: "TOP",
+      minPicks: 1,
+      maxPicks: 3,
+      items: [
+        {
+          productId: ids.bacon,
+          name: "bacon staff",
+          presentation: {
+            name: "bacon staff",
+            customerName: { en: "Smoked streaky bacon" },
+            kitchenName: "BCN",
+            variantName: null,
+            variantCustomerName: null,
+            variantKitchenName: null,
+          },
+          customerName: { en: "Smoked streaky bacon" },
+          kitchenName: "BCN",
+          price: "1.50",
+          portion: "1.000",
+          unit: EACH_UNIT,
+          vatClass: "reduced",
+          maxQuantity: 2,
+          preselected: true,
+          addAllergens: { mustard: {} },
+          suitableFor: ["halal"],
+        },
+        {
+          productId: ids.cheese,
+          name: "cheese staff",
+          presentation: {
+            name: "cheese staff",
+            customerName: { en: "Aged manchego" },
+            kitchenName: "CHS",
+            variantName: null,
+            variantCustomerName: null,
+            variantKitchenName: null,
+          },
+          customerName: { en: "Aged manchego" },
+          kitchenName: "CHS",
+          price: "2.00",
+          portion: "1.000",
+          unit: EACH_UNIT,
+          vatClass: "general",
+          maxQuantity: 1,
+          preselected: false,
+          addAllergens: { milk: {} },
+          // The dish's own line expands its declarations the same way (`readQueueSubItems`,
+          // apps/server/src/working-order.ts), so vegetarian implies no meat and no fish.
+          suitableFor: ["vegetarian", "no_meat", "no_fish"],
+        },
+        {
+          productId: ids.olives,
+          name: "olives staff",
+          presentation: {
+            name: "olives staff",
+            customerName: { en: "Gordal olives" },
+            kitchenName: "OLV",
+            variantName: null,
+            variantCustomerName: null,
+            variantKitchenName: null,
+          },
+          customerName: { en: "Gordal olives" },
+          kitchenName: "OLV",
+          price: "0.75",
+          portion: "1.000",
+          unit: EACH_UNIT,
+          vatClass: "reduced",
+          maxQuantity: 1,
+          preselected: false,
+          addAllergens: null,
+          suitableFor: [],
+        },
+      ],
+    });
+  });
+
+  it("leaves out a list the manager has deactivated", async () => {
+    await run(async (tx) => {
+      const seeded = await attach(tx, ["options", "extras"]);
+      await updateOptionList(tx, seeded.optionsId, { ...cooked(), active: false }, "en");
+      await updateExtraList(tx, seeded.extrasId, { ...toppings(), active: false }, "en");
+    });
+
+    const offered = await run(async (tx) => {
+      return readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: null }]);
+    });
+
+    expect(offered.get(ids.burger)).toEqual([]);
+  });
+
+  it("offers only the labels still available, and drops a default naming a withdrawn one", async () => {
+    // `option_lists.default_label_id` carries no foreign key
+    // (`packages/db/src/schema/menu/options.ts`), and `parseOptionListInput` moves a default
+    // off an unavailable label (option-contract.ts), so the authoring API cannot leave the two out
+    // of step. The column is written directly here to reach the state anyway, because nothing in
+    // the database keeps it consistent.
+    const seeded = await run(async (tx) => {
+      return attach(tx, ["options"]);
+    });
+    await fx.db.execute(sql`update option_labels set available = false where id = ${RARE}`);
+
+    const offered = await run(async (tx) => {
+      return readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: null }]);
+    });
+
+    const list = offered.get(ids.burger)![0]!;
+    expect(list).toMatchObject({ id: seeded.optionsId, defaultLabelId: null });
+    expect(list.kind === "options" && list.labels.map((label) => label.id)).toEqual([WELL]);
+  });
+});
+
+describe("what a menu offer publishes", () => {
+  it("offers every extras list the product carries, at the list's prices, beside its options", async () => {
+    await run(async (tx) => {
+      await updateProduct(tx, ids.bacon, { unitPrice: "0.50" });
+      const attached = await attach(tx, ["extras", "options"]);
+      await updateExtraList(
+        tx,
+        attached.extrasId,
+        {
+          ...toppings(),
+          items: [{ productId: ids.bacon, price: "0.40" }],
+        },
+        "en",
+      );
+    });
+    const offer = (await run((tx) => listMenuOffers(tx, [catalogueId]))).find(
+      (entry) => entry.productId === ids.burger,
+    )!;
+    expect(offer.offeredModifiers.map((entry) => entry.kind)).toEqual(["extras", "options"]);
+    const extras = offer.offeredModifiers.find((entry) => entry.kind === "extras")!;
+    expect(
+      extras.kind === "extras" && extras.items.map((item) => [item.productId, item.price]),
+    ).toEqual([[ids.bacon, "0.40"]]);
+  });
+});
+
+describe("an extra the till cannot sell", () => {
+  // An extra is sold like any product, so one that is Unavailable
+  // (sold out for now) or Inactive (removed) is not offered. Bacon and cheese take the two states
+  // with the OTHER flag left set, so a read of the wrong column still offers one of them.
+  it("leaves out an item whose product is Unavailable or Inactive, on both paths", async () => {
+    const seeded = await run(async (tx) => {
+      const attached = await attach(tx, ["extras"]);
+
+      await updateProduct(tx, ids.bacon, { available: false });
+      await updateProduct(tx, ids.cheese, { active: false });
+      return attached;
+    });
+
+    const offered = await run(async (tx) => {
+      return readOfferedModifiers(tx, [
+        { productId: ids.burger, menuItemId: null },
+        { productId: ids.burger, menuItemId: offerId },
+      ]);
+    });
+
+    for (const holder of [ids.burger, offerId]) {
+      const [list] = offered.get(holder)!;
+      expect(list!.kind === "extras" && list!.id).toBe(seeded.extrasId);
+      expect(list!.kind === "extras" && list!.items.map((item) => item.productId)).toEqual([
+        ids.olives,
+      ]);
+    }
+  });
+});
+
+describe("an extra that is a parent with Active variants", () => {
+  // A product with an Active variant is never sold as itself, and the order path
+  // refuses one picked as an extra, so the till is not offered it. Bacon's variant is Active but
+  // Unavailable, so a read that checked Available rather than Active would still offer bacon;
+  // cheese's only variant is Inactive, so cheese still sells as itself.
+  it("leaves out an item whose product has an Active variant, on both paths", async () => {
+    const seeded = await run(async (tx) => {
+      const attached = await attach(tx, ["extras"]);
+
+      const variant = (name: string, available: boolean, active: boolean) => ({
+        name,
+        customerName: null,
+        kitchenName: null,
+        image: null,
+        unitPrice: "1.00",
+        available,
+        active,
+      });
+      // The catalogue refuses an Active variant on a product an extras list offers
+      // (`product.offered_as_extra`), so the Active one is made by writing its row.
+      const [thick] = await setProductVariants(
+        tx,
+        ids.bacon,
+        [variant("Thick bacon", false, false)],
+        "en",
+      );
+      await tx.update(productRows).set({ active: true }).where(eq(productRows.id, thick!.id));
+      await setProductVariants(tx, ids.cheese, [variant("Mature cheese", true, false)], "en");
+      return attached;
+    });
+
+    const offered = await run((tx) =>
+      readOfferedModifiers(tx, [
+        { productId: ids.burger, menuItemId: null },
+        { productId: ids.burger, menuItemId: offerId },
+      ]),
+    );
+
+    for (const holder of [ids.burger, offerId]) {
+      const [list] = offered.get(holder)!;
+      expect(list!.kind === "extras" && list!.id).toBe(seeded.extrasId);
+      expect(list!.kind === "extras" && list!.items.map((item) => item.productId)).toEqual([
+        ids.cheese,
+        ids.olives,
+      ]);
+    }
+  });
+});
+
+describe("the extras items' product ids alone", () => {
+  // Bacon is Unavailable, which a published document still lists; cheese is Inactive and olives
+  // has an Active variant, which it does not.
+  it("are the items a published document lists, keyed as readOfferedModifiers keys them", async () => {
+    await run(async (tx) => {
+      await attach(tx, ["options", "extras"]);
+      await updateProduct(tx, ids.bacon, { available: false });
+      await updateProduct(tx, ids.cheese, { active: false });
+      const [large] = await setProductVariants(
+        tx,
+        ids.olives,
+        [
+          {
+            name: "Large olives",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "1.00",
+            available: true,
+            active: false,
+          },
+        ],
+        "en",
+      );
+      await tx.update(productRows).set({ active: true }).where(eq(productRows.id, large!.id));
+    });
+    const dishes = [
+      { productId: ids.burger, menuItemId: null },
+      { productId: ids.burger, menuItemId: offerId },
+      { productId: ids.cheese, menuItemId: null },
+    ];
+
+    const [itemIds, offered] = await run(async (tx) => [
+      await readOfferedExtraItemIds(tx, dishes),
+      await readOfferedModifiers(tx, dishes, { includeEveryModifierItem: true }),
+    ]);
+
+    expect(itemIds).toEqual(
+      new Map([
+        [ids.burger, [ids.bacon]],
+        [offerId, [ids.bacon]],
+        [ids.cheese, []],
+      ]),
+    );
+    expect(
+      new Map(
+        [...offered].map(([holder, entries]) => [
+          holder,
+          entries.flatMap((entry) =>
+            entry.kind === "extras" ? entry.items.map((item) => item.productId) : [],
+          ),
+        ]),
+      ),
+    ).toEqual(itemIds);
+  });
+
+  it("gives a dish with no extras list no items", async () => {
+    const itemIds = await run((tx) =>
+      readOfferedExtraItemIds(tx, [{ productId: ids.burger, menuItemId: null }]),
+    );
+    expect(itemIds).toEqual(new Map([[ids.burger, []]]));
+  });
+});
+
+describe("listAvailableProducts and listMenuOffers", () => {
+  it("listAvailableProducts carries the product-side walk", async () => {
+    const seeded = await run(async (tx) => {
+      return attach(tx, ["options", "extras"]);
+    });
+
+    const { products: available } = await run(async (tx) => {
+      return listAvailableProducts(tx);
+    });
+
+    const burger = available.find((product) => product.id === ids.burger)!;
+    expect(burger.offeredModifiers.map((entry) => [entry.kind, entry.id])).toEqual([
+      ["options", seeded.optionsId],
+      ["extras", seeded.extrasId],
+    ]);
+    // A product carrying no attachment at all comes back with an empty walk, not a missing key.
+    expect(available.find((product) => product.id === ids.olives)!.offeredModifiers).toEqual([]);
+  });
+
+  it("listMenuOffers carries the product-resolved walk", async () => {
+    const seeded = await run(async (tx) => {
+      return attach(tx, ["options", "extras"]);
+    });
+
+    const offers = await run(async (tx) => {
+      return listMenuOffers(tx, [catalogueId]);
+    });
+
+    const walk = offers.find((offer) => offer.id === offerId)!.offeredModifiers;
+    expect(walk.map((entry) => [entry.kind, entry.id])).toEqual([
+      ["options", seeded.optionsId],
+      ["extras", seeded.extrasId],
+    ]);
+    const list = walk[1]!;
+    expect(list.kind === "extras" && list.items[0]!.price).toBe("1.50");
+  });
+});
+
+describe("one shared resolution for a set of dishes", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("reads the product side alone for dishes that name no offer", async () => {
+    await run(async (tx) => {
+      await attach(tx, ["options", "extras"]);
+    });
+    const productExtras = vi.spyOn(extraProjection, "readProductExtras");
+    const attachments = vi.spyOn(productModifiers, "readProductModifiers");
+    const optionLists = vi.spyOn(optionsModule, "readOptionListsByIds");
+
+    // Three dishes, the first twice, so a read that moved inside a per-dish loop would count 3.
+    await run(async (tx) => {
+      return readOfferedModifiers(tx, [
+        { productId: ids.burger, menuItemId: null },
+        { productId: ids.burger, menuItemId: null },
+        { productId: ids.olives, menuItemId: null },
+      ]);
+    });
+
+    expect(productExtras).toHaveBeenCalledTimes(1);
+    expect(optionLists).toHaveBeenCalledTimes(1);
+    // ONCE, not twice: `readProductExtras` is handed the map this resolve already read. A second
+    // read would show up here as a second call.
+    expect(attachments).toHaveBeenCalledTimes(1);
+    expect(productExtras.mock.calls[0]![2]).toBe(await attachments.mock.results[0]!.value);
+  });
+
+  it("reads the product side once for dishes ordered through an offer", async () => {
+    await run(async (tx) => {
+      await attach(tx, ["options", "extras"]);
+    });
+    const productExtras = vi.spyOn(extraProjection, "readProductExtras");
+    const attachments = vi.spyOn(productModifiers, "readProductModifiers");
+    const optionLists = vi.spyOn(optionsModule, "readOptionListsByIds");
+
+    await run(async (tx) => {
+      return readOfferedModifiers(tx, [
+        { productId: ids.burger, menuItemId: offerId },
+        { productId: ids.burger, menuItemId: offerId },
+      ]);
+    });
+
+    expect(attachments).toHaveBeenCalledTimes(1);
+    expect(optionLists).toHaveBeenCalledTimes(1);
+
+    expect(productExtras).toHaveBeenCalledTimes(1);
+  });
+});
+
+it("identifies relative variants offered as extras by both audience names", async () => {
+  const offered = await run(async (tx) => {
+    const [variant] = await setProductVariants(
+      tx,
+      ids.bacon,
+      [
+        {
+          name: "Single",
+          image: null,
+          customerName: { en: "Customer single" },
+          kitchenName: "SGL",
+          unitPrice: null,
+          available: true,
+          active: true,
+        },
+      ],
+      "en",
+    );
+    const list = await createExtraList(
+      tx,
+      { name: "Variant extras", items: [{ productId: variant!.id }] },
+      "en",
+    );
+    await writeProductModifiers(tx, ids.burger, [{ kind: "extras", id: list.id }]);
+    return readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: offerId }]);
+  });
+  expect(offered.get(offerId)).toMatchObject([
+    {
+      kind: "extras",
+      items: [
+        {
+          name: "bacon staff (Single)",
+          customerName: { en: "Smoked streaky bacon (Customer single)" },
+          kitchenName: "BCN (SGL)",
+        },
+      ],
+    },
+  ]);
+});

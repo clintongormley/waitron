@@ -16,7 +16,7 @@ is what it is.
 A list is authored once and attached to as many dishes as you like. A dish carries ONE ordered
 attachment list, `product_modifiers`, and each row of it names either an extras list or an options
 list — never both (`product_modifiers_one_reference_ck`,
-`packages/db/src/schema/catalogue/extras.ts`). The three names every list and every label carries —
+`packages/db/src/schema/menu/extras.ts`). The three names every list and every label carries —
 staff `name`, translated `customerName`, plain `kitchenName` — follow the product convention, and
 which surface reads which is in [products.md](products.md).
 
@@ -31,7 +31,7 @@ today and guarded by nothing.
 
 Each kind of list has its own six routes under `/management-api/modifiers`, and the two sets are the
 same six with one path segment different. They are mounted by one helper, `mountListSurface`
-(`apps/server/src/catalogue-api.ts`), which is why they cannot drift apart.
+(`apps/server/src/menu-api.ts`), which is why they cannot drift apart.
 
 | Route | Answers |
 | --- | --- |
@@ -48,11 +48,11 @@ offending `field`; an unknown list id is `options.not_found` / `extras.not_found
 names are optional in every language, including the default. Malformed maps still answer
 `options.invalid` or `extras.invalid` beside their field. An extras item naming a product that has an Active
 variant is refused `extras.product_has_variants`, naming the item's `items.<i>.productId` and the
-product. Every code is registered in `packages/catalogue/src/errors.ts`.
+product. Every code is registered in `packages/menu/src/errors.ts`.
 
 A list carries its labels or its items INSIDE it — there is no separate item endpoint. The order you
 send them in is the order they come back in: the write numbers each row's `sort` from its position
-in the body (`writeItems`, `packages/catalogue/src/extras.ts`; the options equivalent in
+in the body (`writeItems`, `packages/menu/src/extras.ts`; the options equivalent in
 `options.ts`). Sending an id on a label or an item keeps that id; leaving it out mints a new one.
 Which order a TILL draws things in is a separate question with three columns in it — the table under
 _Ordering and stored facts_ below.
@@ -100,15 +100,15 @@ A product POST or PATCH carries one ordered `modifiers` list, each entry
 same shape in the same order. A body that sends the retired `modifierIds` or `optionGroupIds` is
 refused, naming that field.
 
-`writeProductModifiers` (`packages/catalogue/src/product-modifiers.ts`) is what writes it, and it
+`writeProductModifiers` (`packages/menu/src/product-modifiers.ts`) is what writes it, and it
 takes no lock at all. There is no concurrent
 delete to slip in. `withTransaction` (`packages/db/src/tenancy.ts`) runs its body inside the venue
 file's write queue, and that queue admits one write transaction on the file at a time
 (`packages/store/src/write-queue.ts`), so the existence read `listExists` makes is still true when
 the insert a few statements later runs. `writeProductModifiers`'s header says two writers are
-serialised by `withTransaction`, and `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`)
+serialised by `withTransaction`, and `assertExtraListForWrite` (`packages/menu/src/extras.ts`)
 carries the mechanism for the whole package and points at its receipt, `racePair` in
-`packages/catalogue/test/fixtures.ts`.
+`packages/menu/test/fixtures.ts`.
 
 ### A menu offer carries its product's lists
 
@@ -120,7 +120,7 @@ per-menu extras publication or price override.
 ### What an extra costs
 
 The list item's own `price` is the gross price per portion. When it is null,
-`resolveExtraPrice` (`packages/catalogue/src/extras.ts`) multiplies the stored portion by the
+`resolveExtraPrice` (`packages/menu/src/extras.ts`) multiplies the stored portion by the
 product's unit price and rounds once to a cent. A stored zero is a free portion. Every price on
 the wire is a GROSS (VAT-inclusive) two-place decimal string; the
 column underneath holds a count of whole cents and the row converts (`stringToCents` /
@@ -163,7 +163,7 @@ The table draft save, `PUT /api/parties/:id/drafts`, also takes these selections
 (`apps/server/src/order-drafts.ts`). These are fresh dishes, priced when you submit them.
 
 For a fresh line, the save screens the selections through `readOptionSelections` and
-`readExtraSelections` (`packages/catalogue/src/`). These reject malformed entries, duplicate
+`readExtraSelections` (`packages/menu/src/`). These reject malformed entries, duplicate
 list answers and duplicate products within a pick list, under `options.invalid` or `extras.invalid`,
 and require UUIDs for the ids. The save keeps the selections unpriced. List completeness and pricing
 are checked when that line is submitted: an unanswered required options list, for example, refuses
@@ -265,8 +265,8 @@ hold parts of it, each re-numbered from the body of whatever save writes it.
 
 | Column | What it orders | Written by | A route reaches it |
 | --- | --- | --- | --- |
-| `product_modifiers.sort` | a dish's extras and options lists | `writeProductModifiers` (`packages/catalogue/src/product-modifiers.ts`), from the product save's body | yes — the product write |
-| `extra_list_items.sort` | the items WITHIN one extras list, which is the order its picks come back in | `writeItems` (`packages/catalogue/src/extras.ts`), from the list save's body | yes — `PATCH /management-api/modifiers/extras/:id`, and the `POST` that creates a list |
+| `product_modifiers.sort` | a dish's extras and options lists | `writeProductModifiers` (`packages/menu/src/product-modifiers.ts`), from the product save's body | yes — the product write |
+| `extra_list_items.sort` | the items WITHIN one extras list, which is the order its picks come back in | `writeItems` (`packages/menu/src/extras.ts`), from the list save's body | yes — `PATCH /management-api/modifiers/extras/:id`, and the `POST` that creates a list |
 
 So a line parked before any of those saves keeps the old order while the rebuilt side comes back in
 the new one, and a comparison pairing the two up position by position reads that as a changed answer.
@@ -320,9 +320,9 @@ default.
 ## What a till is offered
 
 The two sell-side reads — `listAvailableProducts` and `listMenuOffers`
-(`packages/catalogue/src/operations.ts`) — each carry an `offeredModifiers` array: the ordered
+(`packages/menu/src/operations.ts`) — each carry an `offeredModifiers` array: the ordered
 extras and options lists a dish puts in front of a diner, already resolved. It is built by
-`readOfferedModifiers` (`packages/catalogue/src/offered-modifiers.ts`) and the shapes are declared
+`readOfferedModifiers` (`packages/menu/src/offered-modifiers.ts`) and the shapes are declared
 beside the rest of the sell-side wire in `packages/shared/src/menu-document/menu-types.ts` (`OfferedModifier`, `OfferedExtrasList`,
 `OfferedOptionsList`, `OfferedExtraItem`). The till app reads neither directly: its zone-offer
 routes serve each menu's published version (`listZoneOffers`, `packages/venue-service/src/operations.ts`),
@@ -354,7 +354,7 @@ Six things it is worth knowing about that payload:
   unavailable). A published default is served while it is available; otherwise, including a
   published version with no default, the first label in the published version's order that is
   available now is served, and no default only when none is (`effectiveDefaultLabelId`,
-  `packages/catalogue/src/option-default.ts`, which `applyLiveFields` applies on every read). The
+  `packages/menu/src/option-default.ts`, which `applyLiveFields` applies on every read). The
   till's menu-state poll applies the same rule (`withUnavailable`,
   `apps/till/src/state/menu-refresh.ts`) to the published default, which the served list carries as
   `publishedDefaultLabelId`, so a till that polls and one that reloads preselect the same label once
@@ -363,7 +363,7 @@ Six things it is worth knowing about that payload:
   (`option-contract.ts`) will accept an answer from. That agreement is the reason a till and the
   order path read the same lists: both take them from the menu's published version, which
   `listMenuOffers` builds through `readOfferedModifiers` when the menu is published
-  (`buildMenuDocument`, `packages/catalogue/src/menu-document.ts`), with availability put back when
+  (`buildMenuDocument`, `packages/menu/src/menu-document.ts`), with availability put back when
   it is served (`applyLiveFields`). One exception: an edit of a saved line whose dish the live
   version no longer offers checks that line's options answer against the dish's own current lists
   (`productOptionLists`, `apps/server/src/working-order.ts`), because no published list is left to
@@ -385,7 +385,7 @@ Six things it is worth knowing about that payload:
   refuses to send it again on one it has" in `apps/server/src/tabs.test.ts`. The filter's own tests:
   "refuses an extras pick of an Unavailable or an Inactive product as a pick the list does not
   offer" in `apps/server/src/till-sale.test.ts`, and "puts availability, course and category back
-  from the current rows, and not VAT" in `packages/catalogue/src/menu-document.test.ts`, which clears an
+  from the current rows, and not VAT" in `packages/menu/src/menu-document.test.ts`, which clears an
   extras item's flag from the product's current availability.
   An extras list also leaves out a product that has an Active variant (it is never sold as
   itself; `readExtraProducts`), and a basket priced afresh refuses a pick of one with a
@@ -397,10 +397,10 @@ Six things it is worth knowing about that payload:
   list offers an Active variant — from the parent's editor or the variant's own page — is refused
   `product.offered_as_extra`, naming every list that offers it (`assertNotOfferedAsExtra`,
   `variants.ts`). Both answer 409. Tests: "an extras list and products with variants" in
-  `packages/catalogue/src/extras.test.ts`, "a product an extras list offers" in
-  `packages/catalogue/src/product-editor.test.ts`, and "mountCatalogueApi — extras lists and
-  products with variants" in `apps/server/src/catalogue-api.test.ts`. Tests for the order path:
-  "an extra that is a parent with Active variants" in `packages/catalogue/src/offered-modifiers.test.ts`; "refuses a
+  `packages/menu/src/extras.test.ts`, "a product an extras list offers" in
+  `packages/menu/src/product-editor.test.ts`, and "mountCatalogueApi — extras lists and
+  products with variants" in `apps/server/src/menu-api.test.ts`. Tests for the order path:
+  "an extra that is a parent with Active variants" in `packages/menu/src/offered-modifiers.test.ts`; "refuses a
   menu offer's extras pick of a parent with an Active variant, and sells its variant" in
   `apps/server/src/working-order.test.ts`; and "sells an extras pick of a product whose only
   variant is Inactive" in `apps/server/src/till-api.zone-required.test.ts`.
@@ -445,7 +445,7 @@ after checking that the lines, summed per rate at the cent, are its bases and, w
 one, that their gross amounts are its base plus tax. When the caller
 supplies its own — which the till's filing routes do — it is filed with each base and tax rounded to
 the cent, but it too was grouped per rate over the priced lines a moment earlier
-(`packages/catalogue/src/pricing.ts`). In each of the three an extras child line's base and its own
+(`packages/menu/src/pricing.ts`). In each of the three an extras child line's base and its own
 VAT rate reach the record's `CuotaTotal` — for a whole-invoice credit through the invoice's stored
 breakdown, which was built one of the other two ways when the invoice was filed — and `CuotaTotal` is one of the fields `computeHuella` hashes
 (`@waitron/verifactu`'s `computeHuella`).
@@ -456,7 +456,7 @@ in. So the same basket restructured into different lines can leave `ImporteTotal
 was while `CuotaTotal` and the huella move. That is a fact about the BACKEND and not about the
 system: every till filing route passes `total: priced.total` (`apps/server/src/till-sale.ts`), and
 `priced.total` is the sum of every per-line gross (`grossRows`,
-`packages/catalogue/src/pricing.ts`), so on a real sale a moved line AMOUNT does move
+`packages/menu/src/pricing.ts`), so on a real sale a moved line AMOUNT does move
 `ImporteTotal`. What it cannot see is a restructuring whose amounts still add up to the same
 total.
 
@@ -479,7 +479,7 @@ was frozen, holding that language's text, or another stored language's where it 
 (`buildLineExtras`, or `editLineOptions` when an edit gives a new or changed answer, both in
 `apps/server/src/modifier-selection.ts`), so the receipt prints it whatever language it is in. Each
 side falls back to the staff name only when it has no customer text at all, never to the kitchen
-name — `customerOptionSnapshotLabels` (`packages/catalogue/src/option-snapshot-labels.ts`), beside
+name — `customerOptionSnapshotLabels` (`packages/menu/src/option-snapshot-labels.ts`), beside
 the kitchen-facing `optionSnapshotLabels` the printed kitchen ticket uses.
 
 ## Storage
@@ -509,7 +509,7 @@ plain value with no foreign key beside the frozen names (_On the filed sale_, ab
 
 This feature takes no lock of any kind, and asks no JSON containment question.
 
-`scripts/catalogue-engine-neutral.test.ts` guards the narrow half of this: the feature's own files
+`scripts/menu-engine-neutral.test.ts` guards the narrow half of this: the feature's own files
 carry none of `pg_advisory_*_lock` or `@>` / `<@`, and the catalogue files among them carry no
 `pgEnum(` either. It is weaker than that sounds. It reads the files as TEXT, so
 it cannot tell code from a comment; it covers only the files it names; and `content-languages.ts` is
@@ -518,7 +518,7 @@ not one of them.
 **Nothing at all guards the row locks staying gone here.** The clause is banned by
 `scripts/postgres-sql-residue.test.ts`, whose `ROOTS` are `apps/server/src`,
 `packages/reporting/src`, `packages/reporting/test`, `packages/workforce/src` and
-`packages/payments/src/reconciliation-schedule` — `packages/catalogue` is not one of them, a gap that guard's own pattern
+`packages/payments/src/reconciliation-schedule` — `packages/menu` is not one of them, a gap that guard's own pattern
 comment and `catalogue-engine-neutral`'s header both state. So a `for update` written back into
 these files is caught by review, or by the engine when the statement is prepared, and by no guard
 in between.

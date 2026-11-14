@@ -12,7 +12,7 @@ import {
   reassignProductsToUnit,
   updateUnit,
   type UpdateUnitInput,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { authorizeManager } from "@waitron/identity";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";

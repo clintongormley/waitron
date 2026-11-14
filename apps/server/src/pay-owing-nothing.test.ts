@@ -16,7 +16,7 @@ import {
   workingOrders,
   workingOrderLines,
 } from "@waitron/db";
-import { createProduct } from "@waitron/catalogue";
+import { createProduct } from "@waitron/menu";
 import { payments } from "@waitron/payments";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { createTable } from "./testing/live-table.js";

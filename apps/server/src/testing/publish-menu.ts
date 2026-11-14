@@ -3,7 +3,7 @@ import {
   menuDocumentHash,
   menuPublications,
   publishMenu,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import type { Transaction } from "@waitron/db";
 
 /** Publishes the menu's working state, as the dashboard's preview-then-publish does; the version id. */

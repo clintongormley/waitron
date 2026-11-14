@@ -361,7 +361,7 @@ import { createFiscalReadinessStore } from "./fiscal-readiness.js";
 import { fiscalReadinessInput, submitFiscalReadiness } from "./fiscal-readiness-runner.js";
 import { moduleCoreServices } from "./parties.js";
 import { mountGuestMenuApi, mountPublicGuestMenu, readGuestMenuPages } from "./guest-menu-api.js";
-import { mountCatalogueApi, translationContextFor } from "./catalogue-api.js";
+import { mountCatalogueApi, translationContextFor } from "./menu-api.js";
 import { mountUnitsApi } from "./units-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
 import { mountReportApi, resolveVenueClock } from "./report-api.js";

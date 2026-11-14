@@ -524,9 +524,9 @@ is about, but `content.translation_required` — the refusal the editor's own tr
 produce — carries only the missing `language`, and one product save can have several translated
 values checked (the product's customer name and one per variant saved Active). A variant sent inactive
 is not checked for customer-name translations (`writeProductVariants`,
-`packages/catalogue/src/variants.ts`), so the language alone
+`packages/menu/src/variants.ts`), so the language alone
 does not say which. What the save path can carry is pinned where it is thrown, in
-`packages/catalogue/src/product-editor.test.ts` ("names the missing language, and nothing else" and
+`packages/menu/src/product-editor.test.ts` ("names the missing language, and nothing else" and
 "refuses nutrition input without naming any field"): generic allergen and dietary refusals name
 neither a field nor a language. The kind-specific `allergen.kinds_required` and
 `allergen.invalid_kind` refusals are mapped explicitly to the editor's Nutrition section by
@@ -543,7 +543,7 @@ its table row and focus to that row's actions trigger.
 Cost: an earlier fix on `feat/product-editor-rework` bound `fieldErrors` to the editor but mapped
 `params.field` only. Driving the real screen with an English default and a Spanish-only customer name
 left the section folded, the message behind the modal and focus on Save. Regressions:
-`apps/dashboard/src/screens/catalogue-screen.test.ts`, "reports a refused translation beside the
+`apps/dashboard/src/screens/products-screen.test.ts`, "reports a refused translation beside the
 input for the language the server named" and "marks the variant whose translation the save refused".
 
 ## Saved selections compare values
@@ -2039,7 +2039,7 @@ in a zone already held shows that menu at once and sends one `/api/menu-state` c
 (`#openTable`). The answer goes to `#onMenuState`, which reads the whole menu again only when the
 published versions, the service state or `liveFields` moved; `unavailable` (sold-out dishes and
 options) is applied in place. `liveFields` is a digest of the course and reporting category of each dish, variant and extras item
-(`liveFieldsDigest`, `packages/catalogue/src/menu-document.ts`); without it a dish moved to another
+(`liveFieldsDigest`, `packages/menu/src/menu-document.ts`); without it a dish moved to another
 course would not be noticed. The held menus are forgotten on every start (`#boot`, which a server
 switch runs again) and when the till is given a new `api`. Two limits:
 

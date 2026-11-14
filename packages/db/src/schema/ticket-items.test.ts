@@ -8,7 +8,7 @@ import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
-import { catalogues, products } from "./catalogue.js";
+import { catalogues, products } from "./menus.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { workingOrderLines } from "./orders.js";
 import { ticketItems } from "./ticket-items.js";

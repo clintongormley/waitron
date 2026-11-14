@@ -1,5 +1,5 @@
-import { joinCustomerPresentationText } from "@waitron/catalogue";
-import type { GrossLine } from "@waitron/catalogue";
+import { joinCustomerPresentationText } from "@waitron/menu";
+import type { GrossLine } from "@waitron/menu";
 import {
   addDecimal,
   compareDecimal,

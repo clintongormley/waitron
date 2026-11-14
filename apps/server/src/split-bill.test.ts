@@ -26,7 +26,7 @@ import {
   createCategory,
   createProduct,
   EACH_UNIT,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { nodeId as brandNodeId, thousandthsToDecimal } from "@waitron/shared";
 import type { DeviceRequestConfig, OriginConfig } from "./trading-context.js";
 import { deviceRequestCfg } from "./testing/session-device.js";

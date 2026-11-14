@@ -14,7 +14,7 @@ import {
   readGuestMenu,
   readRecordedDocuments,
   menusOfVersions,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { readCurrentImage, renderRendition } from "@waitron/media";
 import { authorizeManager } from "@waitron/identity";
 import {

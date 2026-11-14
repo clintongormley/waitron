@@ -19,7 +19,7 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { createCategory, createProduct } from "@waitron/catalogue";
+import { createCategory, createProduct } from "@waitron/menu";
 import { hashPin } from "@waitron/identity";
 import { SimulatorPaymentProvider, insertCapturedPayment, payments } from "@waitron/payments";
 import { decimal } from "@waitron/shared";

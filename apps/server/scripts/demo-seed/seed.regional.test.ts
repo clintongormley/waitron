@@ -10,7 +10,7 @@ import {
   listAvailableProducts,
   listMenuOffers,
   listTranslationGapReport,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import * as selections from "./data-set.js";
 import { seedSales } from "./seed-sales.js";
 vi.mock("./seed-sales.js", async (importOriginal) => {

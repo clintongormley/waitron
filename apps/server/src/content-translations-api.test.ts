@@ -25,14 +25,14 @@ import {
   optionLabels,
   extraLists,
   units,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import type {
   TranslationCellEdit,
   TranslationItemPage as TranslationPage,
   TranslationCell as TranslationTarget,
-} from "@waitron/catalogue/src/content-translation-types.js";
+} from "@waitron/menu/src/content-translation-types.js";
 type TranslationBatch = { edits: TranslationCellEdit[] };
-import { mountCatalogueApi } from "./catalogue-api.js";
+import { mountCatalogueApi } from "./menu-api.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],

@@ -24,7 +24,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, registerModulePermissions } from "@waitron/identity";
-import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
+import { createCatalogue, createCategory, createProduct } from "@waitron/menu";
 import { stationStates } from "@waitron/venue-service";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";

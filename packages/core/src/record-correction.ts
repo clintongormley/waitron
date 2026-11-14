@@ -478,7 +478,7 @@ function wholeInvoiceBreakdown(
     const groupsAtRate = breakdown.filter((g) => atRate(g.rate));
     const linesBase = sumDecimals(linesAtRate.map((l) => atCents(l.lineTotal)));
     const breakdownBase = sumDecimals(groupsAtRate.map((g) => g.base));
-    // `rateLines` (`@waitron/catalogue`) files tax as gross − base per rate, so a priced invoice's
+    // `rateLines` (`@waitron/menu`) files tax as gross − base per rate, so a priced invoice's
     // line grosses sum to base + tax there.
     const statedGross = linesAtRate.flatMap((l) =>
       l.lineGross == null ? [] : [atCents(l.lineGross)],

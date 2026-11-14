@@ -1,6 +1,6 @@
 import { inArray } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
-import type { GrossLines } from "@waitron/catalogue";
+import type { GrossLines } from "@waitron/menu";
 import { VENUE_SERVICE } from "./modules.js";
 import type { GrossOrder } from "./working-order.js";
 

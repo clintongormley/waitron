@@ -1,4 +1,4 @@
-import type { LockedLine } from "@waitron/catalogue";
+import type { LockedLine } from "@waitron/menu";
 import { addDecimal, compareDecimal, decimal } from "@waitron/shared";
 import type { OrderLineIdentity, StoredOrderLine } from "./working-order.js";
 

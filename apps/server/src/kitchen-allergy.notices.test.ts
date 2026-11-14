@@ -27,7 +27,7 @@ import {
   readContentLanguages,
   writeProductModifiers,
   updateProduct,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import type { AllergyGuestInput, AllergyPatch, KitchenAllergyBlock } from "@waitron/module";
 import { mountTillApi } from "./till-api.js";
 import { readBillEditState } from "./bill-editing.js";

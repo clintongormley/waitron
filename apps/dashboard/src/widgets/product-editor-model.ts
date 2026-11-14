@@ -1,6 +1,6 @@
 export type LocalizedText = Record<string, string>;
 import { decimal, MONEY_SCALE, toScale } from "@waitron/shared";
-import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
+import { isProductPrice } from "@waitron/menu/src/modifier-limits.js";
 import { t } from "../i18n/t.js";
 import type {
   DietaryLabel,

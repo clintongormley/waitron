@@ -4,7 +4,7 @@ import { sql, and, isNotNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { createCatalogue } from "@waitron/catalogue";
+import { createCatalogue } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   dayCutoverChanges,

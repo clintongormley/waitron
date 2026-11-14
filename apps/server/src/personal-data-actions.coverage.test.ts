@@ -12,7 +12,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import * as db from "@waitron/db";
 import * as adjustmentsSchema from "@waitron/db/schema/adjustments.js";
-import * as catalogueSchema from "@waitron/db/schema/catalogue.js";
+import * as catalogueSchema from "@waitron/db/schema/menu.js";
 import * as credentialsSchema from "@waitron/db/schema/credentials.js";
 import * as handoverSchema from "@waitron/db/schema/handover.js";
 import * as identitySchema from "@waitron/db/schema/identity.js";

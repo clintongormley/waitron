@@ -156,7 +156,7 @@ describe("allocateInvoiceNumber", () => {
     // (`packages/store/src/write-queue.ts`), so what twenty overlapping calls test here is that the
     // queue serialises them — twenty distinct, contiguous numbers — and not that a lock holds under
     // contention. The receipt for the queue itself, with a control in the other direction, is
-    // `racePair` in `packages/catalogue/test/fixtures.ts`.
+    // `racePair` in `packages/menu/test/fixtures.ts`.
     const seriesId = await makeSeries(db, { nodeId: nodeA1, code: "FA" });
     const results = await Promise.all(
       Array.from({ length: 20 }, () =>

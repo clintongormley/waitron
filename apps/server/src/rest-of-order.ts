@@ -1,6 +1,6 @@
 import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import { kitchenStations, ticketItems, workingOrderLines, type Transaction } from "@waitron/db";
-import { kitchenPresentationName } from "@waitron/catalogue";
+import { kitchenPresentationName } from "@waitron/menu";
 import { thousandthsToDecimal, compareStationNames } from "@waitron/shared";
 import { firedQuantity, type TicketState } from "./kitchen-print.js";
 

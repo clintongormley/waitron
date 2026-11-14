@@ -116,7 +116,7 @@ async function copyLayouts(tx: Transaction, fromSetId: string, toSetId: string):
       .values(rows.map((place) => ({ ...place, planId: copyOf.get(place.planId)! })));
 }
 
-/** Rows per statement, bounded as `packages/catalogue/src/batches.ts` bounds them. */
+/** Rows per statement, bounded as `packages/menu/src/batches.ts` bounds them. */
 function inBatches<T>(rows: readonly T[], size = 1000): T[][] {
   const result: T[][] = [];
   for (let start = 0; start < rows.length; start += size)

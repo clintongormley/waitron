@@ -1,4 +1,4 @@
-import { unitPresentation } from "@waitron/catalogue/src/unit-presentation.js";
+import { unitPresentation } from "@waitron/menu/src/unit-presentation.js";
 import {
   FormFeedback,
   bottomMessage,
@@ -16,7 +16,7 @@ import { keyed } from "lit/directives/keyed.js";
 import { repeat } from "lit/directives/repeat.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, submitOnEnter, type ComboboxOption, type SummaryField } from "@waitron/ui";
-import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
+import { isProductPrice } from "@waitron/menu/src/modifier-limits.js";
 import {
   VAT_CLASSES,
   localToday,
@@ -69,7 +69,7 @@ import {
 } from "./form-fields.js";
 import type { CategorySummary, DashboardApi } from "../api/client.js";
 import type { ProductModifierRef } from "@waitron/shared";
-import type { ExtraOfferUsage } from "@waitron/catalogue/src/extra-usage.js";
+import type { ExtraOfferUsage } from "@waitron/menu/src/extra-usage.js";
 import type {
   EditorVariant,
   ModifierListChoice,
@@ -123,7 +123,7 @@ type SectionName = keyof typeof SECTION_FIELDS;
 
 /**
  * The field names the SERVER uses when it rejects a product body
- * (`packages/catalogue/src/product-editor-input.ts`), mapped onto this editor's field names, or a
+ * (`packages/menu/src/product-editor-input.ts`), mapped onto this editor's field names, or a
  * key only the message above Save shows. A value ending in "-" names a translated field: the server
  * names such a field once for all of its languages, so there is no single language to point at and
  * the default content language's input is used.
@@ -152,7 +152,7 @@ const SERVER_FIELDS: Record<string, string> = {
 export function productEditorField(field: string, defaultLanguage: string): string | null {
   const variant = /^variants\.(\d+)\.(name|unitPrice|active)$/.exec(field);
   if (variant) return `variant-${variant[1]}-${variant[2] === "unitPrice" ? "price" : variant[2]}`;
-  // A refused attachment (`modifiers.<n>.id`, thrown by packages/catalogue/src/product-modifiers.ts
+  // A refused attachment (`modifiers.<n>.id`, thrown by packages/menu/src/product-modifiers.ts
   // when a list was deleted or is named twice) points at the Modifiers section's one control,
   // whatever position it names: the attached rows are a table with no input of their own.
   if (/^modifiers\.\d+\.id$/.test(field)) return "modifier";

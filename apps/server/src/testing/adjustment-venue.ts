@@ -14,7 +14,7 @@ import {
   createProduct,
   setProductVariants,
   writeProductModifiers,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import {
   ADJUSTMENTS_PERMISSIONS,
   createAdjustmentReason,

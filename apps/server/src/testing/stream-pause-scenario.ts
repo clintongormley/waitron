@@ -25,7 +25,7 @@ import {
   createCatalogue,
   createCategory,
   createProduct,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import {
   deviceProfiles,

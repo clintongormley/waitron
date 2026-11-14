@@ -9,7 +9,7 @@ import { tableNoMatches } from "@waitron/dashboard-kit";
 import type { DashboardApi, ProductUsingUnit, Unit, UnitInput } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage } from "../i18n/codes.js";
-import { unitPresentation } from "@waitron/catalogue/src/unit-presentation.js";
+import { unitPresentation } from "@waitron/menu/src/unit-presentation.js";
 import { currentContentLanguages } from "@waitron/ui";
 import { currentLocale, t } from "../i18n/t.js";
 import { unitRefusalErrors, type UnitFormErrors } from "../widgets/unit-form.js";

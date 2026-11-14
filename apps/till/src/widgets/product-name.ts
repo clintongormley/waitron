@@ -2,7 +2,7 @@ import { staffPresentationName, contentLanguageCode, resolveContentText } from "
 import type { ProductPresentation } from "@waitron/shared";
 import { currentContentLanguages } from "@waitron/ui";
 import { currentLocale } from "../i18n/t.js";
-import { unitPresentation } from "@waitron/catalogue/src/unit-presentation.js";
+import { unitPresentation } from "@waitron/menu/src/unit-presentation.js";
 import type { TillProduct } from "../api/client.js";
 
 /** The till carries the six name fields OPTIONALLY; the shared resolvers take them present-and-nullable. */

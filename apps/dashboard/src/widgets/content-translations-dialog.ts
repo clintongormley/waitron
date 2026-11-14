@@ -2,7 +2,7 @@ import { LocaleChangeController } from "../state/locale-controller.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import type { ContentSuggestionView } from "@waitron/catalogue/src/content-suggestion-types.js";
+import type { ContentSuggestionView } from "@waitron/menu/src/content-suggestion-types.js";
 import { languageDisplayName, type ContentLanguages, TRANSLATION_GAP_KINDS } from "@waitron/shared";
 import { QueryController, tableNoMatches } from "@waitron/dashboard-kit";
 import {
@@ -25,7 +25,7 @@ import {
   type TranslationCellRef,
   type MissingIn,
   type TranslationRef,
-} from "@waitron/catalogue/src/content-translation-types.js";
+} from "@waitron/menu/src/content-translation-types.js";
 import type { DashboardApi, SuggestionRunView } from "../api/client.js";
 import { QUERY_DEPENDENCIES } from "../api/live-queries.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";

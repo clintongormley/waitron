@@ -10,7 +10,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { readContentLanguages } from "@waitron/catalogue";
+import { readContentLanguages } from "@waitron/menu";
 import { getCountryPack } from "@waitron/country-packs";
 import { DEMO_BASELINE_FIXTURE_ROOTS } from "@waitron/country-packs/demo/testing";
 import { hashPassword, hashPin } from "@waitron/identity";

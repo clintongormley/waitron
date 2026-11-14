@@ -34,7 +34,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
 import { createAdjustmentReason } from "@waitron/adjustments";
-import { createExtraList, writeProductModifiers } from "@waitron/catalogue";
+import { createExtraList, writeProductModifiers } from "@waitron/menu";
 import { attachPrinterToStation } from "./station-printers.js";
 import { createCourse, createStation } from "./kitchen.js";
 import { routeProductTo } from "./testing/zone-offers.js";

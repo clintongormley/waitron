@@ -45,7 +45,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { Decimal, SaleId, ReceiptPresentation } from "@waitron/shared";
-import type { GrossLines } from "@waitron/catalogue";
+import type { GrossLines } from "@waitron/menu";
 import {
   payments,
   associatePaymentWithSale,
@@ -678,7 +678,7 @@ export type IntegratedPayDeps = TillSaleDeps & {
  *  1. Read the order's status. A concurrent pay cannot interleave: one write transaction runs on the
  *     venue file at a time, so the second pay's whole transaction starts only after the first has
  *     committed, and reads the row `settled` (`assertExtraListForWrite`,
- *     `packages/catalogue/src/extras.ts`).
+ *     `packages/menu/src/extras.ts`).
  *  2. Already `settled` → IDEMPOTENT REPLAY: return the existing sale's ticket, file NOTHING.
  *  3. Any other non-`open` status → `working_order.not_open`.
  *  4. Absent → WALK-UP: create it `open` with freshly-priced lines (`createOpenOrder`) and file that

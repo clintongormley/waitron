@@ -6,7 +6,7 @@ import {
   products,
   type Transaction,
 } from "@waitron/db";
-import { loadSectionGraph, reachableProducts } from "@waitron/catalogue";
+import { loadSectionGraph, reachableProducts } from "@waitron/menu";
 import type { RoutingPeriod } from "./routing-types.js";
 import { readDepartmentSeasonWeeks } from "./season-weeks.js";
 import { rangeSpan } from "./service-day.js";

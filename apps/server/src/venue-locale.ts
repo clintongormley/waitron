@@ -7,7 +7,7 @@ import {
   type Transaction,
   type Venue,
 } from "@waitron/db";
-import { contentLanguagesOr, readSavedContentLanguages } from "@waitron/catalogue";
+import { contentLanguagesOr, readSavedContentLanguages } from "@waitron/menu";
 import type { ReceiptLanguageRules } from "@waitron/country";
 import {
   resolveInstalledContentLanguageRules,

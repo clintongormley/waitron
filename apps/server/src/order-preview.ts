@@ -1,6 +1,6 @@
 import { inArray } from "drizzle-orm";
 import { workingOrderLines, type Transaction } from "@waitron/db";
-import { staffPresentationName } from "@waitron/catalogue";
+import { staffPresentationName } from "@waitron/menu";
 import { thousandthsToDecimal } from "@waitron/shared";
 
 export interface OrderPreviewItem {

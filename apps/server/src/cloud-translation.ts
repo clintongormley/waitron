@@ -2,8 +2,8 @@ import { createHash, createPrivateKey, randomUUID, sign } from "node:crypto";
 import type {
   SuggestionResult,
   SuggestionPage,
-} from "@waitron/catalogue/src/content-suggestion-types.js";
-import "@waitron/catalogue/src/errors.js";
+} from "@waitron/menu/src/content-suggestion-types.js";
+import "@waitron/menu/src/errors.js";
 import { AppError } from "@waitron/shared";
 import type { SavedCloudState } from "./cloud-client.js";
 import { machinePayload } from "./cloud-installation.js";

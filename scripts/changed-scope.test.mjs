@@ -339,13 +339,13 @@ describe("gateOutputs", () => {
     expect(a.light_a).toBe("true");
     expect(a.light_b).toBe("false");
 
-    const b = gates(packagesInScope(ls("@waitron/catalogue")));
+    const b = gates(packagesInScope(ls("@waitron/menu")));
     expect(b.light_a).toBe("false");
     expect(b.light_b).toBe("true");
 
     // A scope spanning both bins runs both, and an own-shard package alongside a bin package does
     // not suppress that bin's gate.
-    const both = gates(packagesInScope(ls("@waitron/core", "@waitron/catalogue", "@waitron/db")));
+    const both = gates(packagesInScope(ls("@waitron/core", "@waitron/menu", "@waitron/db")));
     expect(both.light_a).toBe("true");
     expect(both.light_b).toBe("true");
   });
@@ -391,7 +391,7 @@ describe("gateOutputs", () => {
   it("runs a light gate when a testful package joins a test-less one in the SAME bin", () => {
     // The testless members and @waitron/catalogue all live in bin B: a testless member must not
     // suppress a testful one.
-    const g = gates(packagesInScope(ls(...PACKAGES_WITHOUT_TESTS, "@waitron/catalogue")));
+    const g = gates(packagesInScope(ls(...PACKAGES_WITHOUT_TESTS, "@waitron/menu")));
     expect(g.light_a).toBe("false");
     expect(g.light_b).toBe("true");
   });

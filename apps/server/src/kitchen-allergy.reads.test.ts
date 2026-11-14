@@ -11,7 +11,7 @@ import {
   readContentLanguages,
   updateProduct,
   writeProductModifiers,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import type { KitchenAllergyBlock } from "@waitron/module";
 import { readBillEditState } from "./bill-editing.js";
 import { submitGroups, type SubmitGroupsInput } from "./order-groups.js";

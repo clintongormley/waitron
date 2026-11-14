@@ -61,7 +61,7 @@ export function variantInheritedFrom(
   const setting = variantSetting(row, variantId);
   const under = withoutOwn(setting);
   // A variant with no variant price from any source carries its product's setting, a clash included
-  // (`parent` in packages/catalogue/src/menu-combine.ts). Its own override sets its level to
+  // (`parent` in packages/menu/src/menu-combine.ts). Its own override sets its level to
   // "variant", so under one a clash follows the product only when it is the product's clash; the
   // read carries nothing finer, and a variant clash listing exactly the product's candidates reads
   // as following it.

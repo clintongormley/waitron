@@ -39,7 +39,7 @@ import {
   createProduct,
   readContentLanguages,
   writeContentLanguages,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import type { StartedServer, StartServerSeams } from "./boot.js";
 import { lookupBoxName, type MdnsQuerySocket } from "./box-lookup.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";

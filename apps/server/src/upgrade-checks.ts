@@ -2,7 +2,7 @@ import { VENUE_FILE, NODE_FILE, installAppendOnlyTriggers } from "@waitron/store
 import { once } from "node:events";
 import { join } from "node:path";
 import { catalogues, lockVenueDatabase, openVenueDatabase, withTransaction } from "@waitron/db";
-import { readMenuStructure } from "@waitron/catalogue";
+import { readMenuStructure } from "@waitron/menu";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { assertAppendOnlyIntact, existingOptionalAppendOnlyTables } from "./append-only-watch.js";
 import { enabledModules, orderedMigrationSets, type ModuleConfig } from "@waitron/module";

@@ -87,7 +87,7 @@ import "./screens/vat-return-screen.js";
 import "./screens/orders-screen.js";
 import "./screens/staff-screen.js";
 import "./screens/access-roles-screen.js";
-import "./screens/catalogue-screen.js";
+import "./screens/products-screen.js";
 import "./screens/modifiers-screen.js";
 import "./screens/menus-screen.js";
 import "./screens/units-screen.js";

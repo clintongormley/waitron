@@ -1,7 +1,7 @@
 import { html } from "lit";
 import { currentContentLanguages, type SummaryField } from "@waitron/ui";
 import { contentLanguageCode, formatMoney, resolveContentText } from "@waitron/shared";
-import { MAX_MODIFIER_INTEGER, isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
+import { MAX_MODIFIER_INTEGER, isProductPrice } from "@waitron/menu/src/modifier-limits.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-price-input.js";

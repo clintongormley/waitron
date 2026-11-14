@@ -22,7 +22,7 @@ import {
   setProductVariants,
   updateProduct,
   writeProductModifiers,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { createPrinter } from "@waitron/printing";
 import { setRoutingCell } from "@waitron/venue-service";
 import type { AllergyGuestInput, AllergyPatch, KitchenAllergyBlock } from "@waitron/module";

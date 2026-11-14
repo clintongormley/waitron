@@ -21,7 +21,7 @@ import {
   sectionMembers,
   sections,
   updateProduct,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { departmentReceipts, departments } from "@waitron/venue-service";
 import { saveImage, readCurrentImage } from "./image-edits.js";
 import { deleteImage, listImageUsages, readImage, readImageBytes, uploadImage } from "./images.js";

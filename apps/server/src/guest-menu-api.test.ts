@@ -8,7 +8,7 @@ import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { startManagementSession } from "@waitron/identity";
-import { menusFixture } from "@waitron/catalogue/test/menus-fixture.js";
+import { menusFixture } from "@waitron/menu/test/menus-fixture.js";
 import {
   previewMenu,
   publishMenu,
@@ -17,7 +17,7 @@ import {
   setVenueDefaultCatalogue,
   writeContentLanguages,
   GUEST_MENU_SETTINGS,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mountGuestMenuApi, mountPublicGuestMenu } from "./guest-menu-api.js";
 import * as guestMenuApi from "./guest-menu-api.js";

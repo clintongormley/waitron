@@ -28,7 +28,7 @@ import {
   createCategory,
   createProduct,
   menuItems,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { hashDeviceToken, persons, startManagementSession } from "@waitron/identity";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";

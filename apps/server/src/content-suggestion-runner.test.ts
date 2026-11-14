@@ -15,8 +15,8 @@ import {
   startSuggestionRun,
   writeContentLanguages,
   type TranslationContext,
-} from "@waitron/catalogue";
-import { addOversizedFamily } from "@waitron/catalogue/test/suggestion-fixture.js";
+} from "@waitron/menu";
+import { addOversizedFamily } from "@waitron/menu/test/suggestion-fixture.js";
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { translationCloudFixture, type FakeJobBody } from "../test/translation-cloud-fixture.js";

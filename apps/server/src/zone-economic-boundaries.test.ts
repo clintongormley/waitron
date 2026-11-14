@@ -7,7 +7,7 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 import { withTransaction, workingOrderLines, billPayments, floorZones } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { createCategory, createProduct } from "@waitron/catalogue";
+import { createCategory, createProduct } from "@waitron/menu";
 import {
   createServiceZone,
   readProfileServiceScopes,

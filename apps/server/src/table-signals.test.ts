@@ -14,7 +14,7 @@ import {
   createProduct,
   updateProduct,
   units,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import {
   diningTables,
   kitchenStations,

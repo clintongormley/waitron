@@ -4,7 +4,7 @@ import { and, eq, sql } from "drizzle-orm";
 import type { Database } from "../client.js";
 import { useVenueDb } from "./venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { catalogues } from "../schema/catalogue.js";
+import { catalogues } from "../schema/menus.js";
 import { deviceProfiles } from "../schema/device-profiles.js";
 import { devices } from "../schema/devices.js";
 import { kitchenStations } from "../schema/kitchen-stations.js";

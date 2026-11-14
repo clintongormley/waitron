@@ -20,7 +20,7 @@ import { mountPrintApi } from "../../src/print-api.js";
 import { createPairingMode } from "../../src/pairing-mode.js";
 import { recordAttendanceFact } from "../../src/attendance-capture.js";
 import { mountOrdersApi } from "../../src/orders-api.js";
-import { mountCatalogueApi } from "../../src/catalogue-api.js";
+import { mountCatalogueApi } from "../../src/menu-api.js";
 import { moduleCoreServices } from "../../src/parties.js";
 import { mountManagementApi } from "../../src/management-api.js";
 import { systemClock } from "../../src/till-backend.js";

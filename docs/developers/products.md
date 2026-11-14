@@ -43,7 +43,7 @@ or nested top-sellers row — the variant's own relative name is enough.
 product.** You can give Seagrams Gin and London Gin a variant named Single, and you can also
 have a product named Single. Two active products called Single, or two active Single variants
 of one active product, are refused with `product.name_taken`, ignoring case and surrounding
-spaces (`packages/catalogue/src/product-names.ts`). A save that preserves an existing clash
+spaces (`packages/menu/src/product-names.ts`). A save that preserves an existing clash
 without creating another keeps the existing behavior.
 
 You can name a product `Gin (Double)` even when `Gin` has a `Double` variant: the saved-name
@@ -55,7 +55,7 @@ Each name write stores its folded `products.name_key`. Product and single-varian
 compare that key within the relevant parent scope; a row with a null key is absent from those
 lookups. A whole-family save compares the submitted variant names directly. Configuration
 imports also compare names directly, grouping products separately from each product's variants
-(`validateCatalogueConfiguration`, `packages/catalogue/src/configuration-transfer.ts`). An
+(`validateCatalogueConfiguration`, `packages/menu/src/configuration-transfer.ts`). An
 import sets the keys through `storeProductNameKeys` in the catalogue module's `afterImport`;
 a bundle carrying a name key is refused. A product with no `active` value counts as active,
 the column's default. An import refuses an `active` value other than 0 or 1, a category or
@@ -90,7 +90,7 @@ that folder changes that inclusion. Check the menu preview and publish it separa
 the new text on the till.
 
 The `inline changes preserve publication and recorded names` cases in
-`packages/catalogue/src/menu-publication.test.ts` and `apps/server/src/till-api.receipt.test.ts`
+`packages/menu/src/menu-publication.test.ts` and `apps/server/src/till-api.receipt.test.ts`
 exercise this boundary. The catalogue case translates all nine kinds, reads both working menus,
 checks the audience-specific name consumers and retains the published rows until explicit
 publication. The server case files a sale, saves a customer name through the authenticated
@@ -110,7 +110,7 @@ comes from the published menu, and the rate from the day the invoice is issued, 
 - `descriptions` — the customer-facing text, resolved through `customerPresentationText`, then
   stored under exactly the venue's saved receipt languages (`settings.venue.invoiceLocales`), every
   key holding the venue's default content language's text, or that half's staff name where the
-  default has none (`defaultLanguageDescriptions`, `packages/catalogue/src/default-language-text.ts`,
+  default has none (`defaultLanguageDescriptions`, `packages/menu/src/default-language-text.ts`,
   called by `priceOrderLines`, `apps/server/src/working-order.ts`). A receipt prints the entry for
   the sale's names language (`namesLocale`, the first of `sales.invoice_locales`), else the line's
   first stored entry (`lineName`, `apps/server/src/receipt-document.ts`), so it prints the same name
@@ -148,7 +148,7 @@ names, and records the same product in its own `product_id` and a variant's pare
 **A line's VAT class is the one its published menu froze, fixed when its price is; its rate is the
 one in force on the day the invoice is issued.** Each published menu version records the VAT class
 of each dish, variant and extras item, and no rate (`buildMenuDocument`,
-`packages/catalogue/src/menu-document.ts`), and a till is served that class rather than the
+`packages/menu/src/menu-document.ts`), and a till is served that class rather than the
 product's current one. A line added to a held order or a tab stores that
 class (`working_order_lines.vat_class`) with its gross price; a walk-up sale is priced at payment,
 from the version live then (`priceOrderLines`, `apps/server/src/working-order.ts`). A variant with
@@ -156,7 +156,7 @@ no class of its own was frozen at its parent's class, and an extras line takes t
 its picked product. Raising the quantity of an unsent line in place keeps that row's class; a line
 an edit adds takes the class of the version live then. So a change to a product's VAT class reaches
 a till only when a menu including it is published again, and until then that menu shows
-Unpublished changes. Patching a live menu (`patchLiveMenu`, `packages/catalogue/src/menu-publication.ts`)
+Unpublished changes. Patching a live menu (`patchLiveMenu`, `packages/menu/src/menu-publication.ts`)
 changes a class in that menu's live version alone; the product keeps its own.
 
 Each class's percentage is a dated table in code (`VAT_RATE_TABLE` and `vatRateOn`,
@@ -194,7 +194,7 @@ server's retained-answer comparison and the till's selection matching recognize 
 forms without rewriting them. A changed answer takes the new preparation path.
 
 The recorded-answer reader, `customerOptionSnapshotLabels`
-(`packages/catalogue/src/option-snapshot-labels.ts`), keeps its own fallback for those older
+(`packages/menu/src/option-snapshot-labels.ts`), keeps its own fallback for those older
 forms. It takes a nonblank customer map or otherwise the frozen staff map, then resolves the
 requested locale, the default captured in the staff map's key, and finally another stored value.
 It does not consult today's catalogue. `optionSnapshotLabels` uses the frozen kitchen name or
@@ -220,7 +220,7 @@ Where each one surfaces:
 | Surface | Reads | Code |
 | --- | --- | --- |
 | Receipt line — the goods identification, art. 7.1.e | the product and relative variant's frozen customer maps joined in parentheses | `apps/server/src/receipt-lines.ts` |
-| Receipt — one `<list>: <label>` line under the dish | each frozen answer's customer maps, falling back to its staff maps | `customerOptionSnapshotLabels`, `packages/catalogue/src/option-snapshot-labels.ts` |
+| Receipt — one `<list>: <label>` line under the dish | each frozen answer's customer maps, falling back to its staff maps | `customerOptionSnapshotLabels`, `packages/menu/src/option-snapshot-labels.ts` |
 | Kitchen ticket | dishes, split-off extras and following extras read frozen kitchen names, falling back to staff names; cross-references read kitchen names; options answers read kitchen names, falling back to staff names | `buildTicketItems`, `apps/server/src/kitchen-print.ts` |
 | The rest of the order — "Also on this order" on a station's own ticket, on a ticket a printer shares between stations, and on the kitchen screen's card — listing dishes at stations not on the ticket or card | the kitchen names, through `kitchenPresentationName` | `readRestOfOrder`, `apps/server/src/rest-of-order.ts` |
 | Kitchen display and the expediter's pass | dishes, split-off extras and following extras read frozen kitchen names, falling back to staff names; cross-references read kitchen names | `readQueueSubItems`, `listStationQueue` and `readPassRows`, `apps/server/src/working-order.ts`; the pass reads `readPassRows` through `readScopedPassBoard`, `apps/server/src/pass-board.ts` |
@@ -428,7 +428,7 @@ That colour is worked out in order. It is the product's own colour (`products.co
 one. Otherwise it is its main category's colour, or, when that category has none, the colour of the
 nearest category above it that does (`category_details.color`). Otherwise it is the venue's
 default colour (`catalogue_settings.default_color`, which the catalogue's setup step sets to the
-pale blue `#abcced` when it creates the venue's settings row, `CATALOGUE_PROVISIONING` in `packages/catalogue/src/provisioning.ts`); with no default it has none, and each
+pale blue `#abcced` when it creates the venue's settings row, `CATALOGUE_PROVISIONING` in `packages/menu/src/provisioning.ts`); with no default it has none, and each
 screen draws its usual neutral look. The rule lives in one place, `effectiveColor`, `categoryColor` and
 `categoryColorSource` (which also says which category the colour came from) in
 `packages/shared/src/menu-document/color-inheritance.ts`, which the server and the
@@ -446,11 +446,11 @@ reads "Use default colour" and shows the default (`renderColor`,
 A colour is lowercase `#rrggbb`, or null for none. A save refuses anything else, an empty string
 included, as `product.invalid` with `field: "color"`; a default colour is refused as
 `category.invalid` with `field: "color"` (`saveCatalogueDefaultColor`,
-`packages/catalogue/src/settings.ts`). A configuration import refuses the whole
+`packages/menu/src/settings.ts`). A configuration import refuses the whole
 bundle when a product's, a category's or a menu section's colour, or the default, is anything else,
 as `setup.request_invalid` with `field` set to `products.color`, `category_details.color`,
 `sections.color` or `catalogue_settings.default_color` (`validateCatalogueConfiguration`,
-`packages/catalogue/src/configuration-transfer.ts`). A category's colour is set from the colour
+`packages/menu/src/configuration-transfer.ts`). A category's colour is set from the colour
 square before its name in the Products tree, or from the one in the box that names or renames it
 ([product-categories.md](product-categories.md)). The default is set from the square before
 All products, the tree's first row, whose chooser is headed "Colour of All products"; at phone
@@ -458,16 +458,16 @@ width the tree hides that square, as it hides the categories'.
 
 **A colour reaches a till only when a menu is published.** Publishing records each offer's colour
 in the menu's version, as it does the photo and description (`freezeOffer`,
-`packages/catalogue/src/menu-document.ts`). Changing a category's colour, or moving an uncoloured
+`packages/menu/src/menu-document.ts`). Changing a category's colour, or moving an uncoloured
 category under a coloured one, whether through `updateCategory` or the Products tree's Move
 (`moveCatalogueItems`), or changing the venue's default colour (`saveCatalogueDefaultColor`), makes a published menu read as changed when it holds a product whose worked-out
 colour this changes (one with no colour of its own and no coloured category nearer to it), and the
 menu's Preview tab names the change "colour" for that product. The version on sale keeps the old colour until you
-publish (the "a category's colour" cases in `packages/catalogue/src/menu-publication.test.ts`). The
+publish (the "a category's colour" cases in `packages/menu/src/menu-publication.test.ts`). The
 dashboard's Products tree, product editor and a menu's Structure tab draw the stored default, not
 a published version's. A
 product's own colour goes into the next version's offer in the same way
-(`packages/catalogue/src/menu-document.test.ts`), though no test reads a menu's status after one. A live version in an
+(`packages/menu/src/menu-document.test.ts`), though no test reads a menu's status after one. A live version in an
 earlier document format is not sold from: [product-categories.md](product-categories.md).
 
 A menu section has a colour of its own, set in the section form. It paints the section's own tile
@@ -526,12 +526,12 @@ may have any number of variants, one included.
 tax rate, course, description, image and allergen and dietary declarations
 are its parent's while its own column is blank and its own once it sets them
 (`effectiveProductColumns`, whose keys are `INHERITED_KEYS`,
-`packages/catalogue/src/variant-fallback.ts`). Its main reporting category is always its parent's,
+`packages/menu/src/variant-fallback.ts`). Its main reporting category is always its parent's,
 whatever its own `category_id` holds: `effectiveProductColumns.categoryId` reads the parent's for a
 variant, `readProductEditor` returns `primaryCategoryId: null` for one, the editor save refuses a
 variant body naming a category (`product.invalid`, field `primaryCategoryId`) and writes the
 variant's column back to null, and deleting a category clears it from any variant still holding it
-(`vacateCategories`, `packages/catalogue/src/categories.ts`). No migration clears the categories
+(`vacateCategories`, `packages/menu/src/categories.ts`). No migration clears the categories
 variants held before this rule (A209), and the owner decided on 2026-10-03 that none will be
 written: there is no data-migration code before go-live (CLAUDE.md §3) and the dev venue is reset
 before then. So an older variant row may still store one until the next save of the variant's
@@ -546,13 +546,13 @@ blanks its `pricing_unit`; and `assignProductUnit` answers a variant's id with `
 No migration clears the units variants stored before this rule: that carries the owner's category
 decision above over to units, which the owner has yet to confirm. Unit management ignores such a
 row: `productsUsingUnit` lists products with no parent only, reassigning a unit's products skips a
-variant, and `deleteUnit` deletes those rows before the unit (`packages/catalogue/src/units.ts`).
+variant, and `deleteUnit` deletes those rows before the unit (`packages/menu/src/units.ts`).
 
 Its colour is always its parent's too (W92), whatever its own `color` column holds:
 `effectiveProductColumns.color` reads the parent's for a variant, and `readProductEditor` returns
 `color: null` for one. A variant's page shows no colour chooser; the editor save refuses a variant
 body carrying a colour (`product.invalid`, field `color`) and writes the variant's column back to
-null. `updateProduct` (`packages/catalogue/src/operations.ts`) given a colour answers a variant's
+null. `updateProduct` (`packages/menu/src/operations.ts`) given a colour answers a variant's
 id with `product.not_found`. A published offer carries one colour, its product's; its variants carry none.
 
 Its extras and options
@@ -562,12 +562,12 @@ kitchen name falls back to the variant's own staff name (_The three names_, abov
 A variant's published allergens stay blank, and so read as its parent's, until it sets allergens of
 its own, and its published diet likewise until it sets a diet override of its own; once set, each keeps its own
 declaration or override independently of later parent edits
-(`republishOverlays`, `packages/catalogue/src/operations.ts`).
+(`republishOverlays`, `packages/menu/src/operations.ts`).
 
 ### Price
 
 A variant's own price may be blank. On a menu it is charged the most specific price that is set
-(`resolveOfferPrice`, `packages/catalogue/src/offer-price.ts`):
+(`resolveOfferPrice`, `packages/menu/src/offer-price.ts`):
 
 1. that menu's price for the variant (`menu_item_variant_overrides.price`);
 2. else the variant's own price (`products.unit_price` on its row);
@@ -579,8 +579,8 @@ product's own price. A menu's Price overrides tab shows the price a blank field 
 placeholder: one amount, the range across a product's Active sizes, or a clash
 (`apps/dashboard/src/widgets/menu-price-inheritance.ts`). The
 product-editor save accepts a blank variant price both in the parent's variants list and on the
-variant's own page (`parseProductEditorInput`, `packages/catalogue/src/product-editor-input.ts`),
-and `writeProductVariants` (`packages/catalogue/src/variants.ts`) stores it blank.
+variant's own page (`parseProductEditorInput`, `packages/menu/src/product-editor-input.ts`),
+and `writeProductVariants` (`packages/menu/src/variants.ts`) stores it blank.
 
 A variant follows its parent onto every menu the parent is on; it never gets a `menu_items` row of
 its own (`addProductToMenu` refuses one with `menu_item.variant_not_allowed`, and a section refuses
@@ -588,7 +588,7 @@ one as a member with `menu_section.membership_invalid`). A menu stores something
 for a variant only to override its price there: a `menu_item_variant_overrides` row, keyed by the
 parent's menu row and the variant, holds that menu's price, and saving the price blank deletes the
 row. Saving one size's price on a menu writes that size's row alone (`setMenuVariantPrice`,
-`packages/catalogue/src/variants.ts`), while `setMenuVariants` replaces the row of every Active size
+`packages/menu/src/variants.ts`), while `setMenuVariants` replaces the row of every Active size
 at once. An archived size holds no row: archiving it deletes its row on every menu, and
 `setMenuVariantPrice` refuses one with `product.variant_not_found`. The table's
 `menu_item_variant_overrides_overrides_ck` refuses a row with no price.
@@ -605,7 +605,7 @@ A product is on an active menu when that menu's working structure places it — 
 sections, or inside an active menu it includes — and the product is Active; it is sellable when it
 is also Available. A variant is listed under its parent's offer while it is Active, and is sellable
 while it is Available (`readOfferVariants` in `listMenuOffers`,
-`packages/catalogue/src/operations.ts`). A menu has no on/off setting of its own for a product or a
+`packages/menu/src/operations.ts`). A menu has no on/off setting of its own for a product or a
 variant. To take a product off a menu, change the structure so that nothing in it places the
 product; one that comes through an included menu goes when that menu's structure stops placing it or
 the menu is no longer included. Archiving is refused while a live or scheduled published menu includes the product or variant.
@@ -625,13 +625,13 @@ A menu's Price overrides tab lists every Active product an active menu's working
 reaches, with its Active sizes. The working offers leave archived products and sizes out. The tab's Available
 column reads the product's, or a size's, own Available flag. The tab reads `menuPrices`; a
 menu's offers, and the published document built from them
-(`packages/catalogue/src/menu-document.ts`), come from `listMenuOffers` (both in
-`packages/catalogue/src/operations.ts`), and both leave an archived product or size out.
+(`packages/menu/src/menu-document.ts`), come from `listMenuOffers` (both in
+`packages/menu/src/operations.ts`), and both leave an archived product or size out.
 
 The offers a till sells from are each menu's published version, which leaves out a product that was
-archived when it was published (`listMenuOffers`, `packages/catalogue/src/operations.ts`). A product
+archived when it was published (`listMenuOffers`, `packages/menu/src/operations.ts`). A product
 that is Unavailable, or has become archived since, is served in its place marked unavailable
-(`applyLiveFields`, `packages/catalogue/src/menu-document.ts`). A change to a menu's structure
+(`applyLiveFields`, `packages/menu/src/menu-document.ts`). A change to a menu's structure
 reaches the tills only when the menu is published again. Whether each product and variant is
 Active and Available, including products picked as extras, is read from the current rows
 (`applyLiveFields`).
@@ -692,7 +692,7 @@ listed, drawn disabled; each is labelled with its difference from the parent's p
 ("+€1.50") where it has one (`till-modifier-picker`, `apps/till/src/widgets/modifier-picker.ts`;
 the difference is worked out in `apps/till/src/api/client.ts`). A product none of whose variants is
 available on that menu keeps its button, greyed (`hasSomethingToSell`). An extras list does not offer a product
-that has an Active variant (`readExtraProducts`, `packages/catalogue/src/offered-modifiers.ts`),
+that has an Active variant (`readExtraProducts`, `packages/menu/src/offered-modifiers.ts`),
 since the order path refuses one picked as an extra (below). The catalogue refuses both ways of
 putting one there: an extras list naming such a product (`extras.product_has_variants`), and an
 Active variant on a product an extras list offers (`product.offered_as_extra`, which names the
@@ -703,10 +703,10 @@ lists). A variant itself may be an extra.
 **A product with an Active variant, Available or not, is never sold as itself** (#556): a
 line that rings it up without naming a variant is refused `product.variant_required`, and so is an
 extras pick of it. Every sale line names a zone's menu offer, and `selectMenuVariant`
-(`packages/catalogue/src/variants.ts`) refuses a dish line that names no variant. An extras pick
+(`packages/menu/src/variants.ts`) refuses a dish line that names no variant. An extras pick
 cannot name a variant, so `priceOrderLines` (`apps/server/src/working-order.ts`) refuses a pick of
 such a product; a pick of a variant itself sells. That refusal comes from one read for the whole
-basket's picks (`parentsWithActiveVariants`, `packages/catalogue/src/variants.ts`). A product whose
+basket's picks (`parentsWithActiveVariants`, `packages/menu/src/variants.ts`). A product whose
 variants are all archived sells as itself.
 
 On the server, an edit of a held order keeps each stored line it names, at its stored price —
@@ -786,13 +786,13 @@ variant alone. The main category, the unit and the colour are the exceptions: th
 variant `primaryCategoryId: null`, `unitId: null` and `color: null`, and the save refuses a non-null
 value of any of them with `product.invalid`. The variant always takes its parent's category and
 unit, and the save stores no colour on it (`readProductEditor` and `saveProductEditor`, with the
-refusals in `parseProductEditorInput`, `packages/catalogue/src/product-editor-input.ts`). The page
+refusals in `parseProductEditorInput`, `packages/menu/src/product-editor-input.ts`). The page
 shows the parent's unit beside the price as fixed text, with no unit button or dropdown
 (`renderPrice`, `apps/dashboard/src/widgets/product-editor.ts`). A variant's body may leave its
 price, tax rate and dietary declarations blank, which
 a product with no parent may not; it carries no variants and no extras or options lists of its own;
 and its parent never changes, so a body naming a different `parentId` is refused
-(`saveProductEditor`, `packages/catalogue/src/product-editor.ts`).
+(`saveProductEditor`, `packages/menu/src/product-editor.ts`).
 
 ### Photos
 
@@ -869,7 +869,7 @@ New categories are made on the Products screen (`folders.add_category`,
 ## One save, one transaction
 
 **The course is saved with an active product.** `applyRouting` runs for an active editor result
-inside the same transaction the product write already opened (`apps/server/src/catalogue-api.ts`), so a course id the venue does not have
+inside the same transaction the product write already opened (`apps/server/src/menu-api.ts`), so a course id the venue does not have
 rolls the whole product back, and you can choose a course as you create the product.
 
 The product write body carries `name` (required, plain text), `customerName` (a language map or
@@ -882,7 +882,7 @@ dietary declarations, the required `active` flag and optional save-only `availab
 — each variant carrying `name`, `customerName`, `kitchenName`, `image`, `unitPrice`, `available` and
 a required `active`, plus `id` when it already exists. An active variant sent with `active: false`, or left out of the body, is archived; an already
 archived variant sent inactive or omitted remains unchanged (`writeProductVariants`,
-`packages/catalogue/src/variants.ts`). A customer-facing name whose every entry is blank parses to
+`packages/menu/src/variants.ts`). A customer-facing name whose every entry is blank parses to
 `null`, so "I typed spaces" and "I left it empty" store identically.
 
 A product has two states. **Active / Archived** is its retained state. Archive sets `active: false`
@@ -894,7 +894,7 @@ remain allowed.
 Available switch changed. Omission preserves an existing row; a new row defaults to available. This
 also applies to listed variants and a variant's own-page save. Complete reads and drafts retain booleans.
 Unavailable products remain visible in the dashboard. The till sells a product, or offers it as an extra, only when
-it is both (`applyLiveFields` in `packages/catalogue/src/menu-document.ts` marks it on each
+it is both (`applyLiveFields` in `packages/menu/src/menu-document.ts` marks it on each
 served offer and extras item, and `priceOrderLines` in `apps/server/src/working-order.ts` refuses
 what it marks) —
 except that an edit of a held order may keep a line at or below its quantity although its dish or

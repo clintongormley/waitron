@@ -15,14 +15,14 @@ import {
   units,
   writeContentLanguages,
   writeProductModifiers,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { workingLineContexts } from "@waitron/venue-service";
 import { provisionBillVenue, type BillVenue } from "./testing/bill-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { createOpenOrder, priceOrderLines } from "./working-order.js";
 import { readSettledTicket, recordTillSaleOrchestration, reprintSale } from "./till-sale.js";
-import { resolveTranslationCells } from "@waitron/catalogue/src/content-translation-cells.js";
-import { saveContentTranslations } from "@waitron/catalogue/src/content-translations.js";
+import { resolveTranslationCells } from "@waitron/menu/src/content-translation-cells.js";
+import { saveContentTranslations } from "@waitron/menu/src/content-translations.js";
 import { republishMenus } from "./testing/publish-menu.js";
 
 let venue: BillVenue;

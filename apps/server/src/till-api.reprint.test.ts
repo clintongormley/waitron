@@ -15,7 +15,7 @@ import {
 } from "@waitron/db/testing/seed.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { assignCatalogueToVenue, createCatalogue, createProduct } from "@waitron/catalogue";
+import { assignCatalogueToVenue, createCatalogue, createProduct } from "@waitron/menu";
 import { createPrinter } from "@waitron/printing";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";

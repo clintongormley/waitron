@@ -49,7 +49,7 @@ import {
   createCatalogue,
   createCategory,
   createProduct,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import {
   canonicalize,
   generateNodeKeyPair,

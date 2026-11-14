@@ -6,7 +6,7 @@ import type { Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDeviceProfiles, seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
-import { assignCatalogueToVenue, createCatalogue, createProduct } from "@waitron/catalogue";
+import { assignCatalogueToVenue, createCatalogue, createProduct } from "@waitron/menu";
 import { createPrinter, updatePrinter } from "@waitron/printing";
 import { nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { OriginConfig } from "./trading-context.js";
@@ -84,7 +84,7 @@ const AT_CLOCK = "13:00";
  * Narrower than its name: there is no hook inside `enqueueKitchenTickets`, so the fire parks AFTER
  * it returns, uncommitted. What is observed is the venue file's write queue — a second write
  * transaction does not start while the first is open — not an interleave inside this call path. The
- * mechanism is stated on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
+ * mechanism is stated on `assertExtraListForWrite` (`packages/menu/src/extras.ts`).
  */
 describe("print-on-fire concurrency — the write queue around the mapping read", () => {
   it("a concurrent updatePrinter runs only after the fire commits, and never aborts it", async () => {

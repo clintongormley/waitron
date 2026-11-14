@@ -3,7 +3,7 @@ import { setImmediate as yieldTurn } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
 import { adjustmentLines, adjustments, createAdjustmentReason } from "@waitron/adjustments";
-import { createExtraList, createProduct, writeProductModifiers } from "@waitron/catalogue";
+import { createExtraList, createProduct, writeProductModifiers } from "@waitron/menu";
 import {
   billPaymentLines,
   orderPortionEvents,
@@ -40,7 +40,7 @@ import {
   updateHeldOrder,
   type TabRoundLine,
 } from "./working-order.js";
-import { readDefaultCatalogueId } from "@waitron/catalogue";
+import { readDefaultCatalogueId } from "@waitron/menu";
 
 afterEach(() => yieldTurn());
 

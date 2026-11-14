@@ -33,7 +33,7 @@ export * from "./kitchen-print-job-lines.js";
 export * from "./kitchen-print-jobs.js";
 export * from "./ticket-item-moves.js";
 export * from "./drawer-opens.js";
-export * from "./catalogue.js";
+export * from "./menus.js";
 export * from "./purchase-invoices.js";
 export * from "./device-profiles.js";
 export * from "./device-profile-printers.js";
@@ -64,7 +64,7 @@ export * from "./credentials/index.js";
 export * from "./media/index.js";
 export * from "./handover/index.js";
 export * from "./identity/index.js";
-export * from "./catalogue/index.js";
+export * from "./menu/index.js";
 export * from "./adjustments/index.js";
 export * from "./venue-service/index.js";
 

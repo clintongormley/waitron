@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
+import { createCatalogue, createCategory, createProduct } from "@waitron/menu";
 import {
   captureError,
   CHECK_VIOLATION,

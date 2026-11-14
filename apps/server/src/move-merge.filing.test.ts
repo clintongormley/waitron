@@ -11,8 +11,8 @@ import {
   createCategory,
   createProduct,
   listAvailableProducts,
-} from "@waitron/catalogue";
-import type { AvailableProduct } from "@waitron/catalogue";
+} from "@waitron/menu";
+import type { AvailableProduct } from "@waitron/menu";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";

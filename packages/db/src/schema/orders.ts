@@ -15,7 +15,7 @@ import {
   table,
   tsString,
 } from "./columns.js";
-import { products } from "./catalogue.js";
+import { products } from "./menus.js";
 import { devices } from "./devices.js";
 import { diningTables } from "./dining-tables.js";
 import { kitchenCourses } from "./kitchen-courses.js";

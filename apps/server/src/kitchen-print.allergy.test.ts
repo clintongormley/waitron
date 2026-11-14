@@ -6,8 +6,8 @@ import { kitchenStations, printJobs, withTransaction, workingOrderLines } from "
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setMenuVariants, setProductVariants, updateProduct } from "@waitron/catalogue";
-import type { DietaryLabel, ProductAllergens } from "@waitron/catalogue";
+import { setMenuVariants, setProductVariants, updateProduct } from "@waitron/menu";
+import type { DietaryLabel, ProductAllergens } from "@waitron/menu";
 import { createPrinter } from "@waitron/printing";
 import type { KitchenAllergyBlock } from "@waitron/module";
 import { readBillEditState } from "./bill-editing.js";

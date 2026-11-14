@@ -5,8 +5,8 @@ import type {
   TranslationItem,
   TranslationItemPage,
   TranslationQuery,
-} from "@waitron/catalogue/src/content-translation-types.js";
-import type { ContentSuggestionRead } from "@waitron/catalogue/src/content-suggestion-types.js";
+} from "@waitron/menu/src/content-translation-types.js";
+import type { ContentSuggestionRead } from "@waitron/menu/src/content-suggestion-types.js";
 import { TranslationPages, type TranslationPageApi } from "./content-translations-pages.js";
 
 const config = { defaultLanguage: "en", languages: ["en", "es", "fr"] };

@@ -10,9 +10,9 @@ import {
   fixedLanguages,
   parseMenuPatch,
   patchFieldValue,
-} from "@waitron/catalogue/src/menu-patch.js";
-import type { MenuPatchChange, MenuPatchTarget } from "@waitron/catalogue/src/menu-patch-types.js";
-import { mergeOptionalTranslations } from "@waitron/catalogue/src/optional-translations.js";
+} from "@waitron/menu/src/menu-patch.js";
+import type { MenuPatchChange, MenuPatchTarget } from "@waitron/menu/src/menu-patch-types.js";
+import { mergeOptionalTranslations } from "@waitron/menu/src/optional-translations.js";
 
 /** `target` is null only for the group holding the extras and options lists. */
 export interface PatchTreeNode {

@@ -7,7 +7,7 @@ import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js"
  * What serialises overlapping writers is the venue file's write queue
  * (`packages/store/src/write-queue.ts`), so the last case shows the queue serialising them. The
  * receipt for the queue itself, with a control in the other direction, is `racePair` in
- * `packages/catalogue/test/fixtures.ts`.
+ * `packages/menu/test/fixtures.ts`.
  *
  * The suite runs with `resetPerTest: false`, so `order_amendments` only grows across tests: each
  * test seeds its OWN working order and scopes its reads to that order's id.

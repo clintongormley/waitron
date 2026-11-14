@@ -12,10 +12,10 @@ import {
   type SuggestionJobRow,
   type SuggestionPage,
   type TranslationContext,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import type { CloudConnection } from "./cloud-client.js";
 import type { CloudReason } from "./cloud-translation.js";
-import "@waitron/catalogue/src/errors.js";
+import "@waitron/menu/src/errors.js";
 import "./errors.js";
 
 export type RunnerStep = "idle" | "wait" | "again";

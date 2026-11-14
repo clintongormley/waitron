@@ -27,7 +27,7 @@ import {
   createProduct,
   createCatalogue,
   assignCatalogueToVenue,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { readBillEditState } from "./bill-editing.js";
 import { submitGroups } from "./order-groups.js";
 import {

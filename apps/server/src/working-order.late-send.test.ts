@@ -14,7 +14,7 @@ import {
   setProductVariants,
   updateProduct,
   writeProductModifiers,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import type { ExtraSelection } from "@waitron/shared";
 import {
   createServiceZone,

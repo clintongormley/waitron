@@ -20,7 +20,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { VenueRequest } from "@waitron/provisioning";
 import { isAppError } from "@waitron/shared";
 import { parseModuleConfig } from "@waitron/module";
-import { createCategory } from "@waitron/catalogue";
+import { createCategory } from "@waitron/menu";
 import {
   createDepartment,
   addFloorPlanSet,

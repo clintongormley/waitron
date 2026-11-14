@@ -7,7 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./schema/adjustments.js": "./src/schema/adjustments/index.ts",
-    "./schema/catalogue.js": "./src/schema/catalogue/index.ts",
+    "./schema/menu.js": "./src/schema/menu/index.ts",
     "./schema/credentials.js": "./src/schema/credentials/index.ts",
     "./schema/handover.js": "./src/schema/handover/index.ts",
     "./schema/identity.js": "./src/schema/identity/index.ts",

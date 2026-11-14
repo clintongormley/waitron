@@ -36,8 +36,8 @@ import {
   readContentLanguages,
   updateProduct,
   writeProductModifiers,
-} from "@waitron/catalogue";
-import type { AvailableProduct } from "@waitron/catalogue";
+} from "@waitron/menu";
+import type { AvailableProduct } from "@waitron/menu";
 import { VerifactuBackend, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin, loginWithPin, readPersonAuthority } from "@waitron/identity";

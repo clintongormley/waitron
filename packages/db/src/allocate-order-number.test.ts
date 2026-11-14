@@ -88,7 +88,7 @@ const WRITERS = 20;
  * What the overlapping calls below test is that the venue file's WRITE QUEUE serialises them:
  * `withTransaction` runs each body inside `db.withWriteLock`, so the next caller's transaction does
  * not begin until the previous one has committed. The receipt for the queue itself, with a control
- * in the other direction, is `racePair` in `packages/catalogue/test/fixtures.ts`.
+ * in the other direction, is `racePair` in `packages/menu/test/fixtures.ts`.
  */
 describe("allocateOrderNumber under overlapping callers", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });

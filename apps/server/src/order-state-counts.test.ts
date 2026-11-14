@@ -27,7 +27,7 @@ import {
   setProductVariants,
   units,
   writeProductModifiers,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import {
   advanceTicketItem,
   listHeldOrders,

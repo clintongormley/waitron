@@ -160,7 +160,7 @@ const STATE_AFTER: Record<LiveEntryKind, ShiftState> = {
  * Every clock method refuses an illegal transition (`attendance.*`) BEFORE appending: `out →in→
  * working →break_start→ on_break →break_end→ working →out→ out`. Nothing can land between the state
  * read and the append because one write transaction runs on the venue file at a time
- * (`assertExtraListForWrite`, `packages/catalogue/src/extras.ts`).
+ * (`assertExtraListForWrite`, `packages/menu/src/extras.ts`).
  */
 export class WorkforceBackend {
   async clockIn(tx: Transaction, input: ClockEventInput): Promise<void> {

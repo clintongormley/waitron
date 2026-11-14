@@ -1,4 +1,4 @@
-import { unitPresentation } from "@waitron/catalogue/src/unit-presentation.js";
+import { unitPresentation } from "@waitron/menu/src/unit-presentation.js";
 import { sameValue } from "./product-editor-model.js";
 import {
   draftScopeFor,
@@ -13,9 +13,9 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { baseStyles, submitOnEnter } from "@waitron/ui";
-import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
-import { priceForExtraPortion } from "@waitron/catalogue/src/extra-contract.js";
-import { assertQuantityPrecision, EACH_UNIT_ID } from "@waitron/catalogue/src/unit-validation.js";
+import { isProductPrice } from "@waitron/menu/src/modifier-limits.js";
+import { priceForExtraPortion } from "@waitron/menu/src/extra-contract.js";
+import { assertQuantityPrecision, EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 import { decimal, toScale, type ContentLanguages } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -347,7 +347,7 @@ export class ExtraListForm extends LitElement {
   }
 
   /** The server refuses a list naming a product with an Active variant, Available or not
-   * (`assertNoParentsWithVariants`, packages/catalogue/src/extras.ts). */
+   * (`assertNoParentsWithVariants`, packages/menu/src/extras.ts). */
   #hasActiveVariant(productId: string): boolean {
     return this.#productById.get(productId)?.variants.some((variant) => variant.active) ?? false;
   }
@@ -532,7 +532,7 @@ export class ExtraListForm extends LitElement {
     this.#editItems(() => {
       // An item is given its id HERE, not by the server. `writeItems` deletes every item of the
       // list and re-inserts the body's under `item.id ?? randomUUID()`
-      // (packages/catalogue/src/extras.ts), so a row keeps its identity across a save only because
+      // (packages/menu/src/extras.ts), so a row keeps its identity across a save only because
       // the body carried an id for it.
       const item: DraftItem = {
         id: crypto.randomUUID(),

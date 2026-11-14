@@ -1,7 +1,7 @@
 import { formatMoney, type ContentLanguages } from "@waitron/shared";
 import type { MenuDocument } from "@waitron/shared";
-import { fixedLanguages, patchFieldValue } from "@waitron/catalogue/src/menu-patch.js";
-import type { MenuPatchChange } from "@waitron/catalogue/src/menu-patch-types.js";
+import { fixedLanguages, patchFieldValue } from "@waitron/menu/src/menu-patch.js";
+import type { MenuPatchChange } from "@waitron/menu/src/menu-patch-types.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { vatClassName } from "../i18n/domain.js";
 import { conjunctionList } from "../i18n/list.js";

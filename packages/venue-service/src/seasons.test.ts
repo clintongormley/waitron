@@ -8,7 +8,7 @@ import {
   createCatalogue,
   menuDocumentHash,
   publishMenu,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   departmentDays,

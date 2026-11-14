@@ -26,7 +26,7 @@ import {
   updateOptionList,
   updateProduct,
   writeProductModifiers,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import {
   departments,
   menuPeriods,

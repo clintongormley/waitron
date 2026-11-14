@@ -48,7 +48,7 @@ export interface ChainHead {
 /**
  * No lock: the position read here is used several statements later, and nothing can append in
  * between because one write transaction runs on the venue file at a time
- * (`assertExtraListForWrite`, `packages/catalogue/src/extras.ts`). The chain's safety against a fork
+ * (`assertExtraListForWrite`, `packages/menu/src/extras.ts`). The chain's safety against a fork
  * is `time_entries_chain_position_uq`, not this.
  */
 async function selectHead(tx: Transaction, key: ChainKey): Promise<ChainHead | undefined> {

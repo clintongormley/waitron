@@ -9,7 +9,7 @@ import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
-import { catalogues, products } from "./catalogue.js";
+import { catalogues, products } from "./menus.js";
 import { kitchenCourses } from "./kitchen-courses.js";
 
 const RANDOM_UUID = "99999999-9999-4999-8999-999999999999";

@@ -31,7 +31,7 @@ import {
   createProduct,
   createUnit,
   writeProductModifiers,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin, loginWithPin, startManagementSession } from "@waitron/identity";

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { workingOrders } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { addProductToMenu, createCatalogue, createProduct } from "@waitron/catalogue";
+import { addProductToMenu, createCatalogue, createProduct } from "@waitron/menu";
 import {
   createServiceZone,
   replaceMenuWeek,

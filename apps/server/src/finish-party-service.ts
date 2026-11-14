@@ -9,7 +9,7 @@ import {
   type Transaction,
   type DeferredClosurePartyBlocker,
 } from "@waitron/db";
-import { staffPresentationName } from "@waitron/catalogue";
+import { staffPresentationName } from "@waitron/menu";
 import { AppError, thousandthsToDecimal, type ErrorCode } from "@waitron/shared";
 import {
   orderedCancellationContext,

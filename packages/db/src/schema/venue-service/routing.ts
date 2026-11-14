@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { categories, products } from "../catalogue.js";
+import { categories, products } from "../menus.js";
 import { flag, id, newId, table } from "../columns.js";
 import { floorZones } from "../floor-zones.js";
 import { kitchenStations } from "../kitchen-stations.js";

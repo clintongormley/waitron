@@ -15,7 +15,7 @@ import {
   menuItems,
   readLiveDocuments,
   documentOffers,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { computeDailyClose } from "@waitron/reporting";
 import {
   compareDecimal,

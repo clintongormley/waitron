@@ -8,7 +8,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { invoiceSeries, stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { createCatalogue, createProduct } from "@waitron/catalogue";
+import { createCatalogue, createProduct } from "@waitron/menu";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";

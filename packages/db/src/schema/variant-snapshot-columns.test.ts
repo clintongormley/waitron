@@ -9,7 +9,7 @@ import { VARIANT_LOCALES_REFUSAL } from "../trigger-refusals.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
-import { catalogues, products } from "./catalogue.js";
+import { catalogues, products } from "./menus.js";
 import { workingOrderLines } from "./orders.js";
 
 /** An order opened from the dashboard, needing no device. */

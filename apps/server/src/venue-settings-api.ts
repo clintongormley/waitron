@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { readCatalogueSettings, saveCatalogueSettings } from "@waitron/catalogue";
+import { readCatalogueSettings, saveCatalogueSettings } from "@waitron/menu";
 import {
   readVenue,
   saveVenueFields,

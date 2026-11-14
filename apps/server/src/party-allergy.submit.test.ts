@@ -25,7 +25,7 @@ import {
   createExtraList,
   assignCatalogueToVenue,
   writeProductModifiers,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { saveDraftForTest } from "./testing/draft-command-fixture.js";

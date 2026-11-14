@@ -32,7 +32,7 @@ import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-slider.js";
 import { PATH_SEPARATOR } from "../widgets/category-form.js";
-import { foldName } from "@waitron/catalogue/src/name-uniqueness.js";
+import { foldName } from "@waitron/menu/src/name-uniqueness.js";
 import { memberName } from "../widgets/member-names.js";
 import "../widgets/menu-structure-table.js";
 import {
@@ -78,7 +78,7 @@ import type {
 } from "../api/client.js";
 import { MenuReadController } from "../api/menu-read-controller.js";
 import { sendMenuUndo, undoRefusalText } from "../api/menu-undo.js";
-import { menuChangeAction } from "@waitron/catalogue/src/menu-undo.js";
+import { menuChangeAction } from "@waitron/menu/src/menu-undo.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { HOME_COLUMN_RANGE, HOME_DEVICES, HOME_ORDERS, HOME_TILE_MODES } from "@waitron/shared";
 import { dashboardPath, leftToBrowser } from "../navigation.js";

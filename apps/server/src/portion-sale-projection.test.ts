@@ -13,7 +13,7 @@ import {
   writeProductModifiers,
   type LockedLine,
   type VatClass,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { createAdjustmentReason } from "@waitron/adjustments";
 import { withTransaction, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";

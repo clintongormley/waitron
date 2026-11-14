@@ -17,7 +17,7 @@ import { ensureDefaultSeasons } from "./seasons.js";
 import { addStarterServiceSteps } from "./service-steps.js";
 import { STARTER_COURSE_NAMES, STARTER_ZONE_NAMES } from "./starter-content.js";
 import { readStarterStaffLanguage } from "./starter-language.js";
-import { readDefaultCatalogueId } from "@waitron/catalogue";
+import { readDefaultCatalogueId } from "@waitron/menu";
 
 export const COUNTER_ZONE_NAME = "Counter";
 

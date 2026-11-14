@@ -15,7 +15,7 @@ import type { Alert } from "@waitron/module";
 import type {
   TranslationCell,
   TranslationItemPage,
-} from "@waitron/catalogue/src/content-translation-types.js";
+} from "@waitron/menu/src/content-translation-types.js";
 import { AppError, jobOrigin } from "@waitron/shared";
 import type { StartedServer } from "./boot.js";
 import type { BoxHostClient } from "./box-host-client.js";

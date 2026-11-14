@@ -1,5 +1,5 @@
-import { localCalendarDate, rateLines } from "@waitron/catalogue";
-import type { GrossLines, PricedLines } from "@waitron/catalogue";
+import { localCalendarDate, rateLines } from "@waitron/menu";
+import type { GrossLines, PricedLines } from "@waitron/menu";
 import type { FiscalBackend, TrustedClock, TrustedReading } from "@waitron/fiscal";
 
 /** An invoice's lines at the rates of the day it is issued, and the clock that issues it. */

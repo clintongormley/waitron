@@ -8,12 +8,12 @@ import {
   type TranslationItemPage,
   type TranslationQuery,
   type TranslationRef,
-} from "@waitron/catalogue/src/content-translation-types.js";
+} from "@waitron/menu/src/content-translation-types.js";
 import { TRANSLATION_GAP_KINDS } from "@waitron/shared";
 import type {
   ContentSuggestionQuery,
   ContentSuggestionRead,
-} from "@waitron/catalogue/src/content-suggestion-types.js";
+} from "@waitron/menu/src/content-suggestion-types.js";
 import { TranslationDrafts } from "./content-translations-model.js";
 import { sameValue } from "./product-editor-model.js";
 import { languageWindow } from "./content-translations-window.js";

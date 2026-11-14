@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { validateImageBytes } from "@waitron/catalogue";
+import { validateImageBytes } from "@waitron/menu";
 
 /** The name a stored photo goes by: the sha256 of its bytes plus the extension sniffed from them. */
 export function imageFilename(bytes: Uint8Array): string {

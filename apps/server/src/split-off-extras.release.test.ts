@@ -23,7 +23,7 @@ import { fireGroup, fireHeldLine, readCurrentOrders, readHeldCounts } from "./or
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";
-import { updateProduct } from "@waitron/catalogue";
+import { updateProduct } from "@waitron/menu";
 import { offerProducts } from "./testing/zone-offers.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 

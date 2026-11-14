@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { writeContentLanguages } from "@waitron/catalogue";
+import { writeContentLanguages } from "@waitron/menu";
 import { readKitchenLanguage } from "./kitchen-language.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });

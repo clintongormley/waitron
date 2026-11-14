@@ -388,7 +388,7 @@ export async function seedSubstitution(
 
 /**
  * Fires ONE line onto an EXISTING working order — a throwaway catalogue + product (this package
- * takes no dependency on `@waitron/catalogue`), a `working_order_lines` row, and its `ticket_items`
+ * takes no dependency on `@waitron/menu`), a `working_order_lines` row, and its `ticket_items`
  * row with `queued_at` backdated by `opts.ageMinutes`. Split out from {@link seedFiredOrder} so a
  * test can add a SECOND line to one order.
  */

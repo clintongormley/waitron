@@ -18,7 +18,7 @@ import { profileAllows, readPrinterEquipment, readPrinterRoles } from "@waitron/
 import type { ProfilePrinterRole } from "@waitron/layouts";
 import { readKitchenLanguage } from "./kitchen-language.js";
 import { formatOrderNumberSlip } from "./order-number-slip.js";
-import { readReceiptLanguage } from "@waitron/catalogue";
+import { readReceiptLanguage } from "@waitron/menu";
 import { resolveReceiptTrim } from "@waitron/shared";
 import type { Origin } from "@waitron/shared";
 import { AppError } from "@waitron/shared";

@@ -1,4 +1,4 @@
-import type { AllergenCode } from "@waitron/catalogue";
+import type { AllergenCode } from "@waitron/menu";
 
 export const KITCHEN_ALLERGY_WORDS = {
   en: {

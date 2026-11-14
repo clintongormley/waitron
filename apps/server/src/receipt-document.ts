@@ -1,4 +1,4 @@
-import { customerOptionSnapshotLabels } from "@waitron/catalogue";
+import { customerOptionSnapshotLabels } from "@waitron/menu";
 import type { ReceiptLabels } from "@waitron/country";
 import {
   recipientIdentifierLabel,

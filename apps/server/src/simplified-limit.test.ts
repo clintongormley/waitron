@@ -18,7 +18,7 @@ import {
   createCatalogue,
   createCategory,
   createProduct,
-} from "@waitron/catalogue";
+} from "@waitron/menu";
 import { writePartyAllergy } from "@waitron/venue-service";
 import type { Logger } from "./logger.js";
 import { createTable } from "./testing/live-table.js";

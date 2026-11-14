@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Decimal } from "@waitron/shared";
-import { combineOffer } from "@waitron/catalogue/src/menu-combine.js";
+import { combineOffer } from "@waitron/menu/src/menu-combine.js";
 import type { MenuPriceRow, Setting } from "../api/client.js";
 import {
   followsClash,
