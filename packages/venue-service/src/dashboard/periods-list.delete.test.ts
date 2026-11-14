@@ -298,18 +298,14 @@ it("ignores an impact read that answers after a newer one, and keeps the shown i
   await impactShown(dialog);
   expect(body(dialog)).toContain("Painted in 1 season.");
   el.api.rereadWatches();
-  await expect.poll(() => answers.length).toBeGreaterThanOrEqual(2);
-  await new Promise((done) => setTimeout(done, 50));
-  expect(answers.length, "one page re-read, one impact read").toBe(2);
+  await expect.poll(() => answers.length).toBe(3);
   el.api.rereadWatches();
-  await expect.poll(() => answers.length).toBeGreaterThanOrEqual(3);
-  await new Promise((done) => setTimeout(done, 50));
-  expect(answers.length, "one page re-read, one impact read").toBe(3);
+  await expect.poll(() => answers.length).toBe(5);
   await dialog.updateComplete;
   expect(body(dialog)).toContain("Painted in 1 season.");
-  answers[2]!(impactOf({ seasons: 3 }));
+  answers[4]!(impactOf({ seasons: 3 }));
   await expect.poll(() => body(dialog)).toContain("Painted in 3 seasons.");
-  answers[1]!(impactOf({ seasons: 2 }));
+  for (const answer of answers.slice(1, 4)) answer(impactOf({ seasons: 2 }));
   await new Promise((done) => setTimeout(done, 0));
   await dialog.updateComplete;
   expect(body(dialog)).toContain("Painted in 3 seasons.");
@@ -550,17 +546,18 @@ it("an impact read already on its way when a changed-clock refusal arrives does 
   const { el, dialog, sent, answers, shown } = await clockScreen(server);
   server.hold = true;
   el.api.rereadWatches();
-  await expect.poll(() => answers.length).toBe(1);
+  await expect.poll(() => answers.length).toBe(2);
   const before = shown();
   server.revision = 4;
   confirm(dialog).click();
   await waitingForImpact(dialog);
-  await expect.poll(() => answers.length).toBe(2);
+  await expect.poll(() => answers.length).toBe(3);
   answers[0]!(before);
+  answers[1]!(before);
   await new Promise((done) => setTimeout(done, 20));
   await dialog.updateComplete;
   expect(confirm(dialog).disabled, "the older answer is ignored").toBe(true);
-  answers[1]!(shown());
+  answers[2]!(shown());
   await expect.poll(() => confirm(dialog).disabled).toBe(false);
   confirm(dialog).click();
   await expect
@@ -593,17 +590,48 @@ it("reads the impact actively for Delete… and Retry, and passively when a live
   expect(reads).toEqual(["active"]);
 
   el.api.rereadWatches();
-  await expect.poll(() => reads).toEqual(["active", "passive"]);
+  await expect.poll(() => reads).toEqual(["active", "passive", "passive"]);
 
   confirm(dialog).click();
-  await expect.poll(() => reads).toEqual(["active", "passive", "passive"]);
+  await expect.poll(() => reads).toEqual(["active", "passive", "passive", "passive"]);
 
   fail = true;
   el.api.rereadWatches();
   await expect.poll(() => retry(dialog)).not.toBeNull();
   fail = false;
   retry(dialog)!.click();
-  await expect.poll(() => reads).toEqual(["active", "passive", "passive", "passive", "active"]);
+  await expect
+    .poll(() => reads)
+    .toEqual(["active", "passive", "passive", "passive", "passive", "passive", "active"]);
+});
+
+it("refreshes deletion counts when a later Painted in answer follows an earlier impact", async () => {
+  let holdPainted = false;
+  let releasePainted!: () => void;
+  let seasons = 0;
+  const base = fake({ impact: () => impactOf({ seasons }) });
+  const request = (async (path, method, data, options) => {
+    if (path === PAINTED_IN && holdPainted) {
+      await new Promise<void>((done) => {
+        releasePainted = done;
+      });
+      return [{ periodId: "p1", seasons: [{ id: "winter", name: "Winter" }], specialDays: [] }];
+    }
+    return base(path, method, data, options);
+  }) as DashboardRequest;
+  const el = await mount(request);
+  const dialog = await removePeriod(el);
+  await impactShown(dialog);
+  holdPainted = true;
+  seasons = 1;
+  el.api.rereadWatches();
+  await expect.poll(() => body(dialog)).toContain("Painted in 1 season.");
+  seasons = 2;
+  releasePainted();
+  await expect
+    .poll(() => table(el)!.shadowRoot!.querySelector("[data-painted-in]")?.textContent?.trim())
+    .toBe("Winter");
+  await expect.poll(() => body(dialog)).toContain("Painted in 2 seasons.");
 });
 
 it("with live data, reads the impact again when a day range it counts changes, and not on a change the impact does not read", async () => {
@@ -627,23 +655,24 @@ it("with live data, reads the impact again when a day range it counts changes, a
   expect(reads).toBe(1);
 
   liveData.invalidate([{ type: "department_day_ranges" }]);
-  await expect.poll(() => body(dialog)).toContain("Painted in 2 seasons.");
-  expect(reads).toBe(2);
+  await expect.poll(() => body(dialog)).toContain("Painted in 3 seasons.");
+  expect(reads).toBe(3);
 });
 
 it("with live data, an impact answer that arrives while the list is detached is shown once it is back, and Delete sends its revision", async () => {
   const liveData = new LiveData();
   const sent: unknown[] = [];
   let reads = 0;
+  let currentImpact = impactOf({ clockRevision: 3 });
   let held!: (impact: PeriodDeleteImpact) => void;
   const request = fake({
     impact: () => {
       reads++;
-      return reads === 2
+      return reads === 3
         ? new Promise<PeriodDeleteImpact>((done) => {
             held = done;
           })
-        : impactOf({ clockRevision: 3 });
+        : currentImpact;
     },
     write: (_path, _method, body) => {
       sent.push((body as { expectedClockRevision: number }).expectedClockRevision);
@@ -668,14 +697,15 @@ it("with live data, an impact answer that arrives while the list is detached is 
   const dialog = await removePeriod(el);
   await impactShown(dialog);
   liveData.invalidate([{ type: "department_day_ranges" }]);
-  await expect.poll(() => reads).toBe(2);
+  await expect.poll(() => reads).toBe(3);
   el.remove();
-  held(impactOf({ seasons: 2, clockRevision: 4 }));
+  currentImpact = impactOf({ seasons: 2, clockRevision: 4 });
+  held(currentImpact);
   await new Promise((done) => setTimeout(done, 0));
   document.body.append(el);
   await expect.poll(() => body(dialog)).toContain("Painted in 2 seasons.");
   await new Promise((done) => setTimeout(done, 50));
-  expect(reads, "the models kept while detached are older than that answer").toBe(2);
+  expect(reads, "both reattached watches refresh the impact").toBe(5);
   confirm(dialog).click();
   await expect.poll(() => sent).toEqual([4]);
   await expect.poll(() => deleteDialog(el)).toBeNull();

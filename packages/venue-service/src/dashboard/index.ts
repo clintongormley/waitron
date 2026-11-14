@@ -11,6 +11,7 @@ import { VENUE_SERVICE_STRINGS } from "./strings.js";
 import "./venue-operations-screen.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import "./opening-hours-screen.js";
+import "./periods-list.js";
 import "./floor-plans-screen.js";
 
 export const VENUE_SERVICE_DASHBOARD: DashboardContribution & DashboardFurtherScreen = {
@@ -134,6 +135,23 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution & DashboardFurtherSc
               .readOnly=${readOnly}
               .calendar=${calendar}
             ></dashboard-opening-hours-screen>`,
+        };
+      },
+    },
+    {
+      screen: {
+        id: "periods",
+        navLabelKey: "period.title",
+        group: "operations",
+        order: 17,
+        requiresPermission: "venue.configure",
+        readPermission: "venue.view",
+      },
+      create(ctx) {
+        const api = new OpeningHoursApi(ctx.request, ctx.liveData);
+        return {
+          render: (readOnly = false) =>
+            html`<periods-list .api=${api} .readOnly=${readOnly}></periods-list>`,
         };
       },
     },

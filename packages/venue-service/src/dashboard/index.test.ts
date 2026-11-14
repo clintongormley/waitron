@@ -246,7 +246,9 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
     );
     history.replaceState(null, "", "/manage/opening-hours/view/year");
     const liveData = new LiveData();
-    const timetable = VENUE_SERVICE_DASHBOARD.moreScreens!.at(-1)!;
+    const timetable = VENUE_SERVICE_DASHBOARD.moreScreens!.find(
+      (entry) => entry.screen.id === "opening-hours",
+    )!;
     expect(timetable.screen).toEqual({
       id: "opening-hours",
       navLabelKey: "nav.calendar",
@@ -325,7 +327,7 @@ it("registers Floor plans in Operations, configured with venue.configure and rea
   expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
 });
 
-it("the Calendar's Periods window is read-only for a viewer and editable for a manager", async () => {
+it("the Periods page is read-only for a viewer and editable for a manager", async () => {
   const model = {
     dayCutover: "06:00",
     clockRevision: 0,
@@ -333,20 +335,6 @@ it("the Calendar's Periods window is read-only for a viewer and editable for a m
     seasons: [],
     departments: [{ id: "d1", name: "Restaurant", active: true, periods: [] }],
   };
-  const yearRead = (year: number) => ({
-    businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
-    clockRevision: 0,
-    currentBusinessDay: `${year}-10-07`,
-    pending: null,
-    year,
-    timeZone: "Europe/Madrid",
-    today: `${year}-10-07`,
-    seasons: [],
-    days: [],
-    publicHolidaysAvailable: true,
-    holidayCoverage: [],
-    area: { addressKey: "fixture", readiness: "ready", options: [], required: false, chosen: null },
-  });
   const fetchImpl = vi.fn((path: string) =>
     Promise.resolve({
       ok: true,
@@ -359,14 +347,13 @@ it("the Calendar's Periods window is read-only for a viewer and editable for a m
             ? []
             : path.endsWith("/floor-plan-sets/period-choices")
               ? { departments: [] }
-              : path.includes("/opening-hours/year?")
-                ? yearRead(Number(new URL(path, location.href).searchParams.get("year")))
-                : model,
+              : model,
         ),
     } as Response),
   );
-  history.replaceState(null, "", "/manage/opening-hours/view/year/window/periods");
-  const entry = VENUE_SERVICE_DASHBOARD.moreScreens!.find((x) => x.screen.id === "opening-hours")!;
+  history.replaceState(null, "", "/manage/periods");
+  const entry = VENUE_SERVICE_DASHBOARD.moreScreens!.find((x) => x.screen.id === "periods")!;
+  expect(entry, "module contributes the Periods page").toBeDefined();
   const liveData = new LiveData();
   const handle = entry.create({
     request: createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
@@ -376,18 +363,13 @@ it("the Calendar's Periods window is read-only for a viewer and editable for a m
   document.body.append(container);
   containers.push(container);
   render(handle.render(true), container);
-  const calendar = container.querySelector<OpeningHoursScreen>("dashboard-opening-hours-screen")!;
-  const list = () =>
-    calendar.shadowRoot!.querySelector<PeriodsList>(
-      "[data-test=calendar-window][data-window=periods] periods-list",
-    );
+  const list = () => container.querySelector<PeriodsList>("periods-list");
   await vi.waitFor(() => expect(list()).not.toBeNull());
   expect(list()!.readOnly).toBe(true);
   expect(list()!.api.liveData).toBe(liveData);
   await vi.waitFor(() => expect(list()!.shadowRoot!.querySelector("wt-data-table")).not.toBeNull());
   expect(list()!.shadowRoot!.querySelector("[data-test=add-period]")).toBeNull();
   render(handle.render(false), container);
-  await calendar.updateComplete;
   await list()!.updateComplete;
   expect(list()!.readOnly).toBe(false);
   expect(list()!.shadowRoot!.querySelector("[data-test=add-period]")).not.toBeNull();
@@ -403,6 +385,7 @@ it("registers Opening hours without a separate Station hours page", () => {
     "prep-stations",
     "floor-plans",
     "opening-hours",
+    "periods",
   ]);
   expect(customElements.get("dashboard-hours-screen")).toBeUndefined();
 });
@@ -498,6 +481,7 @@ it("A725 puts Prep stations immediately after Departments and zones, before Cale
     "prep-stations",
     "floor-plans",
     "opening-hours",
+    "periods",
   ]);
 });
 

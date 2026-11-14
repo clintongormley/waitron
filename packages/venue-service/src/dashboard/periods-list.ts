@@ -30,8 +30,6 @@ type Deletion = {
   period: Period;
   /** The latest impact read; an answer to an earlier one is ignored. */
   generation: number;
-  /** The latest impact read started after every watch read numbered below this. */
-  readAfter: number;
   /** The delete sends this impact's clock revision. */
   impact?: PeriodDeleteImpact;
   readError: string;
@@ -164,7 +162,7 @@ export class PeriodsList extends LitElement {
       (rows) => {
         this.painted = new Map(rows.map(({ periodId, ...painted }) => [periodId, painted]));
         this.paintedInError = "";
-        this.rereadImpact(rows);
+        this.rereadImpact();
       },
       () => {
         this.paintedInError = t("period.painted_in_error");
@@ -393,22 +391,16 @@ export class PeriodsList extends LitElement {
       return;
     }
     deletion.period = period;
-    this.rereadImpact(this.model!);
+    this.rereadImpact();
   }
-  /** Reads the impact again unless the latest impact read started after the watch read that
-   *  produced `read`, so both watches answering one page re-read cost one impact read. */
-  private rereadImpact(read: object) {
-    const deletion = this.deleting;
-    if (!deletion) return;
-    const number = this.api.readNumberOf(read);
-    if (number !== undefined && number < deletion.readAfter) return;
-    void this.readImpact(deletion, true);
+  private rereadImpact() {
+    if (this.deleting) void this.readImpact(this.deleting, true);
   }
 
   private askDelete(period: Period) {
     if (this.readOnly || !this.isConnected || !this.model || this.deleting || this.periods.editing)
       return;
-    const deletion: Deletion = { period, generation: 0, readAfter: 0, readError: "", busy: false };
+    const deletion: Deletion = { period, generation: 0, readError: "", busy: false };
     this.deleting = deletion;
     void this.readImpact(deletion);
   }
@@ -416,7 +408,6 @@ export class PeriodsList extends LitElement {
   /** `automatic` for a read the person did not start, which is passive session activity. */
   private async readImpact(deletion: Deletion, automatic = false) {
     const generation = ++deletion.generation;
-    deletion.readAfter = this.api.nextReadNumber();
     const current = () => this.deleting === deletion && deletion.generation === generation;
     let impact: PeriodDeleteImpact;
     try {
