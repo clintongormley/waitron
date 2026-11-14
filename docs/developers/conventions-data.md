@@ -1532,7 +1532,8 @@ start serves the recovery page at once, with no count of failed starts (`refused
 classifications. It records missing trigger names before migrating, installs missing pairs on those
 retained tables, and includes them in the startup check and trading watch. It does not migrate an
 Off module or create its absent tables. `boot.failed-start.test.ts` checks all three retained
-Payments tables with populated rows, the warning, changed-trigger refusal and an unchanged journal;
+Payments tables with populated rows, the warning, changed-trigger refusal and unchanged entries in an already-current journal;
+that last assertion does not establish whether the set was passed to the migrator.
 `boot.restore.test.ts` checks a dropped Payments-Off trigger during trading, and
 `boot.payments-off-alerts.test.ts` checks a never-installed Payments set stays absent. The installer
 and stored-text comparison retain the limits above.

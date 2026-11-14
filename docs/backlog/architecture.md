@@ -7,10 +7,10 @@ their full text.
 
 - **A646 — OPEN; DESIGN APPROVED (owner, 2026-10-17 00:05, watcher window).**
   Agreement receipt: `~/waitron-campaign-f/archive/questions-to-2026-10-23.md:1169`.
-  [Plan](../superpowers/plans/2026-11-11-a646-modules-and-card-providers.md), Claude-read and cleared by the watcher on 2026-11-11. Modules lists optional modules and hosts provider configuration windows; Card payments links to all card providers. Administrators can turn card providers on or off after removing their readers; credentials remain available for earlier-payment recovery. Bookings can be switched on or off with a separate administrator restart; the failed-start recovery page can switch it off with an active administrator's password. Workforce-es and Payments switches remain to build; workforce and staffing stay mandatory under A1002. The [remaining-switches plan](../superpowers/plans/2026-11-14-a646-remaining-module-switches.md) was read by Claude and cleared by the watcher on 2026-11-14 at14:22; A646 stays OPEN.
+  [Plan](../superpowers/plans/2026-11-11-a646-modules-and-card-providers.md), Claude-read and cleared by the watcher on 2026-11-11. Modules lists optional modules and hosts provider configuration windows; Card payments links to all card providers. Administrators can turn card providers on or off after removing their readers; credentials remain available for earlier-payment recovery. Bookings can be switched on or off with a separate administrator restart; the failed-start recovery page can switch it off with an active administrator's password. Workforce-es and Payments switches remain to build; workforce and staffing stay mandatory under A1002. The [remaining-switches plan](../superpowers/plans/2026-11-14-a646-remaining-module-switches.md) was read by Claude and cleared by the watcher on 2026-11-14 at 14:22; A646 stays OPEN.
   [Design](../superpowers/specs/2026-10-16-a646-modules-page-design.md) and
   static mockups (removed from the repository on 2026-11-02). The
-  [switched-off modules' append-only protection](#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked)
+  [switched-off modules' append-only protection](#unselected-fiscal-modules-append-only-tables-are-neither-re-protected-nor-checked)
   stays OPEN for unselected fiscal modules; retained optional-module tables are protected. Bookings owns no append-only table and has its own set.
   **Owner, 2026-11-11: Google sign-in leaves A646** ("Move google signin to the backlog, with the
   intention of doing it with a single key via waitron, but this is definitely not a go live
@@ -198,7 +198,7 @@ behaviour — the drain deliberately collects the rows an orphaned writer left �
 decision, not a cleanup. **Next action:** decide whether a read-only body should take the lock at
 all.
 
-## A switched-off module's append-only tables are neither re-protected nor checked
+## Unselected fiscal modules' append-only tables are neither re-protected nor checked
 
 **Left open by A483: unselected provision-only fiscal modules.** Boot repairs missing triggers,
 refuses changed definitions and watches existing tables declared append-only by toggleable modules,
@@ -615,7 +615,7 @@ reset and operator gates; this entry does not start that job.
 
 OPEN.
 
-- [Switched-off modules' append-only protection](#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked).
+- [Switched-off modules' append-only protection](#unselected-fiscal-modules-append-only-tables-are-neither-re-protected-nor-checked).
 - **Putting back a changed append-only trigger is a hand-typed command.** Retry cannot clear
   `append_only.triggers_changed` for a changed trigger; the installer runs the `node -e` drop in
   `deploy/README.md` (_When the page names `append_only.triggers_changed`_) and then presses

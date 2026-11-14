@@ -1257,7 +1257,7 @@ describe("append-only triggers at boot", () => {
 describe("retained optional append-only tables at boot", () => {
   const tables = ["payment_resolutions", "payment_holds", "payment_hold_outcomes"];
 
-  it("repairs Payments-Off triggers, warns, and preserves the rows and dormant journal", async () => {
+  it("repairs Payments-Off triggers, warns, and preserves rows and existing journal entries", async () => {
     const venueDir = await seededVenueDir();
     const state = await stateDir({ "fiscal-none": false, payments: false }, { leaf: true });
     tamper(
@@ -1267,8 +1267,8 @@ describe("retained optional append-only tables at boot", () => {
         values ('retained-order', 'operator_script', 1, '2026-11-14T10:00:00.000Z');
       insert into payments (id, working_order_id, source, provider, payment_ref, amount, state, created_at, updated_at)
         values ('retained-payment', 'retained-order', 'operator_script', 'stripe', 'retained-ref', 1000, 'captured', '2026-11-14T10:00:00.000Z', '2026-11-14T10:00:00.000Z');
-      insert into payment_resolutions (id, payment_id, working_order_id, outcome, cancelled_at_provider, resolved_at)
-        values ('retained-resolution', 'retained-payment', 'retained-order', 'captured', 0, '2026-11-14T10:00:00.000Z');
+      insert into payment_resolutions (id, payment_id, working_order_id, outcome, cancelled_at_provider, person_id, resolved_at)
+        values ('retained-resolution', 'retained-payment', 'retained-order', 'captured', 0, 'manager', '2026-11-14T10:00:00.000Z');
       insert into payment_holds (id, payment_id, provider_amount, found_at)
         values ('retained-hold', 'retained-payment', 1000, '2026-11-14T10:00:00.000Z');
       insert into payment_hold_outcomes (id, hold_id, outcome, person_id, recorded_at)

@@ -8,7 +8,6 @@ import {
   SERVER_PEM_FILE,
   installAppendOnlyTriggers,
 } from "@waitron/store";
-import { appendOnlyTablesIn } from "@waitron/sync-enrolment";
 import {
   boxHostClient,
   boxHostRequests,
@@ -32,7 +31,7 @@ import {
 import {
   APPEND_ONLY_CHECK_MS,
   assertAppendOnlyIntact,
-  existingAppendOnlyTables,
+  existingOptionalAppendOnlyTables,
   missingBeforeMigration,
   refuseTrading,
   tamperWatchJob,
@@ -1329,12 +1328,7 @@ async function bootServer(
       config.environment,
       availableModules.flatMap((module) => (module.fiscal === undefined ? [] : [module.fiscal])),
     );
-    retainedOptionalTables = existingAppendOnlyTables(
-      stampProbe.venue,
-      availableModules
-        .filter((module) => module.tier === "toggleable")
-        .flatMap((module) => appendOnlyTablesIn(module.classification ?? [])),
-    );
+    retainedOptionalTables = existingOptionalAppendOnlyTables(stampProbe.venue, availableModules);
     attendanceSchemaBeforeMigrations = stampProbe.venue.execute<{ schema_version: number }>(
       sql`pragma schema_version`,
     ).rows[0]!.schema_version;
