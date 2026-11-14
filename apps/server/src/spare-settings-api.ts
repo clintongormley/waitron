@@ -1,4 +1,5 @@
 import type { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { readNodeMembership } from "@waitron/db";
 import { verifyEnvelope } from "@waitron/handover";
 import { servingPrimaryNodeId } from "@waitron/membership";
@@ -10,6 +11,7 @@ import {
   readBackupSettings,
   replaceBackupSettings,
 } from "./backup-env-writer.js";
+import { createTurns } from "./backup-turns.js";
 import { peerKeyOf } from "./handover-signing.js";
 import type { Logger } from "./logger.js";
 import type { PeerStatusApiDeps } from "./peer-status-api.js";
@@ -23,11 +25,16 @@ const STATUS = {
 
 const BODY_KEYS = ["settings", "toNodeId"];
 
+// A message holding a minted key and its rotation time is about 400 bytes; the rest is room for a
+// long hand-chosen key.
+const BODY_MAX_BYTES = 64 * 1024;
+
 /**
  * `POST /api/node/backup-settings` — the main box hands its spare its `backup.env`, signed by its
- * node key. Only a mirror takes it, and only from the box its held chart names `serving-primary`,
- * so a box that took over never has its settings overwritten by its old main box. Nothing of the
- * body is stored beyond the file or logged: a value may be the backup recovery key.
+ * node key. Only a mirror takes it, and only from the box its held chart names `serving-primary`
+ * when the whole body has arrived, so a box that took over never has its settings overwritten by
+ * its old main box. Nothing of the body is stored beyond the file or logged: a value may be the
+ * backup recovery key.
  */
 export function mountSpareSettingsApi(
   app: Hono,
@@ -35,39 +42,52 @@ export function mountSpareSettingsApi(
   log: Logger,
 ): void {
   const run = createErrorBoundary(STATUS, "spare-settings.failed");
+  // Two writes side by side would share the file's staging name.
+  const turns = createTurns();
 
-  app.post("/api/node/backup-settings", (c) =>
-    run(c, log, async () => {
-      const held = await readNodeMembership(deps.db);
-      const raw = await readRawJsonBody<unknown>(c);
-      const verdict = verifyEnvelope<unknown>(raw, "backup-settings", await peerKeyOf(deps, held));
-      if (!verdict.valid) {
-        if (verdict.reason === "malformed" || verdict.reason === "wrong_purpose")
-          throw new AppError("spare.settings_invalid", { reason: "envelope" });
-        throw new AppError("spare.settings_sender_unknown", {});
-      }
-      const body = verdict.body;
-      if (
-        body === null ||
-        typeof body !== "object" ||
-        Array.isArray(body) ||
-        Object.keys(body).sort().join() !== BODY_KEYS.join() ||
-        (body as { toNodeId: unknown }).toNodeId !== deps.nodeId
-      ) {
-        throw new AppError("spare.settings_invalid", { reason: "body" });
-      }
-      if ((await readNodeMode(deps.node, deps.nodeId)).mode !== "mirror")
-        throw new AppError("spare.settings_not_a_spare", {});
-      if (held === null || servingPrimaryNodeId(held) !== verdict.signerNodeId)
-        throw new AppError("spare.settings_sender_unknown", {});
-      await replaceBackupSettings(
-        deps.stateDir,
-        (body as { settings: Record<string, string> | null }).settings,
-      );
-      return c.json(
-        { backupSettings: backupSettingsDigestOf(await readBackupSettings(deps.stateDir)) },
-        200,
-      );
+  app.post(
+    "/api/node/backup-settings",
+    bodyLimit({
+      maxSize: BODY_MAX_BYTES,
+      onError: (c) =>
+        c.json({ error: { code: "spare.settings_invalid", params: { reason: "size" } } }, 413),
     }),
+    (c) =>
+      run(c, log, async () => {
+        const raw = await readRawJsonBody<unknown>(c);
+        const digest = await turns(async () => {
+          const held = await readNodeMembership(deps.db);
+          const verdict = verifyEnvelope<unknown>(
+            raw,
+            "backup-settings",
+            await peerKeyOf(deps, held),
+          );
+          if (!verdict.valid) {
+            if (verdict.reason === "malformed" || verdict.reason === "wrong_purpose")
+              throw new AppError("spare.settings_invalid", { reason: "envelope" });
+            throw new AppError("spare.settings_sender_unknown", {});
+          }
+          const body = verdict.body;
+          if (
+            body === null ||
+            typeof body !== "object" ||
+            Array.isArray(body) ||
+            Object.keys(body).sort().join() !== BODY_KEYS.join() ||
+            (body as { toNodeId: unknown }).toNodeId !== deps.nodeId
+          ) {
+            throw new AppError("spare.settings_invalid", { reason: "body" });
+          }
+          if ((await readNodeMode(deps.node, deps.nodeId)).mode !== "mirror")
+            throw new AppError("spare.settings_not_a_spare", {});
+          if (held === null || servingPrimaryNodeId(held) !== verdict.signerNodeId)
+            throw new AppError("spare.settings_sender_unknown", {});
+          await replaceBackupSettings(
+            deps.stateDir,
+            (body as { settings: Record<string, string> | null }).settings,
+          );
+          return backupSettingsDigestOf(await readBackupSettings(deps.stateDir));
+        });
+        return c.json({ backupSettings: digest }, 200);
+      }),
   );
 }

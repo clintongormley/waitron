@@ -3,7 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, stampDeployment, writeNodeMembership } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  readNodeMembership,
+  stampDeployment,
+  writeNodeMembership,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
@@ -206,6 +211,84 @@ describe("POST /api/node/backup-settings", () => {
     expect(
       await send(envelopeOf({ toNodeId: self, settings: { ...SETTINGS, OTHER_SETTING: "x" } })),
     ).toEqual(refusal(400, "spare.settings_invalid", { reason: "name" }));
+    expect(await backupEnv()).toBe(SPARES_OWN);
+  });
+
+  it("refuses a sender the chart stopped naming while its body was on the way, writing nothing", async () => {
+    await holdOwnSettings();
+    let bodyAsked!: () => void;
+    let sendBody!: () => void;
+    const asked = new Promise<void>((resolve) => (bodyAsked = resolve));
+    const released = new Promise<void>((resolve) => (sendBody = resolve));
+    const bytes = new TextEncoder().encode(JSON.stringify(envelopeOf()));
+    const body = new ReadableStream<Uint8Array>(
+      {
+        async pull(controller) {
+          bodyAsked();
+          await released;
+          controller.enqueue(bytes);
+          controller.close();
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    // With its length named, as a box's request has, the body is read by the route itself.
+    const answer = appFor().request("/api/node/backup-settings", {
+      method: "POST",
+      headers: { "content-type": "application/json", "content-length": String(bytes.length) },
+      body,
+      duplex: "half",
+    } as RequestInit);
+    await asked;
+    const held = (await readNodeMembership(suite.db))!;
+    const selfKey = await readNodeIdentityKey(suite.node, RING, self);
+    const changed: MembershipDocumentBody = {
+      term: held.body.term + 1,
+      nodes: held.body.nodes.map((n) => ({
+        ...n,
+        standing: n.nodeId === STANDBY.nodeId ? "serving-primary" : "serving-secondary",
+      })),
+    };
+    await writeNodeMembership(suite.db, {
+      ...held,
+      body: changed,
+      signerNodeId: self,
+      signature: signDocumentBody(changed, selfKey),
+    });
+    sendBody();
+    const response = await answer;
+    expect({ status: response.status, body: await response.json() }).toEqual(
+      refusal(403, "spare.settings_sender_unknown"),
+    );
+    expect(await backupEnv()).toBe(SPARES_OWN);
+  });
+
+  it("answers every one of several requests sent at once, and leaves the file whole", async () => {
+    await holdOwnSettings();
+    await replaceBackupSettings(mainDir, SETTINGS);
+    const app = appFor();
+    const envelope = envelopeOf();
+    const answers = await Promise.all(Array.from({ length: 12 }, () => send(envelope, app)));
+    expect(answers.map((a) => a.status)).toEqual(Array(12).fill(200));
+    expect(await backupEnv()).toBe(await readFile(join(mainDir, "backup.env"), "utf8"));
+  });
+
+  it("refuses a body larger than any settings message, writing nothing", async () => {
+    await holdOwnSettings();
+    const large = envelopeOf({
+      toNodeId: self,
+      settings: { ...SETTINGS, WAITRON_BACKUP_PADDING: "x".repeat(70_000) },
+    });
+    expect(await send(large)).toEqual(refusal(413, "spare.settings_invalid", { reason: "size" }));
+    const text = JSON.stringify(large);
+    const named = await appFor().request("/api/node/backup-settings", {
+      method: "POST",
+      headers: { "content-type": "application/json", "content-length": String(text.length) },
+      body: text,
+    });
+    expect({ status: named.status, body: await named.json() }).toEqual(
+      refusal(413, "spare.settings_invalid", { reason: "size" }),
+    );
     expect(await backupEnv()).toBe(SPARES_OWN);
   });
 
