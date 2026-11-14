@@ -1360,6 +1360,11 @@ export class TillTableOrderScreen extends LitElement {
       .action-panel wt-form-actions {
         scroll-margin-block-end: var(--order-dock-size, 0px);
       }
+
+      /* The dock comes later in the screen and is held at the same foot, so it would cover the row. */
+      .action-panel wt-form-actions {
+        bottom: var(--order-dock-size, 0px);
+      }
     `,
     segmentedOptionStyles,
   ];

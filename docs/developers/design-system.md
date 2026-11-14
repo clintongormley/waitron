@@ -1078,7 +1078,9 @@ box, `[data-order-dock]`, which is `position: sticky` with `bottom: 0` and hidde
 child of the screen, not of the order pane: a sticky box cannot rise above its parent's top, and on
 a 390 × 600 phone the pane starts too low for the bar and the foot to fit under it. So it comes
 after the action panel too. The screen measures its height into `--order-dock-size` on the screen,
-and the basket's lines and the action panel keep it clear (`scroll-margin-block-end`). When Order
+and the basket's lines and the action panel keep it clear (`scroll-margin-block-end`). The action
+panel's `wt-form-actions` row is held that far above the bottom rather than at it, since the box
+would otherwise cover it. When Order
 is shown, or a table opens on it, and the box would cover the pane's first row, the scroll area is
 moved to put the switch at its top. Out of the order's wrappers, the bar is made `inert` itself
 while a round is being sent. On a handheld below the width the draft bar is not drawn while the New
