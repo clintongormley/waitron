@@ -737,7 +737,6 @@ export class StreamSupervisor {
     const steady = (started.steady + ended.steady) / 2;
     this.#skewMs = (started.wall + ended.wall) / 2 - steady;
     this.#bucketClockRead = false;
-    delete this.#status.pruneBlockedSince;
     const key = markerKey(generation);
     this.#markerWrite = { key, started: started.steady, ended: ended.steady };
     try {

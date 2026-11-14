@@ -27,3 +27,16 @@ Run changed test files, stream `src/supervisor.cancel.test.ts`, server `src/guid
 Real rigs: with fresh binary paths, `env -u AI_AGENT -u CLAUDECODE WAITRON_REQUIRE_TEST_TOOLS=1 node scripts/run-with-deadline.mjs 1200 --diagnostics -- pnpm --filter @waitron/server exec vitest run src/stream-loop.e2e.test.ts src/stream-pause.e2e.test.ts --reporter=verbose`. Probe uses server `tsx` under that wrapper. Read test counts; no skipped qualification.
 One-time disposable controls remove warning emission, bypass no-clock pruning and leak the log key: corresponding assertions must fail after work settles, then pass restored. Never commit self-mutation tests. Look EN/ES, light/dark, phone/desktop; normal hook and current-head scoped CI, no whole-package local run.
 Estimate: production +90/-5, tests +180/-10, temporary probe/support including forwarder +250/-0; docs +30/-15 separately. Count temporary support too; stop for watcher opinion at 780 additions (1.5×520), after running changed tests. Target PR within three working hours excluding reviewer/watcher waits; ask before splitting unfinished measurements. When #3125 lands, pause cleanly and take A1308-5h.
+
+## Review corrections, 2026-11-14
+
+The two Claude run-it reads found an unused wire field, inaccurate standby/retry advice, and a
+false earlier-generation test. Keep the warning internal to ongoing alerts by projecting it out of
+both status answers. The existing exact response assertions exercise that projection. Wording
+offers the real restart action after service, says it starts a full copy, and qualifies daily retries
+to normal running. Failed marker listings remain explicitly open in the existing error-report bundle.
+
+A supervisor's opening loop can claim a later generation if its first full copy exceeds the
+side-file limit. The earlier-clock regression case stays, with its first successful marker read
+made explicit. The new warning reset is removed: pruning starts after opening. The existing marker
+identity guard stays; no new superseded-read state or retry path is added.

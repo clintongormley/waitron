@@ -403,13 +403,14 @@ describe("the copy when it goes to the standby server, not the owner's bucket", 
   it("explains retained copies and a next step for bucket and standby retention warnings", () => {
     for (const lang of ["en", "es"] as const) {
       const bucket = alertMessage("backup.stream_retention_blocked", {}, lang);
-      expect(bucket).toContain(
-        lang === "en" ? "Check the bucket settings" : "Revisa los ajustes del bucket",
-      );
+      expect(bucket).toContain(lang === "en" ? "Restart the box" : "Reiniciar el servidor");
       expect(bucket).toContain(lang === "en" ? "old copies" : "copias antiguas");
       const spare = alertMessage("backup.stream_retention_blocked", { toSpare: true }, lang);
       expect(spare).toContain(lang === "en" ? "standby server" : "servidor en espera");
-      expect(spare).not.toMatch(/bucket|internet|contact support/i);
+      expect(spare).not.toMatch(/bucket|internet|contact support|switched on|encendido/i);
+      for (const text of [bucket, spare]) {
+        expect(text).toContain(lang === "en" ? "running normally" : "funciona con normalidad");
+      }
     }
   });
 

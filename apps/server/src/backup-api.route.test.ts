@@ -417,7 +417,10 @@ describe("backup admin routes", () => {
       reason: "start_failed",
       stateSince: "2026-09-15T11:00:00.000Z",
     };
-    const app = buildApp(sup, sc.stateDir, {}, undefined, undefined, () => stream);
+    const app = buildApp(sup, sc.stateDir, {}, undefined, undefined, () => ({
+      ...stream,
+      pruneBlockedSince: "2026-09-15T11:00:00.000Z",
+    }));
     const cookie = await login(app);
     const res = await app.request("/api/backup/status", { headers: { cookie } });
     expect(res.status).toBe(200);

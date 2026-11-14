@@ -186,6 +186,8 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
   const view = async (): Promise<StreamSettingsView> => {
     const { bucket, configured, revision } = await readStored();
     const { held: recoveryKeySet, key } = await readHeldKey(deps.readRecoveryKey);
+    const status: StreamView & { pruneBlockedSince?: string } = { ...deps.stream.status() };
+    delete status.pruneBlockedSince;
     return {
       isPrimary: deps.isPrimary(),
       configured,
@@ -199,7 +201,7 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
               prefix: bucket.prefix,
               accessKeyId: bucket.accessKeyId,
             },
-      status: deps.stream.status(),
+      status,
       recoveryKeySet,
       keyFingerprint: key === undefined ? null : keyFingerprint(key),
       revision,

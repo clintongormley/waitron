@@ -1678,6 +1678,7 @@ describe("generation housekeeping", () => {
     await h.clock.until(() => h.litestream.replicas().length === 2);
     const generation = h.supervisor.status().generation!;
     expect(generation).not.toBe(first);
+    expect(h.listed.filter((prefix) => prefix === markerOf(first))).toHaveLength(1);
     h.store.upload(fullCopyOf(generation));
     await h.clock.until(() => h.supervisor.status().state === "streaming");
     const old = generationName(1, "node-old", new Date(Date.parse(START) - 9 * DAY));

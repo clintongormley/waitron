@@ -517,6 +517,9 @@ DNS, Linux or venue conditions, and this measured no bound on the local level-0 
 - The wizard route answers `backup.stream_name_invalid` 400, where other bucket failures answer
   502 — the status table in `apps/server/src/setup-api.ts` maps the code as one, and the same
   code also covers a bad value in the recovery kit, where 400 is right.
+- A marker listing that throws still logs `stream.prune_failed` without raising the retention
+  warning, and retries at the next daily cleanup. The warning added on 2026-11-14 covers a
+  successful listing that omits the marker; failing listings remain open in this bundle.
 - The status and `errorName` on the stream's log lines other than the pause check's 403 were
   shown by reading, by the store's scripted HTTP answers and by the supervisor's injected
   errors, not against a real bucket. Amazon S3's 403 to the pause check was logged with

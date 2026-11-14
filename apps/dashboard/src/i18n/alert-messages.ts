@@ -128,13 +128,13 @@ export const ALERT_MESSAGES: Readonly<
     },
   },
   "backup.stream_retention_blocked": {
-    en: "The backup bucket is not being tidied: its marker could not be found, so old copies are being kept. Check the bucket settings on the Backups page. Waitron tries again daily.",
-    es: "No se está limpiando el bucket de copias: no se ha encontrado su marcador, así que se conservan las copias antiguas. Revisa los ajustes del bucket en la página de Copias. Waitron lo intenta de nuevo cada día.",
+    en: "The backup bucket is not being tidied: its marker could not be found, so old copies are being kept. Waitron tries again daily while the copy is running normally. After service, use Box status → Restart the box to request a fresh marker.",
+    es: "No se está limpiando el bucket de copias: no se ha encontrado su marcador, así que se conservan las copias antiguas. Waitron lo intenta de nuevo cada día mientras la copia funciona con normalidad. Tras el servicio, usa Estado del servidor → Reiniciar el servidor para pedir un marcador nuevo.",
     variants: {
       toSpare: {
         mode: "replace",
-        en: "Old copies on the standby server are not being tidied because their marker could not be found. Check that the standby server is switched on and connected to the restaurant's network. Waitron tries again daily.",
-        es: "No se están limpiando las copias antiguas del servidor en espera porque no se ha encontrado su marcador. Comprueba que el servidor en espera esté encendido y conectado a la red del restaurante. Waitron lo intenta de nuevo cada día.",
+        en: "Old copies on the standby server are not being tidied because their marker could not be found. Waitron tries again daily while the copy is running normally. After service, use Box status → Restart the box to request a fresh marker.",
+        es: "No se están limpiando las copias antiguas del servidor en espera porque no se ha encontrado su marcador. Waitron lo intenta de nuevo cada día mientras la copia funciona con normalidad. Tras el servicio, usa Estado del servidor → Reiniciar el servidor para pedir un marcador nuevo.",
       },
     },
   },
