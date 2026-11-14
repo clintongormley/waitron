@@ -5,17 +5,18 @@
 > write the named failing check, run it, see it fail for the stated reason, then write the smallest
 > code that passes it.
 
-**Status:** plan for review, 2026-11-14. Written on `feat/w41s-9-filing-evidence` from `main` at
+**Status:** reviewed, and cut to the watcher's answer of 2026-11-14 03:20 (lane L questions.md,
+"W41s-9 evidence step: both cuts and (a), but no alert keeps 'Contact support'"): no chain-check
+section, one merged record lookup, nothing built for wrong-environment refusals, and the three
+alerts left without a page reworded so none says "Contact support". Originally Written on `feat/w41s-9-filing-evidence` from `main` at
 `51bd22780c`. No product code was written to produce it; what was read and the two probes that were
 run are listed at the end.
 
-**Size, stated first.** About **400 lines of production code** (read model ~160, screen ~110,
-strings EN+ES ~90, alert claims and wording ~40) and about **350 lines of tests**, plus about 40
-lines of guide prose and documentation edits. No migration, no new table, no generated files. That
-is above the 150–300 the brief aimed for. **The simplest cut that still meets the owner's ask:**
-drop Task 1's third part (the saved predecessor check, `chain.verification_failed`) and its screen
-list, about 90 production lines, leaving that alert as it is today. This plan keeps it, because the
-backlog's integrity entry names it ("saved predecessor-check issues").
+**Size, stated first.** About **280 lines of production code** after the watcher's cuts, and about
+**300 lines of tests**, plus about 40 lines of guide prose and documentation edits. No migration, no
+new table, no generated files. Cut on the watcher's word (03:20): the saved predecessor check
+(`chain.verification_failed`) gets no section on the page, because it needs a stored record to be
+tampered with, which the append-only triggers stop; its alert is reworded instead (Task 2).
 
 ## The ask, and who approved it
 
@@ -27,19 +28,19 @@ kinds are integrity warnings, mismatched reply lines and wrong-environment refus
 
 ## Should this exist?
 
-- **The need.** Four alerts end in "Contact support" or say nothing about where to look
+- **The need.** Four alerts (three after the cut) end in "Contact support" or say nothing about where to look
   (`apps/dashboard/src/i18n/alert-messages.ts`, keys `fiscal.respuesta_descuadrada`,
   `fiscal.record_flagged`, `fiscal.record_totals_disagree`, `chain.verification_failed`). The facts
   behind them sit only in the `incidents` table's `params`, which no screen reads.
 - **The simplest thing that meets it.** One more read in the existing Fiscal filing route, one
-  more section on the existing page, and four bell links. No new route, no per-alert panel, no
+  more section on the existing page, and three bell links. No new route, no per-alert panel, no
   session fence, no action. Considered and rejected: porting the four retired branches (7,000–9,600
   lines each; the owner retired them); changing only the alert wording (the person still could not
   see which invoice or what AEAT sent back).
 - **What stays unavailable.** Any repair or decision. Wrong-environment evidence (see the decision
   below). A fingerprint refusal's evidence beyond what its alert already says (see Limits).
 
-## Decision for the owner: wrong-environment refusals
+## Decided: nothing for wrong-environment refusals (watcher, 2026-11-14 03:20, option (a))
 
 **By the trace below, both environment refusals are unreachable only while every setup path stamps
 the database's environment before its first record (the stamp sites listed below); the start check
@@ -66,11 +67,9 @@ named:
   (`handover-return.ts:374`), which copies rows another box wrote the same way. Only test fixtures
   write a null.
 
-If the owner wants the evidence anyway: one more query in Task 1 (records still waiting whose
-`entorno` is null or differs from `ctx.recordGeneration.environment`, which the route already
-holds), one more list in Task 3 and two bell links, about 50 production lines. Until then the two
-environment alerts keep their present wording, including "Contact support", and the backlog entry
-records the trace (Task 4).
+The watcher chose (a): build no evidence for them, record this trace in the backlog entry (Task 4),
+and change only the two alerts' wording so neither says "Contact support" (Task 2). The option not
+taken, for the record: one more query, one more list and two bell links, about 50 production lines.
 
 ## What the page already shows (no change)
 
@@ -112,7 +111,8 @@ the fiscal module has a precedent: `packages/fiscal-verifactu/src/clock-stop-inc
    time is that instant cut to the whole second (probe 1 below). So the record is the one record of
    `sale_id` whose generation time equals `detected_at` cut to the second; when there is not
    exactly one such record, the page names none.
-3. **Saved predecessor-check issues — `chain.verification_failed`** (error, a core code).
+3. **Saved predecessor-check issues — `chain.verification_failed`** (error, a core code). **Cut
+   by the watcher: no section, no bell link; Task 2 rewords its alert only.**
    Recorded when an invoice is written and the check of the last two records on the chain
    (`verify.ts:41-106`) finds a problem; the new invoice is still recorded
    (`packages/core/src/record-sale.ts:203`, and the same in `record-correction.ts`,
@@ -130,8 +130,9 @@ so it stays as it is.
 
 ## Decisions this plan makes (reviewable)
 
-- **Open alerts only.** The section lists alerts not yet marked handled, newest first, like the
-  bell. Once handled, a warning leaves the page; the bell's Handled tab keeps it.
+- **Open alerts only.** The section lists alerts of its three codes (`fiscal.respuesta_descuadrada`,
+  `fiscal.record_flagged`, `fiscal.record_totals_disagree`) not yet marked handled, newest first,
+  like the bell. Once handled, a warning leaves the page; the bell's Handled tab keeps it.
 - **Bounded.** The route's existing limit applies (200; none for the export), with a total count, as
   the case table does. `fiscal.record_flagged` can be raised on every sale (a missing IPSI regime
   code is a real local warning, `chain.validation-warnings.test.ts:125`), so the bound is real.
@@ -152,8 +153,8 @@ so it stays as it is.
 | `packages/fiscal-verifactu/src/filing-overview-types.ts` | `FilingWarnings` and its views; `FilingOverviewAnswer` gains `warnings` |
 | `packages/fiscal-verifactu/src/filing-overview-routes.ts` | adds `warnings` to the answer |
 | `packages/fiscal-verifactu/src/filing-overview-routes.test.ts` | one new case |
-| `packages/fiscal-verifactu/src/alerts.ts`, `alerts.test.ts` | four bell links |
-| `apps/dashboard/src/i18n/alert-messages.ts` | four alerts point to the page |
+| `packages/fiscal-verifactu/src/alerts.ts`, `alerts.test.ts` | three bell links |
+| `apps/dashboard/src/i18n/alert-messages.ts` | three alerts point to the page; three more lose "Contact support" |
 | `packages/fiscal-verifactu/src/dashboard/fiscal-filing-screen.ts` | new "Warnings" section |
 | `packages/fiscal-verifactu/src/dashboard/strings.ts` | EN and ES strings |
 | `packages/fiscal-verifactu/src/dashboard/fiscal-filing-screen.test.ts`, `.a11y.test.ts` | new cases |
@@ -201,30 +202,21 @@ export interface RecordWarningView {
   /** Null unless exactly one record of the sale was generated at that second. */
   record: WarnedRecordView | null;
 }
-export interface ChainCheckView {
-  detectedAt: string;
-  issues: {
-    issueCode: string;
-    record: WarnedRecordView | null;
-    expected: string | null;
-    found: string | null;
-  }[];
-}
 export interface FilingWarnings {
   replyMismatches: ReplyMismatchView[];
   recordWarnings: RecordWarningView[];
-  chainChecks: ChainCheckView[];
-  /** Open alerts of these four codes, listed or not. */
+  /** Open alerts of these three codes, listed or not. */
   total: number;
 }
 ```
 
-Queries (one transaction, a fixed number of queries): the listed open incidents of the four codes
-(`acknowledged_at is null`, `order by detected_at desc, id`, `limit`); their count; the sent
-records of the listed reply mismatches (`json_each(params, '$.registroIds')` joined to
-`registros_facturacion` and left-joined to `envios`, ordered by `json_each.key`); the records of
-the listed warnings' sales; the records named by the listed chain checks' issues. Matching a
-warning to its record happens in TypeScript: `Math.floor(detectedAt / 1000) ===
+Queries (one transaction, three queries): the listed open incidents of the three codes
+(`acknowledged_at is null`, `order by detected_at desc, id`, `limit`); their count; and ONE record
+lookup (the watcher's merge) returning, for each listed incident, its candidate records with the
+incident id beside each: for a reply mismatch the records named by `json_each(params,
+'$.registroIds')` with `json_each.key` as their order, for a validation warning every record of its
+`sale_id` (order null); joined to `registros_facturacion` and left-joined to `envios` for the state.
+Matching a warning to its record happens in TypeScript: `Math.floor(detectedAt / 1000) ===
 Math.floor(generated / 1000)`, exactly one match or null.
 
 - [ ] **Failing tests first**, in `filing-warnings.test.ts` with `useVenueDb`, each incident made by
@@ -240,11 +232,9 @@ Math.floor(generated / 1000)`, exactly one match or null.
   - a record of a different sale generated in the same second as the flagged record: `record`
     still names the flagged invoice, never the other sale's record (matching stays within the
     warning's `sale_id`).
-  - a chain check: a record appended, then `recordIncident` with
-    `new AppError("chain.verification_failed", …)` built exactly as `record-sale.ts:208-217`
-    builds it from a `predecessor-link-mismatch` issue naming that record (the params type is
-    checked by the compiler): `issues[0].record` names it, `expected`/`found` carry through.
-  - an alert marked handled (`markIncidentHandled`) is not listed; `total` counts open ones only.
+  - an open `chain.verification_failed` incident is NOT listed and not counted in `total` (the
+    section covers three codes only).
+- an alert marked handled (`markIncidentHandled`) is not listed; `total` counts open ones only.
   - `limit: 1` with two open warnings lists the newer and reports `total: 2`.
   - a key-shape case, as `filing-overview.test.ts:370-430` does: every key of every view is named
     in the expected lists (no `refExterna`, no issuer tax number).
@@ -267,17 +257,17 @@ Math.floor(generated / 1000)`, exactly one match or null.
   - the existing case "refuses a supervisor, who may view reports but not export them"
     (`filing-overview-routes.test.ts:78-85`), which already asserts `readFilingOverview` was not
     called (`:84`), also asserts `readFilingWarnings` was not called.
-  - `alerts.test.ts`: **the one existing assertion this plan changes.** The whole-shape pin of
-    `FISCAL_ALERTS` gains four entries (no entry is removed or altered), each
-    `{ prefix, area: "fiscal", permission: "fiscal.view", screen: "fiscal-filing" }` for
-    `fiscal.respuesta_descuadrada`, `fiscal.record_flagged`, `fiscal.record_totals_disagree` and
-    `chain.verification_failed`; its title names the four. `chain.` is core's claim
-    (`packages/db/src/alerts.ts:7`); the longer prefix wins (`apps/server/src/alerts.ts:41-42`), as
-    the fiscal module's `clock.behind_chain` claim already does.
+  - `alerts.test.ts`: **an existing assertion this plan changes.** The whole-shape pin of
+  `FISCAL_ALERTS` gains three entries (no entry is removed or altered), each
+  `{ prefix, area: "fiscal", permission: "fiscal.view", screen: "fiscal-filing" }` for
+  `fiscal.respuesta_descuadrada`, `fiscal.record_flagged` and `fiscal.record_totals_disagree`; its
+  title names the three. `chain.verification_failed` gets no claim (cut).
+  - Any test pinning the six alerts' wording changes to the new wording below (the watcher's 03:20
+    answer changes what they say); list each under "Changed test checks" in the PR.
 - [ ] Run `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/filing-overview-routes.test.ts src/alerts.test.ts`;
   see both fail.
 - [ ] Route: inside the existing transaction, after `readFilingOverview`, call
-  `readFilingWarnings(tx, { limit })` and add `warnings` to the answer. Add the four claims.
+  `readFilingWarnings(tx, { limit })` and add `warnings` to the answer. Add the three claims.
 - [ ] Alert wording, EN and ES, replacing "Contact support." or adding the pointer (ES page name
   "Remisión a la AEAT", as slice 1's keys use):
   - `fiscal.respuesta_descuadrada`: keep the sentence, replace "Contact support." with "The records
@@ -290,11 +280,31 @@ Math.floor(generated / 1000)`, exactly one match or null.
     Remisión a la AEAT."
   - `fiscal.record_totals_disagree`: append "The invoice is on Fiscal filing." / "La factura está en
     Remisión a la AEAT."
+  - **Reworded only, no page link** (watcher 03:20: what happened, whether sales and filing carry
+    on or stop, from the code, and what the person can do themselves; change nothing else):
   - `chain.verification_failed`: "When an invoice was recorded, Waitron's check of the invoice
-    record before it found a problem. The invoice was still recorded. What the check found is on
-    Fiscal filing." / "Al registrar una factura, la comprobación de Waitron del registro anterior ha
-    encontrado un problema. La factura se ha registrado igualmente. Lo que ha encontrado está en
-    Remisión a la AEAT."
+    record before it found a problem. The invoice was still recorded, and sales and sending to the
+    tax agency (AEAT) carry on. Keep the box running and note when this appeared." / "Al registrar
+    una factura, la comprobación de Waitron del registro anterior ha encontrado un problema. La
+    factura se ha registrado igualmente, y las ventas y los envíos a la AEAT continúan. Mantén el
+    equipo encendido y anota cuándo ha aparecido esto." Receipts: the sale is still recorded
+    (`packages/core/src/record-sale.ts:203`); the drain never reads incidents (`drain.ts`).
+  - `fiscal.environment_mismatch`: "An invoice record was made for the tax agency's
+    {recordEnvironment} service, but this box sends to {hostEnvironment}. That record and the later
+    ones on its chain are kept on this box and not sent; sales carry on. Keep the box running and
+    note when this appeared." / "Un registro de facturación se creó para el servicio de
+    {recordEnvironment} de la AEAT, pero este equipo envía a {hostEnvironment}. Ese registro y los
+    posteriores de su cadena se guardan en este equipo y no se envían; las ventas continúan. Mantén
+    el equipo encendido y anota cuándo ha aparecido esto." Receipts: the record and its chain's later
+    ones are skipped (`drain.ts:693-716`, `blockedSifIds`) and the record stays waiting.
+  - `fiscal.environment_unknown`: the same shape: "An invoice record does not say which tax agency
+    service it was made for. That record and the later ones on its chain are kept on this box and
+    not sent; sales carry on. Keep the box running and note when this appeared." / "Un registro de
+    facturación no indica para qué servicio de la AEAT se creó. Ese registro y los posteriores de su
+    cadena se guardan en este equipo y no se envían; las ventas continúan. Mantén el equipo
+    encendido y anota cuándo ha aparecido esto."
+  - Implementer: verify each "carry on / not sent" sentence against the cited lines before writing
+    it; if the code says otherwise, stop and report rather than change the sentence's meaning.
 - [ ] Run the two files again, then `pnpm exec vitest run scripts/alert-codes.test.ts scripts/english-only.test.ts`
   and `pnpm --filter @waitron/server exec vitest run src/alerts.test.ts src/alerts-api.test.ts`
   (they read codes and areas only; they must pass unedited).
@@ -308,7 +318,7 @@ Math.floor(generated / 1000)`, exactly one match or null.
 
 Layout: a section **Warnings** / **Avisos** (`aria-labelledby`, `data-test="warnings"`) between
 **Filing cases** and **Possibly missing history**. When `warnings.total` is 0 it shows one muted
-line, "No open warnings." / "No hay avisos abiertos." Otherwise up to three lists, each shown only
+line, "No open warnings." / "No hay avisos abiertos." Otherwise up to two lists, each shown only
 when it has a line, built like slice 1's history lists (`historyList`, `field`, `aeatWords`, one
 `wt-disclosure` headed "Technical details" per line). When `total` exceeds what is listed, a muted
 line says "Showing the newest {shown} of {total}. Export them to see every one."
@@ -331,22 +341,14 @@ line says "Showing the newest {shown} of {total}. Export them to see every one."
    has something AEAT accepts but may point out." With no record identified: "An invoice recorded at
    {time} …" (same two endings). Muted: its state now. Technical details: each field beside its
    code, from the paired `fields`/`codes`.
-3. **Problems found checking the record before an invoice** / **Problemas al comprobar el registro
-   anterior a una factura**. Line per issue: `predecessor-hash-mismatch`: "Invoice {number}'s stored
-   fingerprint does not match its contents."; `predecessor-link-mismatch`: "Invoice {number} does not
-   point at the record before it."; `predecessor-missing`: "The record before invoice {number} is not
-   on this box."; any other code: "The check found a problem with invoice {number}." Muted: "Found
-   when an invoice was recorded at {time}. That invoice was still recorded." Technical details:
-   issue code, expected and found fingerprints (`.fingerprint` class). No advice beyond what the
-   page already gives: the export for the tax adviser.
 
 No buttons, no colour beyond existing tokens, no new primitive.
 
 - [ ] **Failing tests first** in `fiscal-filing-screen.test.ts` (fixture gains one warning of each
   kind; the a11y file's `EMPTY` gains `warnings: { replyMismatches: [], recordWarnings: [],
-  chainChecks: [], total: 0 }`):
+  total: 0 }`):
   - each list renders its line in English and Spanish, with the invoice number, and its Technical
-    details hold the raw values (codes, fingerprints, AEAT's words inside `q[lang=es]`);
+    details hold the raw values (codes, AEAT's words inside `q[lang=es]`);
   - an unidentified record warning says "An invoice recorded at …";
   - an empty `warnings` shows only "No open warnings." and no list;
   - `total` above the listed count shows the bounded line.
@@ -367,7 +369,7 @@ No buttons, no colour beyond existing tokens, no new primitive.
 `docs/backlog.md`, `docs/backlog/self-service-refusals.md`.
 
 - [ ] Guide, EN and ES, a section `## Warnings {#warnings}` / `## Avisos {#warnings}` after
-  `{#cases}`: what each of the three lists means in one or two sentences, that nothing on the page
+  `{#cases}`: what each of the two lists means in one or two sentences, that nothing on the page
   changes a record, that handled alerts leave the list, and that the export carries every warning.
   Only what changes what staff do (CLAUDE.md §3: no corner cases the code handles). Update the
   intro's "which records need a decision" sentence to mention warnings.
@@ -378,9 +380,14 @@ No buttons, no colour beyond existing tokens, no new primitive.
     alerts open it; what remains is a persistent repair or decision route, which needs its own owner
     decision; the lines shown for a reply are the first kept while the alert is open.
   - integrity: also say that `fiscal.fingerprint_mismatch` adds nothing to the page (no record, no
-    params) and keeps its alert.
+    params) and keeps its alert, and that `chain.verification_failed` has no section (it needs a
+    tampered stored record, which the append-only triggers stop; watcher 2026-11-14 03:20) and its
+    alert was reworded without "Contact support".
   - environment: record the trace from this plan's decision section (with its receipts, labelled
-    traced, not run) and that no evidence was added; remaining: the owner's choice.
+    traced, not run, with the four stamp sites `provision.ts:141`, `adopt.ts:235`,
+    `first-setup-command-deployment.ts:275`, `restore-gate.ts:20`), that no evidence was added on
+    the watcher's (a) of 2026-11-14 03:20, and that both alerts were reworded without "Contact
+    support".
 - [ ] `docs/backlog/self-service-refusals.md`: under `### fiscal.respuesta_descuadrada`,
   `### fiscal.record_flagged` and `### chain.verification_failed`, a "Reworded 2026-11-14" line as
   slice 1 added for its codes; under `#fiscal-reply` and `#fiscal-integrity`, replace "goes on
@@ -403,8 +410,8 @@ No buttons, no colour beyond existing tokens, no new primitive.
   test flagged an invoice and then its cancellation in the same sale; only one incident was kept,
   so the page shows the first record's warning only.
 - A validation warning keeps field names and codes, never values (`errors.ts:135`).
-- A predecessor check covers two records, not the chain (`verify.ts:41-106`); the page says what it
-  found, not that the rest of the chain is sound.
+- A predecessor check's findings are not shown (cut); its alert says what happened and that sales
+  and filing carry on.
 - A fingerprint refusal keeps only its time and till.
 - Anyone with `fiscal.view` but not `report.export` sees these alerts but cannot open the page, as
   for slice 1's links.
@@ -413,9 +420,9 @@ No buttons, no colour beyond existing tokens, no new primitive.
 
 | Task | Production lines | Test lines |
 | --- | --- | --- |
-| 1. Read model | ~160 | ~200 |
+| 1. Read model | ~110 | ~170 |
 | 2. Route, links, wording | ~40 | ~40 |
-| 3. Screen and strings | ~200 | ~110 |
+| 3. Screen and strings | ~130 | ~90 |
 | 4. Guide and docs | prose only | 0 |
 
 ## What was read and run to write this plan
