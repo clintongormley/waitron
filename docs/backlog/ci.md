@@ -362,6 +362,7 @@ The [stream readiness polling cut](../superpowers/plans/2026-11-14-a1398-stream-
 
 The [root colour scan](../superpowers/plans/2026-11-14-a1398-root-colour-scan.md) skips parsing when the raw source lacks the colour token, case-insensitively.
 Qualify its root whole-job time from the PR's own CI, recording the runner and coverage; the local file-time cut does not establish the four-minute goal.
+The [table-write detector cut](../superpowers/plans/2026-11-14-a1398-table-write-regex.md) shares the combined detector's syntax across its listed names. Its PR must still qualify the root whole-job time separately from local guard timing.
 
 ## Bundle A1398: Pack the other packages' test shards by measured time
 
