@@ -158,7 +158,11 @@ recorded child stuck in synchronous opening" waited for the child's record and i
 (`fiscal-certificate-diagnosis-runner.ts:74`). The branch did not touch the diagnosis code; the case
 passed on the next run and five times locally. The logs of the 25 most recent failed CI runs hold no
 earlier failure of this case. The log is kept at
-`~/waitron-campaign/ci-logs/pr3121-run43532895318-test-server-12.log`.
+`~/waitron-campaign/ci-logs/pr3121-run43532895318-test-server-12.log`. It failed the same way a
+second time on PR #3003 (2026-11-14, run 43585179122, `test-server` shard 1), a branch that also
+does not touch the diagnosis code: the child was sent SIGTERM about 1.65 s after it was spawned and
+the case again got `fiscal.certificate_diagnosis_unavailable`. That log is kept at
+`~/waitron-campaign-b/ci-logs/pr3003-run43585179122-test-server-1.log`.
 
 ## Server shard 2 stalled once on a hosted runner (PR #2664, 2026-11-09)
 
