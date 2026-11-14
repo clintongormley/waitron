@@ -357,7 +357,9 @@ describe("runCli venue", () => {
           ? "GB-vat"
           : arg === "Europe/Madrid"
             ? "Europe/London"
-            : arg,
+            : arg === "es-ES"
+              ? "en-GB"
+              : arg,
     );
     const code = await runCli([...gbArgs, "--yes"], h.deps);
     expect(code).toBe(0);
@@ -459,6 +461,24 @@ describe("runCli venue", () => {
     expect(await runCli([...args, "--yes"], h.deps)).toBe(1);
     expect(h.lines.join("\n")).toContain('setup.request_invalid {"field":"taxpayerDomicile"}');
     expect(h.openVenue).not.toHaveBeenCalled();
+  });
+
+  const replacing = (from: string, to: string) =>
+    VENUE_ARGS.map((arg) => (arg === from ? to : arg));
+  it.each([
+    ["two receipt languages", [...VENUE_ARGS, "--locale", "ca-ES"]],
+    ["a receipt language the country pack does not offer", replacing("es-ES", "en-GB")],
+    [
+      "Spanish receipts in Catalonia, whose receipt language is Catalan",
+      replacing("Madrid", "Barcelona"),
+    ],
+  ])("refuses %s before opening the venue", async (_case, args) => {
+    const h = harness({ env: VENUE_ENV });
+
+    expect(await runCli([...args, "--yes"], h.deps)).toBe(1);
+    expect(h.lines.join("\n")).toContain('setup.request_invalid {"field":"invoiceLocales"}');
+    expect(h.openVenue).not.toHaveBeenCalled();
+    expect(h.applyVenue).not.toHaveBeenCalled();
   });
 
   it("provisions normally when the same real seat accepts the fields", async () => {
@@ -960,9 +980,7 @@ describe("runCli venue", () => {
         "Calle Fiscal 8, 28013 Madrid",
         "Centro",
         "ES-common",
-        "es-ES", // first invoice locale
-        "ca-ES", // a second one
-        "", // blank ends the locale loop
+        "es-ES", // invoice locale
         "Restaurante",
         "Calle Mayor 1",
         "", // address line 2 is optional — blank means none
@@ -992,8 +1010,6 @@ describe("runCli venue", () => {
       "venue name: ",
       "fiscal territory (e.g. ES-common): ",
       "invoice locale (e.g. es-ES): ",
-      "another invoice locale (blank to finish): ",
-      "another invoice locale (blank to finish): ",
       "operation description: ",
       "address line 1: ",
       "address line 2 (blank if none): ",
@@ -1011,10 +1027,7 @@ describe("runCli venue", () => {
 
     const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];
     const location = actions.find((action) => action.kind === "create-venue");
-    expect(location?.kind === "create-venue" && location.invoiceLocales).toEqual([
-      "es-ES",
-      "ca-ES",
-    ]);
+    expect(location?.kind === "create-venue" && location.invoiceLocales).toEqual(["es-ES"]);
     expect(location?.kind === "create-venue" && location.addressLine2).toBeNull();
   });
 });

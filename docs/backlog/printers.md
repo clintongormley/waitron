@@ -639,11 +639,8 @@ Hardware and inbox checks to complete in the owner session.
 
 ## Bundle: Receipt language loose ends
 
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- The provisioning command (`waitron-provision`) can still store two languages, or one no pack
-  offers; the first entry is the default receipt language. It does not hold Catalonia to Catalan:
-  only the Receipts route and setup do.
 - `cfg.invoiceLocales` (`apps/server/src/till-config.ts`) is no longer read outside tests (by
   grep) and can be retired.
 - The till reads its fallback receipt language only when it
