@@ -1009,7 +1009,8 @@ uncaught errors and unhandled rejections to the terminal, a passing test's inclu
 (`grep -l browser */*/vitest.config.ts`) still forward. Measured in `apps/till` on 2026-11-14:
 `pnpm exec vitest run src/till-app.test.ts -t 'does not leave the dialog busy when a step after the
 switch throws'` printed the test's recorded `approvedProfiles` of null rejection with `AI_AGENT` and
-`CLAUDECODE` set, and nothing with both unset; both runs passed. Add that receipt to the guide, and
+`CLAUDECODE` set, and nothing with both unset, or with both set and `server: { forwardConsole: false }`
+added to `apps/till/vitest.config.ts`; all three runs passed. Add that receipt to the guide, and
 decide with the owner whether the other packages should turn forwarding off as the dashboard did.
 
 
