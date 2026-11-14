@@ -151,6 +151,15 @@ had failing `test-till` jobs whose failed cases were read (runs 43240726730 and 
 was this case. Earlier sightings were not searched further. The log is kept at
 `~/waitron-campaign-c/ci-logs/pr2979-run43259195658-attempt1-test-till-3.log`.
 
+A fifth, first seen on PR #3121 (2026-11-14, run 43532895318, `test-server` shard 12):
+`apps/server/src/fiscal-certificate-diagnosis-process.test.ts` "applies the work deadline to a
+recorded child stuck in synchronous opening" waited for the child's record and instead got
+`fiscal.certificate_diagnosis_unavailable` from the runner's deadline
+(`fiscal-certificate-diagnosis-runner.ts:74`). The branch did not touch the diagnosis code; the case
+passed on the next run and five times locally. The logs of the 25 most recent failed CI runs hold no
+earlier failure of this case. The log is kept at
+`~/waitron-campaign/ci-logs/pr3121-run43532895318-test-server-12.log`.
+
 ## Server shard 2 stalled once on a hosted runner (PR #2664, 2026-11-09)
 
 Run [42690313010](https://github.com/clintongormley/waitron/actions/runs/42690313010), job
