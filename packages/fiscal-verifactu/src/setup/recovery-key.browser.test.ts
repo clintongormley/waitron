@@ -2,7 +2,12 @@ import { PDFDocument } from "pdf-lib";
 import { afterEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { applyTokens, LeaveController } from "@waitron/ui";
-import { chooseFiles, drawnFileName, fileControl } from "@waitron/ui/src/test-helpers.js";
+import {
+  chooseFiles,
+  drawnFileName,
+  fileControl,
+  fileError,
+} from "@waitron/ui/src/test-helpers.js";
 import type { WtFileInput } from "@waitron/ui/src/components/wt-file-input.js";
 import { LitElement, html } from "lit";
 import "./first-fiscal-screen.js";
@@ -121,7 +126,7 @@ it.each(["taxpayer", "environment", "software", "node", "name"])(
     if (fault === "name") wrong.nodeKey = { ...wrong.nodeKey, name: "Earlier key" };
     await upload(el, await renderRecoveryPdf(wrong, "en", "Europe/Madrid"));
     await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("#pdf-error")!.textContent).toContain(
+      expect(fileError(el.shadowRoot!.querySelector("wt-file-input")!)?.textContent).toContain(
         "this backup's named key",
       ),
     );
@@ -134,7 +139,7 @@ it("offers manual fields when a printed PDF has no attachment", async () => {
   stripped.addPage();
   await upload(el, new Uint8Array(await stripped.save()));
   await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("#pdf-error")!.textContent).toBe(
+    expect(fileError(el.shadowRoot!.querySelector("wt-file-input")!)?.textContent).toBe(
       "Enter the key from the sheet below.",
     ),
   );
@@ -205,7 +210,7 @@ it("refuses an oversized PDF before reading its bytes", async () => {
   const reading = vi.spyOn(file, "arrayBuffer");
   await el.importFile(file);
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("#pdf-error")!.textContent).toContain(
+  expect(fileError(el.shadowRoot!.querySelector("wt-file-input")!)?.textContent).toContain(
     "Choose a valid recovery PDF",
   );
   expect(reading).not.toHaveBeenCalled();
@@ -237,10 +242,14 @@ it("draws the PDF picker in Spanish and reads the chosen file", async () => {
   expect(drawnFileName(picker)).toBe("notes.pdf");
   expect(picker.shadowRoot!.querySelector(".size")!.textContent).toBe("1,5 kB");
   expect(picker.shadowRoot!.textContent).toContain("Elegir otro archivo");
-  expect(el.shadowRoot!.querySelector("#pdf-error")!.textContent).toBe(
-    "Elige un PDF de recuperación válido, o introduce la clave abajo.",
-  );
-  expect(picker.invalid).toBe(true);
+  const message = "Elige un PDF de recuperación válido, o introduce la clave abajo.";
+  expect(fileError(picker)?.textContent).toBe(message);
+  const control = fileControl(picker);
+  expect(control.getAttribute("aria-invalid")).toBe("true");
+  const described = (control.getAttribute("aria-describedby") ?? "")
+    .split(" ")
+    .map((id) => picker.shadowRoot!.getElementById(id)?.textContent);
+  expect(described).toContain(message);
 });
 
 class KeyShell extends LitElement {
@@ -453,7 +462,7 @@ it.each([
       secrets.push((event as CustomEvent<{ secret?: string }>).detail.secret),
     );
     await upload(el, await recoveryPack({ serverKey: null, serverKeyHeldBy, serverKeyName }));
-    expect(el.shadowRoot!.querySelector("#pdf-error")!.textContent).toBe(message);
+    expect(fileError(el.shadowRoot!.querySelector("wt-file-input")!)?.textContent).toBe(message);
     expect(secrets.every((secret) => secret === undefined)).toBe(true);
     expect(native(el, "printed-recovery-key").disabled).toBe(false);
   },

@@ -51,9 +51,6 @@ export class RecoveryKeyEntry extends LitElement {
         display: block;
         margin-block: var(--wt-space-3);
       }
-      .error {
-        color: var(--wt-color-danger);
-      }
     `,
   ];
   @property({ attribute: false }) selection?: RecoveryKeySelection;
@@ -235,13 +232,12 @@ export class RecoveryKeyEntry extends LitElement {
         locale=${this.locale}
         .copy=${fileInputCopy[this.locale]}
         .files=${this.draft.file ? [this.draft.file] : []}
-        ?invalid=${Boolean(pdfError)}
+        error=${pdfError}
         @wt-change=${(event: CustomEvent<{ files: File[] }>) => {
           event.stopPropagation();
           void this.importFile(event.detail.files[0]);
         }}
       ></wt-file-input>
-      <p id="pdf-error" class="error" role="status">${pdfError}</p>
       <p role="status">${this.loaded ? (en ? "Key loaded" : "Clave cargada") : ""}</p>
       <wt-input
         name="printed-recovery-key"

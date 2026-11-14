@@ -378,7 +378,10 @@ it.each(["en", "es"] as const)(
       await printPage.close();
       await picker.setInputFiles(printedPath);
       await expect
-        .poll(() => page.locator("vf-recovery-key #pdf-error").textContent())
+        .poll(async () => {
+          const message = page.locator("vf-recovery-key wt-file-input [data-error]");
+          return (await message.count()) === 0 ? null : await message.textContent();
+        })
         .toBe(
           locale === "en"
             ? "Enter the key from the sheet below."
