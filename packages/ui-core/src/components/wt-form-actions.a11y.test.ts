@@ -37,7 +37,9 @@ describe.each(["light", "dark"] as const)("wt-form-actions a11y (%s theme)", (th
     const el = scroller.querySelector<WtFormActions>("wt-form-actions")!;
     await el.updateComplete;
     const bar = el.shadowRoot!.querySelector<HTMLElement>("[data-bar]")!;
-    await vi.waitFor(() => expect(getComputedStyle(bar).borderTopWidth).toBe("1px"));
+    await vi.waitFor(() =>
+      expect(getComputedStyle(bar).borderTopColor).not.toBe("rgba(0, 0, 0, 0)"),
+    );
     await expectNoA11yViolations(host);
   });
 });

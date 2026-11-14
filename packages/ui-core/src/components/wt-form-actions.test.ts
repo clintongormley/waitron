@@ -1,4 +1,5 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, onTestFinished, test, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { cleanup, host, mount } from "../test-helpers.js";
 import "./wt-button.js";
 import type { WtFormActions } from "./wt-form-actions.js";
@@ -207,8 +208,10 @@ async function mountTallForm() {
   return { scroller, el };
 }
 
-const separatorWidth = (el: WtFormActions) =>
-  getComputedStyle(el.shadowRoot!.querySelector<HTMLElement>("[data-bar]")!).borderTopWidth;
+const separatorColor = (el: WtFormActions) =>
+  getComputedStyle(el.shadowRoot!.querySelector<HTMLElement>("[data-bar]")!).borderTopColor;
+
+const UNPAINTED = "rgba(0, 0, 0, 0)";
 
 test("stays at the bottom of whatever scrolls, message above its buttons, until the form's end", async () => {
   const { scroller, el } = await mountTallForm();
@@ -229,23 +232,25 @@ test("stays at the bottom of whatever scrolls, message above its buttons, until 
 
 test("draws a line along its top edge only while it is held at the bottom", async () => {
   const { scroller, el } = await mountTallForm();
-  await vi.waitFor(() => expect(separatorWidth(el)).toBe("1px"));
+  const height = el.getBoundingClientRect().height;
+  await vi.waitFor(() => expect(separatorColor(el)).not.toBe(UNPAINTED));
+  expect(el.getBoundingClientRect().height, "being held keeps the row's height").toBe(height);
   const bar = el.shadowRoot!.querySelector<HTMLElement>("[data-bar]")!;
   expect(bar.getBoundingClientRect().top).toBe(el.getBoundingClientRect().top);
   scroller.scrollTop = scroller.scrollHeight;
-  await vi.waitFor(() => expect(separatorWidth(el)).toBe("0px"));
+  await vi.waitFor(() => expect(separatorColor(el)).toBe(UNPAINTED));
 
   const short = (await mount(
     '<wt-form-actions><wt-button variant="primary">Save</wt-button></wt-form-actions>',
   )) as WtFormActions;
   await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-  expect(separatorWidth(short)).toBe("0px");
+  expect(separatorColor(short)).toBe(UNPAINTED);
 });
 
 test("paints the line from the border token", async () => {
   const { el } = await mountTallForm();
   host.style.setProperty("--wt-color-border", "rgb(4, 5, 6)");
-  await vi.waitFor(() => expect(separatorWidth(el)).toBe("1px"));
+  await vi.waitFor(() => expect(separatorColor(el)).not.toBe(UNPAINTED));
   const bar = el.shadowRoot!.querySelector<HTMLElement>("[data-bar]")!;
   expect(getComputedStyle(bar).borderTopColor).toBe("rgb(4, 5, 6)");
 });
@@ -270,14 +275,253 @@ test("pads its block ends with the shared space token", async () => {
   expect([bar.paddingTop, style.paddingBottom, style.position]).toEqual(["13px", "13px", "sticky"]);
 });
 
-test("in a dialog's footer, keeps the footer's own look: not held, no padding or background", async () => {
+test("under an ancestor that marks a dialog's footer, keeps the footer's own look: not held, no padding, line or background", async () => {
   const el = await mount(
-    '<wt-form-actions slot="footer"><wt-button variant="primary">Save</wt-button></wt-form-actions>',
+    '<div><wt-form-actions><wt-button variant="primary">Save</wt-button></wt-form-actions></div>',
   );
   host.style.setProperty("--wt-space-2", "13px");
-  const style = getComputedStyle(el);
-  const bar = getComputedStyle(el.shadowRoot!.querySelector<HTMLElement>("[data-bar]")!);
+  host.style.setProperty("--wt-form-actions-in-footer", "true");
+  const row = el.querySelector("wt-form-actions")!;
+  const style = getComputedStyle(row);
+  const bar = getComputedStyle(row.shadowRoot!.querySelector<HTMLElement>("[data-bar]")!);
   expect(style.position).toBe("static");
-  expect([bar.paddingTop, style.paddingBottom]).toEqual(["0px", "0px"]);
+  expect([bar.paddingTop, style.paddingBottom, bar.borderTopWidth]).toEqual(["0px", "0px", "0px"]);
   expect(style.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+});
+
+/** A 200 px scroller: two fields, the second at 150–170 px, under the held row with its message. */
+const FIELDS_ABOVE_ROW = `<div style="height: 200px; overflow-y: auto">
+  <input aria-label="First" style="display: block; height: 20px; box-sizing: border-box" />
+  <div style="height: 130px"></div>
+  <input aria-label="Second" style="display: block; height: 20px; box-sizing: border-box" />
+  <div style="height: 800px"></div>
+  <input aria-label="Last" style="display: block; height: 20px; box-sizing: border-box" />
+  <div style="height: 800px"></div>
+  <wt-form-actions error="Correct the highlighted fields to continue."><wt-button variant="primary">Save</wt-button></wt-form-actions>
+</div>`;
+
+async function mountFieldsAboveRow() {
+  const scroller = (await mount(FIELDS_ABOVE_ROW)) as HTMLElement;
+  const row = scroller.querySelector<WtFormActions>("wt-form-actions")!;
+  await row.updateComplete;
+  const [first, second, last] = [...scroller.querySelectorAll("input")];
+  return { scroller, row, first: first!, second: second!, last: last! };
+}
+
+/** Waits until `field` lies wholly inside `scroller`'s view and above `row`. */
+async function expectClearOfRow(scroller: HTMLElement, row: HTMLElement, field: HTMLElement) {
+  await vi.waitFor(() => {
+    const box = field.getBoundingClientRect();
+    expect(box.top).toBeGreaterThanOrEqual(scroller.getBoundingClientRect().top);
+    expect(box.bottom).toBeLessThanOrEqual(row.getBoundingClientRect().top);
+  });
+}
+
+const nextFrame = () =>
+  new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+test("scrolls a field Tab reaches under the held row until it is clear of the row", async () => {
+  const { scroller, row, first, second } = await mountFieldsAboveRow();
+  expect(second.getBoundingClientRect().bottom).toBeGreaterThan(row.getBoundingClientRect().top);
+  first.focus();
+  await userEvent.tab();
+  expect(document.activeElement).toBe(second);
+  await expectClearOfRow(scroller, row, second);
+});
+
+test("scrolls a field focused below the view clear of the held row, not just into the view", async () => {
+  const { scroller, row, last } = await mountFieldsAboveRow();
+  // The browser brings a focused field to the middle of a view this short, under the row.
+  scroller.style.height = "120px";
+  last.focus();
+  await expectClearOfRow(scroller, row, last);
+});
+
+test("scrolls what scrolls under it, past a shadow root and an element between that lets its content overflow", async () => {
+  const scroller = (await mount(
+    '<div style="height: 200px; overflow-y: auto"><div style="height: 50px"></div></div>',
+  )) as HTMLElement;
+  const root = scroller.firstElementChild!.attachShadow({ mode: "open" });
+  root.innerHTML = FIELDS_ABOVE_ROW.replace(/^<div[^>]*>|<\/div>$/g, "");
+  const row = root.querySelector<WtFormActions>("wt-form-actions")!;
+  await row.updateComplete;
+  const [first, second] = root.querySelectorAll("input");
+  expect(second!.getBoundingClientRect().bottom).toBeGreaterThan(row.getBoundingClientRect().top);
+  first!.focus();
+  await userEvent.tab();
+  expect(root.activeElement).toBe(second);
+  await expectClearOfRow(scroller, row, second!);
+});
+
+test.each([
+  ["", ""],
+  [", though the page's body names a scrolling overflow the page takes over", "auto"],
+])("scrolls the page when nothing nearer scrolls under it%s", async (_, bodyOverflow) => {
+  document.body.style.overflowY = bodyOverflow;
+  onTestFinished(() => {
+    document.body.style.overflowY = "";
+  });
+  await mount(`<div>
+    <input aria-label="First" style="display: block; height: 20px; box-sizing: border-box" />
+    <div data-gap></div>
+    <input aria-label="Second" style="display: block; height: 20px; box-sizing: border-box" />
+    <div style="height: 3000px"></div>
+    <wt-form-actions error="Correct the highlighted fields to continue."><wt-button variant="primary">Save</wt-button></wt-form-actions>
+  </div>`);
+  const row = host.querySelector<WtFormActions>("wt-form-actions")!;
+  await row.updateComplete;
+  const [first, second] = host.querySelectorAll("input");
+  const gap = host.querySelector<HTMLElement>("[data-gap]")!;
+  gap.style.height = `${row.getBoundingClientRect().top + 5 - gap.getBoundingClientRect().top}px`;
+  expect(second!.getBoundingClientRect().top).toBeGreaterThan(row.getBoundingClientRect().top);
+  first!.focus();
+  await userEvent.tab();
+  expect(document.activeElement).toBe(second);
+  await vi.waitFor(() =>
+    expect(second!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      row.getBoundingClientRect().top,
+    ),
+  );
+  expect(document.documentElement.scrollTop).toBeGreaterThan(0);
+});
+
+test("does not scroll when focus moves to one of its own buttons", async () => {
+  const { scroller, row } = await mountFieldsAboveRow();
+  row.querySelector("wt-button")!.shadowRoot!.querySelector("button")!.focus();
+  await nextFrame();
+  expect(scroller.scrollTop).toBe(0);
+});
+
+const HOLDER_STYLE =
+  "height: 200px; display: flex; flex-direction: column; justify-content: flex-end";
+const ROW = '<wt-form-actions><wt-button variant="primary">Save</wt-button></wt-form-actions>';
+
+/** Each builds, in the scroller, a focusable element that holds the row, and returns it. */
+const holders: [string, (scroller: HTMLElement) => HTMLElement][] = [
+  [
+    "as a child",
+    (scroller) => {
+      scroller.insertAdjacentHTML(
+        "afterbegin",
+        `<div tabindex="0" aria-label="Form" style="${HOLDER_STYLE}">${ROW}</div>`,
+      );
+      return scroller.firstElementChild as HTMLElement;
+    },
+  ],
+  [
+    "through a slot, as a dialog's body holds it",
+    (scroller) => {
+      scroller.insertAdjacentHTML("afterbegin", `<div>${ROW}</div>`);
+      const outer = scroller.firstElementChild!.attachShadow({ mode: "open" });
+      outer.innerHTML = `<div tabindex="0" aria-label="Form" style="${HOLDER_STYLE}"><slot></slot></div>`;
+      return outer.firstElementChild as HTMLElement;
+    },
+  ],
+  [
+    "through a slot inside another element's shadow root",
+    (scroller) => {
+      scroller.insertAdjacentHTML("afterbegin", `<div>${ROW}</div>`);
+      const outer = scroller.firstElementChild!.attachShadow({ mode: "open" });
+      outer.innerHTML = `<div tabindex="0" aria-label="Form" style="${HOLDER_STYLE}"><div><slot></slot></div></div>`;
+      outer.querySelector("div > div")!.attachShadow({ mode: "open" }).innerHTML = "<slot></slot>";
+      return outer.firstElementChild as HTMLElement;
+    },
+  ],
+];
+
+test.each(holders)(
+  "does not scroll when focus moves to an element that holds it %s",
+  async (_, build) => {
+    // The holder's bottom, with room for the row below it, lies past the view.
+    const scroller = (await mount(`<div style="height: 300px; overflow-y: auto">
+      <div style="height: 1000px"></div>
+    </div>`)) as HTMLElement;
+    const holder = build(scroller);
+    scroller.insertAdjacentHTML("afterbegin", '<div style="height: 80px"></div>');
+    await scroller.querySelector<WtFormActions>("wt-form-actions")!.updateComplete;
+    holder.focus();
+    expect(holder.matches(":focus")).toBe(true);
+    await nextFrame();
+    expect(scroller.scrollTop).toBe(0);
+  },
+);
+
+test("scrolls nothing for a field above it", async () => {
+  const { scroller, row, second } = await mountFieldsAboveRow();
+  scroller.scrollTop = 100;
+  expect(second.getBoundingClientRect().bottom).toBeLessThan(row.getBoundingClientRect().top);
+  second.focus();
+  await nextFrame();
+  expect(scroller.scrollTop).toBe(100);
+});
+
+test("scrolls nothing for a field below it", async () => {
+  const scroller = (await mount(`<div style="height: 200px; overflow-y: auto">
+    <wt-form-actions><wt-button variant="primary">Save</wt-button></wt-form-actions>
+    <div style="height: 100px"></div>
+    <input aria-label="Notes" style="display: block; height: 20px; box-sizing: border-box" />
+    <div style="height: 1000px"></div>
+  </div>`)) as HTMLElement;
+  scroller.querySelector("input")!.focus();
+  await nextFrame();
+  expect(scroller.scrollTop).toBe(0);
+});
+
+test("stops watching focus in a parent it has left", async () => {
+  const { scroller, row } = await mountFieldsAboveRow();
+  const remove = vi.spyOn(scroller, "removeEventListener");
+  const elsewhere = document.createElement("div");
+  host.append(elsewhere);
+  const add = vi.spyOn(elsewhere, "addEventListener");
+  elsewhere.append(row);
+  expect(remove.mock.calls.map(([type]) => type)).toContain("focusin");
+  expect(add.mock.calls.map(([type]) => type)).toContain("focusin");
+});
+
+test("takes no room, paints nothing and takes no clicks with neither buttons nor a message", async () => {
+  const scroller = (await mount(`<div style="height: 200px; overflow-y: auto">
+    <div data-content style="height: 1000px">Grid</div>
+    <wt-form-actions> </wt-form-actions>
+  </div>`)) as HTMLElement;
+  const row = scroller.querySelector<WtFormActions>("wt-form-actions")!;
+  await row.updateComplete;
+  expect(row.getBoundingClientRect().height).toBe(0);
+  const box = scroller.getBoundingClientRect();
+  expect(document.elementFromPoint(box.left + 20, box.bottom - 4)).toBe(
+    scroller.querySelector("[data-content]"),
+  );
+
+  row.error = "The routing could not be saved.";
+  await row.updateComplete;
+  expect(row.getBoundingClientRect().height).toBeGreaterThan(0);
+  expect(row.getBoundingClientRect().bottom).toBe(box.bottom);
+  expect(row.shadowRoot!.querySelector("[role=alert]")!.textContent).toBe(
+    "The routing could not be saved.",
+  );
+
+  row.error = "";
+  await row.updateComplete;
+  expect(row.getBoundingClientRect().height).toBe(0);
+});
+
+test("takes room once a button arrives, and gives it up when the last one leaves", async () => {
+  const row = (await mount("<wt-form-actions></wt-form-actions>")) as WtFormActions;
+  expect(row.getBoundingClientRect().height).toBe(0);
+  for (const slot of ["cancel", "secondary", ""]) {
+    const button = document.createElement("wt-button");
+    if (slot) button.slot = slot;
+    button.textContent = "Save";
+    row.append(button);
+    await vi.waitFor(() => expect(row.getBoundingClientRect().height, slot).toBeGreaterThan(0));
+    button.remove();
+    await vi.waitFor(() => expect(row.getBoundingClientRect().height, slot).toBe(0));
+  }
+});
+
+test("takes no room for a message its container shows instead", async () => {
+  const row = (await mount("<wt-form-actions></wt-form-actions>")) as WtFormActions;
+  row.showError = false;
+  row.error = "Correct the highlighted fields to continue.";
+  await row.updateComplete;
+  expect(row.getBoundingClientRect().height).toBe(0);
 });

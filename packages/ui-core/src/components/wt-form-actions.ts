@@ -25,6 +25,12 @@ export function formMessage(message: string) {
 
 export type FormErrorEvent = CustomEvent<{ message: string }>;
 
+/** `node`'s parent in the tree the browser lays out: a slotted element's slot, a shadow root's host. */
+function flatParent(node: Node): Node | null {
+  if (node instanceof Element && node.assignedSlot) return node.assignedSlot;
+  return node instanceof ShadowRoot ? node.host : node.parentNode;
+}
+
 @customElement("wt-form-actions")
 export class WtFormActions extends LitElement {
   static override styles = [
@@ -34,10 +40,6 @@ export class WtFormActions extends LitElement {
       :host {
         display: block;
         width: 100%;
-      }
-
-      /* A dialog already keeps its footer in view, so a row in that slot keeps the footer's look. */
-      :host(:not([slot="footer"])) {
         position: sticky;
         bottom: 0;
         z-index: 1;
@@ -46,14 +48,34 @@ export class WtFormActions extends LitElement {
         container-type: scroll-state;
       }
 
-      /* On the wrapper rather than the host, so the line drawn while held is the row's top edge. */
-      :host(:not([slot="footer"])) .bar {
+      :host(:state(empty)) {
+        display: none;
+      }
+
+      /* On the wrapper rather than the host, so the line drawn while held is the row's top edge.
+         The border is always there, unpainted until held, so being held keeps the row's height. */
+      .bar {
         padding-top: var(--wt-space-2);
+        border-top: 1px solid transparent;
       }
 
       @container scroll-state(stuck: bottom) {
         .bar {
-          border-top: 1px solid var(--wt-color-border);
+          border-top-color: var(--wt-color-border);
+        }
+      }
+
+      /* wt-dialog sets this on its footer, which already keeps its rows in view. */
+      @container style(--wt-form-actions-in-footer: true) {
+        :host {
+          position: static;
+          padding-bottom: 0;
+          background: none;
+        }
+
+        .bar {
+          padding-top: 0;
+          border-top: 0;
         }
       }
 
@@ -89,7 +111,56 @@ export class WtFormActions extends LitElement {
   /** Off while a container shows `error` instead — `wt-dialog` does, above its footer's content. */
   @property({ attribute: false }) showError = true;
 
+  private readonly internals = this.attachInternals();
+  private watched!: Node;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.watched = this.parentNode!;
+    this.watched.addEventListener("focusin", this.onFocusIn);
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.watched.removeEventListener("focusin", this.onFocusIn);
+  }
+
+  /** Keeps a field that focus reaches under the held row in view above it (WCAG 2.4.11). A frame
+   * later, so the browser's own scroll to the field has happened. */
+  private readonly onFocusIn = (event: Event): void => {
+    const field = event.composedPath()[0];
+    if (!(field instanceof HTMLElement) || event.composedPath().includes(this)) return;
+    for (let at = flatParent(this); at; at = flatParent(at)) if (at === field) return;
+    requestAnimationFrame(() => {
+      const row = this.getBoundingClientRect();
+      const box = field.getBoundingClientRect();
+      if (box.bottom <= row.top || box.top >= row.bottom) return;
+      this.scroller().scrollBy({ top: box.bottom - row.top });
+    });
+  };
+
+  /** What scrolls under the row: the nearest ancestor that can scroll, else the page. */
+  private scroller(): Element {
+    for (let at = flatParent(this); at; at = flatParent(at)) {
+      if (!(at instanceof Element) || at.scrollHeight <= at.clientHeight) continue;
+      if (getComputedStyle(at).overflowY !== "visible") return at;
+    }
+    return document.documentElement;
+  }
+
+  /** With no buttons and no message shown, the row takes no room and covers nothing. */
+  private syncEmpty(): void {
+    const filled =
+      (this.showError && this.error !== "") ||
+      [...this.renderRoot.querySelectorAll("slot")].some(
+        (slot) => slot.assignedElements({ flatten: true }).length > 0,
+      );
+    if (filled) this.internals.states.delete("empty");
+    else this.internals.states.add("empty");
+  }
+
   override updated(changed: Map<string, unknown>): void {
+    this.syncEmpty();
     if (!changed.has("error")) return;
     this.dispatchEvent(
       new CustomEvent("wt-form-error", {
@@ -105,8 +176,11 @@ export class WtFormActions extends LitElement {
       <div class="bar" data-bar>
         ${this.showError ? formMessage(this.error) : nothing}
         <div class="actions" data-actions>
-          <div class="cancel"><slot name="cancel"></slot></div>
-          <div class="primary"><slot name="secondary"></slot><slot></slot></div>
+          <div class="cancel"><slot name="cancel" @slotchange=${this.syncEmpty}></slot></div>
+          <div class="primary">
+            <slot name="secondary" @slotchange=${this.syncEmpty}></slot
+            ><slot @slotchange=${this.syncEmpty}></slot>
+          </div>
         </div>
       </div>
     `;
