@@ -2867,7 +2867,7 @@ seat's `FiscalBackend.assertRecordableAt` (`packages/fiscal/src/backend.ts`). Th
 the issue reading, `issueMoment` (`apps/server/src/issue-moment.ts`), whose clock every
 `recordSale` call in `apps/server/src`, outside its tests and `src/testing/`, takes; before the
 reader for a new sale (`payIntegrated`); and on every bill payment, cash included
-(`beginBillPayment`). `refuseWhileClockBehind` (`packages/fiscal-verifactu/src/clock-behind.ts`)
+(`beginBillPayment`). The function `refuseUntilRecordable` (`packages/fiscal-verifactu/src/clock-behind.ts`)
 checks this rule, and the seat's
 `refuseUntilRecordable` calls it, so each route that calls the seat, refunds and the dashboard's resolutions among them, refuses `clock.unusable` under such a
 clock; the refund loops' check at the start of each pass (`refundsPaused`) and `clockStopsRefund`

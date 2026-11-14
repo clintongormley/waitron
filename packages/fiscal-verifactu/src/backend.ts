@@ -51,7 +51,7 @@ import type { Entorno, RegistroRow } from "./registro-row.js";
 import { envios } from "./schema/envios.js";
 import { verifyChain } from "./verify.js";
 import { refuseBeforeFirstIssueDate } from "./first-issue-date.js";
-import { chainHeads, refuseWhileClockBehind as refuseBeforeRecordable } from "./clock-behind.js";
+import { chainHeads, refuseUntilRecordable } from "./clock-behind.js";
 import { confirmClockStep, latestClockStep } from "./clock-step.js";
 import { NOMBRE_RAZON_MAX } from "./venue-fields.js";
 import {
@@ -194,7 +194,7 @@ export class VerifactuBackend implements FiscalBackend {
     tx: Transaction,
     reading: { instant: Date; offsetMinutes: number },
   ): Promise<void> {
-    return refuseBeforeRecordable(tx, reading);
+    return refuseUntilRecordable(tx, reading);
   }
 
   confirmClockStep(tx: Transaction, input: ClockStepRequest): Promise<ClockStepRecorded> {

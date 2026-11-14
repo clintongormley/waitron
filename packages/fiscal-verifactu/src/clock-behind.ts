@@ -42,7 +42,7 @@ export async function chainHeads(tx: Transaction): Promise<Record<string, number
 }
 
 /** `clock.unusable` before 28-10-2024. The append calls it under this name (`chain.ts`). */
-export async function refuseWhileClockBehind(
+export async function refuseUntilRecordable(
   _tx: Transaction,
   reading: { instant: Date; offsetMinutes: number },
 ): Promise<void> {
