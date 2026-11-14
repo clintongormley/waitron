@@ -405,7 +405,7 @@ describe("errors other than a full disk", () => {
   });
 });
 
-it.each(["clock-challenge", "clock-confirm", "clock-set"])(
+it.each(["clock-challenge", "clock-set"])(
   "refuses a default Manager at %s with the box administration permission",
   async (route) => {
     const { deps } = mount(suite.db);
@@ -417,18 +417,11 @@ it.each(["clock-challenge", "clock-confirm", "clock-set"])(
       app,
       {
         ...deps,
-        clockConfirm: {
-          ...deps.clockConfirm,
-          backend: Object.assign(deps.clockConfirm.backend, {
-            confirmClockStop: unexpected,
-            confirmClockStep: unexpected,
-          }),
+        clockSet: {
+          ...deps.clockSet,
+          backend: Object.assign(deps.clockSet.backend, { confirmClockStep: unexpected }),
           requestFromBox: () => false,
-          correction: {
-            inTurn: (run) => run(),
-            steps: () => 0,
-            set: unexpected,
-          },
+          correction: { steps: () => 0, set: unexpected },
         },
       },
       () => {},

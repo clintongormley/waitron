@@ -14,7 +14,7 @@ import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, timesAcrossLines } from "../widgets/test-helpers.js";
 import { goToLabel } from "../widgets/alert-format.js";
 import { guideHref } from "../help-guide.js";
 import "./box-status-screen.js";
