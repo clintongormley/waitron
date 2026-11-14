@@ -57,8 +57,8 @@ rojo. El reloj del servidor se ha movido más de un minuto mientras no se ponía
 así que los cobros esperan. Vuelven a funcionar de las mismas maneras.
 
 **Comprobar la hora** al final de una línea roja de la hora, en lugar de **Avisa al encargado**,
-significa que la hora del servidor está en duda y no ha podido confirmarla por sí
-mismo. Termina cualquiera de las dos líneas rojas de la hora de arriba. Un cobro rechazado dice
+significa que la hora del servidor está en duda y el servidor no ha podido confirmarla por sí
+mismo. Termina cualquiera de las tres líneas rojas de la hora de arriba. Un cobro rechazado dice
 entonces que uses **Comprobar la hora** arriba de la pantalla. Pulsa **Comprobar la hora** para
 abrir su diálogo; si se muestra primero otro aviso, abre la lista y púlsalo ahí. Puede usarlo
 cualquiera con la sesión iniciada en la caja.

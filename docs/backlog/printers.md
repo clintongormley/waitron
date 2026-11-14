@@ -564,7 +564,7 @@ Hardware and inbox checks to complete in the owner session.
   reads `/proc/uptime` so that a box waking from sleep is not taken for a clock jumping forward.
   Slice 9b's measurement M3 set the wall clock on a Linux runner and `/proc/uptime` did not move
   with it; nobody has suspended a Linux box and watched it (`docs/developers/conventions-data.md`,
-  "A jump"). Left open by A798-B slice 9 (#2025).
+  "A clock jump"). Left open by A798-B slice 9 (#2025).
 
 ## Bundle: Bluetooth pairing commands
 

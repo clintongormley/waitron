@@ -707,7 +707,7 @@ export const ALERT_WORDS: Readonly<
       es: "El reloj del servidor no se mantiene en hora. Comprueba su fecha y hora en Estado del servidor.",
     },
   },
-  // `clock.corrected`'s direction; the reloj (masculine) is what moved, in Spanish.
+  // `clock.unconfirmed`'s opening and silent-host sentences, by its `cause` param.
   clock_unconfirmed_lead: {
     words: {
       clock_jumped: {
@@ -732,6 +732,7 @@ export const ALERT_WORDS: Readonly<
       es: "No puede ver su hora de internet porque la parte del servidor que la lee no responde, así que espera así en cada arranque, y su reloj no se puede corregir desde Waitron hasta que esa parte responda.",
     },
   },
+  // `clock.corrected`'s direction; the reloj (masculine) is what moved, in Spanish.
   clock_step_direction: {
     words: {
       forward: { en: "moved forward", es: "adelantado" },
