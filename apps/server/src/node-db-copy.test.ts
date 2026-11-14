@@ -43,7 +43,10 @@ import { MAIN_AUTHORITY } from "./testing/main-authority.js";
 import { PAIR_BUNDLE_FIELDS } from "./testing/pair-bundle.js";
 
 // No module reserves anything for the standby, so A's bundle needs no module operation.
-vi.mock("./modules.js", () => ({ ALL_MODULES: [] }));
+vi.mock("./modules.js", async () => {
+  const { modulesSettings } = await import("@waitron/module");
+  return { ALL_MODULES: [], MODULES_SETTINGS: modulesSettings([]) };
+});
 
 const RING_A = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x3a).toString("base64"),
