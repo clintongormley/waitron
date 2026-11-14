@@ -26,6 +26,18 @@ export interface ActivityKindData {
     readonly builtInKey: string | null;
     readonly name: string | null;
   };
+  readonly "access_role.created": {
+    readonly name: string;
+    readonly permissions: readonly string[];
+    readonly copiedFromRoleId: string | null;
+  };
+  readonly "access_role.renamed": { readonly from: string; readonly to: string };
+  readonly "access_role.deleted": {
+    readonly name: string;
+    readonly permissions: readonly string[];
+  };
+  readonly "access_role.permission_added": { readonly permission: string };
+  readonly "access_role.permission_removed": { readonly permission: string };
   readonly "job_role.created": { readonly name: string };
   readonly "job_role.renamed": { readonly from: string; readonly to: string };
   readonly "job_role.deleted": { readonly name: string };
@@ -92,6 +104,11 @@ export const ACTIVITY_KINDS = {
   "party.allergy_answered": { subject: "party" },
   "access_role.member_added": { subject: "person" },
   "access_role.member_removed": { subject: "person" },
+  "access_role.created": { subject: "access_role" },
+  "access_role.renamed": { subject: "access_role" },
+  "access_role.deleted": { subject: "access_role" },
+  "access_role.permission_added": { subject: "access_role" },
+  "access_role.permission_removed": { subject: "access_role" },
   "job_role.created": { subject: "job_role" },
   "job_role.renamed": { subject: "job_role" },
   "job_role.deleted": { subject: "job_role" },

@@ -3,6 +3,7 @@ import { floorDeletionFor } from "./floor-delete.js";
 import { readZoneDeleteImpact, deleteZone } from "@waitron/venue-service";
 import { readStationDeleteImpact, deleteStation } from "./station-delete.js";
 import { readCourseDeleteImpact, deleteCourse } from "./course-delete.js";
+import { mountAccessRolesApi } from "./access-roles-api.js";
 import { mountDepartmentReceiptSettingsApi } from "./department-receipt-api.js";
 // Side-effect only: registers host codes this file throws (`zone.not_found`, …).
 import "./errors.js";
@@ -1060,6 +1061,8 @@ export function mountManagementApi(
       return c.json({ document });
     }),
   );
+
+  mountAccessRolesApi(app, deps, log);
 
   app.get("/management-api/access-roles", (c) =>
     run(c, log, async () => {

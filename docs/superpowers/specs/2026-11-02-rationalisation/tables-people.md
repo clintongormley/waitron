@@ -282,6 +282,7 @@ What changes for the rota, read in `packages/staffing/src/`:
   (`staff-roles.ts:201-218`) then means each on-rota role.
 - A name is compared exactly after trimming today (`staff-roles.ts:57-66`). A1002 §3 compares a
   custom role's name after Unicode folding, so "Café" and "CAFE" clash.
+  **2026-11-14 correction:** the shared fold preserves accents: "Café" and "CAFÉ" clash; "Cafe" and "Café" can coexist. See the [PR16 addendum](../../plans/2026-11-11-a1002-roles-redesign.md#pr16-name-example-correction--watcher-2026-11-14-0425).
 - Changing who holds a role moves from staffing's holders route, gated by `staffing.manage`
   (`routes.ts:161-162`, `:337-345`), to A1002's membership change. That needs `person.admin`, and
   the person's whole result must stay within what the assigner holds (A1002 §5). Manager holds

@@ -1,5 +1,9 @@
 export {
   BUILT_IN_ROLE_KEYS,
+  createAccessRole,
+  renameAccessRole,
+  setAccessRolePermissions,
+  deleteAccessRole,
   prepareAccessRoleImport,
   importAccessRole,
   importAccessRoleMembership,

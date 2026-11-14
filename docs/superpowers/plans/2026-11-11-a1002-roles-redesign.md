@@ -1413,7 +1413,7 @@ export function deleteAccessRole(tx, input: { managementSessionId: string; roleI
   ticking `node.manage` → `role.not_permitted`; a Manager copying Admin → `role.not_permitted`; an
   Admin copying Admin gets today's declared list and no people. Rule 1's "before" half: on a role
   carrying `fiscal.remedy`, a Manager removing one of its permissions, renaming it and deleting it
-  are each `role.not_permitted`. "Café" then "CAFE" → `role.name_taken`; renaming Manager or
+  are each `role.not_permitted`. "Café" then "CAFÉ" → `role.name_taken`; renaming Manager or
   editing Admin → `role.built_in`; removing `payment.take` from Staff stops a Staff holder taking
   payment; stale `expectedPermissions` → `role.changed`; deleting a role held by three people logs
   three removals and queues mail for those with email; a permission edit
@@ -1515,3 +1515,11 @@ deciden lo que puede hacer cada persona."
   `pnpm exec vitest run scripts/guide-links.test.ts`. Delete A1002's build entries from
   `docs/backlog.md` and its area files; `git grep -nE 'PersonRoleValue|grantedFrom|persons\.role|admittedRoles|applyRoles|approverRoles|billApproverRoles' -- docs/developers docs/operations docs/backlog docs/backlog.md README.md CLAUDE.md`
   prints nothing. **Step 5: Commit**, `/finish-branch`.
+
+### PR16 name example correction — watcher, 2026-11-14 04:25
+
+Keep the shared `foldForUniqueness`: names ignore case but preserve accents, as the global constraints require. “Café” and “CAFÉ” collide; “Cafe” and “Café” can coexist. The watcher cleared correcting task16.1’s example; the shared fold is unchanged.
+
+### PR16 built-in names — watcher clearance, 2026-11-14 04:44
+
+The watcher cleared this material change to prevent confusing built-in/custom labels: refuse a custom name matching any built-in label in any interface language, using the existing role.name_taken error. Dashboard display and identity's name check read the same translation table; the email wording keeps its own labels. Creation, renaming and import use the same check. The copy request still requires permissions as planned; source grants override that list. Configuration import refuses a custom name that a later interface language reserves too; this slice adds no compatibility logic before go-live. This is watcher clearance, not a new owner approval.

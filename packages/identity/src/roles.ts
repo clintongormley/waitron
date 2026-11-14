@@ -1,7 +1,7 @@
-import { and, count, eq, inArray, isNotNull, isNull, notInArray } from "drizzle-orm";
+import { and, count, eq, inArray, isNotNull, isNull, ne, notInArray } from "drizzle-orm";
 import { persons, personRoles, roles, recordActivity, type Transaction } from "@waitron/db";
 import "./errors.js";
-import { AppError } from "@waitron/shared";
+import { AppError, BUILT_IN_ROLE_NAMES } from "@waitron/shared";
 import { foldForUniqueness } from "./fold.js";
 import {
   declaredPermissions,
@@ -10,7 +10,7 @@ import {
   type BuiltInRoleKey,
 } from "./permissions.js";
 import { resolveManagementSession } from "./management-session.js";
-import { holds } from "./authority.js";
+import { holds, type PersonAuthority } from "./authority.js";
 import { authorizeManager } from "./manager-login.js";
 import { requireFreshManagementSignIn } from "./fresh-sign-in.js";
 import { assertUsableAdminRemains } from "./admin-anchor.js";
@@ -195,8 +195,7 @@ export async function importAccessRole(
   const [role] = await tx
     .insert(roles)
     .values({
-      name: (source.name as string).trim(),
-      nameFolded: foldForUniqueness(source.name as string),
+      ...(await checkedRoleName(tx, source.name as string)),
       permissions,
       createdAt: source.created_at as string,
     })
@@ -217,4 +216,208 @@ export async function importAccessRoleMembership(
     subjectId: personId,
     data: { roleId, builtInKey: role!.builtInKey, name: role!.name },
   });
+}
+
+async function roleEditor(tx: Transaction, managementSessionId: string) {
+  const actor = await authorizeManager(tx, { managementSessionId, permission: "person.admin" });
+  await requireFreshManagementSignIn(tx, managementSessionId);
+  return actor;
+}
+
+async function accessRole(tx: Transaction, roleId: string) {
+  const [role] = await tx.select().from(roles).where(eq(roles.id, roleId));
+  if (role === undefined) throw new AppError("role.not_found", { roleId });
+  return role;
+}
+
+function effectivePermissions(role: typeof roles.$inferSelect): string[] {
+  return role.builtInKey === "admin"
+    ? declaredPermissions()
+    : role.permissions.filter(isDeclaredPermission);
+}
+
+function requireRoleGrants(
+  authority: PersonAuthority,
+  permissions: readonly string[],
+  roleId?: string,
+) {
+  if (permissions.some((permission) => !holds(authority, permission)))
+    throw new AppError("role.not_permitted", roleId === undefined ? {} : { roleId });
+}
+
+function checkedPermissions(permissions: readonly string[]): string[] {
+  for (const permission of permissions)
+    if (!isDeclaredPermission(permission))
+      throw new AppError("role.permission_unknown", { permission });
+  return [...new Set(permissions)];
+}
+
+const RESERVED_ROLE_NAMES = new Set(
+  Object.values(BUILT_IN_ROLE_NAMES)
+    .flatMap((names) => Object.values(names))
+    .map(foldForUniqueness),
+);
+
+async function checkedRoleName(tx: Transaction, input: string, roleId?: string) {
+  const name = input.trim();
+  if (name.length === 0) throw new AppError("role.name_required", {});
+  const nameFolded = foldForUniqueness(name);
+  if (RESERVED_ROLE_NAMES.has(nameFolded)) throw new AppError("role.name_taken", { name });
+  const [duplicate] = await tx
+    .select({ id: roles.id })
+    .from(roles)
+    .where(
+      and(
+        eq(roles.nameFolded, nameFolded),
+        roleId === undefined ? undefined : ne(roles.id, roleId),
+      ),
+    );
+  if (duplicate !== undefined) throw new AppError("role.name_taken", { name });
+  return { name, nameFolded };
+}
+
+export async function createAccessRole(
+  tx: Transaction,
+  input: {
+    managementSessionId: string;
+    name: string;
+    permissions: readonly string[];
+    copiedFrom?: string;
+  },
+): Promise<{ id: string }> {
+  const actor = await roleEditor(tx, input.managementSessionId);
+  const source =
+    input.copiedFrom === undefined ? undefined : await accessRole(tx, input.copiedFrom);
+  const permissions =
+    source === undefined ? checkedPermissions(input.permissions) : effectivePermissions(source);
+  requireRoleGrants(actor.authority, permissions, source?.id);
+  const name = await checkedRoleName(tx, input.name);
+  const [role] = await tx
+    .insert(roles)
+    .values({ ...name, permissions })
+    .returning({ id: roles.id });
+  await recordActivity(tx, {
+    kind: "access_role.created",
+    personId: actor.authorizedBy,
+    subjectId: role!.id,
+    data: { name: name.name, permissions, copiedFromRoleId: source?.id ?? null },
+  });
+  return role!;
+}
+
+export async function renameAccessRole(
+  tx: Transaction,
+  input: {
+    managementSessionId: string;
+    roleId: string;
+    name: string;
+    expectedName: string;
+  },
+): Promise<void> {
+  const actor = await roleEditor(tx, input.managementSessionId);
+  const role = await accessRole(tx, input.roleId);
+  if (role.builtInKey !== null) throw new AppError("role.built_in", { roleId: role.id });
+  requireRoleGrants(actor.authority, effectivePermissions(role), role.id);
+  if (role.name !== input.expectedName) throw new AppError("role.changed", {});
+  const name = await checkedRoleName(tx, input.name, role.id);
+  if (name.name === role.name) return;
+  await tx.update(roles).set(name).where(eq(roles.id, role.id));
+  await recordActivity(tx, {
+    kind: "access_role.renamed",
+    personId: actor.authorizedBy,
+    subjectId: role.id,
+    data: { from: role.name!, to: name.name },
+  });
+}
+
+export async function setAccessRolePermissions(
+  tx: Transaction,
+  input: {
+    managementSessionId: string;
+    roleId: string;
+    permissions: readonly string[];
+    expectedPermissions: readonly string[];
+  },
+): Promise<void> {
+  const actor = await roleEditor(tx, input.managementSessionId);
+  const role = await accessRole(tx, input.roleId);
+  if (role.builtInKey === "admin") throw new AppError("role.built_in", { roleId: role.id });
+  const before = new Set(effectivePermissions(role));
+  requireRoleGrants(actor.authority, [...before], role.id);
+  const expected = new Set(input.expectedPermissions);
+  if (before.size !== expected.size || [...before].some((permission) => !expected.has(permission)))
+    throw new AppError("role.changed", {});
+  const permissions = checkedPermissions(input.permissions);
+  requireRoleGrants(actor.authority, permissions, role.id);
+  const after = new Set(permissions);
+  const removed = [...new Set(role.permissions)].filter((permission) => !after.has(permission));
+  const added = permissions.filter((permission) => !before.has(permission));
+  await tx.update(roles).set({ permissions }).where(eq(roles.id, role.id));
+  for (const permission of removed)
+    await recordActivity(tx, {
+      kind: "access_role.permission_removed",
+      personId: actor.authorizedBy,
+      subjectId: role.id,
+      data: { permission },
+    });
+  for (const permission of added)
+    await recordActivity(tx, {
+      kind: "access_role.permission_added",
+      personId: actor.authorizedBy,
+      subjectId: role.id,
+      data: { permission },
+    });
+}
+
+export async function deleteAccessRole(
+  tx: Transaction,
+  input: {
+    managementSessionId: string;
+    roleId: string;
+  },
+): Promise<{ removedFrom: number }> {
+  const actor = await roleEditor(tx, input.managementSessionId);
+  const role = await accessRole(tx, input.roleId);
+  if (role.builtInKey !== null) throw new AppError("role.built_in", { roleId: role.id });
+  const permissions = effectivePermissions(role);
+  requireRoleGrants(actor.authority, permissions, role.id);
+  const members = await tx
+    .select({ personId: personRoles.personId })
+    .from(personRoles)
+    .where(eq(personRoles.roleId, role.id));
+  const [editor] = await tx
+    .select({ name: persons.displayName })
+    .from(persons)
+    .where(eq(persons.id, actor.authorizedBy));
+  for (const member of members) {
+    await tx
+      .delete(personRoles)
+      .where(and(eq(personRoles.roleId, role.id), eq(personRoles.personId, member.personId)));
+    const activity = await recordActivity(tx, {
+      kind: "access_role.member_removed",
+      personId: actor.authorizedBy,
+      subjectId: member.personId,
+      data: { roleId: role.id, builtInKey: null, name: role.name },
+    });
+    await queueRoleMembershipMail(tx, {
+      activityId: activity.id,
+      personId: member.personId,
+      actorId: actor.authorizedBy,
+      change: "removed",
+      roleId: role.id,
+      builtInKey: null,
+      roleName: role.name,
+      editorName: editor!.name,
+      at: activity.at,
+    });
+  }
+  await tx.delete(roles).where(eq(roles.id, role.id));
+  await recordActivity(tx, {
+    kind: "access_role.deleted",
+    personId: actor.authorizedBy,
+    subjectId: role.id,
+    data: { name: role.name!, permissions },
+  });
+  await assertUsableAdminRemains(tx);
+  return { removedFrom: members.length };
 }
