@@ -421,7 +421,7 @@ it.each(["clock-challenge", "clock-set"])(
           ...deps.clockSet,
           backend: Object.assign(deps.clockSet.backend, { confirmClockStep: unexpected }),
           requestFromBox: () => false,
-          correction: { steps: () => 0, set: unexpected },
+          correction: { steps: () => 0, set: unexpected, inTurn: (fn) => fn() },
         },
       },
       () => {},
