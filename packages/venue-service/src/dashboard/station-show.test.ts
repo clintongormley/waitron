@@ -47,7 +47,7 @@ describe("stationShowModel", () => {
       { departmentId: "bar", ranges: [LATE, ALL_DAY] },
       { departmentId: "rest", ranges: [DINNER] },
     ]);
-    const shown = stationShowModel(meta, read, STATION, PERIODS, "station")!;
+    const shown = stationShowModel(meta, read, STATION, PERIODS, "department")!;
     expect(shown.departments).toEqual([
       {
         id: "rest",
@@ -72,6 +72,29 @@ describe("stationShowModel", () => {
     ]);
   });
 
+  it("combines two senders into one named station row for station comparisons", () => {
+    const read = times([
+      { departmentId: "bar", ranges: [LATE, ALL_DAY] },
+      { departmentId: "rest", ranges: [DINNER] },
+    ]);
+    const shown = stationShowModel(monthModel(), read, STATION, PERIODS, "station")!;
+    expect(shown.departments).toEqual([
+      {
+        id: "pass",
+        name: "Pass",
+        zones: [],
+        periods: [
+          { id: "lunch", name: "Lunch", colour: "green" },
+          { id: "dinner", name: "Dinner", colour: "red" },
+          { id: "allday", name: "All day", colour: "purple" },
+        ],
+      },
+    ]);
+    expect(shown.model.days[3]!.departments).toEqual([
+      { departmentId: "pass", zones: [], ranges: [ALL_DAY, DINNER, LATE] },
+    ]);
+  });
+
   it("names a lone sender after its department for the Calendar", () => {
     const read = times([{ departmentId: "bar", ranges: [LATE, ALL_DAY] }]);
     const shown = stationShowModel(monthModel(), read, STATION, PERIODS, "department")!;
@@ -88,7 +111,7 @@ describe("stationShowModel", () => {
     ]);
   });
 
-  it("names a lone sender after the station for the Times tab", () => {
+  it("names a lone sender after the station for station comparisons", () => {
     const read = times([{ departmentId: "bar", ranges: [LATE, ALL_DAY] }]);
     const shown = stationShowModel(monthModel(), read, STATION, PERIODS, "station")!;
     expect(shown.departments).toEqual([
@@ -116,7 +139,7 @@ describe("stationShowModel", () => {
     expect(shown.model.days.every((day) => day.departments.length === 0)).toBe(true);
   });
 
-  it("gives the Times tab one station row when no department sends to the station", () => {
+  it("gives station comparisons one station row when no department sends to the station", () => {
     const shown = stationShowModel(monthModel(), times([]), STATION, PERIODS, "station")!;
     expect(shown.departments.map(({ id, name }) => ({ id, name }))).toEqual([
       { id: "pass", name: "Pass" },
