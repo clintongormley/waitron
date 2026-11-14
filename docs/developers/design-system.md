@@ -35,9 +35,11 @@ template in a non-test `.ts` on disk under `apps/dashboard/src`, `apps/till/src`
 colour functions, the same short list of named colours, and `rem`/`em` (a `var()` fallback
 included). It does not see `px` sizes; styles outside a `css` tag (inline `style=` attributes,
 `unsafeCSS` strings, string constants such as `DRAWER_BREAKPOINT` or `PHONE_WIDTH`, `index.html`);
-selectors and quoted strings; the condition of a `@media` or `@container` rule, which cannot read a
-custom property, so app breakpoints stay literal; a value interpolated with `${…}`; or
-`apps/setup`, `apps/server` and a package's other folders. The rule above still applies to
+selectors, quoted strings and the contents of `url(…)`; the condition of an at-rule that opens a
+block (`@media`, `@container`, `@supports`, …; a `@media` or `@container` size condition cannot use
+`var()`, so app breakpoints stay literal); a value interpolated with `${…}`, and part or all of the
+rest of the template after a regular expression inside `${…}` whose text holds `//`, `/*`, a quote,
+a backtick or a `{`; or `apps/setup`, `apps/server` and a package's other folders. The rule above still applies to
 everything the guards do not see.
 The shared package also runs `packages/ui-core/src/no-hardcoded-chrome.test.ts` and
 `packages/ui-core/src/tap-target-and-focus.test.ts` directly over its own controls.
@@ -603,10 +605,10 @@ the circle drawn inside it; see "Help mode"), `--wt-price-field-width`,
 `--wt-duration-pulse-fast`,
 `--wt-field-height`, `--wt-field-line-width`, `--wt-field-line-width-active`,
 `--wt-dropdown-row-height`, `--wt-letter-spacing-caps|wide` (0.04em and 0.1em),
-`--wt-row-field-min-width` (12rem), and the sizes particular to one view: the dashboard's
+`--wt-row-field-min-width` (12rem), `--wt-date-field-max-width` (16rem, a date picker's widest),
+and the sizes particular to one view: the dashboard's
 `--wt-approvals-…`, `--wt-overview-…`, `--wt-menu-list-…`, `--wt-authenticator-…` and
-`--wt-image-preview-…` tokens, the till's `--wt-till-…` tokens, and the bookings screen's
-`--wt-booking-date-field-max-width`
+`--wt-image-preview-…` tokens and the till's `--wt-till-…` tokens
 
 The field tokens size the filled form field (see "The field box" under Forms):
 `--wt-field-height` (56px) is a labelled field's height, above `--wt-tap-min`, which

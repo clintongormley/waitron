@@ -37,7 +37,7 @@ export class BookingsScreen extends LitElement {
       .picker {
         display: block;
         margin-bottom: var(--wt-space-4);
-        max-width: var(--wt-booking-date-field-max-width);
+        max-width: var(--wt-date-field-max-width);
       }
       .list {
         display: flex;

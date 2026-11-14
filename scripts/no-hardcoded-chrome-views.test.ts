@@ -13,9 +13,12 @@ import { sourceFilesIn } from "./no-till-as-issuer.mjs";
  * `packages/<name>/src/dashboard` there is when it runs, skipping `sourceFilesIn`'s ignored
  * folders, and does not see: px sizes; styles outside a `css` tag (inline `style=` attributes,
  * `unsafeCSS` strings, string constants such as `DRAWER_BREAKPOINT` or `PHONE_WIDTH`,
- * `index.html`); selectors and quoted strings; the condition of a `@media` or `@container` rule,
- * which cannot read a custom property; a value interpolated with `${…}`; `apps/setup`,
- * `apps/server`, or a package's other folders. Only the short list of named colours below is caught.
+ * `index.html`); selectors, quoted strings and the contents of `url(…)`; the condition of an
+ * at-rule that opens a block (`@media`, `@container`, `@supports`, …; a `@media` or `@container`
+ * size condition cannot use `var()`); a value interpolated with `${…}`, and part or all of the rest
+ * of the template after a regular expression inside `${…}` whose text holds `//`, `/*`, a quote, a
+ * backtick or a `{`; `apps/setup`, `apps/server`, or a package's other folders. Only the short list
+ * of named colours below is caught.
  */
 
 const repoRoot = join(import.meta.dirname, "..");
@@ -91,7 +94,9 @@ function skipInterpolation(source: string, start: number): number {
 /** The body of each `css\`…\`` in `source`, with every interpolation replaced by a space. */
 function cssBlocks(source: string): CssBlock[] {
   const blocks: CssBlock[] = [];
-  for (const match of source.matchAll(/(?<![\w$.])css(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*\n)*`/g)) {
+  for (const match of source.matchAll(
+    /(?<![\w$.])css(?:\s|\/\*(?:[^*]|\*(?!\/))*\*\/|\/\/[^\n]*\n)*`/g,
+  )) {
     const open = match.index + match[0].length - 1;
     const out: string[] = [];
     skipTemplate(source, open, out);
@@ -114,7 +119,8 @@ const LITERAL_PATTERNS: readonly RegExp[] = [
 function hardcodedLiterals(body: string): string[] {
   const css = body
     .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/"(?:[^"\\]|\\[\s\S])*"|'(?:[^'\\]|\\[\s\S])*'/g, '""');
+    .replace(/"(?:[^"\\]|\\[\s\S])*"|'(?:[^'\\]|\\[\s\S])*'/g, '""')
+    .replace(/url\([^)]*\)/gi, "url()");
   const values = [...css.matchAll(/[^;{}]*[;{}]|[^;{}]+$/g)]
     .map((m) => m[0])
     .filter((segment) => !segment.endsWith("{") && segment.includes(":"))
@@ -139,6 +145,11 @@ describe("the scanner", () => {
       "a value in a rule nested in a media query",
       "@media (min-width: 1px) { a { color: red } }",
       "red",
+    ],
+    [
+      "a value after an unquoted url() holding a semicolon",
+      "a { background: url(data:image/png;base64,AAA) #fff; }",
+      "#fff",
     ],
   ])("finds %s", (_label, css, literal) => {
     expect(found(css)).toEqual([literal]);
@@ -175,6 +186,11 @@ describe("the scanner", () => {
   ])("finds a css tag separated from its template by %s", (_label, source) => {
     const blocks = cssBlocks(source);
     expect(blocks.map((block) => hardcodedLiterals(block.body))).toEqual([["#12abef"]]);
+  });
+
+  it("does not stretch a comment after `css` over code to a later template", () => {
+    const source = 'import { css /* lit */, html } from "lit";\n/* doc */ `a { color: #000 }`';
+    expect(cssBlocks(source)).toEqual([]);
   });
 
   it.each([

@@ -17,7 +17,7 @@ import { deriveTheme, WAITRON_DEFAULTS } from "./waitron.js";
 const MEANING =
   /^(on-)?(station-|palette-|table-|tab-|day-|danger|success|warning|google-|highlight)/;
 const PREFIX = "--wt-color-";
-// Colours that stay the same in both themes and that no venue theme writes.
+// Colours other than the scrim that stay the same in both themes and that no venue theme writes.
 const FIXED: Record<string, string> = {
   "logo-plate": "#ffffff",
   paper: "#ffffff",

@@ -102,6 +102,7 @@
   --wt-letter-spacing-caps: 0.04em;
   --wt-letter-spacing-wide: 0.1em;
   --wt-row-field-min-width: 12rem;
+  --wt-date-field-max-width: 16rem;
 
   /* Dashboard views. The menu list's two are the room its name column leaves for the other
      columns in the middle and wide layouts. */
@@ -122,9 +123,6 @@
   --wt-till-ticket-column-width: 22rem;
   --wt-till-receipt-qr-size: 10rem;
   --wt-till-station-ticket-min-width: 12rem;
-
-  /* Module dashboard views. */
-  --wt-booking-date-field-max-width: 16rem;
 
   --wt-shadow-1: 0 1px 2px rgb(0 0 0 / 0.08);
   --wt-shadow-2: 0 8px 24px rgb(0 0 0 / 0.16);

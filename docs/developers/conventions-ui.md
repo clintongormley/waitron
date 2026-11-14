@@ -1085,9 +1085,11 @@ template in a non-test `.ts` on disk under `apps/dashboard/src`, `apps/till/src`
 colour functions, the same short list of named colours, and `rem`/`em` (a `var()` fallback
 included). It does not see `px` sizes; styles outside a `css` tag (inline `style=` attributes,
 `unsafeCSS` strings, string constants such as `DRAWER_BREAKPOINT` or `PHONE_WIDTH`, `index.html`);
-selectors and quoted strings; the condition of a `@media` or `@container` rule, which cannot read a
-custom property, so app breakpoints stay literal; a value interpolated with `${…}`; or
-`apps/setup`, `apps/server` and a package's other folders.
+selectors, quoted strings and the contents of `url(…)`; the condition of an at-rule that opens a
+block (`@media`, `@container`, `@supports`, …; a `@media` or `@container` size condition cannot use
+`var()`, so app breakpoints stay literal); a value interpolated with `${…}`, and part or all of the
+rest of the template after a regular expression inside `${…}` whose text holds `//`, `/*`, a quote,
+a backtick or a `{`; or `apps/setup`, `apps/server` and a package's other folders.
 
 A `--wt-*` name a stylesheet reads must be declared somewhere, anywhere under `apps/` or
 `packages/`: CSS gives a property that reads an undeclared name with no fallback its inherited or
