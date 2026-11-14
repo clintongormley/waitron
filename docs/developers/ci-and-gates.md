@@ -1153,7 +1153,7 @@ job: `.github/workflows/ci.yml` runs `test-heavy` (`packages/db`) and `test-serv
 (`apps/server`) as three-way and twenty-four-way file shards, each with a `-merge` job that enforces the thresholds on
 the merged blob (#216) — the files that need either downloaded binary (the stream loop and pause tests, the S3 rehearsal
 scenarios, the rehearsal's send gate and interrupt suites, and the S3 test server's suite) run in `test-server-stream` instead, whose
-blob joins the same merge. `test-dashboard` and `test-venue-service` are four-way and `test-till`
+blob joins the same merge. `test-dashboard`, `test-venue-service` and `test-till` use six-way, four-way and
 seven-way file shards in the same pattern, each with its own `-merge` job, so those three packages'
 coverage bars are enforced in the merge job, not in a shard. Then the
 dedicated mixed database/browser jobs (`test-bookings`, `test-media`, `test-payments-stripe`,
@@ -2595,7 +2595,7 @@ it does not shorten a slow file or establish lower total runner minutes.
 | Package directory | CI job prefix | Shards |
 | --- | --- | --- |
 | apps/server | test-server | 24 |
-| apps/dashboard | test-dashboard | 4 |
+| apps/dashboard | test-dashboard | 6 |
 | apps/till | test-till | 7 |
 
 For any row, collect only that job's logs from qualified runs in one coverage mode, then run:
