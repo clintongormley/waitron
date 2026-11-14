@@ -4155,6 +4155,9 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 
 ### Bound values and growing inserts
 
+2026-11-14, INSERTS-GROW: the table-round exception and its backlog entry are retired. The excerpt
+below records the earlier state; use the [current rule](#the-store-caps-the-values-one-statement-binds-at-official-nodes-limit).
+
 - **Official Node's SQLite binds at most 32,766 values in one statement; Homebrew's binds 250,000.**
   `openVenueStore`'s connections set the lower limit, so local runs refuse what CI refuses. An
   insert whose rows grow with an order must go through `insertInChunks` or `statementChunks`; the table round's
