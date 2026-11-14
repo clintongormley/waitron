@@ -432,7 +432,6 @@ const untilUnconfirmed = (el: TillApp) =>
     .poll(() => banner(el)?.textContent ?? "", { timeout: GIVE_UP_MS })
     .toContain(t("adjust.unconfirmed"));
 
-// Frame-driven effects need their own poll; this waits for a task, not a frame.
 function nextTask(): Promise<void> {
   return new Promise((resolve) => {
     const channel = new MessageChannel();
@@ -445,6 +444,7 @@ function nextTask(): Promise<void> {
   });
 }
 
+/** Frame-driven effects need their own poll; these turns do not guarantee a frame. */
 async function flush(el: TillApp, rounds = 3): Promise<void> {
   for (let i = 0; i < rounds; i++) {
     if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(0);
