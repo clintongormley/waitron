@@ -11,7 +11,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { readSpecialDaysModel } from "./named-days.js";
+import { calendarDays } from "./hours.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
 import { routingModel } from "./routing-store.js";
 
@@ -71,10 +71,8 @@ describe("Calendar without a station-hours page model", () => {
       return { bar: bar!.id, prep: prep!.id, kitchen: kitchen!.id };
     });
     const model = await withTransaction(suite.db, (tx) =>
-      readSpecialDaysModel(tx, "2026-10-09", "2026-10-09", at),
+      calendarDays(tx, ["2026-10-09"], []).then(({ days }) => days),
     );
-    for (const field of ["subjects", "week", "specialCells", "specialDates"])
-      expect(model).not.toHaveProperty(field);
     const routing = await withTransaction(suite.db, (tx) => routingModel(tx, at));
     expect(routing.stations).toEqual([
       { id: ids.bar, name: "Bar", active: true, colour: "red" },
@@ -84,24 +82,16 @@ describe("Calendar without a station-hours page model", () => {
       (await suite.db.select().from(kitchenStations)).find((row) => row.id === ids.prep),
     ).toMatchObject({ id: ids.prep, name: "Prep", active: false });
     expect(routing.stationTimes.map((row) => row.stationId)).not.toContain(ids.prep);
-    expect(model.days[0]!.specialDay).toEqual({ id: special, name: "Festival" });
-    expect([model.timeZone, model.dayCutover, model.civilDate, model.clockReadable]).toEqual([
-      "Europe/Madrid",
-      "04:30",
-      "2026-10-06",
-      true,
-    ]);
+    expect(model[0]!.specialDay).toEqual({ id: special, name: "Festival" });
   });
 
   it("keeps special days without station-hour fields when the venue has no stations", async () => {
     await fixture();
     const special = await festival();
     const model = await withTransaction(suite.db, (tx) =>
-      readSpecialDaysModel(tx, "2026-10-09", "2026-10-09", at),
+      calendarDays(tx, ["2026-10-09"], []).then(({ days }) => days),
     );
-    for (const field of ["subjects", "week", "specialCells", "specialDates"])
-      expect(model).not.toHaveProperty(field);
-    expect(model.days).toEqual([
+    expect(model).toEqual([
       {
         date: "2026-10-09",
         specialDay: { id: special, name: "Festival" },

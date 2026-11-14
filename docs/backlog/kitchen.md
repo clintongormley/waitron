@@ -157,13 +157,6 @@ Next: decide whether the report leaves held dishes out, as the floor does. If it
   `nowIso()`; not proven for all). Left open by the table actions plan's Task 9 (#874, dishes arriving in a
   party get a kitchen group).
 
-## `GET /management-api/stations/outputs-down` and the dashboard's `listOutputsDown` have no caller
-
-- Found while removing the Stations tab's health read (A366 slice 4 decision 34): the
-  route (`apps/server/src/management-api.ts`) and the client method
-  (`packages/venue-service/src/dashboard/routing-client.ts`) are called only by their own tests.
-  Decide whether to remove them or use them; slice 4 Part A leaves both.
-
 ## A1080. Owner question: which refusal wins when one save holds a started dish and a dish at a "Not allowed" station.
 
 Within one dish `ticket.already_started` is checked first (a bare raise of a started dish is not refused as started, A1382), but across a

@@ -41,12 +41,7 @@ import {
   setZoneSalePolicyOverride,
   updateDepartment,
 } from "./operations.js";
-import {
-  readOpeningHoursModel,
-  replaceMenuWeek,
-  saveMenuPeriod,
-  updateMenuPeriod,
-} from "./menu-timetable.js";
+import { readOpeningHoursModel, saveMenuPeriod, updateMenuPeriod } from "./menu-timetable.js";
 import { isLocalDate, parseCalendarMonth, parseCalendarYear } from "./hours-rules.js";
 import {
   CALENDAR_COLOURS,
@@ -70,7 +65,6 @@ import {
   setDepartmentTransferSettings,
 } from "./department-transfers.js";
 import "./errors.js";
-import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { assertDatedClosuresInHours, assertSeasonClosuresInHours } from "./zone-closure-hours.js";
 import {
   deleteSpecialDay,
@@ -375,7 +369,6 @@ function requirePreviewChange(body: Record<string, unknown>): RoutingChange {
 }
 
 import { stationServiceTimes } from "./station-service-times.js";
-import { readSpecialDaysModel } from "./named-days.js";
 import {
   readOpeningHoursMonth,
   readOpeningHoursYear,
@@ -521,16 +514,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         return c.json(
           await viewed(sessionId, (tx) => stationServiceTimes(tx, stationId, from, to)),
         );
-      }),
-    );
-
-    app.get("/management-api/venue-service/named-days", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const from = c.req.query("from") ?? "";
-        const to = c.req.query("to") ?? "";
-        const at = new Date();
-        return c.json(await viewed(sessionId, (tx) => readSpecialDaysModel(tx, from, to, at)));
       }),
     );
 
@@ -1156,26 +1139,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       }),
     );
 
-    app.put("/management-api/venue-service/departments/:departmentId/menu-week", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["days", "seasonId", "expectedClockRevision"]);
-        await gated(sessionId, (tx) =>
-          replaceMenuWeek(
-            tx,
-            departmentId,
-            body.days as readonly MenuWeekDay[],
-            new Date(),
-            body.expectedClockRevision as number,
-            { seasonId: requireBodyUuid(body.seasonId, "seasonId") },
-          ),
-        );
-        return c.body(null, 204);
-      }),
-    );
-
     app.put("/management-api/venue-service/seasons/:seasonId/weeks", (c) =>
       runBodyPaint(c, log, async () => {
         const sessionId = requireManagementSession(c);
@@ -1211,38 +1174,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
                 at,
                 read,
               ),
-          );
-        });
-        return c.body(null, 204);
-      }),
-    );
-
-    app.put("/management-api/venue-service/zones/:zoneId/closed-week", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const zoneId = requireUuidParam(c.req.param("zoneId"), "ZoneId");
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["days", "seasonId", "expectedClockRevision"]);
-        await gated(sessionId, async (tx) => {
-          const seasonId = requireBodyUuid(body.seasonId, "seasonId");
-          const at = new Date();
-          await replaceZoneClosedWeek(
-            tx,
-            zoneId,
-            body.days,
-            body.expectedClockRevision as number,
-            at,
-            {
-              seasonId,
-              afterWrite: (read) =>
-                assertSeasonClosuresInHours(
-                  tx,
-                  seasonId,
-                  [{ zoneId, field: "", days: body.days as readonly ClosedWeekDay[] }],
-                  at,
-                  read,
-                ),
-            },
           );
         });
         return c.body(null, 204);

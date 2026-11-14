@@ -78,7 +78,7 @@ export { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
 export * from "./routing.js";
 export * from "./routing-store.js";
 export * from "./station-times.js";
-export { readCalendarDays, type HolidayReader } from "./hours.js";
+export { type HolidayReader } from "./hours.js";
 export {
   readHolidayFacts,
   readHolidays,
@@ -93,8 +93,6 @@ export type * from "./hours-types.js";
 export { CALENDAR_COLOURS, HOURS_RANGE_MAX_DAYS, WEEK_DISPLAY_ORDER } from "./hours-types.js";
 export * from "./department-transfers.js";
 export { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
-
-export { readSpecialDaysModel } from "./named-days.js";
 
 export { replaceZoneClosedWeek } from "./zone-closed-times.js";
 export { saveSpecialDay, type SpecialDayOccurrence } from "./special-days.js";

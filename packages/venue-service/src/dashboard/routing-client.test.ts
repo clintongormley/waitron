@@ -3,16 +3,12 @@ import { expect, it, vi } from "vitest";
 import type { DashboardRequest } from "@waitron/dashboard-kit";
 import { PrepStationsApi } from "./routing-client.js";
 
-it("has no station-hours, fallback or today writer, and reads output failures passively", async () => {
+it("has no station-hours, fallback or today writer", async () => {
   const request = vi.fn(async () => ({ printersDown: [], screensDark: [] }));
   const api = new PrepStationsApi(request as DashboardRequest);
   expect("setStationHours" in api).toBe(false);
   expect("setStationFallback" in api).toBe(false);
   expect("setStationToday" in api).toBe(false);
-  await api.listOutputsDown();
-  expect(request.mock.calls).toEqual([
-    ["/management-api/stations/outputs-down", "GET", undefined, { passive: true }],
-  ]);
 });
 
 it("A773 station policy: reads the pass coverage passively", async () => {

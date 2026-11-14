@@ -53,13 +53,7 @@ import {
   acceptDepartmentTransfer,
   declineDepartmentTransfer,
 } from "./department-transfers.js";
-import {
-  describeMakers,
-  resolveMakers,
-  resolveExtraMakers,
-  routingAt,
-  stationStates,
-} from "./routing-store.js";
+import { resolveMakers, resolveExtraMakers, routingAt, stationStates } from "./routing-store.js";
 import { stationDestinations, closeStationForToday, openStationForToday } from "./station-times.js";
 import type { VenueServiceContribution } from "@waitron/module";
 import { readServiceDay } from "./day-resolver.js";
@@ -214,7 +208,6 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   stationDestinations,
   closeStationForToday,
   openStationForToday,
-  describeMakers,
   listZoneOffers,
   resolveDefaultMenu,
   menuState,

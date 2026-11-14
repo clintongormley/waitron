@@ -35,7 +35,6 @@ describe("VENUE_SERVICE", () => {
       "copyProfileKitchenScreens",
       "copyTicketAllergy",
       "declineDepartmentTransfer",
-      "describeMakers",
       "dueFloorLayouts",
       "findOrderContext",
       "findOrderModes",

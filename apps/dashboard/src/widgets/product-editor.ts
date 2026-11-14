@@ -161,22 +161,6 @@ export function productEditorField(field: string, defaultLanguage: string): stri
   return mapped.endsWith("-") ? `${mapped}${defaultLanguage}` : mapped;
 }
 
-export function productEditorTranslationField(
-  value: {
-    customerName: LocalizedText | null;
-    variants: readonly { customerName: LocalizedText | null; active: boolean }[];
-  },
-  language: string,
-): string | null {
-  const missing = (text: LocalizedText | null) =>
-    text !== null && !languageText(text, language).trim();
-  if (missing(value.customerName)) return `customer-name-${language}`;
-  const index = value.variants.findIndex(
-    (variant) => variant.active && missing(variant.customerName),
-  );
-  return index === -1 ? null : `variant-${index}-name`;
-}
-
 const VARIANT_KEY = /^variant-(\d+)-(?:name|price|active)$/;
 
 /** The error key a change to each draft field answers, so a refusal of that field goes once the

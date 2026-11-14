@@ -1,7 +1,6 @@
 import { eq } from "drizzle-orm";
 import { departments, readVenueClock, type Transaction } from "@waitron/db";
 import type { BusinessDayClock } from "@waitron/shared";
-import { rangeDates } from "./hours-rules.js";
 import { type CalendarDay, type HolidayFact, type LocalDate } from "./hours-types.js";
 import type { Season } from "./season-rules.js";
 import { calendarCutAnchor } from "./calendar-cut.js";
@@ -73,22 +72,3 @@ export type HolidayReader = (
   from: LocalDate,
   to: LocalDate,
 ) => Promise<readonly HolidayFact[]>;
-
-async function readHolidays(
-  tx: Transaction,
-  dates: readonly LocalDate[],
-  holidays: HolidayReader | undefined,
-): Promise<readonly HolidayFact[]> {
-  return holidays === undefined ? [] : holidays(tx, dates[0]!, dates[dates.length - 1]!);
-}
-
-/** The calendar from `from` to `to`, both included, with any holiday facts `holidays` supplies. */
-export async function readCalendarDays(
-  tx: Transaction,
-  from: LocalDate,
-  to: LocalDate,
-  holidays?: HolidayReader,
-): Promise<CalendarDay[]> {
-  const dates = rangeDates(from, to);
-  return (await calendarDays(tx, dates, await readHolidays(tx, dates, holidays))).days;
-}

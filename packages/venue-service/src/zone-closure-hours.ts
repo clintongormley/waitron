@@ -20,7 +20,7 @@ function departmentIn(departmentOf: ReadonlyMap<string, string>) {
 
 /** After a season-week write, inside its transaction: each listed zone's closures against its
  *  department's week in `seasonId` as now stored, read from the start in force at `at`. `field`
- *  is the request path up to `days.` ("" or "zones.<i>."). Without `read`, the clock and the
+ *  is the request path up to `days.`, such as `zones.<i>.`. Without `read`, the clock and the
  *  zones are read here. */
 export async function assertSeasonClosuresInHours(
   tx: Transaction,

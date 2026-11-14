@@ -116,10 +116,7 @@ import { isUuid } from "./till-session.js";
 import { setProductCourse } from "./kitchen.js";
 
 import type { Logger } from "./logger.js";
-import { VENUE_SERVICE } from "./modules.js";
 import { activationInstant, checkedTimeZone, localTimeOf } from "./menu-publication-time.js";
-import { kitchenStations } from "@waitron/db";
-import { inArray } from "drizzle-orm";
 
 /** Catalogue and content-language routes. One taxpayer per database, so nothing filters by one. */
 export interface CatalogueApiDeps {
@@ -1357,56 +1354,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const session = requireManagementSession(c);
       const ids = (c.req.queries("id") ?? []).map((id) => requireUuidParam(id, "ProductId"));
       return c.json({ menus: await gated(c, session, (tx) => menusHolding(tx, ids)) });
-    }),
-  );
-  app.get("/management-api/products/made-at", (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      return c.json(
-        await gated(c, session, async (tx) => {
-          const makers = await VENUE_SERVICE.describeMakers(tx);
-          const stationIds = [
-            ...new Set(
-              [...makers.values()].flatMap(({ route, unavailableStationId }) =>
-                route?.kind === "station"
-                  ? [route.stationId]
-                  : unavailableStationId === null
-                    ? []
-                    : [unavailableStationId],
-              ),
-            ),
-          ];
-          const names = new Map(
-            (stationIds.length
-              ? await tx
-                  .select({ id: kitchenStations.id, name: kitchenStations.name })
-                  .from(kitchenStations)
-                  .where(inArray(kitchenStations.id, stationIds))
-              : []
-            ).map(({ id, name }) => [id, name]),
-          );
-          return Object.fromEntries(
-            [...makers].map(
-              ([id, { route, variesByZone, noReplacement, unavailableStationId }]) => [
-                id,
-                {
-                  stationId: route?.kind === "station" ? route.stationId : null,
-                  stationName:
-                    route?.kind === "station"
-                      ? (names.get(route.stationId) ?? null)
-                      : unavailableStationId === null
-                        ? null
-                        : (names.get(unavailableStationId) ?? null),
-                  noPreparation: route?.kind === "no_preparation",
-                  noReplacement,
-                  unavailableStationId,
-                  variesByZone,
-                },
-              ],
-            ),
-          );
-        }),
-      );
     }),
   );
   app.get("/management-api/catalogues/:id/products", (c) =>

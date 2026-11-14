@@ -4,16 +4,15 @@ import { expect, it } from "vitest";
 import { CORE_MIGRATIONS, specialDayDates, specialDays, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { readCalendarDays } from "./hours.js";
+import { calendarDays } from "./hours.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
-import { readSpecialDaysModel } from "./named-days.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
 });
 const at = new Date("2026-10-09T10:00:00Z");
 
-it.each(["calendar", "special days", "opening hours"] as const)(
+it.each(["calendar", "opening hours"] as const)(
   "%s reads its days after the station-hours tables are removed",
   async (reader) => {
     const rollback = new Error("roll back the schema probe");
@@ -47,10 +46,9 @@ it.each(["calendar", "special days", "opening hours"] as const)(
           closed: true,
         };
         if (reader === "calendar") {
-          expect(await readCalendarDays(tx, "2027-10-10", "2027-10-10")).toEqual([calendarDay]);
-        } else if (reader === "special days") {
-          const model = await readSpecialDaysModel(tx, "2027-10-10", "2027-10-10", at);
-          expect(model.days).toEqual([calendarDay]);
+          expect(await calendarDays(tx, ["2027-10-10"], []).then(({ days }) => days)).toEqual([
+            calendarDay,
+          ]);
         } else {
           expect(await readOpeningHoursModel(tx, at)).not.toHaveProperty("namedDays");
         }

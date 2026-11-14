@@ -41,7 +41,6 @@ function api(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listCourses: async () => [],
     listProducts: async () => [],
     getFolderRouting: async () => null,
-    listMadeAt: async () => ({}),
     getMenuStructure: async () => ({ members: [] }),
     createUnit: async (input: UnitInput) => ({ id: "new-unit", ...input }),
     ...overrides,

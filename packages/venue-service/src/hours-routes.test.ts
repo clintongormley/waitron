@@ -1,3 +1,4 @@
+import { rangeDates } from "./hours-rules.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedBusinessDay, seedActivityActor } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
@@ -11,7 +12,7 @@ import type {
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   catalogues,
@@ -32,9 +33,8 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
-import type { SpecialDaysModel } from "./holiday-types.js";
-import { readCalendarDays } from "./hours.js";
-import { readSpecialDaysModel } from "./named-days.js";
+import { calendarDays } from "./hours.js";
+import { readOpeningHoursYear } from "./opening-hours-calendar.js";
 import { saveSpecialDay } from "./special-days.js";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { WEEK_DISPLAY_ORDER } from "./hours-types.js";
@@ -196,11 +196,6 @@ async function send(
   });
 }
 
-async function refused(response: Response, status: number, error: Record<string, unknown>) {
-  expect(response.status).toBe(status);
-  expect(await response.json()).toMatchObject({ error });
-}
-
 const period = (opensAt: string, closesAt: string, id = randomUUID()): HourPeriod => ({
   id,
   opensAt,
@@ -251,111 +246,6 @@ const createDay = (
   );
 
 describe("reading Hours", () => {
-  it.each([
-    { at: "2026-10-12T03:59:59.999Z", businessDay: "2026-10-11" },
-    { at: "2026-10-12T04:00:00.000Z", businessDay: "2026-10-12" },
-  ])(
-    "returns the whole page model for the range to anyone who may view the venue at $at",
-    async ({ at, businessDay }) => {
-      vi.useFakeTimers({ toFake: ["Date"] });
-      vi.setSystemTime(new Date(at));
-      onTestFinished(() => {
-        vi.useRealTimers();
-      });
-      const fx = await fixture();
-      const party = await createDay("2030-10-15");
-      const response = await send(
-        fx,
-        "GET",
-        "/named-days?from=2030-10-14&to=2030-10-16",
-        fx.supervisor,
-      );
-      expect(response.status).toBe(200);
-      const model = (await response.json()) as SpecialDaysModel;
-      expect(model.civilDate).toBe("2026-10-12");
-      expect(model).toEqual({
-        businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
-        clockRevision: 1,
-        currentBusinessDay: businessDay,
-        pending: null,
-        timeZone: "Europe/Madrid",
-        dayCutover: "06:00",
-        civilDate: "2026-10-12",
-        clockReadable: true,
-        days: [
-          { date: "2030-10-14", specialDay: null, holidays: [], tone: "standard", closed: false },
-          {
-            date: "2030-10-15",
-            specialDay: { id: party.id, name: "Staff party" },
-            holidays: [],
-            tone: "special_day",
-            closed: false,
-          },
-          { date: "2030-10-16", specialDay: null, holidays: [], tone: "standard", closed: false },
-        ],
-        // No tenant row is stored here, so there is no country to read holidays for.
-        holidayCoverage: [
-          {
-            year: 2030,
-            country: "",
-            provinceCode: null,
-            regionCode: null,
-            nationalRegional: "unsupported_country",
-            local: "address_unresolved",
-            dataVersion: null,
-            sourceIds: [],
-          },
-        ],
-        holidaySources: [],
-        area: {
-          readiness: "unsupported_country",
-          addressKey: '["",null,""]',
-          options: [],
-          required: false,
-          chosen: null,
-        },
-        localHolidaysPerYear: 0,
-      });
-      expect(
-        (await send(fx, "GET", "/named-days?from=2030-10-14&to=2030-10-16", fx.manager)).status,
-      ).toBe(200);
-    },
-  );
-
-  it("refuses staff, an absent and an expired session", async () => {
-    const fx = await fixture();
-    const path = "/named-days?from=2030-10-14&to=2030-10-16";
-    await refused(await send(fx, "GET", path, fx.staff), 403, {
-      code: "authorization.not_permitted",
-    });
-    await refused(await send(fx, "GET", path, undefined), 401, {
-      code: "management_session.required",
-    });
-    await refused(await send(fx, "GET", path, fx.expired), 401, {
-      code: "management_session.expired",
-    });
-  });
-
-  it("refuses a missing, impossible, reversed or over-long range, naming the field", async () => {
-    const fx = await fixture();
-    for (const [query, field] of [
-      ["", "from"],
-      ["?from=2030-10-14", "to"],
-      ["?from=2030-02-30&to=2030-03-02", "from"],
-      ["?from=2030-10-14&to=2030-13-01", "to"],
-      ["?from=2030-10-14&to=2030-10-13", "to"],
-      ["?from=2030-01-01&to=2031-01-02", "to"],
-    ] as const)
-      await refused(await send(fx, "GET", `/named-days${query}`, fx.manager), 400, {
-        code: "hours.invalid",
-        params: { field },
-      });
-    // A leap year's whole year is the longest range served.
-    expect(
-      (await send(fx, "GET", "/named-days?from=2032-01-01&to=2032-12-31", fx.manager)).status,
-    ).toBe(200);
-  });
-
   it("colours a date Closed only when no active department has service ranges", async () => {
     const fx = await fixture();
     const deliPeriod = await withTransaction(db, async (tx) => {
@@ -392,17 +282,17 @@ describe("reading Hours", () => {
         },
       ],
     });
-    const model = (await (
-      await send(fx, "GET", "/named-days?from=2030-10-14&to=2030-10-15", fx.manager)
-    ).json()) as SpecialDaysModel;
-    expect(model.days.map((day) => day.closed)).toEqual([true, true]);
-    expect(model.days.map((day) => day.tone)).toEqual(["special_day", "closed"]);
+    const model = await withTransaction(db, (tx) =>
+      calendarDays(tx, rangeDates("2030-10-14", "2030-10-15"), []).then(({ days }) => days),
+    );
+    expect(model.map((day) => day.closed)).toEqual([true, true]);
+    expect(model.map((day) => day.tone)).toEqual(["special_day", "closed"]);
     await db
       .update(departments)
       .set({ active: false })
       .where(eq(departments.id, fx.departmentIds.restaurant));
     const deli = await withTransaction(db, (tx) =>
-      readCalendarDays(tx, "2030-10-14", "2030-10-15"),
+      calendarDays(tx, rangeDates("2030-10-14", "2030-10-15"), []).then(({ days }) => days),
     );
     expect(deli.map((day) => [day.tone, day.closed])).toEqual([
       ["special_day", true],
@@ -422,58 +312,12 @@ describe("reading Hours", () => {
       ),
     );
     const open = await withTransaction(db, (tx) =>
-      readCalendarDays(tx, "2030-10-14", "2030-10-15"),
+      calendarDays(tx, rangeDates("2030-10-14", "2030-10-15"), []).then(({ days }) => days),
     );
     expect(open.map((day) => [day.tone, day.closed])).toEqual([
       ["special_day", true],
       ["standard", false],
     ]);
-  });
-
-  it("reads the model in the same number of statements whatever the range and its special dates", async () => {
-    await fixture();
-    for (const date of ["2030-11-03", "2030-11-10", "2030-11-17", "2030-11-24"])
-      await createDay(date, { name: date, closedAllDay: true });
-    const statements = (from: string, to: string) =>
-      withTransaction(db, async (tx) => {
-        const reads = vi.spyOn(tx, "select");
-        const model = await readSpecialDaysModel(tx, from, to, new Date());
-        const count = reads.mock.calls.length;
-        reads.mockRestore();
-        return { count, days: model.days.length };
-      });
-    const short = await statements("2030-11-02", "2030-11-04");
-    const long = await statements("2030-10-01", "2030-12-31");
-    expect(short.days).toBe(3);
-    expect(long.days).toBe(92);
-    expect(long.count).toBe(short.count);
-  });
-
-  it("limits the Calendar to its requested range", async () => {
-    await fixture();
-    /** Sunday 6 October 2030, 12:00 in Madrid. */
-    const at = new Date("2030-10-06T10:00:00Z");
-    const days: Record<string, string> = {};
-    for (const date of ["2030-10-12", "2030-10-15", "2030-10-16"])
-      days[date] = (await createDay(date, { name: date, at })).id;
-    const read = () =>
-      withTransaction(db, (tx) => readSpecialDaysModel(tx, "2030-10-13", "2030-10-15", at));
-
-    const model = await read();
-    expect(model.civilDate).toBe("2030-10-06");
-    expect(model.days.map((day) => day.specialDay?.id ?? null)).toEqual([
-      null,
-      null,
-      days["2030-10-15"],
-    ]);
-    for (const field of ["specialDates", "specialCells", "subjects", "week"])
-      expect(model).not.toHaveProperty(field);
-    await db.run(
-      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Mars/Base"}) where module = 'business_day'`,
-    );
-    const unreadable = await read();
-    expect([unreadable.civilDate, unreadable.clockReadable]).toEqual([null, false]);
-    expect(unreadable.days).toEqual(model.days);
   });
 });
 
@@ -515,19 +359,18 @@ describe("Hours when the venue's clock changes", () => {
       return model.stationTimes.find((times) => times.stationId === fx.bar.id)!.status;
     });
 
-  const model = (at: Date) =>
-    withTransaction(db, (tx) => readSpecialDaysModel(tx, "2026-10-12", "2026-10-18", at));
+  const model = (at: Date) => withTransaction(db, (tx) => readOpeningHoursYear(tx, 2026, at));
 
   it("moves the civil date with a new time zone, keeping special days without closing stations", async () => {
     const fx = await fixture();
     await createDay("2026-10-15", { at: new Date("2026-10-01T10:00:00Z") });
     const madrid = await model(AT);
-    expect(madrid.civilDate).toBe("2026-10-15");
+    expect(madrid.today).toBe("2026-10-15");
     expect(await barStatus(fx, AT)).toEqual({ open: true, why: "open" });
 
     await setClock(fx, { timeZone: "America/New_York" });
     const newYork = await model(AT);
-    expect(newYork.civilDate).toBe("2026-10-14");
+    expect(newYork.today).toBe("2026-10-14");
     expect(newYork.timeZone).toBe("America/New_York");
     expect(await barStatus(fx, AT)).toEqual({ open: true, why: "open" });
     expect(newYork.days).toEqual(madrid.days);
@@ -542,7 +385,7 @@ describe("Hours when the venue's clock changes", () => {
       setStationToday(tx, fx.bar.id, "closed", at, await seedActivityActor(tx)),
     );
     const before = await model(at);
-    expect(before.civilDate).toBe("2026-10-15");
+    expect(before.today).toBe("2026-10-15");
     expect(await barStatus(fx, at)).toEqual({ open: false, why: "closed_by_hand" });
 
     await setClock(fx, { dayCutover: "02:00:00" });
@@ -550,7 +393,6 @@ describe("Hours when the venue's clock changes", () => {
     expect(await barStatus(fx, at)).toEqual({ open: true, why: "open" });
     expect(after).toEqual({
       ...before,
-      dayCutover: "02:00",
       businessDayClock: { ...before.businessDayClock, dayCutover: "02:00" },
       currentBusinessDay: "2026-10-15",
     });
@@ -568,58 +410,6 @@ describe("station-only Hours request boundary", () => {
         })
       ).status,
     ).toBe(404);
-  });
-});
-
-describe("named-days Calendar route", () => {
-  it("returns the venue-scoped model for a venue viewer", async () => {
-    const fx = await fixture();
-    const day = await createDay("2030-10-15", { repeatsYearly: true, closedAllDay: true });
-    const response = await send(
-      fx,
-      "GET",
-      "/named-days?from=2031-10-15&to=2031-10-16",
-      fx.supervisor,
-    );
-    expect(response.status).toBe(200);
-    const model = await response.json();
-    expect(model.days).toEqual([
-      {
-        date: "2031-10-15",
-        specialDay: { id: day.id, name: "Staff party" },
-        holidays: [],
-        tone: "special_day",
-        closed: true,
-      },
-      { date: "2031-10-16", specialDay: null, holidays: [], tone: "standard", closed: false },
-    ]);
-  });
-  it("requires the existing venue view authorization", async () => {
-    const fx = await fixture();
-    await refused(
-      await send(fx, "GET", "/named-days?from=2030-10-15&to=2030-10-15", fx.staff),
-      403,
-      { code: "authorization.not_permitted" },
-    );
-    await refused(
-      await send(fx, "GET", "/named-days?from=2030-10-15&to=2030-10-15", undefined),
-      401,
-      { code: "management_session.required" },
-    );
-  });
-  it("refuses missing, malformed, reversed and overlong ranges", async () => {
-    const fx = await fixture();
-    for (const [query, field] of [
-      ["", "from"],
-      ["from=2030-02-30&to=2030-03-01", "from"],
-      ["from=2030-10-16&to=2030-10-15", "to"],
-      ["from=2030-01-01&to=2031-01-02", "to"],
-    ]) {
-      await refused(await send(fx, "GET", `/named-days?${query}`, fx.supervisor), 400, {
-        code: "hours.invalid",
-        params: { field },
-      });
-    }
   });
 });
 

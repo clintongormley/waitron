@@ -22,7 +22,6 @@ export type ImageUsage =
   | {
       kind: "variant";
       id: string;
-      productId: string;
       catalogueId: string;
       name: string;
       active: boolean;

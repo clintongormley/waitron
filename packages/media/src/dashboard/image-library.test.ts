@@ -662,7 +662,6 @@ it("links a blocking variant use to the variant's own product page, not its pare
       {
         kind: "variant",
         id: "variant-1",
-        productId: "product-1",
         catalogueId: "menu",
         name: "Large",
         active: true,
@@ -1787,7 +1786,6 @@ const everyKindOfUse: ImageUsage[] = [
   {
     kind: "variant",
     id: "large",
-    productId: "toast",
     catalogueId: "menu",
     name: "Large toast",
     active: true,

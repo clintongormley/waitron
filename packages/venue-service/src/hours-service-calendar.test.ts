@@ -1,11 +1,11 @@
+import { rangeDates } from "./hours-rules.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, catalogues, departments, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { readCalendarDays } from "./hours.js";
-import { readSpecialDaysModel } from "./named-days.js";
+import { calendarDays } from "./hours.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { readSeasons } from "./seasons.js";
 import { saveSpecialDay } from "./special-days.js";
@@ -99,12 +99,10 @@ const special = (
 
 const tones = async (from: string, to = from) =>
   withTransaction(suite.db, async (tx) => {
-    const calendar = await readCalendarDays(tx, from, to);
-    const model = await readSpecialDaysModel(tx, from, to, at);
+    const calendar = await calendarDays(tx, rangeDates(from, to), []).then(({ days }) => days);
     return {
       calendar: calendar.map((day) => day.tone),
-      model: model.days.map((day) => day.tone),
-      closed: model.days.map((day) => day.closed),
+      closed: calendar.map((day) => day.closed),
     };
   });
 
@@ -113,7 +111,6 @@ describe("calendar follows department service periods", () => {
     await fixture();
     expect(await tones("2026-10-19", "2026-10-20")).toEqual({
       calendar: ["standard", "closed"],
-      model: ["standard", "closed"],
       closed: [false, true],
     });
   });
@@ -143,7 +140,7 @@ describe("calendar follows department service periods", () => {
       });
     });
     const calendar = await withTransaction(suite.db, (tx) =>
-      readCalendarDays(tx, "2030-11-25", "2030-12-02"),
+      calendarDays(tx, rangeDates("2030-11-25", "2030-12-02"), []).then(({ days }) => days),
     );
     expect(calendar.map((day) => [day.date, day.tone])).toEqual([
       ["2030-11-25", "closed"],
@@ -162,12 +159,10 @@ describe("calendar follows department service periods", () => {
     await special(f, "2026-10-20", false);
     expect(await tones("2026-10-20")).toEqual({
       calendar: ["special_day"],
-      model: ["special_day"],
       closed: [true],
     });
     expect(await tones("2026-10-27")).toEqual({
       calendar: ["closed"],
-      model: ["closed"],
       closed: [true],
     });
   });
@@ -178,12 +173,10 @@ describe("calendar follows department service periods", () => {
     await special(f, "2026-10-26", false);
     expect(await tones("2026-10-19")).toEqual({
       calendar: ["special_day"],
-      model: ["special_day"],
       closed: [true],
     });
     expect(await tones("2026-10-26")).toEqual({
       calendar: ["special_day"],
-      model: ["special_day"],
       closed: [false],
     });
   });
@@ -195,12 +188,10 @@ describe("calendar follows department service periods", () => {
     await special(f, "2026-10-27", true, lunch);
     expect(await tones("2026-10-20")).toEqual({
       calendar: ["special_day"],
-      model: ["special_day"],
       closed: [false],
     });
     expect(await tones("2026-10-27")).toEqual({
       calendar: ["special_day"],
-      model: ["special_day"],
       closed: [true],
     });
   });
@@ -209,13 +200,11 @@ describe("calendar follows department service periods", () => {
     const f = await fixture();
     expect(await tones("2026-10-19")).toEqual({
       calendar: ["standard"],
-      model: ["standard"],
       closed: [false],
     });
     await special(f, "2026-10-19", true);
     expect(await tones("2026-10-19")).toEqual({
       calendar: ["special_day"],
-      model: ["special_day"],
       closed: [true],
     });
   });
@@ -224,7 +213,6 @@ describe("calendar follows department service periods", () => {
     const f = await fixture();
     expect(await tones("2026-10-20")).toEqual({
       calendar: ["closed"],
-      model: ["closed"],
       closed: [true],
     });
     await suite.db
@@ -233,7 +221,6 @@ describe("calendar follows department service periods", () => {
       .where(eq(departments.id, f.department));
     expect(await tones("2026-10-19")).toEqual({
       calendar: ["closed"],
-      model: ["closed"],
       closed: [true],
     });
   });

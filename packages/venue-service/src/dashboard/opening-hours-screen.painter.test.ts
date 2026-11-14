@@ -54,7 +54,6 @@ function request(model: () => OpeningHoursModel, writes: unknown[] = []): Dashbo
           departments: [],
         })),
       };
-    if (path.includes("/named-days?")) return { days: [], stations: [], departments: [] };
     return model();
   }) as DashboardRequest;
 }

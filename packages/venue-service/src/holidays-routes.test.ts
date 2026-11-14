@@ -2,8 +2,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { getCountryPack } from "@waitron/country-packs";
+import { beforeAll, beforeEach, describe, expect, it, onTestFinished } from "vitest";
 import {
   CORE_MIGRATIONS,
   settings,
@@ -26,7 +25,8 @@ import {
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
-import type { HolidayGeography, HolidayRead, SpecialDaysModel } from "./holiday-types.js";
+import type { OpeningHoursYear } from "./opening-hours-calendar.js";
+import type { HolidayGeography, HolidayRead } from "./holiday-types.js";
 import { readHolidays } from "./holidays.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
@@ -216,12 +216,9 @@ describe("reading holidays", () => {
     );
   });
 
-  it("refuses both reads to staff, an absent and an expired session", async () => {
+  it("refuses the holidays read to staff, an absent and an expired session", async () => {
     const fx = await fixture();
-    for (const path of [
-      "/holidays?from=2026-10-01&to=2026-10-31",
-      "/named-days?from=2026-10-01&to=2026-10-31",
-    ]) {
+    for (const path of ["/holidays?from=2026-10-01&to=2026-10-31"]) {
       await refused(await send(fx, "GET", path, fx.staff), 403, {
         code: "authorization.not_permitted",
       });
@@ -235,55 +232,13 @@ describe("reading holidays", () => {
   });
 });
 
-describe("the Calendar and holidays", () => {
-  it("reads holidays once and returns their coverage and sources with the days", async () => {
-    const fx = await fixture();
-    await create("2026-10-13", "Fair");
-    const expected = await direct((tx) => readHolidays(tx, "2026-10-11", "2026-10-13"));
-    const readSpy = vi.spyOn(getCountryPack("ES")!.holidayCalendar!, "read");
-    onTestFinished(() => readSpy.mockRestore());
-    const response = await send(
-      fx,
-      "GET",
-      "/named-days?from=2026-10-11&to=2026-10-13",
-      fx.supervisor,
-    );
-    expect(response.status).toBe(200);
-    expect(readSpy).toHaveBeenCalledTimes(1);
-    expect(readSpy.mock.calls[0]).toEqual([
-      {
-        provinceCode: "41",
-        areaKey: null,
-        from: "2026-10-11",
-        to: "2026-10-13",
-      },
-    ]);
-    const model = (await response.json()) as SpecialDaysModel;
-    expect(model.days.map(({ date, holidays }) => ({ date, holidays }))).toEqual([
-      { date: "2026-10-11", holidays: [] },
-      { date: "2026-10-12", holidays: expected.facts.filter((f) => f.date === "2026-10-12") },
-      { date: "2026-10-13", holidays: expected.facts.filter((f) => f.date === "2026-10-13") },
-    ]);
-    expect(model.days[1]!.holidays).toHaveLength(1);
-    expect(model.days[2]!.holidays).toHaveLength(0);
-    expect(model.holidayCoverage).toEqual(expected.coverage);
-    expect(model.holidaySources).toEqual(expected.sources);
-    expect(model.holidaySources.map(({ kind }) => kind)).toEqual(["official"]);
-    expect(model.days.map(({ specialDay }) => specialDay?.name ?? null)).toEqual([
-      null,
-      null,
-      "Fair",
-    ]);
-  });
-});
-
 describe("holiday area", () => {
   it("offers Lleida's sourced areas, saves a choice and clears it", async () => {
     const fx = await fixture({ province: "Lleida", city: "Vielha" });
     const local = async () =>
       (await (
-        await send(fx, "GET", "/named-days?from=2026-01-01&to=2026-12-31", fx.manager)
-      ).json()) as SpecialDaysModel;
+        await send(fx, "GET", "/opening-hours/year?year=2026", fx.manager)
+      ).json()) as OpeningHoursYear;
     const fresh = await local();
     expect(fresh.area.options.map(({ key }) => key)).toEqual(["aran", "lleida-except-aran"]);
     expect(fresh.area.required).toBe(true);

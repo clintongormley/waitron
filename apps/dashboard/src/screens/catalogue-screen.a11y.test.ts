@@ -125,7 +125,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     listCategories: vi.fn().mockResolvedValue(categories),
     listProducts: vi.fn().mockResolvedValue(products),
-    listMadeAt: vi.fn().mockResolvedValue({}),
     getFolderRouting: vi.fn().mockResolvedValue({
       stationTimes: [],
       todayEnds: null,

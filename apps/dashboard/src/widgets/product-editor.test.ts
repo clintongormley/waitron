@@ -18,11 +18,7 @@ import {
   middleWithin,
   textLines,
 } from "@waitron/ui/src/test-helpers.js";
-import {
-  ProductEditor,
-  productEditorField,
-  productEditorTranslationField,
-} from "./product-editor.js";
+import { ProductEditor, productEditorField } from "./product-editor.js";
 import type { EditorVariant, ProductEditorDraft, UnitChoice } from "./product-editor-model.js";
 import type { CategorySummary, ExtraList, OptionList } from "../api/client.js";
 import type { InheritedValues } from "@waitron/shared";
@@ -4221,37 +4217,6 @@ it("hands the variants section and window the base price and photo a blank one f
   const form = variantForm(el) as unknown as { basePrice: string; inheritedImage: string | null };
   expect(form.basePrice).toBe("9.50");
   expect(form.inheritedImage).toBe(mediaTestReference("coffee.png"));
-});
-
-it("points a refused translation at an Active variant only, as the server checks only those", () => {
-  const value = {
-    customerName: { en: "Coffee", es: "Café" },
-    variants: [
-      { customerName: { es: "Taza" }, active: false },
-      { customerName: { es: "Vaso" }, active: true },
-    ],
-  };
-  expect(productEditorTranslationField(value, "en")).toBe("variant-1-name");
-  expect(
-    productEditorTranslationField({ ...value, variants: [value.variants[0]!] }, "en"),
-  ).toBeNull();
-});
-
-it("reads a translation stored under a regional code as present, as the server does", () => {
-  const value: Parameters<typeof productEditorTranslationField>[0] = {
-    customerName: { "en-GB": "House coffee" },
-    variants: [
-      { customerName: { "en-US": "Small" }, active: true },
-      { customerName: { es: "Vaso" }, active: true },
-    ],
-  };
-  expect(productEditorTranslationField({ ...value, customerName: { en: "Coffee" } }, "en")).toBe(
-    "variant-1-name",
-  );
-  expect(productEditorTranslationField(value, "en")).toBe("variant-1-name");
-  expect(
-    productEditorTranslationField({ ...value, variants: [value.variants[0]!] }, "en"),
-  ).toBeNull();
 });
 
 // --- A variant's own page ---

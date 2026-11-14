@@ -1578,7 +1578,6 @@ describe("dashboard-app", () => {
         listUnits: vi.fn().mockResolvedValue([]),
         listExtraLists: vi.fn().mockResolvedValue([]),
         listOptionLists: vi.fn().mockResolvedValue([]),
-        listMadeAt: vi.fn().mockResolvedValue({}),
         getProductEditor: vi.fn().mockResolvedValue(productEditorValue),
         liveData: new LiveData(),
         ...overrides,
@@ -4967,8 +4966,6 @@ describe("dashboard URL navigation", () => {
               cells: [],
               canMakeDefault: false,
             } as never;
-          if (path === "/management-api/stations/outputs-down")
-            return { printersDown: [], screensDark: [] } as never;
           return [] as never;
         },
       });
@@ -5016,8 +5013,6 @@ describe("dashboard URL navigation", () => {
       }),
       request: async (path) => {
         reads.push(path);
-        if (path === "/management-api/stations/outputs-down")
-          return { printersDown: [], screensDark: [] } as never;
         return [] as never;
       },
     });
@@ -8483,7 +8478,6 @@ describe("the Products screen in the shell", () => {
       listUnits: vi.fn().mockResolvedValue([]),
       listExtraLists: vi.fn().mockResolvedValue([]),
       listOptionLists: vi.fn().mockResolvedValue([]),
-      listMadeAt: vi.fn().mockResolvedValue({}),
       getFolderRouting: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
     });
     Object.defineProperty(api, "background", { get: () => api });

@@ -249,16 +249,6 @@ it("keeps retained draft, group, course and ready station history through manage
   expect((await v.db.select().from(routingCells)).map((row) => row.stationId)).toEqual([
     defaultStation.id,
   ]);
-  const madeAt = await app.request("/management-api/products/made-at", { headers: { cookie } });
-  expect(madeAt.status).toBe(200);
-  expect((await madeAt.json())[v.productId("Flan")]).toEqual({
-    stationId: defaultStation.id,
-    stationName: defaultStation.name,
-    noPreparation: false,
-    noReplacement: false,
-    unavailableStationId: null,
-    variesByZone: false,
-  });
   expect(before.rest.get(submitted.tabId)![0]).toEqual({
     ticketItemId: before.tickets[0]!.id,
     orderId: submitted.tabId,

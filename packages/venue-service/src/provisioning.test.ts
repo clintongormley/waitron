@@ -16,7 +16,7 @@ import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDeviceProfiles, seedNode, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { readHolidays, readHolidayAreaModel } from "./holidays.js";
-import { readSpecialDaysModel } from "./named-days.js";
+import { calendarDays } from "./hours.js";
 import { saveSpecialDay } from "./special-days.js";
 import { readSeasons } from "./seasons.js";
 import { createServiceZone } from "./operations.js";
@@ -507,13 +507,11 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       ),
     );
     const readDays = () =>
-      db.transaction((tx) =>
-        readSpecialDaysModel(tx, "2026-06-04", "2026-06-04", new Date("2026-01-01T12:00:00Z")),
-      );
+      db.transaction((tx) => calendarDays(tx, ["2026-06-04"], []).then(({ days }) => days));
     const before = await readDays();
     await runSeed();
     expect(await readDays()).toEqual(before);
-    expect(before.days[0]!.specialDay).toEqual({ id: entry.id, name: "Corpus Christi" });
+    expect(before[0]!.specialDay).toEqual({ id: entry.id, name: "Corpus Christi" });
     expect(await stored()).toEqual({ geographies: 0, entries: 1 });
   });
 

@@ -1,6 +1,6 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -10,7 +10,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
 import {
   categoryDetails,
@@ -29,8 +29,6 @@ import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import { createCourse } from "./kitchen.js";
-import { setRoutingCell, createDepartment, configureZone } from "@waitron/venue-service";
-import { kitchenStations } from "@waitron/db";
 
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
@@ -1687,98 +1685,6 @@ describe("mountCatalogueApi — labels", () => {
 });
 
 describe("mountCatalogueApi — products", () => {
-  it("GET /management-api/products/made-at names the base station and zone variation", async () => {
-    const app = mountApp();
-    const menu = await createCatalogueVia(app, `Made at ${crypto.randomUUID()}`);
-    const folder = async (name: string, parentId: string | null = null) => {
-      const response = await send(app, "POST", "/management-api/categories", {
-        body: { name, parentId },
-      });
-      return ((await response.json()) as { id: string }).id;
-    };
-    const drinks = await folder(`Drinks ${crypto.randomUUID()}`);
-    const cocktails = await folder(`Cocktails ${crypto.randomUUID()}`, drinks);
-    const create = async (name: string, categoryId: string | null) => {
-      const response = await send(app, "POST", "/management-api/products", {
-        body: {
-          catalogueId: menu,
-          categoryId,
-          name,
-          pricingUnit: "each",
-          unitPrice: "3",
-          vatClass: "general",
-        },
-      });
-      expect(response.status).toBe(201);
-      return ((await response.json()) as { id: string }).id;
-    };
-    const lager = await create("Lager", drinks);
-    const mojito = await create("Mojito", cocktails);
-    const bread = await create("Bread", null);
-    await withTransaction(suite.db, async (tx) => {
-      const [bar, cocktailBar] = await tx
-        .insert(kitchenStations)
-        .values([{ name: "Bar", isDefault: true }, { name: "Cocktail bar" }])
-        .returning();
-      await setRoutingCell(
-        tx,
-        { row: { kind: "category", categoryId: drinks }, zoneId: null },
-        { kind: "station", stationId: bar!.id },
-      );
-      const terrace = await seedZone(tx, { name: "Terrace" });
-      const department = await createDepartment(tx, {
-        name: "Dining",
-        orderStart: "table",
-      });
-      await configureZone(tx, { zoneId: terrace!.id, departmentId: department.id });
-      await setRoutingCell(
-        tx,
-        { row: { kind: "category", categoryId: cocktails }, zoneId: terrace!.id },
-        { kind: "station", stationId: cocktailBar!.id },
-      );
-    });
-    const response = await send(app, "GET", "/management-api/products/made-at");
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as Record<string, unknown>;
-    expect(body[lager]).toMatchObject({ stationName: "Bar", variesByZone: false });
-    expect(body[mojito]).toMatchObject({ stationName: "Bar", variesByZone: true });
-    expect(body[bread]).toMatchObject({ stationName: "Bar", variesByZone: false });
-    const cocktailBarId = await withTransaction(suite.db, async (tx) => {
-      const [cocktailBar] = await tx
-        .select({ id: kitchenStations.id })
-        .from(kitchenStations)
-        .where(and(eq(kitchenStations.name, "Cocktail bar")));
-      await setRoutingCell(
-        tx,
-        { row: { kind: "category", categoryId: drinks }, zoneId: null },
-        { kind: "station", stationId: cocktailBar!.id },
-      );
-      await tx
-        .update(kitchenStations)
-        .set({ active: false })
-        .where(eq(kitchenStations.id, cocktailBar!.id));
-      return cocktailBar!.id;
-    });
-    const recovered = await send(app, "GET", "/management-api/products/made-at");
-    expect(recovered.status).toBe(200);
-    const recoveredBody = (await recovered.json()) as Record<string, unknown>;
-    expect(recoveredBody[lager]).toMatchObject({
-      stationName: "Bar",
-      noReplacement: false,
-      unavailableStationId: null,
-    });
-    await withTransaction(suite.db, (tx) =>
-      tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.isDefault, true)),
-    );
-    const changed = await send(app, "GET", "/management-api/products/made-at");
-    const changedBody = (await changed.json()) as Record<string, unknown>;
-    expect(changedBody[lager]).toMatchObject({
-      stationId: null,
-      stationName: "Cocktail bar",
-      noReplacement: true,
-      unavailableStationId: cocktailBarId,
-    });
-  });
   it("GET /management-api/catalogues/:id/products → 200 (empty for a fresh catalogue)", async () => {
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Empty catalogue");

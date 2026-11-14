@@ -80,7 +80,6 @@ export const PATH_PATTERNS = [
   "/management-api/printer-stations",
   "/management-api/printers",
   "/management-api/products",
-  "/management-api/products/made-at",
   "/management-api/purchase-invoices",
   "/management-api/receipt-language",
   "/management-api/receipt-preview",
