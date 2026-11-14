@@ -1579,6 +1579,10 @@ weaker than its name, and its header is the authority for these limits:
   and sees no spread or variable passed as the fields;
 - it never reads free text, and does not see the watchdog's line.
 
+### Bookings recovery (A483, 14 November 2026)
+
+After failed starts reach the existing recovery level, the page offers **Switch Bookings off and start again** when Bookings is effectively On, including an absent override. HTTPS, a local primary role (including a sole box with no saved role row) and an active administrator password are required; Stop changes nothing. The action saves only Bookings Off under the venue lock, then clears failed starts and restarts after the response. It does not offer this action for full-disk, refused-before-start or stopped-while-running pages. `recovery-bookings.test.ts` covers saved settings and failed-save behavior; the shared administrator tests own origin, throttle and form parsing. Administrators without a password cannot use this action.
+
 ### Wrong-environment recovery (A1501, 11 November 2026)
 
 A failed start recorded as `deployment.environment_mismatch` offers Start again and Stop on the

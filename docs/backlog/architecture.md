@@ -7,12 +7,11 @@ their full text.
 
 - **A646 — OPEN; DESIGN APPROVED (owner, 2026-10-17 00:05, watcher window).**
   Agreement receipt: `~/waitron-campaign-f/archive/questions-to-2026-10-23.md:1169`.
-  [Plan](../superpowers/plans/2026-11-11-a646-modules-and-card-providers.md), Claude-read and cleared by the watcher on 2026-11-11. Modules lists optional modules and hosts provider configuration windows; Card payments links to all card providers. Administrators can turn card providers on or off after removing their readers; credentials remain available for earlier-payment recovery. The five other optional module switches are still unbuilt. Bookings is ready to build under the [A483 plan](../superpowers/plans/2026-11-12-a483-smallest-module-toggle.md), reviewed by Claude and cleared by the watcher on 2026-11-14 at 10:24, with an explicit restart and a recovery-page Off action. Workforce, workforce-es, payments and staffing still wait for the append-only protection repair; A646 stays OPEN.
+  [Plan](../superpowers/plans/2026-11-11-a646-modules-and-card-providers.md), Claude-read and cleared by the watcher on 2026-11-11. Modules lists optional modules and hosts provider configuration windows; Card payments links to all card providers. Administrators can turn card providers on or off after removing their readers; credentials remain available for earlier-payment recovery. Bookings can be switched on or off with a separate administrator restart; the failed-start recovery page can switch it off with an active administrator's password. Workforce, workforce-es, payments and staffing still wait for the append-only protection repair; A646 stays OPEN.
   [Design](../superpowers/specs/2026-10-16-a646-modules-page-design.md) and
   static mockups (removed from the repository on 2026-11-02). The
   [switched-off modules' append-only protection](#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked)
-  stays OPEN but no longer gates this page: no module that owns tables becomes switchable here
-  (watcher's scope read, 2026-11-11).
+  stays OPEN and gates the four remaining switches. Bookings owns no append-only table and has its own set.
   **Owner, 2026-11-11: Google sign-in leaves A646** ("Move google signin to the backlog, with the
   intention of doing it with a single key via waitron, but this is definitely not a go live
   requirement"); it is A1507 in [later.md](later.md#a1507-google-sign-in-built-in-through-one-waitron-owned-google-setup).
@@ -23,7 +22,7 @@ their full text.
   with All states. Rows offer Configure where settings exist (watcher, 2026-11-11 17:15), plus Enable/Disable when switching is available, with persistent red reasons
   when Disable is forbidden. Configure opens a modal and saves settings only; state changes need
   separate confirmation and server checks. Stripe/SumUp remain Payments
-  contributions. Other optional modules are listed but cannot be switched. Reuse provider
+  contributions. The four remaining optional module switches are unavailable. Reuse provider
   reader-add checks; Off requires readers removed first, while credentials remain available for refunds and checks.
   Cut live module-code switching, pending-operation records and rerouting every `modules.json` reader
   (watcher, 2026-11-11 14:54).

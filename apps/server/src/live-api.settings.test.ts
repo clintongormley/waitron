@@ -21,6 +21,8 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
 import { liveResourceTypesForModules } from "./live-resources.js";
 
+import { MODULES_SETTINGS } from "./modules.js";
+
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
   setup: (db) => installChangeFeed(db, CORE_CHANGE_SOURCES),
@@ -80,7 +82,7 @@ it("a save to one module's document wakes only that module's subscribers", async
   const unsubscribe = subscribeToChanges(changeSubscriber(bus, () => {}));
   const readers: ReadableStreamDefaultReader<Uint8Array>[] = [];
   try {
-    for (const type of ["settings.venue", "settings.menu"]) {
+    for (const type of ["settings.venue", "settings.menu", "settings.modules"]) {
       const response = await app.request(path(type), { headers: { cookie } });
       expect(response.status).toBe(200);
       const reader = response.body!.getReader();
@@ -106,6 +108,16 @@ it("a save to one module's document wakes only that module's subscribers", async
     );
     expect(await readWithin(readers[0]!)).toBe(
       'event: change\ndata: [{"type":"settings.venue"}]\n\n',
+    );
+    await withTransaction(suite.db, (tx) =>
+      saveSettings(tx, MODULES_SETTINGS, {
+        doc: { modules: { bookings: false } },
+        expectedRevision: 0,
+        personId: null,
+      }),
+    );
+    expect(await readWithin(readers[2]!)).toBe(
+      'event: change\ndata: [{"type":"settings.modules"}]\n\n',
     );
   } finally {
     for (const reader of readers) await reader.cancel();

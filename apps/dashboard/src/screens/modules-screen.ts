@@ -77,6 +77,7 @@ export class ModulesScreen extends LitElement {
     `,
   ];
   @property({ type: Boolean }) canManageProviders = false;
+  @property({ type: Boolean }) canManageModules = false;
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) request!: DashboardRequest;
   @property({ attribute: false }) panels: readonly CardProviderPanel[] = CARD_PROVIDER_PANELS;
@@ -188,11 +189,15 @@ export class ModulesScreen extends LitElement {
       const current = this.catalogue?.find(
         (entry) => entry.id === row.id && entry.category === row.category,
       );
-      await this.api.setPaymentProviderState(
-        row.id,
-        !row.enabled,
-        current?.revision ?? row.revision ?? 0,
-      );
+      if (row.category === "module")
+        await this.api.setBookingsState(!row.enabled, current?.revision ?? row.revision ?? 0);
+      else
+        await this.api.setPaymentProviderState(
+          row.id,
+          !row.enabled,
+          current?.revision ?? row.revision ?? 0,
+        );
+      if (row.category === "module") this.#filters(this.category, "all");
       this.switching = undefined;
       void this.#load();
     } catch (error) {
@@ -212,12 +217,13 @@ export class ModulesScreen extends LitElement {
         key: "name",
         label: text("modules.name"),
         cell: (row) =>
-          html`${this.#name(row)}${row.category === "module" ? html`<span part="switch-reason">${text("modules.switch_unavailable")}</span>` : nothing}`,
+          html`${this.#name(row)}${row.category === "module" && row.id !== "bookings" ? html`<span part="switch-reason">${text("modules.switch_unavailable")}</span>` : nothing}`,
       },
       {
         key: "state",
         label: text("modules.state"),
-        cell: (row) => text(row.enabled ? "modules.enabled" : "modules.disabled"),
+        cell: (row) =>
+          html`${text(row.enabled ? "modules.enabled" : "modules.disabled")}${row.applied !== undefined && row.applied !== row.enabled ? html`<span part="switch-reason">${text("modules.restart_pending")}</span>` : nothing}`,
       },
       {
         key: "configuration",
@@ -241,33 +247,45 @@ export class ModulesScreen extends LitElement {
         label: "",
         pinned: "end",
         cell: (row) =>
-          row.category === "card-provider" &&
-          this.panels.some((panel) => panel.providerId === row.id)
+          row.category === "module" && row.id === "bookings" && this.canManageModules
             ? html`<wt-row-actions label=${this.#name(row)}
                 ><wt-button
-                  data-test=${`configure-${row.id}`}
+                  data-test="switch-bookings"
                   variant="secondary"
-                  @click=${(event: Event) => this.#configure(row, event)}
-                  >${text("modules.configure")}</wt-button
-                >${
-                  this.canManageProviders &&
-                  this.catalogue?.find(
-                    (module) => module.id === "payments" && module.category === "module",
-                  )?.enabled !== false
-                    ? html`<wt-button
-                        data-test=${`switch-${row.id}`}
-                        variant="secondary"
-                        @click=${() => {
-                          this.switching = row;
-                          this.switchError = "";
-                          this.readerNames = [];
-                        }}
-                        >${text(row.enabled ? "modules.turn_off" : "modules.turn_on")}</wt-button
-                      >`
-                    : nothing
-                }</wt-row-actions
+                  @click=${() => {
+                    this.switching = row;
+                    this.switchError = "";
+                  }}
+                  >${text(row.enabled ? "modules.turn_off" : "modules.turn_on")}</wt-button
+                ></wt-row-actions
               >`
-            : nothing,
+            : row.category === "card-provider" &&
+                this.panels.some((panel) => panel.providerId === row.id)
+              ? html`<wt-row-actions label=${this.#name(row)}
+                  ><wt-button
+                    data-test=${`configure-${row.id}`}
+                    variant="secondary"
+                    @click=${(event: Event) => this.#configure(row, event)}
+                    >${text("modules.configure")}</wt-button
+                  >${
+                    this.canManageProviders &&
+                    this.catalogue?.find(
+                      (module) => module.id === "payments" && module.category === "module",
+                    )?.enabled !== false
+                      ? html`<wt-button
+                          data-test=${`switch-${row.id}`}
+                          variant="secondary"
+                          @click=${() => {
+                            this.switching = row;
+                            this.switchError = "";
+                            this.readerNames = [];
+                          }}
+                          >${text(row.enabled ? "modules.turn_off" : "modules.turn_on")}</wt-button
+                        >`
+                      : nothing
+                  }</wt-row-actions
+                >`
+              : nothing,
       },
     ];
   }
@@ -324,10 +342,10 @@ export class ModulesScreen extends LitElement {
               }}
             >
               <p>
-                ${text(this.switching.enabled ? "modules.off_explanation" : "modules.on_explanation")}
+                ${text(this.switching.category === "module" ? "modules.bookings_explanation" : this.switching.enabled ? "modules.off_explanation" : "modules.on_explanation")}
               </p>
               ${
-                this.switchError
+                this.switchError && this.switching.category === "card-provider"
                   ? html`<p class="error" role="alert" data-test="provider-state-error">
                       ${this.switchError === "payment.provider_in_use" ? text("modules.remove_readers") : codeMessage(this.switchError)}
                       ${this.readerNames.join(", ")}
@@ -335,7 +353,9 @@ export class ModulesScreen extends LitElement {
                     </p>`
                   : nothing
               }
-              <wt-form-actions slot="footer"
+              <wt-form-actions
+                slot="footer"
+                error=${this.switching.category === "module" && this.switchError ? codeMessage(this.switchError) : ""}
                 ><wt-button
                   slot="cancel"
                   variant="secondary"

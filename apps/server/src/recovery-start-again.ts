@@ -210,11 +210,10 @@ export function bottomText(message: StartAgainMessage, text: StartAgainPageText)
  * The found files and, over a secure request, the choice form. Placed between the action
  * paragraph and the Retry form. A `moved` answer is the moved message over the found files, with
  * no form, and the page draws it in place of the title, the action paragraph and the Retry form.
- * The password box is the page's one native text field: the page loads no script, so no field
- * primitive can run on it (A1098 Q1).
+ * The page loads no script, so its password field cannot use a field primitive (A1098 Q1).
  */
-export function passwordInput(passwordInvalid: string): string {
-  return `<input type="password" id="start-again-password" name="password" autocomplete="current-password" required${passwordInvalid}>`;
+export function passwordInput(passwordInvalid: string, id = "start-again-password"): string {
+  return `<input type="password" id="${escapeHtml(id)}" name="password" autocomplete="current-password" required${passwordInvalid}>`;
 }
 
 export function renderStartAgainSection(input: {

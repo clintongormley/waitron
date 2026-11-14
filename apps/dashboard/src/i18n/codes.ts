@@ -8,6 +8,10 @@ import { en, es } from "./strings.js";
 
 // Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "module.not_prepared": {
+    en: "This box cannot turn Bookings on with this version of Waitron. Bookings stays off and saved bookings are kept.",
+    es: "Esta versión no puede activar Reservas en este equipo. Reservas sigue desactivado y las reservas guardadas se conservan.",
+  },
   "person.job_roles_changed": {
     en: "Someone changed this person's job roles while you were editing. Reload to see them; your changes are kept until you do.",
     es: "Alguien cambió los puestos de esta persona mientras editabas. Recarga para verlos; tus cambios se conservan hasta entonces.",

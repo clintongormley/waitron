@@ -377,7 +377,7 @@ called weaker than its name, the topic file lists what it does not see.
   watchdog's own line, which goes through neither), and HTML-escaped** (owner decision 2026-09-26;
   the personal-data mask is A980 S10's default, open to the owner). `redactSecrets` masks only a
   password in a URL, which is why no code's params and no logged message may carry a secret. Its
-  password forms, for `setup.start_again_files_found` and `deployment.environment_mismatch`, take
+  password forms, for `setup.start_again_files_found`, `deployment.environment_mismatch` and the failed-start Bookings-Off action, take
   the administrator password over HTTPS only; their Move choices are the exceptions to never
   suggesting removal (A1098, A1501). The
   tail's span and the cost of taking that password without HTTPS:

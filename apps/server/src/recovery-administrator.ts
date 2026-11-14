@@ -114,7 +114,6 @@ export function mountAdministratorChoice(
       try {
         result = await answer(200, { kind: "moved", folder });
       } catch {
-        // The Move is recorded, so a failure to draw must not say nothing changed.
         result = c.html((deps.completedPage ?? movedPage)(locale, folder), 200);
         record("warn", `${deps.eventPrefix ?? "recovery.environment"}_draw_failed`, {});
       }
@@ -160,9 +159,12 @@ export function renderEnvironmentSection(input: {
   };
   path?: string;
   completed?: string;
+  passwordId?: string;
 }): string {
   const { locale, secure, message } = input;
   const shared = START_AGAIN_PAGE_TEXT[locale];
+  const passwordId = input.passwordId ?? "start-again-password";
+  const errorId = input.passwordId ? `${passwordId}-error` : "environment-password-error";
   const text = input.text ?? ENVIRONMENT_RECOVERY_TEXT[locale];
   if (message?.kind === "moved")
     return `<p>${escapeHtml(input.completed ?? shared.moved(message.folder))}</p>`;
@@ -184,9 +186,9 @@ export function renderEnvironmentSection(input: {
   if (!secure)
     return `${explanation}<p>${escapeHtml(shared.insecureForm)}</p>${error === "" ? "" : `<p>${escapeHtml(error)}</p>`}`;
   return `${explanation}<form method="post" action="${escapeHtml(input.path ?? "/recovery-api/environment/start-again")}">
-<p><label for="start-again-password">${escapeHtml(shared.password)} *</label></p>
-<p>${passwordInput(passwordError === "" ? "" : ' aria-invalid="true" aria-describedby="environment-password-error"')}</p>
-${passwordError === "" ? "" : `<p id="environment-password-error">${escapeHtml(passwordError)}</p>`}
+<p><label for="${escapeHtml(passwordId)}">${escapeHtml(shared.password)} *</label></p>
+<p>${passwordInput(passwordError === "" ? "" : ` aria-invalid="true" aria-describedby="${escapeHtml(errorId)}"`, passwordId)}</p>
+${passwordError === "" ? "" : `<p id="${escapeHtml(errorId)}">${escapeHtml(passwordError)}</p>`}
 ${error === "" ? "" : `<p>${escapeHtml(passwordError === "" ? error : shared.fixFields)}</p>`}
 <p><button type="submit" name="choice" value="move">${escapeHtml(text.move)}</button>
 <button type="submit" name="choice" value="keep" formnovalidate>${escapeHtml(text.stop)}</button></p>

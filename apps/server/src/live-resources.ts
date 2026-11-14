@@ -19,6 +19,7 @@ export function liveResourceTypes(
       "email_inbox",
       "backup_status",
       "google_config",
+      settingsChangeType("modules"),
     ]),
   ];
 }

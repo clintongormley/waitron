@@ -653,3 +653,28 @@ export const RESTORE_DISCARD_TEXT = {
     stopped: "Nada ha cambiado. Esta restauración sigue pendiente.",
   },
 } as const;
+
+export const BOOKINGS_RECOVERY_TEXT = {
+  "en-GB": {
+    detail:
+      "You can switch Bookings off and try starting Waitron again. Saved bookings stay on this box. Use an active administrator's password; an administrator without a password cannot use this action.",
+    move: "Switch Bookings off and start again",
+    stop: "Stop",
+    wrong: "That password does not belong to an active administrator.",
+    unavailable: "This recovery action is not available. Waitron has not restarted.",
+    notFinished: "This action did not finish. Waitron has not restarted. Try again.",
+    done: "Bookings is off. Waitron is starting again; reload this page shortly.",
+    stopped: "Nothing was changed. Bookings stays as it was.",
+  },
+  "es-ES": {
+    detail:
+      "Puedes desactivar Reservas e intentar arrancar Waitron de nuevo. Las reservas guardadas permanecen en este equipo. Usa la contraseña de un administrador activo; un administrador sin contraseña no puede usar esta acción.",
+    move: "Desactivar Reservas y volver a arrancar",
+    stop: "Parar",
+    wrong: "Esa contraseña no pertenece a un administrador activo.",
+    unavailable: "Esta acción de recuperación no está disponible. Waitron no se ha reiniciado.",
+    notFinished: "Esta acción no ha terminado. Waitron no se ha reiniciado. Inténtalo de nuevo.",
+    done: "Reservas está desactivado. Waitron está arrancando de nuevo; recarga esta página en unos instantes.",
+    stopped: "No se ha cambiado nada. Reservas sigue como estaba.",
+  },
+} as const;
