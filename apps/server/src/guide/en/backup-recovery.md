@@ -42,7 +42,8 @@ Over a plain connection neither works: set up the secure connection first.
 
 Once the setup is deleted the box restarts. After **Recover from backup**, **Reconnect** opens "Join
 or recover an existing restaurant", where you choose **Restore from backup** or **Restore from my
-bucket**, as on a new box; restoring needs the recovery key and that backup's server key. After
+bucket**, as on a new box; restoring needs the recovery key (for a backup file) or the recovery kit
+(for your bucket), and that backup's server key. After
 **Start again**, **Reconnect** opens "Set up this Waitron server", where you choose how to set up
 this box. If the page is reloaded before you press **Reconnect**, it does not remember which you
 chose and opens its first screen. If that screen asks "Is this page secure?", press **Continue to

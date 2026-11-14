@@ -24,7 +24,7 @@ recovery keys and the server key.
 Choose **Recover from backup** on the repair page: it deletes the failed setup as Start again does,
 and after the box restarts **Reconnect** opens "Join or recover an existing restaurant", where you
 restore as on a new box ([procedure](hour-recovery.md#recover-while-first-setup-is-blocked)). Keep
-the selected copy's named server key and any archive key or source credentials ready. A backup file
+the selected copy's named server key and its recovery key or source credentials ready. A backup file
 carries two databases, the venue's (`db.dump`) and the old box's own (`node.dump`), and a file
 without `node.dump` is refused (`restore.archive_incomplete`, `apps/server/src/restore.ts`).
 

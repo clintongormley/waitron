@@ -6264,7 +6264,7 @@ export const es: Record<StringKey, string> = {
   "node_pack.secret_warning":
     "Guarda este kit secreto fuera del servidor y de sus copias de seguridad.",
   "node_pack.old_key_warning":
-    "Las copias antiguas restauran su clave del servidor anterior. Conserva ese papel hasta que no quede ninguna copia antigua.",
+    "Las copias antiguas restauran la clave del servidor de entonces. Conserva ese papel hasta que no quede ninguna copia antigua.",
   "node_pack.archive_key_warning":
     "Esta es la clave del servidor. El archivo de copia se abre con la clave de recuperación, que es otra.",
   "node_pack.snapshot_warning":
@@ -6275,7 +6275,7 @@ export const es: Record<StringKey, string> = {
   "node_pack.print": "Copia para imprimir",
   "node_pack.failed": "No se pudo crear el kit de recuperación.",
   "node_pack.intro":
-    "Usa la clave del servidor actual y el registro firmado de su custodio. No necesitas un bucket ni una suscripción.",
+    "Usa la clave actual del servidor y el registro firmado de su custodio. No necesitas un bucket ni una suscripción.",
   "node_pack.clear": "Borrar kit",
   "backup.configuration.title": "Exportar la configuración",
   "backup.configuration.explanation":

@@ -688,7 +688,7 @@ command against it treat that entrypoint differently:
   `<name>` is the archive's file name as the bucket lists it. This form takes neither a backup
   file, `--from-bucket` nor `--confirm-venue`, and uses the pack's recovery key even when
   `WAITRON_BACKUP_RECOVERY_KEY` is set. An archive file downloaded from the bucket by hand
-  opens with `restore <backup-file>` and its encryption key in
+  opens with `restore <backup-file>` and its recovery key in
   `WAITRON_BACKUP_RECOVERY_KEY`. A filing node still needs the separate fiscal recovery inputs.
 
   ```bash
