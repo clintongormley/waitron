@@ -116,6 +116,8 @@ export const en = {
     "The refundable payments could not be loaded. Reopen the receipt to try again.",
   "tender_refund.total": "Total to return",
   "tender_refund.invoice_unchanged": "This returns money only. The original invoice is unchanged.",
+  "tender_refund.correction_leg":
+    "This refund is part of the invoice's correction. Once all its money is back, Waitron files the corrective invoice by itself when it can; otherwise Find a bill lists it under Corrections under way, with what is left to do.",
   "tender_refund.choose": "Original payment",
   "tender_refund.unavailable": "No cash or card money is available to refund.",
   "tender_refund.applied": "Payment amount to return",
@@ -137,6 +139,65 @@ export const en = {
   "tender_refund.pending_payment": "Check pending refund",
   "tender_refund.storage":
     "The refund request could not be saved or read on this device. Ask a manager to check its outcome before starting another refund.",
+  "invoice_correction.title": "Correct invoice",
+  "invoice_correction.explain": "Correct an overcharge and return the difference.",
+  "invoice_correction.loading": "Reading the invoice…",
+  "invoice_correction.read_failed": "The invoice could not be read. Nothing has changed.",
+  "invoice_correction.dishes": "Dishes to correct (optional)",
+  "invoice_correction.left": "{amount} left to correct",
+  "invoice_correction.gross": "Money back, VAT included",
+  "invoice_correction.gross_invalid": "Enter an amount above zero, in euros and cents.",
+  "invoice_correction.split": "VAT {rate}%: base {base}, VAT {tax}",
+  "invoice_correction.refundable": "{amount} can still be given back, from these payments:",
+  "invoice_correction.confirm": "Correct and refund {amount}",
+  "invoice_correction.confirm_any": "Correct and refund",
+  "invoice_correction.back": "{back} given back so far, of {gross}.",
+  "invoice_correction.left_back": "{amount} left to give back.",
+  "invoice_correction.pending": "{amount} is waiting for the card company's answer.",
+  "invoice_correction.check_again": "Check again",
+  "invoice_correction.give_cash": "Give back {amount} in cash",
+  "invoice_correction.give_cash_hint": "The cash drawer opens.",
+  "invoice_correction.cash_given": "Give the customer {amount} in cash.",
+  "invoice_correction.refund_card": "Refund to card",
+  "invoice_correction.refund_card_hint": "Opens Refund a payment for this correction.",
+  "invoice_correction.finish_now": "Finish now",
+  "invoice_correction.finish_now_hint":
+    "Files a corrective invoice for the {amount} given back, and gives no more back.",
+  "invoice_correction.record": "Record correction",
+  "invoice_correction.record_hint": "Files the corrective invoice for the {amount} given back.",
+  "invoice_correction.discard": "Discard",
+  "invoice_correction.discard_hint":
+    "Ends the correction. Nothing was given back, so nothing is filed.",
+  "invoice_correction.close_keeping": "Close keeping the refunds",
+  "invoice_correction.close_keeping_hint":
+    "Ends the correction without a corrective invoice. The money given back stays given back.",
+  "invoice_correction.refund_still": "Refund a payment still gives money back.",
+  "invoice_correction.card_unread":
+    "The card's payment could not be read. Choose Refund to card again.",
+  "invoice_correction.card_changed":
+    "This card's payment has changed since it was shown. Check what is left to give back and choose again.",
+  "invoice_correction.card_not_opened":
+    "Refund a payment could not save its request on this device, so it did not open. Choose Refund to card again.",
+  "invoice_correction.changed_while_checking":
+    "The correction changed while it was being checked. Check the VAT shown and press Correct and refund again.",
+  "invoice_correction.filed": "Corrective invoice filed for {amount}.",
+  "invoice_correction.closed":
+    "Correction closed without a corrective invoice. The {amount} given back stays given back.",
+  "invoice_correction.discarded": "Correction discarded. Nothing was given back.",
+  "invoice_correction.unknown":
+    "The server's answer did not arrive. Press again: the same request is sent, so nothing happens twice.",
+  "invoice_correction.close": "Close",
+  "invoice_correction.saved":
+    "An earlier request to correct and refund {amount} got no answer. If it did not go through, Send again opens the correction, so you can then choose how to give back {amount}; nothing is refunded or filed yet. If it did, Send again shows it. Nothing happens twice.",
+  "invoice_correction.no_cash_here":
+    "This till cannot give cash back. Give the cash back from a till that can; while nothing has been given back, Discard ends the correction.",
+  "invoice_correction.saved_cash":
+    "An earlier request to correct and refund {amount} got no answer. If it did not go through, Send again corrects the invoice now and gives {amount} back in cash, opening the cash drawer. If it did, Send again shows what happened. Nothing happens twice.",
+  "invoice_correction.resend": "Send again",
+  "invoice_correction.still_lost":
+    "Still no answer. Check this till's connection to the server, then send again.",
+  "invoice_correction.unknown_end":
+    "The server's answer did not arrive. Press Check again to see whether it was done before pressing anything else.",
   "tender_refund.left": "{amount} left to refund from another payment",
 
   "kitchen_note.changed": "Kitchen note changed",
@@ -666,6 +727,8 @@ export const en = {
   "find_page.range": "{from}–{to} of {total}",
   "find_page.open_bill": "Open bill",
   "find_page.open_receipt": "Open receipt",
+  "find_page.corrections": "Corrections under way",
+  "find_page.correction_row": "{invoice} · {when} · {reason} · {left} of {gross} left to give back",
   "find_page.remove_dates": "Remove date filter",
   "find_page.remove_filter": "Remove {filter} filter",
   "find_page.retry": "Retry",
@@ -2133,6 +2196,8 @@ export const es: Record<StringKey, string> = {
     "No se han podido cargar los pagos que se pueden devolver. Vuelve a abrir el recibo para intentarlo de nuevo.",
   "tender_refund.total": "Total que se devuelve",
   "tender_refund.invoice_unchanged": "Esto solo devuelve dinero. La factura original no cambia.",
+  "tender_refund.correction_leg":
+    "Esta devolución forma parte de la rectificación de la factura. Cuando se haya devuelto todo su dinero, Waitron presenta la factura rectificativa por sí solo si puede; si no, Buscar cuenta la muestra en Rectificaciones en curso, con lo que queda por hacer.",
   "tender_refund.choose": "Pago original",
   "tender_refund.unavailable": "No hay dinero en efectivo o tarjeta disponible para devolver.",
   "tender_refund.applied": "Importe del pago que se devuelve",
@@ -2156,6 +2221,65 @@ export const es: Record<StringKey, string> = {
   "tender_refund.pending_payment": "Consultar devolución pendiente",
   "tender_refund.storage":
     "No se ha podido guardar o leer la solicitud de devolución en este dispositivo. Pide a un responsable que compruebe el resultado antes de iniciar otra devolución.",
+  "invoice_correction.title": "Rectificar factura",
+  "invoice_correction.explain": "Corrige un cobro de más y devuelve la diferencia.",
+  "invoice_correction.loading": "Consultando la factura…",
+  "invoice_correction.read_failed": "No se ha podido leer la factura. No ha cambiado nada.",
+  "invoice_correction.dishes": "Platos que se rectifican (opcional)",
+  "invoice_correction.left": "Quedan {amount} por rectificar",
+  "invoice_correction.gross": "Dinero a devolver, IVA incluido",
+  "invoice_correction.gross_invalid": "Escribe un importe mayor que cero, en euros y céntimos.",
+  "invoice_correction.split": "IVA {rate} %: base {base}, IVA {tax}",
+  "invoice_correction.refundable": "Aún se pueden devolver {amount}, de estos pagos:",
+  "invoice_correction.confirm": "Rectificar y devolver {amount}",
+  "invoice_correction.confirm_any": "Rectificar y devolver",
+  "invoice_correction.back": "Devueltos {back} hasta ahora, de {gross}.",
+  "invoice_correction.left_back": "Quedan {amount} por devolver.",
+  "invoice_correction.pending": "{amount} espera la respuesta de la entidad de la tarjeta.",
+  "invoice_correction.check_again": "Volver a consultar",
+  "invoice_correction.give_cash": "Devolver {amount} en efectivo",
+  "invoice_correction.give_cash_hint": "Se abre el cajón.",
+  "invoice_correction.cash_given": "Da al cliente {amount} en efectivo.",
+  "invoice_correction.refund_card": "Devolver a la tarjeta",
+  "invoice_correction.refund_card_hint": "Abre Devolver un pago para esta rectificación.",
+  "invoice_correction.finish_now": "Terminar ahora",
+  "invoice_correction.finish_now_hint":
+    "Presenta una factura rectificativa por los {amount} devueltos y no devuelve más.",
+  "invoice_correction.record": "Registrar la rectificación",
+  "invoice_correction.record_hint": "Presenta la factura rectificativa por los {amount} devueltos.",
+  "invoice_correction.discard": "Descartar",
+  "invoice_correction.discard_hint":
+    "Termina la rectificación. No se ha devuelto nada, así que no se presenta nada.",
+  "invoice_correction.close_keeping": "Cerrar y conservar las devoluciones",
+  "invoice_correction.close_keeping_hint":
+    "Termina la rectificación sin factura rectificativa. El dinero devuelto queda devuelto.",
+  "invoice_correction.refund_still": "Devolver un pago sigue permitiendo devolver dinero.",
+  "invoice_correction.card_unread":
+    "No se ha podido leer el pago con tarjeta. Vuelve a elegir Devolver a la tarjeta.",
+  "invoice_correction.card_changed":
+    "El pago con tarjeta ha cambiado desde que se mostró. Revisa lo que queda por devolver y vuelve a elegir.",
+  "invoice_correction.card_not_opened":
+    "Devolver un pago no ha podido guardar su solicitud en este dispositivo, así que no se ha abierto. Vuelve a elegir Devolver a la tarjeta.",
+  "invoice_correction.changed_while_checking":
+    "La rectificación cambió mientras se comprobaba. Revisa el IVA que se muestra y vuelve a pulsar Rectificar y devolver.",
+  "invoice_correction.filed": "Factura rectificativa presentada por {amount}.",
+  "invoice_correction.closed":
+    "Rectificación cerrada sin factura rectificativa. Los {amount} devueltos quedan devueltos.",
+  "invoice_correction.discarded": "Rectificación descartada. No se ha devuelto nada.",
+  "invoice_correction.unknown":
+    "No ha llegado la respuesta del servidor. Vuelve a pulsar: se envía la misma petición, así que nada ocurre dos veces.",
+  "invoice_correction.close": "Cerrar",
+  "invoice_correction.saved":
+    "Una petición anterior para rectificar y devolver {amount} no recibió respuesta. Si no llegó, Enviar de nuevo abre la rectificación, para que luego elijas cómo devolver {amount}; aún no se devuelve ni se presenta nada. Si llegó, al pulsar Enviar de nuevo verás la rectificación. Nada ocurre dos veces.",
+  "invoice_correction.no_cash_here":
+    "Esta caja no puede devolver efectivo. Devuelve el efectivo desde una caja que pueda; mientras no se haya devuelto nada, Descartar termina la rectificación.",
+  "invoice_correction.saved_cash":
+    "Una petición anterior para rectificar y devolver {amount} no recibió respuesta. Si no llegó, Enviar de nuevo rectifica la factura ahora y devuelve {amount} en efectivo, abriendo el cajón. Si llegó, al pulsar Enviar de nuevo verás lo que pasó. Nada ocurre dos veces.",
+  "invoice_correction.resend": "Enviar de nuevo",
+  "invoice_correction.still_lost":
+    "Sigue sin respuesta. Comprueba la conexión de esta caja con el servidor y vuelve a enviar.",
+  "invoice_correction.unknown_end":
+    "No ha llegado la respuesta del servidor. Pulsa Volver a consultar para ver si se hizo antes de pulsar nada más.",
   "tender_refund.left": "Quedan {amount} por devolver de otro pago",
 
   "kitchen_note.changed": "Nota para cocina cambiada",
@@ -2680,6 +2804,9 @@ export const es: Record<StringKey, string> = {
   "find_page.range": "{from}–{to} de {total}",
   "find_page.open_bill": "Abrir cuenta",
   "find_page.open_receipt": "Abrir recibo",
+  "find_page.corrections": "Rectificaciones en curso",
+  "find_page.correction_row":
+    "{invoice} · {when} · {reason} · quedan {left} de {gross} por devolver",
   "find_page.remove_dates": "Quitar filtro de fechas",
   "find_page.remove_filter": "Quitar filtro de {filter}",
   "find_page.retry": "Reintentar",

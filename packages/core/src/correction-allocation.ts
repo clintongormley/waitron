@@ -162,7 +162,8 @@ function validRate(value: Decimal): boolean {
   );
 }
 
-function remainingLines(history: CorrectionAmountHistory): CorrectionAmountLine[] {
+/** The invoice's lines, each with `gross` cut to what earlier corrections left of it. */
+export function remainingLines(history: CorrectionAmountHistory): CorrectionAmountLine[] {
   const ids = new Set<string>();
   const rates = new Set<string>();
   const remaining = history.lines

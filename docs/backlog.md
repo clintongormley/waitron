@@ -134,8 +134,7 @@ stays in one area.
 them only when a lane has nothing better.
 
 **Features the owner ranked on 2026-10-16 that are still open:** A803 bills and tables, A646 the
-Modules page, A664 archiving or deleting old data, and A802 correcting part of a paid invoice
-([reshape plan](superpowers/plans/2026-11-12-a802-reshape.md)).
+Modules page, and A664 archiving or deleting old data.
 
 **Remote access unblocks the customer-facing features, so it comes first among them (owner,
 2026-10-22).** Online booking (A1013), the table's QR code (A508), online ordering for collection
@@ -337,21 +336,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   `apps/till/src/state/working-order.ts`) that no screen shows.
   [Detail](backlog/fiscal.md#vat-at-line-add-m7v-a68)
 
-- **A802 — correct part of a paid invoice: build the approved design.**
-  **2026-11-09:** The first arithmetic foundation and cumulative base/VAT bounds follow the [approved cash-first extraction plan](superpowers/plans/2026-11-09-a802-cash-first-extraction.md); staff correction preview/acceptance remains a later slice.
-  **2026-11-09:** Slice 2 ([plan](superpowers/plans/2026-11-09-a802-exact-vat-writer.md)): `recordCorrection` files a supplied `partialVatBreakdown` only when it follows slice 1's rule given every earlier correction, and refuses any other supplied split; without the field nothing changes.
-  **2026-11-10:** Slice 3 ([plan](superpowers/plans/2026-11-10-a802-correction-history.md)): `previewCorrectionAmounts` reads an invoice's correction history, asks the regime whether its filing admits a correction, and refuses an invoice whose filed figures differ from the stored ones; staff get nothing yet. An AEAT preproduction run of the final-cent shape comes before the slice staff can use.
-  **2026-11-11:** The owner chose option A (a fix of a refused invoice never changes its amounts, [A1481](backlog/fiscal.md#a1481-a-fix-never-changes-an-invoices-amounts-owner-2026-11-11)), so slice 3b, filing at the figures the agency accepted after a fix, is dropped and #2775 closed; slices 4–5 are re-planned against the figures stored at sale time ([plan](superpowers/plans/2026-11-11-a802-slices-4-5.md)).
-  **2026-11-11:** Slice 4 (server only): two till routes preview and make a part corrective invoice of a paid all-cash simplified invoice, giving that cash back in the same transaction with one drawer job; a repeat of the same request returns the first answer, and a different request reusing its submission id is refused (new ledger table `invoice_corrections`). Staff get nothing until slice 5. The verifactu library's AEAT test-service run of the final-cent corrective passed on 2026-11-11 (run 43110422275: all seven records accepted).
-  **2026-11-12:** The owner chose to run a correction like a bill in reverse ([decision](backlog/fiscal.md#a802-a-correction-runs-like-a-bill-in-reverse-owner-2026-11-12)); the [reshape plan](superpowers/plans/2026-11-12-a802-reshape.md) replaces slice 4's one-step route in five pull requests. PR 1a (cash, server only): a correction is opened after the filing checks, with nothing filed; its cash goes back in one or more steps, and the last step files the corrective in the same transaction; a manager can file for the money back so far, discard one with nothing back, or close one keeping its refunds when its filing can never happen. Staff get nothing on the till until slice 5. PR 1a landed on 2026-11-12 (#2973).
-  **2026-11-12:** PR 1b (server only): tickets paid by card, or by card and cash, can be corrected too. A card refund joins a correction through Refund a payment and files nothing; a manager presses Record correction once all the money is back, until PR 2 (below) files it automatically. A cash payment named there is refused (`invoice_correction.cash_route_only`), and a pending refund stops opening, filing and ending a correction (`invoice_correction.refund_pending`). A till lists the open corrections in its zones (`GET /api/invoice-corrections`), and a correction that gave money back over an hour ago and is still open raises a warning among the tax-filing alerts (`invoice_correction.unfinished`). Staff get nothing on the till until slice 5.
-
-  **2026-11-12:** PR 2 (server only): the approval given when a correction was opened counts. Once all its money is back, Waitron files the corrective itself under the till that opened it, at the till or in the background check when a card refund is confirmed later with nobody signed in, instead of waiting for Record correction. A refused filing raises `invoice_correction.filing_refused` among the tax-filing alerts, and Record correction stays the way out. Staff get nothing on the till until slice 5.
-
-  **2026-11-13:** PR 3, slice 5a: a corrective invoice prints at the till once, when a person's request filed it (the last cash step or File now), on a till allowed to print receipts, never on an automatic filing or a replay; staff reprint it on demand as a copy. When it prints is the watcher's rule (lane L `questions.md`, 2026-11-13 01:05); the print-receipt condition follows the card slip's and came from this branch's review. Both are for the owner to confirm at landing. The paper shows its title, the invoice it corrects and that invoice's date, and an emailed corrective is captioned as a corrective invoice in its language. The till gains the requests that open a correction and give its cash or card money back, each saved before sending, so a retry of an unanswered request is sent under the same id and the server answers it as a repeat instead of doing it twice; no screen uses them yet.
-
-  Next: PR 4, slice 5b (the till's correction window, its buttons and the guide), in the [reshape plan](superpowers/plans/2026-11-12-a802-reshape.md) §6. Each fiscal PR waits for the owner to land it.
-  [Detail](backlog/fiscal.md#nothing-in-the-product-can-issue-a-corrective-invoice-r5-_factura-rectificativa_-for-a-vat-error-on-an-issued-simplified-invoice)
+- **Correcting a paid invoice: dish counts, earlier refunds and cancelled dishes (left open by
+  A802 slice 5b, #3108).** The correction window ticks whole dishes; an earlier ordinary refund does not
+  count towards a correction; a refund of cancelled dishes does not yet file its corrective in the
+  same step (A758 §3.8, owner Q43 e).
+  [Detail](backlog/fiscal.md#correcting-a-paid-invoice-what-a802-left-open)
 
 - **Correct VAT without returning money.** Design the separate correction for a wrong VAT rate
   or classification when the customer's gross total stays the same. The owner left this out of
@@ -805,8 +794,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   name rather than a till string. Believed to predate the slice; not run on main.
 
 - **A1261. A full invoice for a bill already paid, from the table's ⋮ (left open by A803 slice 3,
-  Owner question 2, #2360).** Once A802 gives the till a way in, offer it from the ⋮ for a paid
-  bill.
+  Owner question 2, #2360).** Correct invoice (A802) does not issue a full invoice; offer one
+  from the ⋮ for a paid bill once something does.
   [Detail](backlog/till.md#a1261-a-full-invoice-for-a-bill-already-paid-from-the-tables-)
 
 - **A bill another till moved, merged or part-paid** (bundle of 2, 1 important, size M). Holds A1267, A1288. [Detail](backlog/till.md#bundle-a-bill-another-till-moved-merged-or-part-paid)
@@ -2461,7 +2450,7 @@ Spain-hosting assumption; wider country policy belongs to Cloud.
 | Q21 (pre-bill, or the invoice when a table asks for the bill)                                         | the table screen prints no pre-bill; when one is built, printing it never fires held food and never marks a line sent (menus plan D10)                                                                     | S1 |
 | F3 canje (`IDOtro`, a separate F3 series, `Destinatarios` XSD)                                        | explicit document type and issuer identify foreign recipients; F3 uses `full`                                                                                                                                                   | fields and identity types answered from AEAT's technical rules; R4 |
 | Q27–Q29 (paying a bill in parts, a table that leaves without paying, how a comp or discount shows)    | parts: server built (#721), the till does not use it yet; comps and discounts built (#916); leaving without paying built on the owner's decision (B17)                                                     | S3, S6, S10 (A445, A447) |
-| Q31 (correct an issued ticket by differences or by substitution)                                      | `recordCorrection` files by differences (`"I"`); no route calls it _(2026-10-02, C126: the whole-order cancel route now calls it for a whole-invoice credit)_                                              | **Answered**: the business's choice (art. 15.5; AEAT FAQ) |
+| Q31 (correct an issued ticket by differences or by substitution)                                      | `recordCorrection` files by differences (`"I"`); the whole-order cancel credit and A802's part corrections call it                                                                                                              | **Answered**: the business's choice (art. 15.5; AEAT FAQ) |
 | Q32 (how a cancelled order's already-issued simplified invoice is undone)                             | the whole-order cancel credits the invoice in full with an R5 corrective invoice, not an annulment (C126)                                                                                                  | S7 |
 | Q42 (a bill paid later by transfer: invoice now, or a proforma and the invoice on payment; F1 and F2) | the till's server closes such a bill as a deferred payment, invoice issued at the meal (`POST /api/working-orders/:id/close-deferred`, A275); the open bill's, the presented bill's and the Counter's Pay windows send it (A275 Task 7). The Pay route refuses every tender but cash and card (`sale.unsupported_tender`) | Option 2 not lawful for a consumer; deposits S8, unpaid debts S6 |
 

@@ -95,8 +95,13 @@ function lineIdsOf(value: unknown, lineId: string | null): string[] | undefined 
 
 function requireApproverPermission(
   value: string | undefined,
-): "adjustment.approve" | "sale.refund" | "system.box_admin" {
-  if (value !== "adjustment.approve" && value !== "sale.refund" && value !== "system.box_admin")
+): "adjustment.approve" | "sale.refund" | "sale.rectify" | "system.box_admin" {
+  if (
+    value !== "adjustment.approve" &&
+    value !== "sale.refund" &&
+    value !== "sale.rectify" &&
+    value !== "system.box_admin"
+  )
     throw invalid("permission");
   return value;
 }

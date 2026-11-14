@@ -4,6 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import type { DataTableColumn, WtDataTable } from "@waitron/ui/src/components/wt-data-table.js";
 import type { TillApi } from "../api/client.js";
+import type { OpenInvoiceCorrection } from "../api/invoice-correction-types.js";
 import type {
   BillRow,
   BillsQuery,
@@ -103,6 +104,23 @@ export class TillFindBillScreen extends LitElement {
       .chips {
         padding-block: var(--wt-space-2);
       }
+      .corrections {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--wt-space-2);
+        margin-bottom: var(--wt-space-3);
+      }
+      .correction-text {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      h2 {
+        font-size: var(--wt-font-size-lg);
+        margin: 0;
+      }
     `,
   ];
   @property({ attribute: false }) api!: TillApi;
@@ -118,6 +136,9 @@ export class TillFindBillScreen extends LitElement {
   @state() private dateTo = "";
   @state() private dateInvalid = false;
   @state() private resolved: DateWindow = null;
+  @state() private corrections: OpenInvoiceCorrection[] = [];
+  @state() private correctionsError = false;
+  #correctionsController?: AbortController;
   readonly #views: Record<Tab, View> = { bills: emptyView(), transactions: emptyView() };
   #controller?: AbortController;
   #optionsController?: AbortController;
@@ -139,9 +160,11 @@ export class TillFindBillScreen extends LitElement {
         if (this.options) this.#read();
         else void this.#loadOptions();
       }
+      void this.#loadCorrections();
     }
   }
   override disconnectedCallback(): void {
+    this.#correctionsController?.abort();
     this.#cancel();
     this.#optionsController?.abort();
     this.#optionsGeneration++;
@@ -152,7 +175,66 @@ export class TillFindBillScreen extends LitElement {
     if (this.hasUpdated && this.active) {
       if (this.options) this.#read();
       else void this.#loadOptions();
+      void this.#loadCorrections();
     }
+  }
+  async #loadCorrections(): Promise<void> {
+    this.#correctionsController?.abort();
+    this.#correctionsController = undefined;
+    this.correctionsError = false;
+    if (!this.active || !this.api) return;
+    const controller = (this.#correctionsController = new AbortController());
+    try {
+      const corrections = await this.api.listInvoiceCorrections({ signal: controller.signal });
+      if (controller === this.#correctionsController) this.corrections = corrections;
+    } catch {
+      if (controller === this.#correctionsController) this.correctionsError = true;
+    }
+  }
+  /** Fills every placeholder in one pass, so a reason holding `{left}` or `$&` stays as typed. */
+  #correctionRow(correction: OpenInvoiceCorrection, timeZone: string): string {
+    const money = (value: string) => formatMoney(value, currentLocale());
+    const values: Record<string, string> = {
+      invoice: correction.invoiceNumber,
+      when: new Date(correction.openedAt).toLocaleString(currentLocale(), { timeZone }),
+      reason: correction.reason,
+      left: money(correction.left),
+      gross: money(correction.gross),
+    };
+    return label("correction_row").replace(
+      /\{(\w+)\}/g,
+      (match, key: string) => values[key] ?? match,
+    );
+  }
+  #correctionsList(timeZone: string) {
+    if (this.corrections.length === 0 && !this.correctionsError) return nothing;
+    return html`<section class="corrections" data-corrections>
+      <h2>${label("corrections")}</h2>
+      ${
+        this.correctionsError
+          ? html`<p role="alert" class="error">${label("load_failed")}</p>
+              <wt-button
+                variant="secondary"
+                data-corrections-retry
+                @click=${() => void this.#loadCorrections()}
+                >${label("retry")}</wt-button
+              >`
+          : nothing
+      }
+      ${this.corrections.map(
+        (correction) =>
+          html`<wt-button
+            variant="secondary"
+            align="start"
+            data-correction=${correction.id}
+            .disabled=${this.busy}
+            @click=${() => this.#emit("find-correction-open", { correction })}
+            ><span class="correction-text" data-correction-text
+              >${this.#correctionRow(correction, timeZone)}</span
+            ></wt-button
+          >`,
+      )}
+    </section>`;
   }
   #cancel(): void {
     this.#generation++;
@@ -592,6 +674,7 @@ export class TillFindBillScreen extends LitElement {
         >
         <h1>${t("find_bill.title")}</h1>
       </header>
+      ${this.options ? this.#correctionsList(this.options.timeZone) : nothing}
       ${
         this.options
           ? html`<wt-tabs

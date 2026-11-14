@@ -32,8 +32,14 @@ import type {
 import type {
   InvoiceCorrectionCashGiven,
   InvoiceCorrectionCashRequest,
+  InvoiceCorrectionFileRequest,
+  InvoiceCorrectionLines,
   InvoiceCorrectionOpened,
+  InvoiceCorrectionPreview,
+  InvoiceCorrectionPreviewRequest,
   InvoiceCorrectionRequest,
+  InvoiceCorrectionView,
+  OpenInvoiceCorrection,
 } from "./invoice-correction-types.js";
 import type { CloseDeferredRequest, CloseDeferredResult } from "./deferred-close-types.js";
 import type {
@@ -3997,6 +4003,29 @@ export class TillApi {
     );
   }
 
+  readInvoiceCorrectionLines(
+    saleId: string,
+    options: ReadOptions = {},
+  ): Promise<InvoiceCorrectionLines> {
+    return this.#request(
+      `/api/transactions/${encodeURIComponent(saleId)}/corrections/lines`,
+      "GET",
+      undefined,
+      options.signal,
+    );
+  }
+
+  previewInvoiceCorrection(
+    saleId: string,
+    request: InvoiceCorrectionPreviewRequest,
+  ): Promise<InvoiceCorrectionPreview> {
+    return this.#request(
+      `/api/transactions/${encodeURIComponent(saleId)}/corrections/preview`,
+      "POST",
+      request,
+    );
+  }
+
   /** `POST /api/transactions/:saleId/corrections`; refused `invoice_correction.already_open`
    * with the open correction's `correctionId`. */
   openInvoiceCorrection(
@@ -4016,6 +4045,53 @@ export class TillApi {
   ): Promise<InvoiceCorrectionCashGiven> {
     return this.#request(
       `/api/invoice-corrections/${encodeURIComponent(correctionId)}/cash`,
+      "POST",
+      request,
+    );
+  }
+
+  async listInvoiceCorrections(options: ReadOptions = {}): Promise<OpenInvoiceCorrection[]> {
+    const { corrections } = await this.#request<{ corrections: OpenInvoiceCorrection[] }>(
+      "/api/invoice-corrections",
+      "GET",
+      undefined,
+      options.signal,
+    );
+    return corrections;
+  }
+
+  getInvoiceCorrection(
+    correctionId: string,
+    options: ReadOptions = {},
+  ): Promise<InvoiceCorrectionView> {
+    return this.#request(
+      `/api/invoice-corrections/${encodeURIComponent(correctionId)}`,
+      "GET",
+      undefined,
+      options.signal,
+    );
+  }
+
+  /** Files the correction for the money given back so far; `expectedSplit` is the split shown. */
+  fileInvoiceCorrection(
+    correctionId: string,
+    request: InvoiceCorrectionFileRequest,
+  ): Promise<InvoiceCorrectionView> {
+    return this.#request(
+      `/api/invoice-corrections/${encodeURIComponent(correctionId)}/file`,
+      "POST",
+      request,
+    );
+  }
+
+  /** Ends the correction without filing: discarded with nothing back, or closed keeping its
+   * refunds when filing it is refused for good. */
+  closeInvoiceCorrection(
+    correctionId: string,
+    request: { override?: InvoiceCorrectionFileRequest["override"] },
+  ): Promise<InvoiceCorrectionView> {
+    return this.#request(
+      `/api/invoice-corrections/${encodeURIComponent(correctionId)}/close`,
       "POST",
       request,
     );
@@ -4523,7 +4599,7 @@ export class TillApi {
   }
 
   listApprovers(
-    permission: "adjustment.approve" | "sale.refund" | "system.box_admin",
+    permission: "adjustment.approve" | "sale.refund" | "sale.rectify" | "system.box_admin",
   ): Promise<StaffMember[]> {
     return this.#request<StaffMember[]>(
       `/api/adjustment-approvers?permission=${encodeURIComponent(permission)}`,

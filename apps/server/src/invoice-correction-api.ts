@@ -17,6 +17,7 @@ import {
   parseInvoiceCorrection,
   previewInvoiceCorrection,
   readInvoiceCorrection,
+  readInvoiceCorrectionLines,
   type InvoiceCorrectionRequest,
   type InvoiceCorrectionView,
 } from "./invoice-corrections.js";
@@ -74,6 +75,18 @@ export function mountInvoiceCorrectionApi(
           gross: body.gross as string,
           ...(lineIds === undefined ? {} : { lineIds }),
         });
+      });
+      return c.json(result);
+    }),
+  );
+  app.get("/api/transactions/:saleId/corrections/lines", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { passive: true });
+      const cfg = requestCfg(deps.cfg, session),
+        id = brandSaleId(pathId(c.req.param("saleId"), "sale"));
+      const result = await withTransaction(deps.db, async (tx) => {
+        await checkAccess(tx, session, id);
+        return readInvoiceCorrectionLines(tx, deps.backend, cfg, deps.clock.now(), id);
       });
       return c.json(result);
     }),

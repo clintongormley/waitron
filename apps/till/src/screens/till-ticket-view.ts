@@ -60,7 +60,7 @@ export interface TicketIssuer {
  * resolves it through `resolveSnapshotText` instead, as the printed twin
  * (`apps/server/src/receipt-document.ts`) does.
  */
-function lineName(descriptions: Record<string, string>, locale: string): string {
+export function lineName(descriptions: Record<string, string>, locale: string): string {
   return descriptions[locale] ?? Object.values(descriptions)[0] ?? "";
 }
 
@@ -1439,11 +1439,17 @@ export class TillTicketView extends LitElement {
         ${
           this.historical && this.refundable
             ? html`<wt-button
-                data-tender-refund
-                variant="secondary"
-                @click=${() => this.dispatchEvent(new CustomEvent("tender-refund-open", { bubbles: true, composed: true }))}
-                >${t("tender_refund.title")}</wt-button
-              >`
+                  data-tender-refund
+                  variant="secondary"
+                  @click=${() => this.dispatchEvent(new CustomEvent("tender-refund-open", { bubbles: true, composed: true }))}
+                  >${t("tender_refund.title")}</wt-button
+                >
+                <wt-button
+                  data-invoice-correction
+                  variant="secondary"
+                  @click=${() => this.dispatchEvent(new CustomEvent("invoice-correction-open", { bubbles: true, composed: true }))}
+                  >${t("invoice_correction.title")}</wt-button
+                >`
             : nothing
         }
         ${

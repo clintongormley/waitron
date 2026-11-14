@@ -1,8 +1,11 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { findAdjustmentReason } from "@waitron/adjustments";
 import {
+  formatInvoiceNumber,
   previewCorrectionAmounts,
+  readCorrectableLines,
   recordCorrection,
+  type CorrectableLine,
   type CorrectionPreview,
   type RecordCorrectionInput,
 } from "@waitron/core";
@@ -10,7 +13,9 @@ import {
   deviceProfiles,
   devices,
   invoiceCorrections,
+  invoiceSeries,
   readLiveSeriesIdTx,
+  sales,
   saleSettlements,
   type Transaction,
 } from "@waitron/db";
@@ -36,8 +41,10 @@ import { invalid, MONEY } from "./bill-allocation.js";
 import { deviceProfileJoin } from "./device-session.js";
 import {
   readCorrectionLegs,
+  readCorrectionLegsOf,
   readCorrectionMoney,
   readCorrectionRow,
+  type CorrectionLegs,
   refuseWhileCorrectionOpen,
   type InvoiceCorrectionRow,
 } from "./invoice-correction-legs.js";
@@ -85,10 +92,13 @@ export interface InvoiceCorrectionView {
   correctiveSaleId: string | null;
   legs: TenderRefundView[];
   /** What /file would file now: `previewCorrectionAmounts` for the money back over the
-   * correction's lineIds, or the code it refused with and whether /close may end the correction
-   * keeping its refunds; null while a leg is pending, nothing is back, or the correction has ended. */
+   * correction's lineIds, or the code it refused with, the refusal's `reason` when it gave one, and
+   * whether /close may end the correction keeping its refunds; null while a leg is pending, nothing
+   * is back, or the correction has ended. */
   fileNow:
-    { gross: string; vatBreakdown: SplitLine[] } | { refusal: string; closable: boolean } | null;
+    | { gross: string; vatBreakdown: SplitLine[] }
+    | { refusal: string; reason?: string; closable: boolean }
+    | null;
 }
 
 export type InvoiceCorrectionDeps = Pick<TenderRefundDeps, "backend" | "clock" | "attendance">;
@@ -108,6 +118,27 @@ async function checkCorrectionOpenable(
   saleId: SaleId,
   selection: { gross: Decimal; lineIds?: readonly string[] },
 ): Promise<CorrectionPreview & { moneyRefundable: Decimal }> {
+  return checkInvoiceCorrectable(tx, backend, cfg, reading, saleId, async (moneyRefundable) => {
+    const preview = await previewCorrectionAmounts(tx, backend, saleId, cfg.nodeId, selection);
+    if (compareDecimal(moneyRefundable, preview.gross) < 0)
+      throw new AppError("invoice_correction.money_short", {
+        saleId,
+        moneyLeft: moneyRefundable,
+        gross: preview.gross,
+      });
+    return { ...preview, moneyRefundable };
+  });
+}
+
+/** Runs `read` between the checks about the invoice that the preview and Open both make. */
+async function checkInvoiceCorrectable<T>(
+  tx: Transaction,
+  backend: FiscalBackend,
+  cfg: Pick<DeviceRequestConfig, "nodeId">,
+  reading: TrustedReading,
+  saleId: SaleId,
+  read: (moneyRefundable: Decimal) => Promise<T>,
+): Promise<T> {
   const [settled] = await tx
     .select({ id: saleSettlements.id })
     .from(saleSettlements)
@@ -121,18 +152,26 @@ async function checkCorrectionOpenable(
       saleId,
       refundId: pending.pendingRefundId!,
     });
-  const preview = await previewCorrectionAmounts(tx, backend, saleId, cfg.nodeId, selection);
-  const moneyRefundable = appliedRemainingOf(refundable);
-  if (compareDecimal(moneyRefundable, preview.gross) < 0)
-    throw new AppError("invoice_correction.money_short", {
-      saleId,
-      moneyLeft: moneyRefundable,
-      gross: preview.gross,
-    });
+  const result = await read(appliedRemainingOf(refundable));
   if ((await backend.checkIntegrity(tx, cfg.nodeId)).issues.length > 0)
     throw new AppError("invoice_correction.chain_unsound", { saleId });
   await backend.refuseWhileClockBehind(tx, reading);
-  return { ...preview, moneyRefundable };
+  return result;
+}
+
+/** The invoice's lines with what is left to correct of each, and the money still refundable on
+ * it; refused as the preview refuses the invoice, before any amount is asked. */
+export async function readInvoiceCorrectionLines(
+  tx: Transaction,
+  backend: FiscalBackend,
+  cfg: Pick<DeviceRequestConfig, "nodeId">,
+  reading: TrustedReading,
+  saleId: SaleId,
+): Promise<{ lines: CorrectableLine[]; moneyRefundable: Decimal }> {
+  return checkInvoiceCorrectable(tx, backend, cfg, reading, saleId, async (moneyRefundable) => ({
+    lines: await readCorrectableLines(tx, backend, saleId, cfg.nodeId),
+    moneyRefundable,
+  }));
 }
 
 /** What correcting `selection.gross` off the invoice would file, and the money still refundable on it. */
@@ -244,11 +283,14 @@ export async function readInvoiceCorrection(
 }
 
 async function summaryOf(tx: Transaction, correctionId: string) {
-  const row = await readCorrectionRow(tx, correctionId);
-  const {
-    refunds,
-    money: { completed: back, pending },
-  } = await readCorrectionLegs(tx, correctionId);
+  return summaryFrom(
+    await readCorrectionRow(tx, correctionId),
+    await readCorrectionLegs(tx, correctionId),
+  );
+}
+
+function summaryFrom(row: InvoiceCorrectionRow, { refunds, money }: CorrectionLegs) {
+  const { completed: back, pending } = money;
   const view: Omit<InvoiceCorrectionView, "fileNow"> = {
     id: row.id,
     saleId: row.originalSaleId,
@@ -266,18 +308,29 @@ async function summaryOf(tx: Transaction, correctionId: string) {
 }
 
 /** The open corrections whose invoice's working order `inZones` admits, oldest first, each without
- * `fileNow`. */
+ * `fileNow` and with the number of the invoice it corrects: one read of the corrections, then one
+ * read of their refunds per `SQL_VARIABLE_LIMIT` corrections, none when no correction is open. */
 export async function listOpenInvoiceCorrections(
   tx: Transaction,
   inZones?: OrderZoneCondition,
-): Promise<Omit<InvoiceCorrectionView, "fileNow">[]> {
-  const rows = await tx.execute<{ id: string }>(sql`select c.id from invoice_corrections c
-    join sales s on s.id = c.original_sale_id
-    where c.state = 'open' and (${inZones?.(sql`s.working_order_id`) ?? sql`1`})
-    order by c.created_at, c.id`);
-  const views: Omit<InvoiceCorrectionView, "fileNow">[] = [];
-  for (const { id } of rows.rows) views.push((await summaryOf(tx, id)).view);
-  return views;
+): Promise<(Omit<InvoiceCorrectionView, "fileNow"> & { invoiceNumber: string })[]> {
+  const rows = await tx
+    .select({ row: invoiceCorrections, code: invoiceSeries.code, number: sales.invoiceNumber })
+    .from(invoiceCorrections)
+    .innerJoin(sales, eq(sales.id, invoiceCorrections.originalSaleId))
+    .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+    .where(
+      and(eq(invoiceCorrections.state, "open"), inZones?.(sql`${sales.workingOrderId}`) ?? sql`1`),
+    )
+    .orderBy(asc(invoiceCorrections.createdAt), asc(invoiceCorrections.id));
+  const legs = await readCorrectionLegsOf(
+    tx,
+    rows.map(({ row }) => row.id),
+  );
+  return rows.map(({ row, code, number }) => ({
+    ...summaryFrom(row, legs.get(row.id)!).view,
+    invoiceNumber: formatInvoiceNumber(code, number),
+  }));
 }
 
 /**
@@ -482,7 +535,15 @@ async function fileNowFor(
   selection: { gross: Decimal; lineIds?: readonly string[] },
 ): Promise<InvoiceCorrectionView["fileNow"]> {
   const filing = await previewOrRefusal(tx, backend, cfg, saleId, selection);
-  if ("refusal" in filing) return { refusal: filing.refusal.code, closable: filing.closable };
+  if ("refusal" in filing) {
+    const { code, params } = filing.refusal;
+    const reason = (params as { reason?: unknown }).reason;
+    return {
+      refusal: code,
+      ...(typeof reason === "string" ? { reason } : {}),
+      closable: filing.closable,
+    };
+  }
   return { gross: filing.gross, vatBreakdown: splitOf(filing) };
 }
 

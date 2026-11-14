@@ -897,3 +897,114 @@ it.each([
   expect(codeMessage("deferred_close.ineligible", "en", params)).toBe(english);
   expect(codeMessage("deferred_close.ineligible", "es", params)).toBe(spanish);
 });
+
+it.each([
+  "invoice_correction.not_settled",
+  "invoice_correction.already_open",
+  "invoice_correction.refund_pending",
+  "invoice_correction.money_short",
+  "invoice_correction.chain_unsound",
+  "sale.correction_amount_invalid",
+  "sale.correction_scope_invalid",
+  "sale.correction_history_unusable",
+  "sale.correction_not_admitted",
+  "sale.correction_unsupported",
+])("explains the correction preview's refusal %s in English and Spanish", (code) => {
+  for (const locale of ["en", "es"]) {
+    expect(codeMessage(code, locale)).not.toBe(codeMessage("unknown", locale));
+    expect(codeMessage(code, locale)).not.toContain(code);
+  }
+  expect(codeMessage(code, "en")).not.toMatch(/ask a manager/i);
+  expect(codeMessage(code, "es")).not.toMatch(/responsable/i);
+});
+
+it("words sale.correction_unsupported for every flow that meets it, the whole-order cancel included", () => {
+  expect(codeMessage("sale.correction_unsupported", "en")).toBe(
+    "This is a full invoice naming a customer, and the till cannot file a corrective invoice for it.",
+  );
+  expect(codeMessage("sale.correction_unsupported", "es")).toBe(
+    "Es una factura completa a nombre de un cliente y la caja no puede presentar una factura rectificativa para ella.",
+  );
+});
+
+it("leaves Refund a payment out of the correction refusals other flows share", () => {
+  const worded = [
+    ...[
+      "invoice_correction.chain_unsound",
+      "sale.correction_history_unusable",
+      "sale.correction_not_admitted",
+      "sale.correction_unsupported",
+    ].map((code) => [code, {}] as const),
+    ...[
+      "replaced",
+      "unsupported",
+      "missing",
+      "wrong_node",
+      "not_simplified",
+      "filing_versions_unusable",
+    ].map((reason) => ["sale.correction_not_admitted", { reason }] as const),
+  ];
+  for (const [code, params] of worded) {
+    expect(codeMessage(code, "en", params)).not.toMatch(/refund a payment/i);
+    expect(codeMessage(code, "es", params)).not.toMatch(/devolver un pago/i);
+  }
+});
+
+it("words each reason a correction is not admitted, and any other reason as the general one", () => {
+  const reasons = [
+    "replaced",
+    "unsupported",
+    "missing",
+    "wrong_node",
+    "voided",
+    "not_simplified",
+    "filing_refused",
+    "filing_versions_unusable",
+    "filed_figures_unreadable",
+    "filed_figures_changed",
+  ];
+  for (const locale of ["en", "es"]) {
+    const general = codeMessage("sale.correction_not_admitted", locale);
+    const worded = reasons.map((reason) =>
+      codeMessage("sale.correction_not_admitted", locale, { reason }),
+    );
+    expect(new Set(worded).size, locale).toBe(8);
+    expect(worded).not.toContain(general);
+    expect(codeMessage("sale.correction_not_admitted", locale, { reason: "constructor" })).toBe(
+      general,
+    );
+  }
+  expect(codeMessage("sale.correction_not_admitted", "en", { reason: "voided" })).toBe(
+    "This invoice was cancelled, so there is nothing left to correct.",
+  );
+  expect(codeMessage("sale.correction_not_admitted", "es", { reason: "voided" })).toBe(
+    "Esta factura se anuló, así que no queda nada por rectificar.",
+  );
+});
+
+it.each([
+  "invoice_correction.not_open",
+  "invoice_correction.not_found",
+  "invoice_correction.leg_too_large",
+  "invoice_correction.nothing_back",
+  "invoice_correction.still_correctable",
+  "invoice_correction.cash_short",
+  "invoice_correction.cash_route_only",
+  "invoice_correction.split_changed",
+])("explains the refusal %s of finishing a correction in English and Spanish", (code) => {
+  for (const locale of ["en", "es"]) {
+    expect(codeMessage(code, locale)).not.toBe(codeMessage("unknown", locale));
+    expect(codeMessage(code, locale)).not.toContain(code);
+  }
+  expect(codeMessage(code, "en")).not.toMatch(/ask a manager/i);
+  expect(codeMessage(code, "es")).not.toMatch(/responsable/i);
+});
+
+it("tells staff an open correction carries on from Correct invoice", () => {
+  expect(codeMessage("invoice_correction.already_open", "en")).toBe(
+    "A correction of this invoice is under way. Open Correct invoice to carry on with it.",
+  );
+  expect(codeMessage("invoice_correction.already_open", "es")).toBe(
+    "Hay una rectificación de esta factura en curso. Abre Rectificar factura para continuarla.",
+  );
+});

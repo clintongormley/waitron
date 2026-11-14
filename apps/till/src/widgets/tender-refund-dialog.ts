@@ -107,6 +107,8 @@ export class TillTenderRefundDialog extends LitElement {
   @property() dishes = "";
   @property() target = "";
   @property({ type: Boolean }) refundAtTill = false;
+  /** Opened as a correction's card refund, which leads to its corrective invoice. */
+  @property({ type: Boolean }) correcting = false;
   @state() private draft: Draft = blank();
   @state() private active = true;
   @state() private attempted = false;
@@ -562,7 +564,13 @@ export class TillTenderRefundDialog extends LitElement {
         @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-submit]"))}
       >
         <p>${this.invoiceNumber}</p>
-        <p class="muted" data-invoice-unchanged>${t("tender_refund.invoice_unchanged")}</p>
+        ${
+          this.correcting
+            ? html`<p class="muted" data-correction-leg>${t("tender_refund.correction_leg")}</p>`
+            : html`<p class="muted" data-invoice-unchanged>
+                ${t("tender_refund.invoice_unchanged")}
+              </p>`
+        }
         ${this.#body()}
       </div>
     </wt-dialog>`;

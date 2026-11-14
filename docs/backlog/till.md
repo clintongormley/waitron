@@ -3872,8 +3872,8 @@ money with its bill.
 
 **A1261. A full invoice for a bill already paid, from the table's ⋮ (left open by A803 slice 3,
 Owner question 2, #2360).** As built, the ⋮ offers Full invoice only for a bill still to pay and
-not yet invoiced; for a paid bill it is a correction, which A802 has not built. Once A802 gives
-the till a way in, offer it from the ⋮ for a paid bill. If the owner instead picks "show it
+not yet invoiced; for a paid bill it needs an invoice that replaces the paid ticket, which Correct
+invoice (A802) does not issue. Once something does, offer it from the ⋮ for a paid bill. If the owner instead picks "show it
 quiet and explain on tap", that needs a new sentence in English and Spanish first.
 
 ## A1265. The table screen's ⋮ list is taller than the room below it, so Finish table starts below the fold

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import {
   deviceProfiles,
@@ -28,8 +28,9 @@ import { SESSION_COOKIE } from "./till-session.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
 import { readBillEditState } from "./bill-editing.js";
+import { listOpenInvoiceCorrections } from "./invoice-corrections.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
-import { parkOrder } from "./working-order.js";
+import { parkOrder, readInvoiceNumber } from "./working-order.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -223,6 +224,85 @@ describe("POST /api/transactions/:saleId/corrections/preview", () => {
       status: 200,
       json: { id: readable, state: "open" },
     });
+  });
+});
+
+it("still gives money back through Refund a payment while the invoice records need checking", async () => {
+  const saleId = await sold(["10.00"]);
+  const [cash] = await inTx(venue, (tx) => readRefundableTenders(tx, saleId));
+  const unsound = vi.spyOn(venue.backend, "checkIntegrity").mockResolvedValue({
+    ok: false,
+    checked: 1,
+    issues: [{ code: "predecessor-hash-mismatch", params: {} }],
+  } as Awaited<ReturnType<typeof venue.backend.checkIntegrity>>);
+  onTestFinished(() => unsound.mockRestore());
+
+  expect(await preview(saleId, { gross: "2.00" })).toMatchObject({
+    status: 409,
+    json: { code: "invoice_correction.chain_unsound" },
+  });
+  expect(
+    await send(venue.app, venue.cookie, "POST", `/api/transactions/${saleId}/refunds`, {
+      submissionId: randomUUID(),
+      tenderId: cash!.tenderId,
+      appliedAmount: "2.00",
+      tipAmount: "0.00",
+      reason: "Goodwill",
+      override: supervisor(),
+    }),
+  ).toMatchObject({ status: 200, json: { state: "completed", appliedAmount: "2.00" } });
+});
+
+describe("GET /api/transactions/:saleId/corrections/lines", () => {
+  const lines = (saleId: string, cookie = venue.cookie) =>
+    send(venue.app, cookie, "GET", `/api/transactions/${saleId}/corrections/lines`);
+
+  it("answers each line with what is left of it and the money still refundable", async () => {
+    const saleId = await sold(["4.00", "6.00"]);
+    const answer = await lines(saleId);
+    expect(answer.status).toBe(200);
+    expect(answer.json).toEqual({
+      lines: [
+        {
+          id: expect.any(String),
+          descriptions: expect.any(Object),
+          rate: "21.00",
+          gross: "10.00",
+          left: "10.00",
+        },
+      ],
+      moneyRefundable: "10.00",
+    });
+    const receipt = await send(
+      venue.app,
+      venue.cookie,
+      "GET",
+      `/api/transactions/${saleId}/receipt`,
+    );
+    expect((answer.json as { lines: [{ descriptions: object }] }).lines[0].descriptions).toEqual(
+      (receipt.json as { lines: [{ descriptions: object }] }).lines[0].descriptions,
+    );
+  });
+
+  it("refuses with the preview's code an invoice the preview refuses", async () => {
+    const unpaid = await sold([]);
+    const busy = await sold(["10.00"]);
+    await opened(busy);
+    for (const saleId of [unpaid, busy]) {
+      const refused = await lines(saleId);
+      expect(refused.status).toBe(409);
+      expect(refused).toEqual(await preview(saleId, { gross: "5.00" }));
+    }
+    expect((await lines(unpaid)).json).toMatchObject({ code: "invoice_correction.not_settled" });
+    expect((await lines(busy)).json).toMatchObject({ code: "invoice_correction.already_open" });
+  });
+
+  it("refuses a till outside the invoice's zone as the preview does", async () => {
+    const saleId = await sold(["10.00"]);
+    await serveOnly(otherZone);
+    expect(await lines(saleId, zonedTill.cookie)).toEqual(ZONE_REFUSED());
+    await serveOnly(venue.zoneId);
+    expect(await lines(saleId, zonedTill.cookie)).toMatchObject({ status: 200 });
   });
 });
 
@@ -498,6 +578,83 @@ describe("GET /api/invoice-corrections", () => {
     expect(ids).toEqual(expect.arrayContaining([here, there]));
     expect(ids).not.toContain(filed);
     await serveOnly(venue.zoneId);
+  });
+
+  it("lists each open correction as reading it alone shows it, money back and refunds included", async () => {
+    const ids = [
+      await opened(await sold(["10.00"])),
+      await opened(await sold(["10.00"])),
+      await opened(await sold(["10.00"])),
+    ];
+    expect((await giveCash(ids[0]!, cashBody({ amount: "2.00" }))).status).toBe(200);
+    expect((await giveCash(ids[1]!, cashBody({ amount: "1.00" }))).status).toBe(200);
+
+    const listed = (await list()).json.corrections as Record<string, unknown>[];
+    for (const id of ids) {
+      const { fileNow, ...alone } = (await read(id)).json as Record<string, unknown>;
+      void fileNow;
+      expect(listed.find((correction) => correction.id === id)).toEqual({
+        ...alone,
+        invoiceNumber: expect.any(String),
+      });
+    }
+    expect(
+      ids.map((id) => {
+        const found = listed.find((correction) => correction.id === id)!;
+        return [found.moneyBack, found.left, (found.legs as unknown[]).length];
+      }),
+    ).toEqual([
+      ["2.00", "3.00", 1],
+      ["1.00", "4.00", 1],
+      ["0.00", "5.00", 0],
+    ]);
+  });
+
+  it("reads the list of one open correction and of several in the same number of statements", async () => {
+    const statementsFor = () =>
+      inTx(venue, async (tx) => {
+        let statements = 0;
+        const counted = new Proxy(tx, {
+          get(target, prop) {
+            const value: unknown = Reflect.get(target, prop, target);
+            if (typeof value !== "function") return value;
+            if (["execute", "select", "all", "get", "run", "values"].includes(String(prop)))
+              return (...args: unknown[]) => {
+                statements += 1;
+                return (value as (...a: unknown[]) => unknown).apply(target, args);
+              };
+            return value.bind(target);
+          },
+        });
+        const corrections = await listOpenInvoiceCorrections(counted);
+        return { statements, rows: corrections.length };
+      });
+    await opened(await sold(["10.00"]));
+    const before = await statementsFor();
+    const id = await opened(await sold(["10.00"]));
+    expect((await giveCash(id, cashBody({ amount: "1.00" }))).status).toBe(200);
+    await opened(await sold(["10.00"]));
+    await opened(await sold(["10.00"]));
+    const after = await statementsFor();
+
+    expect(after.rows).toBe(before.rows + 3);
+    expect(after.statements).toBe(before.statements);
+  });
+
+  it("names each correction's invoice by its number", async () => {
+    const first = await sold(["10.00"]);
+    const second = await sold(["10.00"]);
+    const numbers = await inTx(venue, async (tx) => [
+      await readInvoiceNumber(tx, first),
+      await readInvoiceNumber(tx, second),
+    ]);
+    expect(numbers[0]).not.toBe(numbers[1]);
+    const ids = [await opened(first), await opened(second)];
+
+    const listed = (await list()).json.corrections as { id: string; invoiceNumber: string }[];
+    expect(
+      ids.map((id) => listed.find((correction) => correction.id === id)?.invoiceNumber),
+    ).toEqual(numbers);
   });
 });
 

@@ -58,6 +58,7 @@ import {
 import type { PayEquipmentPick, PayEquipmentRole } from "./widgets/pay-equipment.js";
 import { LeaveController, type WtDialog, type DraftScope, type LeaveReason } from "@waitron/ui";
 import type { BillRow, TransactionRow } from "./api/find-bill-types.js";
+import type { OpenInvoiceCorrection } from "./api/invoice-correction-types.js";
 import "./screens/till-find-bill-screen.js";
 import { EMPTY_MENU_FILTERS, type MenuFilters } from "./menu-filter.js";
 import { isTillDestination, type TillDestination, tillPath } from "./navigation.js";
@@ -259,6 +260,9 @@ import type {
 } from "./widgets/bill-pay-dialog.js";
 import "./widgets/bill-refund-dialog.js";
 import "./widgets/tender-refund-dialog.js";
+import "./widgets/invoice-correction-dialog.js";
+import type { InvoiceCorrectionCardLeg } from "./widgets/invoice-correction-dialog.js";
+import { InvoiceCorrectionSession } from "./state/invoice-correction.js";
 import type { TillTenderRefundDialog } from "./widgets/tender-refund-dialog.js";
 import type {
   RefundableTender,
@@ -267,6 +271,7 @@ import type {
   TenderRefundRequest,
 } from "./api/tender-refund-types.js";
 import {
+  refundMethodAllowed,
   TenderRefundAttempts,
   TenderRefundSession,
   TenderRefundAttemptError,
@@ -1251,6 +1256,9 @@ interface RefundFill {
   cancellationIds: string[];
   /** The cancel's Void reasons, so the refund does not read them again. */
   reasons?: AdjustmentReason[];
+  /** The open correction this refund is a card leg of, and its card. */
+  invoiceCorrectionId?: string;
+  tenderId?: string;
 }
 
 interface FinishingTable {
@@ -2662,6 +2670,7 @@ export class TillApp extends LitElement {
     this.#closeDeviceZones();
     this.deviceSettingsOpen = false;
     this.#closeTenderRefund();
+    this.invoiceCorrecting = null;
     this.#tenderRefundRead++;
     this.#stopClocking();
     this.#cancelFindBillRead();
@@ -3446,6 +3455,13 @@ export class TillApp extends LitElement {
   #tenderRefundSession?: TenderRefundSession;
   #tenderRefundRead = 0;
   @state() private refundableTenders: RefundableTender[] = [];
+  @state() private invoiceCorrecting: {
+    saleId: string;
+    correctionId: string;
+    session: InvoiceCorrectionSession;
+    legsRevision: number;
+    cardNotice: { key: StringKey } | null;
+  } | null = null;
   @state() private tenderRefunding: {
     visit: object;
     saleId: string;
@@ -4705,6 +4721,7 @@ export class TillApp extends LitElement {
       this.refundPrintBusy = false;
       if (this.historicalReceipt?.kind === "refund") this.#backToFindBill();
       this.#closeTenderRefund();
+      this.invoiceCorrecting = null;
       if (this.#tenderRefundScope !== undefined)
         this.#tenderRefundSession = new TenderRefundSession(
           this.#tenderRefundScope,
@@ -4714,7 +4731,10 @@ export class TillApp extends LitElement {
     }
     if (changed.has("api")) this.#stopHours();
     if (changed.has("drill")) {
-      if (this.drill?.kind !== "ticket") this.#closeTenderRefund();
+      if (this.drill?.kind !== "ticket") {
+        this.#closeTenderRefund();
+        this.invoiceCorrecting = null;
+      }
       if (this.drill?.kind !== "find-bill") this.#cancelFindBillRead();
       if (this.drill?.kind !== "find-bill" && this.drill?.kind !== "ticket")
         this.historicalReceipt = null;
@@ -8495,16 +8515,7 @@ export class TillApp extends LitElement {
   }
 
   #refundMethodAllowed(row: RefundableTender): boolean {
-    return (
-      (row.method === "cash" || row.method === "card") &&
-      this.capabilities.includes(
-        row.method === "cash"
-          ? "take-cash"
-          : row.manual
-            ? "hand-keyed-card-payment"
-            : "integrated-card-payment",
-      )
-    );
+    return refundMethodAllowed(row, this.capabilities);
   }
 
   #hasRefundableTenders(): boolean {
@@ -8524,9 +8535,10 @@ export class TillApp extends LitElement {
     );
   }
 
-  async #readRefundableTenders(afterRefund = false): Promise<void> {
+  /** True when the payments read now are the ones shown. */
+  async #readRefundableTenders(afterRefund = false): Promise<boolean> {
     const receipt = this.historicalReceipt;
-    if (receipt?.kind !== "invoice") return;
+    if (receipt?.kind !== "invoice") return false;
     const session = this.#operatorSession;
     const api = this.api;
     const read = ++this.#tenderRefundRead;
@@ -8538,14 +8550,22 @@ export class TillApp extends LitElement {
       read === this.#tenderRefundRead;
     try {
       const tenders = await api.getRefundableTenders(receipt.saleId, {});
-      if (current()) this.refundableTenders = tenders;
+      if (!current()) return false;
+      this.refundableTenders = tenders;
+      return true;
     } catch {
       if (current())
         this.errorKey = afterRefund ? "tender_refund.refresh_failed" : "tender_refund.read_failed";
+      return false;
     }
   }
 
   #closeTenderRefund(): void {
+    if (this.tenderRefunding?.fill?.invoiceCorrectionId !== undefined && this.invoiceCorrecting)
+      this.invoiceCorrecting = {
+        ...this.invoiceCorrecting,
+        legsRevision: this.invoiceCorrecting.legsRevision + 1,
+      };
     this.tenderRefunding = null;
   }
 
@@ -8617,12 +8637,14 @@ export class TillApp extends LitElement {
   #linkedAsk(ask: TenderRefundAsk, fill: RefundFill | undefined): TenderRefundAsk {
     const rest: TenderRefundAsk = { ...ask };
     delete rest.cancellationIds;
+    if (fill?.invoiceCorrectionId !== undefined)
+      return { ...rest, invoiceCorrectionId: fill.invoiceCorrectionId };
     if (fill === undefined || fill.cancellationIds.length === 0) return rest;
     return { ...rest, cancellationIds: [...fill.cancellationIds] };
   }
 
   #refundAtTill(fill: RefundFill | undefined): boolean {
-    if (fill === undefined) return false;
+    if (fill === undefined || fill.invoiceCorrectionId !== undefined) return false;
     const available = this.refundableTenders.filter((row) =>
       this.#cancellationPaymentAvailable(row),
     );
@@ -8765,11 +8787,123 @@ export class TillApp extends LitElement {
     });
   }
 
+  async #onFindCorrectionOpen(
+    event: CustomEvent<{ correction: OpenInvoiceCorrection }>,
+  ): Promise<void> {
+    if (this.drill?.kind !== "find-bill") return;
+    const { id, saleId } = event.detail.correction;
+    await this.#openHistoricalReceipt({ saleId, workingOrderId: null, refundId: null });
+    if (this.historicalReceipt?.kind === "invoice" && this.historicalReceipt.saleId === saleId)
+      this.#openInvoiceCorrection(id);
+  }
+
+  /** With `correctionId`, carries on with that open correction, which may have nothing left to
+   * refund. */
+  #openInvoiceCorrection(correctionId = ""): void {
+    const receipt = this.historicalReceipt;
+    if (
+      !this.isConnected ||
+      this.drill?.kind !== "ticket" ||
+      receipt?.kind !== "invoice" ||
+      this.invoiceCorrecting ||
+      this.#tenderRefundScope === undefined ||
+      (correctionId === "" && !this.#hasRefundableTenders())
+    )
+      return;
+    this.invoiceCorrecting = {
+      saleId: receipt.saleId,
+      correctionId,
+      session: new InvoiceCorrectionSession(this.#tenderRefundScope, this.api),
+      legsRevision: 0,
+      cardNotice: null,
+    };
+  }
+
+  /** Opens Refund a payment on a correction's card once the payments are read again: the correction
+   * window read them after this app did, and a refund may have ended between the two reads. */
+  async #openCorrectionCard(
+    correcting: InvoiceCorrectionSession,
+    leg: InvoiceCorrectionCardLeg,
+  ): Promise<void> {
+    const receipt = this.historicalReceipt;
+    const session = this.#operatorSession;
+    const api = this.api;
+    if (this.invoiceCorrecting?.session !== correcting || this.tenderRefunding) return;
+    this.invoiceCorrecting = { ...this.invoiceCorrecting, cardNotice: null };
+    const read = await this.#readRefundableTenders();
+    const same = () =>
+      this.isConnected &&
+      this.historicalReceipt === receipt &&
+      this.#operatorSession === session &&
+      this.api === api &&
+      this.invoiceCorrecting?.session === correcting;
+    // The window's own message, and a fresh read of the correction, since the main screen's error
+    // sits behind the window and the step pressed may be gone.
+    const refused = (key: StringKey) => {
+      if (this.invoiceCorrecting?.session === correcting)
+        this.invoiceCorrecting = {
+          ...this.invoiceCorrecting,
+          legsRevision: this.invoiceCorrecting.legsRevision + 1,
+          cardNotice: { key },
+        };
+    };
+    if (!read) {
+      refused("invoice_correction.card_unread");
+      return;
+    }
+    if (!same() || this.tenderRefunding) return;
+    const card = this.refundableTenders.find((row) => row.tenderId === leg.tenderId);
+    if (
+      card === undefined ||
+      card.pendingRefundId !== null ||
+      compareDecimal(decimal(card.appliedRemaining), decimal("0")) <= 0 ||
+      !this.#refundMethodAllowed(card)
+    ) {
+      refused("invoice_correction.card_changed");
+      return;
+    }
+    this.#openTenderRefund({
+      target: leg.target,
+      startReasonId: leg.startReasonId,
+      dishes: "",
+      cancellationIds: [],
+      invoiceCorrectionId: leg.correctionId,
+      tenderId: leg.tenderId,
+    });
+    if (!this.tenderRefunding) refused("invoice_correction.card_not_opened");
+  }
+
+  #renderInvoiceCorrection(): TemplateResult | typeof nothing {
+    const open = this.invoiceCorrecting;
+    if (!open) return nothing;
+    return html`<till-invoice-correction-dialog
+      .api=${this.api}
+      .saleId=${open.saleId}
+      .correctionId=${open.correctionId}
+      .invoiceNumber=${this.result?.invoiceNumber ?? ""}
+      .namesLocale=${this.result?.namesLocale ?? this.result?.locale ?? ""}
+      .session=${open.session}
+      .capabilities=${this.capabilities}
+      .legsRevision=${open.legsRevision}
+      .cardNotice=${open.cardNotice}
+      @invoice-correction-card=${(event: CustomEvent<InvoiceCorrectionCardLeg>) => {
+        event.stopPropagation();
+        void this.#openCorrectionCard(open.session, event.detail);
+      }}
+      @invoice-correction-close=${(event: Event) => {
+        event.stopPropagation();
+        if (this.invoiceCorrecting?.session !== open.session) return;
+        this.invoiceCorrecting = null;
+        void this.#readRefundableTenders(true);
+      }}
+    ></till-invoice-correction-dialog>`;
+  }
+
   #renderTenderRefund(): TemplateResult | typeof nothing {
     const open = this.tenderRefunding;
     if (!open) return nothing;
     return html`<till-tender-refund-dialog
-        .tenders=${this.refundableTenders.filter((row) => row.pendingRefundId !== null || this.#refundMethodAllowed(row))}
+        .tenders=${this.refundableTenders.filter((row) => (open.fill?.tenderId === undefined || row.tenderId === open.fill.tenderId) && (row.pendingRefundId !== null || this.#refundMethodAllowed(row)))}
         .invoiceNumber=${this.result?.invoiceNumber ?? ""}
         .attempt=${open.attempt}
         .result=${open.result}
@@ -8781,6 +8915,7 @@ export class TillApp extends LitElement {
         .dishes=${open.fill?.dishes ?? ""}
         .target=${open.fill?.target ?? ""}
         .refundAtTill=${this.#refundAtTill(open.fill)}
+        .correcting=${open.fill?.invoiceCorrectionId !== undefined}
         @tender-refund-reasons=${(event: Event) => {
           event.stopPropagation();
           if (this.tenderRefunding?.visit === open.visit) void this.#loadTenderRefundReasons();
@@ -8870,6 +9005,7 @@ export class TillApp extends LitElement {
         @find-bill-open=${(event: CustomEvent<{ row: BillRow }>) => void this.#onFindBillOpen(event)}
         @find-bill-back=${() => this.#requestLeave(() => this.#onBackToCounter())}
         @find-transaction-open=${(event: CustomEvent<{ row: TransactionRow }>) => void this.#onFindTransactionOpen(event)}
+        @find-correction-open=${(event: CustomEvent<{ correction: OpenInvoiceCorrection }>) => void this.#onFindCorrectionOpen(event)}
       ></till-find-bill-screen>
     </div>`;
   }
@@ -21697,6 +21833,7 @@ export class TillApp extends LitElement {
         return html`<till-ticket-view
           .refundable=${this.#hasRefundableTenders()}
           @tender-refund-open=${() => this.#openTenderRefund()}
+          @invoice-correction-open=${() => this.#openInvoiceCorrection()}
           .historical=${this.historicalReceipt !== null}
           .receiptCopiesOnly=${this.#ticketDeliveryTarget()?.transaction === true}
           .historicalDelivery=${this.historicalReceipt?.kind === "invoice" && this.#ticketDeliveryTarget() !== undefined}
@@ -22302,7 +22439,7 @@ export class TillApp extends LitElement {
         ${this.#renderCancelItem()} ${this.#renderFinishTable()} ${this.#renderAdjusting()}
         ${this.#renderBillPaying()} ${this.#renderDeferredClosing()}
         ${this.#renderPresentedPaying()} ${this.#renderDeparting()} ${this.#renderTenderRefund()}
-        ${this.#renderCancelCrediting()}
+        ${this.#renderInvoiceCorrection()} ${this.#renderCancelCrediting()}
         ${
           this.settlementDocument === null
             ? nothing

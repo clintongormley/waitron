@@ -24,6 +24,11 @@ export interface InvoiceCorrectionCashRequest {
   override?: { personId: string; pin: string };
 }
 
+export interface InvoiceCorrectionFileRequest {
+  expectedSplit: CorrectionSplitLine[];
+  override?: { personId: string; pin: string };
+}
+
 export interface InvoiceCorrectionView {
   id: string;
   saleId: string;
@@ -38,9 +43,14 @@ export interface InvoiceCorrectionView {
   legs: TenderRefundView[];
   fileNow:
     | { gross: string; vatBreakdown: CorrectionSplitLine[] }
-    | { refusal: string; closable: boolean }
+    | { refusal: string; reason?: string; closable: boolean }
     | null;
 }
+
+/** A correction under way, as Find bill lists it, with the number of the invoice it corrects. */
+export type OpenInvoiceCorrection = Omit<InvoiceCorrectionView, "fileNow"> & {
+  invoiceNumber: string;
+};
 
 export interface InvoiceCorrectionOpened {
   correction: InvoiceCorrectionView;
@@ -51,4 +61,30 @@ export interface InvoiceCorrectionCashGiven {
   correction: InvoiceCorrectionView;
   refunds: TenderRefundView[];
   replayed: boolean;
+}
+
+/** A line of the invoice with what earlier corrections left of it, `left`. */
+export interface InvoiceCorrectionLine {
+  id: string;
+  descriptions: Record<string, string>;
+  rate: string;
+  gross: string;
+  left: string;
+}
+
+export interface InvoiceCorrectionLines {
+  lines: InvoiceCorrectionLine[];
+  /** The money still refundable over every payment on the invoice. */
+  moneyRefundable: string;
+}
+
+export interface InvoiceCorrectionPreviewRequest {
+  gross: string;
+  lineIds?: string[];
+}
+
+export interface InvoiceCorrectionPreview {
+  gross: string;
+  vatBreakdown: CorrectionSplitLine[];
+  moneyRefundable: string;
 }

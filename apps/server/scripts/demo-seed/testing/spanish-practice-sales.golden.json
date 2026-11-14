@@ -706,7 +706,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 240,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -733,7 +733,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 130,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -760,7 +760,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 725,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -787,7 +787,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 100,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -814,7 +814,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 1850,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -841,7 +841,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 100,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -868,7 +868,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 100,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -895,7 +895,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 1850,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -922,7 +922,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 725,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -949,7 +949,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 100,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -976,7 +976,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 130,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1003,7 +1003,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 1850,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1030,7 +1030,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 1850,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1057,7 +1057,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 100,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1084,7 +1084,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 240,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1111,7 +1111,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 100,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1138,7 +1138,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 1850,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1165,7 +1165,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 725,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1192,7 +1192,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 1850,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1219,7 +1219,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 725,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1246,7 +1246,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 725,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1273,7 +1273,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 240,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1300,7 +1300,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 240,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1327,7 +1327,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 725,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1354,7 +1354,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 240,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1381,7 +1381,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 100,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1408,7 +1408,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 240,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1435,7 +1435,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 240,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1462,7 +1462,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 1850,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1489,7 +1489,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 1850,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1516,7 +1516,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 240,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1543,7 +1543,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 1850,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1570,7 +1570,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 130,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1597,7 +1597,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 240,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1624,7 +1624,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 1850,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1651,7 +1651,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 100,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1678,7 +1678,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 1850,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1705,7 +1705,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 725,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1732,7 +1732,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 725,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1759,7 +1759,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 100,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1786,7 +1786,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 725,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1813,7 +1813,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 130,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1840,7 +1840,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 240,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1867,7 +1867,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 1850,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1894,7 +1894,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 100,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1921,7 +1921,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 1850,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1948,7 +1948,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 100,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -1975,7 +1975,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 240,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -2002,7 +2002,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 1850,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -2029,7 +2029,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 240,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -2056,7 +2056,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 130,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -2083,7 +2083,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 1850,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -2110,7 +2110,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 1850,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -2137,7 +2137,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 725,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -2164,7 +2164,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 725,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -2191,7 +2191,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 1850,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -2218,7 +2218,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 100,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -2245,7 +2245,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 100,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -2272,7 +2272,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 240,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -2299,7 +2299,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 725,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -2326,7 +2326,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 1850,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -2353,7 +2353,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 1850,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -2380,7 +2380,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 130,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -2407,7 +2407,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 725,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -2434,7 +2434,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 100,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -2461,7 +2461,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 130,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -2488,7 +2488,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 725,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null
@@ -2515,7 +2515,7 @@
       "parent_product_id": null,
       "menu_id": null,
       "menu_version_id": null,
-      "line_gross": null,
+      "line_gross": 240,
       "classification": null,
       "corrects_line_id": null,
       "list_gross": null

@@ -26,6 +26,7 @@ import { eq, sql } from "drizzle-orm";
 import {
   correctionLinesFor,
   previewCorrectionAmounts,
+  readCorrectableLines,
   readCorrectionAmountHistory,
 } from "./correction-history.js";
 import { recordCorrection, type RecordCorrectionInput } from "./record-correction.js";
@@ -494,5 +495,41 @@ it.each<[name: string, whose: "invoice" | "corrective", figures: FiledFigures, r
   expect(await captureError(() => preview(saleId))).toMatchObject({
     code: "sale.correction_not_admitted",
     params: { reason },
+  });
+});
+
+it("reads each invoice line with what earlier corrections left of it, refusing as the preview does", async () => {
+  const { saleId, ids } = await sell();
+  await correct(saleId, "-1.05", [steakTaken(1, ids[1]!, "-0.87", "-1.05")]);
+  const lines = (of = backend as FiscalBackend) =>
+    withTransaction(suite.db, (tx) => readCorrectableLines(tx, of, saleId, nodeId));
+
+  expect(await lines()).toEqual([
+    {
+      id: ids[0],
+      descriptions: { "es-ES": "Rice bowl" },
+      rate: "10.00",
+      gross: "11.00",
+      left: "11.00",
+    },
+    {
+      id: ids[1],
+      descriptions: { "es-ES": "Steak" },
+      rate: "21.00",
+      gross: "12.10",
+      left: "11.05",
+    },
+    {
+      id: ids[2],
+      descriptions: { "es-ES": "Sauce" },
+      rate: "10.00",
+      gross: "1.10",
+      left: "1.10",
+    },
+  ]);
+  backend.setCorrectionAdmission({ eligible: false, reason: "voided" });
+  expect(await captureError(() => lines())).toMatchObject({
+    code: "sale.correction_not_admitted",
+    params: { reason: "voided" },
   });
 });

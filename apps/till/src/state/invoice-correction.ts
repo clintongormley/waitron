@@ -48,6 +48,10 @@ function openFingerprint(ask: InvoiceCorrectionAsk): string {
 
 const cashFingerprint = (ask: { amount: string }) => JSON.stringify([money(ask.amount)]);
 
+/** Journal keys with a request on its way, counted across every session: reopening the window makes
+ * a new session, which must not drop what an earlier one is still sending. */
+const sending = new Map<string, number>();
+
 /**
  * Saves each request's submission id in the refund journal before sending, so an unknown answer is
  * replayed with it. The server checks the session, the device, authorization and trading before it
@@ -101,10 +105,14 @@ export class InvoiceCorrectionSession {
   ): Promise<R> {
     if (this.#busy) return fail("busy");
     this.#busy = true;
+    sending.set(key, (sending.get(key) ?? 0) + 1);
     try {
       return await this.#sendOnce(key, ask, fingerprint, send);
     } finally {
       this.#busy = false;
+      const left = sending.get(key)! - 1;
+      if (left === 0) sending.delete(key);
+      else sending.set(key, left);
     }
   }
 
@@ -150,6 +158,20 @@ export class InvoiceCorrectionSession {
 
   savedOpen(saleId: string): Saved<InvoiceCorrectionAsk> | null {
     return this.#read(this.#key("open", saleId));
+  }
+
+  /** Drops the saved Open of `saleId` once the correction it may have opened has been found; never
+   * while any session's Open of it is on its way, whose own answer removes its id. */
+  forgetOpen(saleId: string): void {
+    const key = this.#key("open", saleId);
+    if (sending.has(key)) return;
+    let held: string | undefined;
+    try {
+      held = this.#read(key)?.submissionId;
+    } catch {
+      return;
+    }
+    if (held !== undefined) this.#forget(key, held);
   }
 
   savedCash(correctionId: string): Saved<{ amount: string }> | null {

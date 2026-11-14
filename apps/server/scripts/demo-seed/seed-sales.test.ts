@@ -4,8 +4,10 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { sql } from "drizzle-orm";
-import { sales, withTransaction } from "@waitron/db";
+import { eq, sql } from "drizzle-orm";
+import type { TrustedClock } from "@waitron/fiscal";
+import { saleLines, sales, withTransaction } from "@waitron/db";
+import { previewCorrectionAmounts } from "@waitron/core";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { VenueResult } from "@waitron/provisioning";
@@ -17,8 +19,9 @@ import {
   decimal,
   nodeId as brandNodeId,
   rawCentsToDecimal,
+  saleId as brandSaleId,
 } from "@waitron/shared";
-import { seedSales } from "./seed-sales.js";
+import { nodeBackend, seedSales } from "./seed-sales.js";
 import type { SeedSalesProduct, SeedSalesVenue } from "./seed-sales.js";
 
 import type { SeedLocale } from "./locale.js";
@@ -64,6 +67,36 @@ const PRODUCTS: SeedSalesProduct[] = [
     vatClass: "zero",
   },
 ];
+
+// Prices whose VAT taken as base × rate rounds a cent away from gross − base: 5.00 at 10% has base
+// 4.55 and VAT 0.46, 2.10 at 21% has base 1.74 and VAT 0.37.
+const CENT_SPLIT_PRODUCTS: SeedSalesProduct[] = [
+  {
+    id: "p-reduced-split",
+    name: "Tostada",
+    customerName: { [LOCALE]: "Tostada" },
+    unitPrice: "5.00",
+    vatClass: "reduced",
+  },
+  {
+    id: "p-general-split",
+    name: "Refresco",
+    customerName: { [LOCALE]: "Refresco" },
+    unitPrice: "2.10",
+    vatClass: "general",
+  },
+];
+
+// Reading a preview stamps nothing, so no clock is ever asked.
+const PREVIEW_CLOCK: TrustedClock = {
+  now: () => {
+    throw new Error("the correction preview read the clock");
+  },
+  anchor: () => {
+    throw new Error("the correction preview anchored the clock");
+  },
+  currentAnchor: () => null,
+};
 
 const provisionVenue = createDemoVenueProvisioner(() => suite.db, {
   nifBase: 80_000_000,
@@ -185,6 +218,44 @@ describe("seedSales", () => {
     }));
     expect(pairs("sales")).toEqual(expected);
     expect(pairs("registros_facturacion")).toEqual(expected);
+  });
+
+  it("files demo sales whose every line can be corrected: the preview takes back each whole sale", async () => {
+    const venue = await createDemoVenueProvisioner(() => suite.db, {
+      nifBase: 82_000_000,
+      nifFormat: "calculated",
+      invoiceLocale: "es-ES",
+    })();
+    const { count } = await seedSales(suite.db, {
+      venue: venueFor(venue),
+      invoiceLocale: "es-ES",
+      days: 2,
+      products: CENT_SPLIT_PRODUCTS,
+    });
+    expect(count).toBeGreaterThan(0);
+
+    const previews = await withTransaction(suite.db, async (tx) => {
+      const backend = await nodeBackend(suite.db, tx, venue.nodeId, PREVIEW_CLOCK, "preproduction");
+      const results = [];
+      for (const sale of await tx.select({ id: sales.id, total: sales.total }).from(sales)) {
+        const lines = await tx
+          .select({ id: saleLines.id })
+          .from(saleLines)
+          .where(eq(saleLines.saleId, sale.id));
+        const total = rawCentsToDecimal(String(sale.total));
+        const preview = await previewCorrectionAmounts(
+          tx,
+          backend,
+          brandSaleId(sale.id),
+          brandNodeId(venue.nodeId),
+          { gross: total, lineIds: lines.map((line) => line.id) },
+        );
+        results.push({ total, gross: preview.gross });
+      }
+      return results;
+    });
+    expect(previews.length).toBe(count);
+    for (const { total, gross } of previews) expect(compareDecimal(gross, total)).toBe(0);
   });
 
   it("refuses to file demo sales into a production environment, and writes nothing", async () => {

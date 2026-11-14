@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent, page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { RefundableTender } from "../api/tender-refund-types.js";
 import type { AdjustmentReason } from "../api/client.js";
@@ -128,6 +129,23 @@ it("refunds the original card's remaining applied amount and tip, explicitly lea
     },
   ]);
 });
+
+it.each([
+  [
+    "en",
+    "This refund is part of the invoice's correction. Once all its money is back, Waitron files the corrective invoice by itself when it can; otherwise Find a bill lists it under Corrections under way, with what is left to do.",
+  ],
+  ["es", es["tender_refund.correction_leg"]],
+] as const)(
+  "says in %s that a correction's card refund leads to its corrective invoice",
+  async (locale, said) => {
+    setLocale(locale);
+    const el = await mount({ correcting: true });
+
+    expect(root(el).querySelector("[data-invoice-unchanged]")).toBeNull();
+    expect(root(el).querySelector("[data-correction-leg]")!.textContent!.trim()).toBe(said);
+  },
+);
 
 it("requires a choice between original tenders and resets amounts and the hand-keyed switch on another choice", async () => {
   const manual = { ...card, tenderId: "manual-1", last4: "0077", manual: true };

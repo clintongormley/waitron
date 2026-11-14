@@ -413,6 +413,74 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This bill has received a payment. Its full invoice choice cannot be removed",
     es: "Esta cuenta ya ha recibido un pago. No se puede quitar la elección de factura completa",
   },
+  "invoice_correction.not_settled": {
+    en: "This bill is not fully paid, so its invoice cannot be corrected yet.",
+    es: "Esta cuenta no está pagada del todo, así que su factura aún no se puede rectificar.",
+  },
+  "invoice_correction.already_open": {
+    en: "A correction of this invoice is under way. Open Correct invoice to carry on with it.",
+    es: "Hay una rectificación de esta factura en curso. Abre Rectificar factura para continuarla.",
+  },
+  "invoice_correction.not_open": {
+    en: "This correction has already ended. Close this window to see the invoice as it is now.",
+    es: "Esta rectificación ya ha terminado. Cierra esta ventana para ver la factura como está ahora.",
+  },
+  "invoice_correction.not_found": {
+    en: "This correction no longer exists. Close this window and open Correct invoice again.",
+    es: "Esta rectificación ya no existe. Cierra esta ventana y vuelve a abrir Rectificar factura.",
+  },
+  "invoice_correction.leg_too_large": {
+    en: "That is more than this correction has left to give back. Give back no more than the amount shown as left.",
+    es: "Es más de lo que le queda por devolver a esta rectificación. Devuelve como mucho el importe que aparece pendiente.",
+  },
+  "invoice_correction.nothing_back": {
+    en: "No money has gone back yet, so there is nothing to file. Give money back first, or discard the correction.",
+    es: "Aún no se ha devuelto dinero, así que no hay nada que presentar. Devuelve dinero primero o descarta la rectificación.",
+  },
+  "invoice_correction.still_correctable": {
+    en: "Money has gone back and this correction can still be filed. Press Finish now to file it.",
+    es: "Ya se ha devuelto dinero y esta rectificación aún se puede presentar. Pulsa Terminar ahora para presentarla.",
+  },
+  "invoice_correction.cash_short": {
+    en: "This bill's cash payments hold less than that. Give the rest back on the card it was paid with.",
+    es: "Los pagos en efectivo de esta cuenta no llegan a ese importe. Devuelve el resto en la tarjeta con la que se pagó.",
+  },
+  "invoice_correction.cash_route_only": {
+    en: "Cash for a correction is given back from Correct invoice. Open Correct invoice to give it.",
+    es: "El efectivo de una rectificación se devuelve desde Rectificar factura. Abre Rectificar factura para devolverlo.",
+  },
+  "invoice_correction.split_changed": {
+    en: "The VAT split has changed since it was shown. Check the new split and press again.",
+    es: "El desglose del IVA ha cambiado desde que se mostró. Revisa el nuevo desglose y vuelve a pulsar.",
+  },
+  "invoice_correction.refund_pending": {
+    en: "A refund of this bill is still waiting for its result. Check it under Refund a payment, then try again.",
+    es: "Una devolución de esta cuenta aún espera su resultado. Consúltala en Devolver un pago y vuelve a intentarlo.",
+  },
+  "invoice_correction.money_short": {
+    en: "That is more than is left to give back from this bill's payments. Enter a smaller amount.",
+    es: "Es más de lo que queda por devolver de los pagos de esta cuenta. Escribe un importe menor.",
+  },
+  "invoice_correction.chain_unsound": {
+    en: "The server's invoice records need checking, so no invoice can be corrected now.",
+    es: "Hay que revisar los registros de facturas del servidor, así que ahora no se puede rectificar ninguna factura.",
+  },
+  "sale.correction_amount_invalid": {
+    en: "Enter an amount above zero and no more than is left to correct of the dishes chosen.",
+    es: "Escribe un importe mayor que cero y no superior a lo que queda por rectificar de los platos elegidos.",
+  },
+  "sale.correction_scope_invalid": {
+    en: "This bill has dishes at more than one VAT rate. Pick the dishes to correct, all at one rate.",
+    es: "Esta cuenta tiene platos con más de un tipo de IVA. Elige los platos que se rectifican, todos del mismo tipo.",
+  },
+  "sale.correction_history_unusable": {
+    en: "This invoice's earlier corrections cannot be read, so it cannot be corrected.",
+    es: "No se pueden leer las rectificaciones anteriores de esta factura, así que no se puede rectificar.",
+  },
+  "sale.correction_not_admitted": {
+    en: "This invoice cannot be corrected.",
+    es: "Esta factura no se puede rectificar.",
+  },
   "sale.correction_exceeds_total": {
     en: "That correction is more than is left of the invoice after its earlier corrections",
     es: "Esa rectificación supera lo que queda de la factura tras sus rectificaciones anteriores",
@@ -422,8 +490,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta factura ya se ha rectificado, así que no se puede abonar por completo",
   },
   "sale.correction_unsupported": {
-    en: "A full invoice needs a reviewed manual correction. Ask a manager for help",
-    es: "Una factura completa necesita una rectificación manual revisada. Pide ayuda a un responsable",
+    en: "This is a full invoice naming a customer, and the till cannot file a corrective invoice for it.",
+    es: "Es una factura completa a nombre de un cliente y la caja no puede presentar una factura rectificativa para ella.",
   },
   "bill.presented": {
     en: "This bill has been presented, so it cannot be changed",
@@ -846,6 +914,46 @@ const DEFERRED_INELIGIBLE: Record<string, { en: string; es: string }> = {
   },
 };
 
+const FIGURES_UNCHECKED = {
+  en: "This invoice's filed figures cannot be checked, so it cannot be corrected.",
+  es: "No se pueden comprobar las cifras presentadas de esta factura, así que no se puede rectificar.",
+};
+
+/** Why `sale.correction_not_admitted` refused, by its `reason`. */
+const CORRECTION_NOT_ADMITTED: Record<string, { en: string; es: string }> = {
+  replaced: {
+    en: "This receipt was replaced by a full invoice, so it cannot be corrected.",
+    es: "Este tique se sustituyó por una factura completa, así que no se puede rectificar.",
+  },
+  unsupported: {
+    en: "Invoices cannot be corrected at this venue.",
+    es: "En este local no se pueden rectificar facturas.",
+  },
+  missing: {
+    en: "This invoice has no filing record, so it cannot be corrected.",
+    es: "Esta factura no tiene registro presentado, así que no se puede rectificar.",
+  },
+  wrong_node: {
+    en: "This invoice was filed by another server, so this one cannot correct it.",
+    es: "Otro servidor presentó esta factura, así que este no la puede rectificar.",
+  },
+  voided: {
+    en: "This invoice was cancelled, so there is nothing left to correct.",
+    es: "Esta factura se anuló, así que no queda nada por rectificar.",
+  },
+  not_simplified: {
+    en: "Only a simplified invoice can be corrected here.",
+    es: "Aquí solo se puede rectificar una factura simplificada.",
+  },
+  filing_refused: {
+    en: "The tax agency has not accepted this invoice's filing. Try again once it has been sent again.",
+    es: "La Agencia Tributaria no ha aceptado la presentación de esta factura. Vuelve a intentarlo cuando se haya enviado de nuevo.",
+  },
+  filing_versions_unusable: FIGURES_UNCHECKED,
+  filed_figures_unreadable: FIGURES_UNCHECKED,
+  filed_figures_changed: FIGURES_UNCHECKED,
+};
+
 /** Always a readable sentence, never the raw code. `locale` may be a full BCP-47 tag ("es-ES"). */
 export function codeMessage(
   code: string,
@@ -858,6 +966,12 @@ export function codeMessage(
     if (Object.hasOwn(DEFERRED_INELIGIBLE, reason))
       return pickLocale(DEFERRED_INELIGIBLE[reason]!, locale);
   }
+  if (
+    code === "sale.correction_not_admitted" &&
+    typeof params?.reason === "string" &&
+    Object.hasOwn(CORRECTION_NOT_ADMITTED, params.reason)
+  )
+    return pickLocale(CORRECTION_NOT_ADMITTED[params.reason]!, locale);
   // Own-key check, not `?? GENERIC`: a code such as `constructor` would resolve an inherited
   // Object.prototype member under a bare lookup.
   const entry = Object.hasOwn(CODE_MESSAGES, code) ? CODE_MESSAGES[code]! : GENERIC;

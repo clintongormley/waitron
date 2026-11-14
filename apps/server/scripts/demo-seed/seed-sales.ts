@@ -13,30 +13,22 @@ import { withIssuanceTransaction } from "@waitron/core";
 
 import { eq } from "drizzle-orm";
 import { recordSale } from "@waitron/core";
-import type { RecordSaleInput, RecordSaleLine } from "@waitron/core";
-import {
-  prepareIssueClock,
-  type FiscalBackend,
-  type TrustedClock,
-  type VatBreakdownLine,
-} from "@waitron/fiscal";
+import type { RecordSaleInput } from "@waitron/core";
+import { prepareIssueClock, type FiscalBackend, type TrustedClock } from "@waitron/fiscal";
 import { readVenue, nodes, withTransaction, type Transaction } from "@waitron/db";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { Database } from "@waitron/db";
 import {
-  baseFromGross,
   customerPresentationText,
   localCalendarDate,
+  rateLines,
   readContentLanguages,
   toInvoiceLineDescriptions,
-  vatRateOn,
 } from "@waitron/catalogue";
-import type { VatClass } from "@waitron/catalogue";
+import type { GrossLine, VatClass } from "@waitron/catalogue";
 import {
   AppError,
-  addDecimal,
   decimal,
-  percentOf,
   sumDecimals,
   toScale,
   MONEY_SCALE,
@@ -44,7 +36,6 @@ import {
   seriesId as brandSeriesId,
   jobOrigin,
 } from "@waitron/shared";
-import type { Decimal } from "@waitron/shared";
 import { deploymentEnvironment } from "../../src/config.js";
 import type { DeploymentEnvironment } from "../../src/config.js";
 import { ALL_MODULES } from "../../src/modules.js";
@@ -131,24 +122,7 @@ function randInt(rng: () => number, min: number, max: number): number {
   return min + Math.floor(rng() * (max - min + 1));
 }
 
-/** Restates `@waitron/core`'s breakdown derivation without its rounding to the cent: the line
- *  totals here come from `baseFromGross`, already at the money scale. */
-function breakdownOf(lines: readonly RecordSaleLine[]): VatBreakdownLine[] {
-  const bases = new Map<Decimal, Decimal>();
-  for (const line of lines) {
-    const rate = decimal(line.vatRate);
-    const base = decimal(line.lineTotal);
-    const existing = bases.get(rate);
-    bases.set(rate, existing === undefined ? base : addDecimal(existing, base));
-  }
-  return [...bases.entries()].map(([rate, base]) => ({ rate, base, tax: percentOf(base, rate) }));
-}
-
-function totalOf(breakdown: readonly VatBreakdownLine[]): Decimal {
-  return sumDecimals(breakdown.flatMap((g) => [g.base, g.tax]));
-}
-
-async function nodeBackend(
+export async function nodeBackend(
   db: Database,
   tx: Transaction,
   nodeId: string,
@@ -248,13 +222,11 @@ export async function seedSales(
       const clock = await prepareIssueClock(tx, { nodeId }, backDating.clock);
       const backend = await nodeBackend(db, tx, venue.nodeId, clock, environment);
       const on = localCalendarDate(instant, clock.now().offsetMinutes);
-      const lines: RecordSaleLine[] = [];
+      const grossLines: GrossLine[] = [];
       for (const product of chosen) {
-        const gross = toScale(decimal(product.unitPrice), MONEY_SCALE);
-        const rate = vatRateOn(product.vatClass, on);
-        const base = baseFromGross(gross, rate);
-        lines.push({
-          lineNo: lines.length + 1,
+        const price = toScale(decimal(product.unitPrice), MONEY_SCALE);
+        grossLines.push({
+          lineNo: grossLines.length + 1,
           name: product.name,
           descriptions: toInvoiceLineDescriptions(
             customerPresentationText(
@@ -272,14 +244,16 @@ export async function seedSales(
             defaultLanguage,
           ),
           quantity: "1",
-          unitPrice: base,
-          vatRate: rate,
-          lineTotal: base,
+          vatClass: product.vatClass,
+          grossUnitPrice: price,
+          lineGross: price,
         });
       }
+      const { lines, total, vatBreakdown } = rateLines(
+        { lines: grossLines, total: sumDecimals(grossLines.map((line) => line.lineGross)) },
+        on,
+      );
 
-      const vatBreakdown = breakdownOf(lines);
-      const total = totalOf(vatBreakdown);
       const input: RecordSaleInput = {
         origin: jobOrigin("demo_seed"),
         nodeId,
@@ -288,7 +262,6 @@ export async function seedSales(
         invoiceLocales: [invoiceLocale],
         total,
         lines,
-        // Derived from the same lines as `total`, so `recordSale`'s reconciliation check passes.
         vatBreakdown,
         settlement: {
           kind: "immediate",

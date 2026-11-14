@@ -6580,6 +6580,7 @@ it.each(retirementActionLooks)(
       const client = stubApi({
         getTill: vi.fn().mockResolvedValue({ ...till, locale }),
         findBillOptions: vi.fn().mockResolvedValue(billOptions),
+        listInvoiceCorrections: vi.fn().mockResolvedValue([]),
         listBills: vi.fn().mockResolvedValue(listPage()),
         listTransactions: vi
           .fn()
