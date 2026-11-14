@@ -222,13 +222,17 @@ const hourAfterWipe = async (f: Held) =>
     onBox: false,
   })) as { input: unknown };
 
-/** A resolution record, with one step, in the layout Start again's deletion removes. */
+/**
+ * A resolution record laid out as its writer left one: step 1 in the record folder itself, a later
+ * odd step in its own `step-NNNNNN` folder.
+ */
 async function seedResolutionRecord(f: Pick<Held, "roots">): Promise<string> {
   const folder = join(f.roots.stateDir, "first-setup-resolutions");
   const record = join(folder, randomUUID());
-  await mkdir(join(record, "step-000001"), { recursive: true });
+  await mkdir(join(record, "step-000003"), { recursive: true });
+  await writeFile(join(record, "000001.json"), "{}");
   await writeFile(join(record, "manifest.json"), "{}");
-  await writeFile(join(record, "step-000001", "manifest.json"), "{}");
+  await writeFile(join(record, "step-000003", "manifest.json"), "{}");
   return folder;
 }
 
