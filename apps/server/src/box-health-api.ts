@@ -237,8 +237,8 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
       const stepsSeen = correction.steps();
       const reading = clockSet.clock.now();
       const steadyMs = clockSet.steady();
-      if (challenges.take(sessionId, challengeId) === null)
-        throw new AppError("clock.check_expired", {});
+      const challenge = challenges.take(sessionId, challengeId);
+      if (challenge === null) throw new AppError("clock.check_expired", {});
       const refuse = (reason: "stale" | "stopped" | "not_stopped") =>
         new AppError("clock.set_refused", { reason });
       const start = clockSet.start;
@@ -247,12 +247,15 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
       const confirmed = await correction.inTurn(() =>
         withTransaction(deps.db, async (tx) => {
           const now = clockSet.clock.now();
+          const nowReading = { wallMs: now.instant.getTime(), monoMs: clockSet.steady() };
           if (
             correction.steps() !== stepsSeen ||
             wallMovedAgainstSteady(
               { wallMs: reading.instant.getTime(), monoMs: steadyMs },
-              { wallMs: now.instant.getTime(), monoMs: clockSet.steady() },
-            )
+              nowReading,
+            ) ||
+            // What was confirmed is the time the challenge showed.
+            wallMovedAgainstSteady(challenge.issuedAt, nowReading)
           )
             throw refuse("stale");
           if (clockUnusableAt(backend, now)) throw refuse("stopped");

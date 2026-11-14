@@ -556,6 +556,36 @@ it("refuses a confirmation when a step of the box's clock lands during it", asyn
   );
 });
 
+it("refuses a confirmation when the box's clock moved between its challenge and its confirm", async () => {
+  const start = startClockState();
+  const box = await stoppedBox(0, { start });
+  const asked = await ask(box, mario.cookie);
+  box.setClock(boxTime(box) + 2 * DAY);
+  await expectRefused(
+    box,
+    send(box.app, mario.cookie, "POST", "/api/box/clock-confirm", {
+      challengeId: asked.json.challengeId,
+      asShown: true,
+    }),
+    "stale",
+  );
+  expect(start.status).toBe("waiting");
+});
+
+it("confirms when the box's clock ran with its steady clock between challenge and confirm", async () => {
+  const start = startClockState();
+  const box = await stoppedBox(0, { start });
+  const asked = await ask(box, mario.cookie);
+  box.setClock(boxTime(box) + 3_000);
+  box.setSteady(3_000);
+  const answer = await send(box.app, mario.cookie, "POST", "/api/box/clock-confirm", {
+    challengeId: asked.json.challengeId,
+    asShown: true,
+  });
+  expect(answer.status).toBe(200);
+  expect(start.status).toBe("by_person");
+});
+
 it("refuses a confirmation on the box itself, and from anyone but an administrator", async () => {
   const start = startClockState();
   const box = await stoppedBox(0, { start });
