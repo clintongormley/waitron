@@ -1653,7 +1653,6 @@ export class DashboardApp extends LitElement {
   #activate(enabled: readonly string[]): void {
     this.#moduleContexts.clear();
     this.#coreSearchContext = undefined;
-    this.#coreSettingDestinations = [];
     this.#enabledModules = [...enabled];
     const knownGroups = new Set<NavGroupId>(NAV_GROUPS.map((g) => g.id));
     const knownTabs = new Set<string>(VENUE_SETTINGS_TABS);
@@ -1668,7 +1667,8 @@ export class DashboardApp extends LitElement {
       liveData: this.api.liveData,
       renderPanel: this.#renderPanel,
     };
-    this.#coreSettingDestinations = departmentReceiptSearchDestinations(this.api);
+    if (this.#coreSettingDestinations.length === 0)
+      this.#coreSettingDestinations = departmentReceiptSearchDestinations(this.api);
     for (const c of DASHBOARD_MODULES) {
       if (!enabled.includes(c.module)) continue;
       const screens: readonly DashboardFurtherScreen[] = contributedScreens(c);

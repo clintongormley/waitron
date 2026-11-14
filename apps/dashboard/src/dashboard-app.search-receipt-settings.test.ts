@@ -91,3 +91,35 @@ it.each([{ permissions: ["venue.view"] }, { modules: [] }])(
     expect(searchResult(app, id("email"))).toBeNull();
   },
 );
+
+it("keeps an open receipt chooser usable after returning to the browser tab", async () => {
+  const { app, fetchImpl } = await mountReceiptApp({
+    path: "/manage/overview",
+    departments: [
+      { id: "bar", name: "Bar" },
+      { id: "restaurant", name: "Restaurant" },
+    ],
+  });
+  await searchSettings(app, t("receipts.email"));
+  await userEvent.click(searchResult(app, id("email"))!);
+  await expect.poll(() => settingChooser(app)?.querySelector("wt-combobox")).toBeTruthy();
+  await chooseSettingRow(app, "restaurant");
+  const reads = () =>
+    fetchImpl.mock.calls.filter(([path]) => path === "/management-api/session/me").length;
+  const before = reads();
+  document.dispatchEvent(new Event("visibilitychange"));
+  await expect.poll(reads).toBeGreaterThan(before);
+  await expect
+    .poll(
+      () =>
+        settingChooser(app)!.querySelector<HTMLButtonElement>("[data-test=setting-open]")?.disabled,
+    )
+    .toBe(false);
+  await userEvent.click(
+    settingChooser(app)!.querySelector<HTMLElement>("[data-test=setting-open]")!,
+  );
+  await expect
+    .poll(() => location.pathname)
+    .toBe("/manage/venue-operations/department/restaurant/view/receipt");
+  await expect.poll(() => receiptTabEditor(app)?.subject?.id).toBe("restaurant");
+});

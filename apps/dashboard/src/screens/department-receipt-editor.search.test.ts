@@ -1,7 +1,7 @@
 import { afterEach, expect, it } from "vitest";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
-import * as editor from "./department-receipt-editor.js";
+import { departmentReceiptSettingFields } from "./department-receipt-editor.js";
 import {
   mountReceiptEditor,
   receiptApi,
@@ -38,10 +38,7 @@ it.each(["en-GB", "es-ES"])(
           actual.add(JSON.stringify([name, t("appearance.logo")]));
         } else actual.add(JSON.stringify([name.replace(/-(?:es|ca)-ES$/, ""), field.label]));
       }
-      const declarations = Reflect.get(editor, "departmentReceiptSettingFields") as
-        readonly { name: string; labelKey: Parameters<typeof t>[0] }[] | undefined;
-      expect(declarations, "receipt settings publish their searchable labels").toBeDefined();
-      const declared = declarations!.map(({ name, labelKey }) =>
+      const declared = departmentReceiptSettingFields.map(({ name, labelKey }) =>
         JSON.stringify([name, t(labelKey)]),
       );
       expect(declared).toHaveLength(new Set(declared).size);
