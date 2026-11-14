@@ -2,25 +2,12 @@ import "./errors.js";
 import type { RecordSaleLine } from "@waitron/core";
 import type { Transaction } from "@waitron/db";
 import type { ModuleRouteContext } from "@waitron/module";
-import { AppError, decimal, jobOrigin, seriesId } from "@waitron/shared";
-import { applyCorrectiveInvoice } from "./record-remedy-corrective.js";
-import { caseIdForRecord, type RemedyPolicy } from "./record-remedy.js";
+import { decimal, jobOrigin, seriesId } from "@waitron/shared";
+import { applyCorrectiveInvoice, correctiveRemedy } from "./record-remedy-corrective.js";
+import type { RemedyPolicy } from "./record-remedy.js";
+import { invalid, object, only, requestCaseId, text } from "./record-remedy-request.js";
 import { makeVerifactuBackend } from "./slot.js";
 
-function invalid(): never {
-  throw new AppError("fiscal.remedy_request_invalid", {});
-}
-function object(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return invalid();
-  return value as Record<string, unknown>;
-}
-function only(row: Record<string, unknown>, keys: readonly string[]) {
-  if (Object.keys(row).some((key) => !keys.includes(key))) invalid();
-}
-function text(value: unknown): string {
-  if (typeof value !== "string" || value.trim() === "") return invalid();
-  return value;
-}
 function amount(value: unknown): string {
   const literal = text(value);
   try {
@@ -84,11 +71,18 @@ export async function applyCorrectiveInvoiceRequest(
   if (new Set(lines.map((item) => item.lineNo)).size !== lines.length) invalid();
   const registroId = text(raw.registroId);
   const request = {
-    caseId: raw.caseId === undefined ? await caseIdForRecord(tx, registroId) : text(raw.caseId),
+    caseId: await requestCaseId(tx, raw.caseId, registroId),
     registroId,
     actionKey: text(raw.actionKey),
     reason: text(raw.reason),
-    correction: {
+  };
+  const backend = makeVerifactuBackend({
+    db: ctx.db,
+    clock: generation.clock,
+    environment: generation.environment,
+  });
+  const remedy = correctiveRemedy(
+    {
       origin: jobOrigin("operator_script"),
       seriesId: seriesId(text(correction.seriesId)),
       total: amount(correction.total),
@@ -96,17 +90,13 @@ export async function applyCorrectiveInvoiceRequest(
       wholeInvoice: correction.wholeInvoice === true,
       lines,
     },
-  };
-  const backend = makeVerifactuBackend({
-    db: ctx.db,
-    clock: generation.clock,
-    environment: generation.environment,
-  });
+    { managementSessionId: token, nodeId: generation.nodeId, backend },
+  );
   return applyCorrectiveInvoice(tx, {
     managementSessionId: token,
     generation,
     enabledRemedies,
-    backend,
     request,
+    remedy,
   });
 }

@@ -13,12 +13,11 @@ import { envios } from "./schema/envios.js";
 import { filingCaseEvents, filingCases } from "./schema/filing-cases.js";
 import { registrosFacturacion } from "./schema/registros.js";
 
-export interface CorrectiveInvoiceRequest {
+export interface InvoiceRemedyRequest {
   caseId: string;
   registroId: string;
   actionKey: string;
   reason: string;
-  correction: Omit<RecordCorrectionInput, "nodeId" | "correctsSaleId" | "clock" | "authz">;
 }
 
 /** A remedy that issues a new invoice for a case's record; `applyCorrectiveInvoice` makes the checks
@@ -33,7 +32,7 @@ export interface InvoiceRemedy {
     delivery: typeof envios.$inferSelect;
     target: typeof registrosFacturacion.$inferSelect;
   }) => boolean;
-  replace: (
+  issue: (
     tx: Transaction,
     facts: {
       correctsSaleId: SaleId;
@@ -43,22 +42,22 @@ export interface InvoiceRemedy {
   ) => Promise<{ saleId: string; fiscal: FiscalRecordRef }>;
 }
 
-function correctiveRemedy(
-  request: CorrectiveInvoiceRequest,
-  input: { managementSessionId: string; generation: { nodeId: NodeId }; backend: VerifactuBackend },
+export function correctiveRemedy(
+  correction: Omit<RecordCorrectionInput, "nodeId" | "correctsSaleId" | "clock" | "authz">,
+  input: { managementSessionId: string; nodeId: NodeId; backend: VerifactuBackend },
 ): InvoiceRemedy {
   return {
     kind: "corrective-invoice",
     action: {
       correction: {
-        ...request.correction,
-        wholeInvoice: request.correction.wholeInvoice === true,
+        ...correction,
+        wholeInvoice: correction.wholeInvoice === true,
       },
     },
-    replace: (tx, { correctsSaleId, clock }) =>
+    issue: (tx, { correctsSaleId, clock }) =>
       recordCorrection(tx, input.backend, {
-        ...request.correction,
-        nodeId: input.generation.nodeId,
+        ...correction,
+        nodeId: input.nodeId,
         correctsSaleId,
         authz: { managementSessionId: input.managementSessionId },
         clock,
@@ -72,13 +71,11 @@ export async function applyCorrectiveInvoice(
     managementSessionId: string;
     generation: NonNullable<ModuleRouteContext["recordGeneration"]>;
     enabledRemedies: RemedyPolicy;
-    backend: VerifactuBackend;
-    request: CorrectiveInvoiceRequest | Omit<CorrectiveInvoiceRequest, "correction">;
-    remedy?: InvoiceRemedy;
+    request: InvoiceRemedyRequest;
+    remedy: InvoiceRemedy;
   },
 ): Promise<{ saleId: string; registroId: string; eventId: string }> {
-  const { request, generation } = input;
-  const remedy = input.remedy ?? correctiveRemedy(request as CorrectiveInvoiceRequest, input);
+  const { request, generation, remedy } = input;
   const personId = await admitRecordRemedy(
     tx,
     input.managementSessionId,
@@ -122,13 +119,13 @@ export async function applyCorrectiveInvoice(
         caseId: request.caseId,
         actionKey: request.actionKey,
       });
-    const [remedy] = await tx
+    const [remedyRecord] = await tx
       .select({ saleId: registrosFacturacion.saleId })
       .from(registrosFacturacion)
       .where(eq(registrosFacturacion.id, stored.remedyRegistroId));
-    if (remedy === undefined)
+    if (remedyRecord === undefined)
       throw new AppError("fiscal.remedy_invalid", { registroId: request.registroId });
-    return { saleId: remedy.saleId, registroId: stored.remedyRegistroId, eventId: stored.id };
+    return { saleId: remedyRecord.saleId, registroId: stored.remedyRegistroId, eventId: stored.id };
   }
   const [filingCase] = await tx
     .select()
@@ -169,12 +166,11 @@ export async function applyCorrectiveInvoice(
     (remedy.admits !== undefined && !remedy.admits({ filingCase, delivery, target }))
   )
     throw new AppError("fiscal.remedy_invalid", { registroId: request.registroId });
-  // `recordCorrection` would credit a replaced invoice's replacement, not this case's record.
   const correctsSaleId = saleId(target.saleId);
   if ((await correctionTargetFor(tx, correctsSaleId)) !== correctsSaleId)
     throw new AppError("fiscal.remedy_invalid", { registroId: request.registroId });
   const clock = await prepareIssueClock(tx, { nodeId: generation.nodeId }, generation.clock);
-  const result = await remedy.replace(tx, { correctsSaleId, target, clock });
+  const result = await remedy.issue(tx, { correctsSaleId, target, clock });
   const [appended] = await tx
     .select()
     .from(registrosFacturacion)

@@ -67,7 +67,7 @@ const ALLOWED: readonly { file: string; fragment: string; lines: number; reason:
   },
   {
     file: "packages/reporting/src/vat-return.ts",
-    fragment: "where r.corrects_sale_id = s.id and r.replaces_original = 1",
+    fragment: "left join sales repl on repl.corrects_sale_id = s.id and repl.replaces_original = 1",
     lines: 1,
     reason:
       "looks up a replaced sale's supply day to choose its VAT period; it totals nothing a sale owes",

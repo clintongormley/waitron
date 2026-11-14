@@ -396,7 +396,7 @@ it("refuses when this node has no live rectificative series", async () => {
     .update(invoiceSeries)
     .set({ retiredAt: TODAY })
     .where(eq(invoiceSeries.id, rectificativeId));
-  await refuses(body, "series.no_rectificative_for_node");
+  await refuses(body, "series.no_rectificative_for_node", 409);
 });
 
 it.each([

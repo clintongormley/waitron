@@ -3,6 +3,7 @@ import { decimal } from "../money.js";
 import { isAppError } from "../errors.js";
 import {
   VAT_RATE_TABLE,
+  isCalendarDate,
   localCalendarDate,
   localToday,
   vatRateOn,
@@ -230,6 +231,15 @@ describe("a table checked once", () => {
       (VAT_RATE_TABLE as Record<string, unknown>).general = [];
     }).toThrow(TypeError);
     expect(vatRateOn("general", "2028-01-01")).toBe(decimal("21.00"));
+  });
+});
+
+describe("isCalendarDate", () => {
+  it("accepts a real day written YYYY-MM-DD and nothing else", () => {
+    expect(isCalendarDate("2028-02-29")).toBe(true);
+    for (const bad of ["2027-02-29", "2027-13-01", "2027-1-01", "20270101", "2027-01-01T00:00"]) {
+      expect(isCalendarDate(bad)).toBe(false);
+    }
   });
 });
 

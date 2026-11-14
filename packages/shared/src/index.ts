@@ -440,6 +440,7 @@ export type {
 export {
   vatRateOn,
   vatRatesOn,
+  isCalendarDate,
   localCalendarDate,
   localToday,
   VAT_CLASSES,

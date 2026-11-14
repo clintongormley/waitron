@@ -29,6 +29,7 @@ import { readChainHead } from "./chain.js";
 import { openFilingCase, recordCaseEvent } from "./filing-cases.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
 import * as remedies from "./record-remedy.js";
+import { correctiveRemedy } from "./record-remedy-corrective.js";
 import { applyCorrectedRecordFacts } from "./record-remedy-http.js";
 import { envios } from "./schema/envios.js";
 import { filingCaseEvents, type FilingCaseCause } from "./schema/filing-cases.js";
@@ -171,7 +172,14 @@ beforeEach(async () => {
 });
 
 async function apply(value = input): Promise<Result> {
-  return withTransaction(suite.db, (tx) => remedies.applyCorrectiveInvoice(tx, value));
+  const remedy = correctiveRemedy(value.request.correction, {
+    managementSessionId: value.managementSessionId,
+    nodeId: value.generation.nodeId,
+    backend: value.backend,
+  });
+  return withTransaction(suite.db, (tx) =>
+    remedies.applyCorrectiveInvoice(tx, { ...value, remedy }),
+  );
 }
 async function snapshot() {
   return {

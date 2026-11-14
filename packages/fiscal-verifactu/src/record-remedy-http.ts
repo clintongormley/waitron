@@ -6,8 +6,9 @@ import type { ModuleRouteContext } from "@waitron/module";
 import { canonicalJson } from "@waitron/recovery-pack";
 import { AppError, compareDecimal, decimal, readSaleOrigin, saleId } from "@waitron/shared";
 import type { AltaInput, RegistroAlta } from "@waitron/verifactu";
-import { applyRecordCorrection, caseIdForRecord, type RemedyPolicy } from "./record-remedy.js";
+import { applyRecordCorrection, type RemedyPolicy } from "./record-remedy.js";
 import { readCorrectedRecordFacts, type CorrectedRecordFacts } from "./record-remedy-facts.js";
+import { invalid, object, only, requestCaseId, text } from "./record-remedy-request.js";
 import { currentSif } from "./registro-sif.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import {
@@ -16,21 +17,6 @@ import {
   SOFTWARE_IDENTITY,
   softwareVersion,
 } from "./software-identity.js";
-
-function invalid(): never {
-  throw new AppError("fiscal.remedy_request_invalid", {});
-}
-function object(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return invalid();
-  return value as Record<string, unknown>;
-}
-function text(value: unknown): string {
-  if (typeof value !== "string" || value.trim() === "") return invalid();
-  return value;
-}
-function only(value: Record<string, unknown>, keys: readonly string[]) {
-  if (Object.keys(value).some((key) => !keys.includes(key))) invalid();
-}
 
 const BREAKDOWN_AMOUNTS = [
   "TipoImpositivo",
@@ -146,8 +132,7 @@ export async function applyCorrectedRecordFacts(
   if (priorOutcome !== "rejected" && priorOutcome !== "accepted-with-errors") invalid();
   const facts = readCorrectedRecordFacts(body.facts);
   const registroId = text(body.registroId);
-  const caseId =
-    body.caseId === undefined ? await caseIdForRecord(tx, registroId) : text(body.caseId);
+  const caseId = await requestCaseId(tx, body.caseId, registroId);
   const actionKey = text(body.actionKey);
   const reason = text(body.reason);
   generation.requireWritable();

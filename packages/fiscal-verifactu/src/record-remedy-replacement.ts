@@ -2,30 +2,18 @@ import "./errors.js";
 import { recordReplacement } from "@waitron/core";
 import { readLiveSeriesIdTx, type Transaction } from "@waitron/db";
 import type { ModuleRouteContext } from "@waitron/module";
-import { AppError, jobOrigin, seriesId } from "@waitron/shared";
-import { formatDateTime } from "@waitron/verifactu";
+import { AppError, isCalendarDate, jobOrigin, localCalendarDate, seriesId } from "@waitron/shared";
 import { applyCorrectiveInvoice } from "./record-remedy-corrective.js";
-import { caseIdForRecord, type RemedyPolicy } from "./record-remedy.js";
+import type { RemedyPolicy } from "./record-remedy.js";
+import { only, requestCaseId, text } from "./record-remedy-request.js";
 import { makeVerifactuBackend } from "./slot.js";
-
-const KEYS = ["kind", "caseId", "registroId", "actionKey", "reason", "operationDate"];
-
-function text(value: unknown): string {
-  if (typeof value !== "string" || value.trim() === "")
-    throw new AppError("fiscal.remedy_request_invalid", {});
-  return value;
-}
 
 function operationDateInvalid(): never {
   throw new AppError("fiscal.operation_date_invalid", { field: "operationDate" });
 }
 
-/** A calendar day written `YYYY-MM-DD`; refused otherwise. */
-function calendarDay(value: unknown): string {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) operationDateInvalid();
-  const parsed = new Date(`${value}T00:00:00Z`);
-  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value)
-    operationDateInvalid();
+function operationDateOf(value: unknown): string {
+  if (typeof value !== "string" || !isCalendarDate(value)) operationDateInvalid();
   return value;
 }
 
@@ -41,14 +29,13 @@ export async function applyReplacementInvoiceRequest(
   enabledRemedies: RemedyPolicy,
   raw: Record<string, unknown>,
 ) {
-  if (Object.keys(raw).some((key) => !KEYS.includes(key)))
-    throw new AppError("fiscal.remedy_request_invalid", {});
+  only(raw, ["kind", "caseId", "registroId", "actionKey", "reason", "operationDate"]);
   const registroId = text(raw.registroId);
   const actionKey = text(raw.actionKey);
   const reason = text(raw.reason);
-  const operationDate = calendarDay(raw.operationDate);
+  const operationDate = operationDateOf(raw.operationDate);
   const request = {
-    caseId: raw.caseId === undefined ? await caseIdForRecord(tx, registroId) : text(raw.caseId),
+    caseId: await requestCaseId(tx, raw.caseId, registroId),
     registroId,
     actionKey,
     reason,
@@ -62,7 +49,6 @@ export async function applyReplacementInvoiceRequest(
     managementSessionId: token,
     generation,
     enabledRemedies,
-    backend,
     request,
     remedy: {
       kind: "replacement-invoice",
@@ -71,10 +57,10 @@ export async function applyReplacementInvoiceRequest(
         filingCase.cause === "fiscal.registro_rechazado" &&
         delivery.codigoError === "1112" &&
         target.tipoFactura === "F2",
-      async replace(tx, { correctsSaleId, target, clock }) {
+      async issue(tx, { correctsSaleId, target, clock }) {
         const now = clock.now();
         // The replacement's own issue day, from the reading that dates it.
-        const today = formatDateTime(now.instant, now.offsetMinutes).slice(0, 10);
+        const today = localCalendarDate(now.instant, now.offsetMinutes);
         // @waitron/verifactu's FECHA_OPERACION_BEFORE_MINIMUM: not before today twenty years back.
         const earliest = `${String(Number(today.slice(0, 4)) - 20).padStart(4, "0")}${today.slice(4)}`;
         if (

@@ -33,18 +33,14 @@ export async function computeVatReturn(tx: Transaction, input: VatReturnInput): 
   // shifted civil date as `"YYYY-MM-DD"`, the shape `periodDateFilter` compares against. The explicit
   // sign is for a reader: SQLite reads an unsigned modifier as positive.
   const filedDate = sql`date(s.issued_at, printf('%+d minutes', s.issued_offset_minutes))`;
-  // `s` is the alias `aggregateVatByRate` gives `sales`; `sales_one_replacement_uq` admits at most
-  // one replacement per sale.
-  const supplyDay = sql`(select r.supply_day from sales r
-    where r.corrects_sale_id = s.id and r.replaces_original = 1)`;
-  const dateFilter = periodDateFilter(
-    sql`coalesce(${supplyDay}, ${filedDate})`,
-    input.year,
-    input.period,
-  );
-
+  // `sales_one_replacement_uq` admits at most one replacement per sale, so the join adds no rows.
   const summary = await aggregateVatByRate(tx, {
-    counted: sql`${dateFilter} and ${activeSalesClause()}`,
+    joined: sql`left join sales repl on repl.corrects_sale_id = s.id and repl.replaces_original = 1`,
+    counted: sql`${periodDateFilter(
+      sql`coalesce(repl.supply_day, ${filedDate})`,
+      input.year,
+      input.period,
+    )} and ${activeSalesClause()}`,
   });
   const deducible = await computeInputVat(tx, {
     year: input.year,
