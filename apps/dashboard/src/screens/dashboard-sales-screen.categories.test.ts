@@ -203,8 +203,8 @@ async function flush(el: SalesScreen): Promise<void> {
   await el.updateComplete;
 }
 
-async function mount(api: DashboardApi): Promise<SalesScreen> {
-  const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
+async function mount(api: DashboardApi, props: Partial<SalesScreen> = {}): Promise<SalesScreen> {
+  const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api, ...props });
   await flush(el);
   return el;
 }
@@ -769,17 +769,65 @@ describe("dashboard-sales-screen — printing the category report", () => {
   it("says there is nowhere to print, and disables Print, when the venue has no printer", async () => {
     setLocale("en");
     const api = stubApi({ getReportPrinters: vi.fn().mockResolvedValue([]) });
-    const el = await mount(api);
+    const el = await mount(api, { canManagePrinters: true });
     expect(q(el, "print-printer")).toBeNull();
-    expect(q(el, "no-printers")!.textContent!.trim()).toBe(
-      "No active printer at this venue. Ask a manager to add one under Printers.",
+    expect(q(el, "no-printers")).not.toBeNull();
+    expect(q(el, "no-printers-text")!.textContent!.trim()).toBe(
+      "No active printer at this venue. Add a receipt printer on Printers to print this report here.",
     );
+    const link = q<HTMLAnchorElement>(el, "no-printers-link")!;
+    expect(link.getAttribute("href")).toBe("/manage/printers");
+    expect(link.textContent!.trim()).toBe("Printers");
+    expect(q(el, "no-printers-sign-in")).toBeNull();
     const button = q<HTMLElement & { disabled: boolean }>(el, "print-categories")!;
     expect(button.disabled).toBe(true);
     button.click();
     await flush(el);
     expect(api.printCategorySales).not.toHaveBeenCalled();
   });
+
+  it("tells a person who may add printers where to add one, in Spanish", async () => {
+    setLocale("es");
+    const el = await mount(stubApi({ getReportPrinters: vi.fn().mockResolvedValue([]) }), {
+      canManagePrinters: true,
+    });
+    expect(q(el, "no-printers-text")!.textContent!.trim()).toBe(
+      "No hay ninguna impresora activa en este local. Añade una impresora de recibos en Impresoras para imprimir aquí este informe.",
+    );
+    const link = q<HTMLAnchorElement>(el, "no-printers-link")!;
+    expect(link.getAttribute("href")).toBe("/manage/printers");
+    expect(link.textContent!.trim()).toBe("Impresoras");
+  });
+
+  it.each([
+    [
+      "en",
+      "No active printer at this venue. Sign in as an administrator to add a receipt printer on Printers, so this report can be printed here. Doing so signs you out first.",
+      "Sign in as an administrator",
+    ],
+    [
+      "es",
+      "No hay ninguna impresora activa en este local. Inicia sesión como administrador para añadir una impresora de recibos en Impresoras y poder imprimir aquí este informe. Al hacerlo, primero se cierra tu sesión actual.",
+      "Iniciar sesión como administrador",
+    ],
+  ])(
+    "offers an administrator sign-in when the person cannot add a printer (%s)",
+    async (locale, text, action) => {
+      setLocale(locale);
+      const el = await mount(stubApi({ getReportPrinters: vi.fn().mockResolvedValue([]) }));
+      expect(q(el, "no-printers-text")!.textContent!.trim()).toBe(text);
+      expect(q(el, "no-printers-link")).toBeNull();
+      const signIn = q(el, "no-printers-sign-in")!;
+      expect(signIn.textContent!.trim()).toBe(action);
+      const asked = vi.fn();
+      el.addEventListener("admin-sign-in", asked);
+      signIn.click();
+      expect(asked).toHaveBeenCalledOnce();
+      const event = asked.mock.calls[0]![0] as Event;
+      expect(event.bubbles).toBe(true);
+      expect(event.composed).toBe(true);
+    },
+  );
 
   it("does not say there is nowhere to print while the printers load or after their read fails", async () => {
     const pending = await mount(

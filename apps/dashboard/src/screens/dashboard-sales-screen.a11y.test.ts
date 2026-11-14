@@ -249,6 +249,19 @@ describe.each(["light", "dark"] as const)("dashboard-sales-screen a11y (%s theme
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=categories-error]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=no-printers]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=no-printers-sign-in]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the no-printers note with its Printers link accessibly", async () => {
+    const api = stubApi({ getReportPrinters: vi.fn().mockResolvedValue([]) });
+    const { el, host } = await mountWidget<SalesScreen>(
+      "dashboard-sales-screen",
+      { api, canManagePrinters: true },
+      theme,
+    );
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=no-printers-link]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

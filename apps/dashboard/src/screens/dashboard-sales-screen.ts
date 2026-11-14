@@ -208,6 +208,7 @@ export class SalesScreen extends LitElement {
 
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) canExport = false;
+  @property({ attribute: false }) canManagePrinters = false;
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
@@ -726,11 +727,7 @@ export class SalesScreen extends LitElement {
           >${t("sales.print_categories")}</wt-button
         >
       </div>
-      ${
-        this.printers !== null && printers.length === 0
-          ? html`<p class="muted" data-test="no-printers">${t("sales.no_printers")}</p>`
-          : nothing
-      }
+      ${this.printers !== null && printers.length === 0 ? this.#renderNoPrinters() : nothing}
       ${
         this.printSentTo === null
           ? nothing
@@ -753,6 +750,25 @@ export class SalesScreen extends LitElement {
           : nothing
       }
     `;
+  }
+
+  #renderNoPrinters(): TemplateResult {
+    return this.canManagePrinters
+      ? html`<div class="muted" data-test="no-printers">
+          <p data-test="no-printers-text">${t("sales.no_printers_manage")}</p>
+          <a data-test="no-printers-link" href="/manage/printers">${t("nav.printers")}</a>
+        </div>`
+      : html`<div class="muted" data-test="no-printers">
+          <p data-test="no-printers-text">${t("sales.no_printers_sign_in")}</p>
+          <wt-button
+            data-test="no-printers-sign-in"
+            @click=${() =>
+              this.dispatchEvent(
+                new CustomEvent("admin-sign-in", { bubbles: true, composed: true }),
+              )}
+            >${t("staff.sign_in_as_admin")}</wt-button
+          >
+        </div>`;
   }
 
   #renderClose(close: DailyCloseDto): TemplateResult {
