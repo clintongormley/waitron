@@ -246,24 +246,29 @@ it.each(["bases", "taxpayer", "environment", "source", "target", "event"])(
   },
 );
 
-it.each(["sif", "series"])("refuses admitting an already active standby %s", async (fault) => {
-  if (fault === "sif")
-    await withTransaction(suite.db, (tx) =>
-      seedFixtureSif(tx, {
-        nodeId: standby.nodeId,
-        nif: "89890001K",
-        idSistemaInformatico: "W1",
-      }),
+it.each(["sif", "series"])(
+  "retains configuration beside an already active target %s without fiscal changes",
+  async (fault) => {
+    if (fault === "sif")
+      await withTransaction(suite.db, (tx) =>
+        seedFixtureSif(tx, {
+          nodeId: standby.nodeId,
+          nif: "89890001K",
+          idSistemaInformatico: "W1",
+        }),
+      );
+    else await suite.db.insert(invoiceSeries).values({ nodeId: standby.nodeId, code: "OTHER" });
+    const before = await rows();
+    const reserved = await reserve();
+    expect(reserved.state).toMatchObject({ binding: reserveBinding, bases });
+    await establish(reserved.state);
+    expect(await rows()).toEqual(before);
+    expect(value).toEqual({ version: 1, entries: [], dormant: [reserved.state] });
+    expect(readRetainedHourDormant(history, { ...reserveBinding, action: "promote" })).toEqual(
+      reserved.state,
     );
-  else await suite.db.insert(invoiceSeries).values({ nodeId: standby.nodeId, code: "OTHER" });
-  const before = await rows();
-  await expect(reserve()).rejects.toMatchObject({
-    code: "sif.allocation_invalid",
-    params: { reason: "standby_already_active" },
-  });
-  expect(await rows()).toEqual(before);
-  expect(history).toEqual([]);
-});
+  },
+);
 
 it("refuses a changed primary configuration before establishment", async () => {
   const reserved = await reserve();

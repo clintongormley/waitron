@@ -202,7 +202,10 @@ export async function activateAuthenticatedHourStandbyAllocation(
     authority,
     "promote",
   );
-  if (authorised.context.priorActivation !== "committed") {
+  if (
+    authorised.context.priorActivation !== "committed" &&
+    authorised.context.oldMachineRelinquished !== true
+  ) {
     const liveSif = await currentSif(tx, target.nodeId).catch((error: unknown) => {
       if (isAppError(error) && error.code === "sif.not_registered") return null;
       throw error;

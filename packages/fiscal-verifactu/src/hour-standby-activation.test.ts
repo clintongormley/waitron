@@ -27,13 +27,18 @@ const bases = [
   { code: "R", purpose: "rectificative" },
 ];
 
-function fixture(action = "promote", identity = "0CNPG", eventId = "promotion") {
-  const target = action === "setup" ? primary : standby;
+function fixture(
+  action = "promote",
+  identity = "0CNPG",
+  eventId = "promotion",
+  direction: "forward" | "back" = "forward",
+) {
+  const target = action === "setup" || direction === "back" ? primary : standby;
   const binding: OperationBinding = {
     module: "fiscal-verifactu",
     action,
     eventId,
-    sourceId: primary.nodeId,
+    sourceId: direction === "back" ? standby.nodeId : primary.nodeId,
     targetNodeId: target.nodeId,
   };
   const operatorId = "administrator";
@@ -445,8 +450,12 @@ it("refuses changed committed promotion input instead of issuing another identit
   expect(await snapshot()).toEqual(before);
 });
 
-function relinquishedFixture() {
-  const f = fixture();
+function relinquishedFixture(
+  direction: "forward" | "back" = "forward",
+  identity = "0CNPG",
+  eventId = "promotion",
+) {
+  const f = fixture("promote", identity, eventId, direction);
   return {
     ...f,
     input: {
@@ -460,6 +469,64 @@ function relinquishedFixture() {
     },
   };
 }
+
+it("a controlled hand-back allocates over the first box's retained active setup", async () => {
+  await activate();
+  const before = await snapshot();
+  const f = relinquishedFixture("back", "0CNRC", "hand-back");
+  const result = await activate(f, "none", bases, { relinquished: true });
+  expect(result.activationEventId).toBe("hand-back");
+  expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
+    { code: "A-0CNRC", purpose: "standard" },
+    { code: "FF-0CNRC", purpose: "full" },
+    { code: "R-0CNRC", purpose: "rectificative" },
+    { code: "a/B_1.2-3-0CNRC", purpose: "standard" },
+  ]);
+  const after = await snapshot();
+  const oldSif = before.sifs.find((row) => row.nodeId === primary.nodeId)!;
+  expect(after.sifs.find((row) => row.id === oldSif.id)).toEqual({
+    ...oldSif,
+    revocadoEn: expect.any(Date),
+  });
+  expect(after.sifs.find((row) => row.id === result.sifId)).toMatchObject({
+    nodeId: primary.nodeId,
+    numeroInstalacion: "0CNRC",
+    revocadoEn: null,
+  });
+  const originalSeries = before.series.filter((row) => row.nodeId === primary.nodeId);
+  expect(after.series.filter((row) => originalSeries.some((old) => old.id === row.id))).toEqual(
+    originalSeries.map((row) => ({ ...row, retiredAt: expect.any(Date) })),
+  );
+  expect(after.series.filter((row) => result.series.some((fresh) => fresh.id === row.id))).toEqual(
+    result.series.map((row) => ({
+      ...row,
+      nodeId: primary.nodeId,
+      nextNumber: 1,
+      retiredAt: null,
+    })),
+  );
+  expect(after.sifs.filter((row) => row.nodeId === standby.nodeId)).toEqual(
+    before.sifs.filter((row) => row.nodeId === standby.nodeId),
+  );
+  expect(after.series.filter((row) => row.nodeId === standby.nodeId)).toEqual(
+    before.series.filter((row) => row.nodeId === standby.nodeId),
+  );
+  expect(after.chains.filter((row) => row.nodeId === standby.nodeId)).toEqual(
+    before.chains.filter((row) => row.nodeId === standby.nodeId),
+  );
+  expect(await activate(f, "committed", bases, { relinquished: true })).toEqual(result);
+  expect(await snapshot()).toEqual(after);
+});
+
+it("an uncontrolled hand-back refuses the first box's active setup without fiscal changes", async () => {
+  await activate();
+  const before = await snapshot();
+  await expect(activate(fixture("promote", "0CNRC", "hand-back", "back"))).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "standby_already_active" },
+  });
+  expect(await snapshot()).toEqual(before);
+});
 
 it("a promotion admitted with oldMachineRelinquished activates and stores its version 2 approval", async () => {
   const f = relinquishedFixture();

@@ -1760,20 +1760,16 @@ Not in any track until the standalone primary is done.
 
 - **Address search provider, province names, guide lines** (bundle of 2, size M, waits for another entry). Holds A1171, A1171. [Detail](backlog/replication-cloud.md#bundle-address-search-provider-province-names-guide-lines)
 
-- **A1018. Simple controlled and emergency handover, with Cloud only a placement.** M2 handles all AEAT communication after either takeover; returning M1 transfers fiscal originals, outcomes and their recorded payment facts without replaying live effects.
-  The [build plan](superpowers/plans/2026-11-02-a1018-handover-build.md) cuts the work into slices.
-  The controlled Servers-to-spare screen is built and checked on simulated boxes; real-box use
-  still waits for real-box qualification. Slice 7’s emergency server flow is checked on simulated
-  boxes. Slice 8 adds the protected `/handover/emergency` page, saved-declaration resume and the
-  existing clock check, with one entered password/code retained until completion or leaving and a
-  replacement code only if it expires. Its [page plan](superpowers/plans/2026-11-12-a1018-8-emergency-page.md)
-  was cleared by the watcher on 12 November; real-box and Cloud qualification remain open. Reporting → Handover intervals shows committed emergency takeovers from signed
-  declarations, including unknown sale/order times and venue-zone dates. The [12a PR 1](superpowers/plans/2026-11-12-a1018-12a-warnings-return-completion.md) warning beside sales/cash-up/category reports and VAT links report viewers to the handover dates; it does not identify which report periods are affected. The [receiver completion work](superpowers/plans/2026-11-12-a1018-return-completion.md) persists accounted batch digests with the venue and shows whether one advertised inventory was fully received. Report warnings remain as date reminders; missing activity, amounts and cash-ups stay unconfirmed. A1342’s marker is now stored and returned invoices are listed. Reports show a general notice, without identifying affected invoices or periods; duplicates are not identified.
-  The owner answered (a) to both its questions (returned invoices in modelo 303; the emergency
-  minute wait) on 2026-11-02: Slice 12b is built on that answer, landed by the owner and marked
-  pending the venue's tax adviser, and Task 7.4b is not built. On 2026-11-03 the owner read
-  Slice 9's S2 re-run from its new Parts F and G, and S2 reads PASS; the watcher (`questions.md`, 2026-11-12 10:10) said “Do not rebuild Slices 10/11”; Task 10.6 stays with A1342.
+- **A1018. Qualify local controlled and emergency handover on real boxes.** The owner’s
+  [physical-qualification task](superpowers/plans/2026-11-02-a1018-handover-build.md#owner-task-physical-qualification-on-real-boxes)
+  remains open, including the complete runtime hand-back. R40’s preparation and allocation gates
+  are checked separately by the [hand-back plan](superpowers/plans/2026-11-14-a1018-r40-hand-back.md).
+  Cloud work continues under A1188, including selected-backup placement as part 0.
   [Detail](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
+
+- **Decide how to identify invoices issued again after an emergency handover.** Automatic
+  duplicate identification has no agreed matching rule and remains unplanned.
+  [Detail](backlog/replication-cloud.md#identify-invoices-issued-again-after-emergency-handover)
 
 - **A947 3b must make the held chart vouch for a joined box's key, or the main box can never check
   its answer and waits at every start.** Left open by A1018 Slice 3 (Ruling R13).
@@ -1811,7 +1807,7 @@ Not in any track until the standalone primary is done.
   third-box cases from A1342 need their own approved scope; the owner accepted the two-box bucket
   stop as clearing A947 3b-6 on 2026-11-09. [Detail](backlog/replication-cloud.md#a-box-the-chart-no-longer-names-main-keeps-filing-its-earlier-records)
 
-- **Series and module-preparation gaps at handover** (bundle of 3, 2 go-live, 1 important, size M, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-series-and-module-preparation-gaps-at-handover)
+- **Series and module-preparation gaps at handover** (bundle of 2, 1 go-live, 1 important, size M, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-series-and-module-preparation-gaps-at-handover)
 
 - **Decide what the old promote route still does** (bundle of 3, 2 important, size S). Holds A1279. [Detail](backlog/replication-cloud.md#bundle-decide-what-the-old-promote-route-still-does)
 

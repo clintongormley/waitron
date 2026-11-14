@@ -3915,6 +3915,11 @@ the period, bucketed by their own *fecha de expedición*, as a separate line in 
 
 ### Slice 13 — Archive, the wipe gates, and becoming the spare
 
+**2026-11-14 update:** The watcher dropped this slice's archive/wipe/self-wipe work under the
+owner's warn-only reset decision. R40's two module gates are covered by the
+[hand-back plan](2026-11-14-a1018-r40-hand-back.md); complete runtime hand-back remains unqualified.
+Slice 14's selected-backup placement belongs to A1188 part 0. The tasks below retain their history.
+
 Note from Slice 5's build (Ruling R40): the first hand-back, M2 to M1, answers
 `sif.allocation_invalid` `standby_already_active` at the first request, after M2 has given up
 filing, because M1's registration stays active. This slice's tasks must meet that: see the backlog's

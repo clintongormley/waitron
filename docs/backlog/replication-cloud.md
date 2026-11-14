@@ -671,6 +671,7 @@ declaration that the box is off, and only if the Cloud owner agreed in advance.
 Design approved 2026-10-29: administrators by default, and other roles once A1002 lets a venue
 give them the permission; printers and drawers wait for A1175's Android app, while card readers
 follow, being reached over the internet (owner, 2026-10-29).
+Part 0 owns the selected-backup placement previously named by A1018 Slice 14.
 Building waits for A947's strip and Cloud's half:
 [A1188 design](../superpowers/specs/2026-10-29-a1188-cloud-emergency-start-design.md).
 
@@ -730,14 +731,10 @@ signal, so only an answer or an exit ends its wait. Left open by A1018 Slice 5 (
 
 ## Bundle: Series and module-preparation gaps at handover
 
-3 entries, size M.
+2 entries, size M.
 
 - **A second live standard series made a sale answer `server.internal` in a test fixture;
   the production cause is untraced.** Left open by A1018 Slice 5 (Ruling R39).
-- **The first hand-back is refused after the giving box has stopped filing; settle before Slice 13
-  or 3b-F.** M2 to M1 answers `sif.allocation_invalid` `standby_already_active` at the first request,
-  because M1's registration stays active (run on a promoted database standing in for the copy).
-  Left open by A1018 Slice 5 (Ruling R40).
 - **The module preparation file grows with every write, and a handover cannot promise room in it.**
   Every revision repeats all earlier entries under a 1 MiB cap. The handover's size check keeps room
   for three writes now, and any further write can still fill the file. Left open by A1018 Slice 5
@@ -944,7 +941,19 @@ signal, so only an answer or an exit ends its wait. Left open by A1018 Slice 5 (
   `apps/server/src/cloud-*.ts` files.** One shared helper would serve them all; left out of #1729
   as a refactor larger than that PR (its simplify review, 2026-10-15).
 
+## Identify invoices issued again after emergency handover
+
+Automatic duplicate identification needs an agreed venue matching rule before it is planned.
+Returned-invoice lists and report notices do not identify invoices issued again.
+
 ## Decisions and deliberate limits
+
+**A1018 R40, 2026-11-14:** The preparation and allocation gates accept a controlled hand-back
+onto a box with its old fiscal registration. The [bounded plan](../superpowers/plans/2026-11-14-a1018-r40-hand-back.md)
+checks these gates separately; a complete runtime hand-back remains unqualified under the
+owner's physical-qualification task. The watcher cleared this scope at 01:08 on 14 November.
+The old Slice 13 archive/wipe/self-wipe work is dropped under the owner's warn-only reset decision.
+Acknowledgement, responsibility and resolution remain unplanned.
 
 **A1018 R39, 2026-11-14:** The dormant-series prerequisite is dropped: the bounded source check
 found no production route or duty that changes a filing box's live series outside an allocation.

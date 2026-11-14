@@ -2,7 +2,7 @@ import "./errors.js";
 import { assertHourSeriesConfiguration } from "./hour-series-configuration.js";
 import { isDeepStrictEqual as equal } from "node:util";
 import { and, eq, isNull } from "drizzle-orm";
-import { deployment, invoiceSeries, nodes, readTenant, type Transaction } from "@waitron/db";
+import { deployment, nodes, readTenant, type Transaction } from "@waitron/db";
 import {
   readOperationAuthority,
   type ModuleOperationHost,
@@ -218,18 +218,6 @@ async function configuration(
     .where(eq(nodes.id, standby.nodeId));
   if (source === undefined || (requireTarget && target === undefined))
     return refuse("node_mismatch");
-  const [activeSif] = await tx
-    .select()
-    .from(registroSif)
-    .where(and(eq(registroSif.nodeId, standby.nodeId), isNull(registroSif.revocadoEn)))
-    .limit(1);
-  const [activeSeries] = await tx
-    .select()
-    .from(invoiceSeries)
-    .where(and(eq(invoiceSeries.nodeId, standby.nodeId), isNull(invoiceSeries.retiredAt)))
-    .limit(1);
-  if (activeSif !== undefined || activeSeries !== undefined)
-    return refuse("standby_already_active");
   const tenant = await readTenant(tx);
   const [stamp] = await tx
     .select({ environment: deployment.environment })
