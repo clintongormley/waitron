@@ -803,6 +803,9 @@ error; the message does not promise that every apply starts the worker.
 
 2026-11-14 (fix/backups-screen-small): a load error the dashboard has no words for now shows
 `backup.archive_settings_unusable`'s Backups-screen wording instead of the generic fallback.
+After a save whose reload fails with such a code, the line under the status no longer ends in the
+generic fallback: it says when the box tries again, or stops when the status line already explains
+the failed load.
 
 **Still open:** correction when a host/key refusal persists after replacement — explaining or
 reconciling key numbers, restoring an old credentials key, and rewriting the record. Do not replace

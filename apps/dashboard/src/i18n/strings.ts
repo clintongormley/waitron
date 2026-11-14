@@ -2102,7 +2102,7 @@ export const en = {
   "backup_evidence.stop": "Stop",
   "backup.reload_failed_after_save": "Saved, but the box could not load the new settings.",
   "backup.reload_failed_retry":
-    "The box tries again the next time it starts and each time backup settings are saved.",
+    "The box tries again the next time it starts, and each time scheduled backups are turned on, changed or turned off.",
   "backup.destination.local": "On this box",
   "backup.destination.off_box": "Off the box",
   "backup.destination.stored": "Stored a backup under the current key",
@@ -6092,7 +6092,7 @@ export const es: Record<StringKey, string> = {
   "backup.reload_failed_after_save":
     "Se ha guardado, pero la caja no ha podido cargar los ajustes nuevos.",
   "backup.reload_failed_retry":
-    "La caja lo vuelve a intentar la próxima vez que se inicie y cada vez que se guarden los ajustes de las copias.",
+    "La caja lo vuelve a intentar la próxima vez que se inicie y cada vez que se activen, cambien o desactiven las copias programadas.",
   "backup.destination.local": "En esta caja",
   "backup.destination.off_box": "Fuera de la caja",
   "backup.destination.stored": "Ha guardado una copia con la clave actual",

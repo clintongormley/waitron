@@ -1338,12 +1338,11 @@ export class BackupScreen extends LitElement {
     `;
   }
 
-  // The status line's load failure already explains the load it names; a code with no words of its
-  // own gets no generic "try again", and otherwise the save left backups off.
+  // The apply route answers a load failure as its reload code too (backup-api.ts), so the status line already says it.
   #reloadFailedDetail(s: BackupStatusView, code: string): string {
     if (code === s.loadErrorCode) return "";
     if (hasCodeMessage(code)) return codeMessage(code);
-    return s.loadErrorCode ? "" : t("backup.reload_failed_retry");
+    return t("backup.reload_failed_retry");
   }
 
   #renderStatus(s: BackupStatusView): TemplateResult {

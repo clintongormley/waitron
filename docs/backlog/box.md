@@ -1476,7 +1476,8 @@ once released. Belongs with A1016.
 
 ## Bundle: Backups screen leftovers
 
-5 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+6 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06),
+except the last, added 2026-11-14.
 
 - **Two small leftovers in the Backups destination form, reported by A639's review and not fixed
   there (#1695).** Neither was reproduced outside the reviewer's run.
@@ -1491,6 +1492,11 @@ once released. Belongs with A1016.
 - **Loose ends left by SQLite slice 2 Task 2a (#557, a recovery key that does not need an archive
   destination).**
   [Detail](box.md#loose-ends-left-by-sqlite-slice-2-task-2a-557-a-recovery-key-that-does-not-need-an-archive-destination)
+- **After a save whose reload fails, Turn on backups stays greyed out until a field changes**, so
+  the only retries are changing a setting or the box's next start. Letting it send the same settings
+  again is an exception to the Forms rule that a save stays quiet until the draft changes (A331), so
+  it needs the owner's decision. Found by fix/backups-screen-small's review, by reading
+  `#apply`'s `scope.commit` and `#applyAction`; not run.
 
 ## Bundle: Box status rows
 
