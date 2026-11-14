@@ -2092,7 +2092,7 @@ export const en = {
   "servers.standing.sell_only": "Former primary, now only sells",
   "servers.standing.removed": "Removed",
   "servers.remove": "Remove",
-  "servers.remove_title": "Remove this standby?",
+  "servers.remove_title": "Remove this spare?",
   "servers.remove_explanation":
     "It will be marked removed on the list of servers, so tills stop trying to reach it. This cannot be undone. To use that machine again, reset it and add it as a new spare.",
   "servers.declare_explanation":
