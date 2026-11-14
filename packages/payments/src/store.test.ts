@@ -1858,16 +1858,14 @@ describe("refund audit facts", () => {
 
 it("reads only the latest successful payment audit generation for each requested UTC day", async () => {
   for (const generation of [0, 1, 2])
-    await suite.db
-      .insert(scheduledRuns)
-      .values({
-        duty: "payments.reconcile.sumup",
-        periodFrom: "2026-06-01T00:00:00.000Z",
-        periodTo: "2026-06-02T00:00:00.000Z",
-        generation,
-        state: generation === 2 ? "failed" : "succeeded",
-        summary: { generation },
-      });
+    await suite.db.insert(scheduledRuns).values({
+      duty: "payments.reconcile.sumup",
+      periodFrom: "2026-06-01T00:00:00.000Z",
+      periodTo: "2026-06-02T00:00:00.000Z",
+      generation,
+      state: generation === 2 ? "failed" : "succeeded",
+      summary: { generation },
+    });
   const rows = await withTransaction(suite.db, (tx) =>
     listPaymentAuditRuns(tx, "sumup", ["2026-06-01T00:00:00.000Z"]),
   );
