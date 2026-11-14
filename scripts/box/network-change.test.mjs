@@ -1,8 +1,21 @@
 import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath, URL } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
 import { parseWifiRecord } from "./wifi-record.mjs";
+
+const cliGuard = vi.hoisted(() => ({ refuse: false }));
+vi.mock("./disk-start.mjs", async (importOriginal) => {
+  const real = await importOriginal();
+  return {
+    ...real,
+    inspectEncryptedHostState: (...args) => {
+      if (cliGuard.refuse) throw Error("private host details");
+      return real.inspectEncryptedHostState(...args);
+    },
+  };
+});
 
 const folders = [];
 afterEach(async () => {
@@ -588,3 +601,84 @@ it("selects a default-enabled saved profile and repairs its copy after worker la
     network: { ssidHex: "41", keyMgmt: "sae", psk: "previous-password", hidden: true },
   });
 });
+
+it("the worker executable refuses an unverified host without printing its private failure", async () => {
+  const prior = process.argv[1],
+    exit = process.exitCode;
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    cliGuard.refuse = true;
+    process.argv[1] = fileURLToPath(new URL("./network-change.mjs", import.meta.url));
+    vi.resetModules();
+    await import("./network-change.mjs");
+    expect(process.exitCode).toBe(1);
+    expect(error.mock.calls).toEqual([["network.change failed"]]);
+  } finally {
+    cliGuard.refuse = false;
+    process.argv[1] = prior;
+    process.exitCode = exit;
+    error.mockRestore();
+    vi.resetModules();
+  }
+});
+
+it("refuses a missing system profile directory before saving credentials or a pending operation", async () => {
+  const f = await fixture();
+  await fs.rm(f.profilesRoot, { recursive: true });
+  expect(await f.service.accept(fields, { source: "person", person: "waiter-1" })).toEqual({
+    ok: false,
+    reason: "host_failed",
+  });
+  expect(await fs.readdir(f.hostRoot)).toEqual([]);
+});
+
+it("the default journal records the actor without the password", async () => {
+  const f = await fixture();
+  const { createNetworkChange } = await import("./network-change.mjs");
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const service = createNetworkChange({ ...f.deps, log: undefined });
+    expect(await service.accept(fields, { source: "person", person: "waiter-1" })).toEqual({
+      ok: true,
+    });
+    expect(error.mock.calls).toEqual([
+      [
+        JSON.stringify({
+          verb: "network.join",
+          actor: { source: "person", person: "waiter-1" },
+          permission: "system.manage",
+        }),
+      ],
+    ]);
+  } finally {
+    error.mockRestore();
+  }
+});
+
+it("the default boot inspector refuses a temporary folder that is not the installed boot mount", async () => {
+  const f = await fixture();
+  const { createNetworkChange } = await import("./network-change.mjs");
+  const service = createNetworkChange({ ...f.deps, inspectBootMount: undefined });
+  await service.accept(fields, { source: "person", person: "waiter-1" });
+  await service.work();
+  expect((await service.status()).bootCopy).toEqual({
+    state: "failed",
+    reason: null,
+    failure: "mount-unverified",
+  });
+  expect(await fs.readdir(f.bootRoot)).toEqual([]);
+});
+
+it.skipIf(process.platform !== "linux")(
+  "records the real host boot identity when accepting a join",
+  async () => {
+    const f = await fixture();
+    const { createNetworkChange } = await import("./network-change.mjs");
+    const service = createNetworkChange({ ...f.deps, readBootId: undefined });
+    expect(await service.accept(fields, { source: "person", person: "waiter-1" })).toEqual({
+      ok: true,
+    });
+    const stored = JSON.parse(await fs.readFile(join(f.hostRoot, "network.json"), "utf8"));
+    expect(stored.boot).toBe(await fs.readFile("/proc/sys/kernel/random/boot_id", "utf8"));
+  },
+);

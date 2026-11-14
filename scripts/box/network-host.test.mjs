@@ -57,6 +57,7 @@ function host({
   active = true,
   profiles = ["normal", "other"],
   addresses = ["192.0.2.8"],
+  noIp4 = false,
 } = {}) {
   const values = {
     [`${root}/Devices/eth1`]: [
@@ -79,7 +80,7 @@ function host({
       typed("u", 1),
       typed("u", 100),
       typed("s", "eth0"),
-      typed("o", `${root}/IP4Config/1`),
+      typed("o", noIp4 ? "/" : `${root}/IP4Config/1`),
       typed("o", `${root}/IP6Config/1`),
       typed("o", "/"),
     ],
@@ -428,4 +429,57 @@ it("refuses partial device properties and a radio already used as a hotspot", as
       await handleNetworkRequest(request, { run, readStatus: async () => ({ change: null }) }),
     ),
   ).toEqual({ ok: false, reason: "host_failed" });
+});
+
+it("waits for the requested scan to finish before reading access points", async () => {
+  const { handleNetworkRequest } = await import("./network-host.mjs");
+  const base = host();
+  let observations = 0;
+  const run = async (command, args) => {
+    if (command === "nmcli") return "";
+    if (args.at(-1) === "LastScan") return JSON.stringify(typed("x", ++observations < 3 ? 0 : 1));
+    if (args.at(-1) === "GetAllAccessPoints")
+      return JSON.stringify(typed("ao", [observations >= 3 ? ["/fresh"] : []]));
+    if (args.includes("/fresh"))
+      return [[65], 80, 0x100, 0].map((data) => JSON.stringify(typed("unused", data))).join("\n");
+    return base(command, args);
+  };
+  expect(
+    JSON.parse(
+      await handleNetworkRequest('network.scan {"actor":{"source":"person","person":"owner"}}', {
+        run,
+        readStatus: async () => ({ change: null }),
+      }),
+    ),
+  ).toEqual({ ok: true, networks: [{ ssidHex: "41", signal: 80, security: "wpa-psk" }] });
+});
+
+it("refuses selection when two infrastructure radios are active", async () => {
+  const { networkRadio } = await import("./network-manager.mjs");
+  const bus = {
+    call: async () => ["/radio/0", "/radio/1"],
+    get: async (path, iface) =>
+      iface.endsWith(".Device")
+        ? [2, 100, path.endsWith("0") ? "wlan0" : "wlan1", "/", "/", "/active/1"]
+        : [2, "/ap/1"],
+  };
+  await expect(networkRadio(bus)).rejects.toThrow("ambiguous radio");
+});
+
+it("retains IPv6 status when Ethernet has no IPv4 configuration object", async () => {
+  const { handleNetworkRead } = await import("./network-host.mjs");
+  expect(JSON.parse(await handleNetworkRead(line, { run: host({ noIp4: true }) })).wired).toEqual({
+    connected: true,
+    address: "2001:db8::8",
+  });
+});
+
+it("the read entry refuses malformed input without starting a host command", async () => {
+  const { handleNetworkRead } = await import("./network-host.mjs");
+  const run = vi.fn();
+  expect(JSON.parse(await handleNetworkRead("network.read {", { run }))).toEqual({
+    ok: false,
+    reason: "request_invalid",
+  });
+  expect(run).not.toHaveBeenCalled();
 });
