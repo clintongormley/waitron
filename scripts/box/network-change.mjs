@@ -213,7 +213,9 @@ export function createNetworkChange({
         ]);
         state.previous = null;
         await save(state);
-      } catch {}
+      } catch {
+        /* The applied join records activation independently of later writes. */
+      }
     }
     await publish(state);
   }
