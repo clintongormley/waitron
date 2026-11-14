@@ -172,8 +172,9 @@ that fallback is not live-qualified. A lost fallback reply has no supplied refer
 
 Recovery records the gross capture and identified completed refunds together. Uncertain refund
 evidence stays attempting for another check; a failed refund alone leaves the charge. A partly
-refunded unfiled charge keeps the order held. Retaining and allocating the remaining charge after
-a partial refund is still unavailable. Stripe durable reversal attempts and backup-machine
+refunded unfiled charge keeps the order held until explicit confirmation. Direct-order and pending
+linked payments can retain provider-confirmed remaining money on the bill, bill-first with any excess
+as a tip; failed-linked payments keep the full-refund route. Stripe durable reversal attempts and backup-machine
 hardware qualification remain open, along with signature handling.
 
 The daily gross-charge audit and read-only refund comparison do not establish bank arrival.

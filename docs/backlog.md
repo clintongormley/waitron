@@ -1308,8 +1308,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   same moment (an accepted race); Stripe's reader list is one page; status never refreshes by
   itself, and polling must go through the passive-session controller.
 
-- **The SumUp reconciler** — backup-machine hardware/signature qualification and
-  retained-money allocation after a partial refund. Stripe's durable reversal work (W44) stays separate. The November
+- **The SumUp reconciler** — backup-machine hardware/signature qualification. Stripe's durable reversal work (W44) stays separate. The November
   results now include cross-account affiliate acceptance, pending/paid references, REFUNDED events
   and unpaid cancellation. The first recovery slice supplies Waitron's partner key and records
   identified refunds.

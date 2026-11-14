@@ -2341,6 +2341,13 @@ export interface AbandonedRefundOutcome {
   outcome: "confirmed" | "unconfirmed";
 }
 
+export interface RetainedAllocation {
+  remaining: string;
+  applied: string;
+  tip: string;
+  outstanding: string;
+}
+
 export interface PartialRefundView {
   paymentId: string;
   captured: string;
@@ -2350,6 +2357,7 @@ export interface PartialRefundView {
 
 export interface StuckPaymentRow {
   partialRefund?: PartialRefundView;
+  retention?: RetainedAllocation;
   paymentId: string;
   workingOrderId: string;
   orderNumber: number;
@@ -2369,7 +2377,9 @@ export type StuckPaymentResolution =
   | { outcome: "not_charged"; orderUnlocked: boolean };
 
 export interface StuckBillPaymentRow {
+  billState?: "pending" | "failed";
   partialRefund?: PartialRefundView;
+  retention?: RetainedAllocation;
   billPaymentId: string;
   workingOrderId: string;
   orderNumber: number;
@@ -5207,6 +5217,17 @@ export class DashboardApi {
     return this.#request(
       `/management-api/payments/partial-refunds/${encodeURIComponent(paymentId)}/release`,
       "POST",
+    );
+  }
+
+  retainPartialRefund(
+    paymentId: string,
+    allocation: Pick<RetainedAllocation, "remaining" | "applied" | "tip">,
+  ): Promise<{ outcome: "retained" } & RetainedAllocation> {
+    return this.#request(
+      `/management-api/payments/partial-refunds/${encodeURIComponent(paymentId)}/retain`,
+      "POST",
+      allocation,
     );
   }
 

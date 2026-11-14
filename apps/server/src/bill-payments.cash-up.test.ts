@@ -1,12 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { captureError, withTransaction } from "@waitron/db";
+import { billPayments, captureError, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TrustedClock } from "@waitron/fiscal";
 import { computeDailyClose, recordDailyClose } from "@waitron/reporting";
 import type { CashCountInput } from "@waitron/reporting";
-import { AppError, deviceId as brandDeviceId } from "@waitron/shared";
+import {
+  AppError,
+  decimal,
+  deviceOrigin,
+  workingOrderId as brandOrderId,
+  deviceId as brandDeviceId,
+} from "@waitron/shared";
 import {
   paymentRows,
   provisionBillVenue,
@@ -16,6 +22,7 @@ import {
   type Answer,
   type BillVenue,
 } from "./testing/bill-venue.js";
+import { insertCapturedPayment, recordRefund } from "@waitron/payments";
 import { systemClock } from "./till-backend.js";
 import "./errors.js";
 
@@ -119,6 +126,53 @@ async function refusedClose(businessDay: string, cashCounts: CashCountInput[]) {
 }
 
 describe("the cash-up counts money on the day and device it moves (bill payments design §9a)", () => {
+  it("dates retained net money to capture day, leaving the outside refund out of bill returns", async () => {
+    const billId = await tabWith(venue, "Paella", "Paella");
+    await withTransaction(venue.db, async (tx) => {
+      const [bill] = await tx
+        .insert(billPayments)
+        .values({
+          workingOrderId: billId,
+          submissionId: randomUUID(),
+          fingerprint: "retained",
+          kind: "contribution",
+          method: "card",
+          applied: 6000,
+          tip: 0,
+          state: "received",
+          requestedBy: venue.adminId,
+          source: "device",
+          deviceId: venue.deviceId,
+          receivedAt: "2026-03-20T11:00:00.000Z",
+        })
+        .returning();
+      const key = { provider: "fake", paymentRef: randomUUID() };
+      await insertCapturedPayment(tx, {
+        ...key,
+        origin: deviceOrigin(venue.deviceId),
+        nodeId: venue.cfg.nodeId,
+        workingOrderId: brandOrderId(billId),
+        billPaymentId: bill!.id,
+        amount: decimal("100.00"),
+        externalRef: "retained-day-test",
+        settledAt: new Date("2026-03-20T11:00:00.000Z"),
+      });
+      await recordRefund(tx, {
+        ...key,
+        amount: decimal("40.00"),
+        providerRefundRef: "outside-return",
+        at: new Date("2026-03-21T11:00:00.000Z"),
+      });
+    });
+    expect((await dailyClose("2026-03-20")).cash.byOrigin).toContainEqual({
+      source: "device",
+      deviceId: venue.deviceId,
+      cashTakings: "0.00",
+      byMethod: [{ method: "card", amount: "60.00", tip: "0.00" }],
+    });
+    expect((await dailyClose("2026-03-21")).cash.byOrigin).toEqual([]);
+  });
+
   it("counts day 1's cash on its device, and day 2's card on its device, once each (test 24)", async () => {
     const deviceA = brandDeviceId(venue.deviceId);
     const deviceB = brandDeviceId(venue.device2Id);

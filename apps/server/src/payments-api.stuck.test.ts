@@ -11,6 +11,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   billPaymentRefunds,
+  tenders,
   billPayments,
   devices,
   incidents,
@@ -82,6 +83,7 @@ import type { DeviceRequestConfig } from "./trading-context.js";
 
 import { systemClock } from "./till-backend.js";
 import { createOpenOrder } from "./working-order.js";
+import { completeBillPayment, readBillBalance } from "./bill-payments.js";
 import { ordersWithUnfiledPayment } from "./till-sale.js";
 import { payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated } from "./testing/whole-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -2861,12 +2863,13 @@ describe("provider-confirmed partial-refund release", () => {
       mark?: boolean;
       unidentified?: boolean;
       supported?: boolean;
+      amount?: string;
     } = {},
   ) {
     const evidence = {
       kind: "known" as const,
       processorRef: "partial-txn",
-      captured: decimal("1.50"),
+      captured: decimal(options.amount ?? "1.50"),
       refunds: [
         { providerRefundRef: "first", amount: decimal("0.40") },
         { providerRefundRef: "rest", amount: decimal("1.10") },
@@ -2892,7 +2895,7 @@ describe("provider-confirmed partial-refund release", () => {
           origin: deviceOrigin(v.deviceId),
           nodeId: v.cfg.nodeId,
           workingOrderId: brandWorkingOrderId(orderId),
-          amount: decimal("1.50"),
+          amount: decimal(options.amount ?? "1.50"),
           externalRef: "partial-txn",
           settledAt: new Date(MARK),
           card: { scheme: "VISA", last4: "1234", entryMode: "chip", authCode: "AUTH" },
@@ -2921,6 +2924,194 @@ describe("provider-confirmed partial-refund release", () => {
       .where(eq(payments.paymentRef, key.paymentRef));
     return { v, orderId, bill, payment: payment!, lookup, evidence };
   }
+
+  const retainPath = (id: string) => `/management-api/payments/partial-refunds/${id}/retain`;
+  const allocation = { remaining: "1.10", applied: "1.10", tip: "0.00" };
+  it.each([undefined, "pending"] as const)(
+    "retains net money for %s and collects only the remainder",
+    async (bill) => {
+      const { v, orderId, payment, evidence, lookup } = await partial({ bill, mark: !bill });
+      evidence.refunds.pop();
+      const result = await post(v, retainPath(payment.id), allocation);
+      expect(result.status).toBe(200);
+      expect(await result.json()).toMatchObject({
+        outcome: "retained",
+        applied: "1.10",
+        tip: "0.00",
+        outstanding: "0.40",
+      });
+      const [saved] = await suite.db.select().from(payments).where(eq(payments.id, payment.id));
+      expect(saved).toMatchObject({
+        amount: 150,
+        state: "partially_refunded",
+        externalRef: "partial-txn",
+        billPaymentId: expect.any(String),
+      });
+      const [received] = await suite.db
+        .select()
+        .from(billPayments)
+        .where(eq(billPayments.id, saved!.billPaymentId!));
+      expect(received).toMatchObject({
+        state: "received",
+        applied: 110,
+        tip: 0,
+        attestedBy: v.managerId,
+      });
+      expect(
+        (await withTransaction(suite.db, (tx) => readBillBalance(tx, orderId))).outstanding,
+      ).toBe("0.40");
+      expect((await orderOf(orderId)).mark).toBeNull();
+      expect(await post(v, retainPath(payment.id), allocation).then((r) => r.status)).toBe(200);
+      expect(lookup).toHaveBeenCalledTimes(1);
+      expect(
+        await post(v, retainPath(payment.id), { ...allocation, tip: "0.10" }).then((r) => r.status),
+      ).toBe(400);
+      await takeReaderBillPayment(
+        {
+          db: suite.db,
+          backend,
+          clock,
+          provider: new FakePaymentProvider(suite.db),
+          admission: testTradingAdmission(),
+        },
+        v.cfg,
+        orderId,
+        {
+          submissionId: randomUUID(),
+          kind: "contribution",
+          amount: "0.40",
+          method: "card",
+          applied: "0.40",
+          tip: "0.00",
+        },
+        {
+          personId: v.managerId,
+          sessionId: await openTillSession(suite.db, {
+            deviceId: v.cfg.origin.deviceId,
+            personId: v.managerId,
+          }),
+        },
+      );
+      const [linked] = await suite.db.select().from(payments).where(eq(payments.id, payment.id));
+      expect(linked!.saleId).not.toBeNull();
+      expect(
+        await suite.db
+          .select({ amount: tenders.amount })
+          .from(tenders)
+          .where(eq(tenders.saleId, linked!.saleId!)),
+      ).toEqual([{ amount: 110 }, { amount: 40 }]);
+      expect(await post(v, retainPath(payment.id), allocation).then((r) => r.status)).toBe(200);
+      expect(lookup).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("shows a bill-first excess as tip and issues net tenders, refusing it when tips are off", async () => {
+    const { v, orderId, payment, evidence, lookup } = await partial({ amount: "2.00", mark: true });
+    evidence.refunds.pop();
+    const seen = { remaining: "1.60", applied: "1.50", tip: "0.10" };
+    const refused = await post(v, retainPath(payment.id), seen);
+    expect((await errorOf(refused)).code).toBe("bill.tip_not_allowed");
+    expect(lookup).not.toHaveBeenCalled();
+    v.cfg.tipsEnabled = true;
+    const list = await send(v, "GET", "/management-api/payments/stuck");
+    expect(await list.json()).toMatchObject([{ retention: { ...seen, outstanding: "0.00" } }]);
+    const result = await post(v, retainPath(payment.id), seen);
+    expect(result.status).toBe(200);
+    const [saved] = await suite.db.select().from(payments).where(eq(payments.id, payment.id));
+    expect(saved!.saleId).not.toBeNull();
+    expect(
+      await suite.db
+        .select({ amount: tenders.amount, tip: tenders.tipAmount })
+        .from(tenders)
+        .where(eq(tenders.saleId, saved!.saleId!)),
+    ).toEqual([{ amount: 160, tip: 10 }]);
+    expect((await orderOf(orderId)).mark).toBeNull();
+  });
+
+  it("keeps failed-linked money on the full-refund route", async () => {
+    const { v, payment, lookup } = await partial({ bill: "failed" });
+    const list = await send(v, "GET", "/management-api/payments/bill-payments");
+    const [row] = await list.json();
+    expect(row.billState).toBe("failed");
+    expect(row.retention).toBeUndefined();
+    const refused = await post(v, retainPath(payment.id), allocation);
+    expect((await errorOf(refused)).code).toBe("payment.not_stuck");
+    expect(lookup).not.toHaveBeenCalled();
+    expect((await send(v, "POST", releasePath(payment.id))).status).toBe(200);
+  });
+
+  it.each(["evidence changed", "another box", "permission lost"])(
+    "retains the hold when %s during confirmation",
+    async (problem) => {
+      const { v, payment, evidence, lookup } = await partial({ mark: true });
+      evidence.refunds.pop();
+      lookup.mockImplementation(async () => {
+        if (problem === "evidence changed")
+          evidence.refunds.push({ providerRefundRef: "later", amount: decimal("0.10") });
+        if (problem === "another box")
+          await suite.db
+            .update(payments)
+            .set({ nodeId: await seedNode(suite.db) })
+            .where(eq(payments.id, payment.id));
+        if (problem === "permission lost")
+          await suite.db
+            .update(persons)
+            .set({ status: "suspended" })
+            .where(eq(persons.id, v.managerId));
+        return evidence;
+      });
+      const result = await post(v, retainPath(payment.id), allocation);
+      const refusal = await errorOf(result);
+      expect(refusal.code).toBe(
+        problem === "evidence changed"
+          ? "bill.allocation_changed"
+          : problem === "another box"
+            ? "payment.not_stuck"
+            : "person.suspended",
+      );
+      expect(
+        await suite.db
+          .select()
+          .from(paymentRefunds)
+          .where(eq(paymentRefunds.paymentId, payment.id)),
+      ).toHaveLength(problem === "evidence changed" ? 2 : 1);
+      expect((await orderOf(payment.workingOrderId)).mark).toBe(MARK);
+      if (problem === "evidence changed") {
+        expect(refusal.params).toMatchObject({
+          preview: { kind: "allocated", applied: "1.00", charged: "1.00", tip: "0.00" },
+        });
+        expect(await (await send(v, "GET", "/management-api/payments/stuck")).json()).toMatchObject(
+          [{ partialRefund: { remaining: "1.00" } }],
+        );
+        lookup.mockResolvedValue(evidence);
+        expect(
+          (
+            await post(v, retainPath(payment.id), {
+              remaining: "1.00",
+              applied: "1.00",
+              tip: "0.00",
+            })
+          ).status,
+        ).toBe(200);
+      }
+    },
+  );
+
+  it("refuses gross completion of a partly refunded pending payment", async () => {
+    const { v, bill } = await partial({ bill: "pending" });
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        completeBillPayment(
+          tx,
+          { db: suite.db, backend, clock, admission: testTradingAdmission() },
+          v.cfg,
+          bill!,
+          new Date(MARK),
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "bill.attestation_contradicted" });
+    expect((await billPaymentOf(bill!)).state).toBe("pending");
+  });
 
   it.each([
     { bill: undefined, placed: false, mark: true },

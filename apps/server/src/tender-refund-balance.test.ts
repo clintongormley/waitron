@@ -236,6 +236,64 @@ describe("settled-tender refundable balances", () => {
     expect(await read(target.saleId)).toHaveLength(1);
   });
 
+  it("does not subtract the pre-retention refund twice, but subtracts later provider returns", async () => {
+    const [bill] = await store.db
+      .insert(billPayments)
+      .values({
+        workingOrderId: orderId,
+        submissionId: randomUUID(),
+        fingerprint: "retained",
+        kind: "contribution",
+        method: "card",
+        state: "received",
+        applied: 6000,
+        tip: 0,
+        source: "device",
+        deviceId,
+        requestedBy: PERSON,
+        receivedAt: AT,
+      })
+      .returning();
+    const saleId = await invoice({ total: 6000 });
+    const [tender] = await store.db
+      .insert(tenders)
+      .values({ saleId, method: "card", amount: 6000, settledAt: AT, billPaymentId: bill!.id })
+      .returning();
+    await store.db.insert(saleSettlements).values({ saleId, settledAt: AT });
+    const target = { saleId, tenderId: tender!.id };
+    const payment = await capture(target.saleId, {
+      amount: 10000,
+      billPaymentId: bill!.id,
+      state: "partially_refunded",
+    });
+    const returned = (amount: number) =>
+      store.db.insert(paymentRefunds).values({
+        paymentId: payment.id,
+        provider: payment.provider,
+        paymentRef: payment.paymentRef,
+        providerRefundRef: randomUUID(),
+        amount,
+        state: "succeeded",
+      });
+    await returned(4000);
+    expect(await read(target.saleId)).toMatchObject([
+      { appliedRemaining: "60.00", tipRemaining: "0.00" },
+    ]);
+    await returned(1000);
+    expect(await read(target.saleId)).toMatchObject([
+      { appliedRemaining: "50.00", tipRemaining: "0.00" },
+    ]);
+    await refund(target, {
+      method: "card",
+      provider: payment.provider,
+      providerPaymentRef: payment.paymentRef,
+      appliedAmount: 1000,
+    });
+    expect(await read(target.saleId)).toMatchObject([
+      { appliedRemaining: "50.00", tipRemaining: "0.00" },
+    ]);
+  });
+
   it("reads connected and manual cards from their original capture, retaining leading-zero digits", async () => {
     const connected = await paid("card");
     await capture(connected.saleId);

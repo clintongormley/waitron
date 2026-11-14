@@ -390,6 +390,7 @@ export class PaymentsScreen extends LitElement {
   #readErrorShown = false;
   @state() private stuck: StuckPaymentRow[] = [];
   @state() private stuckLoadError: string | null = null;
+  @state() private retainingPartial = false;
   @state() private confirmingPartial: StuckPaymentRow | StuckBillPaymentRow | null = null;
   @state() private confirmingStuck: StuckPaymentRow | null = null;
   @state() private resolvingId: string | null = null;
@@ -2034,6 +2035,7 @@ export class PaymentsScreen extends LitElement {
       <div class="stuck-body">
         <p class="stuck-order">${this.#billOrder(row)}</p>
         <p>${this.#providerName(row.provider!)} · ${this.#partialAmounts(row)}</p>
+        ${"billPaymentId" in row && "billState" in row && row.billState === "failed" ? html`<p>${t("payments.partial.failed_link")}</p>` : nothing}
       </div>
       <wt-button
         variant="secondary"
@@ -2041,16 +2043,32 @@ export class PaymentsScreen extends LitElement {
         aria-label=${`${t("payments.partial.confirm")}: ${this.#billOrder(row)}`}
         ?disabled=${this.billBusy}
         @click=${() => {
+          this.retainingPartial = false;
           this.confirmingPartial = row;
         }}
         >${t("payments.partial.confirm")}</wt-button
       >
+      ${
+        row.retention
+          ? html`<wt-button
+              variant="secondary"
+              data-test=${`retain-partial-${id}`}
+              ?disabled=${this.billBusy}
+              @click=${() => {
+                this.retainingPartial = true;
+                this.confirmingPartial = row;
+              }}
+              >${t("payments.partial.retain")}</wt-button
+            >`
+          : nothing
+      }
     </li>`;
   }
 
   async #releasePartial(): Promise<void> {
     const row = this.confirmingPartial;
     if (!row || this.billBusy) return;
+    const retain = this.retainingPartial;
     this.confirmingPartial = null;
     this.billBusy = true;
     const showResult = (result: { text: string; refused: boolean } | null) => {
@@ -2061,16 +2079,23 @@ export class PaymentsScreen extends LitElement {
     const operation = (this.#billOperation = {});
     const current = () => this.isConnected && this.#billOperation === operation;
     try {
-      await this.api.releasePartialRefund(row.partialRefund!.paymentId);
+      if (retain && row.retention) {
+        const { remaining, applied, tip } = row.retention;
+        await this.api.retainPartialRefund(row.partialRefund!.paymentId, {
+          remaining,
+          applied,
+          tip,
+        });
+      } else await this.api.releasePartialRefund(row.partialRefund!.paymentId);
       if (!current()) return;
       showResult({
-        text: `${this.#billOrder(row)}: ${t("payments.partial.released")}`,
+        text: `${this.#billOrder(row)}: ${t(retain ? "payments.partial.retained" : "payments.partial.released")}`,
         refused: false,
       });
     } catch (error) {
       if (!current()) return;
       showResult({
-        text: `${this.#billOrder(row)}: ${codeOf(error) === "payment.outcome_unknown" ? ((error as { params?: { reason?: unknown } }).params?.reason === "refund_reference_missing" ? t("payments.partial.reference_missing") : t("payments.partial.unconfirmed")) : stuckRefusalText(error)}`,
+        text: `${this.#billOrder(row)}: ${codeOf(error) === "payment.outcome_unknown" ? ((error as { params?: { reason?: unknown } }).params?.reason === "refund_reference_missing" ? t("payments.partial.reference_missing") : t(retain ? "payments.partial.retain_unconfirmed" : "payments.partial.unconfirmed")) : stuckRefusalText(error)}`,
         refused: true,
       });
     }
@@ -2096,10 +2121,12 @@ export class PaymentsScreen extends LitElement {
   #renderPartialDialog(): TemplateResult | typeof nothing {
     const row = this.confirmingPartial;
     if (!row) return nothing;
+    const retain = this.retainingPartial;
+    const title = t(retain ? "payments.partial.retain" : "payments.partial.confirm");
     return html`<wt-dialog
       data-test="partial-refund-dialog"
       .open=${true}
-      heading=${t("payments.partial.confirm")}
+      heading=${title}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
         this.confirmingPartial = null;
@@ -2108,7 +2135,18 @@ export class PaymentsScreen extends LitElement {
       <p>${this.#billOrder(row)}</p>
       <p>${this.#partialAmounts(row)}</p>
       <p>
-        ${fill("payments.partial.instructions", { provider: this.#providerName(row.provider!), remaining: formatMoney(row.partialRefund!.remaining, currentLocale()) })}
+        ${
+          retain && row.retention
+            ? fill("payments.partial.retain_instructions", {
+                applied: formatMoney(row.retention.applied, currentLocale()),
+                tip: formatMoney(row.retention.tip, currentLocale()),
+                outstanding: formatMoney(row.retention.outstanding, currentLocale()),
+              })
+            : fill("payments.partial.instructions", {
+                provider: this.#providerName(row.provider!),
+                remaining: formatMoney(row.partialRefund!.remaining, currentLocale()),
+              })
+        }
       </p>
       <wt-form-actions slot="footer">
         <wt-button
@@ -2121,7 +2159,7 @@ export class PaymentsScreen extends LitElement {
           >${t("action.cancel")}</wt-button
         >
         <wt-button data-test="confirm-partial-refund" @click=${() => void this.#releasePartial()}
-          >${t("payments.partial.confirm")}</wt-button
+          >${title}</wt-button
         >
       </wt-form-actions>
     </wt-dialog>`;
