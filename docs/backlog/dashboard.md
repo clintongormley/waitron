@@ -75,9 +75,11 @@ Move repeated bottom-message assembly, attempt, refusal-dismissal and render-bef
 plumbing in the remaining dashboard editors and the till's forms onto `FormFeedback` in
 `@waitron/ui`. The product editor, Department receipt, Venue privacy and time-zone repair
 form, invoice-customer Find and menu-publication Schedule also use it;
-keep their field-specific or guarded refusal focus local. Station refusal-dismissal remains
-open. Inventory each later batch before migrating it; leave single-job forms local.
+keep their field-specific or guarded refusal focus local. Inventory each later batch before
+migrating it; leave single-job forms local.
 Keep the translation editor local: the helper removes no duplicated logic while its refusal clearing and reveal/focus remain local.
+Keep Backup archive settings local too: moving only its attempt flag and message joiner removes no repeated logic; its domain refusal clearing and form-scoped focus stay local.
+Keep station field-refusal dismissal local: it is one domain-specific conditional clearing the refusal that names the edited field.
 Preserve each form's field mapping and message behavior; keep domain-specific refusal clearing local. See the
 [second-slice inventory](../superpowers/plans/2026-11-12-d-form-plumbing-2.md) and the
 [inventory of the remaining venue forms](../superpowers/plans/2026-11-13-d-form-plumbing-venue-batch.md).
