@@ -496,6 +496,27 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   today. A cover charge applies only to orders eaten in (A1522's setting). The only way to charge
   more on the terrace today is to make it a department of its own with its own menu. Not designed.
 
+- **A1524. Products and menus screens: the owner's review (owner, 2026-11-14).** Four screens.
+  - **Courses page layout.** Each course's name is at the far left and its switch at the far right,
+    with most of the page between them. Only the switch's column has a visible heading ("On the
+    till"), and its "?" floats past the switch. The bin sits beside the switch, not in the row's
+    end menu. The rows are tall for one line, and the title sits almost on the table, lined up with
+    the bottom of "Add course" rather than its middle. The page draws its own table
+    (`apps/dashboard/src/widgets/course-list.ts`); match the other list screens. The switch leaves
+    this page in A1526, so lay the page out for names, order and the row menu.
+  - **Menus list: a search bar**, as Products and Modifiers have, with the column chooser on the
+    same line rather than alone on a row of its own (`apps/dashboard/src/screens/menus-screen.ts`).
+  - **Image library: no standing drop box.** Dropping photos already works anywhere on the page, and
+    the page says "Drop N photos to upload them" while files are dragged over it
+    (`packages/media/src/dashboard/image-library.ts`). The "Drop photos anywhere on this page…" box
+    goes, and comes back only as the empty page when the library has no photos.
+  - **Menu patch window: picking an item in the list makes the list and the title jump.** `#pick`
+    scrolls the form into view on every pick (`apps/dashboard/src/widgets/menu-patch-dialog.ts`,
+    `form.scrollIntoView`), which is meant for the narrow layout, where the form sits under the
+    list. On a wide screen a dish's form is taller than the window, so the whole window scrolls and
+    carries the title, the search and the list with it. On a wide screen only the form scrolls,
+    which also stops the image preview being cut off at the bottom.
+
 - **A1517. Accepted allergen changes before go-live (owner, 2026-11-11): go-live.** The owner accepted
   the recommendations; mobile-data access to A670's published menu remains to build.
   The [cleared new-selection plan](superpowers/plans/2026-11-12-a1517-2-allergen-choices.md) leaves option-list labels unfiltered because they carry no allergen data.
@@ -643,7 +664,25 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   hours and closures kept in Waitron update the venue's Google Business Profile, so Google Maps never
   shows a closed venue as open. Needs a design. Not started.
 
-- **Department dialog** (bundle of 2, 1 important, size S). [Detail](backlog/service-periods.md#bundle-department-dialog)
+- **A1525. Departments and zones page: the owner's review (owner, 2026-11-14).**
+  - The page's title says "Departments" while the menu says "Departments and zones"; the title says
+    both.
+  - **No public-holiday warnings anywhere.** The owner: "this comes from an official source and will
+    be published later. we shouldn't be warning about these", and no warning even once the year's
+    list is out. Remove "{name} (Every year) has no public holiday of that name in {year}." from
+    this page and the Year view's missing-holiday warning (`#warnings`,
+    `packages/venue-service/src/dashboard/opening-hours-year.ts`). Trace every reader of
+    `special_day.holiday_missing` (`packages/venue-service/src/operations.ts`) before removing it.
+    This replaces the Holidays yearly bundle's readiness-line entry.
+  - **A zone's value that matches its department's is left blank, not drawn in grey italics.** The
+    owner: grey italics for a default stay elsewhere, such as in dropdowns, "but here i think it
+    just adds noise". A row that uses table service leaves "When counter service is used" blank,
+    except that a department whose zones use counter service still shows its own value there, so
+    the value those zones take is shown once.
+  - **The empty "Also edit" column goes** (moved here from the Department dialog bundle; the owner
+    did not know what it was for).
+
+- **Department dialog** (bundle of 1, size S). [Detail](backlog/service-periods.md#bundle-department-dialog)
 
 - **One rule for two managers editing at once** (bundle of 6, 2 important, size M). Holds A1073. [Detail](backlog/service-periods.md#bundle-one-rule-for-two-managers-editing-at-once)
 
@@ -671,7 +710,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A department or zone delete's preview never counts a special day's painted hours**
   [Detail](backlog/service-periods.md#a-department-or-zone-deletes-preview-never-counts-a-special-days-painted-hours)
 
-- **Holidays yearly** (bundle of 4, 1 important, size S). [Detail](backlog/service-periods.md#bundle-holidays-yearly)
+- **Holidays yearly** (bundle of 3, size S). [Detail](backlog/service-periods.md#bundle-holidays-yearly)
 
 - **A1084. A confirmed late dish routes by the period running when it is sent, not the period the
   kitchen agreed for**
@@ -769,6 +808,39 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Detail](backlog/kitchen.md#a692--editing-a-sent-dish-decides-its-extras-made-here-again-by-the-device-that-edits)
 
 ### The till, devices and table service
+
+- **A1526. A table's whole meal in one list: service steps and course firing together (owner,
+  2026-11-14).** Needs a design the owner approves before anything is built: the owner wants "to see
+  the overall plan before i agree". The owner chose mock-up A at the desk (kept beside the desk's
+  task file, never committed): the department window gets a **Tables** tab holding one list in the
+  order a meal happens. Fixed moments are drawn grey (party seated; bill requested; party leaves,
+  with the Needs clearing switch). The venue's service steps are drawn blue (the waiter). The
+  venue's courses, in course order, are drawn amber (the kitchen). The Service tab keeps orders,
+  payment and the collection ticket. Decided by the owner:
+  - **Fire now / Hold for later moves from the Courses page to each department** ("makes sense"):
+    the restaurant holds its mains while the deli fires everything at once. The Courses page keeps
+    the names and their order (A1524).
+  - **The fire reminder joins the list.** Each held course carries its own "remind to fire N min
+    after <the course before> is served", in place of the department's single "Remind to fire the
+    next course after" on today's Service tab. The owner merged them because the reminder and the
+    steps "are covering the same territory".
+  - **New default steps:** Set up (when seated, at once), Take order (2 min after Set up), Dessert?
+    (5 min after Mains are served), Coffee or bill? (5 min after Desserts are served). "Anything
+    else?" stops being a default ("replace it"). A new venue has no courses (A757 design §8), so the
+    design says what a new department gets until Mains and Desserts exist.
+
+  For the design to put to the owner:
+  - Whether the list orders itself from each step's start, with "after the step before" becoming
+    "after <a named step>" (the desk's recommendation, so a step can never sit where it does not
+    fire), or keeps an order the venue drags.
+  - A step left undone for some minutes takes Waiting's amber outline, one rule for every step (the
+    desk's proposal; the owner: "probably makes sense").
+  - Colours stay fixed for each kind of state and are not set per venue or step (the desk's
+    recommendation; the owner asked the question and has not answered it).
+
+  Builds on A757 ([design](superpowers/specs/2026-10-17-a757-table-states-design.md) §8, slices 7
+  and 8). Changes the course hold setting's home and the reminder's shape, so the schema changes:
+  before go-live that is a starting-migration rebuild.
 
 - **Service steps after a bill moves or tables combine** (bundle of 4, 2 important, size S). Holds A1330, A1331, A1333, A1005. [Detail](backlog/till.md#bundle-service-steps-after-a-bill-moves-or-tables-combine)
 
@@ -1310,6 +1382,15 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 - **Reader status time limits** (bundle of 2, size S). [Detail](backlog/payments.md#bundle-reader-status-time-limits)
 
 ### Users, sign-in and the dashboard shell
+
+- **A1527. "Search pages" finds the settings inside a window, not only the places (owner,
+  2026-11-14).** The owner could not find a department's "Remind to fire the next course after"
+  through the menu's search. The search finds pages, Venue settings tabs, calendar views and the
+  places modules declare (`apps/dashboard/src/nav-search.ts`, `#searchDestinations` in
+  `apps/dashboard/src/dashboard-app.ts`), but not a setting inside a window that opens for one row,
+  such as a department's tabs. It should find a setting by its label and open where it lives,
+  asking which department when there are several. Needs a design for how the list of settings is
+  kept from going stale. Not started.
 
 - **A1089: account-access recovery needs an authenticated decision when no offered sign-in works.**
   The passkey refusal offers retry, password entry and an emailed password reset. These do not

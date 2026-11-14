@@ -67,15 +67,6 @@ only `department_days` and `zone_days` rows that have a season, while
 closed-time lines at least counted the old named-day hours, so now it discloses no dated hours at
 all.
 
-## The readiness line for a repeating holiday date names the official holiday
-
-The readiness line for a repeating holiday date with no match names the stored official holiday
-name ("Natividad del Señor"), not the special day's own ("Christmas Day"), and says "no public
-holiday of that name" when the cause is that the year's whole list has not shipped yet.
-The Year's missing-holiday warning (`#warnings`,
-`packages/venue-service/src/dashboard/opening-hours-year.ts`) uses the same sentence and the same
-name, though its read carries the special day's own `name`; a fix covers both.
-
 ## A date another manager removed stays in the special-day draft
 
 A date another manager removed stays in the draft when this draft changed its paint or its Closed
@@ -397,21 +388,17 @@ its id. Left open by A789 slice 3, #2051 (plan D33).
 
 ## Bundle: Department dialog
 
-2 entries, size S.
+1 entry, size S. The "Also edit" column moved to A1525 (owner, 2026-11-14).
 
-- **The departments list's "Also edit" column is empty on every row** (left by #1858, 2026-10-18):
-  A504 (#1857) removed the zones' Floor plan link and #1858 the departments' Receipt link, so the
-  column draws blank cells. Owner to decide whether it goes
-  (`packages/venue-service/src/dashboard/departments-list.ts`).
 - **A per-field department policy repair changes the trading-name default.**
   [Detail](service-periods.md#a-per-field-department-policy-repair-changes-the-trading-name-default)
 
 ## Bundle: Holidays yearly
 
-4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+The readiness-line entry went on 2026-11-14: the owner decided there is no missing-holiday warning
+at all (A1525).
 
-- **The readiness line for a repeating holiday date names the official holiday**
-  [Detail](service-periods.md#the-readiness-line-for-a-repeating-holiday-date-names-the-official-holiday)
 - **Two holidays with one name in one year's list**
   [Detail](service-periods.md#two-holidays-with-one-name-in-one-years-list)
 - **2027 data** — left open by A261 step 6 (Public holidays, #1305). Not shipped; the BOE daily
