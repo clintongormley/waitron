@@ -1,3 +1,4 @@
+import { VENUE_FILE } from "@waitron/store";
 // Builds a small reference folder shaped like `protection-list list`'s output, for the tests.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -22,7 +23,7 @@ export function fixtureEntry(
   const phase = where.phase ?? "sql-only";
   const folder = join(dir, "databases", composition, where.folder ?? phase);
   mkdirSync(folder, { recursive: true });
-  const db = new DatabaseSync(join(folder, "venue.db"));
+  const db = new DatabaseSync(join(folder, VENUE_FILE));
   try {
     const owningSet: Record<string, string> = {};
     for (const set of sets) {

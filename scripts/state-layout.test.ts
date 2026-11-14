@@ -18,7 +18,9 @@ const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const names = [
   ...STATE_LAYOUT.map((entry) => entry.name).filter((name) => /[.\-/]/.test(name)),
   ...Object.values(layout).filter(
-    (value): value is string => typeof value === "string" && value.startsWith(`${CLOUD_DIR}/`),
+    (value): value is string =>
+      typeof value === "string" &&
+      (value.startsWith(`${CLOUD_DIR}/`) || /(?:\.db|\.lock|\.holder\.json)/.test(value)),
   ),
 ];
 const quotedNames = names.map(escaped).join("|");
@@ -145,4 +147,16 @@ it("reports Cloud folder and child definitions while accepting other roots and f
     ),
   ).toEqual([]);
   expect(strays(LAYOUT, text)).toEqual([]);
+});
+
+it("reports store file definitions outside the layout", () => {
+  expect(
+    strays(
+      "apps/server/src/example.ts",
+      'const file = "venue.db";\nconst lock = "migrations.lock";',
+    ),
+  ).toEqual([
+    'apps/server/src/example.ts:1: const file = "venue.db"',
+    'apps/server/src/example.ts:2: const lock = "migrations.lock"',
+  ]);
 });

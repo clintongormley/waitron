@@ -1,3 +1,4 @@
+import { VENUE_FILE, LITESTREAM_META_SUFFIX } from "@waitron/store";
 import { basename, dirname, join } from "node:path";
 import { AppError } from "@waitron/shared";
 import { bucketKey, normalisePrefix, venuePrefix } from "./names.js";
@@ -138,7 +139,7 @@ export function replicaUrl(bucket: BucketConfig, venueId: string, generation: st
 /** Builds, and discards, the Litestream configuration and environment these settings would get. */
 export function checkLitestreamSettings(bucket: BucketConfig): void {
   litestreamConfig({
-    dbPath: "venue.db",
+    dbPath: VENUE_FILE,
     replicaUrl: replicaUrl(bucket, "venue", "gen-0-node-20260101T000000Z"),
   });
   litestreamEnv(bucket, Buffer.alloc(32).toString("base64"));
@@ -146,5 +147,5 @@ export function checkLitestreamSettings(bucket: BucketConfig): void {
 
 /** Litestream's own state for `dbPath`: `.<file>-litestream` beside it (`db.go:342` at the pinned tag). */
 export function litestreamMetaDir(dbPath: string): string {
-  return join(dirname(dbPath), `.${basename(dbPath)}-litestream`);
+  return join(dirname(dbPath), `.${basename(dbPath)}${LITESTREAM_META_SUFFIX}`);
 }

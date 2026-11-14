@@ -1,5 +1,5 @@
 import { lstat, mkdir, mkdtemp, rm } from "node:fs/promises";
-import { SCRATCH_DIR } from "@waitron/store";
+import { SCRATCH_DIR, VENUE_FILE, appendOnlyTriggers, JOURNAL_SUFFIX } from "@waitron/store";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { manifestSets } from "@waitron/migrations";
@@ -13,7 +13,7 @@ import {
   type FirstSetupRoots,
 } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
-import { appendOnlyTriggers } from "@waitron/store";
+
 import "./errors.js";
 import { ALL_MODULES } from "./modules.js";
 import { copyVenueFiles } from "./venue-private-copy.js";
@@ -75,12 +75,12 @@ export async function readSetupDatabase(
   roots: Pick<FirstSetupRoots, "stateDir" | "venueDir">,
   modules: readonly WaitronModule[],
 ): Promise<SetupDatabaseRead> {
-  const database = join(roots.venueDir, "venue.db");
+  const database = join(roots.venueDir, VENUE_FILE);
   let scratch: string | undefined;
   let connection: DatabaseSync | undefined;
   let failed = false;
   try {
-    const journal = await lstat(`${database}-journal`).then(
+    const journal = await lstat(`${database}${JOURNAL_SUFFIX}`).then(
       () => true,
       (error: unknown) =>
         (error as NodeJS.ErrnoException).code === "ENOENT"
@@ -126,7 +126,7 @@ export async function readSetupDatabase(
       );
       if (!present) readFailed("database missing");
       // Read-write so SQLite can roll back a leftover -journal; `query_only` refuses any other write.
-      connection = new DatabaseSync(join(scratch, "venue.db"));
+      connection = new DatabaseSync(join(scratch, VENUE_FILE));
       connection.exec("pragma query_only = 1");
     }
     const { holdings: read, damage } = await readHoldings(connection, modules);

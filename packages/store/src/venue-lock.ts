@@ -1,3 +1,4 @@
+import { VENUE_LOCK_FILE } from "./state-layout.js";
 import { mkdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -8,7 +9,7 @@ import { isVerificationVenueCopy } from "./verification-venue-copy.js";
  * The file whose lock stands for the whole venue folder. It holds no data. Never unlink it: a
  * second process opening the path after an unlink takes a fresh lock beside the holder.
  */
-export const VENUE_LOCK_FILE = "venue.lock";
+export { VENUE_LOCK_FILE } from "./state-layout.js";
 
 /** SQLite's `SQLITE_BUSY`, which `node:sqlite` puts on the thrown error's `errcode`. */
 const SQLITE_BUSY = 5;

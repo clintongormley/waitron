@@ -17,6 +17,13 @@ import {
   TLS_JOINED_FILE,
   STREAM_RESTORE_PREFIX,
   RESTORE_ENTRY_PREFIX,
+  VENUE_WAL_FILE,
+  VENUE_FILE,
+  SHM_SUFFIX,
+  JOURNAL_SUFFIX,
+  NODE_WAL_FILE,
+  NODE_FILE,
+  VENUE_LITESTREAM_DIR,
 } from "@waitron/store";
 import { lockVenueDatabase } from "@waitron/db";
 import { AppError } from "@waitron/shared";
@@ -57,15 +64,15 @@ const KEEP = new Set([
   ENVIRONMENT_RECOVERY_MOVE_FILE,
 ]);
 const VENUE = [
-  "venue.db-wal",
-  "venue.db-shm",
-  "venue.db-journal",
-  "venue.db",
-  "node.db-wal",
-  "node.db-shm",
-  "node.db-journal",
-  "node.db",
-  ".venue.db-litestream",
+  VENUE_WAL_FILE,
+  `${VENUE_FILE}${SHM_SUFFIX}`,
+  `${VENUE_FILE}${JOURNAL_SUFFIX}`,
+  VENUE_FILE,
+  NODE_WAL_FILE,
+  `${NODE_FILE}${SHM_SUFFIX}`,
+  `${NODE_FILE}${JOURNAL_SUFFIX}`,
+  NODE_FILE,
+  VENUE_LITESTREAM_DIR,
   "first-setup-workspaces",
   "first-setup-selection.json",
   "first-setup-retirement.json",

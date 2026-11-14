@@ -1,4 +1,4 @@
-import { FIRST_SETUP_FILE } from "@waitron/store";
+import { FIRST_SETUP_FILE, VENUE_FILE, VENUE_WAL_FILE } from "@waitron/store";
 import { AppError } from "@waitron/shared";
 import { isDeepStrictEqual } from "node:util";
 import {
@@ -165,7 +165,7 @@ async function presentAttemptEligibility(
     noOtherSections &&
     inspection.artifacts.every(
       (artifact) =>
-        [FIRST_SETUP_FILE, "venue.db", "venue.db-wal"].includes(artifact.name) ||
+        [FIRST_SETUP_FILE, VENUE_FILE, VENUE_WAL_FILE].includes(artifact.name) ||
         (!artifact.name.startsWith("outside-") && artifact.status === "missing"),
     );
   const emptyWorkspace = inspection.emptyDatabase && unused(state) && noOtherHistory;

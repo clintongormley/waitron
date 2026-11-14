@@ -7,6 +7,8 @@ import {
   RESTORE_FLOW_DIR,
   SETUP_OPERATION_FILE,
   FIRST_FISCAL_DOCUMENTS_DIR,
+  VENUE_FILE,
+  VENUE_WAL_FILE,
 } from "@waitron/store";
 import "./errors.js";
 import { constants } from "node:fs";
@@ -93,7 +95,7 @@ async function inspectDatabase(
   if (file.status !== "present") return { database: "unreadable", emptyDatabase: false };
   let connection: DatabaseSync | undefined;
   try {
-    connection = new DatabaseSync(join(roots.venueDir, "venue.db"), { readOnly: true });
+    connection = new DatabaseSync(join(roots.venueDir, VENUE_FILE), { readOnly: true });
     connection.exec("begin");
     const target = executeTarget(connection);
     const tenants = await readTenantIdentities(target);
@@ -135,7 +137,7 @@ export function createFirstSetupResolutionInspection(
     async inspectFirstSetupDatabase(requiredSets: readonly string[] = []) {
       return inspectDatabase(
         options,
-        await artifact(options.venueDir, "venue.db", Infinity, false, false),
+        await artifact(options.venueDir, VENUE_FILE, Infinity, false, false),
         options.migrationsRoot ?? null,
         [...(options.expectedMigrationSets ?? []), ...requiredSets],
       );
@@ -143,7 +145,7 @@ export function createFirstSetupResolutionInspection(
     async recheckEmptyDatabase(roots: FirstSetupRoots, requiredSets: readonly string[]) {
       const inspected = await inspectDatabase(
         roots,
-        await artifact(roots.venueDir, "venue.db", 128 * 1024 * 1024, false),
+        await artifact(roots.venueDir, VENUE_FILE, 128 * 1024 * 1024, false),
         options.migrationsRoot ?? null,
         [...(options.expectedMigrationSets ?? []), ...requiredSets],
       );
@@ -180,7 +182,7 @@ export function createFirstSetupResolutionInspection(
       };
       for (const file of inspection.artifacts) {
         if (file.name.startsWith("outside-") || file.name === "flows/setup/documents") continue;
-        const venue = ["venue.db", "venue.db-wal"].includes(file.name);
+        const venue = [VENUE_FILE, VENUE_WAL_FILE].includes(file.name);
         await capture(
           join(venue ? options.venueDir : options.stateDir, file.name),
           `${venue ? "venue" : "state"}/${file.name}`,
@@ -290,7 +292,7 @@ export function createFirstSetupResolutionInspection(
       ])
         artifacts.push(await artifact(options.stateDir, name));
       artifacts.push(await artifact(options.stateDir, TRADING_ENV_FILE, 65536, false));
-      for (const name of ["venue.db", "venue.db-wal"])
+      for (const name of [VENUE_FILE, VENUE_WAL_FILE])
         artifacts.push(await artifact(options.venueDir, name, 128 * 1024 * 1024, false));
       const documents = join(options.stateDir, FIRST_FISCAL_DOCUMENTS_DIR);
       try {

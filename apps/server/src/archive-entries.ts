@@ -1,3 +1,4 @@
+import { NODE_FILE } from "@waitron/store";
 import type { ArchiveReadBudget } from "./archive-read-budget.js";
 import type { WaitronModule } from "@waitron/module";
 import type { ArchiveEntry } from "./backup-archive.js";
@@ -72,7 +73,7 @@ export function snapshotNodeDatabase(
     await mkdir(parent, { recursive: true, mode: 0o700 });
     const scratch = await mkdtemp(join(parent, "waitron-node-copy-"));
     try {
-      const path = join(scratch, "node.db");
+      const path = join(scratch, NODE_FILE);
       await node.archiveTo(path);
       return await readFile(path);
     } finally {

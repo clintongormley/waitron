@@ -1,3 +1,9 @@
+import {
+  VENUE_DIR_NAME,
+  SECRETS_ENV_FILE,
+  CLOUD_STAFF_CERT_FILE,
+  CLOUD_STAFF_KEY_FILE,
+} from "@waitron/store";
 import { sql } from "drizzle-orm";
 import { createStaffCsr, installStaffCertificate } from "../src/cloud-remote.js";
 import { createCloudConnection } from "../src/cloud-client.js";
@@ -39,7 +45,7 @@ const savedEnv = await readFile(envPath, "utf8").catch((error: unknown) => {
 if (savedEnv !== undefined) {
   env = JSON.parse(savedEnv) as NodeJS.ProcessEnv;
 } else {
-  const venueDir = join(root, "venue"),
+  const venueDir = join(root, VENUE_DIR_NAME),
     migrationsRoot = join(root, "migrations");
   const sets = manifestSets(),
     source = migrationOptionsFor(sets, null);
@@ -103,7 +109,7 @@ if (savedEnv !== undefined) {
       now: () => new Date(),
       listIpv4: () => [],
     });
-    boxSecrets = parseEnvFile(await readFile(join(root, "secrets.env"), "utf8"));
+    boxSecrets = parseEnvFile(await readFile(join(root, SECRETS_ENV_FILE), "utf8"));
     await writeTradingEnv(root, {
       nodeId: result.nodeId,
       environment: "preproduction",
@@ -189,8 +195,8 @@ process.on("message", (message: unknown) => {
     const hostname = message.hostname;
     void installStaffCertificate(root, hostname, message.certificate)
       .then(async () => {
-        env.WAITRON_TLS_CERT_FILE = join(root, "cloud/staff.crt");
-        env.WAITRON_TLS_KEY_FILE = join(root, "cloud/staff.key");
+        env.WAITRON_TLS_CERT_FILE = join(root, CLOUD_STAFF_CERT_FILE);
+        env.WAITRON_TLS_KEY_FILE = join(root, CLOUD_STAFF_KEY_FILE);
         env.WAITRON_MANAGEMENT_ORIGIN = "https://" + hostname;
         env.WAITRON_MANAGEMENT_RP_ID = hostname;
         await writeFile(envPath, JSON.stringify(env), { mode: 0o600 });

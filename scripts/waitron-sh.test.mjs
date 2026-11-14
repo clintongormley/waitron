@@ -1,3 +1,4 @@
+import { VENUE_DIR_NAME, VENUE_FILE } from "../packages/store/src/state-layout.js";
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -2700,9 +2701,9 @@ describe("the venue stamp reader inside waitron.sh", () => {
   function venueDir({ migrated = true, stamp = "" } = {}) {
     const state = mkdtempSync(join(tmpdir(), "waitron-state-"));
     dirs.push(state);
-    const dir = join(state, "venue");
+    const dir = join(state, VENUE_DIR_NAME);
     mkdirSync(dir);
-    const db = new DatabaseSync(join(dir, "venue.db"));
+    const db = new DatabaseSync(join(dir, VENUE_FILE));
     if (migrated) {
       db.exec("create table deployment (id integer primary key, environment text not null)");
       if (stamp) db.prepare("insert into deployment values (1, ?)").run(stamp);
@@ -2726,8 +2727,8 @@ describe("the venue stamp reader inside waitron.sh", () => {
   it("finds the venue directory under the state directory the image sets", () => {
     const state = mkdtempSync(join(tmpdir(), "waitron-state-"));
     dirs.push(state);
-    mkdirSync(join(state, "venue"));
-    const db = new DatabaseSync(join(state, "venue", "venue.db"));
+    mkdirSync(join(state, VENUE_DIR_NAME));
+    const db = new DatabaseSync(join(state, VENUE_DIR_NAME, VENUE_FILE));
     db.exec("create table deployment (id integer primary key, environment text not null)");
     db.prepare("insert into deployment values (1, ?)").run("production");
     db.close();
@@ -2739,14 +2740,14 @@ describe("the venue stamp reader inside waitron.sh", () => {
   it("reads the fixed venue under state even when a development override names another venue", () => {
     const state = mkdtempSync(join(tmpdir(), "waitron-state-"));
     dirs.push(state);
-    mkdirSync(join(state, "venue"));
-    const db = new DatabaseSync(join(state, "venue", "venue.db"));
+    mkdirSync(join(state, VENUE_DIR_NAME));
+    const db = new DatabaseSync(join(state, VENUE_DIR_NAME, VENUE_FILE));
     db.exec("create table deployment (id integer primary key, environment text not null)");
     db.prepare("insert into deployment values (1, ?)").run("production");
     db.close();
     const r = readStamp({
       WAITRON_STATE_DIR: state,
-      WAITRON_VENUE_DIR: join(venueDir({ stamp: "preproduction" }), "venue"),
+      WAITRON_VENUE_DIR: join(venueDir({ stamp: "preproduction" }), VENUE_DIR_NAME),
     });
     expect(r.status).toBe(0);
     expect(r.stdout.trim()).toBe("production");
@@ -2785,8 +2786,8 @@ describe("the venue stamp reader inside waitron.sh", () => {
   it("fails when the venue file is not a database", () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-venue-"));
     dirs.push(dir);
-    mkdirSync(join(dir, "venue"));
-    writeFileSync(join(dir, "venue", "venue.db"), "these bytes are not a SQLite database");
+    mkdirSync(join(dir, VENUE_DIR_NAME));
+    writeFileSync(join(dir, VENUE_DIR_NAME, VENUE_FILE), "these bytes are not a SQLite database");
     const r = readStamp({ WAITRON_STATE_DIR: dir });
     expect(r.status).not.toBe(0);
     expect(r.stdout.trim()).toBe("");

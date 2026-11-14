@@ -1,6 +1,19 @@
+import {
+  VENUE_LOCK_FILE,
+  INCOMING_SUFFIX,
+  REPLACED_DATABASE_PREFIX,
+  MIGRATIONS_LOCK_FILE,
+  TRADING_ENV_REPLACED_SUFFIX,
+  TRADING_ENV_FILE,
+  NODE_FILE,
+  openBackupQuery,
+  SIDE_FILE_SUFFIXES,
+  VENUE_FILE,
+  type BackupQuery,
+} from "@waitron/store";
+
 import { syncFolderHolding } from "./fs-atomic.js";
-import { TRADING_ENV_REPLACED_SUFFIX } from "@waitron/store";
-import { TRADING_ENV_FILE } from "@waitron/store";
+
 import { assertVenueFirstSetupAllowed, isFirstSetupHostPath } from "@waitron/provisioning";
 import { lstatSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
@@ -39,13 +52,7 @@ import {
 } from "@waitron/db";
 import { NODE_MIGRATIONS, readRecoveryKeyName } from "@waitron/node-db";
 import { applyMigrations, expectedSchemaVersion, migrationOptionsFor } from "@waitron/migrations";
-import {
-  NODE_FILE,
-  openBackupQuery,
-  SIDE_FILE_SUFFIXES,
-  VENUE_FILE,
-  type BackupQuery,
-} from "@waitron/store";
+
 import { litestreamMetaDir } from "@waitron/stream/litestream.js";
 import {
   modulesWithSets,
@@ -104,8 +111,7 @@ const TRADING_ENV_ENTRY = `${SECRETS_PREFIX}trading.env`;
 const REPLACED_SUFFIX = TRADING_ENV_REPLACED_SUFFIX;
 const IDENTITY_KEYS = ["WAITRON_NODE_ID"] as const;
 /** Where the incoming database sits while it is still incoming — same directory, so the rename is atomic. */
-export const INCOMING_SUFFIX = ".incoming";
-const ASIDE_PREFIX = `.${VENUE_FILE}-replaced-`;
+export { INCOMING_SUFFIX } from "@waitron/store";
 /** The venue file holds the whole database, the same protected content the artifact carried. */
 export const VENUE_FILE_MODE = 0o600;
 
@@ -628,8 +634,8 @@ export async function restoreDatabase(args: {
     ...[target, nodeTarget].flatMap((file) =>
       ["", ...SIDE_FILE_SUFFIXES, INCOMING_SUFFIX].map((suffix) => `${file}${suffix}`),
     ),
-    join(args.venueDir, "venue.lock"),
-    join(args.venueDir, "migrations.lock"),
+    join(args.venueDir, VENUE_LOCK_FILE),
+    join(args.venueDir, MIGRATIONS_LOCK_FILE),
   ];
   const protectedFolder =
     sourceParent === venueParent ? "" : sourceParent.slice(venueParent.length + 1).split(sep)[0];
@@ -638,7 +644,7 @@ export async function restoreDatabase(args: {
     source.nlink !== 1 ||
     (sourceParent.startsWith(`${venueParent}${sep}`) &&
       (protectedFolder === basename(litestreamMetaDir(target)) ||
-        protectedFolder.startsWith(ASIDE_PREFIX))) ||
+        protectedFolder.startsWith(REPLACED_DATABASE_PREFIX))) ||
     protectedPaths.some((path) => {
       const info = lstatSync(path, { throwIfNoEntry: false });
       return (
@@ -668,7 +674,7 @@ export async function restoreDatabase(args: {
     if (args.nodeDump !== undefined)
       await writeFile(nodeIncoming, args.nodeDump, { mode: VENUE_FILE_MODE, flag: "wx" });
     await fs.rm(litestreamMetaDir(target), { recursive: true, force: true });
-    aside = await mkdtemp(join(args.venueDir, ASIDE_PREFIX));
+    aside = await mkdtemp(join(args.venueDir, REPLACED_DATABASE_PREFIX));
   } catch (error) {
     await removeIncomings();
     throw error;
@@ -1083,7 +1089,7 @@ export async function restoreFromArtifactFile(deps: RestoreFileDeps): Promise<vo
 
 async function replacedDatabaseFolders(venueDir: string): Promise<string[]> {
   return (await readdir(venueDir, { withFileTypes: true }))
-    .filter((entry) => entry.isDirectory() && entry.name.startsWith(ASIDE_PREFIX))
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith(REPLACED_DATABASE_PREFIX))
     .map((entry) => entry.name);
 }
 

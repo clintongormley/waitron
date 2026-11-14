@@ -641,6 +641,7 @@ const { existsSync } = require("node:fs");
 const { join } = require("node:path");
 const state = process.env.WAITRON_STATE_DIR;
 if (!state) throw new Error("WAITRON_STATE_DIR is not set");
+// The start script must work against images that do not carry the TypeScript layout.
 const dir = join(state, "venue");
 const file = join(dir, "venue.db");
 if (!existsSync(file)) process.exit(0);

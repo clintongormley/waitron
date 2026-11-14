@@ -1,3 +1,13 @@
+import {
+  VENUE_DIR_NAME,
+  TRADING_ENV_FILE,
+  BACKUP_ENV_FILE,
+  CLOUD_CONNECTION_FILE,
+  CLOUD_STAFF_KEY_FILE,
+  CLOUD_STAFF_CERT_FILE,
+  VENUE_FILE,
+} from "@waitron/store";
+
 import assert from "node:assert/strict";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -39,7 +49,7 @@ const request = JSON.parse(input) as {
 };
 assert(typeof request.origin === "string" && new URL(request.origin).origin === request.origin);
 const stateDir = join(root, "state");
-const venueDir = join(root, "venue");
+const venueDir = join(root, VENUE_DIR_NAME);
 const client = createCloudRecoveryClient({
   stateDir,
   origin: request.origin,
@@ -101,7 +111,7 @@ else if (request.command === "stage") {
     await readFile(join(stateDir, "flows/restore/record.json"), "utf8"),
   ).request;
   if (request.expectedPointId) assert.equal(marker.managedCloud.pointId, request.expectedPointId);
-  assert.equal(await exists(join(venueDir, "venue.db")), false);
+  assert.equal(await exists(join(venueDir, VENUE_FILE)), false);
   const hooks: string[] = [];
   const restored = await runStagedRestore({
     stateDir,
@@ -121,13 +131,13 @@ else if (request.command === "stage") {
     await store.close();
   }
   assert.equal(
-    parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8")).WAITRON_NODE_ID,
+    parseEnvFile(await readFile(join(stateDir, TRADING_ENV_FILE), "utf8")).WAITRON_NODE_ID,
     request.expectedSourceNodeId,
   );
-  assert.equal(await exists(join(stateDir, "backup.env")), false);
-  assert.equal(await exists(join(stateDir, "cloud/connection.json")), false);
-  assert.equal(await exists(join(stateDir, "cloud/staff.key")), false);
-  assert.equal(await exists(join(stateDir, "cloud/staff.crt")), false);
+  assert.equal(await exists(join(stateDir, BACKUP_ENV_FILE)), false);
+  assert.equal(await exists(join(stateDir, CLOUD_CONNECTION_FILE)), false);
+  assert.equal(await exists(join(stateDir, CLOUD_STAFF_KEY_FILE)), false);
+  assert.equal(await exists(join(stateDir, CLOUD_STAFF_CERT_FILE)), false);
   result = {
     restored: true,
     venue: request.expectedVenue,
@@ -139,7 +149,7 @@ else if (request.command === "stage") {
   result = { reported: true };
 } else if (request.command === "prepareReplacement" || request.command === "statusReplacement") {
   const nodeId = parseEnvFile(
-    await readFile(join(stateDir, "trading.env"), "utf8"),
+    await readFile(join(stateDir, TRADING_ENV_FILE), "utf8"),
   ).WAITRON_NODE_ID;
   assert(nodeId);
   if (request.expectedSourceNodeId) assert.equal(nodeId, request.expectedSourceNodeId);

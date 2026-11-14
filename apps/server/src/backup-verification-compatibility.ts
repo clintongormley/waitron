@@ -11,7 +11,7 @@ import {
   type WaitronModule,
 } from "@waitron/module";
 import { isAppError } from "@waitron/shared";
-import { openBackupQuery, type BackupQuery, type BackupRow } from "@waitron/store";
+import { openBackupQuery, type BackupQuery, type BackupRow, NODE_FILE } from "@waitron/store";
 import type { ArchiveEntry } from "./backup-archive.js";
 import type { BackupManifest } from "./backup-manifest.js";
 import type { BackupVerificationTarget } from "./backup-verification-protocol.js";
@@ -231,7 +231,7 @@ async function reconcile(
     return await reconcileModules(input, actual, inventory, entries, tables, before, null);
   const scratch = await mkdtemp(join(input.scratchDir, "waitron-node-copy-"));
   try {
-    const path = join(scratch, "node.db");
+    const path = join(scratch, NODE_FILE);
     await writeFile(path, nodeDump.bytes, { mode: 0o600 });
     let opened: Awaited<ReturnType<typeof openBackupQuery>>;
     try {

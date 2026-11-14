@@ -1,3 +1,4 @@
+import { VENUE_FILE } from "@waitron/store";
 import { lstat, readFile, unlink } from "node:fs/promises";
 import { isAbsolute, join, normalize } from "node:path";
 import {
@@ -55,7 +56,7 @@ const notePath = (stateDir: string) => join(stateDir, BACKUP_ROOM_NOTE_FILE);
 const MAX_NOTE_BYTES = 64 * 1024;
 
 export async function venueDbIdentity(venueDir: string): Promise<VenueDbIdentity> {
-  const info = await lstat(join(venueDir, "venue.db"), { bigint: true });
+  const info = await lstat(join(venueDir, VENUE_FILE), { bigint: true });
   return {
     dev: info.dev.toString(),
     ino: info.ino.toString(),

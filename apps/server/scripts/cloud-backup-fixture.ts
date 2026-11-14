@@ -1,8 +1,18 @@
+import {
+  VENUE_DIR_NAME,
+  TRADING_ENV_FILE,
+  VENUE_FILE,
+  BACKUP_ENV_FILE,
+  CLOUD_CONNECTION_FILE,
+  CLOUD_STAFF_KEY_FILE,
+} from "@waitron/store";
+
 import assert from "node:assert/strict";
 import { createConnection } from "node:net";
 import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
+// The store backup query forbids PRAGMAs; this read-only copy needs integrity_check.
 import { DatabaseSync } from "node:sqlite";
 import { readVenue, openVenueDatabase } from "@waitron/db";
 import { runOnce } from "../src/backup-sweep.js";
@@ -65,11 +75,12 @@ const exists = async (name: string, directory = root) => {
 };
 if (request.command === "capture") {
   // No lock: Cloud's runner captures while the fixture server on this folder is still running.
-  const store = await openVenueDatabase(join(root, "venue"), { exclusive: false });
+  const store = await openVenueDatabase(join(root, VENUE_DIR_NAME), { exclusive: false });
   try {
     let artifact: Uint8Array | undefined;
     await runOnce({
-      nodeId: parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8")).WAITRON_NODE_ID!,
+      nodeId: parseEnvFile(await readFile(join(stateDir, TRADING_ENV_FILE), "utf8"))
+        .WAITRON_NODE_ID!,
       backends: [
         {
           id: "cloud-test-capture",
@@ -136,7 +147,11 @@ if (request.command === "capture") {
     await store.close();
   }
 } else if (request.command === "restore") {
-  assert.equal(await exists("venue/venue.db"), false, "Restore target must be fresh");
+  assert.equal(
+    await exists(`${VENUE_DIR_NAME}/${VENUE_FILE}`),
+    false,
+    "Restore target must be fresh",
+  );
   const artifact = await readFile(join(root, "input.backup.enc"));
   const checked = await validateArtifact({ ...validation, artifact });
   try {
@@ -168,29 +183,29 @@ if (request.command === "capture") {
       secretEntries: checked.secretEntries.filter((entry) => entry.name !== "secrets/backup.env"),
     };
     const hooks: string[] = [];
-    await mkdir(join(root, "venue"), { mode: 0o700 });
+    await mkdir(join(root, VENUE_DIR_NAME), { mode: 0o700 });
     await writeValidated(managed, {
       ...validation,
-      venueDir: join(root, "venue"),
+      venueDir: join(root, VENUE_DIR_NAME),
       log: (_level, code, params) => {
         if (code === "restore.hook.done") hooks.push(String(params?.module));
       },
     });
-    const store = await openVenueDatabase(join(root, "venue"));
+    const store = await openVenueDatabase(join(root, VENUE_DIR_NAME));
     try {
       const venue = await readVenue(store.venue);
       assert.equal(venue.name, request.expectedVenue);
     } finally {
       await store.close();
     }
-    assert.equal(await exists("backup.env", stateDir), false);
+    assert.equal(await exists(BACKUP_ENV_FILE, stateDir), false);
     console.log(
       JSON.stringify({
         networkDenied,
         integrityOk: true,
         hooks,
-        cloudCredentialPresent: await exists("cloud/connection.json", stateDir),
-        staffKeyPresent: await exists("cloud/staff.key", stateDir),
+        cloudCredentialPresent: await exists(CLOUD_CONNECTION_FILE, stateDir),
+        staffKeyPresent: await exists(CLOUD_STAFF_KEY_FILE, stateDir),
       }),
     );
   } finally {

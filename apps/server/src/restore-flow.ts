@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { lstat, readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { readRestoreFlowPhase, type RestoreFlowPhase } from "@waitron/provisioning";
-import { FLOWS_DIR, RESTORE_FLOW_DIR, SCRATCH_DIR } from "@waitron/store";
+import { FLOWS_DIR, RESTORE_FLOW_DIR, SCRATCH_DIR, VENUE_FILE } from "@waitron/store";
 import { mkdirDurable, syncFolderHolding, writeFileDurable } from "./fs-atomic.js";
 import type { RebuildSource } from "./rebuild-first-start.js";
 
@@ -21,7 +21,7 @@ export interface RestoreFlowRecord {
 const ATTACHMENTS = [
   "artifact",
   "key",
-  "venue.db",
+  VENUE_FILE,
   "entries",
   "placement.db",
   "node-key",

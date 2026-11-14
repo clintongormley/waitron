@@ -21,7 +21,8 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1163.0",
     "@waitron/membership": "workspace:*",
-    "@waitron/shared": "workspace:*"
+    "@waitron/shared": "workspace:*",
+    "@waitron/store": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

@@ -196,19 +196,6 @@ behaviour — the drain deliberately collects the rows an orphaned writer left �
 decision, not a cleanup. **Next action:** decide whether a read-only body should take the lock at
 all.
 
-## Files that still spell the store's file names themselves
-
-Left by #757, which exported them from `@waitron/store`. Outside test files and `bench/`: `apps/server/src/cloud-snapshot-archive.ts`
-(a staging file outside the venue folder), `packages/stream/src/litestream.ts` and
-`packages/stream/src/restore.ts` (`@waitron/stream` does not depend on the store),
-`deploy/waitron.sh` (a `node -e` snippet run in the app image, whose `/app/node_modules` holds only
-sharp), the fixture scripts `apps/server/scripts/cloud-backup-fixture.ts` and
-`apps/server/scripts/cloud-recovery-client-fixture.ts`, and the store's own
-`packages/store/src/connections.ts`, which builds the `-wal` path itself; `WAL_SUFFIX` lives in
-`index.ts`, which imports `connections.ts`, so using it there means moving the names into a module
-of their own. #757's checks do not cover `migrations.lock`, Litestream's `.venue.db-litestream/`
-folder, or the restore's `venue.db.incoming` file and `.venue.db-replaced-*` folder.
-
 ## A switched-off module's append-only tables are neither re-protected nor checked
 
 **Left open by A483.** Boot hands `applyMigrations` the sets of the modules this start migrates
@@ -284,15 +271,6 @@ break the rule (`docs/developers/conventions-data.md`); 17 defects answered 500,
 missing id (A394-1 to -6); all but A394-5's two, which still answer 500, are fixed; 16 owner
 questions. The follow-ups and the rows:
 `docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
-
-## Raw engine imports in `apps/server/src/recovery-lock.ts` and `apps/server/scripts/cloud-backup-fixture.ts`
-
-Left open by W45 (#1155), which closed
-"`packages/migrations` opened its own raw `node:sqlite` connection": a 2026-10-03 search of
-non-test files under `apps/` and `packages/` also found raw engine imports in
-`apps/server/src/recovery-lock.ts` and `apps/server/scripts/cloud-backup-fixture.ts`. **Next
-action:** review each remaining raw connection separately before deciding whether a shared store
-API fits.
 
 ## A913's fix items: general code English only
 
@@ -1423,17 +1401,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   [Detail](architecture.md#loose-ends-left-by-a435s-printer-reader-and-device-delete-steps-2-to-4).
 - **Loose ends left by A435 steps 3, 3b and 4 (#1520, #1524, #1519).**
   [Detail](architecture.md#loose-ends-left-by-a435-steps-3-3b-and-4-1520-1524-1519)
-
-## Bundle: Raw engine imports and hand-spelled file names
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Raw engine imports in `apps/server/src/recovery-lock.ts` and
-  `apps/server/scripts/cloud-backup-fixture.ts`** — left open by W45 (#1155). **Next action:**
-  review each remaining raw connection separately before deciding whether a shared store API fits.
-  [Detail](architecture.md#raw-engine-imports-in-appsserversrcrecovery-lockts-and-appsserverscriptscloud-backup-fixturets)
-- **Files that still spell the store's file names themselves**
-  [Detail](architecture.md#files-that-still-spell-the-stores-file-names-themselves)
 
 ## Decisions and deliberate limits
 

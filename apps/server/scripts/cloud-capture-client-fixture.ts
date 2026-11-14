@@ -1,3 +1,4 @@
+import { CLOUD_CONNECTION_FILE, VENUE_DIR_NAME, TRADING_ENV_FILE } from "@waitron/store";
 import assert from "node:assert/strict";
 import { readFile, realpath } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
@@ -30,7 +31,7 @@ const request = JSON.parse(input) as {
 };
 assert(request.stateSubdir === undefined || request.stateSubdir === "state");
 const stateDir = request.stateSubdir === "state" ? join(root, "state") : root;
-const saved = JSON.parse(await readFile(join(stateDir, "cloud/connection.json"), "utf8"));
+const saved = JSON.parse(await readFile(join(stateDir, CLOUD_CONNECTION_FILE), "utf8"));
 const client = createCloudConnection({
   stateDir,
   origin: saved.origin,
@@ -48,10 +49,10 @@ else if (request.command === "upload")
     { ca: request.ca },
   );
 else if (request.command === "schedule") {
-  const store = await openVenueDatabase(join(root, "venue"));
+  const store = await openVenueDatabase(join(root, VENUE_DIR_NAME));
   try {
     await client.refresh();
-    const identity = parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8"));
+    const identity = parseEnvFile(await readFile(join(stateDir, TRADING_ENV_FILE), "utf8"));
     let created = 0;
     let point: CloudCapturePoint | undefined;
     const scheduler = createCloudSnapshotWorker({

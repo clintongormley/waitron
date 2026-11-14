@@ -8,6 +8,24 @@ export interface StateEntry {
   readonly why: string;
 }
 
+export const VENUE_FILE = "venue.db";
+export const NODE_FILE = "node.db";
+export const DATABASE_FILES = [VENUE_FILE, NODE_FILE] as const;
+export const WAL_SUFFIX = "-wal";
+export const SHM_SUFFIX = "-shm";
+export const JOURNAL_SUFFIX = "-journal";
+/** A committed row can live in the write-ahead file until it is checkpointed. */
+export const SIDE_FILE_SUFFIXES = [WAL_SUFFIX, SHM_SUFFIX] as const;
+export const VENUE_WAL_FILE = `${VENUE_FILE}${WAL_SUFFIX}`;
+export const NODE_WAL_FILE = `${NODE_FILE}${WAL_SUFFIX}`;
+export const VENUE_LOCK_FILE = "venue.lock";
+export const VENUE_HOLDER_FILE = "venue.holder.json";
+export const MIGRATIONS_LOCK_FILE = "migrations.lock";
+export const LITESTREAM_META_SUFFIX = "-litestream";
+export const VENUE_LITESTREAM_DIR = `.${VENUE_FILE}${LITESTREAM_META_SUFFIX}`;
+export const INCOMING_SUFFIX = ".incoming";
+export const REPLACED_DATABASE_PREFIX = `.${VENUE_FILE}-replaced-`;
+
 export const SPARE_SPACE_FILE = "spare-space";
 export const SPARE_SPACE_RELEASED_FILE = "spare-space.released";
 export const BACKUP_ROOM_NOTE_FILE = "backup-room-note.json";

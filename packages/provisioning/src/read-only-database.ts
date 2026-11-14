@@ -1,3 +1,4 @@
+import { WAL_SUFFIX, SHM_SUFFIX } from "@waitron/store";
 import { constants, type Stats } from "node:fs";
 import { lstat, open } from "node:fs/promises";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
@@ -18,7 +19,7 @@ export type ImmutableOpen =
  */
 export async function openImmutableWhenWalEmpty(path: string): Promise<ImmutableOpen> {
   try {
-    if ((await lstat(`${path}-wal`)).size !== 0) return { kind: "wal" };
+    if ((await lstat(`${path}${WAL_SUFFIX}`)).size !== 0) return { kind: "wal" };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT")
       return { kind: "failed", stage: "wal", error };
@@ -66,12 +67,12 @@ export async function openWalInPlace(path: string): Promise<InPlaceOpen> {
   const main = await plainFile(path);
   if (main === "missing" || main === "not-a-file") return { kind: main };
   if (main.size < SQLITE_HEADER_BYTES) return { kind: "short" };
-  const wal = await plainFile(`${path}-wal`);
+  const wal = await plainFile(`${path}${WAL_SUFFIX}`);
   if (wal === "not-a-file") return { kind: wal };
-  const shm = await plainFile(`${path}-shm`);
+  const shm = await plainFile(`${path}${SHM_SUFFIX}`);
   if (shm === "not-a-file") return { kind: shm };
   if (shm === "missing") return { kind: "no-shm" };
-  if (wal !== "missing" && !(await walHeaderAccepted(`${path}-wal`, wal.size)))
+  if (wal !== "missing" && !(await walHeaderAccepted(`${path}${WAL_SUFFIX}`, wal.size)))
     return { kind: "wal-header" };
   const url = pathToFileURL(path);
   url.searchParams.set("mode", "ro");
