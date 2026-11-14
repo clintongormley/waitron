@@ -662,9 +662,10 @@ it("leaves an unreadable request in place while the box holds another Cloud conn
   await writeFile(
     join(f.stateDir, "cloud/connection.json"),
     JSON.stringify({
-      version: 1,
+      version: 2,
       origin,
-        environment: "test",
+      venueId: registration.venueId,
+      environment: "test",
       requestId: randomUUID(),
       code: "12345678",
       privateKey: key.privateKey.export({ format: "der", type: "pkcs8" }).toString("base64url"),

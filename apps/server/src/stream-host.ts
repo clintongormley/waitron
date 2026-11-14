@@ -169,7 +169,7 @@ export async function readNewerBucketMain(
 export type HostStreamView = StreamView | ((StreamStatus | StreamNotStarted) & { toSpare: true });
 
 interface PairTarget {
-  venueId: string;
+  streamId: string;
   pair: { storeUrl: string; accessKeyId: string; secretAccessKey: string; authorityPem: string };
 }
 
@@ -379,7 +379,7 @@ export class StreamHost {
   async #pairTarget(link: PairLink): Promise<PairTarget> {
     const { node, ring, nodeId, stateDir } = this.#deps;
     return {
-      venueId: link.venueId,
+      streamId: link.venueId,
       pair: {
         storeUrl: link.storeUrl,
         accessKeyId: link.accessKeyId,

@@ -1293,10 +1293,13 @@ describe("the live copy's wiring", () => {
       );
     }
 
-    const pairedRuntime = (litestream: FakeLitestream) =>
+    const pairedRuntime = (
+      litestream: FakeLitestream,
+      store = new SwitchableStore(() => new Date()),
+    ) =>
       runtime({
         spawn: litestream.spawn,
-        store: new SwitchableStore(() => new Date()),
+        store,
         storeLookup: async (hostname) => {
           expect(hostname).toBe(SPARE_NAME);
           return { addresses: ["127.0.0.1"], remembered: false };
@@ -1327,14 +1330,19 @@ describe("the live copy's wiring", () => {
       );
       await pair(await startSpare("spare.pem"));
       const litestream = new FakeLitestream();
-      const rt = pairedRuntime(litestream);
+      const store = new SwitchableStore(() => new Date());
+      const rt = pairedRuntime(litestream, store);
       try {
         await rt.start();
         await vi.waitFor(() => expect(litestream.running()).toBeDefined(), { timeout: 10_000 });
 
         const url = new URL(await replicaUrl());
         expect(url.host).toBe("waitron");
-        expect(url.pathname.startsWith(`/${venuePrefix("venue-7")}`)).toBe(true);
+        expect(url.pathname).toMatch(/^\/gen-0-node-a-\d{8}T\d{6}Z$/);
+        const generation = generationOf(rt.status());
+        store.upload(`${generation}/0000/0000000000000001-0000000000000001.ltx`);
+        await vi.waitFor(() => expect(rt.status().state).toBe("streaming"), { timeout: 10_000 });
+        expect((await readPointer(store, "venue-7"))!.pointer.body.streamId).toBe("venue-7");
         expect(url.searchParams.get("region")).toBe("us-east-1");
         const endpoint = url.searchParams.get("endpoint")!;
         expect(endpoint).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
@@ -1395,7 +1403,7 @@ describe("the live copy's wiring", () => {
 
         const url = new URL(await replicaUrl());
         expect(url.host).toBe("venue-copies");
-        expect(url.pathname.startsWith(`/${venuePrefix("venue-1")}`)).toBe(true);
+        expect(url.pathname).toMatch(/^\/gen-0-node-a-\d{8}T\d{6}Z$/);
         expect(url.searchParams.get("endpoint")).toBe("https://s3.example.test");
         expect(litestream.running()!.env).toMatchObject({
           WAITRON_STREAM_ACCESS_KEY_ID: SETTINGS.accessKeyId,

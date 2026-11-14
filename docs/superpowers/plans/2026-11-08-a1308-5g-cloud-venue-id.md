@@ -261,3 +261,9 @@ first stream save and the configured prefix. These are not additional claims abo
 Watcher 2026-11-12 20:16 supersedes the null-id refusal above: a valid bound box file whose id the
 restored database lacks reads as not connected. Explicit Connect starts a fresh empty-id request;
 a real pre-pairing archive restore beside a completed file tests the full pairing-again sequence.
+
+2026-11-14, watcher clearance 01:02: A947 3b-6a added the spare-store caller after the original
+5g review. Port `spare-copy.ts` and its fixtures to the stream API's `streamId` and prefix-root
+pointer, preserving the pair link's existing copy identifier and key derivation; keep the new
+host's pipe and target lifecycle. This does not change the joining protocol. The corresponding
+replacement reissue fixtures keep their refusal and retry assertions under the v2 byte positions.
