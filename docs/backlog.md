@@ -466,7 +466,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 ### Menus and the catalogue
 
 - **A1517. Accepted allergen changes before go-live (owner, 2026-11-11): go-live.** The owner accepted
-  the recommendations; still to build: design A670's guest menu.
+  the recommendations; public access to A670's published menu remains to build.
   The [cleared new-selection plan](superpowers/plans/2026-11-12-a1517-2-allergen-choices.md) leaves option-list labels unfiltered because they carry no allergen data.
   [Proposal](superpowers/specs/2026-11-11-a1517-allergen-proposal.md) · [Detail](backlog/catalogue.md#a1517-allergen-points-to-revisit-before-go-live)
 
@@ -488,7 +488,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   Managers can preview a published menu in guest languages. The watcher cleared the
   [build plan](superpowers/plans/2026-11-13-a670-guest-menu-build.md), including browser Print / Save as PDF.
   Public opt-in, Cloud delivery and fixed A4 presets remain; no ordering.
-  [Detail](backlog/catalogue.md#a670--printed-menus-owner-2026-10-14-open-not-designed)
+  [Detail](backlog/catalogue.md#a670--guest-menu-sharing-and-fixed-a4-presets)
 
 - **wt-data-table: heading wrap, long names, odds and ends** (bundle of 10, size M). Holds A1318, A543. [Detail](backlog/catalogue.md#bundle-wt-data-table-heading-wrap-long-names-odds-and-ends)
 

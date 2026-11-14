@@ -677,7 +677,7 @@ A424 (#1452). A434's macOS Chromium probe measured the whole tab at screen width
 reproduce with the Linux fonts before choosing a change. The Printers tab's shorter label
 was the separate A434 ruling.
 
-## A670 — printed menus (owner, 2026-10-14; open, not designed)
+## A670 — guest-menu sharing and fixed A4 presets
 
 The manager’s guest preview reads the published menu, with guest/default/internal name fallback,
 separately priced sizes/extras and declarations. It adds no public link or printing.

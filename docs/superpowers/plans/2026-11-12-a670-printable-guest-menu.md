@@ -2,7 +2,7 @@
 
 Build stopped by the owner 2026-11-12 02:43 pending a menu design; mock-ups first.
 
-**PLAN FOR APPROVAL, 12 November 2026.** Design only. The [A1517 owner decisions](../specs/2026-11-11-a1517-allergen-proposal.md#owner-decisions-2026-11-11) bring forward [A670](../../backlog/catalogue.md#a670--printed-menus-owner-2026-10-14-open-not-designed); they do not approve this proposal. Separate Sol-high author; driver checked; Claude read once (323 seconds, Lane D `receipts/a670-plan-review.md`). Corrections below incorporate that read. Watcher 2026-11-12 02:41 cleared building with both recommendations while the owner answers; no owner approval of those choices is claimed.
+**PLAN FOR APPROVAL, 12 November 2026.** Design only. The [A1517 owner decisions](../specs/2026-11-11-a1517-allergen-proposal.md#owner-decisions-2026-11-11) bring forward [A670](../../backlog/catalogue.md#a670--guest-menu-sharing-and-fixed-a4-presets); they do not approve this proposal. Separate Sol-high author; driver checked; Claude read once (323 seconds, Lane D `receipts/a670-plan-review.md`). Corrections below incorporate that read. Watcher 2026-11-12 02:41 cleared building with both recommendations while the owner answers; no owner approval of those choices is claimed.
 
 ## Finish line and existing route
 
