@@ -43,13 +43,3 @@ export function captureShellLinks(host: HTMLElement): () => void {
   host.addEventListener("click", capture, true);
   return () => host.removeEventListener("click", capture, true);
 }
-
-export function requestCalendarWindow(host: HTMLElement, window: "periods" | "seasons"): void {
-  host.dispatchEvent(
-    new CustomEvent("calendar-window-open", {
-      detail: { window },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-}

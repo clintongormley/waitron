@@ -382,7 +382,7 @@ export class PeriodDialog extends LitElement {
             class="chip"
             data-own-click
             data-painted-in
-            href=${href}
+            href=${`${href}?back=/manage/periods`}
             data-tint=${tint || nothing}
             ?data-special-day=${special}
             >${text}</a

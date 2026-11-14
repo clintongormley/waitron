@@ -14,11 +14,12 @@ export const NO_COLOUR_USERS: readonly ColourUser[] = [];
 export function calendarColourChoices(
   label: (colour: CalendarColour) => string,
   users: readonly ColourUser[] = [],
+  fill: (colour: CalendarColour) => string = (colour) => PERIOD_COLOUR_TOKENS[colour].fill,
 ): ColourChoice[] {
   return CALENDAR_COLOURS.map((colour) => ({
     value: colour,
     label: label(colour),
-    fill: PERIOD_COLOUR_TOKENS[colour].fill,
+    fill: fill(colour),
     usedBy: users.filter((user) => user.colour === colour).map((user) => user.name),
   }));
 }
@@ -29,12 +30,13 @@ export function calendarColourChoices(
  */
 export function rememberedColourChoices(
   label: (colour: CalendarColour) => string,
+  fill?: (colour: CalendarColour) => string,
 ): (users: readonly ColourUser[]) => ColourChoice[] {
   let last: { users: readonly ColourUser[]; locale: string; choices: ColourChoice[] } | undefined;
   return (users) => {
     const locale = currentLocale();
     if (last?.users !== users || last.locale !== locale)
-      last = { users, locale, choices: calendarColourChoices(label, users) };
+      last = { users, locale, choices: calendarColourChoices(label, users, fill) };
     return last.choices;
   };
 }

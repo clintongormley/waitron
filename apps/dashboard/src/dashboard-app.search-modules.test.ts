@@ -1,7 +1,7 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
 import type { DashboardRequest } from "@waitron/dashboard-kit";
-import { navigationGuardFor, leaveCoordinatorFor, type WtInput } from "@waitron/ui";
+import { leaveCoordinatorFor, type WtInput } from "@waitron/ui";
 import type { DashboardApi } from "./api/client.js";
 import type { DashboardApp } from "./dashboard-app.js";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "./widgets/test-helpers.js";
@@ -25,7 +25,7 @@ const model = {
   clockReadable: true,
   dayCutover: "06:00",
   menus: [{ id: "menu", name: "Lunch menu", active: true, includes: [] }],
-  seasons: [{ id: "spring", name: "Spring", startsOn: "03-01" }],
+  seasons: [{ id: "spring", name: "Spring", startsOn: "03-01", colour: "green" }],
   currentSeasonId: "spring",
   departments: [
     {
@@ -112,7 +112,9 @@ const request = (async (path: string) => {
         .split(",")
         .map((date) => ({ date, seasonId: "spring", dayCutover: "06:00", departments: [] })),
     };
-  if (path.endsWith("/menu-periods/painted-in")) return [];
+  if (path.endsWith("/floor-plan-sets/period-choices")) return { departments: [] };
+  if (path.endsWith("/menu-periods/painted-in"))
+    return [{ periodId: "lunch", seasons: [{ id: "spring", name: "Spring" }], specialDays: [] }];
   if (path.endsWith("/routing"))
     return {
       zones: [],
@@ -169,7 +171,13 @@ async function mount(
   } as unknown as DashboardApi;
   const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request }, options.theme);
   await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("dashboard-opening-hours-screen")).not.toBeNull(),
+    expect(
+      el.shadowRoot!.querySelector(
+        options.path === "/manage/seasons"
+          ? "dashboard-seasons-screen"
+          : "dashboard-opening-hours-screen",
+      ),
+    ).not.toBeNull(),
   );
   if (options.width === 390)
     await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!);
@@ -186,11 +194,11 @@ const result = (el: DashboardApp, id: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-search-destination="${id}"]`);
 const calendar = (el: DashboardApp) =>
   el.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
-/** The Seasons window's season names, from each row's name field or, read-only, its text. */
+/** The editor's row names, editable or read-only. */
 const seasonRows = (screen: HTMLElement) =>
   [
     ...(screen
-      .shadowRoot!.querySelector("seasons-window[data-test=calendar-window]")
+      .shadowRoot!.querySelector("seasons-window")
       ?.shadowRoot?.querySelectorAll("tbody tr") ?? []),
   ]
     .map(
@@ -247,39 +255,35 @@ it("rebuilds destinations when modules and permissions change at the next sessio
   await vi.waitFor(() => expect(result(el, "calendar:staffing")).toBeNull());
 });
 it.each(["light", "dark"] as const)(
-  "the shipped Seasons window is accessible in %s",
+  "the shipped Seasons page is accessible in %s",
   async (theme) => {
     const { el } = await mount({ theme });
     await search(el, "seasons");
-    await userEvent.click(result(el, "venue-service:seasons")!);
-    await vi.waitFor(() => expect(seasonRows(calendar(el))).toContain("Spring"));
-    expect(location.pathname).toBe("/manage/opening-hours/view/year/window/seasons");
-    await expectNoA11yViolations(
-      calendar(el).shadowRoot!.querySelector("[data-test=calendar-window]")!,
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-seasons]")!);
+    await vi.waitFor(() =>
+      expect(seasonRows(el.shadowRoot!.querySelector("dashboard-seasons-screen")!)).toContain(
+        "Spring",
+      ),
     );
+    expect(location.pathname).toBe("/manage/seasons");
+    await expectNoA11yViolations(el.shadowRoot!.querySelector("dashboard-seasons-screen")!);
   },
 );
 it.each(["light", "dark"] as const)(
-  "searching peri finds Periods in the Calendar and opens its window (%s)",
+  "searching peri finds and opens the Periods page (%s)",
   async (theme) => {
     const { el } = await mount({ theme });
-    expect(el.shadowRoot!.querySelector("[data-test=nav-periods]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=nav-periods]")).not.toBeNull();
     await search(el, "peri");
-    expect(result(el, "venue-service:periods")).not.toBeNull();
-    await userEvent.click(result(el, "venue-service:periods")!);
+    expect(el.shadowRoot!.querySelector("[data-test=nav-periods]")).not.toBeNull();
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-periods]")!);
     await vi.waitFor(() =>
       expect(
-        calendar(el)
-          .shadowRoot!.querySelector(
-            "[data-test=calendar-window][data-window=periods] periods-list",
-          )
-          ?.shadowRoot?.querySelector("wt-data-table"),
+        el.shadowRoot!.querySelector("periods-list")?.shadowRoot?.querySelector("wt-data-table"),
       ).toBeTruthy(),
     );
-    expect(location.pathname).toBe("/manage/opening-hours/view/year/window/periods");
-    await expectNoA11yViolations(
-      calendar(el).shadowRoot!.querySelector("[data-test=calendar-window]")!,
-    );
+    expect(location.pathname).toBe("/manage/periods");
+    await expectNoA11yViolations(el.shadowRoot!.querySelector("periods-list")!);
   },
 );
 it.each(["light", "dark"] as const)(
@@ -298,61 +302,70 @@ it.each(["light", "dark"] as const)(
           path: `__screenshots__/a727-look/search-${theme}-${width}-${locale}.png`,
         });
         await search(el, locale === "es-ES" ? "temporadas" : "seasons");
-        await userEvent.click(result(el, "venue-service:seasons")!);
-        await vi.waitFor(() => expect(seasonRows(calendar(el))).toContain("Spring"));
-        const modal = calendar(el)
-          .shadowRoot!.querySelector("[data-test=calendar-window]")!
-          .shadowRoot!.querySelector("wt-modal")!;
-        await vi.waitFor(() => expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true));
-        const native = modal.shadowRoot!.querySelector("dialog")!;
+        await userEvent.click(
+          el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-seasons]")!,
+        );
+        await vi.waitFor(() =>
+          expect(seasonRows(el.shadowRoot!.querySelector("dashboard-seasons-screen")!)).toContain(
+            "Spring",
+          ),
+        );
+        const native = el.shadowRoot!.querySelector("dashboard-seasons-screen")!;
         await expect.poll(() => native.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
         await expect.poll(() => native.getBoundingClientRect().right).toBeLessThanOrEqual(width);
         await page.screenshot({
-          path: `__screenshots__/a727-look/window-${theme}-${width}-${locale}.png`,
+          path: `__screenshots__/a727-look/seasons-${theme}-${width}-${locale}.png`,
         });
         cleanupWidgets();
       }
   },
 );
 
-it("the real shell delegates window-only navigation without discarding the actual painter draft", async () => {
-  const base = "/manage/opening-hours/view/season/season/spring/department/restaurant";
-  const { el } = await mount({ path: base });
-  await vi.waitFor(() =>
-    expect(
-      calendar(el)
-        .shadowRoot!.querySelector("season-painter")
-        ?.shadowRoot?.querySelector("paint-grid"),
-    ).not.toBeNull(),
-  );
-  const painter = calendar(el).shadowRoot!.querySelector("season-painter")!;
-  const grid = painter.shadowRoot!.querySelector("paint-grid")!;
-  const painted = [{ periodId: "lunch", startsAt: "12:00", endsAt: "14:00" }];
-  grid.dispatchEvent(
-    new CustomEvent("paint-change", {
-      detail: { key: "3", day: painted },
+it.each(["sidebar", "Back"])("the real shell protects the Seasons draft on %s", async (way) => {
+  const { el } = await mount();
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-seasons]")!);
+  await vi.waitFor(() => expect(location.pathname).toBe("/manage/seasons"));
+  const editor = () =>
+    el
+      .shadowRoot!.querySelector("dashboard-seasons-screen")
+      ?.shadowRoot?.querySelector("seasons-window");
+  await vi.waitFor(() => expect(editor()).toBeTruthy());
+  const input = () => editor()!.shadowRoot!.querySelector<WtInput>("wt-input")!;
+  input().dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: "Late spring" },
       bubbles: true,
       composed: true,
     }),
   );
-  await painter.updateComplete;
-  expect(grid.days.get("3")).toEqual(painted);
+  await editor()!.updateComplete;
   expect(leaveCoordinatorFor(el)!.isDirty()).toBe(true);
-  const opening = navigationGuardFor(window)!.write(`${base}/window/seasons`);
+  const leave = async () => {
+    if (way === "Back") history.back();
+    else
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-periods]")!);
+  };
+  await leave();
+  const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  await vi.waitFor(() => expect(question.open).toBe(true));
+  await userEvent.click(question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!);
+  await vi.waitFor(() => expect(question.open).toBe(false));
+  expect(location.pathname).toBe("/manage/seasons");
+  expect(input().value).toBe("Late spring");
+  await leave();
+  await vi.waitFor(() => expect(question.open).toBe(true));
+  await userEvent.click(question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!);
   await vi.waitFor(() =>
-    expect(calendar(el).shadowRoot!.querySelector("[data-test=calendar-window]")).not.toBeNull(),
+    expect(location.pathname).toBe(
+      way === "Back" ? "/manage/opening-hours/view/year" : "/manage/periods",
+    ),
   );
-  await opening;
-  expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
-  expect(calendar(el).shadowRoot!.querySelector("season-painter")).toBe(painter);
-  expect(grid.days.get("3")).toEqual(painted);
-  calendar(el)
-    .shadowRoot!.querySelector("[data-test=calendar-window]")!
-    .shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-seasons]")!
-    .click();
-  await vi.waitFor(() => expect(location.pathname).toBe(base));
-  expect(grid.days.get("3")).toEqual(painted);
-  expect(leaveCoordinatorFor(el)!.isDirty()).toBe(true);
+  expect(
+    el.shadowRoot!.querySelector(
+      way === "Back" ? "dashboard-opening-hours-screen" : "periods-list",
+    ),
+  ).not.toBeNull();
+  expect(leaveCoordinatorFor(el)!.isDirty()).toBe(false);
 });
 describe("inline period editing inside the real shell", () => {
   const seasonBase = "/manage/opening-hours/view/season/season/spring/department/restaurant";
@@ -427,18 +440,6 @@ describe("inline period editing inside the real shell", () => {
     expect(name()).toBe("Staff party");
     expect(leaveCoordinatorFor(el)!.isDirty()).toBe(true);
   });
-});
-it("opening Calendar preserves an unrelated bookmark query and hash but removes stale station", async () => {
-  const { el } = await mount({
-    path: "/manage/opening-hours/view/year?source=bookmark&station=old#calendar",
-  });
-  await search(el, "seasons");
-  await userEvent.click(result(el, "venue-service:seasons")!);
-  await vi.waitFor(() =>
-    expect(calendar(el).shadowRoot!.querySelector("[data-test=calendar-window]")).not.toBeNull(),
-  );
-  expect(location.search).toBe("?source=bookmark");
-  expect(location.hash).toBe("#calendar");
 });
 it("the Voids and comps page follows its permission rather than every enabled module", async () => {
   const { el, session } = await mount({

@@ -17,6 +17,10 @@ Some holidays depend on the island or part of a province where your venue stands
 Changing the screen language keeps your chosen area. To change which holidays apply, change the area itself.
 Review public holidays after changing the venue’s city. Choosing another holiday area replaces your previous choice.
 
+## Edit seasons {#seasons}
+
+Open **Seasons** under **Venue operations** to change their names, colours and start dates. Each season runs until the next starts. **Save** keeps you on the page; **Cancel** discards your unsaved changes.
+
 ## Check where a period is used {#periods}
 
-Open **Periods** from Calendar. In **Painted in**, choose a season or special day to check its timetable.
+Open **Periods** under **Venue operations**, beside **Calendar**. In **Painted in**, choose a season or special day to check its timetable.

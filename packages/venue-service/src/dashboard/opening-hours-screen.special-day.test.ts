@@ -20,7 +20,7 @@ import {
   storedDay,
   summaryOf,
 } from "../testing/special-day-painter-fixture.js";
-import { captureShellLinks, requestCalendarWindow } from "../testing/shell-link-capture.js";
+import { captureShellLinks } from "../testing/shell-link-capture.js";
 import "./opening-hours-screen.js";
 
 type Screen = HTMLElementTagNameMap["dashboard-opening-hours-screen"];
@@ -1081,85 +1081,17 @@ class AddingGuardedApp extends GuardedApp {
 }
 customElements.define("special-day-adding-test-app", AddingGuardedApp);
 
-describe("the special-day painter and Periods window", () => {
+describe("period updates while painting a special day", () => {
   const base = "/manage/opening-hours/view/special-day/special-day/sd1";
-  const periodsWindow = (el: Screen) =>
-    el.shadowRoot!.querySelector("[data-test=calendar-window][data-window=periods] periods-list");
-
-  it("a viewer returns from a Painted in special day to the Periods window", async () => {
-    const origin = "/manage/opening-hours/view/year/year/2026/window/periods";
-    const { el } = await mount(origin, true);
-    const guard = new NavigationGuard(window, {
-      isDirty: () => false,
-      request: async () => "kept",
-    });
-    const stop = captureShellLinks(el);
-    try {
-      await expect
-        .poll(() =>
-          periodsWindow(el)
-            ?.shadowRoot?.querySelector("wt-data-table")
-            ?.shadowRoot?.querySelector("a[part~=chip]"),
-        )
-        .toBeTruthy();
-      periodsWindow(el)!
-        .shadowRoot!.querySelector("wt-data-table")!
-        .shadowRoot!.querySelector<HTMLAnchorElement>("a[part~=chip]")!
-        .click();
-      await expect.poll(() => location.pathname).toBe(base);
-      const painter = await shownPainter(el);
-      expect(painter.readOnly).toBe(true);
-      await userEvent.click(frame(painter).shadowRoot!.querySelector<HTMLElement>(".close")!);
-      await expect.poll(() => location.pathname).toBe(origin);
-      await expect.poll(() => periodsWindow(el)).not.toBeNull();
-    } finally {
-      stop();
-      guard.dispose();
-    }
-  });
-
-  it("the Periods window over a special-day painter keeps its unsaved day", async () => {
-    history.replaceState(null, "", base);
-    const app = document.createElement("special-day-guarded-test-app") as GuardedApp;
-    applyTokens(app);
-    hosts.push(app);
-    document.body.append(app);
-    await app.updateComplete;
-    const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
+  it("a viewer closes a Painted in special day to the Periods page", async () => {
+    const { el } = await mount(`${base}?back=/manage/periods`, true);
     const painter = await shownPainter(el);
-    painter.shadowRoot!.querySelector("wt-input[name=name]")!.dispatchEvent(
-      new CustomEvent("wt-change", {
-        detail: { value: "Staff party" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await settle(painter);
-    expect(app.leave.coordinator.isDirty()).toBe(true);
-    const question =
-      app.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-unsaved-changes"]>(
-        "wt-unsaved-changes",
-      )!;
-    const pushes = pushedPaths();
-    requestCalendarWindow(el, "periods");
-    await expect.poll(() => location.pathname).toBe(`${base}/window/periods`);
-    await expect.poll(() => periodsWindow(el)).not.toBeNull();
-    expect(pushes()).toEqual([`${base}/window/periods`]);
-    expect(question.open).toBe(false);
-    expect(painterOf(el)).toBe(painter);
-    expect(nameOf(painter)).toBe("Staff party");
-    expect(app.leave.coordinator.isDirty()).toBe(true);
-    history.back();
-    await expect.poll(() => location.pathname).toBe(base);
-    await expect.poll(() => el.shadowRoot!.querySelector("[data-test=calendar-window]")).toBeNull();
-    expect(question.open).toBe(false);
-    expect(painterOf(el)).toBe(painter);
-    expect(nameOf(painter)).toBe("Staff party");
-    expect(app.leave.coordinator.isDirty()).toBe(true);
-    expect(app.recorded.writes).toEqual([]);
+    expect(painter.readOnly).toBe(true);
+    await userEvent.click(frame(painter).shadowRoot!.querySelector<HTMLElement>(".close")!);
+    await expect.poll(() => location.pathname).toBe("/manage/periods");
   });
 
-  it("a period added in the window reaches the special-day painter underneath, which keeps its unsaved day", async () => {
+  it("a newly stored period reaches the special-day painter, which keeps its unsaved day", async () => {
     history.replaceState(null, "", base);
     const app = document.createElement("special-day-adding-test-app") as AddingGuardedApp;
     applyTokens(app);
@@ -1177,39 +1109,13 @@ describe("the special-day painter and Periods window", () => {
     );
     await settle(painter);
     expect(painter.shadowRoot!.querySelector('[data-test="paint-p-new"]')).toBeNull();
-    requestCalendarWindow(el, "periods");
-    await expect.poll(() => periodsWindow(el)).not.toBeNull();
-    const list = periodsWindow(el) as HTMLElementTagNameMap["periods-list"];
-    await expect.poll(() => list.shadowRoot?.querySelector("[data-test=add-period]")).toBeTruthy();
-    list.shadowRoot!.querySelector<HTMLElement>("[data-test=add-period]")!.click();
-    await list.updateComplete;
-    const dialog = list.shadowRoot!.querySelector("period-dialog")!;
-    await dialog.updateComplete;
-    for (const [name, value] of [
-      ["departmentId", "d1"],
-      ["name", "Brunch"],
-      ["menuId", "m1"],
-    ])
-      dialog
-        .shadowRoot!.querySelector<HTMLElement>(`[name=${name}]`)!
-        .dispatchEvent(
-          new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
-        );
-    await dialog.updateComplete;
-    dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=save-period]")!.click();
-    await expect.poll(() => list.shadowRoot!.querySelector("period-dialog")).toBeNull();
-    expect(app.recorded.writes).toEqual([
-      [
-        "/management-api/venue-service/departments/d1/menu-periods",
-        "POST",
-        expect.objectContaining({ name: "Brunch", menuId: "m1" }),
-      ],
-    ]);
-    el.shadowRoot!.querySelector<HTMLElement>(
-      "[data-test=calendar-window] [data-test=close-calendar-window]",
-    )!.click();
-    await expect.poll(() => location.pathname).toBe(base);
-    await expect.poll(() => el.shadowRoot!.querySelector("[data-test=calendar-window]")).toBeNull();
+    await app.api.createPeriod("d1", {
+      name: "Brunch",
+      menuId: "m1",
+      colour: "blue",
+      staffMenuIds: [],
+    });
+    app.api.rereadWatches();
     expect(painterOf(el)).toBe(painter);
     await expect
       .poll(() => painter.shadowRoot!.querySelector('[data-test="paint-p-new"]'))

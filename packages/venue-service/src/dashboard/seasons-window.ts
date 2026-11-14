@@ -10,9 +10,7 @@ import {
   submitOnEnter,
   visuallyHiddenStyles,
   type DraftScope,
-  type LeaveReason,
 } from "@waitron/ui";
-import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-colour-chooser.js";
@@ -47,7 +45,7 @@ import {
   type SeasonRefusedField,
 } from "./season-refusal.js";
 import { refusalOf, type Refusal } from "./refusal.js";
-import { seasonTintStyles } from "./season-tint.js";
+import { SEASON_TINT_TOKENS, seasonTintStyles } from "./season-tint.js";
 import { t } from "./strings.js";
 import { clockChangeConflictText } from "./clock-change-conflict.js";
 
@@ -78,16 +76,15 @@ export class SeasonsWindow extends LitElement {
     css`
       :host {
         display: block;
+        min-width: 0;
+        background: var(--wt-color-bg);
       }
       .table-wrap {
         overflow-x: auto;
         container-type: inline-size;
       }
-      /* Caps the chooser, so a long colour name does not push the Day box under the bin. */
-      @container (width < 480px) {
-        wt-colour-chooser {
-          max-width: calc(var(--wt-space-6) * 3.75);
-        }
+      wt-colour-chooser {
+        min-width: max-content;
       }
       .table-wrap:focus-visible {
         outline: var(--wt-focus-ring);
@@ -161,7 +158,7 @@ export class SeasonsWindow extends LitElement {
         z-index: 1;
         width: 1%;
         text-align: end;
-        background: var(--wt-color-surface-raised);
+        background: var(--wt-color-bg);
       }
       .colour-text {
         display: inline-flex;
@@ -211,7 +208,6 @@ export class SeasonsWindow extends LitElement {
     OpeningHoursApi,
     "saveSeasons" | "readSeasonDeleteImpact"
   >;
-  @property({ attribute: false }) beforeClose?: (reason: LeaveReason) => Promise<boolean>;
   /** Replaced whole on every change, so a restore can swap it while keeping the live `next`. */
   @state() private draft?: SeasonDraft;
   private baseline?: SeasonDraft;
@@ -238,8 +234,6 @@ export class SeasonsWindow extends LitElement {
     this.generation = {};
     // The scope is taken in willUpdate; a host put back after a redraw has none until it redraws.
     this.requestUpdate();
-    this.dataset.test = "calendar-window";
-    this.dataset.window = "seasons";
   }
   override disconnectedCallback() {
     this.scope?.dispose();
@@ -283,10 +277,6 @@ export class SeasonsWindow extends LitElement {
     this.baseline = merged.baseline;
     this.scope?.commit(this.baseline);
   }
-  private readonly guardClose = async (reason: LeaveReason): Promise<boolean> => {
-    if (!this.isConnected || this.busy) return false;
-    return this.beforeClose ? this.beforeClose(reason) : true;
-  };
   private get busy(): boolean {
     return this.saving !== undefined && this.saving === this.generation;
   }
@@ -487,15 +477,22 @@ export class SeasonsWindow extends LitElement {
   private choicesFor(key: string) {
     let choices = this.colourChoices.get(key);
     if (!choices) {
-      choices = rememberedColourChoices((colour) => t(`hours.colour.${colour}`));
+      choices = rememberedColourChoices(
+        (colour) => t(`hours.colour.${colour}`),
+        (colour) => SEASON_TINT_TOKENS[colour].tint,
+      );
       this.colourChoices.set(key, choices);
     }
     return choices(this.usersOf(key));
   }
   private readonly usedByLabel = (colour: string, names: string) =>
     format("hours.colour_used_by", { colour, names });
-  private close() {
-    void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+  private discard() {
+    if (this.busy) return;
+    this.setDraft({ ...this.baseline!, next: Math.max(this.draft!.next, this.baseline!.next) });
+    this.feedback.reset();
+    this.refusal = undefined;
+    this.revision = this.clockRevision;
   }
   private until(key: string): string {
     const until = runsUntil(this.rows, key);
@@ -526,11 +523,13 @@ export class SeasonsWindow extends LitElement {
         this.change(row.key, field, event.detail.value);
       };
     const name = row.name.trim();
+    const rowName = name || format("season.new_row", { number: String(index + 1) });
+    const label = (field: string) => format("season.row_field", { field, name: rowName });
     return html`<tr data-row=${row.key}>
       <td>
         <wt-colour-chooser
           name=${`season-${index}-colour`}
-          label=${t("hours.colour")}
+          label=${label(t("hours.colour"))}
           hide-label
           .value=${row.colour}
           .choices=${this.choicesFor(row.key)}
@@ -543,7 +542,7 @@ export class SeasonsWindow extends LitElement {
       <td class="name">
         <wt-input
           name=${`season-${index}-name`}
-          label=${t("prep.name")}
+          label=${label(t("prep.name"))}
           required
           hide-label
           .value=${row.name}
@@ -562,7 +561,7 @@ export class SeasonsWindow extends LitElement {
           <wt-combobox
             ?preserve-order=${true /* Preserve day chronology. */}
             name=${`season-${index}-day`}
-            label=${t("season.day")}
+            label=${label(t("season.day"))}
             required
             hide-label
             search="never"
@@ -577,7 +576,7 @@ export class SeasonsWindow extends LitElement {
             ?preserve-order=${true /* Preserve month chronology. */}
             stable-width
             name=${`season-${index}-month`}
-            label=${t("season.month")}
+            label=${label(t("season.month"))}
             required
             hide-label
             search="never"
@@ -664,16 +663,7 @@ export class SeasonsWindow extends LitElement {
     </div>`;
   }
   private footer({ own, refused, gone }: Marks) {
-    if (this.readOnly)
-      return html`<wt-form-actions slot="footer">
-        <wt-button
-          slot="cancel"
-          variant="secondary"
-          data-test="close-seasons"
-          @click=${() => this.close()}
-          >${t("calendar.window.close")}</wt-button
-        >
-      </wt-form-actions>`;
+    if (this.readOnly) return nothing;
     const action = saveActionState(this.scope);
     const busy = this.busy;
     const marked =
@@ -689,7 +679,6 @@ export class SeasonsWindow extends LitElement {
           : (clockChangeConflictText(this.refusal.refusal) ??
             seasonRefusalText(this.refusal.refusal));
     return html`<wt-form-actions
-      slot="footer"
       .error=${bottomMessage(refusal, marked ? t("prep.fix_fields") : "")}
     >
       <wt-button
@@ -697,7 +686,7 @@ export class SeasonsWindow extends LitElement {
         variant="secondary"
         data-test="cancel-seasons"
         ?disabled=${busy}
-        @click=${() => this.close()}
+        @click=${() => this.discard()}
         >${t("prep.cancel")}</wt-button
       >
       <wt-button
@@ -714,11 +703,7 @@ export class SeasonsWindow extends LitElement {
     const marks: Marks = this.readOnly
       ? { own: new Map(), gone: new Set() }
       : { own: this.ownErrors(), refused: this.refused(), gone: this.gone() };
-    return html`<wt-modal
-      open
-      heading=${t("season.seasons")}
-      .dismissible=${!this.busy}
-      .beforeClose=${this.guardClose}
+    return html`<div
       @keydown=${(event: KeyboardEvent) =>
         submitOnEnter(event, this.shadowRoot!.querySelector("[data-test=save-seasons]"))}
     >
@@ -740,7 +725,7 @@ export class SeasonsWindow extends LitElement {
             </div>`
       }
       ${this.footer(marks)}
-    </wt-modal>`;
+    </div>`;
   }
 }
 

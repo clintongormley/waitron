@@ -73,7 +73,7 @@ async function mount(state: string, theme: "light" | "dark") {
   return el;
 }
 
-describe.each(["light", "dark"] as const)("Seasons window (%s)", (theme) => {
+describe.each(["light", "dark"] as const)("Seasons editor (%s)", (theme) => {
   test.each(["editable", "read-only", "added", "refused", "deleting"])(
     "%s has no violations",
     async (state) => {
@@ -88,9 +88,7 @@ describe.each(["light", "dark"] as const)("Seasons window (%s)", (theme) => {
       await page.viewport(390, 800);
       expect(window.innerWidth).toBe(390);
       const el = await mount("editable", theme);
-      const surface = getComputedStyle(
-        el.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector("dialog")!,
-      ).backgroundColor;
+      const surface = getComputedStyle(el).backgroundColor;
       for (const cell of el.shadowRoot!.querySelectorAll(".bin"))
         expect(getComputedStyle(cell).backgroundColor).toBe(surface);
       await expectNoA11yViolations(el);

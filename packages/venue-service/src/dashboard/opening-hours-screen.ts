@@ -18,9 +18,6 @@ import {
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
-import "@waitron/ui/src/components/wt-modal.js";
-import "./seasons-window.js";
-import "@waitron/ui/src/components/wt-form-actions.js";
 import "./season-painter.js";
 import type { PainterNavigation } from "./season-painter.js";
 import "./opening-hours-year.js";
@@ -32,17 +29,14 @@ import "./calendar-day-box.js";
 import { openingHoursDay } from "./opening-hours-day.js";
 import {
   calendarViewPath,
-  calendarWindowPath,
   hoursPath,
-  isCalendarWindow,
-  type CalendarWindow,
   openingHoursPath,
+  periodsPath,
   seasonPainterPath,
   specialDayPainterPath,
 } from "./opening-hours-paths.js";
 import { segmentedStyles } from "./segmented-styles.js";
 import "./special-day-painter.js";
-import "./periods-list.js";
 import type { OpeningHoursMonth, OpeningHoursYear } from "../opening-hours-calendar.js";
 import { HOURS_RANGE_MAX_DAYS, type HolidayFact, type LocalDate } from "../hours-types.js";
 import type { SpecialDayDetail } from "../special-days.js";
@@ -150,9 +144,7 @@ export class OpeningHoursScreen extends LitElement {
   @property({ attribute: false }) calendar?: CalendarViews;
   /** Set while the address names one of `calendar`'s views. */
   @state() private moduleView?: ModuleAddress;
-  @state() private windowId: CalendarWindow | "" = "";
   private contentKey = "";
-  private readonly windowDraftRoot = {};
   /** Each view's handle, created the first time it is shown and kept for this screen's life. */
   private readonly viewHandles = new Map<string, DashboardScreenHandle>();
   @state() private model?: OpeningHoursModel;
@@ -243,7 +235,6 @@ export class OpeningHoursScreen extends LitElement {
         year: "year",
         month: "month",
         week: "week",
-        window: "window",
       },
     },
   });
@@ -255,12 +246,10 @@ export class OpeningHoursScreen extends LitElement {
       if (this.focusHandOff?.navigation !== this.navigations) this.endFocusHandOff();
     }
     if (this.url.read("dashboard") !== "opening-hours") return;
-    const windowId = this.url.read("window");
     const requestedView = this.url.read("view");
     if (
       current.searchParams.has("station") &&
-      (isCalendarWindow(windowId) ||
-        requestedView === "year" ||
+      (requestedView === "year" ||
         requestedView === "month" ||
         requestedView === "week" ||
         this.calendarView(requestedView))
@@ -268,12 +257,7 @@ export class OpeningHoursScreen extends LitElement {
       this.replaceAddress(this.calendarUrl(current.pathname));
       return;
     }
-    if (windowId !== null && !isCalendarWindow(windowId)) {
-      this.replaceAddress(this.calendarUrl(calendarWindowPath(current.pathname, null)));
-      return;
-    }
-    this.windowId = windowId ?? "";
-    const contentPath = calendarWindowPath(current.pathname, null);
+    const contentPath = current.pathname;
     const contentKey = contentPath + current.search + current.hash;
     if (contentKey === this.contentKey) return;
     this.contentKey = contentKey;
@@ -378,7 +362,7 @@ export class OpeningHoursScreen extends LitElement {
     const parts = path.slice(openingHoursPath.length + 1).split("/");
     const params: Record<string, string> = {};
     for (let i = 0; i + 1 < parts.length; i += 2) {
-      if (parts[i] === "view" || parts[i] === "window") continue;
+      if (parts[i] === "view") continue;
       try {
         params[decodePathSegment(parts[i]!)] = decodePathSegment(parts[i + 1]!);
       } catch {
@@ -394,93 +378,6 @@ export class OpeningHoursScreen extends LitElement {
       (businessDateToday(this.model!) || browserToday()).slice(0, 7)
     );
   }
-  /** Moves the Calendar to a module view, or with `"hours"` back to Opening hours (its month when
-   *  `params.month` names one, else its year). A view it was not given is ignored. */
-  navigationScopes(destination: URL): readonly object[] | undefined {
-    const current = new URL(navigationGuardFor(window)?.href ?? location.href);
-    if (
-      destination.origin !== current.origin ||
-      destination.search !== current.search ||
-      destination.hash !== current.hash ||
-      calendarWindowPath(destination.pathname, null) !== calendarWindowPath(current.pathname, null)
-    )
-      return undefined;
-    return this.windowId ? [this.windowDraftRoot] : [];
-  }
-  private readonly beforeWindowClose = async () => {
-    await this.closeWindow();
-    return false;
-  };
-  private readonly windowOpenRequested = (event: CustomEvent<{ window: CalendarWindow }>) => {
-    event.stopPropagation();
-    void this.openWindow(event.detail.window);
-  };
-  private async openWindow(id: CalendarWindow) {
-    const path = new URL(navigationGuardFor(window)?.href ?? location.href).pathname;
-    await this.writeAddress(this.calendarUrl(calendarWindowPath(path, id)));
-  }
-  private async closeWindow() {
-    const path = new URL(navigationGuardFor(window)?.href ?? location.href).pathname;
-    await this.writeAddress(this.calendarUrl(calendarWindowPath(path, null)));
-  }
-  private readonly windowClosed = (event: Event) => {
-    event.stopPropagation();
-    if (
-      event.target === event.currentTarget &&
-      event.currentTarget === this.shadowRoot?.querySelector("[data-test=calendar-window]")
-    )
-      void this.closeWindow();
-  };
-  private windowFooter() {
-    return html`<wt-form-actions slot="footer"
-      ><wt-button
-        slot="cancel"
-        data-test="close-calendar-window"
-        variant="secondary"
-        @click=${() => void this.closeWindow()}
-        >${t("calendar.window.close")}</wt-button
-      ></wt-form-actions
-    >`;
-  }
-  private calendarWindow() {
-    if (!this.windowId || !this.model) return nothing;
-    if (this.windowId === "periods")
-      return html`<wt-modal
-        data-test="calendar-window"
-        data-window="periods"
-        size="wide"
-        height="medium"
-        aria-label=${t("period.title")}
-        .open=${true}
-        .beforeClose=${this.beforeWindowClose}
-        @wt-close=${this.windowClosed}
-        ><periods-list
-          .api=${this.api}
-          .readOnly=${this.readOnly}
-          .draftParent=${this.windowDraftRoot}
-          @click=${this.paintedInClicked}
-        ></periods-list
-        >${this.windowFooter()}</wt-modal
-      >`;
-    return html`<seasons-window
-      data-test="calendar-window"
-      data-window="seasons"
-      .seasons=${this.model.seasons}
-      .clockRevision=${this.model.clockRevision}
-      .readOnly=${this.readOnly}
-      .draftParent=${this.windowDraftRoot}
-      .api=${this.api}
-      .beforeClose=${this.beforeWindowClose}
-      @wt-close=${this.windowClosed}
-      @seasons-saved=${this.seasonsSaved}
-    ></seasons-window>`;
-  }
-  /** Re-reads rather than taking the answer's list, which a newer live list may already replace. */
-  private readonly seasonsSaved = (event: Event) => {
-    event.stopPropagation();
-    this.api.rereadWithSpecialDays();
-    void this.closeWindow();
-  };
   private openCalendarView(view: string, params: Record<string, string>) {
     if (!this.isConnected) return;
     if (view === "hours") return void this.writeAddress(this.hoursUrl(params));
@@ -576,7 +473,6 @@ export class OpeningHoursScreen extends LitElement {
   }
   override connectedCallback() {
     super.connectedCallback();
-    this.addEventListener("calendar-window-open", this.windowOpenRequested as EventListener);
     this.detach = this.api.watchOpeningHours(
       (model) => {
         const first = !this.model;
@@ -593,7 +489,6 @@ export class OpeningHoursScreen extends LitElement {
     );
   }
   override disconnectedCallback() {
-    this.removeEventListener("calendar-window-open", this.windowOpenRequested as EventListener);
     this.detach?.();
     this.monthWatch.stop();
     this.stationsDetach?.();
@@ -947,7 +842,7 @@ export class OpeningHoursScreen extends LitElement {
     const coordinator = leaveCoordinatorFor(this);
     if (coordinator)
       await coordinator.request({
-        scopes: this.navigationScopes(url) ?? "all",
+        scopes: "all",
         reason: "navigation",
         proceed,
       });
@@ -1001,27 +896,6 @@ export class OpeningHoursScreen extends LitElement {
     this.sentHolidays = address.date ? { date: address.date, holidays } : undefined;
     await this.writeAddress(this.specialUrl(address));
     this.markPushedPainter(false);
-  }
-  private async paintedInClicked(event: MouseEvent) {
-    if (
-      event.defaultPrevented ||
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    )
-      return;
-    const link = event
-      .composedPath()
-      .find(
-        (node): node is HTMLAnchorElement =>
-          node instanceof HTMLAnchorElement && node.hasAttribute("data-painted-in"),
-      );
-    if (!link) return;
-    event.preventDefault();
-    await this.writeAddress(new URL(link.href));
-    if (!this.windowId) this.markPushedPainter(false);
   }
   private markPushedPainter(wasOpen: boolean) {
     if (wasOpen || !this.isConnected || !this.overlaid()) return;
@@ -1081,6 +955,11 @@ export class OpeningHoursScreen extends LitElement {
   }
   /** Closes either painter: back to the entry it was pushed over, else to the view it drew over. */
   private closePainter() {
+    const current = new URL(navigationGuardFor(window)?.href ?? location.href);
+    if (current.searchParams.get("back") === periodsPath) {
+      this.replaceAddress(new URL(periodsPath, current));
+      return;
+    }
     const pushed = this.atPushedPainter();
     this.pushedPainter = undefined;
     if (pushed) history.back();
@@ -1590,7 +1469,7 @@ export class OpeningHoursScreen extends LitElement {
     }
     ${this.dayBoxTemplate()}
     ${this.specialReadError ? html`<p role="alert" data-test="special-read-error">${this.specialReadError}</p>` : nothing}
-    ${this.seasonPainter()} ${this.specialPainter()} ${this.calendarWindow()}`;
+    ${this.seasonPainter()} ${this.specialPainter()} `;
   }
 }
 declare global {

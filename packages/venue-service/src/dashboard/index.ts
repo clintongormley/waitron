@@ -1,5 +1,4 @@
 import { createRef, ref } from "lit/directives/ref.js";
-import type { OpeningHoursScreen } from "./opening-hours-screen.js";
 import type { VenueOperationsScreen } from "./venue-operations-screen.js";
 import { html } from "lit";
 import type { DashboardContribution, DashboardFurtherScreen } from "@waitron/dashboard-kit";
@@ -26,18 +25,6 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution & DashboardFurtherSc
   },
   searchDestinations: [
     ...departmentSettingSearchDestinations,
-    {
-      id: "venue-service:seasons",
-      screen: "opening-hours",
-      labelKey: "season.seasons",
-      path: "/manage/opening-hours/view/year/window/seasons",
-    },
-    {
-      id: "venue-service:periods",
-      screen: "opening-hours",
-      labelKey: "period.title",
-      path: "/manage/opening-hours/view/year/window/periods",
-    },
     {
       id: "venue-service:year",
       screen: "opening-hours",
@@ -126,12 +113,9 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution & DashboardFurtherSc
       create(ctx) {
         const api = new OpeningHoursApi(ctx.request, ctx.liveData);
         const calendar = { ctx, views: ctx.calendarViews ?? [] };
-        const screen = createRef<OpeningHoursScreen>();
         return {
-          navigationScopes: (destination) => screen.value?.navigationScopes(destination),
           render: (readOnly = false) =>
             html`<dashboard-opening-hours-screen
-              ${ref(screen)}
               .api=${api}
               .readOnly=${readOnly}
               .calendar=${calendar}

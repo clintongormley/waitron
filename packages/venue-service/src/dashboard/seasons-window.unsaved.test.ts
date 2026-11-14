@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
-import { applyTokens, LeaveController, type LeaveReason } from "@waitron/ui";
+import { applyTokens, LeaveController } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { SeasonsWindow } from "./seasons-window.js";
@@ -19,17 +19,18 @@ class SeasonsLeaveApp extends LitElement {
     saveSeasons: vi.fn(() => new Promise<never>(() => {})),
     readSeasonDeleteImpact: vi.fn(),
   } as unknown as WindowApi;
-  /** The screen's guard, reduced to asking about the window's root. */
-  readonly beforeClose = async (reason: LeaveReason) =>
-    (await this.leave.coordinator.request({ scopes: [this.windowRoot], reason, proceed() {} })) ===
-    "proceeded";
+  readonly leavePage = async () =>
+    this.leave.coordinator.request({
+      scopes: [this.windowRoot],
+      reason: "navigation",
+      proceed() {},
+    });
   override render() {
     return html`<seasons-window
         .seasons=${seasons}
         .clockRevision=${1}
         .api=${this.api}
         .draftParent=${this.windowRoot}
-        .beforeClose=${this.beforeClose}
       ></seasons-window
       >${this.leave.render({ heading: "Unsaved changes", message: "Discard unsaved changes?", keepLabel: "Keep editing", discardLabel: "Discard changes" })}`;
   }
@@ -58,8 +59,6 @@ async function change(el: SeasonsWindow, index: number, value: string) {
   );
   await el.updateComplete;
 }
-const modal = (el: SeasonsWindow) =>
-  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!;
 const save = (el: SeasonsWindow) =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-seasons]")!;
 const question = () =>
@@ -78,53 +77,34 @@ async function choose(decision: "keep" | "discard") {
   await expect.poll(() => q.open).toBe(false);
 }
 
-it("asks before closing a changed draft, and Keep keeps the rows", async () => {
+it("asks before leaving a changed page, and Keep keeps the rows", async () => {
   const el = await mount();
   expect(unload()).toBe(false);
   await change(el, 0, "Deep winter");
   expect(unload()).toBe(true);
-  const close = modal(el).requestClose("escape");
+  const close = app.leavePage();
   await choose("keep");
-  expect(await close).toBe(false);
-  expect(modal(el).open).toBe(true);
+  expect(await close).toBe("kept");
   expect(nameField(el, 0).value).toBe("Deep winter");
-  const discard = modal(el).requestClose("escape");
+  const discard = app.leavePage();
   await choose("discard");
-  expect(await discard).toBe(true);
+  expect(await discard).toBe("proceeded");
   await el.updateComplete;
   expect(nameField(el, 0).value).toBe("Winter");
   expect(unload()).toBe(false);
 });
 
-it("restoring the opened values closes without asking", async () => {
+it("restoring the saved values lets navigation proceed without asking", async () => {
   const el = await mount();
   await change(el, 0, "Cold");
   await change(el, 0, "Winter");
   expect([save(el).disabled, save(el).variant]).toEqual([true, "secondary"]);
   expect(unload()).toBe(false);
-  expect(await modal(el).requestClose("cancel")).toBe(true);
+  expect(await app.leavePage()).toBe("proceeded");
   expect(question().open).toBe(false);
 });
 
-it("a close asked in the turn a Save starts is refused", async () => {
-  const el = await mount();
-  await change(el, 0, "Cold");
-  save(el).shadowRoot!.querySelector("button")!.click();
-  const close = modal(el).requestClose("escape");
-  const asked = expect
-    .poll(() => question().open)
-    .toBe(true)
-    .then(
-      () => "asked",
-      () => "never asked",
-    );
-  expect(await Promise.race([close, asked])).toBe(false);
-  expect(question().open).toBe(false);
-  expect(modal(el).open).toBe(true);
-  expect(app.api.saveSeasons).toHaveBeenCalledTimes(1);
-});
-
-it("a draft parented to the window root is asked about only for that root", async () => {
+it("a draft parented to the page root is asked about only for that root", async () => {
   const el = await mount();
   await change(el, 0, "Cold");
   const coordinator = app.leave.coordinator;

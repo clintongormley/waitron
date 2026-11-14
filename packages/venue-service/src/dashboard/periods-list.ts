@@ -213,7 +213,7 @@ export class PeriodsList extends LitElement {
             part=${`chip tint-${tints.get(season.id) ?? "grey"}`}
             data-own-click
             data-painted-in
-            href=${seasonPainterPath({ seasonId: season.id, departmentId: row.departmentId })}
+            href=${`${seasonPainterPath({ seasonId: season.id, departmentId: row.departmentId })}?back=/manage/periods`}
             >${season.name}</a
           >`,
       )}${painted.specialDays.map(
@@ -222,7 +222,7 @@ export class PeriodsList extends LitElement {
             part="chip special-day"
             data-own-click
             data-painted-in
-            href=${specialDayPainterPath({ specialDayId: day.id })}
+            href=${`${specialDayPainterPath({ specialDayId: day.id })}?back=/manage/periods`}
             >${day.name}</a
           >`,
       )}</span
