@@ -79,7 +79,7 @@ function schemaObject(table: string): string {
 }
 
 /**
- * How a write of `table` is spelled.
+ * How a write of `table` is spelled; `table` may be a non-capturing group of names.
  *
  * `UPDATE` must carry its `SET`: `nodes` and `deployment` are ordinary English words, and a
  * sentence about updating nodes would otherwise read as a write. The rest are shapes reviewers
@@ -109,7 +109,7 @@ function detector(table: string): string {
 const TABLES = Object.keys(ALLOWED);
 /** Built once. The combined form is a cheap reject: most files match none of the tables. */
 const DETECTORS = new Map(TABLES.map((table) => [table, new RegExp(detector(table), "im")]));
-const ANY_TABLE = new RegExp(TABLES.map((table) => detector(table)).join("|"), "im");
+const ANY_TABLE = new RegExp(detector(`(?:${TABLES.join("|")})`), "im");
 
 /**
  * Does this source write `table`? A comment is not code, wherever on its line it starts. A table
@@ -368,5 +368,29 @@ describe("the detector itself", () => {
     expect(
       writes('const url = "https://x/y"; await tx.insert(tenants).values(row);', "tenants"),
     ).toBe(true);
+  });
+});
+
+describe("the combined table detector", () => {
+  it("accepts every listed SQL and builder name", () => {
+    for (const table of TABLES) {
+      expect(ANY_TABLE.test(blankComments(`INSERT INTO ${table}`)), table).toBe(true);
+      expect(
+        ANY_TABLE.test(blankComments(`database()\n  .insert(${schemaObject(table)})`)),
+        table,
+      ).toBe(true);
+    }
+  });
+
+  it("refuses prose, other names, ordinary collection calls, reads and comments", () => {
+    for (const source of [
+      "update nodes in the tree before painting",
+      "await tx.insert(nodeMembership).values(row)",
+      "this.cache.delete(nodes);",
+      "select legal_name from tenants where id = 1",
+      "  // ... db.insert(deployment) stamps the row",
+    ]) {
+      expect(ANY_TABLE.test(blankComments(source)), source).toBe(false);
+    }
   });
 });

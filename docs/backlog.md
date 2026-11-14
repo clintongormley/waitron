@@ -1927,7 +1927,7 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 For package distribution and the four-minute target, use the
 [CI job layout](developers/ci-and-gates.md#ci-job-layout-and-scheduling).
 
-- **A1398-2. Qualify the remaining four-minute CI job gaps.** Dashboard and till timings are accepted. Qualify the root colour scan, stream readiness polling cut and remaining light-package and server CI jobs by whole-job timings, separately from local file-time gains. [Detail](backlog/ci.md#a1398-2-slow-browser-test-files).
+- **A1398-2. Qualify the remaining four-minute CI job gaps.** Dashboard and till timings are accepted. Qualify the root guard cuts, stream readiness polling cut and remaining light-package and server CI jobs by whole-job timings, separately from local file-time gains. [Detail](backlog/ci.md#a1398-2-slow-browser-test-files).
 
 - **apps/server's test speed: restart tests, measured speed-ups, fixed PINs** (bundle of 3, size L). [Detail](backlog/ci.md#bundle-appsservers-test-speed-restart-tests-measured-speed-ups-fixed-pins)
 
