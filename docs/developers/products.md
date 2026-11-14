@@ -428,7 +428,7 @@ That colour is worked out in order. It is the product's own colour (`products.co
 one. Otherwise it is its main category's colour, or, when that category has none, the colour of the
 nearest category above it that does (`category_details.color`). Otherwise it is the venue's
 default colour (`settings.menu.defaultColor`, which the menu's setup step sets to the
-pale blue `#abcced` when it creates the menu settings document, `CATALOGUE_PROVISIONING` in `packages/menu/src/provisioning.ts`); with no default it has none, and each
+pale blue `#abcced` when it creates the menu settings document, `MENU_PROVISIONING` in `packages/menu/src/provisioning.ts`); with no default it has none, and each
 screen draws its usual neutral look. The rule lives in one place, `effectiveColor`, `categoryColor` and
 `categoryColorSource` (which also says which category the colour came from) in
 `packages/shared/src/menu-document/color-inheritance.ts`, which the server and the
@@ -460,7 +460,7 @@ width the tree hides that square, as it hides the categories'.
 in the menu's version, as it does the photo and description (`freezeOffer`,
 `packages/menu/src/menu-document.ts`). Changing a category's colour, or moving an uncoloured
 category under a coloured one, whether through `updateCategory` or the Products tree's Move
-(`moveMenuItems`), or changing the venue's default colour (`saveMenuDefaultColor`), makes a published menu read as changed when it holds a product whose worked-out
+(`moveProductItems`), or changing the venue's default colour (`saveMenuDefaultColor`), makes a published menu read as changed when it holds a product whose worked-out
 colour this changes (one with no colour of its own and no coloured category nearer to it), and the
 menu's Preview tab names the change "colour" for that product. The version on sale keeps the old colour until you
 publish (the "a category's colour" cases in `packages/menu/src/menu-publication.test.ts`). The
