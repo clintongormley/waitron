@@ -362,7 +362,7 @@ describe("a controlled handover to the joined spare, then the old box back by em
         operationId: OP,
       });
       opened.push(c);
-      const modules = enabledModules(ALL_MODULES, await readModuleConfig(spareState));
+      const modules = enabledModules(ALL_MODULES, await readModuleConfig(spareBox.db));
       const oldRows = await fiscalRowsOf(c.venue, mainId);
       const codes = (rows: Record<string, unknown[]>) =>
         (rows.invoice_series as Array<{ id: string; code: string }>).map(({ code }) => code);

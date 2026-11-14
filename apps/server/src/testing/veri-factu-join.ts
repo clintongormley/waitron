@@ -34,7 +34,7 @@ export const MAIN_URL = "https://main.test";
 export const SPARE_URL = "https://spare.test";
 export const ADMIN_PASSWORD = "correct horse";
 
-/** Two boxes on separate databases and state folders; the main box's folder chooses its modules. */
+/** Two boxes on separate databases and state folders; the main box's database chooses its modules. */
 export interface TwoBoxes {
   mainBox: VenueDb;
   spareBox: VenueDb;
@@ -44,12 +44,12 @@ export interface TwoBoxes {
 }
 
 /**
- * A main box set up in Spain with the modules its state folder enables, signed in as its
+ * A main box set up in Spain with the modules its venue database enables, signed in as its
  * administrator, its chart listing only itself, and the real bundle route mounted on `bundleApp`.
  */
 export async function veriFactuMainBox(boxes: TwoBoxes) {
   const { mainBox, mainState, ring } = boxes;
-  const modules = enabledModules(ALL_MODULES, await readModuleConfig(mainState));
+  const modules = enabledModules(ALL_MODULES, await readModuleConfig(mainBox.db));
   await stampDeployment(mainBox.db, "preproduction");
   const venue = await applyWithFirstSetup(mainState)(
     planVenue(
@@ -188,7 +188,7 @@ export async function joinSpare(
       },
       persistBackupSettings: (settings) => replaceBackupSettings(spareState, settings),
       persistModuleConfig: async (config) => {
-        await writeModuleConfig(spareState, config);
+        await writeModuleConfig(spareBox.db, config, null);
       },
       stateDir: spareState,
       database: "spare",
