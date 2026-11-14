@@ -18,7 +18,7 @@ import { hashPassword } from "@waitron/identity";
 import { recoveryApp } from "./recovery-surface.js";
 import { FRESH, readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { publishRestoreFlow } from "./restore-flow.js";
-import { RESTORE_DISCARD_TEXT } from "./i18n/recovery-page.js";
+import { RESTORE_DISCARD_WORDS } from "./i18n/recovery-page.js";
 
 const password = "the backup administrator password";
 const hashes = [hashPassword(password)];
@@ -86,7 +86,7 @@ async function fixture(phase: "staged" | "placing" | "first-start" | "unreadable
 it("offers the discard form for unreadable state in both languages, with a safe Stop", async () => {
   const f = await fixture("unreadable");
   for (const locale of ["en-GB", "es-ES"] as const) {
-    const { move: action, stop } = RESTORE_DISCARD_TEXT[locale];
+    const { move: action, stop } = RESTORE_DISCARD_WORDS[locale];
     const body = await (await f.request("/", undefined, locale)).text();
     expect(body).toContain(`>${action}</button>`);
     expect(body).toContain(`formnovalidate>${stop}</button>`);

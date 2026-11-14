@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   BOOT_INCOMPLETE,
-  ENVIRONMENT_RECOVERY_TEXT,
+  ENVIRONMENT_RECOVERY_WORDS,
   GENERIC_WORDS,
   OPERATOR_WORDS,
   RECOVERY_PAGE_WORDS,
@@ -93,7 +93,7 @@ describe("recovery page wording", () => {
       ),
       ...(["en-GB", "es-ES"] as const).map(
         (lang) =>
-          [`environment ${lang}`, { ...ENVIRONMENT_RECOVERY_TEXT[lang] }] as [
+          [`environment ${lang}`, { ...ENVIRONMENT_RECOVERY_WORDS[lang] }] as [
             string,
             Record<string, string>,
           ],

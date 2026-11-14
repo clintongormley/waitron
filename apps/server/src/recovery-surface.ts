@@ -18,7 +18,7 @@ import type { StartAgainSurvey, chooseStartAgainLeftovers } from "@waitron/provi
 import type { Statfs } from "./free-bytes.js";
 import {
   GENERIC_WORDS,
-  ENVIRONMENT_RECOVERY_TEXT,
+  ENVIRONMENT_RECOVERY_WORDS,
   HOLDER_STALLED,
   OPERATOR_WORDS,
   RECOVERY_PAGE_WORDS,
@@ -321,7 +321,7 @@ export function recoveryApp(deps: RecoveryDeps): Hono {
         view.locale,
         freeBytes,
         deps.state,
-        `<p>${escapeHtml(ENVIRONMENT_RECOVERY_TEXT[view.locale].stopped)}</p>`,
+        `<p>${escapeHtml(ENVIRONMENT_RECOVERY_WORDS[view.locale].stopped)}</p>`,
       );
     return renderPage(deps, log, view.locale, freeBytes, deps.state, section, environmentAnswer);
   };

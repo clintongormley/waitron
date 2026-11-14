@@ -27,7 +27,7 @@ import {
   renderEnvironmentSection,
   type AdministratorView,
 } from "./recovery-administrator.js";
-import { BOOKINGS_RECOVERY_TEXT } from "./i18n/recovery-page.js";
+import { BOOKINGS_RECOVERY_WORDS } from "./i18n/recovery-page.js";
 import { renderDocument, escapeHtml } from "./html-page.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
@@ -61,7 +61,7 @@ export async function renderBookingsRecovery(
   deps: BookingsRecoveryDeps,
   view: AdministratorView,
 ): Promise<string> {
-  const text = BOOKINGS_RECOVERY_TEXT[view.locale];
+  const text = BOOKINGS_RECOVERY_WORDS[view.locale];
   if (view.stopped) return `<p>${escapeHtml(text.stopped)}</p>`;
   if (view.message?.kind !== "moved" && !(await eligible(deps).catch(() => false))) {
     if (view.message === undefined) return "";
@@ -92,8 +92,8 @@ export function mountBookingsRecovery(
       completedPage: (locale) =>
         renderDocument(
           locale,
-          BOOKINGS_RECOVERY_TEXT[locale].move,
-          `<p>${escapeHtml(BOOKINGS_RECOVERY_TEXT[locale].done)}</p>`,
+          BOOKINGS_RECOVERY_WORDS[locale].move,
+          `<p>${escapeHtml(BOOKINGS_RECOVERY_WORDS[locale].done)}</p>`,
         ),
       choose: async (authorize) => {
         const hold = await lockVenueDatabase(deps.roots.venueDir);

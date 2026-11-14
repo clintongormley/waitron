@@ -586,7 +586,7 @@ export const GENERIC_WORDS: OperatorWords = {
   },
 };
 
-export const ENVIRONMENT_RECOVERY_TEXT: Readonly<
+export const ENVIRONMENT_RECOVERY_WORDS: Readonly<
   Record<
     SupportedLocale,
     {
@@ -623,7 +623,7 @@ export const ENVIRONMENT_RECOVERY_TEXT: Readonly<
   },
 };
 
-export const RESTORE_DISCARD_TEXT = {
+export const RESTORE_DISCARD_WORDS = {
   "en-GB": {
     move: "Throw this restore away",
     stop: "Stop",
@@ -654,7 +654,7 @@ export const RESTORE_DISCARD_TEXT = {
   },
 } as const;
 
-export const BOOKINGS_RECOVERY_TEXT = {
+export const BOOKINGS_RECOVERY_WORDS = {
   "en-GB": {
     detail:
       "You can switch Bookings off and try starting Waitron again. Saved bookings stay on this box. Use an active administrator's password; an administrator without a password cannot use this action.",
