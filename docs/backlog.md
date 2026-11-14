@@ -198,12 +198,12 @@ that bundle's heading in the area's file: take a bundle as one pull request.
   The owner retired this item's separate evidence screen on 2026-11-10. W41s-9's evidence step
   (2026-11-14) added nothing for these two alerts on the watcher's choice (a) of 2026-11-14 03:20,
   and reworded both so neither says "Contact support". The trace behind that choice, traced, not
-  run: a record's environment is the process's own (`apps/server/src/boot.ts:3199`) and the drain
-  compares it with the same value (`boot.ts:4179`, `drain.ts:698-711`); a start whose environment
+  run: a record's environment is the process's own (`apps/server/src/boot.ts:3240`) and the drain
+  compares it with the same value (`boot.ts:4260`, `drain.ts:698-711`); a start whose environment
   differs from the database's stamp is refused (`apps/server/src/deployment-guard.ts:27-31`, called at
-  `boot.ts:1307`); and every path that creates a venue database stamps it before its first record:
-  first setup (`packages/provisioning/src/first-setup-command-deployment.ts:275`), provisioning
-  (`apps/server/src/provision.ts:141`) and adoption (`apps/server/src/adopt.ts:235`), while a
+  `boot.ts:1319`); and every path that creates a venue database stamps it before its first record:
+  first setup (`packages/provisioning/src/first-setup-command-deployment.ts:286`), provisioning
+  (`apps/server/src/provision.ts:144`) and adoption (`apps/server/src/adopt.ts:233`), while a
   restore of a backup from the other environment is refused (`apps/server/src/restore-gate.ts:20`).
   So a mismatch is unreachable only while every setup path stamps first; the start check over an
   unstamped database does not cover the rest (a reviewer's throwaway test started a test box over
