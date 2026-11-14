@@ -691,52 +691,15 @@ supersedes the earlier build split. `fiscal.remedy` is Admin by default and assi
 
 ### Review every permission: fewer, coarser, and consistently named
 
-**2026-11-14:** this historical discussion's build split is superseded by the
-[roles redesign](../superpowers/specs/2026-11-11-a1002-roles-redesign-design.md) and
-[its implementation plan](../superpowers/plans/2026-11-11-a1002-roles-redesign.md).
-The role and permission decisions remain here; the build is no longer open.
+The owner asked for fewer, coarser and consistently named permissions on 2026-09-26,
+and restated on 2026-10-02: "review all permissions and the roles they're assigned to".
+The review covers both permissions and their default holders. Machine permissions use `node.*`,
+not `mirror.*` (owner preference).
 
-
-**2026-11-08:** A1002's [approved inventory](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md#2-one-permission-review-before-role-storage)
-is the target. The [reviewed plan](../superpowers/plans/2026-11-08-a1002-custom-roles.md) incorporates
-WATCHER 2026-11-08 03:57: same-default renames form cut 1, with new authority/storage in cut 2.
-The same-default names use `payment.take`, `hardware.manage`, `venue.configure`,
-`schedule.manage`, `system.manage` and `catalogue.manage`. Changes to authority and role storage
-remain in cut 2; its shared-service gates are recorded at [A7](#roles-the-admin-can-edit-a7). The dated discussion below is historical;
-its pending-approval wording is superseded by the 2026-11-07 full approval recorded in design §11.
-
-- **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). Since
-  A494 (2026-10-11), `catalogue.manage` (manager and above, the roles that hold `person.manage`)
-  gates the catalogue, units and content languages; the "VAT class for new products" default is set
-  under `venue.configure` (owner, 2026-10-16, A755). Input
-  since C128 (#1031): every till payment route checks the permission held by every role, staff
-  included. A1002 cut 1 names it `payment.take` and keeps those holders. The list in
-  `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it
-  too fine-grained. The machine permissions now share `node.manage`: adding a machine, promoting
-  a standby and, since #708, removing a standby that never finished joining. Machine permissions are named
-  `node.*`, not `mirror.*` — the owner's preference. The review should propose the whole list: which
-  permissions to merge, the names, and which role holds each, and then rename the call sites in one
-  change. **Renaming is allowed now:** A1002 cut 1 removes the obsolete permanent-name header.
-  A search (2026-09-26, reading, not running) found them stored nowhere — the database
-  stores a person's ROLE (`packages/db/src/schema/identity/persons.ts`), and the names appear only in
-  code the box itself serves — and the pre-production rule (CLAUDE.md §3, no
-  backwards-compatibility code until a venue is live) covers the rest. The review should confirm that
-  by running it, then drop or narrow that header sentence. **Do it before the editable-roles item
-  below** (owner, 2026-09-26): once an admin can make roles and give them permissions, the stored
-  roles would name their permissions, so a rename after that has to rewrite those rows as well.
-  The roles design was not written when this review was requested; the approved A1002 design
-  linked above proposes those rows in the still-unbuilt roles cut.
-  **2026-11-08 pointer:** that approval status is historical; design §11 records full approval,
-  and the [reviewed plan](../superpowers/plans/2026-11-08-a1002-custom-roles.md) records corrections
-  and the remaining build blockers. Implementation is still open.
-  **Restated by the owner 2026-10-02: "review all permissions and the roles they're assigned to"** —
-  the review covers BOTH halves: every permission, and which of the built-in roles holds each. Two
-  role questions from that morning's dashboard Orders screen answers (B27s, lane C questions.md
-  2026-10-02 ~09:40 and ~09:50) belong in it: the staff role holds no `report.view`, so the Orders
-  screen gave staff a narrower view of their own (unfinished bills plus today's finished ones) rather
-  than the permission deciding. Dashboard resends now use `hardware.manage`, held only by managers
-  and admins; the copy follows the till copy's permission. The approved permission merges are
-  implemented in cut 1; role storage and changed authority stay in cut 2.
+The [earlier review](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md#2-one-permission-review-before-role-storage)
+records the inventory and discussion. **2026-11-14:** the
+[11 November redesign](../superpowers/specs/2026-11-11-a1002-roles-redesign-design.md)
+supersedes its build split; that permission and role build is no longer open.
 
 ### Roles are something an admin can add and edit; the four built-ins are only defaults
 

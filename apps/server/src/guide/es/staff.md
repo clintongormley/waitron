@@ -68,7 +68,7 @@ antes de confirmar. Solo puedes cambiar o copiar roles si tienes todos sus permi
 
 Activa **Ayuda** en la cabecera del panel y abre la ayuda de un permiso para comprobar qué
 permite antes de marcarlo. Empleado, Supervisor y Encargado son puntos de partida integrados
-cuyos permisos puedes cambiar. Administrador siempre tiene todos, incluidos los que se añadan después.
+cuyos permisos puedes cambiar. Administrador siempre tiene todos, incluidos los que se añadan después; sus casillas están bloqueadas.
 Los roles integrados no se pueden renombrar ni eliminar.
 
 Asigna los roles a las personas en **Usuarios**, en **Roles de acceso — lo que puede hacer**,

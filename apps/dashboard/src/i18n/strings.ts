@@ -2,7 +2,7 @@ export const en = {
   "access_roles.job_roles":
     "Job roles put people on the rota and on devices; they grant no permissions.",
   "permission.payments.providers.manage.help":
-    "Turn a card provider on or off on Modules. Opening Modules and connecting or disconnecting a provider also need Manage devices and printers.",
+    "Turn a card provider on or off on Modules. To open Modules, you also need Manage devices and printers; that permission covers connecting and disconnecting providers.",
   "permission.payment.take.help":
     "Take payments and collect bills on the till, or close a bill for later payment. The device must also allow the payment method.",
   "permission.sale.void.help":
@@ -28,7 +28,7 @@ export const en = {
   "permission.personal_data.export.help":
     "Download another staff member’s personal-data copy from Users, or customer data from Orders. Confirm your sign-in before downloading staff data.",
   "permission.person.manage.help":
-    "Edit names and contact details in Users. Other people’s PINs, sign-ins, invitations and account status also need Manage staff permissions; changing their sign-in requires every permission they hold. Changing another person’s email also needs Change other people’s email addresses.",
+    "Edit names and contact details in Users. Other people’s PINs, sign-ins, invitations and account status also need Manage staff permissions and every permission they hold. Changing their email also needs Change other people’s email addresses.",
   "permission.person.admin.help":
     "Create and edit access roles, and give or remove them in Users. You can change or give a role only when you hold every permission it grants.",
   "permission.person.email.help":
@@ -4131,7 +4131,7 @@ export const es: Record<StringKey, string> = {
   "access_roles.job_roles":
     "Los puestos ponen a las personas en el cuadrante y en los dispositivos; no dan permisos.",
   "permission.payments.providers.manage.help":
-    "Activa o desactiva un proveedor de tarjetas en Módulos. Para abrir Módulos y conectar o desconectar un proveedor también necesitas Gestionar dispositivos e impresoras.",
+    "Activa o desactiva un proveedor de tarjetas en Módulos. Para abrir Módulos también necesitas Gestionar dispositivos e impresoras; ese permiso permite conectar y desconectar proveedores.",
   "permission.payment.take.help":
     "Cobra ventas y cuentas en la caja, o cierra una cuenta para cobrarla más tarde. El dispositivo también debe permitir la forma de pago.",
   "permission.sale.void.help":
@@ -4157,7 +4157,7 @@ export const es: Record<StringKey, string> = {
   "permission.personal_data.export.help":
     "Descarga la copia de datos personales de otro empleado desde Usuarios, o datos de clientes desde Pedidos. Confirma tu acceso antes de descargar los datos de un empleado.",
   "permission.person.manage.help":
-    "Edita nombres y datos de contacto en Usuarios. Los PIN, accesos, invitaciones y estados de cuenta de otras personas también requieren Gestionar permisos del personal; para cambiar su acceso necesitas todos sus permisos. Cambiar su correo también requiere Cambiar correos de otras personas.",
+    "Edita nombres y datos de contacto en Usuarios. Los PIN, accesos, invitaciones y estados de cuenta de otras personas también requieren Gestionar permisos del personal y todos sus permisos. Cambiar su correo también requiere Cambiar correos de otras personas.",
   "permission.person.admin.help":
     "Crea y edita roles de acceso, y asígnalos o retíralos en Usuarios. Solo puedes cambiar o asignar un rol si tienes todos los permisos que concede.",
   "permission.person.email.help":
@@ -4324,7 +4324,7 @@ export const es: Record<StringKey, string> = {
   "permission_sign_in.read_again": "Volver a consultar",
   "zone_repair.ready": "Las ventas están disponibles. Vuelve a cargar el panel.",
   "zone_repair.conversion_failed":
-    "No se ha podido leer la zona elegida en la hora actual. Comprueba el reloj del equipo y vuelve a intentarlo.",
+    "No se ha podido leer la zona elegida en la hora actual. Comprueba el reloj del servidor y vuelve a intentarlo.",
   "zone_repair.invalid_zone": "Elige una zona horaria admitida para este país.",
   "zone_repair.not_needed": "El local ya tiene una zona horaria válida. Consulta su estado actual.",
   "zone_repair.heading": "Confirmar la zona horaria del local",

@@ -62,7 +62,7 @@ You can change or copy only roles whose permissions you hold.
 
 Turn on **Help** in the dashboard banner, then open a permission’s bubble to check what it
 allows before ticking it. Staff, Supervisor and Manager are built-in starting points whose
-permissions you can change. Admin always has everything, including permissions added later.
+permissions you can change. Admin always has everything, including permissions added later; its ticks are locked.
 Built-in roles cannot be renamed or deleted.
 
 Give people their roles in **Users**, under **Access roles — what they may do**, and save
