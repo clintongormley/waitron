@@ -432,10 +432,22 @@ const untilUnconfirmed = (el: TillApp) =>
     .poll(() => banner(el)?.textContent ?? "", { timeout: GIVE_UP_MS })
     .toContain(t("adjust.unconfirmed"));
 
+function nextTask(): Promise<void> {
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      channel.port1.close();
+      channel.port2.close();
+      resolve();
+    };
+    channel.port2.postMessage(null);
+  });
+}
+
 async function flush(el: TillApp, rounds = 3): Promise<void> {
   for (let i = 0; i < rounds; i++) {
     if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(0);
-    else await new Promise((resolve) => setTimeout(resolve, 0));
+    else await nextTask();
     await el.updateComplete;
   }
 }
