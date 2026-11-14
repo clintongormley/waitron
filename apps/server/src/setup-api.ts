@@ -281,10 +281,10 @@ const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   // name; 409, as menu-api.ts answers it.
   "category.name_taken": 409,
   "product.name_taken": 409,
-  // A configuration export or a restore copy that cannot be opened (the restore tables spread this).
   "recovery.passphrase_invalid": 422,
   "backup.artifact_invalid": 422,
   "backup.archive_invalid": 422,
+  "restore.archive_resource_limit": 507,
   // An export's image metadata, or its language, the media module refuses; 400, as
   // packages/media/src/routes.ts answers both.
   "image.invalid_metadata": 400,
@@ -368,12 +368,6 @@ async function matchesResetProof(
   );
 }
 
-/**
- * The refusals every restore route (archive, Cloud and bucket) meets from the same validation, so
- * each code answers one status on all three: a copy or key that cannot be opened is 422 (those
- * three rows are in `PROVISION_STATUS`, spread here); an environment or schema conflict, or an old
- * server that may still be selling, is 409.
- */
 const ARCHIVE_RESTORE_STATUS: Record<string, ContentfulStatusCode> = {
   ...PROVISION_STATUS,
   "restore.environment_mismatch": 409,

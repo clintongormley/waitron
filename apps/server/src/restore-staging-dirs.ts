@@ -2,6 +2,7 @@
 export const STAGED_RECOVERY_DIR = "staged-recovery";
 
 export const ARCHIVE_DOWNLOAD_PREFIX = "archive-download-";
+export const ARCHIVE_INPUT_PREFIX = "archive-input-";
 export const ARCHIVE_VALIDATE_PREFIX = "archive-validate-";
 export const RESTORE_ADMISSION_PREFIX = "restore-admission-";
 

@@ -122,6 +122,8 @@ function classify(error: unknown): Verdict {
   if (["ENOSPC", "EDQUOT", "ENOMEM", "ERR_WORKER_OUT_OF_MEMORY"].includes(errnoOf(error) ?? ""))
     return { status: "unavailable", reason: "resource_limit" };
   if (isAppError(error)) {
+    if (error.code === "restore.archive_resource_limit")
+      return { status: "unavailable", reason: "resource_limit" };
     if (error.code === "recovery.passphrase_invalid")
       return { status: "unavailable", reason: "decryption_unavailable" };
     if (["restore.environment_mismatch", "restore.schema_too_new"].includes(error.code))

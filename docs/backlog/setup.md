@@ -410,6 +410,8 @@ a day, seed 1, produced 1,061,224 rows and a 1,268,463,901-byte encrypted backup
 15,221,566,812 bytes (14,516.42 MiB); the year figure is a linear estimate.
 The backup used synthetic identity files and empty media folders. Even the measured month
 exceeds the setup upload limit of 256 MiB. The streamed-upload plan still needs watcher clearance.
+_14 November 2026, A1533: the compressed month below fits the 256 MiB upload budget;
+this earlier raw measurement predates compression._
 
 A second build with the same profile and revision measured 1,296,785,408 database bytes.
 `dbstat` assigns 782,790,656 bytes (60.36%) to `print_jobs`, or 789,913,600 (60.91%)
@@ -421,20 +423,31 @@ compacted `db.dump`, not a compressed backup-format measurement), gzip -6 took 1
 produced 230,623,991 bytes (output/input 0.177843); zstd -3 took 0.57 seconds and produced
 152,964,251 bytes (0.117956). Both decompressed to the original SHA-256. Their linear
 360-day estimates are 2,639.28 and 1,750.54 MiB respectively, still above the upload limit.
-The current writer passes `packArchiveStream` directly to `encryptArtifactFile`
-(`apps/server/src/backup-sweep.ts`); the packer reads raw file chunks and the cipher encrypts
-them without a compression step. Compression before encryption is queued as A1533; the current writer remains unchanged.
+The writer measured above passed raw archive chunks straight to encryption. A1533 now inserts
+gzip before encryption; Cloud snapshot creation keeps its separate raw writer.
 
 After A1532's one-week payload cleanup, the same 30-day sample has a 676,794,368-byte
 compact dump. On pinned `node:26-slim` digest `5adad64f9a1fca2d51972caa65983634c8a774eb300d72b20f7f2a0f60368072`
 (Node 26.13.0, arm64), built-in gzip6 produced 144,176,204 bytes; zstd3 produced
 125,429,021 bytes. Both decoded to SHA-256
 `723ee9c29c6d54e04a1ca83395317940803736e6a4cdb13e88a5e786fe5fad58`.
-A1533 selects stable gzip. These are dump codec measurements, not completed compressed
-backup sizes. A synthetic near-256 MiB artifact probe using the current cipher and archive
-unpacker measured 1,128 MiB peak resident memory for raw input and 1,884 MiB with the proposed
-512 MiB decoded buffer cap. The watcher's explicit memory stop now holds implementation;
-[the reviewed plan](../superpowers/plans/2026-11-14-a1533-compressed-backups.md) records the decision still needed.
+A1533 uses stable gzip. Controlled captures with the same synthetic metadata and no module
+contributions produced 676,798,984 raw encrypted bytes versus 144,176,735 compressed encrypted
+bytes. Capture, including SQLite compaction and local storage, took 13.77 versus 18.27 seconds.
+Data-only restore (decrypt, validate and place, without migrations or identity activation) took
+4.98 versus 6.83 seconds. Both placed the exact dump hash above, refused a flipped final
+ciphertext byte and validated after that byte was restored. These are single runs on the pinned
+image, not a year-sized measurement or a full fiscal recovery rehearsal.
+
+A synthetic near-256 MiB artifact probe measured 1,128 MiB peak resident memory on the former
+raw buffer path and 1,884 MiB with the rejected 512 MiB decoded gzip buffer. File-backed
+validation with its synchronous encrypted-input snapshot measured 743 MiB raw and 743 MiB gzip
+with the same input shapes on the same image. The earlier 488/486 MiB file-path probe omitted
+that snapshot and does not describe the final validator's memory use.
+HTTP upload transport still buffers the encrypted input. Raw uploads now inherit the file
+reader's 4096-entry, 4096-byte-name and 16 MiB metadata limits and briefly need disk space for
+encrypted input, decrypted archive and extracted database.
+
 The streamed-upload work remains open.
 
 An oversized committed attempt's Finish request now passes the readable-database gate and refuses

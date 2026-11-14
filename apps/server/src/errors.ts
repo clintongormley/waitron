@@ -1786,6 +1786,8 @@ declare module "@waitron/shared" {
      * restored. `missing` is the fixed entry name.
      */
     "restore.archive_incomplete": { missing: string };
+    /** A staging or decoding capacity refusal is not evidence that the archive is damaged. */
+    "restore.archive_resource_limit": Record<string, never>;
     /**
      * The restore met a top-level archive entry it does not know how to route. Fails loud rather
      * than drop data on the cold-recovery path (CLAUDE.md §5); the fix is to teach the restore to

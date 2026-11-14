@@ -28,6 +28,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { BACKUP_ROOM_NOTE_FILE } from "@waitron/provisioning";
 import { backupAlertSource, type BackupOutcomeHolder } from "./alert-sources.js";
+import { gunzipSync } from "node:zlib";
 import { decryptArtifact } from "./artifact-cipher.js";
 import { unpackArchive } from "./backup-archive.js";
 import type { BackupConfig } from "./backup-config.js";
@@ -236,7 +237,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
 
       // The archive's `db.dump` opens as a database and answers a query against the venue's schema.
       const entries = unpackArchive(
-        decryptArtifact(await readFile(join(dest, name!)), STRONG_KEY_1),
+        gunzipSync(decryptArtifact(await readFile(join(dest, name!)), STRONG_KEY_1)),
       );
       const copy = join(await makeDestDir(), "restored.db");
       await writeFile(copy, Buffer.from(entries.find((e) => e.name === "db.dump")!.bytes));
@@ -345,10 +346,13 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       await poll(async () => {
         for (const name of await listArchives(dest)) {
           try {
-            const plain = decryptArtifact(await readFile(join(dest, name)), STRONG_KEY_2);
+            const plain = gunzipSync(
+              decryptArtifact(await readFile(join(dest, name)), STRONG_KEY_2),
+            );
             if (unpackArchive(plain).some((e) => e.name === "manifest.json")) return true;
-          } catch {
-            // Not one the new key opens; try the next.
+          } catch (error) {
+            if (!(error instanceof AppError) || error.code !== "recovery.passphrase_invalid")
+              throw error;
           }
         }
         return undefined;

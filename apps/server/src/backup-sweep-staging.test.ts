@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import {
   mkdir,
@@ -794,6 +795,7 @@ it("a copy larger than the estimate is refused before any destination when no ba
   const { statfs, seen } = thenEncrypted(f, [30 + 10, DUMP.length], (encrypted) => encrypted + 9);
   const err = await runOnce({
     ...deps(f, [folder, bucket]),
+    archive: async (path) => writeFile(path, randomBytes(DUMP.length)),
     outcomes,
     stagingEstimateBytes: async () => 10,
     statfs,
@@ -827,10 +829,10 @@ it("a copy larger than the estimate deletes the oldest backup at the second chec
   const onArchivesDeleted = vi.fn<
     (deleted: readonly DeletableArchive[], at: Date) => Promise<void>
   >(async () => {});
-  // The first check (10-byte estimate) and the after-copy check (1000 bytes) pass without deleting;
-  // the encrypted file is larger than the copy.
+  // Incompressible database bytes keep the encrypted copy larger than the raw copy.
   await runOnce({
     ...d,
+    archive: async (path) => writeFile(path, randomBytes(DUMP.length)),
     stagingEstimateBytes: async () => 10,
     statfs: rising(DUMP.length, s.sizes),
     spaceFloorBytes: 10,

@@ -7,7 +7,7 @@ import type { SetupRestoreScreen } from "./screens/restore-screen.js";
 import type { WtInput } from "@waitron/ui/src/components/wt-input.js";
 import type { WtUnsavedChanges } from "@waitron/ui/src/components/wt-unsaved-changes.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
-import { setLocale } from "./i18n/t.js";
+import { setLocale, t } from "./i18n/t.js";
 
 afterEach(() => {
   cleanupWidgets();
@@ -193,6 +193,27 @@ describe("setup archive restore unsaved changes", () => {
     expect(warning(el).open).toBe(false);
     expect(unload()).toBe(false);
   });
+  it.each(["en-GB", "es-ES"])(
+    "explains archive capacity without blaming the backup (%s)",
+    async (locale) => {
+      const { el, form, api } = await mount();
+      setLocale(locale);
+      vi.mocked(api.restore).mockRejectedValue({ code: "restore.archive_resource_limit" });
+      await fill(form);
+      q(form, "[data-test=restore]").click();
+      await expect
+        .poll(
+          () =>
+            el.shadowRoot!.querySelector<SetupRestoreScreen>("setup-restore-screen")?.errorMessage,
+        )
+        .toBeDefined();
+      expect(
+        el.shadowRoot!.querySelector<SetupRestoreScreen>("setup-restore-screen")?.errorMessage,
+      ).toBe(t("shell.restore.archive_resource_limit"));
+      expect(screen(el)).toBe("restore");
+      expect(unload()).toBe(true);
+    },
+  );
   it("a refused request remains protected against the original empty form", async () => {
     const { el, form, api } = await mount();
     vi.mocked(api.restore).mockRejectedValue({ code: "restore.environment_mismatch" });

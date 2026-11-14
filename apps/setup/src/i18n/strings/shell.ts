@@ -128,6 +128,8 @@ export const shellEn = {
   "shell.throttle_wait": "Too many attempts. Wait {seconds} seconds, then try again.",
   "shell.throttle_wait_one": "Too many attempts. Wait 1 second, then try again.",
 
+  "shell.restore.archive_resource_limit":
+    "The box cannot make enough temporary space to open this backup, or could not measure its free space. Free disk space on this box and try again.",
   "shell.restore.staging_failed":
     "The backup could not be staged. Check the connection and try again. If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
   "shell.restore.staging_failed_code":
@@ -353,6 +355,8 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.throttle_wait": "Demasiados intentos. Espera {seconds} segundos y vuelve a intentarlo.",
   "shell.throttle_wait_one": "Demasiados intentos. Espera 1 segundo y vuelve a intentarlo.",
 
+  "shell.restore.archive_resource_limit":
+    "El equipo no puede reservar suficiente espacio temporal para abrir esta copia, o no ha podido medir el espacio libre. Libera espacio en el disco de este equipo y vuelve a intentarlo.",
   "shell.restore.staging_failed":
     "No se ha podido preparar la copia de seguridad. Comprueba la conexión e inténtalo de nuevo. Si sigue guardada una restauración anterior, se ejecutará cuando arranque el servidor. Elige otra restauración para sustituirla.",
   "shell.restore.staging_failed_code":

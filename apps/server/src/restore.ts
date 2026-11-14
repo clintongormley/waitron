@@ -71,10 +71,10 @@ import { codeOf } from "@waitron/server-kit";
 import { parseEnvFile } from "./env-file.js";
 import { isUnset } from "./env-value.js";
 import { errnoOf } from "./errno.js";
-import { type ArchiveEntry, unpackArchive } from "./backup-archive.js";
-import { decryptArtifact } from "./artifact-cipher.js";
+import { type ArchiveEntry } from "./backup-archive.js";
 import { decryptArtifactFile } from "./artifact-cipher-file.js";
-import { recoveryArchiveSourceId, recoveryStreamSourceId } from "./recovery-source.js";
+import { recoveryStreamSourceId } from "./recovery-source.js";
+import { decodeArchiveFile } from "./backup-compression.js";
 import { unpackArchiveFile } from "./backup-archive-file.js";
 import type { BackupManifest } from "./backup-manifest.js";
 import type { DeploymentEnvironment } from "./config.js";
@@ -84,7 +84,11 @@ import { assertSafeEntryName } from "./restore-entry-guard.js";
 import type { StateSecretFiles } from "./state-secrets.js";
 import type { RebuildSource } from "./rebuild-first-start.js";
 import { endRestoreFlow, publishRestoreFlow } from "./restore-flow.js";
-import { ARCHIVE_VALIDATE_PREFIX, RESTORE_ADMISSION_PREFIX } from "./restore-staging-dirs.js";
+import {
+  ARCHIVE_INPUT_PREFIX,
+  ARCHIVE_VALIDATE_PREFIX,
+  RESTORE_ADMISSION_PREFIX,
+} from "./restore-staging-dirs.js";
 import { unpackStateFiles } from "./state-secrets.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
 import { clearSelectedCopy } from "./handover-copy-selection.js";
@@ -269,32 +273,23 @@ export async function validateArtifact(
   deps: ValidationDeps,
 ): Promise<ValidatedArtifact & { readonly sourceId: string }> {
   const artifact = Uint8Array.from(deps.artifact);
-  const plaintext = decryptArtifact(artifact, deps.recoveryKey);
-  return {
-    ...(await validateEntries(unpackArchive(plaintext), deps)),
-    sourceId: recoveryArchiveSourceId(artifact),
-  };
+  let encryptedDir: string | undefined;
+  try {
+    await mkdir(deps.stagingDir, { recursive: true, mode: 0o700 });
+    encryptedDir = await mkdtemp(join(deps.stagingDir, ARCHIVE_INPUT_PREFIX));
+    const artifactPath = join(encryptedDir, "artifact");
+    await writeFile(artifactPath, artifact, { mode: VENUE_FILE_MODE, flag: "wx" });
+    return await validateArtifactFile({ ...deps, artifactPath });
+  } catch (error) {
+    if (["ENOSPC", "EDQUOT"].includes(errnoOf(error) ?? ""))
+      throw new AppError("restore.archive_resource_limit", {});
+    throw error;
+  } finally {
+    if (encryptedDir !== undefined) await rm(encryptedDir, { recursive: true, force: true });
+  }
 }
 
 export type EntryValidationDeps = Omit<ValidationDeps, "artifact" | "recoveryKey">;
-
-export async function validateEntries(
-  entries: ArchiveEntry[],
-  deps: EntryValidationDeps,
-): Promise<ValidatedArtifact> {
-  const { dumpEntry, ...metadata } = await validateEntryMetadata(entries, deps);
-  const scratch = await mkdtemp(join(deps.stagingDir, ARCHIVE_VALIDATE_PREFIX));
-  const discard = () => rm(scratch, { recursive: true, force: true });
-  const databasePath = join(scratch, VENUE_FILE);
-  try {
-    await writeFile(databasePath, dumpEntry.bytes, { mode: VENUE_FILE_MODE, flag: "wx" });
-    await writeStagedNodeCopy(databasePath, metadata.nodeDump);
-    return { ...metadata, databasePath, discard };
-  } catch (error) {
-    await discard();
-    throw error;
-  }
-}
 
 export async function validateDatabaseEntries(
   entries: readonly ArchiveEntry[],
@@ -1065,8 +1060,9 @@ export async function validateArtifactFile(
   const plaintext = join(scratch, "plaintext");
   try {
     const sourceId = await decryptArtifactFile(deps.artifactPath, plaintext, deps.recoveryKey);
-    const inputs = await unpackArchiveFile(plaintext, scratch);
-    await rm(plaintext);
+    const archive = await decodeArchiveFile(plaintext, join(scratch, "decoded"));
+    const inputs = await unpackArchiveFile(archive, scratch);
+    await rm(archive);
     const entries = inputs.map((input) =>
       input.kind === "bytes" ? input.entry : { name: input.name, bytes: new Uint8Array() },
     );

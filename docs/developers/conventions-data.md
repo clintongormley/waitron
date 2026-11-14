@@ -5139,11 +5139,18 @@ instead: bucket CLI, setup staging and boot use `databasePath`; archive CLI and 
 await after placement or refusal. The source-liveness check opens that same file. Borrowed bucket
 validation leaves disposal to its prepared download or staged request.
 
-Scheduled local capture streams WBA1 framing into WBK1 encryption once and passes the completed
+Scheduled local capture streams WBA1 framing through gzip6, then WBK1 encryption once, and passes the completed
 ciphertext file to each destination's `putFile`. Local storage copies inside a private directory,
 sets mode 0600, then renames the completed file to its key; `getFile` uses the same copy boundary.
 File decryption completes GCM authentication before parsing the archive, because the unverified
-plaintext must never reach placement. Metadata reads share limits of 4096 entries, 4096 UTF-8 name
+plaintext must never reach placement. Gzip is detected only after authentication; raw WBA1 stays
+accepted for the separate Cloud writer. Compressed output is limited to half the free scratch
+bytes above the 256 MiB start reserve, so unpacking can hold both the decoded archive and
+its extracted database. Unknown free space refuses validation of compressed input. Compressed plaintext is removed
+before unpacking. Uploaded ciphertext is snapshotted before the first asynchronous wait, so a caller's
+later buffer changes cannot alter the checked bytes or source id. It is staged separately and removed as validation returns
+or throws; the returned database copy keeps its own cleanup. Capacity refusals use
+`restore.archive_resource_limit`, distinct from malformed-archive refusals. Metadata reads share limits of 4096 entries, 4096 UTF-8 name
 bytes and 16 MiB total; database chunks are 64 KiB and `db.dump` has no metadata size cap.
 
 The real SQLite roundtrip in `apps/server/src/restore-artifact-file.test.ts` captures through the
@@ -5158,6 +5165,12 @@ src/local-fs-backend.test.ts`.
 Sparse 2147487744-byte placement and codec tests check size, offsets and edge bytes. They do not
 measure integrity checks or cryptographic throughput over a valid SQLite database that large.
 Managed Cloud's 512 MiB and setup upload's 256 MiB limits remain separate from this local file path.
+Capture reservations still use uncompressed estimates; a nearly full box may refuse a backup
+or prune older ones even when its compressed copy would fit. Raw uploads inherit the file
+metadata limits and briefly hold encrypted, plaintext and extracted copies on disk.
+The raw Cloud-writer control in `restore-artifact-file.test.ts` exercises upload acceptance.
+`restore-full-disk.e2e.test.ts` fills its own small filesystem to check staging capacity
+refusal, scratch cleanup and the unchanged destination.
 
 
 The closed placement source must have one filesystem name (`nlink == 1`), so a surviving hard link

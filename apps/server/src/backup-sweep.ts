@@ -46,6 +46,7 @@ import {
 } from "./backup-room.js";
 import type { DeviceOf } from "./disk-usage.js";
 import { SPACE_LOW_BYTES } from "./free-space-watch.js";
+import { compressArchive } from "./backup-compression.js";
 import { START_FREE_SPACE_FLOOR } from "./start-space.js";
 import type { StagingTurn } from "./backup-staging-turn.js";
 import type { StorageBackend, StorageCall } from "./storage-backend.js";
@@ -274,7 +275,7 @@ export async function runOnce(
     encryptedDir = await mkdtemp(join(deps.stagingDir, BACKUP_ENCRYPT_DIR_PREFIX));
     const ciphertext = join(encryptedDir, "artifact");
     await encryptArtifactFile(
-      packArchiveStream(entries),
+      compressArchive(packArchiveStream(entries), deps.signal),
       ciphertext,
       deps.recoveryKey,
       deps.signal,

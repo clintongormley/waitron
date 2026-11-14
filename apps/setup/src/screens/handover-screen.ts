@@ -329,6 +329,7 @@ export class SetupHandoverScreen extends LitElement {
     if (code === "handover.controlled_unresolved") return t("handover.emergency.controlled");
     if (code === "handover.copy_predates_destination")
       return t("handover.emergency.backup_too_old");
+    if (code === "restore.archive_resource_limit") return t("shell.restore.archive_resource_limit");
     if (code === "handover.backup_key_missing" || code === "backup.recovery_key_too_short")
       return t("handover.emergency.backup_key_missing");
     if (

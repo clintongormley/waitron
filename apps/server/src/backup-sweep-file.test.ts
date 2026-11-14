@@ -1,5 +1,6 @@
 import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { chmod, mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { gunzipSync } from "node:zlib";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -106,7 +107,7 @@ it("streams capture once to independent file destinations and leaves no staging 
   const bytes = await a.get(key, call);
   expect(await b.get(key, call)).toEqual(bytes);
   expect(artifactModes).toEqual([0o600, 0o600]);
-  const entries = unpackArchive(decryptArtifact(bytes, "key"));
+  const entries = unpackArchive(gunzipSync(decryptArtifact(bytes, "key")));
   expect(entries.map((e) => e.name)).toEqual([
     "manifest.json",
     "db.dump",
@@ -140,7 +141,9 @@ it("isolates a failed copy, retains stored success after a prune refusal and cle
   });
   expect(
     unpackArchive(
-      decryptArtifact(await good.get(await storedKey(join(f.root, "good")), call), "key"),
+      gunzipSync(
+        decryptArtifact(await good.get(await storedKey(join(f.root, "good")), call), "key"),
+      ),
     )[1].name,
   ).toBe("db.dump");
   expect(outcomes.failed.has("bad")).toBe(true);
