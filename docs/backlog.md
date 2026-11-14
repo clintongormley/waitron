@@ -1154,7 +1154,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **One session at the real box: printers, paper, tax QR, the drawer** (size M, needs the real hardware and inbox). Holds A739, A773, A552, A553. [Detail](backlog/printers.md#bundle-one-session-at-the-real-box-printers-paper-tax-qr-the-drawer)
 
-- **Printing does not wait for discovery** (bundle of 5, 2 important, size M). [Detail](backlog/printers.md#bundle-printing-does-not-wait-for-discovery)
+- **Measure one-job print pulls on the box.** Physical throughput, authentication and large retained queues remain unmeasured. [Detail](backlog/printers.md#measure-one-job-print-pulls-on-the-box)
 
 - **Bluetooth pairing commands** (bundle of 5, 1 important, size M). [Detail](backlog/printers.md#bundle-bluetooth-pairing-commands)
 

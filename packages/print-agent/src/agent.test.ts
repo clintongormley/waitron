@@ -86,7 +86,7 @@ function client(over: Partial<AgentClient> = {}): AgentClient {
     enrolSelf: vi.fn(async () => failR({ kind: "refused" })),
     joinStatus: vi.fn(async () => okR<JoinStatus>("approved")),
     pullJobs: vi.fn(async () =>
-      okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: null }),
+      okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: null }),
     ),
     report: vi.fn(async () => okR(undefined)),
     claimPageJob: vi.fn(async () => okR<PageJob | null>(null)),
@@ -442,7 +442,7 @@ describe("createAgent — phases", () => {
           nodeId: "n1",
           servers: [{ url: "http://b.test", nodeId: "n2" }],
           jobs: [],
-          discoveryUntil: null,
+          discoveryExpiresInMs: null,
         }),
       ),
     });
@@ -462,7 +462,7 @@ describe("createAgent — phases", () => {
           nodeId: "n1",
           servers: [{ url: "http://b.test", nodeId: "n2" }],
           jobs: [],
-          discoveryUntil: null,
+          discoveryExpiresInMs: null,
         }),
       ),
     });
@@ -604,7 +604,12 @@ describe("createAgent — setup controls", () => {
     await pullStarted.promise;
     const configure = agent.configure({ serverUrl: "http://attacker.test", name: "changed" });
     pullReply.resolve(
-      okR({ nodeId: "n1", servers: [{ url: "http://b.test" }], jobs: [], discoveryUntil: null }),
+      okR({
+        nodeId: "n1",
+        servers: [{ url: "http://b.test" }],
+        jobs: [],
+        discoveryExpiresInMs: null,
+      }),
     );
     await tick;
     await expect(configure).resolves.toBe(false);
@@ -640,7 +645,7 @@ describe("createAgent — setup controls", () => {
       expect(served).not.toBe("blocked");
       expect(served).toMatchObject({ joined: true });
     } finally {
-      pullReply.resolve(okR({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: null }));
+      pullReply.resolve(okR({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: null }));
       await tick;
     }
   });
@@ -767,7 +772,7 @@ describe("createAgent — setup controls", () => {
       pullJobs: vi.fn(async () =>
         fail
           ? failR({ kind: "unreachable", detail: "offline" })
-          : okR({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: null }),
+          : okR({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: null }),
       ),
     });
     const agent = createAgent({ host, client: c });
@@ -819,7 +824,7 @@ describe("createAgent — setup controls", () => {
     const tick = agent.runOnce();
     await pullStarted.promise;
     const cancel = agent.cancelNetworkReset();
-    pullReply.resolve(okR({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: null }));
+    pullReply.resolve(okR({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: null }));
     await tick;
     await expect(cancel).resolves.toBe(false);
     expect((await agent.setupSnapshot()).resetAt).toBeUndefined();
@@ -976,7 +981,7 @@ describe("createAgent — push and report", () => {
           nodeId: "n1",
           servers: [],
           jobs: [job("j1"), job("j2")],
-          discoveryUntil: null,
+          discoveryExpiresInMs: null,
         }),
       ),
     });
@@ -999,7 +1004,7 @@ describe("createAgent — push and report", () => {
           nodeId: "n1",
           servers: [],
           jobs: [job("j1"), job("j2")],
-          discoveryUntil: null,
+          discoveryExpiresInMs: null,
         }),
       ),
     });
@@ -1020,10 +1025,15 @@ describe("createAgent — push and report", () => {
     const pulls = vi
       .fn()
       .mockResolvedValueOnce(
-        okR<PullReply>({ nodeId: "n1", servers: [], jobs: [job("j1")], discoveryUntil: null }),
+        okR<PullReply>({
+          nodeId: "n1",
+          servers: [],
+          jobs: [job("j1")],
+          discoveryExpiresInMs: null,
+        }),
       )
       .mockResolvedValue(
-        okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: null }),
+        okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: null }),
       );
     const agent = createAgent({ host, client: client({ pullJobs: pulls }) });
     await agent.runOnce();
@@ -1037,7 +1047,12 @@ describe("createAgent — push and report", () => {
     const host = fakeHost({ config: CONFIG, token: "a1.s", transport });
     const c = client({
       pullJobs: vi.fn(async () =>
-        okR<PullReply>({ nodeId: "n1", servers: [], jobs: [job("j1")], discoveryUntil: null }),
+        okR<PullReply>({
+          nodeId: "n1",
+          servers: [],
+          jobs: [job("j1")],
+          discoveryExpiresInMs: null,
+        }),
       ),
     });
     await createAgent({ host, client: c }).runOnce();
@@ -1052,7 +1067,12 @@ describe("createAgent — push and report", () => {
     const host = fakeHost({ config: CONFIG, token: "a1.s" });
     const c = client({
       pullJobs: vi.fn(async () =>
-        okR<PullReply>({ nodeId: "n1", servers: [], jobs: [job("j1")], discoveryUntil: null }),
+        okR<PullReply>({
+          nodeId: "n1",
+          servers: [],
+          jobs: [job("j1")],
+          discoveryExpiresInMs: null,
+        }),
       ),
       report: vi.fn(async () => failR({ kind: "unreachable", detail: "gone" })),
     });
@@ -1079,6 +1099,127 @@ describe("createAgent — inventory, discovery and resolve", () => {
       scanned: unknown[];
     };
 
+  it.each(["address", "classification"])(
+    "delivers jobs before a held %s check finishes",
+    async (held) => {
+      const gate = deferred<DiscoveredDevice[]>();
+      const found: DiscoveredDevice = { transport: "network_tcp", host: "10.0.0.4", port: 9100 };
+      const host = fakeHost({
+        config: CONFIG,
+        token: "a1.s",
+        scan: async () => [found],
+        probeNetwork: async () => (held === "address" ? gate.promise : [found]),
+        markPagePrinters: async () => (held === "classification" ? gate.promise : [found]),
+      });
+      const c = client({
+        pullJobs: vi.fn(async () =>
+          okR<PullReply>({
+            nodeId: "n1",
+            servers: [],
+            jobs: [usbJob("unblocked")],
+            discoveryExpiresInMs: 180_000,
+            networkProbes: [{ host: "10.0.0.4", port: 9100, expiresInMs: 30_000 }],
+          }),
+        ),
+      });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      vi.mocked(c.report).mockClear();
+      const tick = agent.runOnce();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      try {
+        expect(c.report).toHaveBeenCalledWith(A, "a1.s", "unblocked", { status: "done" });
+      } finally {
+        gate.resolve([found]);
+        await tick;
+      }
+    },
+  );
+
+  it("drops a prior typed hit after the next check fails", async () => {
+    const found: DiscoveredDevice = { transport: "network_tcp", host: "10.0.0.4", port: 9100 };
+    const probeNetwork = vi
+      .fn()
+      .mockResolvedValueOnce([found])
+      .mockRejectedValue(new Error("offline"));
+    const c = client({
+      pullJobs: vi.fn(async () =>
+        okR<PullReply>({
+          nodeId: "n1",
+          servers: [],
+          jobs: [],
+          discoveryExpiresInMs: null,
+          networkProbes: [{ host: "10.0.0.4", port: 9100, expiresInMs: 30_000 }],
+        }),
+      ),
+    });
+    const agent = createAgent({
+      host: fakeHost({ config: CONFIG, token: "a1.s", probeNetwork }),
+      client: c,
+    });
+    await agent.runOnce();
+    await agent.runOnce();
+    await agent.runOnce();
+    await agent.runOnce();
+    expect(inventoryOf(c, 2).scanned).toEqual([found]);
+    expect(inventoryOf(c, 3).scanned).toEqual([]);
+  });
+
+  it("reports a typed address while a discovery pass stays held", async () => {
+    const pass = deferred<DiscoveredDevice[]>();
+    const found: DiscoveredDevice = { transport: "network_tcp", host: "10.0.0.4", port: 9100 };
+    const host = fakeHost({
+      config: CONFIG,
+      token: "a1.s",
+      scan: () => pass.promise,
+      probeNetwork: async () => [found],
+    });
+    const c = client({
+      pullJobs: vi.fn(async () =>
+        okR<PullReply>({
+          nodeId: "n1",
+          servers: [],
+          jobs: [],
+          discoveryExpiresInMs: 180_000,
+          networkProbes: [{ host: "10.0.0.4", port: 9100, expiresInMs: 30_000 }],
+        }),
+      ),
+    });
+    const agent = createAgent({ host, client: c });
+    try {
+      await agent.runOnce();
+      await agent.runOnce();
+      await agent.runOnce();
+      expect(inventoryOf(c, 2).scanned).toEqual([found]);
+    } finally {
+      pass.resolve([]);
+    }
+  });
+
+  it.each([100_000, -100_000])(
+    "uses the local clock for a discovery duration (offset %s)",
+    async (offset) => {
+      const scan = vi.fn(async () => []);
+      let now = 1_000 + offset;
+      const host = fakeHost({ config: CONFIG, token: "a1.s", scan, now: () => now });
+      const c = client({
+        pullJobs: vi
+          .fn()
+          .mockResolvedValueOnce(
+            okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: 1234 }),
+          )
+          .mockResolvedValue(failR({ kind: "unreachable", detail: "offline" })),
+      });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      await agent.runOnce();
+      expect(scan).toHaveBeenCalledWith(undefined, 2234 + offset);
+      now += 1234;
+      await agent.runOnce();
+      expect(scan).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it.each([0, 100_000, -100_000])(
     "probes explicit addresses independently of a failed scan and stops at expiry (clock offset %s ms)",
     async (offset) => {
@@ -1101,7 +1242,7 @@ describe("createAgent — inventory, discovery and resolve", () => {
             nodeId: "n1",
             servers: [],
             jobs: [],
-            discoveryUntil: 90000,
+            discoveryExpiresInMs: 90000,
             networkProbes: [target],
           }),
         ),
@@ -1113,11 +1254,14 @@ describe("createAgent — inventory, discovery and resolve", () => {
       await agent.runOnce();
       expect(agent.status.phase).toBe("unreachable");
       expect(probeNetwork).toHaveBeenCalledWith([target]);
-      expect(inventoryOf(c, 1).scanned).toEqual([found]);
+      expect(inventoryOf(c, 1).scanned).toEqual([]);
+      await agent.runOnce();
+      expect(inventoryOf(c, 2).scanned).toEqual([found]);
+      expect(probeNetwork).toHaveBeenCalledTimes(2);
       now = 30000 + offset;
       await agent.runOnce();
-      expect(probeNetwork).toHaveBeenCalledTimes(1);
-      expect(inventoryOf(c, 2).scanned).toEqual([]);
+      expect(probeNetwork).toHaveBeenCalledTimes(2);
+      expect(inventoryOf(c, 3).scanned).toEqual([]);
     },
   );
 
@@ -1138,7 +1282,7 @@ describe("createAgent — inventory, discovery and resolve", () => {
         pullJobs: vi
           .fn()
           .mockResolvedValueOnce(
-            okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: 181_000 }),
+            okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: 180_000 }),
           )
           .mockResolvedValue(failR({ kind: "unreachable", detail: "offline" })),
       });
@@ -1170,7 +1314,7 @@ describe("createAgent — inventory, discovery and resolve", () => {
             nodeId: "n1",
             servers: [],
             jobs: [],
-            discoveryUntil: null,
+            discoveryExpiresInMs: null,
             networkProbes: [target],
           }),
         ),
@@ -1205,7 +1349,7 @@ describe("createAgent — inventory, discovery and resolve", () => {
           nodeId: "n1",
           servers: [{ url: B, nodeId: "n2" }],
           jobs: [],
-          discoveryUntil: null,
+          discoveryExpiresInMs: null,
           networkProbes: [target],
         }),
       ),
@@ -1214,7 +1358,8 @@ describe("createAgent — inventory, discovery and resolve", () => {
     await agent.runOnce();
     await agent.runOnce();
     expect(probeNetwork).toHaveBeenCalledWith([target]);
-    expect(inventoryOf(c, 1).scanned).toEqual([found]);
+    await agent.runOnce();
+    expect(inventoryOf(c, 2).scanned).toEqual([found]);
     probeNetwork.mockClear();
     promoted = true;
     await agent.runOnce();
@@ -1243,12 +1388,17 @@ describe("createAgent — inventory, discovery and resolve", () => {
             nodeId: "n1",
             servers: [],
             jobs: [],
-            discoveryUntil: null,
+            discoveryExpiresInMs: null,
             networkProbes: [{ host: "10.0.0.1", port: 9100, expiresInMs: 30000 }],
           }),
         )
         .mockResolvedValue(
-          okR({ nodeId: "n1", servers: [], jobs: [usbJob("probe-print")], discoveryUntil: null }),
+          okR({
+            nodeId: "n1",
+            servers: [],
+            jobs: [usbJob("probe-print")],
+            discoveryExpiresInMs: null,
+          }),
         ),
     });
     const agent = createAgent({ host, client: c });
@@ -1271,14 +1421,14 @@ describe("createAgent — inventory, discovery and resolve", () => {
           nodeId: "n1",
           servers: [],
           jobs: [],
-          discoveryUntil: 10_000_000_000,
+          discoveryExpiresInMs: 180_000,
           networkProbes: [target],
         }),
       );
     const markHp = async (devices: DiscoveredDevice[]) =>
       devices.map((d) => (d.host === H ? { ...d, pagePrinter: true as const } : d));
 
-    it("classifies the merged scan and probe results once, so a scan duplicate of a typed address is reported marked", async () => {
+    it("merges independently classified scan and typed results, keeping the named scan device", async () => {
       const markPagePrinters = vi.fn(markHp);
       const host = fakeHost({
         config: CONFIG,
@@ -1288,18 +1438,18 @@ describe("createAgent — inventory, discovery and resolve", () => {
         markPagePrinters,
       });
       // The typed address arrives with the second reply, so the pull that carries the pass's
-      // devices is also the first to probe it.
+      // devices is also the first to start probing it.
       const pulls = openWindowWithProbe().mockResolvedValueOnce(
-        okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: 10_000_000_000 }),
+        okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: 180_000 }),
       );
       const c = client({ pullJobs: pulls });
       const agent = createAgent({ host, client: c });
       await agent.runOnce(); // opens the window
       expect(markPagePrinters).not.toHaveBeenCalled();
       await agent.runOnce(); // starts the pass and records the typed address
-      await agent.runOnce(); // takes the pass's devices, probes, merges, then classifies
-      expect(markPagePrinters).toHaveBeenCalledTimes(1);
+      await agent.runOnce(); // takes the classified pass's devices and starts the typed check
       expect(markPagePrinters).toHaveBeenCalledWith([scannedHp]);
+      expect(markPagePrinters).toHaveBeenCalledWith([probedHp]);
       expect(inventoryOf(c, 2).scanned).toStrictEqual([{ ...scannedHp, pagePrinter: true }]);
     });
 
@@ -1316,7 +1466,7 @@ describe("createAgent — inventory, discovery and resolve", () => {
         pullJobs: vi
           .fn()
           .mockResolvedValue(
-            okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: 10_000_000_000 }),
+            okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: 180_000 }),
           ),
       });
       const agent = createAgent({ host, client: c });
@@ -1340,14 +1490,14 @@ describe("createAgent — inventory, discovery and resolve", () => {
         pullJobs: vi
           .fn()
           .mockResolvedValueOnce(
-            okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: 10_000_000_000 }),
+            okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: 180_000 }),
           )
           .mockResolvedValue(
             okR<PullReply>({
               nodeId: "n1",
               servers: [],
               jobs: [usbJob("classify-print")],
-              discoveryUntil: null,
+              discoveryExpiresInMs: null,
             }),
           ),
       });
@@ -1392,7 +1542,7 @@ describe("createAgent — inventory, discovery and resolve", () => {
         vi
           .fn()
           .mockResolvedValue(
-            okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: 10_000_000_000 }),
+            okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: 180_000 }),
           );
 
       it.each([
@@ -1509,18 +1659,16 @@ describe("createAgent — inventory, discovery and resolve", () => {
     const scanned = [{ transport: "bluetooth" as const, name: "BT-58", localKey: "AA:BB:CC" }];
     const scan = vi.fn(async () => scanned);
     const host = fakeHost({ config: CONFIG, token: "a1.s", scan });
-    // The discoveryUntil in each reply governs whether the NEXT tick scans. host.now() starts high
-    // (>0), so a far-future instant opens the window and null (stored as 0) closes it.
     const pulls = vi
       .fn()
       .mockResolvedValueOnce(
-        okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: 10_000_000_000 }),
+        okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: 180_000 }),
       )
       .mockResolvedValueOnce(
-        okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: null }),
+        okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: null }),
       )
       .mockResolvedValue(
-        okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: null }),
+        okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: null }),
       );
     const c = client({ pullJobs: pulls });
     const agent = createAgent({ host, client: c });
@@ -1543,7 +1691,7 @@ describe("createAgent — inventory, discovery and resolve", () => {
     });
     const host = fakeHost({ config: CONFIG, token: "a1.s", scan });
     const pulls = vi.fn(async () =>
-      okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: 10_000_000_000 }),
+      okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: 180_000 }),
     );
     const agent = createAgent({ host, client: client({ pullJobs: pulls }) });
     await agent.runOnce(); // opens the window (no prior window → no scan yet)
@@ -1573,7 +1721,7 @@ describe("createAgent — inventory, discovery and resolve", () => {
         nodeId: "n1",
         servers: [],
         jobs: [],
-        discoveryUntil: 10_000_000_000,
+        discoveryExpiresInMs: 180_000,
         networkProbes: [{ host: "10.0.0.1", port: 9100, expiresInMs: 30000 }],
       }),
     );
@@ -1599,7 +1747,7 @@ describe("createAgent — inventory, discovery and resolve", () => {
   describe("a discovery pass runs beside the job pull", () => {
     const bt = { transport: "bluetooth" as const, name: "BT-58", localKey: "AA:BB:CC" };
     const open = (jobs: WireJob[] = []) =>
-      okR<PullReply>({ nodeId: "n1", servers: [], jobs, discoveryUntil: 10_000_000_000 });
+      okR<PullReply>({ nodeId: "n1", servers: [], jobs, discoveryExpiresInMs: 180_000 });
     // Lets every tick and pass whose host calls have already resolved run to the end.
     const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
     const never = () => new Promise<DiscoveredDevice[]>(() => {});
@@ -1662,7 +1810,7 @@ describe("createAgent — inventory, discovery and resolve", () => {
       await Promise.all(ticks);
     });
 
-    it("reports a finished pass's devices on the next pull, and only once", async () => {
+    it("replays a finished pass until the next pass completes", async () => {
       const pass = deferred<DiscoveredDevice[]>();
       const scan = vi.fn().mockReturnValueOnce(pass.promise).mockImplementation(never);
       const host = fakeHost({ config: CONFIG, token: "a1.s", scan });
@@ -1678,14 +1826,75 @@ describe("createAgent — inventory, discovery and resolve", () => {
       await agent.runOnce();
       expect(inventoryOf(c, 2).scanned).toEqual([bt]);
       await agent.runOnce();
-      expect(inventoryOf(c, 3).scanned).toEqual([]);
+      expect(inventoryOf(c, 3).scanned).toEqual([bt]);
     });
+
+    it("does not revive an acknowledged snapshot when discovery reopens", async () => {
+      const closed = okR<PullReply>({
+        nodeId: "n1",
+        servers: [],
+        jobs: [],
+        discoveryExpiresInMs: null,
+      });
+      const pulls = vi
+        .fn()
+        .mockResolvedValueOnce(open())
+        .mockResolvedValueOnce(open())
+        .mockResolvedValueOnce(closed)
+        .mockResolvedValueOnce(closed)
+        .mockResolvedValue(open());
+      const scan = vi.fn().mockResolvedValueOnce([bt]).mockImplementation(never);
+      const c = client({ pullJobs: pulls });
+      const agent = createAgent({
+        host: fakeHost({ config: CONFIG, token: "a1.s", scan }),
+        client: c,
+      });
+      for (let i = 0; i < 7; i++) await agent.runOnce();
+      expect(pulls.mock.calls.map((call) => call[2].scanned)).toEqual([
+        [],
+        [],
+        [bt],
+        [],
+        [],
+        [],
+        [],
+      ]);
+    });
+
+    it.each(["empty", "throwing"])(
+      "replaces replayed discoveries after a completed %s pass",
+      async (result) => {
+        const scan = vi
+          .fn()
+          .mockResolvedValueOnce([bt])
+          .mockImplementation(async () => {
+            if (result === "throwing") throw new Error("scan failed");
+            return [];
+          });
+        const c = client({ pullJobs: vi.fn(async () => open()) });
+        const agent = createAgent({
+          host: fakeHost({ config: CONFIG, token: "a1.s", scan }),
+          client: c,
+        });
+        await agent.runOnce();
+        await agent.runOnce();
+        await agent.runOnce();
+        await agent.runOnce();
+        expect(inventoryOf(c, 2).scanned).toEqual([bt]);
+        expect(inventoryOf(c, 3).scanned).toEqual([]);
+      },
+    );
 
     it("keeps a finished pass's devices through a failed pull and sends them on the next pull that succeeds", async () => {
       const pass = deferred<DiscoveredDevice[]>();
       const scan = vi.fn().mockReturnValueOnce(pass.promise).mockImplementation(never);
       const host = fakeHost({ config: CONFIG, token: "a1.s", scan });
-      const closed = okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: null });
+      const closed = okR<PullReply>({
+        nodeId: "n1",
+        servers: [],
+        jobs: [],
+        discoveryExpiresInMs: null,
+      });
       const pulls = vi
         .fn()
         .mockResolvedValueOnce(open())
@@ -1715,12 +1924,18 @@ describe("createAgent — inventory, discovery and resolve", () => {
         .mockImplementation(never);
       const host = fakeHost({ config: CONFIG, token: "a1.s", scan });
       const inFlight = deferred<Result<PullReply>>();
+      const closed = okR<PullReply>({
+        nodeId: "n1",
+        servers: [],
+        jobs: [],
+        discoveryExpiresInMs: null,
+      });
       const pulls = vi
         .fn()
         .mockResolvedValueOnce(open())
         .mockResolvedValueOnce(open())
         .mockReturnValueOnce(inFlight.promise)
-        .mockResolvedValue(open());
+        .mockResolvedValue(closed);
       const c = client({ pullJobs: pulls });
       const agent = createAgent({ host, client: c });
       const usb = { transport: "usb" as const, name: "USB-80", localKey: "SN-9" };
@@ -1733,7 +1948,7 @@ describe("createAgent — inventory, discovery and resolve", () => {
       expect(scan).toHaveBeenCalledTimes(2);
       second.resolve([usb]);
       await settle();
-      inFlight.resolve(open());
+      inFlight.resolve(closed);
       await carrying;
       await agent.runOnce();
       expect(pulls.mock.calls.map((call) => call[2].scanned)).toEqual([[], [], [bt], [usb]]);
@@ -1774,7 +1989,7 @@ describe("createAgent — inventory, discovery and resolve", () => {
         .mockResolvedValueOnce(open())
         .mockResolvedValueOnce(failR({ kind: "unauthorized" }))
         .mockResolvedValue(
-          okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: null }),
+          okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: null }),
         );
       const agent = createAgent({ host, client: client({ pullJobs: pulls }) });
       await agent.runOnce(); // opens the window
@@ -1884,7 +2099,12 @@ describe("createAgent — inventory, discovery and resolve", () => {
     const host = fakeHost({ config: CONFIG, token: "a1.s", transport, resolve });
     const c = client({
       pullJobs: vi.fn(async () =>
-        okR<PullReply>({ nodeId: "n1", servers: [], jobs: [usbJob("j1")], discoveryUntil: null }),
+        okR<PullReply>({
+          nodeId: "n1",
+          servers: [],
+          jobs: [usbJob("j1")],
+          discoveryExpiresInMs: null,
+        }),
       ),
     });
     await createAgent({ host, client: c }).runOnce();
@@ -1905,7 +2125,7 @@ describe("createAgent — inventory, discovery and resolve", () => {
           nodeId: "n1",
           servers: [],
           jobs: [usbJob("j1"), usbJob("j2")],
-          discoveryUntil: null,
+          discoveryExpiresInMs: null,
         }),
       ),
     });
@@ -1949,7 +2169,7 @@ describe("createAgent — start/stop and logging", () => {
                   },
                 ]
               : [],
-          discoveryUntil: null,
+          discoveryExpiresInMs: null,
         });
       }),
     });
@@ -1985,7 +2205,7 @@ describe("createAgent — start/stop and logging", () => {
     const host = fakeHost({ config: CONFIG, token: "a1.s" });
     const pulls = vi.fn(async () => {
       agent.stop();
-      return okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: null });
+      return okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: null });
     });
     const agent = createAgent({ host, client: client({ pullJobs: pulls }), intervalMs: 50 });
     await agent.start();
@@ -2009,7 +2229,7 @@ describe("createAgent — start/stop and logging", () => {
         nodeId: "n1",
         servers: [],
         jobs: [],
-        discoveryUntil: Date.now() + 10_000,
+        discoveryExpiresInMs: 10_000,
       }),
     );
     const c = client({ pullJobs: pulls });
@@ -2032,6 +2252,53 @@ describe("createAgent — start/stop and logging", () => {
     }
   });
 
+  it.each([false, true])(
+    "a completed typed check leaves the held job pull intact (hit %s)",
+    async (hit) => {
+      const held = heldPulls();
+      const pending = deferred<DiscoveredDevice[]>();
+      const found: DiscoveredDevice = { transport: "network_tcp", host: "10.0.0.4", port: 9100 };
+      const probeNetwork = vi
+        .fn()
+        .mockResolvedValueOnce(hit ? [found] : [])
+        .mockReturnValue(pending.promise);
+      const host = fakeHost({ config: CONFIG, token: "a1.s", now: () => 1_000, probeNetwork });
+      const pulls = held.pull.mockResolvedValueOnce(
+        okR<PullReply>({
+          nodeId: "n1",
+          servers: [],
+          jobs: [],
+          discoveryExpiresInMs: null,
+          networkProbes: [{ host: "10.0.0.4", port: 9100, expiresInMs: 30_000 }],
+        }),
+      );
+      const agent = createAgent({ host, client: client({ pullJobs: pulls }) });
+      await agent.runOnce();
+      const loop = agent.start();
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(pulls).toHaveBeenCalledTimes(2);
+        held.waits[0]!.resolve(
+          okR<PullReply>({
+            nodeId: "n1",
+            servers: [],
+            jobs: [],
+            discoveryExpiresInMs: null,
+            networkProbes: [{ host: "10.0.0.4", port: 9100, expiresInMs: 30_000 }],
+          }),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(probeNetwork).toHaveBeenCalledTimes(1);
+        expect(pulls.mock.calls.at(-1)![2].scanned).toEqual(hit ? [found] : []);
+      } finally {
+        agent.stop();
+        held.finish();
+        pending.resolve([]);
+        await loop;
+      }
+    },
+  );
+
   it("starts another empty scan at the next polling interval", async () => {
     let clock = 1_000;
     const held = heldPulls();
@@ -2046,7 +2313,7 @@ describe("createAgent — start/stop and logging", () => {
       now: () => clock,
     });
     const pulls = held.pull.mockResolvedValueOnce(
-      okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: 10_000 }),
+      okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: 10_000 }),
     );
     const agent = createAgent({ host, client: client({ pullJobs: pulls }), intervalMs: 50 });
     await agent.runOnce();
@@ -2056,7 +2323,7 @@ describe("createAgent — start/stop and logging", () => {
       expect(scan).toHaveBeenCalledTimes(1);
       clock = 1_050;
       held.waits[0]!.resolve(
-        okR({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: clock + 10_000 }),
+        okR({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: 10_000 }),
       );
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(scan).toHaveBeenCalledTimes(2);
@@ -2087,7 +2354,7 @@ describe("createAgent — start/stop and logging", () => {
         now: () => clock,
       });
       const pulls = held.pull.mockResolvedValueOnce(
-        okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: clock + 10_000 }),
+        okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: 10_000 }),
       );
       const agent = createAgent({ host, client: client({ pullJobs: pulls }), intervalMs: 50 });
       await agent.runOnce();
@@ -2097,11 +2364,11 @@ describe("createAgent — start/stop and logging", () => {
         expect(scan).toHaveBeenCalledTimes(1);
         clock = steppedTo;
         held.waits[0]!.resolve(
-          okR({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: clock + 10_000 }),
+          okR({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: 10_000 }),
         );
         await new Promise((resolve) => setTimeout(resolve, 0));
         held.waits[1]!.resolve(
-          okR({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: clock + 10_000 }),
+          okR({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: 10_000 }),
         );
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(scan).toHaveBeenCalledTimes(scans);
@@ -2164,7 +2431,7 @@ describe("createAgent — Bluetooth commands", () => {
     payload: new Uint8Array([7]),
   });
   const reply = (over: Partial<PullReply> = {}): Result<PullReply> =>
-    okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: null, ...over });
+    okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: null, ...over });
   const pair = (id: string, pin?: string): BluetoothCommand => ({
     id,
     kind: "pair",
@@ -2873,7 +3140,7 @@ describe("createAgent — A4 page jobs", () => {
     payload: new Uint8Array([7]),
   });
   const pull = (jobs: WireJob[] = []) =>
-    okR<PullReply>({ nodeId: "n1", servers: [], jobs, discoveryUntil: null });
+    okR<PullReply>({ nodeId: "n1", servers: [], jobs, discoveryExpiresInMs: null });
 
   /** Renewal waits are held until the test releases them; any other sleep never ends. */
   function pageHost(printPage: Host["printPage"], extra: Parameters<typeof fakeHost>[0] = {}) {

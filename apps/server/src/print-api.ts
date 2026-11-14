@@ -970,7 +970,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           payload: Buffer.from(job.payload).toString("base64"),
           ...(job.invoiceClaim === undefined ? {} : { invoiceClaim: job.invoiceClaim }),
         })),
-        discoveryUntil: until > repliedAt ? until : null,
+        discoveryExpiresInMs: until > repliedAt ? until - repliedAt : null,
         ...(networkProbes.length ? { networkProbes } : {}),
         ...(commands.length ? { bluetoothCommands: commands } : {}),
       });

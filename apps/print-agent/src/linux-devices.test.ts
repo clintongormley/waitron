@@ -910,3 +910,36 @@ describe("createLinuxDevices — resolve() against a recent paired listing", () 
     expect(paired).toHaveBeenCalledTimes(2);
   });
 });
+
+it("passes the Linux scan deadline through the real network composition to its sweep", async () => {
+  let now = 1_000;
+  const calls: [string, number][] = [];
+  const devices = createLinuxDevices({
+    sysfsRoot: root,
+    bluetooth: fakeBluetooth(),
+    now: () => now,
+    networkScanDeps: {
+      interfaces: () => ({
+        en0: [
+          {
+            address: "10.0.0.1",
+            cidr: "10.0.0.1/29",
+            family: "IPv4",
+            internal: false,
+            netmask: "255.255.255.248",
+            mac: "00:00:00:00:00:00",
+          },
+        ],
+      }),
+      mdns: async () => [],
+      connect: async (host, _port, timeout) => {
+        calls.push([host, timeout]);
+        now = 2_000;
+        return true;
+      },
+    },
+  });
+  const found = await devices.scan(["network_tcp"], 1_100);
+  expect(calls).toEqual([["10.0.0.2", 100]]);
+  expect(found).toEqual([{ transport: "network_tcp", host: "10.0.0.2", port: 9100 }]);
+});

@@ -150,14 +150,6 @@ chosen destination.
   agent's paired list leaves the device out would end it, but the pull handler does not yet tell
   an empty list from an absent one.
 
-## An agent compares the server's discovery deadline with its own clock
-
-- **An agent compares the server's discovery deadline with its own clock** (found in C102, read, not
-  run). `discoveryUntil` is a time on the server's clock, and the agent checks it against
-  `host.now()` (`packages/print-agent/src/agent.ts`), where a network probe's deadline is sent as a
-  duration because the two clocks can differ. An agent on another machine whose clock is out by
-  minutes scans for the wrong span; one on the box shares its clock.
-
 ## Measure one-job print pulls on the box
 
 A517 uses one job per pull to eliminate unsent leased tails. Every job now repeats the agent's
@@ -582,25 +574,6 @@ Hardware and inbox checks to complete in the owner session.
   with it; nobody has suspended a Linux box and watched it (`docs/developers/conventions-data.md`,
   "A jump"). Left open by A798-B slice 9 (#2025).
 
-## Bundle: Printing does not wait for discovery
-
-5 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A sweep in flight keeps connecting after the discovery window closes.** Pass the deadline
-  through `Host.scan`. The office-printer check and the check of addresses typed into the dashboard
-  still run inside the poll, so the job pull waits for them (C117, #955).
-  [Detail](printers.md#a-sweep-in-flight-keeps-connecting-after-the-discovery-window-closes)
-- **An agent compares the server's discovery deadline with its own clock** — found in C102, read, not run. An agent on another machine whose clock is out by minutes scans for the wrong span; one on the box shares its clock. [Detail](printers.md#an-agent-compares-the-servers-discovery-deadline-with-its-own-clock)
-- **Measure one-job print pulls on the box** — A517 repeats the agent's inventory cycle per job.
-  A1372 covers delivered-history claim cost in a local database; physical throughput,
-  authentication and large retained queues remain unmeasured, including exhausted failures
-  and uncertain drawer claims. [Detail](printers.md#measure-one-job-print-pulls-on-the-box)
-- **A typed address receives one HTTP request on port 631** after its connection check succeeds.
-  The 2026-09-12 address-check design allowed any unicast address (public, loopback, link-local)
-  because the check sent nothing; that reasoning no longer covers the follow-up query.
-- **While a discovery window is open, a device not reported within 45 seconds drops off the list**
-  until its next report; 45 seconds does not cover every scan pass (C102, #953).
-
 ## Bundle: Bluetooth pairing commands
 
 5 entries, size M.
@@ -871,16 +844,6 @@ The discovery caption uses the announced server hostname, with the local suffix 
 available. It falls back to the routing address when no server name was announced; it does not
 construct a friendly computer name from a printer label. See the
 [identity map and plan](../superpowers/plans/2026-10-14-a576-ipp-queue-identity.md).
-
-## A sweep in flight keeps connecting after the discovery window closes
-
-- **A sweep in flight keeps connecting after the discovery window closes**. Pass the deadline through `Host.scan`. The office-printer capability
-  queries that follow the scan have no deadline either: at most eight at a time, each up to
-  1.5 seconds, and the job pull waits for them, so printing is delayed while they run.
-- **The office-printer check and the check of addresses typed into the dashboard still run inside
-  the poll** — left open by C117 (#955), so the job pull still waits for them. The agent puts no
-  limit of its own on a scan pass; read, not run: the whole sweep across several networks and the
-  USB reads have no overall limit.
 
 ## Loose ends left by C107 (#974)
 

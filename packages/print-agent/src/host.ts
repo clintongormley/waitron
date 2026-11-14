@@ -161,16 +161,14 @@ export interface Host {
   /** Devices the agent can deliver a job to now — reported to the server on every pull. */
   visibleDevices(): Promise<VisibleDevice[]>;
   /** An active discovery pass over the given transports (all discoverable kinds when omitted); run
-   * only while the server holds a discovery window open. */
-  scan(kinds?: TransportKind[]): Promise<DiscoveredDevice[]>;
+   * only while the server holds a discovery window open. The deadline uses the host's clock. */
+  scan(kinds?: TransportKind[], deadline?: number): Promise<DiscoveredDevice[]>;
   /** Bounded TCP connection checks; send no bytes and return only reachable targets. */
   probeNetwork(targets: NetworkProbe[]): Promise<DiscoveredDevice[]>;
   /** Asks each network device's IPP queue (the one its host announced, else port 631) one
    * Get-Printer-Attributes query, or reuses a recent answer, and returns the devices with office
    * printers marked `pagePrinter: true` and an `office` report. A failed check leaves a device with a
-   * raw port unmarked. The loop calls it at most once per pull, over the merged scan and probe
-   * results, and treats a throw as "nothing marked"; either way it gives an `ippOnly` device left
-   * without a report an `invalid_reply` one. */
+   * raw port unmarked. Scan and typed-address workers classify their own results. */
   markPagePrinters?(devices: DiscoveredDevice[]): Promise<DiscoveredDevice[]>;
   /** Turns a claimed job's connection facts into a {@link PrinterTarget} the transport can send to —
    * for a local job, mapping its `localKey` to a device path from the host's device list, which a

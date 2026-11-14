@@ -11,7 +11,7 @@ function client(invoiceClaim: unknown) {
         JSON.stringify({
           nodeId: "box",
           servers: [],
-          discoveryUntil: null,
+          discoveryExpiresInMs: null,
           jobs: [
             {
               id: "job",
