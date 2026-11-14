@@ -1137,6 +1137,14 @@ AEAT message names `DescripcionOperacion`, and had the server also refuse a chan
 recipients, correction type, corrected invoice or replaced invoice with
 `fiscal.remedy_printed_fact_changed` (campaign `questions.md`, 2026-11-14 00:01 and 00:27).
 
+A simplified invoice AEAT refused for a future date is put right by a replacement corrective
+invoice, R5 with `TipoRectificativa` "S", offered on any day (owner's picker, 2026-11-13 22:09, same
+`desk/done` file). Answers A–D (owner, relayed 2026-11-14 09:50): rectified amounts 0.00, the real
+day as its operation date, the printed copy says it replaces the invoice in full with a 0,00 €
+rectification, and a later refund names the replacement. E: the sale counts in its real day's VAT
+period (owner, 2026-11-14 17:20). The replacement is dated today (watcher, 11:54); the real day is
+asked of the administrator and stored as `sales.supply_day` (watcher, 18:22).
+
 ### A1425 part 1: after a takeover (owner, 2026-11-08)
 
 A box the held membership chart does not name `serving-primary` refuses a sale before any money moves.

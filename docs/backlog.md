@@ -322,7 +322,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   correction is accepted, on any issuing chain, an administrator may release a held cancellation
   through a remedy, which only a test policy enables today (production's `ENABLED_REMEDIES` holds
   only `record-correction` and `replacement-invoice`, for rejected records only,
-  `packages/fiscal-verifactu/src/record-remedy-routes.ts:31`).
+  `packages/fiscal-verifactu/src/record-remedy-routes.ts:32`).
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment

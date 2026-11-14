@@ -3365,6 +3365,7 @@ _2026-11-14: the corrective for (1) and (2) is built as a replacement (R5, `Tipo
 rectified amounts 0.00, and the sale's real day as `FechaOperacion` when it differs from the
 replacement's date). Waitron files it only when AEAT refused every record Waitron sent under that
 invoice's number, none with code 3000 (AEAT already holds one). No screen offers it yet._
+_2026-11-14: the Fiscal filing case dialog offers it (Q37-FIX PR 3)._
 
 **Proposed interim treatment:** preserve the rejected record and response, show the invoice as
 unresolved, and require an explicit corrective action. D2 proposes continuing later submissions
