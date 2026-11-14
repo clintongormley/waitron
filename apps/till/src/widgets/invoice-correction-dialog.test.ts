@@ -365,6 +365,22 @@ it("shows a refusal about the invoice above the buttons, giving way to the field
   expect(actions().error).toBe(t("form.fix_fields"));
 });
 
+it("stays open, keeping the draft, when something inside the window closes itself", async () => {
+  const { el } = await mount();
+  await type(el, "5");
+  const closes = vi.fn();
+  el.addEventListener("invoice-correction-close", closes);
+
+  root(el)
+    .querySelector(".body")!
+    .dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+  await el.updateComplete;
+
+  expect(root(el).querySelector("wt-dialog")!.open).toBe(true);
+  expect(closes).not.toHaveBeenCalled();
+  expect(grossField(el).value).toBe("5");
+});
+
 it("writes the split's VAT rate with the language's decimal mark", async () => {
   setLocale("es");
   const api = fakeApi();
