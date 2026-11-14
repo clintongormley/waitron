@@ -836,6 +836,67 @@ describe("A841 the till follows the theme in use", () => {
     expect(themeFetch).toHaveBeenCalledTimes(2);
   });
 
+  it("a moved theme hash repaints a cash register with no counter zone on the floor plan", async () => {
+    const { el } = await mountApp({
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture([], ["z1"])),
+      getTill: vi.fn().mockResolvedValue(first),
+    });
+    await flush(el);
+    await signIn(el);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    expect(floor(el)).not.toBeNull();
+    expect(themeFetch).toHaveBeenCalledTimes(1);
+    themeAnswer = fixture;
+    api.getTill.mockResolvedValue(moved);
+    await poll(el);
+    await vi.waitFor(() => expect(bg()).toBe(FIXTURE_LIGHT_BG));
+    expect(themeFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("a moved theme hash repaints a kitchen screen in device mode", async () => {
+    const kds = { ...first, formFactor: "kds" as FormFactor, capabilities: ["act-as-kds"] };
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(kds),
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        deviceId: "dev-1",
+        formFactor: "kds",
+        kitchenScreens: [
+          {
+            kind: "station",
+            available: true,
+            stations: [],
+            zones: null,
+            nonPassStationsOverride: null,
+            showNonPassStations: true,
+          },
+        ],
+      }),
+      getDeviceStationScreen: vi.fn().mockResolvedValue({ stations: [] }),
+    });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector<TillStationScreen>("till-station-screen")?.deviceMode).toBe(
+      true,
+    );
+    expect(themeFetch).toHaveBeenCalledTimes(1);
+    themeAnswer = fixture;
+    api.getTill.mockResolvedValue({ ...kds, themeHash: "h2", setupRevision: "s2" });
+    await poll(el);
+    await vi.waitFor(() => expect(bg()).toBe(FIXTURE_LIGHT_BG));
+    expect(themeFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("a till with a counter zone reads no setup on a tick whose revision is unchanged", async () => {
+    const el = await openTill(first);
+    const reads = api.getTill.mock.calls.length;
+    const checks = api.menuState.mock.calls.length;
+    api.menuState.mockImplementation(async () => state("v1", "lf-1", "s1"));
+    await poll(el);
+    await flush(el);
+    expect(api.menuState.mock.calls.length).toBeGreaterThan(checks);
+    expect(api.getTill.mock.calls.length).toBe(reads);
+  });
+
   it("a moved theme hash brings a new logo into a handheld's bar without a reload", async () => {
     const handheld = till("tablet-landscape");
     const before = { width: innerWidth, height: innerHeight };

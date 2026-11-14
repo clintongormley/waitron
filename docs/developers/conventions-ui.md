@@ -2060,7 +2060,10 @@ stops it" in the same file.
 **The start read.** `GET /api/till` answers `completeTillSetup` (`apps/server/src/till-setup.ts`) plus
 `servers` and `membership`, and `setupRevision`, a hash of every field but those two (`setupRevisionOf`).
 `/api/menu-state` names the same revision. When a poll names one the till has not applied,
-`#noteSetupRevision` reads `/api/till` again and `#applyVenueSetup` applies the venue's values:
+`#noteSetupRevision` reads `/api/till` again and `#applyVenueSetup` applies the venue's values.
+A signed-in till whose menu check has no zone to ask about, and a kitchen screen in device mode,
+read `/api/till` itself every 15 seconds (`#followSetup`) and apply it the same way when its
+revision moved. The venue's values are:
 receipt languages and invoice language, venue name and tax id, onboarding intent,
 courses, card provider, card readers and the default reader, tips, the simplified-invoice
 limit and full invoices. Every read of the setup is numbered when sent, and an answer is skipped
@@ -2103,8 +2106,7 @@ Fixed until the till starts again (a reload, or a server switch, which runs `#bo
   (`#reconcileSavedDeviceZones`), and at no other time. They change the layout and which screens the
   till offers; applied mid-session they could take away the screen the person is on, and at those
   three points the till already lays itself out again (the default A768 chose; whether to change it is backlog A787).
-- A kitchen screen in device mode: nothing, the theme included. Nobody signs in on it, so it runs
-  no poll (backlog A785); it takes the theme in use when it starts. A station's bump mode is not a
+- A kitchen screen in device mode: the profile's values above. A station's bump mode is not a
   setup value: each order of its queue carries it (`StationQueueGroup.bumpMode`), read every 15 s
   in both modes (`REFRESH_MS`, `apps/till/src/screens/till-station-screen.ts`).
 

@@ -1,6 +1,6 @@
 import { outsideCardValues } from "./widgets/outside-card.js";
 import { TillLiveConnection, TILL_LIVE_TYPES } from "./api/live-connection.js";
-import { liveRefresh, queuedLiveRefresh } from "./state/live-gate.js";
+import { liveGate, liveRefresh, queuedLiveRefresh } from "./state/live-gate.js";
 import {
   recoveryLink,
   recoveryRefusalOf,
@@ -2695,6 +2695,7 @@ export class TillApp extends LitElement {
     this.#menuPoll.stop();
     this.#equipmentPoll.stop();
     this.#stopPinScreenPoll();
+    this.#stopKitchenSetupPoll();
     this.#stopFloorPoll();
     this.#endSplitRefusalReads(SPLIT_READS_OFF_PAGE);
     this.#draftSync?.drop();
@@ -3253,19 +3254,46 @@ export class TillApp extends LitElement {
         this.#tabNeedsFloorData(tab)
       )
         void this.#refreshFloorZones();
-      return this.#readLiveDeviceZones(signal);
+      const zones = this.#readLiveDeviceZones(signal);
+      if (this.#menuZones().length > 0) return zones;
+      return Promise.all([zones, this.#followSetup(signal)]).then(() => undefined);
     },
     read: (zoneId, signal) => this.api.menuState(zoneId, { signal }),
-    // A table's zone only while its order is on screen: each read takes a turn of the write lock.
-    zones: () =>
-      [
-        ...new Set([
-          this.counterServiceZoneId,
-          this.#tableCatalogueActive() ? (this.#tableZoneId ?? "") : "",
-        ]),
-      ].filter((id) => id !== ""),
+    zones: () => this.#menuZones(),
     onState: (zoneId, state) => this.#onMenuState(zoneId, state),
   });
+  /** A table's zone only while its order is on screen: each read takes a turn of the write lock. */
+  #menuZones(): string[] {
+    return [
+      ...new Set([
+        this.counterServiceZoneId,
+        this.#tableCatalogueActive() ? (this.#tableZoneId ?? "") : "",
+      ]),
+    ].filter((id) => id !== "");
+  }
+  #kitchenSetupPoll?: { stop(): void };
+
+  #startKitchenSetupPoll(): void {
+    this.#kitchenSetupPoll ??= liveGate(this.#live, {
+      types: TILL_LIVE_TYPES.menu!,
+      intervalMs: 15_000,
+      run: () => {
+        const limit = limited(TABLE_REQUEST_LIMIT_MS);
+        this.#followSetup(limit.signal)
+          .catch((error: unknown) => {
+            if ((error as { code?: string } | undefined)?.code === "device.unauthorized")
+              this.#stopKitchenSetupPoll();
+          })
+          .finally(limit.done);
+      },
+      quietWhileConnected: false,
+    });
+  }
+
+  #stopKitchenSetupPoll(): void {
+    this.#kitchenSetupPoll?.stop();
+    this.#kitchenSetupPoll = undefined;
+  }
   readonly #equipmentPoll = new EquipmentPoll({
     live: () => this.#live,
     // The count is taken before the read is sent, so an answer a change overtook is set aside.
@@ -4807,6 +4835,7 @@ export class TillApp extends LitElement {
     this.#stopDepartmentTransfers();
     this.#battery?.stop();
     this.#stopPinScreenPoll();
+    this.#stopKitchenSetupPoll();
     const bootGeneration = ++this.#bootGeneration;
     this.#refusedPerson = undefined;
     this.#setupRead = undefined;
@@ -4978,6 +5007,7 @@ export class TillApp extends LitElement {
         show();
         this.#sayIfSwitched(from);
         this.deviceMode = true;
+        this.#startKitchenSetupPoll();
         if (this.#preLoginChoice === undefined) setLocale(this.#venueLocale);
         this.#setScreen("station");
         this.#onHistory();
@@ -5935,6 +5965,7 @@ export class TillApp extends LitElement {
     if (!offerLoadFailed) this.#reconcileBasket();
     this.#menuPoll.start();
     this.#stopPinScreenPoll();
+    this.#stopKitchenSetupPoll();
     this.#equipmentPoll.start();
     void this.#readEquipment().then(() => {
       if (replaced()) return;
@@ -10982,6 +11013,15 @@ export class TillApp extends LitElement {
         if (this.#setupRead === read) this.#setupRead = undefined;
       });
     this.#setupRead = read;
+  }
+
+  /** For a till whose polls name no setup revision: reads the setup and applies it when it moved. */
+  async #followSetup(signal: AbortSignal): Promise<void> {
+    const generation = this.#bootGeneration;
+    const asked = ++this.#setupAsked;
+    const till = await this.api.getTill({ signal });
+    if (generation === this.#bootGeneration && till.setupRevision !== this.#setupRevision)
+      this.#applyVenueSetup(till, asked);
   }
 
   /** The parts of the till's setup that come from the device's profile. */

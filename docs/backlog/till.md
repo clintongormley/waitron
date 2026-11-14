@@ -1183,14 +1183,6 @@ against the Requested by names; on a phone the table scrolls sideways inside its
 the cut-off last column to say so. Owner to look at the pictures and say whether either wants
 changing.
 
-## A785. A kitchen screen in device mode keeps the theme it started with until reload (left open by A768, 2026-10-17).
-
-Nobody signs in on it, so it runs no menu-state poll and never sees the
-setup revision move when the theme in use changes. Its station queue read could name the
-revision, as `/api/menu-state` does. (A756 PR 7, 2026-10-24, moved the bump mode onto each queue
-order, so that refreshes.)
-
-
 ## On a short phone the till's More menu is taller than the room it gets (found by A681's look, 2026-10-17).
 
 On a handheld, since A797 slice 3, Log out follows the Settings group, last in ☰
@@ -1437,23 +1429,6 @@ found and fixed the same shape on a cash register's bar, where a case reproduced
 queued before the counter leaves the page does not observe it again" in
 `till-shell.counter-logo.test.ts`); `#observe()` and the lines in `disconnectedCallback()` that clear its observer are unchanged since
 before slice 14.
-
-
-## A cash register on the floor plan with no counter zone misses a theme change (A841 slice 5's review, 2026-10-21).
-
-A till learns of a new theme only through the setup revision its 15-second menu
-check returns, and that check asks about the counter zone plus the zone of a table whose order is
-on screen (`apps/till/src/till-app.ts:2585-2591`); a cash register whose profile has no counter
-zone gets an empty one at sign-in (`:4884-4901`; a handheld always gets one), so on the floor plan it asks about no zone and keeps the old
-theme until it opens a table, its zones or profile change, or it reloads. Run 2026-10-22 by
-slice 13's review: with the till fixture in `apps/till/src/till-app-setup-refresh.test.ts` changed
-to a signed-in floor view with no counter zone, "a moved theme hash repaints an open till without
-a reload" failed, the background staying on the old colour. The design says every signed-in till follows within one poll (design section 12). Decide:
-have the poll return the setup revision without asking about a zone, or accept it and correct the
-design. The user guide's Appearance page already says what is true. The switch dialog's sentence "every signed-in
-till within 15 seconds" (A841 slice 13, the design's approved words) is untrue for this till too
-until this is decided. The venue logo follows the same path, so such a till keeps an old logo too
-(A841 slice 8b).
 
 
 ## The floor map draws a neighbouring table's allergy mark over a held table's rings.
@@ -2076,21 +2051,13 @@ Printer identity is separate from the till route inventory.
 
 ## Bundle: What an open till picks up from a setup change
 
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size S. Its text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **A785. A kitchen screen in device mode keeps the theme it started with until reload (left open by
-  A768, 2026-10-17).** Nobody signs in on it, so it runs no menu-state poll and never sees the setup
-  revision move when the theme in use changes.
-  [Detail](till.md#a785-a-kitchen-screen-in-device-mode-keeps-the-theme-it-started-with-until-reload-left-open-by-a768-2026-10-17)
 - **A787. Profile values on an open till refresh only at a profile switch or a change of zones (left
   open by A768, 2026-10-17).** Form factor, capabilities, idle logout, starting screen and whether
   clocking is offered change the till's layout, so they are applied only where the till already lays
   itself out again (A768's default; the owner has not decided).
   [Detail](till.md#a787-profile-values-on-an-open-till-refresh-only-at-a-profile-switch-or-a-change-of-zones-left-open-by-a768-2026-10-17)
-- **A cash register on the floor plan with no counter zone misses a theme change (A841 slice 5's
-  review, 2026-10-21).** The venue logo follows the same path, so such a till keeps an old logo too
-  (A841 slice 8b).
-  [Detail](till.md#a-cash-register-on-the-floor-plan-with-no-counter-zone-misses-a-theme-change-a841-slice-5s-review-2026-10-21)
 
 ## Bundle: Small till and floor wording fixes
 
