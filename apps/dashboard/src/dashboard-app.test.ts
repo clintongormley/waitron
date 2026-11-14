@@ -98,7 +98,7 @@ const people: PersonSummary[] = [
   {
     personId: "p1",
     displayName: "Ada",
-    role: "manager",
+    roleIds: ["manager"],
     status: "active",
     hasPassword: true,
     hasTotp: true,
@@ -122,7 +122,7 @@ const ownProfile = {
 
 const meResponse = {
   personId: "p1",
-  role: "manager",
+  roleIds: ["manager"],
   email: "manager@example.com",
   locale: null as string | null,
   venueLocale: "es-ES",
@@ -140,8 +140,23 @@ const meResponse = {
   modules: ["bookings"],
 };
 
-function venueViewer(permissions: string[], role = meResponse.role) {
-  return { ...meResponse, role, permissions: ["venue.view", ...permissions] };
+const noAccessRoleMeResponse = {
+  personId: "p1",
+  roleIds: [],
+  email: null,
+  locale: null,
+  venueLocale: "en-GB",
+  sessionDefault: "en-GB",
+  venueName: "Test SL",
+  onboardingIntent: "prepare",
+  permissions: [],
+  modules: ["core", "bookings"],
+  sessionExpiresInSeconds: 1800,
+  sessionIdleTimeoutSeconds: 1800,
+};
+
+function venueViewer(permissions: string[], role = "manager") {
+  return { ...meResponse, roleIds: [role], permissions: ["venue.view", ...permissions] };
 }
 
 it.each(["prepare", "live", "demo", undefined] as const)(
@@ -153,7 +168,7 @@ it.each(["prepare", "live", "demo", undefined] as const)(
         api: stubApi({
           getMe: vi.fn().mockResolvedValue({
             ...meResponse,
-            role,
+            roleIds: [role],
             onboardingIntent: intent,
             permissions:
               role === "admin"
@@ -299,7 +314,7 @@ it.each(["staff", "supervisor", "manager", "admin"])(
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p1",
-        role,
+        roleIds: [role],
         locale: null,
         venueLocale: "en-GB",
         sessionDefault: "en-GB",
@@ -702,7 +717,7 @@ describe("dashboard-app", () => {
       const api = stubApi({
         getMe: vi.fn().mockResolvedValue({
           personId: "p1",
-          role: "manager",
+          roleIds: ["manager"],
           locale: null,
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
@@ -754,7 +769,7 @@ describe("dashboard-app", () => {
       const api = stubApi({
         getMe: vi.fn().mockResolvedValue({
           personId: "p1",
-          role: "manager",
+          roleIds: ["manager"],
           locale: null,
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
@@ -786,7 +801,7 @@ describe("dashboard-app", () => {
       .fn()
       .mockResolvedValueOnce({
         personId: "p1",
-        role: "manager",
+        roleIds: ["manager"],
         locale: null,
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
@@ -813,7 +828,7 @@ describe("dashboard-app", () => {
     const late = new Promise((resolve) => (resolveLate = resolve));
     const initial = {
       personId: "p1",
-      role: "manager",
+      roleIds: ["manager"],
       locale: null,
       venueLocale: "es-ES",
       sessionDefault: "es-ES",
@@ -941,7 +956,7 @@ describe("dashboard-app", () => {
     );
     const getMe = vi.fn().mockResolvedValue({
       personId: "p1",
-      role: "manager",
+      roleIds: ["manager"],
       locale: null,
       venueLocale: "es-ES",
       sessionDefault: "es-ES",
@@ -1006,7 +1021,7 @@ describe("dashboard-app", () => {
         .mockRejectedValueOnce({ code: "management_session.required" })
         .mockResolvedValue({
           personId: "p1",
-          role: "manager",
+          roleIds: ["manager"],
           locale: null,
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
@@ -1044,9 +1059,7 @@ describe("dashboard-app", () => {
     history.replaceState(null, "", "/manage/email");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
-        getMe: vi
-          .fn()
-          .mockResolvedValue({ ...meResponse, role: undefined, permissions, modules: [] }),
+        getMe: vi.fn().mockResolvedValue({ ...meResponse, roleIds: [], permissions, modules: [] }),
         getEmailInbox: vi.fn().mockResolvedValue({ mode: "unconfigured", count: 0, messages: [] }),
       }),
     });
@@ -1088,10 +1101,15 @@ describe("dashboard-app", () => {
   ])(
     "a person holding only %s signs in and sees permitted pages",
     async (_name, permissions, screens) => {
-      const person: Partial<typeof meResponse> = { ...meResponse };
-      delete person.role;
+      const person = { ...meResponse, roleIds: [] };
       const api = stubApi({
-        getMe: vi.fn().mockResolvedValue({ ...person, permissions, modules: [] }),
+        getMe: vi
+          .fn()
+          .mockResolvedValue(
+            permissions.length === 0
+              ? noAccessRoleMeResponse
+              : { ...person, permissions, modules: [] },
+          ),
       });
       const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
       await flush(el);
@@ -1116,7 +1134,7 @@ describe("dashboard-app", () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p9",
-        role: "staff",
+        roleIds: ["staff"],
         locale: null,
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
@@ -1136,7 +1154,7 @@ describe("dashboard-app", () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p9",
-        role: "staff",
+        roleIds: ["staff"],
         locale: null,
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
@@ -1159,7 +1177,7 @@ describe("dashboard-app", () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p9",
-        role: "staff",
+        roleIds: ["staff"],
         locale: null,
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
@@ -1179,7 +1197,7 @@ describe("dashboard-app", () => {
         .mockRejectedValueOnce({ code: "management_session.required" })
         .mockResolvedValue({
           personId: "p9",
-          role: "staff",
+          roleIds: ["staff"],
           locale: null,
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
@@ -1204,7 +1222,7 @@ describe("dashboard-app", () => {
         .mockRejectedValueOnce({ code: "management_session.required" })
         .mockResolvedValue({
           personId: "p9",
-          role: "staff",
+          roleIds: ["staff"],
           locale: null,
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
@@ -1854,7 +1872,7 @@ describe("dashboard-app", () => {
         .mockRejectedValueOnce({ code: "management_session.required" })
         .mockResolvedValue({
           personId: "p1",
-          role: "manager",
+          roleIds: ["manager"],
           locale: null,
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
@@ -1883,7 +1901,7 @@ describe("dashboard-app", () => {
         .mockRejectedValueOnce({ code: "management_session.required" })
         .mockResolvedValue({
           personId: "new-person",
-          role: "manager",
+          roleIds: ["manager"],
           email: "new@example.test",
           locale: null,
           venueLocale: "es-ES",
@@ -1918,7 +1936,7 @@ describe("dashboard-app", () => {
         .mockRejectedValueOnce({ code: "management_session.required" })
         .mockResolvedValue({
           personId: "actual-person",
-          role: "manager",
+          roleIds: ["manager"],
           email: "actual@example.com",
           locale: null,
           venueLocale: "es-ES",
@@ -1956,7 +1974,7 @@ describe("dashboard-app", () => {
         .mockRejectedValueOnce({ code: "management_session.required" })
         .mockResolvedValue({
           personId: "other",
-          role: "manager",
+          roleIds: ["manager"],
           email: "other@example.com",
           locale: null,
           venueLocale: "es-ES",
@@ -1999,7 +2017,7 @@ describe("dashboard-app", () => {
     expect(location.search).not.toContain("login=google");
     resolve({
       personId: "google-person",
-      role: "manager",
+      roleIds: ["manager"],
       email: "google@example.com",
       locale: null,
       venueLocale: "es-ES",
@@ -2034,7 +2052,7 @@ describe("dashboard-app", () => {
             ? vi.fn().mockRejectedValue({ code: "management_session.required" })
             : vi.fn().mockResolvedValue({
                 personId: "other",
-                role: "manager",
+                roleIds: ["manager"],
                 email: "other@example.com",
                 locale: null,
                 venueLocale: "es-ES",
@@ -3224,7 +3242,7 @@ describe("dashboard-app", () => {
       api: stubApi({
         getMe: vi.fn().mockResolvedValue({
           personId: "p1",
-          role: "manager",
+          roleIds: ["manager"],
           locale: null,
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
@@ -3248,7 +3266,7 @@ describe("dashboard-app", () => {
       api: stubApi({
         getMe: vi.fn().mockResolvedValue({
           personId: "p1",
-          role: "manager",
+          roleIds: ["manager"],
           locale: null,
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
@@ -3269,7 +3287,7 @@ describe("dashboard-app", () => {
       api: stubApi({
         getMe: vi.fn().mockResolvedValue({
           personId: "p1",
-          role: "manager",
+          roleIds: ["manager"],
           locale: null,
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
@@ -3289,7 +3307,7 @@ describe("dashboard-app", () => {
   it("reconciles the active module set on a re-login — a now-disabled module stops showing", async () => {
     const session1 = {
       personId: "p1",
-      role: "manager",
+      roleIds: ["manager"],
       locale: null,
       venueLocale: "es-ES",
       sessionDefault: "es-ES",
@@ -3497,7 +3515,7 @@ describe("dashboard-app", () => {
     const supervisor = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p3",
-        role: "supervisor",
+        roleIds: ["supervisor"],
         locale: null,
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
@@ -3584,7 +3602,7 @@ describe("dashboard-app", () => {
     const supervisor = stubApi({
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
-        role: "supervisor",
+        roleIds: ["supervisor"],
         permissions: ["venue.view"],
         modules: [],
       }),
@@ -3607,7 +3625,7 @@ describe("dashboard-app", () => {
     const supervisor = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p3",
-        role: "supervisor",
+        roleIds: ["supervisor"],
         locale: null,
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
@@ -3651,7 +3669,7 @@ describe("dashboard-app", () => {
       api: stubApi({
         getMe: vi.fn().mockResolvedValue({
           ...meResponse,
-          role: "supervisor",
+          roleIds: ["supervisor"],
           permissions: ["venue.view"],
         }),
         listStaff: vi.fn().mockResolvedValue([]),
@@ -3666,7 +3684,7 @@ describe("dashboard-app", () => {
     const admin = stubApi({
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
-        role: "admin",
+        roleIds: ["admin"],
         permissions: ["node.manage", "system.manage", "venue.view"],
       }),
       listStaff: vi.fn().mockResolvedValue([]),
@@ -3691,7 +3709,7 @@ describe("dashboard-app", () => {
     mgr.remove();
     const { el: bare } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
-        getMe: vi.fn().mockResolvedValue({ ...meResponse, role: "admin", permissions: [] }),
+        getMe: vi.fn().mockResolvedValue({ ...meResponse, roleIds: ["admin"], permissions: [] }),
         listStaff: vi.fn().mockResolvedValue([]),
       }),
     });
@@ -3901,7 +3919,7 @@ describe("dashboard-app", () => {
   ])("does not offer Appearance to a %s session without venue.view", async (role, permissions) => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
-        getMe: vi.fn().mockResolvedValue({ ...meResponse, role, permissions }),
+        getMe: vi.fn().mockResolvedValue({ ...meResponse, roleIds: [role], permissions }),
         listStaff: vi.fn().mockResolvedValue([]),
       }),
     });
@@ -3924,7 +3942,7 @@ describe("dashboard-app", () => {
         api: stubApi({
           getMe: vi.fn().mockResolvedValue({
             ...meResponse,
-            role,
+            roleIds: [role],
             permissions,
             modules: [],
           }),
@@ -4018,7 +4036,7 @@ describe("dashboard-app", () => {
         api: stubApi({
           getMe: vi.fn().mockResolvedValue({
             ...meResponse,
-            role,
+            roleIds: [role],
             permissions: role === "supervisor" ? ["venue.view"] : meResponse.permissions,
           }),
           listStaff: vi.fn().mockResolvedValue([]),
@@ -4055,7 +4073,7 @@ describe("dashboard-app", () => {
         api: stubApi({
           getMe: vi.fn().mockResolvedValue({
             ...meResponse,
-            role,
+            roleIds: [role],
             permissions,
           }),
           getFloorPlan: vi.fn(() => new Promise(() => undefined)),
@@ -4321,7 +4339,7 @@ describe("dashboard-app", () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p9",
-        role: "staff",
+        roleIds: ["staff"],
         locale: null,
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
@@ -4338,7 +4356,7 @@ describe("dashboard-app", () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p9",
-        role: "staff",
+        roleIds: ["staff"],
         locale: null,
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
@@ -4412,7 +4430,7 @@ type LocalesResponse = {
 };
 type MeResponse = {
   personId: string;
-  role: string;
+  roleIds: string[];
   locale: string | null;
   venueLocale: string;
   sessionDefault: string;
@@ -4448,7 +4466,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
         .mockRejectedValueOnce({ code: "management_session.required" })
         .mockResolvedValue({
           personId: "p1",
-          role: "manager",
+          roleIds: ["manager"],
           locale: "es-ES",
           venueLocale: "en-GB",
           sessionDefault: "en-GB",
@@ -4482,7 +4500,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p1",
-        role: "manager",
+        roleIds: ["manager"],
         locale: "en-GB",
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
@@ -4536,7 +4554,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
         .mockRejectedValueOnce({ code: "management_session.required" })
         .mockResolvedValue({
           personId: "p1",
-          role: "manager",
+          roleIds: ["manager"],
           locale: "es-ES",
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
@@ -4616,7 +4634,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p9",
-        role: "staff",
+        roleIds: ["staff"],
         locale: "en-GB",
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
@@ -4648,7 +4666,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p1",
-        role: "manager",
+        roleIds: ["manager"],
         locale: null,
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
@@ -4671,7 +4689,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
         .mockRejectedValueOnce({ code: "management_session.required" })
         .mockResolvedValue({
           personId: "p1",
-          role: "manager",
+          roleIds: ["manager"],
           locale: "en-GB",
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
@@ -4788,7 +4806,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p1",
-        role: "manager",
+        roleIds: ["manager"],
         locale: "en-GB",
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
@@ -4842,7 +4860,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     host.remove(); // torn down before the probe resolves
     resolveMe({
       personId: "p1",
-      role: "manager",
+      roleIds: ["manager"],
       locale: "en-GB",
       venueLocale: "es-ES",
       sessionDefault: "es-ES",
@@ -4880,7 +4898,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p1",
-        role: "manager",
+        roleIds: ["manager"],
         locale: "en-GB",
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
@@ -4925,7 +4943,7 @@ describe("dashboard URL navigation", () => {
         api: stubApi({
           getMe: vi.fn().mockResolvedValue({
             ...meResponse,
-            role,
+            roleIds: [role],
             permissions: ["venue.view", ...permissions],
             modules,
           }),
@@ -4983,7 +5001,7 @@ describe("dashboard URL navigation", () => {
       api: stubApi({
         getMe: vi.fn().mockResolvedValue({
           personId: "p1",
-          role: "supervisor",
+          roleIds: ["supervisor"],
           locale: "en-GB",
           venueLocale: "en-GB",
           sessionDefault: "en-GB",
@@ -5017,7 +5035,7 @@ describe("dashboard URL navigation", () => {
       api: stubApi({
         getMe: vi.fn().mockResolvedValue({
           personId: "p1",
-          role: "manager",
+          roleIds: ["manager"],
           locale: "en-GB",
           venueLocale: "en-GB",
           sessionDefault: "en-GB",
@@ -5063,7 +5081,7 @@ describe("dashboard URL navigation", () => {
       api: stubApi({
         getMe: vi.fn().mockResolvedValue({
           personId: "p1",
-          role: "manager",
+          roleIds: ["manager"],
           locale: "en-GB",
           venueLocale: "en-GB",
           sessionDefault: "en-GB",
@@ -5113,7 +5131,7 @@ describe("dashboard URL navigation", () => {
         api: stubApi({
           getMe: vi.fn().mockResolvedValue({
             personId: "p1",
-            role: "manager",
+            roleIds: ["manager"],
             locale: "en",
             venueLocale: "en",
             sessionDefault: "en",
@@ -5139,7 +5157,7 @@ describe("dashboard URL navigation", () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         personId: "p1",
-        role: "manager",
+        roleIds: ["manager"],
         locale: "en-GB",
         venueLocale: "en-GB",
         sessionDefault: "en-GB",
@@ -5249,7 +5267,7 @@ describe("dashboard URL navigation", () => {
     expect(location.pathname).toBe("/manage/venue-operations/view/zones");
     getMe.mockResolvedValue({
       personId: "p1",
-      role: "manager",
+      roleIds: ["manager"],
       locale: "en-GB",
       venueLocale: "en-GB",
       sessionDefault: "en-GB",
@@ -5330,7 +5348,7 @@ describe("dashboard URL navigation", () => {
       api: stubApi({
         getMe: vi.fn().mockResolvedValue({
           personId: "p1",
-          role,
+          roleIds: [role],
           locale: null,
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
@@ -5354,7 +5372,7 @@ describe("dashboard URL navigation", () => {
     expect(login(el)).not.toBeNull();
     getMe.mockResolvedValue({
       personId: "p1",
-      role: "manager",
+      roleIds: ["manager"],
       locale: null,
       venueLocale: "es-ES",
       sessionDefault: "es-ES",
@@ -6105,7 +6123,7 @@ describe("the banner's email inbox link", () => {
       ? stubApi({
           getMe: vi.fn().mockResolvedValue({
             ...meResponse,
-            role: "admin",
+            roleIds: ["admin"],
             permissions: [
               "person.admin",
               "person.manage",
@@ -6176,7 +6194,7 @@ describe("the banner's email inbox link", () => {
       api: stubApi({
         getMe: vi
           .fn()
-          .mockResolvedValue({ ...meResponse, role: "manager", onboardingIntent: "demo" }),
+          .mockResolvedValue({ ...meResponse, roleIds: ["manager"], onboardingIntent: "demo" }),
         listDemoPrinterJobs: vi.fn(() => new Promise(() => undefined)),
       }),
     });
@@ -6194,7 +6212,7 @@ describe("the banner's email inbox link", () => {
       api: stubApi({
         getMe: vi.fn().mockResolvedValue({
           ...meResponse,
-          role,
+          roleIds: [role],
           permissions: role === "supervisor" ? ["venue.view"] : meResponse.permissions,
           onboardingIntent: intent,
         }),
@@ -6238,7 +6256,7 @@ describe("the banner's email inbox link", () => {
         api: stubApi({
           getMe: vi.fn().mockResolvedValue({
             ...meResponse,
-            role,
+            roleIds: [role],
             permissions: [
               "venue.view",
               "hardware.manage",
@@ -6504,7 +6522,7 @@ describe("alerts in the shell", () => {
       const api = alertsApi({
         getMe: vi.fn().mockResolvedValue({
           ...meResponse,
-          role: "admin",
+          roleIds: ["admin"],
           permissions: [
             "person.admin",
             "person.manage",
@@ -6551,7 +6569,7 @@ describe("alerts in the shell", () => {
       const api = alertsApi({
         getMe: vi.fn().mockResolvedValue({
           ...meResponse,
-          role: "admin",
+          roleIds: ["admin"],
           permissions: [
             "person.admin",
             "person.manage",
@@ -7021,7 +7039,7 @@ describe("alerts in the shell", () => {
     const api = alertsApi({
       getMe: vi
         .fn()
-        .mockResolvedValue({ ...meResponse, role: "staff", permissions: ["payment.take"] }),
+        .mockResolvedValue({ ...meResponse, roleIds: ["staff"], permissions: ["payment.take"] }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
     await flush(el);
@@ -7109,7 +7127,7 @@ describe("alerts in the shell", () => {
       .mockResolvedValue({
         ...meResponse,
         sessionDefault: "en-GB",
-        role: "staff",
+        roleIds: ["staff"],
         permissions: ["payment.take"],
       });
     const api = alertsApi({
@@ -7132,7 +7150,7 @@ describe("alerts in the shell", () => {
     const getMe = vi
       .fn()
       .mockResolvedValueOnce(manager)
-      .mockResolvedValueOnce({ ...manager, role: "staff", permissions: ["payment.take"] })
+      .mockResolvedValueOnce({ ...manager, roleIds: ["staff"], permissions: ["payment.take"] })
       .mockResolvedValue(manager);
     const api = alertsApi({
       getMe,
@@ -7868,7 +7886,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     const api = stubApi({
       getMe: vi
         .fn()
-        .mockResolvedValue({ ...meResponse, role: "staff", permissions: ["payment.take"] }),
+        .mockResolvedValue({ ...meResponse, roleIds: ["staff"], permissions: ["payment.take"] }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
@@ -8114,7 +8132,7 @@ describe("the nav search", () => {
   it("never offers a page the person may not open, typed with its exact label", async () => {
     const el = await mountSession(
       sessionIn("en-GB", {
-        role: "supervisor",
+        roleIds: ["supervisor"],
         permissions: ["venue.view"],
         modules: ["bookings"],
       }),
@@ -9245,7 +9263,7 @@ describe("mounted public department dialogs", () => {
         })),
         getMe: vi.fn().mockResolvedValue({
           ...meResponse,
-          role: "manager",
+          roleIds: ["manager"],
           locale: "en-GB",
           venueLocale: "en-GB",
           sessionDefault: "en-GB",
@@ -9774,7 +9792,7 @@ describe("the Users screen's administrator sign-in, pressed for real", () => {
     firstNames: "Marta",
     lastNames: "López",
     telephone: null,
-    role: "staff",
+    roleIds: ["staff"],
     status: "active",
     hasPassword: false,
     hasTotp: false,
@@ -9867,7 +9885,7 @@ describe("startup zone repair", () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
-        role,
+        roleIds: [role],
         permissions: role === "manager" ? ["venue.configure"] : [],
         tradingAdmission: { state: "invalid" },
       }),
@@ -10083,7 +10101,7 @@ describe.each(["light", "dark"] as const)("staff zone repair in %s", (theme) => 
           ...meResponse,
           locale,
           sessionDefault: locale,
-          role: "staff",
+          roleIds: ["staff"],
           permissions: [],
           tradingAdmission: { state: "invalid" },
         }),
