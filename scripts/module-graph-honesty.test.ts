@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
+import { stripSql } from "../packages/sync-enrolment/src/migration-tables.js";
 import { modulesWithSets, packageDirOf } from "../packages/module/src/module.js";
 
 /**
@@ -31,9 +32,6 @@ import { modulesWithSets, packageDirOf } from "../packages/module/src/module.js"
  *   `ON <table>` the `.*?` cannot reach cleanly, or a table named with quoting the regexes do not
  *   cover, could be missed; the defence is the vacuous-pass anchor, which asserts the scan FOUND a
  *   known real edge in the tree's actual spelling.
- * - The stripping is single-pass and naive: `--` is treated as a comment start even inside a
- *   string literal (line comments are blanked before strings), so a migration mixing the two on one
- *   line could confuse it.
  * - Body matching counts `CASE`/`END` tokens but does not parse SQL. Top-level writes recognize
  *   plain INSERT INTO, UPDATE and DELETE FROM at a statement's start, not WITH-prefixed writes,
  *   REPLACE or INSERT/UPDATE OR variants. Other SQL syntax and top-level reads are not detected.
@@ -64,17 +62,6 @@ const EDGE_KINDS = [
   ["FK reference", REFERENCES],
   ["trigger", CREATE_TRIGGER],
 ] as const;
-
-/** Blank block comments, `--` line comments, and `'…'` string literals to whitespace, preserving
- * line count. Naive by design — see the header's known-limitations block. */
-function stripSql(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, " "))
-    .split("\n")
-    .map((line) => line.replace(/--.*$/, ""))
-    .join("\n")
-    .replace(/'(?:[^']|'')*'/g, (literal) => literal.replace(/[^\n]/g, " "));
-}
 
 /** A CASE's END may end a statement; only an END outside CASE closes the trigger body. */
 function* triggerRanges(sql: string): Iterable<{ start: number; end: number; body: string }> {

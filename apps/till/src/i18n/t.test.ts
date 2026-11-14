@@ -30,6 +30,8 @@ it.each([
   ["en-GB", "Milk"],
   ["es", "Leche"],
   ["es-ES", "Leche"],
+  ["es-ES\n", "Milk"],
+  ["es-\rES", "Milk"],
   ["fr-FR", "Milk"],
   ["", "Milk"],
 ])("selects the entry's text for locale %s", (locale, expected) => {

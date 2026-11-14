@@ -171,7 +171,7 @@ export { MEDIA_FILENAME } from "./media-filename.js";
 export { formatEquipmentCode, parseEquipmentCode, type EquipmentKind } from "./equipment-code.js";
 export { mayTakeOver, type EquipmentVia } from "./equipment-takeover.js";
 export { tillProviderForReader, type TillReaderProvider } from "./till-card-provider.js";
-export { firstCodeInCauseChain, MAX_CAUSE_DEPTH } from "./cause-chain.js";
+export { causeLayers, firstCodeInCauseChain, MAX_CAUSE_DEPTH } from "./cause-chain.js";
 export { DISK_FULL_RESULT_CODE, diskFullIn, sqliteFailureOf } from "./engine-failure.js";
 export { BUILD_HEADER } from "./build-header.js";
 export { PERSON_HEADER } from "./person-header.js";
@@ -528,3 +528,5 @@ export {
   type GuestDeclarations,
 } from "./menu-document/guest-menu.js";
 export { guestMenuWords } from "./i18n/guest-menu.js";
+
+export { isSqlIdentifier } from "./sql-identifier.js";

@@ -1,3 +1,4 @@
+import { trimTrailingSlashes } from "./trim-trailing-slashes.js";
 import { isDeepStrictEqual } from "node:util";
 import { eq } from "drizzle-orm";
 import type { Context, Hono } from "hono";
@@ -229,7 +230,7 @@ export function mountHandoverSourceStartApi(
       answer = await postToBox(
         await checkedExchange(),
         destinationNodeId,
-        `${contactUrl.replace(/\/+$/, "")}${OFFER_PATH}`,
+        `${trimTrailingSlashes(contactUrl)}${OFFER_PATH}`,
         envelope,
       );
     } catch (error) {

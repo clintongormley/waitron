@@ -1,6 +1,6 @@
 import { LitElement, css, html, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { deriveDisplayName, isValidTelephone } from "@waitron/shared";
+import { deriveDisplayName, isValidEmail, isValidTelephone } from "@waitron/shared";
 import {
   baseStyles,
   draftScopeFor,
@@ -180,7 +180,7 @@ export class PersonForm extends LitElement {
     if (this.lastNames.trim() === "") errors.lastNames = t("form.last_names_required");
     if (this.displayName.trim() === "") errors.displayName = t("form.display_name_required");
     if (this.email.trim() === "") errors.email = t("form.email_required");
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.email.trim())) {
+    else if (!isValidEmail(this.email.trim())) {
       errors.email = codeMessage("person.email_invalid");
     }
     const tel = this.telephone.trim();

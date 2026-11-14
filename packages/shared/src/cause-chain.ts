@@ -13,14 +13,22 @@ export function firstCodeInCauseChain(
   error: unknown,
   accept: (code: string) => boolean,
 ): string | null {
-  let current: unknown = error;
-  for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth += 1) {
-    if (typeof current !== "object" || current === null) return null;
-    const code: unknown = (current as { code?: unknown }).code;
+  for (const layer of causeLayers(error)) {
+    if (typeof layer !== "object" || layer === null) return null;
+    const code: unknown = (layer as { code?: unknown }).code;
     if (typeof code === "string" && accept(code)) return code;
-    const cause: unknown = (current as { cause?: unknown }).cause;
-    if (cause === current) return null;
-    current = cause;
   }
   return null;
+}
+
+/** Outermost first; consumers decide which kinds of layer they can read. */
+export function* causeLayers(error: unknown): Generator<unknown> {
+  let current = error;
+  for (let depth = 0; current !== undefined && depth < MAX_CAUSE_DEPTH; depth++) {
+    yield current;
+    if (current === null || (typeof current !== "object" && typeof current !== "function")) return;
+    const next: unknown = (current as { cause?: unknown }).cause;
+    if (next === current) return;
+    current = next;
+  }
 }

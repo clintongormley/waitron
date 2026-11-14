@@ -1,3 +1,4 @@
+import { isSqlIdentifier } from "@waitron/shared";
 /**
  * Identifier validation for the statements `venue-db.ts` and `schema-conformance.ts` build by hand.
  *
@@ -8,11 +9,8 @@
  * schema a migration created — a name needing an escape is a bug worth failing on.
  */
 
-/** Conservative, and deliberately narrower than SQL allows: what a migrated schema actually names. */
-const SAFE_TOKEN = /^[A-Za-z_][A-Za-z0-9_]*$/;
-
 export function assertSafeIdentifier(kind: string, value: string): string {
-  if (!SAFE_TOKEN.test(value)) {
+  if (!isSqlIdentifier(value)) {
     throw new Error(`assertSafeIdentifier: unsafe ${kind} ${JSON.stringify(value)}`);
   }
   return value;

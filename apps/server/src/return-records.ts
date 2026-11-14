@@ -1,3 +1,4 @@
+import { trimTrailingSlashes } from "./trim-trailing-slashes.js";
 import { readPinnedPrimaryKey } from "@waitron/node-db";
 import { nodeId as asNodeId } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
@@ -75,7 +76,7 @@ export async function runReturnRecordsPass(
       const answer = await postToBox(
         { fetch: deps.fetch, timeoutMs: 5_000 },
         target.nodeId,
-        `${target.contactUrl.replace(/\/+$/, "")}/api/node/return-records`,
+        `${trimTrailingSlashes(target.contactUrl)}/api/node/return-records`,
         JSON.stringify(await signAsThisBox(deps, "return-batch", body)),
       );
       if (answer.status !== 200) {

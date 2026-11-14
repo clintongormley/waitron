@@ -1,10 +1,9 @@
+import { triggerRaised } from "../constraint-target.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { COVERAGE_REFUSAL, POST_SETTLEMENT_REFUSAL } from "../trigger-refusals.js";
-import { TRIGGER_ABORT } from "../sql-state.js";
-import { isRefusal } from "../unique-violation.js";
 import { withTransaction } from "../tenancy.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
@@ -181,7 +180,7 @@ describe("sale settlements — coverage on the settlement INSERT", () => {
     // The class AND the words, so a CHECK failure or a foreign-key refusal cannot pass as a
     // coverage refusal: `RAISE(ABORT, …)` shares its result code with `ON DELETE RESTRICT`
     // (`packages/db/src/sql-state.ts`), and only the text separates the two.
-    expect(isRefusal(error, TRIGGER_ABORT)).toBe(true);
+    expect(triggerRaised(error, COVERAGE_REFUSAL)).toBe(true);
     expect(engineErrorMessage(error)).toBe(COVERAGE_REFUSAL);
   });
 });
@@ -207,7 +206,7 @@ describe("sale settlements — append-only", () => {
         .set({ settledAt: "2026-07-21T19:20:30+00:00" })
         .where(eq(saleSettlements.id, settlementId)),
     );
-    expect(isRefusal(error, TRIGGER_ABORT)).toBe(true);
+    expect(triggerRaised(error, "sale_settlements is append-only")).toBe(true);
     expect(engineErrorMessage(error)).toBe("sale_settlements is append-only");
   });
 
@@ -215,7 +214,7 @@ describe("sale settlements — append-only", () => {
     const error = await captureError(() =>
       suite.db.delete(saleSettlements).where(eq(saleSettlements.id, settlementId)),
     );
-    expect(isRefusal(error, TRIGGER_ABORT)).toBe(true);
+    expect(triggerRaised(error, "sale_settlements is append-only")).toBe(true);
     expect(engineErrorMessage(error)).toBe("sale_settlements is append-only");
   });
 });
@@ -236,7 +235,7 @@ describe("sale settlements — no tender after settlement", () => {
         tx.insert(tenders).values({ saleId, method: "cash", amount: 500, settledAt: AT }),
       ),
     );
-    expect(isRefusal(error, TRIGGER_ABORT)).toBe(true);
+    expect(triggerRaised(error, POST_SETTLEMENT_REFUSAL)).toBe(true);
     expect(engineErrorMessage(error)).toBe(POST_SETTLEMENT_REFUSAL);
   });
 });

@@ -1,3 +1,4 @@
+import { isSqlIdentifier } from "@waitron/shared";
 import type { Database, Transaction } from "./client.js";
 import { sql } from "drizzle-orm";
 import { quoteLiteral, type ChangeSource } from "@waitron/shared";
@@ -8,10 +9,9 @@ import { quoteLiteral, type ChangeSource } from "@waitron/shared";
  * refused rather than escaped, which is the shape `CLAUDE.md` §3 asks for. The names themselves
  * come from the modules' own descriptors, not from a request.
  */
-const PLAIN_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 function plainName(kind: string, name: string): string {
-  if (!PLAIN_IDENTIFIER.test(name)) {
+  if (!isSqlIdentifier(name)) {
     throw new Error(`change feed: ${name} is not a plain ${kind} name`);
   }
   return name;

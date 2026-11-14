@@ -1,4 +1,4 @@
-import { MAX_CAUSE_DEPTH } from "./cause-chain.js";
+import { causeLayers } from "./cause-chain.js";
 
 /**
  * The engine's own failure — its extended result code and the message that goes with it — taken
@@ -13,8 +13,7 @@ import { MAX_CAUSE_DEPTH } from "./cause-chain.js";
  * A message can name a table or column, so do not print it where only a code was safe to print.
  */
 export function sqliteFailureOf(error: unknown): { errcode: number; message: string } | null {
-  let current: unknown = error;
-  for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth += 1) {
+  for (const current of causeLayers(error)) {
     if (typeof current !== "object" || current === null) return null;
     const layer = current as { errcode?: unknown; message?: unknown; cause?: unknown };
     if (typeof layer.errcode === "number") {
@@ -23,9 +22,6 @@ export function sqliteFailureOf(error: unknown): { errcode: number; message: str
         message: typeof layer.message === "string" ? layer.message : "",
       };
     }
-    const cause: unknown = layer.cause;
-    if (cause === current) return null;
-    current = cause;
   }
   return null;
 }
@@ -38,14 +34,10 @@ export const DISK_FULL_RESULT_CODE = 13;
  * `code`, or the engine's {@link DISK_FULL_RESULT_CODE} on `errcode`.
  */
 export function diskFullIn(error: unknown): boolean {
-  let current: unknown = error;
-  for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth += 1) {
+  for (const current of causeLayers(error)) {
     if (typeof current !== "object" || current === null) return false;
     const layer = current as { code?: unknown; errcode?: unknown; cause?: unknown };
     if (layer.code === "storage.disk_full" || layer.errcode === DISK_FULL_RESULT_CODE) return true;
-    const cause: unknown = layer.cause;
-    if (cause === current) return false;
-    current = cause;
   }
   return false;
 }

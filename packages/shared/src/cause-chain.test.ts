@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { firstCodeInCauseChain } from "./cause-chain.js";
+import { causeLayers, firstCodeInCauseChain } from "./cause-chain.js";
 
 /** Accepts anything, so these tests exercise the WALK rather than any caller's predicate. */
 const any = (): boolean => true;
@@ -47,5 +47,26 @@ describe("firstCodeInCauseChain", () => {
     const error = new Error("cyclic") as Error & { cause?: unknown };
     error.cause = error;
     expect(firstCodeInCauseChain(error, any)).toBeNull();
+  });
+});
+
+describe("causeLayers", () => {
+  it("yields outer layers first, follows function causes and includes a primitive tail", () => {
+    const fn = Object.assign(() => {}, { cause: "tail" });
+    const outer = { cause: fn };
+    expect([...causeLayers(outer)]).toEqual([outer, fn, "tail"]);
+    expect([...causeLayers(null)]).toEqual([null]);
+    expect([...causeLayers(undefined)]).toEqual([]);
+  });
+  it("yields at most five layers and stops a self-reference", () => {
+    const fifth = { cause: { marker: "sixth" } };
+    const fourth = { cause: fifth };
+    const third = { cause: fourth };
+    const second = { cause: third };
+    const first = { cause: second };
+    expect([...causeLayers(first)]).toEqual([first, second, third, fourth, fifth]);
+    const self: { cause?: unknown } = {};
+    self.cause = self;
+    expect([...causeLayers(self)]).toEqual([self]);
   });
 });

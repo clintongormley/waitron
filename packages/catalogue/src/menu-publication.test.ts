@@ -1,3 +1,4 @@
+import { triggerRaised } from "@waitron/db";
 import {
   extraListItems,
   menuDetails,
@@ -14,14 +15,7 @@ import type { MenuChange, MenuChangeBody } from "@waitron/shared";
 import { createIncludedMenu as createSection } from "../test/included-menu.js";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
-import {
-  captureError,
-  engineErrorMessage,
-  isRefusal,
-  TRIGGER_ABORT,
-  withTransaction,
-  type Transaction,
-} from "@waitron/db";
+import { captureError, engineErrorMessage, withTransaction, type Transaction } from "@waitron/db";
 import { useCatalogueDb } from "../test/fixtures.js";
 import {
   menusFixture,
@@ -455,17 +449,17 @@ describe("publishMenu", () => {
         .set({ contentHash: "forged" })
         .where(eq(menuVersions.id, first.versionId)),
     );
-    expect(isRefusal(update, TRIGGER_ABORT)).toBe(true);
+    expect(triggerRaised(update, "menu_versions is append-only")).toBe(true);
     expect(engineErrorMessage(update)).toBe("menu_versions is append-only");
     const remove = await captureError(() =>
       fx.db.delete(menuVersions).where(eq(menuVersions.id, first.versionId)),
     );
-    expect(isRefusal(remove, TRIGGER_ABORT)).toBe(true);
+    expect(triggerRaised(remove, "menu_versions is append-only")).toBe(true);
     expect(engineErrorMessage(remove)).toBe("menu_versions is append-only");
     const removeImage = await captureError(() =>
       fx.db.delete(menuVersionImages).where(eq(menuVersionImages.versionId, first.versionId)),
     );
-    expect(isRefusal(removeImage, TRIGGER_ABORT)).toBe(true);
+    expect(triggerRaised(removeImage, "menu_version_images is append-only")).toBe(true);
     expect(engineErrorMessage(removeImage)).toBe("menu_version_images is append-only");
     expect(await versionRows()).toEqual(rows);
   });

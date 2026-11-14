@@ -9,6 +9,7 @@ import {
   constraintTarget,
   indexViolated,
   refusalOn,
+  refusalCode,
   restrictRefused,
   sameTarget,
   triggerRaised,
@@ -125,7 +126,8 @@ describe("reading a SQLite refusal", () => {
   it("tells a restricted delete apart from a value naming no parent", async () => {
     const db = await open();
     const error = await refusal(db, sql`delete from parent where id = 1`);
-    expect(isRefusal(error, RESTRICT_VIOLATION)).toBe(true);
+    expect(isRefusal(error, RESTRICT_VIOLATION)).toBe(false);
+    expect(refusalCode(error)).toBe(1811);
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(false);
   });
 
@@ -178,14 +180,16 @@ describe("reading a trigger's raise", () => {
       db,
       sql`insert into child (id, parent_id, code) values ('c4', 1, 'STOP')`,
     );
-    expect(isRefusal(raised, TRIGGER_ABORT)).toBe(true);
+    expect(isRefusal(raised, TRIGGER_ABORT)).toBe(false);
+    expect(refusalCode(raised)).toBe(1811);
     expect(triggerRaised(raised, RAISED)).toBe(true);
 
     // The control, and the whole reason the predicate reads the message: SQLite implements
     // `ON DELETE RESTRICT` with an internal trigger, so a restricted delete arrives under the SAME
     // result code as the raise above. Only the words separate them.
     const restricted = await refusal(db, sql`delete from parent where id = 1`);
-    expect(isRefusal(restricted, TRIGGER_ABORT)).toBe(true);
+    expect(isRefusal(restricted, TRIGGER_ABORT)).toBe(false);
+    expect(refusalCode(restricted)).toBe(1811);
     expect(triggerRaised(restricted, RAISED)).toBe(false);
   });
 
@@ -249,7 +253,8 @@ describe("reading a restricted delete", () => {
           begin select raise(abort, 'this suite''s own guard refused the row'); end`,
     );
     const raised = await refusal(db, sql`delete from parent where id = 1`);
-    expect(isRefusal(raised, RESTRICT_VIOLATION)).toBe(true);
+    expect(isRefusal(raised, RESTRICT_VIOLATION)).toBe(false);
+    expect(refusalCode(raised)).toBe(1811);
     expect(restrictRefused(raised)).toBe(false);
   });
 

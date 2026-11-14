@@ -504,7 +504,7 @@ called weaker than its name, the topic file lists what it does not see.
   `write-queue.test.ts`, weaker than their names: page limits, not a real disk; at-commit cases are
   stand-ins. No guard enforces
   the test catch rule.
-- **Identify result-code 1811 refusals by their words, never `isRefusal` alone.**
+- **Identify result-code 1811 refusals by their words, never `isRefusal` alone (two stated exceptions in bill-request.ts and dish-not-sent-alert.ts, where payment must settle).**
   Use `restrictRefused`/`triggerRaised` in `packages/db/src/constraint-target.ts`. Nothing guards it.
 - **A full disk is not one error code; code 14 also names a missing folder.**
   `fullDiskFailure` in `apps/server/src/boot-failure.ts` classifies 13 always, 14/4874/`ENOSPC` only

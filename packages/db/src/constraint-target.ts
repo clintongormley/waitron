@@ -1,4 +1,4 @@
-import { MAX_CAUSE_DEPTH } from "@waitron/shared";
+import { causeLayers } from "@waitron/shared";
 import {
   CHECK_VIOLATION,
   RESTRICT_VIOLATION,
@@ -13,28 +13,6 @@ export interface ConstraintTarget {
   readonly table: string;
   /** The key the refusal named, in the order the index or constraint declares it. */
   readonly columns: readonly string[];
-}
-
-/**
- * Every object in an error's `cause` chain, outermost first.
- *
- * The walk exists because WHERE the engine's fields sit depends on how the statement was run. A
- * refusal from `db.run` arrives as drizzle's `DrizzleError`, which carries none of them and holds
- * the engine's error on `.cause`; one from `db.all`, `db.get`, `db.execute` or an awaited drizzle
- * query builder is the engine's own error, carrying them itself.
- *
- * It cannot be a predicate over `@waitron/shared`'s `firstCodeInCauseChain`, which returns only a
- * `code`, where this file needs the engine's `message` off a layer as well — and {@link refusalOn}
- * needs both off the SAME layer.
- */
-function* causeLayers(error: unknown): Generator<Record<string, unknown>> {
-  let current: unknown = error;
-  for (let depth = 0; current != null && depth < MAX_CAUSE_DEPTH; depth++) {
-    if (typeof current === "object") yield current as Record<string, unknown>;
-    const next = (current as { cause?: unknown }).cause;
-    if (next === current) return;
-    current = next;
-  }
 }
 
 /**
@@ -80,7 +58,9 @@ function keyColumns(message: string): ConstraintTarget | undefined {
  * failure alike.
  */
 export function refusalCode(error: unknown): number | undefined {
-  for (const layer of causeLayers(error)) {
+  for (const current of causeLayers(error)) {
+    if (typeof current !== "object" || current === null) continue;
+    const layer = current as Record<string, unknown>;
     if (typeof layer.errcode === "number") return layer.errcode;
   }
   return undefined;
@@ -105,7 +85,9 @@ export function refusalCode(error: unknown): number | undefined {
  * from another, ask the database whether the parent row exists.
  */
 export function constraintTarget(error: unknown): ConstraintTarget | undefined {
-  for (const layer of causeLayers(error)) {
+  for (const current of causeLayers(error)) {
+    if (typeof current !== "object" || current === null) continue;
+    const layer = current as Record<string, unknown>;
     if (typeof layer.errcode !== "number" || typeof layer.message !== "string") continue;
     const target = keyColumns(layer.message);
     if (target !== undefined) return target;
@@ -150,7 +132,9 @@ export function refusalOn(
   refusal: RefusalClass,
   expected: ConstraintTarget,
 ): boolean {
-  for (const layer of causeLayers(error)) {
+  for (const current of causeLayers(error)) {
+    if (typeof current !== "object" || current === null) continue;
+    const layer = current as Record<string, unknown>;
     if (typeof layer.errcode !== "number" || !refusal.includes(layer.errcode)) continue;
     if (typeof layer.message !== "string") continue;
     if (sameTarget(keyColumns(layer.message), expected)) return true;
@@ -172,14 +156,7 @@ export function refusalOn(
  * Matched on ONE layer of the cause chain, for the reason {@link refusalOn} states.
  */
 export function indexViolated(error: unknown, index: string): boolean {
-  const expected = `UNIQUE constraint failed: index '${index}'`;
-  // Widened from the literal tuple, for the reason {@link checkFailed}'s own line states.
-  const refusal: RefusalClass = UNIQUE_VIOLATION;
-  for (const layer of causeLayers(error)) {
-    if (typeof layer.errcode !== "number" || !refusal.includes(layer.errcode)) continue;
-    if (layer.message === expected) return true;
-  }
-  return false;
+  return messageRefused(error, UNIQUE_VIOLATION, `UNIQUE constraint failed: index '${index}'`);
 }
 
 /**
@@ -195,16 +172,7 @@ export function indexViolated(error: unknown, index: string): boolean {
  * Matched on ONE layer of the cause chain, for the reason {@link refusalOn} states.
  */
 export function checkFailed(error: unknown, constraint: string): boolean {
-  const expected = `CHECK constraint failed: ${constraint}`;
-  // Widened from the literal tuple `CHECK_VIOLATION` declares, so `includes` takes any number.
-  // `TRIGGER_ABORT` and `RESTRICT_VIOLATION` carry the same annotation at their declarations; this
-  // one is local because `CHECK_VIOLATION[0]` is read as a literal elsewhere in the tree.
-  const refusal: RefusalClass = CHECK_VIOLATION;
-  for (const layer of causeLayers(error)) {
-    if (typeof layer.errcode !== "number" || !refusal.includes(layer.errcode)) continue;
-    if (layer.message === expected) return true;
-  }
-  return false;
+  return messageRefused(error, CHECK_VIOLATION, `CHECK constraint failed: ${constraint}`);
 }
 
 /**
@@ -222,25 +190,25 @@ export function checkFailed(error: unknown, constraint: string): boolean {
  * with this one is a different guard.
  */
 export function triggerRaised(error: unknown, raised: string): boolean {
-  for (const layer of causeLayers(error)) {
-    if (typeof layer.errcode !== "number" || !TRIGGER_ABORT.includes(layer.errcode)) continue;
-    if (layer.message === raised) return true;
-  }
-  return false;
+  return messageRefused(error, TRIGGER_ABORT, raised);
 }
 
 /**
  * Did an `ON DELETE RESTRICT` foreign key refuse this delete?
  *
- * The question `isRefusal(error, RESTRICT_VIOLATION)` cannot answer alone: every trigger's
- * `RAISE(ABORT)` arrives under the same result code. The engine's words separate them, unless a
+ * A trigger's `RAISE(ABORT)` and a restricted delete share a result code. The words separate them, unless a
  * trigger raises those exact words. It names no key, so this cannot tell WHICH key refused.
  * Matched on ONE layer of the cause chain, for the reason {@link refusalOn} states.
  */
 export function restrictRefused(error: unknown): boolean {
-  const expected = "FOREIGN KEY constraint failed";
-  for (const layer of causeLayers(error)) {
-    if (typeof layer.errcode !== "number" || !RESTRICT_VIOLATION.includes(layer.errcode)) continue;
+  return messageRefused(error, RESTRICT_VIOLATION, "FOREIGN KEY constraint failed");
+}
+
+function messageRefused(error: unknown, refusal: RefusalClass, expected: string): boolean {
+  for (const current of causeLayers(error)) {
+    if (typeof current !== "object" || current === null) continue;
+    const layer = current as Record<string, unknown>;
+    if (typeof layer.errcode !== "number" || !refusal.includes(layer.errcode)) continue;
     if (layer.message === expected) return true;
   }
   return false;

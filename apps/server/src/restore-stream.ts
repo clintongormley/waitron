@@ -1,7 +1,8 @@
+import { tableExists } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { loadKeyRing } from "@waitron/credentials";
 import { openVenueDatabase, readVenue, tenants, type VenueDatabase } from "@waitron/db";
 import { manifestSets } from "@waitron/migrations";
@@ -212,10 +213,8 @@ async function readRestoredVenue(store: VenueDatabase, nodeId: string): Promise<
   if (tenant === undefined) throw new AppError("restore.identity_unknown", { nodeId });
   let venue;
   try {
-    const table = store.venue.execute<{ name: string }>(
-      sql`select name from sqlite_master where type = 'table' and name = 'settings'`,
-    );
-    if (table.rows.length === 0) throw new AppError("restore.identity_unknown", { nodeId });
+    if (!(await tableExists(store.venue, "settings")))
+      throw new AppError("restore.identity_unknown", { nodeId });
     venue = await readVenue(store.venue);
   } catch (error) {
     if (
@@ -254,10 +253,9 @@ async function readRestoredCopy(args: {
   }
   try {
     await assertNotAhead(store, manifestSets(), args.migrationsRoot);
-    const table = await store.venue.execute<{ name: string }>(
-      sql`select name from sqlite_master where type = 'table' and name = ${"node_sealed_state"}`,
-    );
-    const sealed = table.rows.length === 0 ? null : await readSealedStateRow(store.venue, nodeId);
+    const sealed = (await tableExists(store.venue, "node_sealed_state"))
+      ? await readSealedStateRow(store.venue, nodeId)
+      : null;
     if (sealed === null) throw new AppError("restore.stream_state_missing", { nodeId });
     return { sealed, venue: await readRestoredVenue(store, nodeId) };
   } finally {

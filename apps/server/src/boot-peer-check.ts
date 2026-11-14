@@ -1,3 +1,4 @@
+import { trimTrailingSlashes } from "./trim-trailing-slashes.js";
 import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import {
@@ -472,7 +473,7 @@ export function askPeerStatus(
       answer = await postToBox(
         { ...deps, timeoutMs },
         peer.nodeId,
-        `${peer.url.replace(/\/+$/, "")}/api/node/peer-status`,
+        `${trimTrailingSlashes(peer.url)}/api/node/peer-status`,
         JSON.stringify(query),
       );
     } catch (error) {

@@ -1,3 +1,4 @@
+import { trimTrailingSlashes } from "./trim-trailing-slashes.js";
 import { HANDOVER_DIR } from "@waitron/store";
 import { mkdir, rm, stat } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
@@ -141,7 +142,7 @@ export function usableBase(url: string | undefined): string | undefined {
   }
   // `boxDownload` ignores its trust over plain http, so the pin would protect nothing.
   if (parsed.protocol === "https:" || isLoopbackHost(parsed.hostname)) {
-    return url.replace(/\/+$/, "");
+    return trimTrailingSlashes(url);
   }
   return undefined;
 }

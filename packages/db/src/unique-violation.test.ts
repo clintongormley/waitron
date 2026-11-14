@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isUniqueViolation } from "./unique-violation.js";
+import { isRefusal, isUniqueViolation } from "./unique-violation.js";
 
 /**
  * `wrappers` Error links wrapping `tail`, so `tail` sits at index `wrappers` of the cause chain —
@@ -90,4 +90,10 @@ describe("isUniqueViolation", () => {
     expect(isUniqueViolation(undefined)).toBe(false);
     expect(isUniqueViolation("dup key")).toBe(false);
   });
+});
+
+it("declines 1811 even in a mixed refusal list, and keeps ordinary refusals", () => {
+  expect(isRefusal({ errcode: 1811 }, [1811, 2067])).toBe(false);
+  expect(isRefusal({ errcode: 2067 }, [1811, 2067])).toBe(true);
+  expect(isRefusal({ errcode: 1811, cause: { errcode: 2067 } }, [1811, 2067])).toBe(false);
 });

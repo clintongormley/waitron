@@ -4,7 +4,7 @@ import {
   NOT_NULL_VIOLATION,
   nowIso,
   parties,
-  TRIGGER_ABORT,
+  refusalCode,
   UNIQUE_VIOLATION,
   workingOrders,
 } from "@waitron/db";
@@ -78,10 +78,9 @@ export async function clearBillRequestIfPaid(
   try {
     await tx.update(parties).set({ billRequestedAt: null }).where(eq(parties.id, survivor.id));
   } catch (error) {
-    // Under SQLite's default ABORT a refusal backs out the statement alone (CLAUDE.md §3; 1555 is
-    // treated like 2067 without a measurement of its own), and no trigger or conflict clause in this
-    // schema uses ROLLBACK. A `RAISE(ROLLBACK)` would report the same 1811 and end the transaction.
-    if (!isRefusal(error, CLEARING_REFUSALS)) throw error;
+    // Deliberately catch every trigger refusal so the payment settles.
+    // Refusals must leave the transaction open; RAISE(ROLLBACK) would end it.
+    if (!isRefusal(error, CLEARING_REFUSALS) && refusalCode(error) !== 1811) throw error;
     log?.("warn", "bill_request.clear_failed", {
       billId,
       partyId: survivor.id,
@@ -90,7 +89,7 @@ export async function clearBillRequestIfPaid(
   }
 }
 
-const CLEARING_REFUSALS = [...TRIGGER_ABORT, ...UNIQUE_VIOLATION, ...NOT_NULL_VIOLATION];
+const CLEARING_REFUSALS = [...UNIQUE_VIOLATION, ...NOT_NULL_VIOLATION];
 
 /**
  * The party at the end of the party's chain of merges — itself, if it was never merged — and its

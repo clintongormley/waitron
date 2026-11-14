@@ -2249,7 +2249,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   IDs; the pack's module preset; the refused foral, Canary, Ceuta and Melilla jurisdictions; a
   territory picker in the setup wizard (it offers `ES-common` only).
 
-- **The two `stripSql` scanners and their copied patterns** (bundle of 2, size S). [Detail](backlog/architecture.md#bundle-the-two-stripsql-scanners-and-their-copied-patterns)
 
 - **Loose ends left by A394-3 (#1447).**
   [Detail](backlog/architecture.md#loose-ends-left-by-a394-3-1447).
@@ -2263,7 +2262,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   **Next action:** decide whether a read-only body should take the lock at all.
   [Detail](backlog/architecture.md#every-read-route-now-takes-the-venues-exclusive-write-lock-and-issues-a-delete)
 
-- **One identifier validator, one error walker** (bundle of 2, size S). [Detail](backlog/architecture.md#bundle-one-identifier-validator-one-error-walker)
 
 - **Raw engine imports and hand-spelled file names** (bundle of 2, size S, waits for another entry). [Detail](backlog/architecture.md#bundle-raw-engine-imports-and-hand-spelled-file-names)
 

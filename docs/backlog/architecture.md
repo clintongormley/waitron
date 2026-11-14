@@ -53,37 +53,6 @@ their full text.
      card providers.
 
 
-## Copies of the patterns A105 and C27 replaced
-
-**OPEN.** The same two SQL patterns (the
-  block-comment one A105 replaced, and `/--.*$/`, the one C27 replaced) are copied in
-  `scripts/module-graph-honesty.test.ts`, a guard reading the repository's own SQL;
-  `apps/till/src/i18n/t.ts` still strips the region with `/-.*$/` on the till's locale (CodeQL did
-  not flag it); and `/\/+$/` (written `/\/+$/u` in `mailpit-client.ts`) is still used in
-  `apps/server/src/boot-peer-check.ts` (another box's contact address from the held chart),
-  `apps/server/src/boot.ts` (the main box's origin URL from `node_mirror_link`),
-  `apps/server/src/handover-destination-duty.ts` (the handover source's contact address, once
-  `new URL` has parsed it), `apps/server/src/handover-source-start-api.ts` (the handover
-  destination's contact address), `apps/server/src/handover-status-api.ts` (the destination's
-  contact address, for its handover page), `apps/server/src/mailpit-client.ts` (the loopback
-  Mailpit base URL) and `apps/server/src/return-records.ts` (the main box's contact address from
-  the held chart) — none of them timed; and the email pattern itself is still copied in `apps/dashboard`
-  (`login-preference.ts` twice, `screens/login-screen.ts`, `screens/profile-screen.ts`,
-  `widgets/person-edit.ts`, `widgets/person-form.ts`), run in the browser on an address the person
-  typed or the browser saved (CodeQL did not flag them either). See also the OPEN bullet "The two
-  SQL scanners named `stripSql`…": a fix to one touches the other's code.
-
-## The two SQL scanners named `stripSql` blank block comments before `--` comments
-
-**OPEN (split from A95).** `scripts/module-graph-honesty.test.ts` and
-  `packages/sync-enrolment/src/migration-tables.ts` (product code, not a guard) blank `/*…*/` before
-  `--` comments and `'…'` strings, the same ordering the six TypeScript guards had. Read, not run;
-  whether any file they scan has a `/*` inside a `--` comment or a string is not measured. The
-  TypeScript reader in `packages/shared/src/source-comments.ts` knows nothing of `--` comments, so
-  it is not a drop-in fix. See also the OPEN bullet "Copies of the patterns A105 and C27
-  replaced…", which holds the copy of `/--.*$/` in `scripts/module-graph-honesty.test.ts`: a fix to
-  one touches the other's code.
-
 ## Remaining table restrictions after the grants-record audit
 
 Each unresolved table has its own entry in [the backlog](../backlog.md). The
@@ -240,23 +209,6 @@ on a read-only body is: `node:sqlite` exposes a change counter. But it interacts
 behaviour — the drain deliberately collects the rows an orphaned writer left — so this is a design
 decision, not a cleanup. **Next action:** decide whether a read-only body should take the lock at
 all.
-
-## Three copies of one SQL identifier validator and two cause-chain walkers
-
-**OPEN.** W8 replaced the probes in
-`packages/db/src/deployment.ts`, `packages/db/src/node-membership.ts`,
-`packages/db/src/mirror-config.ts` (deleted since), `packages/migrations/src/schema-version.ts`,
-`packages/migrations/src/journal-hashes.ts` and `packages/catalogue/src/categories.ts` with
-`@waitron/db`'s `tableExists`. `apps/server/src/restore-stream.ts` still has a one-table probe;
-`apps/server/scripts/dev-setup.ts` checks two table names in one query. The identifier validator is in
-`packages/db/src/testing/identifiers.ts`, `packages/db/src/change-feed.ts` and
-`packages/store/src/append-only.ts` — the first two are in the SAME package. The cause-chain walk is
-in `packages/shared/src/cause-chain.ts` and again in `packages/db/src/constraint-target.ts`, and
-that one is a regression: `unique-violation.ts` used to import the shared walker and now uses the
-local copy. The shared walker's only product caller is
-`packages/fiscal-verifactu/src/certificate-check.ts`. **Next action:** export
-one validator from `@waitron/shared`; `packages/store` depends only on `@waitron/shared`,
-which depends on nothing, so that edge closes no loop.
 
 ## Files that still spell the store's file names themselves
 
@@ -1531,29 +1483,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   [Detail](architecture.md#loose-ends-left-by-a435s-printer-reader-and-device-delete-steps-2-to-4).
 - **Loose ends left by A435 steps 3, 3b and 4 (#1520, #1524, #1519).**
   [Detail](architecture.md#loose-ends-left-by-a435-steps-3-3b-and-4-1520-1524-1519)
-
-## Bundle: The two `stripSql` scanners and their copied patterns
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Copies of the patterns A105 and C27 replaced — OPEN.**
-  [Detail](architecture.md#copies-of-the-patterns-a105-and-c27-replaced)
-- **The two SQL scanners named `stripSql` blank block comments before `--` comments — OPEN (split from A95).**
-  Read, not run; whether any file they scan has a `/*` inside a `--` comment or a string is not measured.
-  [Detail](architecture.md#the-two-sql-scanners-named-stripsql-blank-block-comments-before----comments)
-
-## Bundle: One identifier validator, one error walker
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Three copies of one SQL identifier validator and two cause-chain walkers** — OPEN.
-  **Next action:** export one validator from `@waitron/shared`; `packages/store` depends only on
-  `@waitron/shared`, which depends on nothing, so that edge closes no loop.
-  [Detail](architecture.md#three-copies-of-one-sql-identifier-validator-and-two-cause-chain-walkers)
-- **Two leftovers of the restrict/trigger refusal split (#731).** `isRefusal` with
-  `RESTRICT_VIOLATION` or `TRIGGER_ABORT` still reads the number alone and both stay exported (the
-  `CLAUDE.md` §3 rule, unguarded, is what stands against a new caller); and the four near-identical
-  word-matching checks in `packages/db/src/constraint-target.ts` could share one private helper.
 
 ## Bundle: Raw engine imports and hand-spelled file names
 
