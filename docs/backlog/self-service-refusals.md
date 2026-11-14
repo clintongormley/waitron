@@ -946,7 +946,7 @@ The product referrals remain open.
 
 ### fiscal-cases
 
-**Fiscal filing-case alerts need a real decision route.** The evidence page exists: **Reporting → Fiscal filing** (W41s-9 slice 1, 2026-11-10), which the bell's filing alerts open. It decides nothing, so the decision step still waits for the page to offer W41s-8's remedies, of which production enables only the correction record; until then keep the missing workflow explicit. Rejections, cancellations, duplicate conflicts and repeated refusals cannot be fixed by an invented retry screen.
+**Fiscal filing-case alerts need a real decision route.** The evidence page exists: **Reporting → Fiscal filing** (W41s-9 slice 1, 2026-11-10), which the bell's filing alerts open. Its one decision: for a sale AEAT refused with code 1100 whose message names the operation description, an administrator may send a correction record with a new description (Q37-FIX). Every other case still waits for the page to offer W41s-8's other remedies; until then keep the missing workflow explicit. Rejections, cancellations, duplicate conflicts and repeated refusals cannot be fixed by an invented retry screen.
 
 ### fiscal-reply
 

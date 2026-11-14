@@ -210,7 +210,7 @@ that bundle's heading in the area's file: take a bundle as one pull request.
   first retained warning may differ from the latest reply; persistent repair requires a separate
   owner decision.
 
-- **A1089: fiscal filing-case alerts need a real decision route.** The evidence page exists: **Reporting → Fiscal filing** (W41s-9 slice 1, 2026-11-10), which the bell's filing alerts open. It decides nothing, so the decision step still waits for the page to offer W41s-8's remedies, of which production enables only the correction record; until then keep the missing workflow explicit. Rejections, cancellations, duplicate conflicts and repeated refusals cannot be fixed by an invented retry screen.
+- **A1089: fiscal filing-case alerts need a real decision route.** The evidence page exists: **Reporting → Fiscal filing** (W41s-9 slice 1, 2026-11-10), which the bell's filing alerts open. Its one decision: for a sale AEAT refused with code 1100 whose message names the operation description, an administrator may send a correction record with a new description (Q37-FIX). Every other case still waits for the page to offer W41s-8's other remedies; until then keep the missing workflow explicit. Rejections, cancellations, duplicate conflicts and repeated refusals cannot be fixed by an invented retry screen.
   [Audit](backlog/self-service-refusals.md#fiscal-cases).
 
 - **A1089: fiscal integrity and validation alerts need evidence-preserving next steps.** Replace support-only guidance without editing records or treating every warning as a proven Waitron bug. A substantial missing recovery workflow requires an owner decision.
