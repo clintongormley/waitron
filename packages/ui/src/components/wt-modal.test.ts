@@ -1046,8 +1046,12 @@ test("a guarded parent ignores a child's Escape and close while retaining its ow
   const child = parent.querySelector("wt-modal")!;
   child.open = true;
   await child.updateComplete;
+  const closed = new Promise((resolve) =>
+    child.addEventListener("wt-close", resolve, { once: true }),
+  );
   await userEvent.keyboard("{Escape}");
   await vi.waitFor(() => expect(dialogOf(child).open).toBe(false));
+  await closed;
   expect(dialogOf(parent).open).toBe(true);
   expect(parent.querySelector("wt-input")!.value).toBe("parent draft");
   expect(parent.beforeClose).not.toHaveBeenCalled();

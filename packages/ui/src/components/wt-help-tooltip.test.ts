@@ -302,9 +302,13 @@ test("stops watching for Escape once the tooltip is closed", async () => {
   const elsewhere = document.createElement("input");
   host.append(elsewhere);
 
+  const opened = new Promise((resolve) => tip.addEventListener("toggle", resolve, { once: true }));
   await userEvent.click(button);
+  await opened;
   await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(true));
+  const closed = new Promise((resolve) => tip.addEventListener("toggle", resolve, { once: true }));
   await userEvent.click(button);
+  await closed;
   await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(false));
 
   elsewhere.focus();
