@@ -69,7 +69,14 @@ export class BackupAudit extends LitElement {
           ${formatMoney(decimal(row.amount), currentLocale())} ·
           ${new Date(row.settledAt).toLocaleString(currentLocale(), { timeZone: audit!.timeZone })}
         </p>
-        <p>${row.references.join(", ")}</p>`;
+        ${row.references.length ? html`<p>${row.references.join(", ")}</p>` : nothing}`;
+    const details = (row: BackupAuditView["backupMatches"][number]) =>
+      html` <p>
+          ${t("payments.backup.recorded")}: ${row.paymentRef} · ${t("payments.backup.order")}:
+          ${row.workingOrderId}
+        </p>
+        ${row.externalMachine ? html`<p>${t("payments.backup.machine")}: ${row.externalMachine}</p>` : nothing}
+        ${row.externalRef ? html`<p>${t("payments.backup.operation")}: ${row.externalRef}</p>` : nothing}`;
     return html`<section aria-label=${t("payments.backup.title")}>
       <h2>${t("payments.backup.title")}</h2>
       <p>${t("payments.backup.note")}</p>
@@ -96,26 +103,17 @@ export class BackupAudit extends LitElement {
               ${audit.complete ? nothing : html`<p role="status">${t("payments.backup.incomplete")}</p>`}
               <h3>${t("payments.backup.matched")}</h3>
               <ul>
-                ${audit.backupMatches.map(
-                  (row) =>
-                    html`<li>
-                      ${charge(row)}
-                      <p>
-                        ${t("payments.backup.recorded")}: ${row.paymentRef} ·
-                        ${t("payments.backup.order")}: ${row.workingOrderId}
-                      </p>
-                      ${row.externalMachine ? html`<p>${t("payments.backup.machine")}: ${row.externalMachine}</p>` : nothing}
-                      ${row.externalRef ? html`<p>${t("payments.backup.operation")}: ${row.externalRef}</p>` : nothing}
-                    </li>`,
-                )}
+                ${audit.backupMatches.map((row) => html`<li>${charge(row)} ${details(row)}</li>`)}
               </ul>
               <h3>${t("payments.backup.exceptions")}</h3>
               <ul>
                 ${audit.backupUnmatched.map(
                   (row) =>
                     html`<li>
-                      ${charge(row)}
-                      <p>${t(`payments.backup.${row.reason}`)}</p>
+                      ${charge(row)} ${row.kind === "recorded" ? details(row) : nothing}
+                      <p>
+                        ${t(`payments.backup.${row.kind === "recorded" && row.reason === "unmatched" ? "recorded_unmatched" : row.reason}`)}
+                      </p>
                     </li>`,
                 )}
               </ul>

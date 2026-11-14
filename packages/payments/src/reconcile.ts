@@ -91,12 +91,15 @@ export interface BackupPaymentMatch {
   externalRef: string | null;
 }
 
-export interface BackupPaymentUnmatched {
+export type BackupPaymentUnmatched = {
   references: string[];
   amount: string;
   settledAt: string;
   reason: "ambiguous" | "unmatched";
-}
+} & (
+  | { kind: "charge" }
+  | ({ kind: "recorded" } & Omit<BackupPaymentMatch, "references" | "amount" | "settledAt">)
+);
 
 export interface PaymentReconcileResult {
   period: ReconcilePeriod;

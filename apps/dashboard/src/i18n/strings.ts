@@ -2860,6 +2860,7 @@ export const en = {
   "payments.backup.incomplete":
     "Comparison incomplete. One or both daily checks are not available yet. The complete day is available after the following UTC midnight’s check.",
   "payments.backup.matched": "Matched payments",
+  "payments.backup.recorded_unmatched": "No matching SumUp charge — check in SumUp",
   "payments.backup.exceptions": "Payments to check",
   "payments.backup.ambiguous": "Several possible matches — check in SumUp",
   "payments.backup.unmatched": "No matching entry — check in SumUp",
@@ -6989,6 +6990,7 @@ export const es: Record<StringKey, string> = {
   "payments.backup.incomplete":
     "Comparación incompleta. Falta una o ambas comprobaciones diarias. El día completo estará disponible tras la comprobación de la siguiente medianoche UTC.",
   "payments.backup.matched": "Pagos vinculados",
+  "payments.backup.recorded_unmatched": "Sin cargo coincidente de SumUp — compruébalo en SumUp",
   "payments.backup.exceptions": "Pagos por comprobar",
   "payments.backup.ambiguous": "Varias coincidencias posibles — compruébalo en SumUp",
   "payments.backup.unmatched": "Sin anotación coincidente — compruébalo en SumUp",

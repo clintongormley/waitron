@@ -225,7 +225,12 @@ describe("backup-machine comparison", () => {
         heldAlerts,
       }).reconcile(period, now);
       expect(result.backupMatches).toHaveLength(matched);
-      expect(result.backupUnmatched).toHaveLength(unmatched);
+      expect(result.backupUnmatched?.filter((row) => row.kind === "charge")).toHaveLength(
+        unmatched,
+      );
+      expect(result.backupUnmatched?.filter((row) => row.kind === "recorded")).toHaveLength(
+        competing === "other provider" || matched ? 0 : competing === "manual" ? 2 : 1,
+      );
       expect(result.unlinkedCharges).toBe(unmatched);
       expect(result.missingLocal).toHaveLength(unmatched);
       if (matched)
@@ -304,7 +309,10 @@ describe("backup-machine comparison", () => {
       heldAlerts,
     }).reconcile(period, now);
     expect(result.backupMatches).toEqual([]);
-    expect(result.backupUnmatched).toEqual([]);
+    expect(result.backupUnmatched.filter((row) => row.kind === "charge")).toEqual([]);
+    expect(result.backupUnmatched).toMatchObject([
+      { kind: "recorded", paymentRef: "backup", reason: "unmatched" },
+    ]);
     expect(result.unlinkedCharges).toBe(0);
     expect(result.missingLocal.map((row) => row.references)).toEqual([["hinted"]]);
   });
@@ -373,4 +381,42 @@ it("counts an unreadable item only in its original UTC audit day", async () => {
       .unlinkedCharges,
   ).toBe(1);
   expect((await audit.reconcile(period, now)).unlinkedCharges).toBe(0);
+});
+
+it("lists a recorded backup payment even when SumUp reports no charge", async () => {
+  const seeded = await seedWorkingOrder(suite.db, freshNif());
+  await withTransaction(suite.db, (tx) =>
+    insertCapturedPayment(tx, {
+      provider: "manual",
+      paymentRef: "not-charged",
+      externalProvider: "connected_account",
+      externalRef: "operation-9",
+      externalMachine: "Backup Solo",
+      amount: decimal("42.00"),
+      origin: deviceOrigin(seeded.deviceId),
+      nodeId: seeded.nodeId,
+      workingOrderId: seeded.workingOrderId,
+      settledAt: new Date("2026-07-01T12:00:00Z"),
+    }),
+  );
+  const result = await new SumUpReconciler({
+    db: suite.db,
+    resolveClient: async () => new FakeSumUp(),
+    incidents: captureAlerts.raise,
+    heldAlerts,
+  }).reconcile(period, now);
+  expect(result.backupUnmatched).toEqual([
+    {
+      kind: "recorded",
+      references: [],
+      amount: "42.00",
+      settledAt: "2026-07-01T12:00:00.000Z",
+      reason: "unmatched",
+      paymentRef: "not-charged",
+      workingOrderId: seeded.workingOrderId,
+      externalMachine: "Backup Solo",
+      externalRef: "operation-9",
+    },
+  ]);
+  expect(result.unlinkedCharges).toBe(0);
 });

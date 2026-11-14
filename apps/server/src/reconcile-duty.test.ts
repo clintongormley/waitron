@@ -84,6 +84,7 @@ describe("a PaymentReconciler adapts to a PeriodDuty", () => {
       ],
       backupUnmatched: [
         {
+          kind: "charge" as const,
           references: ["unknown"],
           amount: "9.00",
           settledAt: "2026-07-24T14:00:00.000Z",

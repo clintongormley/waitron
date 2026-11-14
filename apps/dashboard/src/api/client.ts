@@ -2246,12 +2246,21 @@ export interface BackupAuditView {
     externalMachine: string | null;
     externalRef: string | null;
   }[];
-  backupUnmatched: {
+  backupUnmatched: ({
     references: string[];
     amount: string;
     settledAt: string;
     reason: "ambiguous" | "unmatched";
-  }[];
+  } & (
+    | { kind: "charge" }
+    | {
+        kind: "recorded";
+        paymentRef: string;
+        workingOrderId: string;
+        externalMachine: string | null;
+        externalRef: string | null;
+      }
+  ))[];
 }
 
 export interface PaymentProviderRow {

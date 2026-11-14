@@ -29,6 +29,17 @@ const result = {
   ],
   backupUnmatched: [
     {
+      kind: "recorded",
+      references: [],
+      amount: "42.00",
+      settledAt: "2026-07-01T15:00:00.000Z",
+      reason: "unmatched",
+      paymentRef: "recorded-42",
+      workingOrderId: "order-42",
+      externalMachine: "Second Solo",
+      externalRef: "operation-42",
+    },
+    {
       references: ["ambiguous-8"],
       amount: "10.25",
       settledAt: "2026-07-01T13:00:00.000Z",
@@ -58,9 +69,14 @@ it("shows matches and exceptions, and reads a changed day passively", async () =
     "charge-7",
     "ambiguous-8",
     "unknown-9",
+    "recorded-42",
+    "order-42",
+    "Second Solo",
+    "operation-42",
     t("payments.backup.incomplete"),
     t("payments.backup.ambiguous"),
     t("payments.backup.unmatched"),
+    t("payments.backup.recorded_unmatched"),
   ])
     expect(el.shadowRoot!.textContent).toContain(text);
   const day = el.shadowRoot!.querySelector<WtInput>("wt-input")!;

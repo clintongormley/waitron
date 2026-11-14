@@ -73,17 +73,21 @@ export class SumUpReconciler implements PaymentReconciler {
               Math.abs(Date.parse(row.settledAt!) - charge.settledAt.getTime()) <= 300_000,
           ),
         );
+        const matchedManual = new Set<(typeof manual)[number]>();
         const matched = new Set<(typeof records)[number]>();
         for (const [index, charge] of outside.entries()) {
-          if (charge.settledAt < window.from || charge.settledAt >= window.to) continue;
           const options = choices[index]!;
           const row = options[0];
+          const unique =
+            options.length === 1 && choices.filter((rows) => rows.includes(row!)).length === 1;
+          if (unique) matchedManual.add(row!);
+          if (charge.settledAt < window.from || charge.settledAt >= window.to) continue;
           const common = {
             references: charge.references,
             amount: charge.amount,
             settledAt: charge.settledAt.toISOString(),
           };
-          if (options.length === 1 && choices.filter((rows) => rows.includes(row!)).length === 1) {
+          if (unique) {
             backupMatches.push({
               ...common,
               paymentRef: row!.paymentRef,
@@ -93,7 +97,26 @@ export class SumUpReconciler implements PaymentReconciler {
             });
             matched.add(charge);
           } else
-            backupUnmatched.push({ ...common, reason: options.length ? "ambiguous" : "unmatched" });
+            backupUnmatched.push({
+              ...common,
+              kind: "charge",
+              reason: options.length ? "ambiguous" : "unmatched",
+            });
+        }
+        for (const row of manual) {
+          if (
+            matchedManual.has(row) ||
+            row.settledAt! < window.from.toISOString() ||
+            row.settledAt! >= window.to.toISOString()
+          )
+            continue;
+          backupUnmatched.push({
+            ...row,
+            settledAt: row.settledAt!,
+            references: [],
+            kind: "recorded",
+            reason: choices.some((rows) => rows.includes(row)) ? "ambiguous" : "unmatched",
+          });
         }
         return records.filter(
           (row) =>
