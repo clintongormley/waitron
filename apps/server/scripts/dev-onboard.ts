@@ -1,11 +1,12 @@
 import { venueDirOf } from "@waitron/store";
 // Local-dev bootstrap for setup mode: migrate a local venue directory and write a venue-less
-// `apps/server/.env`, so `pnpm dev` boots the server unprovisioned. Run from the repo root via
-// `pnpm dev:onboard`.
+// `apps/server/.env`, or the file `WAITRON_DEV_ENV_FILE` names, so `pnpm dev` boots the server
+// unprovisioned. Run from the repo root via `pnpm dev:onboard`.
 //
 // It refuses a directory that already holds a venue: provisioning a second one would start a second
 // SIF and a second hash chain (CLAUDE.md §5). It never deletes data itself.
-import { realpathSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { deploymentEnvironment, resolveConfigDir } from "../src/config.js";
@@ -70,12 +71,13 @@ export async function devOnboard(opts: DevOnboardOptions): Promise<DevOnboardRes
     WAITRON_ENV: "dev",
     WAITRON_HTTP_PORT: opts.httpPort || "8080",
   };
+  mkdirSync(dirname(envPath), { recursive: true });
   writeFileSync(envPath, renderSetupEnvFile(env));
   log(`dev-onboard: wrote ${envPath} (setup mode — no venue bound)`);
   return { env };
 }
 
-/** `--reset` removes the venue directory first. `WAITRON_DEV_ENV_FILE` moves the settings file (tests). */
+/** `--reset` removes the venue directory first. `WAITRON_DEV_ENV_FILE` moves the settings file. */
 async function main(): Promise<void> {
   refuseProduction(process.env);
   const envPath =

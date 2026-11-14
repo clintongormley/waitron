@@ -109,6 +109,18 @@ describe("devOnboard against a real venue directory", () => {
     expect(shifted.env.WAITRON_HTTP_PORT).toBe("8180");
   });
 
+  it("makes the settings file's missing folder", async () => {
+    const nestedEnvPath = join(workDir, "not-yet", "server.env");
+    await devOnboard({
+      venueDir: join(workDir, "nested-venue"),
+      envPath: nestedEnvPath,
+      environment: process.env,
+    });
+    expect(parseEnvFile(readFileSync(nestedEnvPath, "utf8")).WAITRON_VENUE_DIR).toBe(
+      join(workDir, "nested-venue"),
+    );
+  });
+
   it("dev:onboard refuses production before migrating", async () => {
     const refusedDir = join(workDir, "refused");
     await expect(

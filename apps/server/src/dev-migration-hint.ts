@@ -44,7 +44,8 @@ export async function withDevMigrationHint(
       try {
         log("error", "migrations.dev_constraint_violation", {
           errcode: failure.errcode,
-          remedyIfStaleDatabase: "wa-wt reset demo <worktree-name>",
+          remedyIfStaleDatabase:
+            "wa-wt reset demo <worktree-name> (owner) or wa-wt reset own demo <worktree-name> (Claude)",
         });
       } catch {
         // A failing sink must not replace the migration failure.

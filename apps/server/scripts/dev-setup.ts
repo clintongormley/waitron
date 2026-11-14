@@ -2,9 +2,10 @@ import { tableExists } from "@waitron/db";
 import { venueDirOf } from "@waitron/store";
 import { DEMO_DEVELOPER_PRESETS } from "@waitron/country-packs/demo";
 // Idempotent local-dev bootstrap: provision ONE preproduction venue into a local venue directory and
-// write its identity to `apps/server/.env`. Run from the repo root via `pnpm dev:setup`; never
-// against a production directory — it chains real fiscal records under `preproduction`, and it
-// refuses `WAITRON_ENV=production` before touching the directory.
+// write its identity to `apps/server/.env`, or the file `WAITRON_DEV_ENV_FILE` names. Run from the
+// repo root via `pnpm dev:setup`; never against a production directory — it chains real fiscal
+// records under `preproduction`, and it refuses `WAITRON_ENV=production` before touching the
+// directory.
 //
 
 import {
@@ -13,7 +14,8 @@ import {
   type CountryDemoDeveloperPreset,
 } from "@waitron/country";
 import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
 import { openVenueDatabase, withTransaction, type Database } from "@waitron/db";
@@ -356,10 +358,11 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
 
   if (hasAny) {
     throw new Error(
-      "dev-setup: the venue directory already holds a venue, but this apps/server/.env does not name " +
+      `dev-setup: the venue directory already holds a venue, but ${envPath} does not name ` +
         "it (missing, stale, or mismatched). Refusing to provision a second venue — it would start a " +
         "new fiscal chain. Run `pnpm dev:reset` to remove the venue directory and re-provision from " +
-        "scratch.",
+        "scratch (from a wa-wt stack: `wa-wt reset demo <worktree-name>`, or Claude's " +
+        "`wa-wt reset own demo <worktree-name>`).",
     );
   }
 
@@ -385,6 +388,7 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
     ids,
     httpPort: opts.httpPort,
   });
+  mkdirSync(dirname(envPath), { recursive: true });
   writeFileSync(envPath, renderEnvFile(env));
   log(`dev-setup: wrote ${envPath}`);
   await writeFiscalModuleSettings(venueDir, log);
@@ -399,9 +403,10 @@ export function resetVenueDir(venueDir: string): void {
   rmSync(venueDir, { recursive: true, force: true });
 }
 
-/** `--reset` removes the venue directory first. */
+/** `--reset` removes the venue directory first. `WAITRON_DEV_ENV_FILE` moves the settings file. */
 async function main(): Promise<void> {
-  const envPath = fileURLToPath(new URL("../.env", import.meta.url));
+  const envPath =
+    process.env.WAITRON_DEV_ENV_FILE?.trim() || fileURLToPath(new URL("../.env", import.meta.url));
 
   // Resolved exactly as boot does. Imported dynamically so a test importing this module does not
   // pull the whole `boot.ts` graph.
