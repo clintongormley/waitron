@@ -137,7 +137,7 @@ como se guardó, incluidos los espacios y las mayúsculas. La ventana muestra la
 que coinciden en los tres datos;
 pulsa **Descargar sus datos** para obtener un ZIP con una copia en PDF de cada factura, un archivo
 `invoices.json` con el nombre, el identificador, su tipo y país emisor cuando existen y la dirección de cada una y todas las direcciones de correo
-a las que la caja la envió o intentó enviarla, y un `README.txt` en el idioma del local. Los
+a las que el servidor la envió o intentó enviarla, y un `README.txt` en el idioma del local. Los
 gerentes no ven esta acción. Una reserva no lleva NIF, así que esta búsqueda no encuentra reservas.
 Waitron no guarda una lista de estas solicitudes, así que anota la solicitud y tu respuesta en los
 registros del local. El plazo de un mes para responder y las demás obligaciones del local están en

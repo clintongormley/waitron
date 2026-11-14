@@ -5451,15 +5451,15 @@ export const es: Record<StringKey, string> = {
   "email.settings.remove": "Quitar servidor de correo",
   "email.settings.stop": "Parar",
   "email.settings.prepare_save":
-    "Al guardar un servidor, las invitaciones y los enlaces para restablecer contraseñas llegan a buzones reales.",
+    "Al guardar un servidor de correo, las invitaciones y los enlaces para restablecer contraseñas llegan a buzones reales.",
   "email.settings.remove_capture":
     "¿Quitar el servidor de correo guardado? El correo volverá a quedarse en el buzón de prueba de este servidor. Parar conserva la configuración.",
   "email.settings.remove_live":
-    "¿Quitar el servidor guardado? No se enviarán correos de cuentas ni facturas hasta que configures otro servidor. Las ventas continúan. Parar conserva la configuración.",
+    "¿Quitar el servidor de correo guardado? No se enviarán correos de cuentas ni facturas hasta que configures otro servidor de correo. Las ventas continúan. Parar conserva la configuración.",
   "email.settings.change": "Cambiar servidor de correo",
   "email.settings.set_up": "Configurar servidor de correo",
   "email.settings.unavailable":
-    "No se pueden enviar facturas por correo hasta que configures un servidor.",
+    "No se pueden enviar facturas por correo hasta que configures un servidor de correo.",
   "email.settings.invalid_sender":
     "La dirección del remitente guardada para las facturas no es válida. Cámbiala abajo.",
   "email.settings.captured":
