@@ -1,8 +1,9 @@
 import { expect, it, onTestFinished } from "vitest";
+import type { IncomingMessage } from "node:http";
 import { createHash } from "node:crypto";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
 
-async function fixture(wait: () => Promise<void> = async () => {}) {
+async function fixture(wait: (req: IncomingMessage) => Promise<void> = async () => {}) {
   const calls: object[] = [];
   const reply: Record<string, unknown> = {
     version: 1,
@@ -20,7 +21,7 @@ async function fixture(wait: () => Promise<void> = async () => {}) {
         currentLease: values[6] === JSON.stringify((saved.lifecycle as { lease: unknown }).lease),
         ...(typeof sent.body === "string" ? { text: sent.body } : {}),
       });
-      await wait();
+      await wait(req);
       res.end(JSON.stringify(reply));
     },
   });
@@ -147,3 +148,127 @@ it("ends an in-flight status read when its caller aborts", async () => {
     release();
   }
 }, 3000);
+
+it("reconciles changed publications on later passes and withdraws missing publications without reviving a Cloud block", async () => {
+  const f = await fixture(async () => {
+    const last = f.calls.at(-1) as { action: string; body: { bodySha256: string }; text?: string };
+    if (last.action === "guest-menu-publish")
+      Object.assign(f.reply, {
+        revision: Number(f.reply.revision) + 1,
+        state: "current",
+        publication: {
+          bodySha256: last.body.bodySha256,
+          defaultLanguage: JSON.parse(last.text!).defaultLanguage,
+          receivedAt: "2026-11-14T05:00:00.000Z",
+        },
+      });
+    if (last.action === "guest-menu-withdraw")
+      Object.assign(f.reply, {
+        revision: Number(f.reply.revision) + 1,
+        state: "off",
+        publication: null,
+      });
+  });
+  let pages: { defaultLanguage: string; pages: Record<string, string> } | null = {
+    defaultLanguage: "en",
+    pages: { en: "<h1>Lunch</h1>" },
+  };
+  const { createGuestMenuDelivery } = await import("./cloud-guest-menu.js");
+  const delivery = createGuestMenuDelivery({
+    connection: f.client,
+    readPages: async () => pages,
+    isPrimary: () => true,
+  });
+  const signal = new AbortController().signal;
+  expect(await delivery.status()).toEqual({ state: "pending", receivedAt: null });
+  await delivery.reconcile(signal);
+  expect(await delivery.status()).toEqual({
+    state: "current",
+    receivedAt: "2026-11-14T05:00:00.000Z",
+  });
+  await delivery.reconcile(signal);
+  expect(
+    f.calls.filter((v) => (v as { action: string }).action === "guest-menu-publish"),
+  ).toHaveLength(1);
+  pages = { defaultLanguage: "fr", pages: { fr: "<h1>Dinner</h1>" } };
+  expect((await delivery.status()).state).toBe("pending");
+  await delivery.reconcile(signal);
+  expect((f.calls.at(-1) as { text: string }).text).toBe(
+    '{"defaultLanguage":"fr","pages":{"fr":"<h1>Dinner</h1>"}}',
+  );
+  expect((await delivery.status()).state).toBe("current");
+  pages = null;
+  expect((await delivery.status()).state).toBe("pending");
+  await delivery.reconcile(signal);
+  expect((await delivery.status()).state).toBe("off");
+  expect((f.calls.at(-1) as { action: string }).action).toBe("guest-menu-withdraw");
+  Object.assign(f.reply, { state: "blocked", publication: null });
+  pages = { defaultLanguage: "en", pages: { en: "<h1>Lunch</h1>" } };
+  await delivery.reconcile(signal);
+  expect((await delivery.status()).state).toBe("blocked");
+  expect((f.calls.at(-1) as { action: string }).action).toBe("guest-menu-status");
+});
+
+it.each(["abort", "stepdown"] as const)(
+  "does not publish if %s arrives during the status exchange",
+  async (stop) => {
+    const controller = new AbortController();
+    let primary = true;
+    const f = await fixture(async () => {
+      if (stop === "abort") controller.abort();
+      else primary = false;
+    });
+    const { createGuestMenuDelivery } = await import("./cloud-guest-menu.js");
+    const delivery = createGuestMenuDelivery({
+      connection: f.client,
+      isPrimary: () => primary,
+      readPages: async () => ({ defaultLanguage: "en", pages: { en: "<h1>Lunch</h1>" } }),
+    });
+    await delivery.reconcile(controller.signal).catch(() => {});
+    expect(f.calls.map((v) => (v as { action: string }).action)).toEqual(["guest-menu-status"]);
+  },
+);
+
+it("confirms a publish whose reply was lost on the next connected pass without resending it", async () => {
+  let offline = true;
+  const f = await fixture(async (req) => {
+    const last = f.calls.at(-1) as { action: string; body: { bodySha256: string } };
+    if (offline) {
+      req.socket.destroy();
+      return;
+    }
+    if (last.action === "guest-menu-publish") {
+      Object.assign(f.reply, {
+        revision: 1,
+        state: "current",
+        publication: {
+          bodySha256: last.body.bodySha256,
+          defaultLanguage: "en",
+          receivedAt: "2026-11-14T05:00:00.000Z",
+        },
+      });
+      req.socket.destroy();
+    }
+  });
+  const { createGuestMenuDelivery } = await import("./cloud-guest-menu.js");
+  const delivery = createGuestMenuDelivery({
+    connection: f.client,
+    isPrimary: () => true,
+    readPages: async () => ({ defaultLanguage: "en", pages: { en: "<h1>Lunch</h1>" } }),
+  });
+  const signal = new AbortController().signal;
+  await expect(delivery.reconcile(signal)).rejects.toMatchObject({ code: "cloud.unavailable" });
+  expect((await delivery.status()).state).toBe("pending");
+  offline = false;
+  await expect(delivery.reconcile(signal)).rejects.toMatchObject({ code: "cloud.unavailable" });
+  expect((await delivery.status()).state).toBe("pending");
+  await delivery.reconcile(signal);
+  expect((await delivery.status()).state).toBe("current");
+  expect(f.calls.map((v) => (v as { action: string }).action)).toEqual([
+    "guest-menu-status",
+    "guest-menu-status",
+    "guest-menu-publish",
+    "guest-menu-status",
+  ]);
+  expect((await f.client.status()).installation?.state).toBe("active");
+});

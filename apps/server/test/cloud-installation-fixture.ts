@@ -76,8 +76,18 @@ export async function installationFixture(
       await options.staffCertificate(values, saved, req, res, sent);
       return;
     }
-    if (String(values[2]).startsWith("guest-menu-") && options.guestMenu) {
-      await options.guestMenu(values, saved, req, res, sent);
+    if (String(values[2]).startsWith("guest-menu-")) {
+      if (options.guestMenu) await options.guestMenu(values, saved, req, res, sent);
+      else
+        res.end(
+          JSON.stringify({
+            version: 1,
+            url: `https://menus.example.test/m/${(saved.view as { registration: { venueId: string } }).registration.venueId}`,
+            revision: 0,
+            state: "off",
+            publication: null,
+          }),
+        );
       return;
     }
     if (values[2] === "billing-display" && options.billing) {

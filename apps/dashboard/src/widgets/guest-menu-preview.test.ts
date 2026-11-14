@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import type { GuestMenuPreview } from "./guest-menu-preview.js";
 import "./guest-menu-preview.js";
@@ -284,6 +284,66 @@ it("shares one settings revision between appearance and sharing actions in eithe
       )
       .toBe("sans");
   } finally {
+    cleanupWidgets();
+  }
+});
+
+it("refreshes Cloud confirmation passively while preserving the open paper draft", async () => {
+  const { DashboardApi } = await import("../api/client.js");
+  const { mountWidget, cleanupWidgets } = await import("./test-helpers.js");
+  const { t } = await import("../i18n/t.js");
+  let state = "pending";
+  const api = new DashboardApi("", async (input, init) => {
+    if (String(input).endsWith("/management-api/guest-menu")) {
+      expect(new Headers(init?.headers).get("x-waitron-live")).toBe("1");
+      return new Response(
+        JSON.stringify({
+          enabled: true,
+          available: true,
+          revision: 1,
+          delivery: { state, receivedAt: state === "current" ? "2026-11-14T05:00:00.000Z" : null },
+        }),
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        html: "<h1>Lunch</h1>",
+        language: "en",
+        languages: ["en"],
+        versionId: "v1",
+        members: [],
+      }),
+    );
+  });
+  const { el } = await mountWidget<GuestMenuPreview>("dashboard-guest-menu-preview", {
+    api,
+    menuId: "menu",
+  });
+  try {
+    await page.elementLocator(el.shadowRoot!.querySelector("wt-button")!).click();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("#cloud-delivery")?.textContent)
+      .toBe(t("menus.guest_cloud_pending"));
+    const paper = el.shadowRoot!.querySelector("dashboard-guest-menu-paper")!;
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    await el.shadowRoot!.querySelector("wt-modal")!.requestClose("navigation");
+    await expect.poll(() => el.shadowRoot!.querySelector("dashboard-guest-menu-paper")).toBeNull();
+    await page.elementLocator(el.shadowRoot!.querySelector("wt-button")!).click();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("#cloud-delivery")?.textContent)
+      .toBe(t("menus.guest_cloud_pending"));
+    const reopenedPaper = el.shadowRoot!.querySelector("dashboard-guest-menu-paper")!;
+    expect(reopenedPaper).not.toBe(paper);
+    state = "current";
+    await vi.advanceTimersByTimeAsync(60000);
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("#cloud-delivery")?.textContent)
+      .toBe(t("menus.guest_cloud_current"));
+    expect(el.shadowRoot!.querySelector("dashboard-guest-menu-paper")).toBe(reopenedPaper);
+    expect(el.shadowRoot!.querySelector('a[href^="https://"]')).toBeNull();
+  } finally {
+    vi.useRealTimers();
+    api.liveData.clear();
     cleanupWidgets();
   }
 });

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { AppError } from "@waitron/shared";
-import type { SavedCloudState } from "./cloud-client.js";
+import type { SavedCloudState, CloudConnection } from "./cloud-client.js";
 import { serviceExchange, type OnRefusal } from "./cloud-translation.js";
 import "./errors.js";
 
@@ -124,4 +124,58 @@ export async function withdrawCloudGuestMenu(
     ),
     state,
   );
+}
+
+export interface GuestMenuDeliveryStatus {
+  state: "not_connected" | "pending" | "current" | "off" | "blocked";
+  receivedAt: string | null;
+}
+
+export function createGuestMenuDelivery(options: {
+  connection: CloudConnection;
+  readPages: () => Promise<{ defaultLanguage: string; pages: Record<string, string> } | null>;
+  isPrimary: () => boolean;
+}) {
+  let confirmed: CloudGuestMenuView | undefined;
+  let identity: string | undefined;
+  const digest = (body: string) => createHash("sha256").update(body).digest("hex");
+  const desiredBody = async () => {
+    const pages = await options.readPages();
+    return pages === null ? null : JSON.stringify(pages);
+  };
+  const currentIdentity = async () => (await options.connection.status()).registration?.venueId;
+  return {
+    async reconcile(signal: AbortSignal) {
+      if (signal.aborted || !options.isPrimary()) return;
+      const venue = await currentIdentity();
+      const remote = await options.connection.guestMenuStatus(signal);
+      confirmed = remote;
+      identity = venue;
+      const body = await desiredBody();
+      if (signal.aborted || !options.isPrimary()) return;
+      if (body === null) {
+        if (remote.state === "current")
+          confirmed = await options.connection.withdrawGuestMenu(signal);
+      } else if (remote.state !== "blocked" && remote.publication?.bodySha256 !== digest(body)) {
+        confirmed = await options.connection.publishGuestMenu(remote.revision, body, signal);
+      }
+    },
+    async status(): Promise<GuestMenuDeliveryStatus> {
+      const venue = await currentIdentity();
+      if (!venue) return { state: "not_connected", receivedAt: null };
+      const body = await desiredBody();
+      const remote = venue === identity && options.isPrimary() ? confirmed : undefined;
+      const state =
+        remote?.state === "blocked"
+          ? "blocked"
+          : body === null
+            ? remote?.state === "off"
+              ? "off"
+              : "pending"
+            : remote?.state === "current" && remote.publication?.bodySha256 === digest(body)
+              ? "current"
+              : "pending";
+      return { state, receivedAt: remote?.publication?.receivedAt ?? null };
+    },
+  };
 }

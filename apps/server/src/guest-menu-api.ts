@@ -24,6 +24,7 @@ import {
   readJsonBody,
 } from "@waitron/server-kit";
 import { AppError, FALLBACK_LOCALE, publicGuestMenu } from "@waitron/shared";
+import type { GuestMenuDeliveryStatus } from "./cloud-guest-menu.js";
 import type { Logger } from "./logger.js";
 import { renderGuestMenuPage, renderGuestMenuUnavailable } from "./guest-menu-page.js";
 import "./errors.js";
@@ -61,6 +62,7 @@ export async function readGuestMenuPages(db: Database, venueLocale: string) {
           true,
           undefined,
           "lang",
+          live.since,
         ),
       ]),
     ),
@@ -68,7 +70,12 @@ export async function readGuestMenuPages(db: Database, venueLocale: string) {
 }
 export function mountGuestMenuApi(
   app: Hono,
-  deps: { db: Database; venueLocale?: string; serving: () => boolean },
+  deps: {
+    db: Database;
+    venueLocale?: string;
+    serving: () => boolean;
+    delivery?: () => Promise<GuestMenuDeliveryStatus>;
+  },
   log: Logger,
 ): void {
   app.get("/management-api/guest-menu", (c) =>
@@ -82,7 +89,7 @@ export function mountGuestMenuApi(
         return sharingStatus(tx, deps.serving);
       });
       c.header("Cache-Control", "no-store");
-      return c.json(answer);
+      return c.json({ ...answer, ...(deps.delivery ? { delivery: await deps.delivery() } : {}) });
     }),
   );
   app.put("/management-api/guest-menu", (c) =>
@@ -112,7 +119,7 @@ export function mountGuestMenuApi(
         });
         return sharingStatus(tx, deps.serving);
       });
-      return c.json(answer);
+      return c.json({ ...answer, ...(deps.delivery ? { delivery: await deps.delivery() } : {}) });
     }),
   );
   app.get("/management-api/catalogues/:id/guest-preview", (c) =>

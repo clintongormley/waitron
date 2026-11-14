@@ -481,7 +481,11 @@ version. This may be a different menu from the one you are previewing. Choose
 **Open the shared menu on this box** to check it. Publish changes before checking them there.
 Only an active, published default menu is shown. Choose **Turn sharing off** to stop sharing.
 The choice stays on this box when you import a configuration; a new box starts with sharing Off.
-A guest link over mobile data and Cloud delivery are not available yet.
+When this box is connected to Cloud, the preview shows whether Cloud has the current publication
+or an update is pending. Publish your changes, then wait for confirmation. If the box is offline,
+Cloud keeps its last delivered copy. Turning sharing off also waits for delivery before that copy
+is removed. You can stop sharing in the Cloud portal while the box is offline; enable it there to
+resume delivery. A guest link over mobile data is still being prepared.
 
 ## Print a published menu {#guest-paper}
 

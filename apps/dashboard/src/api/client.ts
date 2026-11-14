@@ -3187,6 +3187,10 @@ export class DashboardApi {
     enabled: boolean;
     revision: number;
     available: boolean;
+    delivery?: {
+      state: "not_connected" | "pending" | "current" | "off" | "blocked";
+      receivedAt: string | null;
+    };
     paper?: import("@waitron/shared").GuestMenuPaperAppearance;
   }> {
     return this.#request("/management-api/guest-menu", "GET", undefined, { passive: true });

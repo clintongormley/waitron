@@ -675,9 +675,9 @@ The manager’s guest preview reads the published menu, with guest/default/inter
 separately priced sizes/extras and declarations. Local opt-in sharing exposes only the active default publication on the serving box. Bistro and Lunch-and-wine A4 presets print the captured publication through the browser, with box-local scalar appearance and per-preview logo/order/breaks. A mobile-data guest link remains unavailable.
 
 Remaining work follows the watcher-cleared [build plan](../superpowers/plans/2026-11-13-a670-guest-menu-build.md):
-delivery/confirmation of Cloud’s hosted copy under lane G’s
-A670-CLOUD contract. Cloud readiness remains
-unverified; ordering is separate. Choosing a guest menu independently of the default menu is a later feature.
+public mobile-data qualification of Cloud’s hosted copy. The box delivers publications and
+reports pending/current/off/blocked confirmation under lane G’s A670-CLOUD contract. Public
+readiness remains unverified; ordering is separate. Choosing a guest menu independently of the default menu is a later feature.
 
 The owner’s 13 November 22:31 answers, relayed by the watcher in Lane D `questions.md`, choose
 forwarding to the box with a hosted published read-only copy when unreachable, fixed presets

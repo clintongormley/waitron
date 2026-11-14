@@ -71,6 +71,7 @@ it("builds every Cloud page from the opted-in publication without dropping conte
   expect(body!.defaultLanguage).toBe("ca-ES-valencia");
   expect(Object.keys(body!.pages).sort()).toEqual(["ca-ES-valencia", "en", "fr"]);
   expect(body!.pages.en).toContain("Soup for guests");
+  expect(body!.pages.en).toMatch(/<time datetime="[^"]+">/);
   for (const html of Object.values(body!.pages)) {
     expect(html).not.toContain("Unpublished soup");
     expect(html).toContain("?lang=ca-ES-valencia");
