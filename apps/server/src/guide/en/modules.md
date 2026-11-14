@@ -46,6 +46,8 @@ restart, then turn the provider on.
 
 With Spanish workforce rules off, you can still plan rotas and record working time. Spanish-rule
 checks and the Spain time-record export are unavailable until you turn the module on and restart.
+Your personal-data download keeps your clock records in `clock-entries.json`; its Spanish-format
+`time-record.pdf` and `time-record.csv` files are omitted while the module is off.
 
 ## Check abandoned-order refunds {#abandoned-refunds}
 

@@ -33,8 +33,6 @@ export function enabledTableRemovals(modules: readonly WaitronModule[]): readonl
   return modules.flatMap((m) => (m.tableRemoval ? [m.tableRemoval] : []));
 }
 
-/** Every module's permission-seat contribution. Over ALL_MODULES, NOT the enabled set: a disabled
- * module mounts no route, so its permission is unreachable anyway. */
 export const ALL_MODULE_PERMISSIONS: readonly ModulePermission[] = ALL_MODULES.flatMap(
   (m) => m.permissions ?? [],
 );

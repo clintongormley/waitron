@@ -15,8 +15,9 @@ import {
   type WaitronModule,
 } from "@waitron/module";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { eq } from "drizzle-orm";
 import { jobOrigin } from "@waitron/shared";
-import { WORKFORCE_MIGRATIONS, WorkforceBackend } from "@waitron/workforce";
+import { WORKFORCE_MIGRATIONS, WorkforceBackend, timeEntries } from "@waitron/workforce";
 import { WORKFORCE_ES_MIGRATIONS } from "@waitron/workforce-es";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { mountAttendanceExportApi } from "./attendance-export-api.js";
@@ -214,3 +215,60 @@ describe("the server's working-time part", () => {
     ).not.toThrow();
   });
 });
+
+it.each([false, true])(
+  "keeps own clock-entry JSON with Spanish rules enabled=%s",
+  async (enabled) => {
+    const original = await withTransaction(
+      suite.db,
+      async (tx) =>
+        (await tx.select().from(timeEntries).where(eq(timeEntries.personId, marthaId)))[0]!,
+    );
+    await withTransaction(suite.db, (tx) =>
+      new WorkforceBackend().requestCorrection(tx, {
+        nodeId: original.nodeId,
+        correctsEntryId: original.id,
+        at: "2026-01-02T00:35:00.000Z",
+        offsetMinutes: -120,
+        reason: "Correct clock-in time",
+        actorPersonId: marthaId,
+        origin: jobOrigin("dashboard"),
+      }),
+    );
+    const modules = ALL_MODULES.filter((module) => enabled || module.name !== "workforce-es");
+    const own = personalDataParts(modules).find((entry) => entry.owner === "workforce")!;
+    const build = await withTransaction(suite.db, (tx) => own.part.prepare(tx, subject()));
+    const output = await build();
+    expect(output.map((file) => file.name)).toContain("clock-entries.json");
+    const payload = text(named(output, "clock-entries.json"));
+    const { entries } = JSON.parse(payload);
+    expect(entries).toHaveLength(7);
+    expect(entries.map((entry: { personId: string }) => entry.personId)).toEqual(
+      Array(7).fill(marthaId),
+    );
+    expect(entries[0]).toMatchObject({
+      eventAt: "2026-01-02T00:30:00.000Z",
+      eventOffsetMinutes: -120,
+      entryKind: "in",
+      capturedBySource: "dashboard",
+    });
+    expect(
+      entries.find((entry: { entryKind: string }) => entry.entryKind === "correction"),
+    ).toMatchObject({
+      correctsEntryId: original.id,
+      correctionReason: "Correct clock-in time",
+      correctionStatus: "requested",
+      correctionActorId: marthaId,
+      recordedByPersonId: marthaId,
+      selfApproved: false,
+      authorKind: "worker",
+      correctionDirection: "worker_request",
+      missingEntryKind: null,
+      respondsToEntryId: null,
+      payPeriodClosureId: null,
+    });
+    expect(payload).not.toContain(colleagueId);
+    expect(payload).not.toContain(COLLEAGUE_NAME);
+    expect(payload).not.toContain("Martha Lewis");
+  },
+);

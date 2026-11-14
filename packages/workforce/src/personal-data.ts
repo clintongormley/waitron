@@ -14,6 +14,7 @@ import { availability } from "./schema/availability.js";
 import { employments } from "./schema/employments.js";
 import { rosterVersions } from "./schema/roster-versions.js";
 import { shiftSwaps } from "./schema/shift-swaps.js";
+import { timeEntries } from "./schema/time-entries.js";
 import { shifts } from "./schema/shifts.js";
 
 /** Minutes past local midnight as `HH:MM`; 1440 reads `24:00`. */
@@ -27,7 +28,7 @@ const authorizer = alias(persons, "authorizer");
 
 /** A file is built only when the person has a row for it. */
 export const WORKFORCE_PERSONAL_DATA: ModulePersonalData = {
-  files: ["employment.json", "rota.json", "absences.json", "attendance.json"],
+  files: ["employment.json", "rota.json", "absences.json", "attendance.json", "clock-entries.json"],
 
   async prepare(tx: Transaction, { personId }) {
     const employmentRows = await tx
@@ -165,6 +166,12 @@ export const WORKFORCE_PERSONAL_DATA: ModulePersonalData = {
       .where(eq(attendanceOperationFacts.personId, personId))
       .orderBy(asc(attendanceOperationFacts.at), asc(attendanceOperationFacts.sequence));
 
+    const clockRows = await tx
+      .select()
+      .from(timeEntries)
+      .where(eq(timeEntries.personId, personId))
+      .orderBy(asc(timeEntries.eventAt), asc(timeEntries.recordedAt), asc(timeEntries.id));
+
     const hasAttendance = questionRows.length + responseRows.length + activityRows.length > 0;
 
     return async () => {
@@ -256,6 +263,7 @@ export const WORKFORCE_PERSONAL_DATA: ModulePersonalData = {
             })),
           }),
         );
+      if (clockRows.length > 0) files.push(jsonFile("clock-entries.json", { entries: clockRows }));
       return files;
     };
   },

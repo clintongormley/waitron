@@ -1227,7 +1227,9 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 **Venue identity (owner, 2026-11-02).** Cloud assigns its venue id; a box not connected to Cloud backs up where its owner chooses. A1308 slice 5 completes the removal of the old location object. The [venue-id design](../superpowers/specs/2026-11-04-a1301-venue-id-design.md) records the decision and its defaults.
 
-### A646 — a Modules page where the administrator switches optional modules on and sets them up
+<a id="a646--a-modules-page-where-the-administrator-switches-optional-modules-on-and-sets-them-up"></a>
+
+**A646 — a Modules page where the administrator switches optional modules on and sets them up.**
 
 Owner design decision, 2026-10-17 00:05 (Lane F archive/questions-to-2026-10-23.md:1169):
 optional modules and card providers share the Modules page. Workforce and staffing stay mandatory

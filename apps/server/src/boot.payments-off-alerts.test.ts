@@ -6,6 +6,8 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { withTransaction, saveSettings } from "@waitron/db";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
+import { convenioConfig } from "@waitron/workforce-es";
+import { mountTillApi, resolveCardCollector } from "./till-api.js";
 import { failAttempting, PAYMENTS_SETTINGS } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -19,6 +21,11 @@ import { freePorts } from "./testing/free-ports.js";
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
   return ephemeralHttpMock();
+});
+
+vi.mock("./till-api.js", async (original) => {
+  const actual = await original<typeof import("./till-api.js")>();
+  return { ...actual, mountTillApi: vi.fn(actual.mountTillApi) };
 });
 
 vi.mock("./stripe-account.js", async (original) => {
@@ -77,7 +84,15 @@ describe.each([false, true])("the running server with Payments Off (installed=%s
         join(migrationsRoot, "payments", "9999_a646_probe.sql"),
         "create table a646_probe (id integer);\n",
       );
-      await seedModuleSettings(suite.db, { "fiscal-none": false, payments: false });
+      await seedModuleSettings(suite.db, {
+        "fiscal-none": false,
+        payments: false,
+        "workforce-es": false,
+      });
+      await suite.db
+        .insert(convenioConfig)
+        .values({ id: 1 })
+        .onConflictDoNothing({ target: convenioConfig.id });
       const env = {
         WAITRON_HTTP_LANDING_PORT: "0",
         WAITRON_HTTP_PORT: String(port),
@@ -134,6 +149,14 @@ describe.each([false, true])("the running server with Payments Off (installed=%s
         expect((await fetch(`${base}/health`)).status).toBe(200);
       });
 
+      await expect(
+        resolveCardCollector(vi.mocked(mountTillApi).mock.calls.at(-1)![1], undefined, undefined),
+      ).rejects.toMatchObject({ code: "module.disabled" });
+      const rules = await fetch(`${base}/management-api/roster/breaches?period=2026-11-09`, {
+        headers: { cookie: venue.managerCookie },
+      });
+      expect(rules.status).toBe(409);
+      expect(await rules.json()).toMatchObject({ error: { code: "convenio.not_found" } });
       const events = await fetch(
         `${base}/management-api/events?resources=${encodeURIComponent(JSON.stringify(["settings.modules", "settings.payments", ...(installed ? ["payments"] : [])].map((type) => ({ type }))))}`,
         { headers: { cookie: venue.managerCookie } },

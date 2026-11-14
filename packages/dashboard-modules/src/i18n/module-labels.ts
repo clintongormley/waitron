@@ -43,7 +43,7 @@ registerCatalogue({
     "modules.payments_explanation":
       "Turn every card provider off first. Save this change, then open Box status in Settings and restart when service can pause. Earlier payments and refunds remain available; connected card collection is off after restart. The tills reconnect; a kitchen send during restart may need resending.",
     "modules.workforce_es_explanation":
-      "Save this change, then open Box status in Settings and restart when service can pause. While off, Spanish workforce checks and the Spain time-record export are unavailable. Ordinary rotas and clock records stay available. The tills reconnect; a kitchen send during restart may need resending.",
+      "Save this change, then open Box status in Settings and restart when service can pause. While off, Spanish workforce checks and the Spain time-record export are unavailable. Ordinary rotas and clock records stay available. Personal-data downloads keep clock records as JSON, but omit the Spanish-format time-record PDF and CSV while off. The tills reconnect; a kitchen send during restart may need resending.",
     "modules.configure_providers": "Configure card providers",
     "modules.guide": "How to set up modules",
   },
@@ -84,7 +84,7 @@ registerCatalogue({
     "modules.payments_explanation":
       "Desactiva primero todos los proveedores de tarjeta. Guarda el cambio y abre Estado del servidor en Ajustes para reiniciar cuando puedas pausar el servicio. Los pagos anteriores y sus reembolsos siguen disponibles; el cobro con tarjeta conectada queda desactivado tras reiniciar. Las cajas se reconectan; puede que debas repetir un envío a cocina.",
     "modules.workforce_es_explanation":
-      "Guarda el cambio y abre Estado del servidor en Ajustes para reiniciar cuando puedas pausar el servicio. Mientras está desactivado, no están disponibles las comprobaciones laborales españolas ni la exportación española del registro horario. Los turnos y fichajes siguen disponibles. Las cajas se reconectan; puede que debas repetir un envío a cocina.",
+      "Guarda el cambio y abre Estado del servidor en Ajustes para reiniciar cuando puedas pausar el servicio. Mientras está desactivado, no están disponibles las comprobaciones laborales españolas ni la exportación española del registro horario. Los turnos y fichajes siguen disponibles. La descarga de datos personales conserva los fichajes en JSON, pero omite los archivos PDF y CSV del registro horario en formato español mientras está desactivado. Las cajas se reconectan; puede que debas repetir un envío a cocina.",
     "modules.configure_providers": "Configurar proveedores de tarjeta",
     "modules.guide": "Cómo configurar los módulos",
   },
