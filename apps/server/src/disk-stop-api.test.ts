@@ -183,7 +183,7 @@ describe("GET /management-api/disk-stop", () => {
     const backupPrefix = claimFor(REGISTRY, "backup.archives_deleted").prefix;
     const adminOnly = createAlertRegistry({
       claims: ALL_ALERT_CLAIMS.map((claim) =>
-        claim.prefix === backupPrefix ? { ...claim, permission: "person.admin" } : claim,
+        claim.prefix === backupPrefix ? { ...claim, permission: "system.box_admin" } : claim,
       ),
       sources: [],
     });

@@ -418,9 +418,10 @@ async function seed(
       .select({ id: persons.id })
       .from(persons)
       .where(eq(persons.displayName, MANAGER_NAME));
+    const builtInRoles = await ensureBuiltInRoles(tx);
     for (const person of holders)
-      await importAccessRoleMembership(tx, person.id, (await ensureBuiltInRoles(tx))["staff"]);
-    await importAccessRoleMembership(tx, manager!.id, (await ensureBuiltInRoles(tx))["manager"]);
+      await importAccessRoleMembership(tx, person.id, builtInRoles.staff);
+    await importAccessRoleMembership(tx, manager!.id, builtInRoles.manager);
     await tx.insert(personStaffRoles).values(
       [...holders, manager!].map((person) => ({
         personId: person.id,

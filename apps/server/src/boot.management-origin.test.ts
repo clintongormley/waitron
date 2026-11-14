@@ -324,7 +324,13 @@ it("boots and closes a separate staff entrance over the real dashboard API", asy
       const localBody = (await local.json()) as { personId: string };
       expect(await response.json()).toMatchObject({
         personId: localBody.personId,
-        role: "manager",
+        roleIds: [
+          (
+            await suite.db.execute<{ id: string }>(
+              sql`select id from roles where built_in_key = 'manager'`,
+            )
+          ).rows[0]!.id,
+        ],
       });
       for (const path of [
         "/setup-api/status",

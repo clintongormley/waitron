@@ -225,22 +225,20 @@ describe("mountEmailInboxApi", () => {
   });
 });
 
-it("does not return captured message headers, snippets or links to a manager", async () => {
+it("returns captured message headers, snippets and links to a default Manager", async () => {
   const venue = await setupVenue();
   const { app, mailpit } = mount("local_capture");
   const response = await get(app, "/management-api/email", venue.manager);
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ mode: "local_capture", count: 0, messages: [] });
-  expect(mailpit.list).not.toHaveBeenCalled();
+  expect(await response.json()).toEqual({ mode: "local_capture", ...SUMMARY });
+  expect(mailpit.list).toHaveBeenCalledOnce();
 });
 
-it("refuses a manager's direct captured-message read", async () => {
+it("lets a default Manager read a captured message", async () => {
   const venue = await setupVenue();
   const { app, mailpit } = mount("local_capture");
   const response = await get(app, "/management-api/email/message/mail-1", venue.manager);
-  expect(response.status).toBe(403);
-  expect(await response.json()).toMatchObject({
-    error: { code: "authorization.not_permitted", params: { permission: "person.admin" } },
-  });
-  expect(mailpit.read).not.toHaveBeenCalled();
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ id: "mail-1", subject: "Set up your account" });
+  expect(mailpit.read).toHaveBeenCalledWith("mail-1");
 });

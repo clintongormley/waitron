@@ -10,7 +10,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
-import { fill, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { accessRoleName, statusName } from "../i18n/domain.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import "../widgets/staff-list.js";
@@ -500,7 +500,7 @@ export class StaffScreen extends LitElement {
           multiple
           placeholder=${t("staff.filter_all_roles")}
           .countLabel=${(count: number) => fill("person.access_roles_selected", { count: String(count) })}
-          .options=${[...this.accessRoles].sort((a, b) => accessRoleName(a).localeCompare(accessRoleName(b))).map((role) => ({ value: role.id, label: accessRoleName(role) }))}
+          .options=${[...this.accessRoles].sort((a, b) => accessRoleName(a).localeCompare(accessRoleName(b), currentLocale())).map((role) => ({ value: role.id, label: accessRoleName(role) }))}
           .values=${this.roleFilter}
           @wt-change=${(event: CustomEvent<{ values: string[] }>) => {
             event.stopPropagation();

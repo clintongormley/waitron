@@ -61,6 +61,10 @@ async function mount(held = ["manager"], viewerAdmin = true, stale = false) {
 }
 it("saves two access-role tags with the membership baseline independently of details", async () => {
   const { el, field, calls } = await mount();
+  const firstNames = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+    "[data-test=edit-first-names]",
+  )!;
+  firstNames.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Alex" } }));
   await chooseOptions(field(), ["manager", "waiter"]);
   await el.updateComplete;
   expect(el.shadowRoot!.querySelectorAll("[data-access-role]")).toHaveLength(2);
@@ -77,6 +81,10 @@ it("saves two access-role tags with the membership baseline independently of det
         )!.disabled,
     )
     .toBe(true);
+  expect(firstNames.value).toBe("Alex");
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!.disabled,
+  ).toBe(false);
 });
 it("holds forbidden roles as locked tags and omits them from offered choices", async () => {
   const { el, field, calls } = await mount(["admin", "cash", "manager"], false);

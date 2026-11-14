@@ -24,7 +24,7 @@ sends invitations and password-reset links to real inboxes. Check the account de
 this page and the invoice status in **Mail server**: development boxes keep invoice email locally
 even when account email uses the saved server.
 
-In Demo, use the **Email inbox** link in the top bar. Sign in as an admin to open captured messages.
+In Demo, use the **Email inbox** link in the top bar. Sign in as a Manager or Admin to open captured messages.
 
 ## Check the test result {#test-results}
 

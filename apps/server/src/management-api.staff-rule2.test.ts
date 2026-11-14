@@ -329,3 +329,36 @@ it("a default Manager invites several roles but cannot hand out Admin", async ()
     await suite.db.select().from(persons).where(eq(persons.email, "forbidden@example.test")),
   ).toEqual([]);
 });
+
+it("refuses the access-role list to a staff session", async () => {
+  const f = await fixture("email", "waiter", false);
+  await setBuiltInRoleForTest(suite.db, f.manager.id, "staff");
+  const response = await f.send("/management-api/access-roles", "GET");
+  expect(response.status).toBe(403);
+  expect(await response.json()).toEqual({
+    error: { code: "authorization.not_permitted", params: { permission: "person.manage" } },
+  });
+});
+
+it.each([
+  ["roleIds", null],
+  ["expectedRoleIds", [42]],
+] as const)("refuses malformed membership %s before writing", async (field, value) => {
+  const f = await fixture("email", "waiter", false);
+  const before = await suite.db
+    .select()
+    .from(personRoles)
+    .where(eq(personRoles.personId, f.target.id));
+  const response = await f.send(`/management-api/staff/${f.target.id}/access-roles`, "PUT", {
+    roleIds: [],
+    expectedRoleIds: [],
+    [field]: value,
+  });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({
+    error: { code: "management.request_invalid", params: { field } },
+  });
+  expect(
+    await suite.db.select().from(personRoles).where(eq(personRoles.personId, f.target.id)),
+  ).toEqual(before);
+});

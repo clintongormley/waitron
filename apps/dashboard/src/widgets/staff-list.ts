@@ -49,6 +49,12 @@ export class StaffList extends LitElement {
     ];
     if (this.#columnsMemo?.inputs.every((input, index) => input === inputs[index]))
       return this.#columnsMemo.columns;
+    const roleNames = new Map(this.accessRoles.map((role) => [role.id, accessRoleName(role)]));
+    const heldRoleNames = (person: PersonSummary) =>
+      person.roleIds
+        .map((id) => roleNames.get(id))
+        .filter((name) => name !== undefined)
+        .join(", ") || t("person.no_access_role");
     const columns: DataTableColumn<PersonSummary>[] = [
       {
         key: "displayName",
@@ -72,18 +78,8 @@ export class StaffList extends LitElement {
         key: "role",
         choosable: "shown",
         label: t("staff.field_role"),
-        cell: (person) =>
-          person.roleIds
-            .map((id) => this.accessRoles.find((role) => role.id === id))
-            .filter((role) => role !== undefined)
-            .map((role) => accessRoleName(role))
-            .join(", ") || t("person.no_access_role"),
-        sortValue: (person) =>
-          person.roleIds
-            .map((id) => this.accessRoles.find((role) => role.id === id))
-            .filter((role) => role !== undefined)
-            .map((role) => accessRoleName(role))
-            .join(", ") || t("person.no_access_role"),
+        cell: heldRoleNames,
+        sortValue: heldRoleNames,
       },
       {
         key: "email",

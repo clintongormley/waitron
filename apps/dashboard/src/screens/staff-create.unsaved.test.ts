@@ -34,7 +34,7 @@ customElements.define("staff-create-leave-test-app", StaffCreateApp);
 async function mount(api: Partial<DashboardApi>) {
   setLocale("en-GB");
   const { el: app } = await mountWidget<StaffCreateApp>("staff-create-leave-test-app", {
-    api: api as DashboardApi,
+    api: { listAccessRoles: async () => [], ...api } as DashboardApi,
   });
   const screen = app.shadowRoot!.querySelector("dashboard-staff-screen")!;
   await screen.updateComplete;
