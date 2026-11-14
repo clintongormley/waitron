@@ -60,12 +60,10 @@ export function bootEnv(
 }
 
 /** Every migration set copied under `<scratch>/migrations`, as a box's `WAITRON_MIGRATIONS_DIR`. */
-export async function copyMigrations(
-  scratch: string,
-): Promise<{ migrationsRoot: string; fromSource: ReturnType<typeof migrationOptionsFor> }> {
+export async function copyMigrations(scratch: string): Promise<string> {
   const migrationsRoot = join(scratch, "migrations");
   await copyMigrationsRoot(migrationsRoot);
-  return { migrationsRoot, fromSource: migrationOptionsFor(manifestSets(), null) };
+  return migrationsRoot;
 }
 
 export interface StreamBox {
@@ -84,7 +82,6 @@ export interface StreamBox {
  */
 export async function provisionStreamBox(options: {
   dirs: BoxDirs;
-  migrations: ReturnType<typeof migrationOptionsFor>;
   advertisedOrigin: string;
   bucket: BucketConfig;
   recoveryKey: string;
@@ -101,7 +98,7 @@ export async function provisionStreamBox(options: {
     listIpv4: () => [],
   });
   const ring = loadKeyRing(parseEnvFile(await readFile(join(dirs.state, "secrets.env"), "utf8")));
-  await applyMigrations(dirs.venue, options.migrations);
+  await applyMigrations(dirs.venue, migrationOptionsFor(manifestSets(), null));
   const seeding = await openVenueDatabase(dirs.venue);
   let box: StreamBox;
   try {

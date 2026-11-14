@@ -36,7 +36,7 @@ import {
 } from "@waitron/db";
 import { hashDeviceToken, persons } from "@waitron/identity";
 import { seedDevice } from "@waitron/db/testing/seed.js";
-import { applyMigrations } from "@waitron/migrations";
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import {
@@ -260,7 +260,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
   const failures: unknown[] = [];
   try {
     clock.begin("probe");
-    const { migrationsRoot, fromSource } = await copyMigrations(scratch);
+    const migrationsRoot = await copyMigrations(scratch);
 
     // 1. The bucket.
     const store = fixture.store ?? createS3ObjectStore(bucket);
@@ -283,7 +283,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
       listIpv4: () => [],
     });
     const ring = loadKeyRing(parseEnvFile(await readFile(join(stateDir, "secrets.env"), "utf8")));
-    await applyMigrations(venueDir, fromSource);
+    await applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null));
     const seeding = await openVenueDatabase(venueDir);
     let box: {
       nodeId: string;

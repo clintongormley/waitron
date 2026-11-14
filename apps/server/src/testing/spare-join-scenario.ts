@@ -525,7 +525,7 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
   const linesSince = (from: number): LogLine[] => logSoFar().slice(from);
   try {
     clock.begin("probe");
-    const { migrationsRoot, fromSource } = await copyMigrations(scratch);
+    const migrationsRoot = await copyMigrations(scratch);
     // One draw: M's and S's HTTPS ports, then S's store and its versitygw's loopback port.
     const [portM, portS, storeS, storeLoopbackS] = (await freePorts(4)) as [
       number,
@@ -544,7 +544,6 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
     const dirsM = await boxDirs(scratch, "box-m");
     const m = await provisionStreamBox({
       dirs: dirsM,
-      migrations: fromSource,
       advertisedOrigin: `https://${BOX_HOSTNAME}:${portM}`,
       bucket,
       recoveryKey: RECOVERY_KEY,

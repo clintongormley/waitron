@@ -325,7 +325,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
   const failures: unknown[] = [];
   try {
     clock.begin("probe");
-    const { migrationsRoot, fromSource } = await copyMigrations(scratch);
+    const migrationsRoot = await copyMigrations(scratch);
 
     // 1. The bucket, and the conditional write every pointer move depends on. A server that does not
     //    refuse a stale write fails HERE, with the probe's reason, before anything streams.
@@ -343,7 +343,6 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     const portA = await freePort();
     const { nodeSecret: mintedSecret, ...a } = await provisionStreamBox({
       dirs: dirsA,
-      migrations: fromSource,
       advertisedOrigin: `https://127.0.0.1:${portA}`,
       bucket,
       recoveryKey: RECOVERY_KEY,
