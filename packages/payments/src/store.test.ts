@@ -38,6 +38,7 @@ import {
   listAuditCandidates,
   listBackupPayments,
   listReconcilable,
+  listRefundAuditRows,
   markReconcileRemediated,
   recordFailedRefund,
   recordRefund,
@@ -1782,5 +1783,73 @@ it("reads exact gross amounts for same-account backup entries, including later r
         externalMachine: "Backup machine",
       },
     ]);
+  });
+});
+
+describe("refund audit facts", () => {
+  it("reads successful refunds across dates for selected parents, including manual entries, without failed attempts", async () => {
+    const seeded = await seedTenant();
+    await capture(seeded, "refund-parent");
+    await capture(seeded, "ignored-parent");
+    await withTransaction(suite.db, async (tx) => {
+      await recordRefund(tx, {
+        provider: "fake",
+        paymentRef: "refund-parent",
+        amount: decimal("2.35"),
+        providerRefundRef: "refund-1",
+      });
+      await recordRefund(tx, {
+        provider: "fake",
+        paymentRef: "refund-parent",
+        amount: decimal("1.25"),
+      });
+      await recordFailedRefund(tx, {
+        provider: "fake",
+        paymentRef: "refund-parent",
+        amount: decimal("3.00"),
+      });
+      await tx.update(paymentRefunds).set({ createdAt: "2026-07-23T12:00:00.000Z" });
+      await tx
+        .update(paymentRefunds)
+        .set({ createdAt: "2026-07-23T12:01:00.000Z" })
+        .where(eq(paymentRefunds.amount, 125));
+    });
+    const period = { from: new Date("2026-07-23T00:00:00Z"), to: new Date("2026-07-24T00:00:00Z") };
+    const rows = await withTransaction(suite.db, (tx) =>
+      listRefundAuditRows(tx, "fake", period, [], []),
+    );
+    expect(
+      rows.map((row) => ({
+        paymentRef: row.paymentRef,
+        state: row.state,
+        refunds: row.refunds.map(({ amount, providerRefundRef }) => ({
+          amount,
+          providerRefundRef,
+        })),
+      })),
+    ).toEqual([
+      {
+        paymentRef: "refund-parent",
+        state: "partially_refunded",
+        refunds: [
+          { amount: "2.35", providerRefundRef: "refund-1" },
+          { amount: "1.25", providerRefundRef: null },
+        ],
+      },
+    ]);
+    await suite.db.update(paymentRefunds).set({ createdAt: "2026-07-22T12:00:00.000Z" });
+    await suite.db
+      .update(payments)
+      .set({ provider: "manual", externalProvider: "connected_account" })
+      .where(eq(payments.paymentRef, "refund-parent"));
+    const late = await withTransaction(suite.db, (tx) =>
+      listRefundAuditRows(tx, "fake", period, [], ["refund-parent"]),
+    );
+    expect(late.map((row) => [row.paymentRef, row.provider, row.refunds.length])).toEqual([
+      ["refund-parent", "manual", 2],
+    ]);
+    expect(
+      await withTransaction(suite.db, (tx) => listRefundAuditRows(tx, "sumup", period, [], [])),
+    ).toEqual([]);
   });
 });

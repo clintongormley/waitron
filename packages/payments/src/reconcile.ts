@@ -101,7 +101,20 @@ export type BackupPaymentUnmatched = {
   | ({ kind: "recorded" } & Omit<BackupPaymentMatch, "references" | "amount" | "settledAt">)
 );
 
+export interface RefundEvidence {
+  complete: boolean;
+  checkedAt: string;
+  parents: {
+    processorRef: string;
+    capturedAt?: string;
+    events: { id: string; amount: string; at: string }[];
+    issue?:
+      "read_failed" | "not_found" | "missing_events" | "missing_reference" | "invalid" | "pending";
+  }[];
+}
+
 export interface PaymentReconcileResult {
+  refundEvidence?: RefundEvidence;
   period: ReconcilePeriod;
   /** LOCAL rows examined, not report entries. */
   checked: number;

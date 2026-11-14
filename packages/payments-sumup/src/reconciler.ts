@@ -5,6 +5,7 @@ import {
   existingReferences,
   listAuditCandidates,
   listBackupPayments,
+  listRefundAuditRows,
   reconcilePayments,
 } from "@waitron/payments";
 import type {
@@ -34,12 +35,13 @@ export class SumUpReconciler implements PaymentReconciler {
       from: new Date(period.from.getTime() - ms),
       to: new Date(period.to.getTime() + ms),
     });
-    const { candidates, nearbyCandidates, manual } = await withTransaction(
+    const { candidates, nearbyCandidates, manual, refundRows } = await withTransaction(
       this.deps.db,
       async (tx) => ({
         candidates: await listAuditCandidates(tx, this.provider, period),
         nearbyCandidates: await listAuditCandidates(tx, this.provider, pad(600_000)),
         manual: await listBackupPayments(tx, pad(600_000)),
+        refundRows: await listRefundAuditRows(tx, this.provider, period),
       }),
     );
     const source = sumupSettlementReport(client, nearbyCandidates);
@@ -144,14 +146,21 @@ export class SumUpReconciler implements PaymentReconciler {
       await originalDay.fetch(period);
       unreadableUnlinked = originalDay.unreadableUnlinked;
     }
+    const refundEvidence = await source.fetchRefundEvidence(
+      refundRows.flatMap((row) =>
+        row.provider === this.provider && row.externalRef !== null ? [row.externalRef] : [],
+      ),
+      now,
+    );
     return {
       ...result,
+      refundEvidence,
       backupMatches,
       backupUnmatched,
       unlinkedCharges:
         unreadableUnlinked +
         result.missingLocal.filter((row) => row.workingOrderId === null).length,
-      ...(candidates.some((row) => row.state === "attempting")
+      ...(source.retryRefunds || candidates.some((row) => row.state === "attempting")
         ? { resweepAfter: new Date(now.getTime() + 86_400_000) }
         : {}),
     };

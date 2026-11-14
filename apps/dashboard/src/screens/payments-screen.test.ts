@@ -2410,6 +2410,14 @@ it("opens the backup comparison from Card payments", async () => {
       complete: false,
       backupMatches: [],
       backupUnmatched: [],
+      refundAudit: {
+        complete: false,
+        checkedAt: [],
+        matches: [],
+        agreements: [],
+        exceptions: [],
+        outside: [],
+      },
     }),
   });
   const { el } = await mountWidget<PaymentsScreen>("dashboard-payments-screen", {

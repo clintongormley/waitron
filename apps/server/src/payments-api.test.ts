@@ -1,4 +1,5 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -39,6 +40,7 @@ import {
   deviceCardReaders,
   payments,
   scheduledRuns,
+  recordRefund,
   type CardProviderContribution,
 } from "@waitron/payments";
 import {
@@ -3285,6 +3287,14 @@ describe("backup-machine audit read", () => {
       complete: true,
       backupMatches: [],
       backupUnmatched: [row],
+      refundAudit: {
+        complete: false,
+        checkedAt: [],
+        matches: [],
+        agreements: [],
+        exceptions: [],
+        outside: [],
+      },
     });
     const bad = await send(app, "GET", "/management-api/payments/backup-audit?day=2026-02-30", {
       cookie: venue.managerCookie,
@@ -3292,4 +3302,70 @@ describe("backup-machine audit read", () => {
     expect(bad.status).toBe(400);
     expect(await bad.json()).toMatchObject({ error: { code: "management.request_invalid" } });
   });
+});
+
+it("compares current refunds on passive manager reads without provider I/O or a new audit", async () => {
+  const venue = await seedVenueWithStaff();
+  const fetch = vi.fn<typeof globalThis.fetch>();
+  const app = mountApp(venue, PROVIDERS, suite.db, { fetch });
+  const order = await seedWorkingOrder(suite.db, { source: "dashboard", orderNumber: 1 });
+  await suite.db.insert(payments).values({
+    workingOrderId: order.id,
+    source: "device",
+    deviceId: await seedDevice(),
+    provider: "sumup",
+    paymentRef: "refund-payment",
+    externalRef: "refund-charge",
+    amount: 1000,
+    state: "captured",
+    settledAt: "2026-06-01T12:00:00.000Z",
+  });
+  for (const day of ["2026-07-01", "2026-07-02"])
+    await suite.db.insert(scheduledRuns).values({
+      duty: "payments.reconcile.sumup",
+      periodFrom: `${day}T00:00:00.000Z`,
+      periodTo: new Date(Date.parse(`${day}T00:00:00Z`) + 86400000).toISOString(),
+      generation: 0,
+      state: "succeeded",
+      summary: {
+        backupMatches: [],
+        backupUnmatched: [],
+        refundEvidence: {
+          complete: true,
+          checkedAt: "2026-07-03T00:05:00.000Z",
+          parents: [
+            {
+              processorRef: "refund-charge",
+              events: [{ id: "refund-1", amount: "2.35", at: "2026-07-02T12:00:00.000Z" }],
+            },
+          ],
+        },
+      },
+    });
+  const read = async () => {
+    const response = await app.request("/management-api/payments/backup-audit?day=2026-07-02", {
+      headers: { cookie: venue.managerCookie, "x-waitron-live": "1" },
+    });
+    expect(response.status).toBe(200);
+    return response.json();
+  };
+  expect((await read()).refundAudit.exceptions).toMatchObject([
+    { reason: "missing_local", providerRefundRef: "refund-1" },
+  ]);
+  await withTransaction(suite.db, async (tx) => {
+    await recordRefund(tx, {
+      provider: "sumup",
+      paymentRef: "refund-payment",
+      amount: decimal("2.35"),
+      providerRefundRef: "refund-1",
+    });
+    await tx.update(paymentRefunds).set({ createdAt: "2026-07-02T12:01:00.000Z" });
+  });
+  const result = await read();
+  expect(result.refundAudit.matches).toMatchObject([
+    { paymentRef: "refund-payment", localAmount: "2.35", providerAmount: "2.35" },
+  ]);
+  expect(result.refundAudit.exceptions).toEqual([]);
+  expect(fetch).not.toHaveBeenCalled();
+  expect(await suite.db.select().from(scheduledRuns)).toHaveLength(2);
 });

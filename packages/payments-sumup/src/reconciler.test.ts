@@ -3,7 +3,12 @@ import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal, deviceOrigin } from "@waitron/shared";
-import { PAYMENTS_MIGRATIONS, insertCapturedPayment, insertFailedPayment } from "@waitron/payments";
+import {
+  PAYMENTS_MIGRATIONS,
+  insertCapturedPayment,
+  insertFailedPayment,
+  recordRefund,
+} from "@waitron/payments";
 import { seedWorkingOrder, freshNif } from "@waitron/payments/test/seed.js";
 import { captureAlerts, heldAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { SumUpReconciler } from "./reconciler.js";
@@ -435,4 +440,72 @@ it("lists a recorded backup payment even when SumUp reports no charge", async ()
     },
   ]);
   expect(result.unlinkedCharges).toBe(0);
+});
+
+it("keeps refund evidence in the audit and never sends or changes financial rows", async () => {
+  const seeded = await seedWorkingOrder(suite.db, freshNif());
+  await withTransaction(suite.db, async (tx) => {
+    await insertCapturedPayment(tx, {
+      provider: "sumup",
+      paymentRef: "returned",
+      externalRef: "old-charge",
+      amount: decimal("10.00"),
+      origin: deviceOrigin(seeded.deviceId),
+      nodeId: seeded.nodeId,
+      workingOrderId: seeded.workingOrderId,
+      settledAt: new Date("2026-06-01T12:00:00Z"),
+    });
+    await recordRefund(tx, {
+      provider: "sumup",
+      paymentRef: "returned",
+      amount: decimal("2.35"),
+      providerRefundRef: "refund-1",
+    });
+    await tx.execute(sql`update payment_refunds set created_at = '2026-07-01T13:00:00.000Z'`);
+  });
+  const client = new FakeSumUp();
+  const send = vi.spyOn(client, "sendRefund").mockResolvedValue({ httpStatus: 201 });
+  const refund = vi.spyOn(client, "refund").mockResolvedValue({ status: "accepted" });
+  vi.spyOn(client, "findTransaction").mockResolvedValue({
+    id: "old-charge",
+    status: "SUCCESSFUL",
+    amount: decimal("10.00"),
+    currency: "EUR",
+    refundEvents: [
+      {
+        id: "refund-1",
+        status: "REFUNDED",
+        amount: decimal("2.35"),
+        timestamp: "2026-07-01T12:59:00Z",
+      },
+    ],
+  });
+  const before = [
+    await suite.db.execute(sql`select * from payments`),
+    await suite.db.execute(sql`select * from payment_refunds`),
+  ];
+  const audit = new SumUpReconciler({
+    db: suite.db,
+    resolveClient: async () => client,
+    incidents: captureAlerts.raise,
+    heldAlerts,
+  });
+  const result = await audit.reconcile(period, now);
+  expect(result.refundEvidence).toMatchObject({
+    complete: true,
+    checkedAt: now.toISOString(),
+    parents: [
+      {
+        processorRef: "old-charge",
+        events: [{ id: "refund-1", amount: "2.35", at: "2026-07-01T12:59:00.000Z" }],
+      },
+    ],
+  });
+  expect(result.resweepAfter).toBeUndefined();
+  expect([
+    await suite.db.execute(sql`select * from payments`),
+    await suite.db.execute(sql`select * from payment_refunds`),
+  ]).toEqual(before);
+  expect(send).not.toHaveBeenCalled();
+  expect(refund).not.toHaveBeenCalled();
 });

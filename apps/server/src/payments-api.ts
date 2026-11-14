@@ -1,4 +1,5 @@
 import { resolveVenueClock } from "@waitron/reporting";
+import { refundAudit, type RefundAuditRun } from "./refund-audit.js";
 import { backupAuditDay, type BackupAuditRun } from "./backup-audit-day.js";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { withIssuanceTransaction } from "@waitron/core";
@@ -45,6 +46,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
   PAYMENTS_SETTINGS,
   scheduledRuns,
+  listRefundAuditRows,
   type BackupPaymentMatch,
   type BackupPaymentUnmatched,
   appendReaderToProfiles,
@@ -781,11 +783,103 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
               gte(scheduledRuns.periodTo, bounds.startAt),
             ),
           );
-        return backupAuditDay(
-          day,
-          clock.timeZone,
-          runs as BackupAuditRun<BackupPaymentMatch | BackupPaymentUnmatched>[],
+        const period = { from: new Date(bounds.startAt), to: new Date(bounds.endAt) };
+        const summaries = [...runs] as RefundAuditRun[];
+        const readRows = () =>
+          listRefundAuditRows(
+            tx,
+            "sumup",
+            period,
+            summaries.flatMap(
+              (run) =>
+                run.summary?.refundEvidence?.parents.map((parent) => parent.processorRef) ?? [],
+            ),
+            summaries.flatMap(
+              (run) => run.summary?.backupMatches?.map((match) => match.paymentRef) ?? [],
+            ),
+          );
+        const current = await readRows();
+        const days = [
+          ...new Set(
+            [
+              ...current.flatMap((row) =>
+                row.provider === "manual" && row.settledAt !== null ? [row.settledAt] : [],
+              ),
+              ...summaries.flatMap(
+                (run) =>
+                  run.summary?.refundEvidence?.parents.flatMap((parent) =>
+                    parent.capturedAt ? [parent.capturedAt] : [],
+                  ) ?? [],
+              ),
+            ].map((at) => `${at.slice(0, 10)}T00:00:00.000Z`),
+          ),
+        ];
+        const manualRefs = new Set(
+          current.filter((row) => row.provider === "manual").map((row) => row.paymentRef),
         );
+        const observedRefs = new Set(
+          summaries.flatMap(
+            (run) =>
+              run.summary?.refundEvidence?.parents.map((parent) => parent.processorRef) ?? [],
+          ),
+        );
+        for (let i = 0; i < days.length; i += 1000) {
+          const older = await tx
+            .select()
+            .from(scheduledRuns)
+            .where(
+              and(
+                eq(scheduledRuns.duty, "payments.reconcile.sumup"),
+                eq(scheduledRuns.state, "succeeded"),
+                inArray(scheduledRuns.periodFrom, days.slice(i, i + 1000)),
+              ),
+            );
+          for (const run of older) {
+            if (
+              summaries.some(
+                (existing) =>
+                  existing.periodFrom === run.periodFrom && existing.generation === run.generation,
+              )
+            )
+              continue;
+            const summary = run.summary as RefundAuditRun["summary"];
+            const matches =
+              summary?.backupMatches?.filter(
+                (match) =>
+                  manualRefs.has(match.paymentRef) ||
+                  match.references.some((id) => observedRefs.has(id)),
+              ) ?? [];
+            const ids = new Set([...observedRefs, ...matches.flatMap((match) => match.references)]);
+            summaries.push({
+              ...run,
+              summary: {
+                backupMatches: matches,
+                backupUnmatched:
+                  summary?.backupUnmatched?.filter((charge) =>
+                    charge.references.some((id) => ids.has(id)),
+                  ) ?? [],
+                ...(summary?.refundEvidence
+                  ? {
+                      refundEvidence: {
+                        ...summary.refundEvidence,
+                        parents: summary.refundEvidence.parents.filter((parent) =>
+                          ids.has(parent.processorRef),
+                        ),
+                      },
+                    }
+                  : {}),
+              },
+            });
+          }
+        }
+        return {
+          ...backupAuditDay(
+            day,
+            clock.timeZone,
+            runs as BackupAuditRun<BackupPaymentMatch | BackupPaymentUnmatched>[],
+          ),
+          refundAudit: refundAudit(period, summaries, await readRows()),
+        };
       });
       return c.json(result);
     }),

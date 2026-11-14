@@ -49,6 +49,7 @@ function summaryOf(result: PaymentReconcileResult): Record<string, unknown> {
   return {
     period: { from: result.period.from.toISOString(), to: result.period.to.toISOString() },
     checked: result.checked,
+    ...(result.refundEvidence === undefined ? {} : { refundEvidence: result.refundEvidence }),
     ...(result.unlinkedCharges === undefined ? {} : { unlinkedCharges: result.unlinkedCharges }),
     ...(result.backupMatches === undefined
       ? {}

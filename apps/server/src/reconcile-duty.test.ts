@@ -362,3 +362,15 @@ describe("the reconciliation pass follows the payments module's switch", () => {
     expect(runs).toBe(0);
   });
 });
+
+it("stores selected refund evidence as JSON without storing a disagreement", async () => {
+  const refundEvidence = {
+    complete: false,
+    checkedAt: NOW.toISOString(),
+    parents: [{ processorRef: "charge", events: [], issue: "read_failed" as const }],
+  };
+  const outcome = await reconcilerAsDuty(
+    reconcilerReturning({ ...emptyResult(PERIOD), refundEvidence }),
+  ).run(PERIOD, NOW);
+  expect(JSON.parse(JSON.stringify(outcome.summary)).refundEvidence).toEqual(refundEvidence);
+});

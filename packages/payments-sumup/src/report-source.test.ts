@@ -230,3 +230,124 @@ describe("SumUp gross charge report", () => {
     });
   });
 });
+
+describe("SumUp refund evidence", () => {
+  it("discovers refund parents without replacing gross charges and reuses each detail read", async () => {
+    const client = new FakeSumUp();
+    vi.spyOn(client, "historyPage").mockResolvedValue({
+      items: [item(), item({ type: "REFUND" }), item({ type: "REFUND" })],
+    });
+    const event = {
+      id: "r1",
+      status: "REFUNDED",
+      amount: decimal("2.35"),
+      timestamp: "2026-07-01T13:00:00Z",
+    };
+    const find = vi.spyOn(client, "findTransaction").mockResolvedValue({
+      id: "tx",
+      status: "SUCCESSFUL",
+      amount: decimal("10.00"),
+      currency: "EUR",
+      timestamp: "2026-06-01T12:00:00Z",
+      refundEvents: [
+        event,
+        {
+          timestamp: "2026-07-01T13:00:00.000Z",
+          amount: decimal("2.35"),
+          status: "SUCCESSFUL",
+          id: "r1",
+        },
+      ],
+    });
+    const report = source(client);
+    expect(await report.fetch(period)).toHaveLength(1);
+    const evidence = await report.fetchRefundEvidence(["tx"], period.to);
+    expect(evidence).toEqual({
+      complete: true,
+      checkedAt: period.to.toISOString(),
+      parents: [
+        {
+          processorRef: "tx",
+          capturedAt: "2026-06-01T12:00:00.000Z",
+          events: [{ id: "r1", amount: "2.35", at: "2026-07-01T13:00:00.000Z" }],
+        },
+      ],
+    });
+    expect(find.mock.calls).toEqual([[{ id: "tx" }]]);
+  });
+
+  it.each([
+    { kind: "failed read", detail: undefined, issue: "read_failed", retry: true },
+    { kind: "not found", detail: null, issue: "not_found", retry: false },
+    { kind: "missing events", detail: {}, issue: "missing_events", retry: false },
+    {
+      kind: "bad content",
+      detail: { refundEvidenceInvalid: true, refundEvents: [] },
+      issue: "invalid",
+      retry: false,
+    },
+    {
+      kind: "pending refund",
+      detail: {
+        refundEvents: [
+          {
+            id: "r",
+            status: "PENDING",
+            amount: decimal("2.00"),
+            timestamp: "2026-07-01T13:00:00Z",
+          },
+        ],
+      },
+      issue: "pending",
+      retry: true,
+    },
+    {
+      kind: "conflict",
+      detail: {
+        refundEvents: [
+          {
+            id: "r",
+            status: "REFUNDED",
+            amount: decimal("2.00"),
+            timestamp: "2026-07-01T13:00:00Z",
+          },
+          {
+            id: "r",
+            status: "REFUNDED",
+            amount: decimal("3.00"),
+            timestamp: "2026-07-01T13:00:00Z",
+          },
+        ],
+      },
+      issue: "invalid",
+      retry: false,
+    },
+  ])(
+    "isolates $kind from charges and retries only transient evidence",
+    async ({ detail, issue, retry }) => {
+      const client = new FakeSumUp();
+      vi.spyOn(client, "historyPage").mockResolvedValue({
+        items: [item(), item({ type: "REFUND" })],
+      });
+      vi.spyOn(client, "findTransaction").mockImplementation(async () => {
+        if (detail === undefined) throw new Error("network");
+        return detail === null
+          ? null
+          : {
+              id: "tx",
+              status: "SUCCESSFUL",
+              amount: decimal("10.00"),
+              currency: "EUR",
+              ...detail,
+            };
+      });
+      const report = source(client);
+      expect(await report.fetch(period)).toHaveLength(1);
+      expect(await report.fetchRefundEvidence([], period.to)).toMatchObject({
+        complete: false,
+        parents: [{ processorRef: "tx", issue }],
+      });
+      expect(report.retryRefunds).toBe(retry);
+    },
+  );
+});

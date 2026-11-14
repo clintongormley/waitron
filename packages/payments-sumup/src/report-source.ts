@@ -1,8 +1,9 @@
 import "./errors.js";
 import { AppError, compareDecimal, decimal } from "@waitron/shared";
-import type { SettlementRecord, SettlementReportSource } from "@waitron/payments";
+import type { RefundEvidence, SettlementRecord, SettlementReportSource } from "@waitron/payments";
 import type { SumUpClient, SumUpHistoryItem, SumUpTransaction } from "./client.js";
-import { fromMajorUnits } from "./client.js";
+import { SumUpCloudProvider } from "./provider.js";
+import { fromMajorUnits, refundOutcomeOf } from "./client.js";
 
 type AuditCandidate = {
   state: string;
@@ -42,14 +43,79 @@ function historyRecord(t: SumUpHistoryItem): SettlementRecord {
 export function sumupSettlementReport(
   client: SumUpClient,
   candidates: readonly AuditCandidate[] = [],
-): SettlementReportSource & { unreadableUnlinked: number } {
+) {
+  const refundParents = new Set<string>();
+  const details = new Map<string, SumUpTransaction | null>();
+  const lookup = async (id: string) => {
+    if (!details.has(id)) details.set(id, await client.findTransaction({ id }));
+    return details.get(id)!;
+  };
   const source = {
     unreadableUnlinked: 0,
+    retryRefunds: false,
+    async fetchRefundEvidence(ids: readonly string[], now: Date): Promise<RefundEvidence> {
+      const evidence: RefundEvidence = {
+        complete: true,
+        checkedAt: now.toISOString(),
+        parents: [],
+      };
+      for (const id of new Set([...refundParents, ...ids])) {
+        const parent: RefundEvidence["parents"][number] = { processorRef: id, events: [] };
+        try {
+          const t = id ? await lookup(id) : null;
+          if (t?.timestamp && Number.isFinite(Date.parse(t.timestamp)))
+            parent.capturedAt = new Date(t.timestamp).toISOString();
+          if (!id) parent.issue = "missing_reference";
+          else if (t === null) parent.issue = "not_found";
+          else if (t.id !== id || t.currency !== "EUR") parent.issue = "invalid";
+          else if (t.refundEvents === undefined) parent.issue = "missing_events";
+          else {
+            const unique = new Map(t.refundEvents.map((event) => [event.id, event]));
+            const valid =
+              !t.refundEvidenceInvalid &&
+              t.refundEvents.every(
+                (event) =>
+                  typeof event.id === "string" &&
+                  event.id !== "" &&
+                  Number.isFinite(Date.parse(event.timestamp)) &&
+                  compareDecimal(event.amount, decimal("0")) > 0 &&
+                  refundOutcomeOf(event.status) === refundOutcomeOf(unique.get(event.id)!.status) &&
+                  compareDecimal(event.amount, unique.get(event.id)!.amount) === 0 &&
+                  Date.parse(event.timestamp) === Date.parse(unique.get(event.id)!.timestamp),
+              );
+            const classified = SumUpCloudProvider.classify(t, now);
+            if (!valid) parent.issue = "invalid";
+            else if (classified.kind !== "captured") {
+              parent.issue = [...unique.values()].some(
+                (event) => refundOutcomeOf(event.status) === "pending",
+              )
+                ? "pending"
+                : "invalid";
+            } else
+              parent.events = classified.refunds.map((event) => ({
+                id: event.id,
+                amount: event.amount,
+                at: new Date(event.timestamp).toISOString(),
+              }));
+          }
+        } catch {
+          parent.issue = "read_failed";
+        }
+        if (parent.issue !== undefined) evidence.complete = false;
+        if (parent.issue === "pending" || parent.issue === "read_failed")
+          source.retryRefunds = true;
+        evidence.parents.push(parent);
+      }
+      return evidence;
+    },
     async fetch(
       window: Parameters<SettlementReportSource["fetch"]>[0],
       localReferences: readonly string[] = [],
     ) {
       source.unreadableUnlinked = 0;
+      source.retryRefunds = false;
+      refundParents.clear();
+      details.clear();
       const known = new Set(localReferences);
       const records = new Map<string, SettlementRecord>();
       const pages = new Set<string>();
@@ -77,7 +143,12 @@ export function sumupSettlementReport(
             source.unreadableUnlinked++;
             continue;
           }
-          if (t.type === "REFUND" || !completed(t.status)) continue;
+          if (t.type === "REFUND") {
+            refundParents.add(typeof t.transaction_id === "string" ? t.transaction_id : "");
+            continue;
+          }
+          if (t.status === "REFUNDED" && t.transaction_id) refundParents.add(t.transaction_id);
+          if (!completed(t.status)) continue;
           try {
             const record = historyRecord(t);
             if (record.settledAt < window.from || record.settledAt >= window.to) continue;
@@ -109,7 +180,7 @@ export function sumupSettlementReport(
       }
       for (const id of known) {
         if (records.has(id)) continue;
-        const t = await client.findTransaction({ id });
+        const t = await lookup(id);
         if (t === null) continue;
         if (t.id !== id) throw incomplete();
         if (t.status === "PENDING" || t.status === "CANCELLED" || t.status === "FAILED") continue;

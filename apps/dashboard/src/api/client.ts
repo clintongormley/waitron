@@ -2223,7 +2223,43 @@ export interface ModuleRow {
   revision?: number;
 }
 
+export interface RefundAuditItem {
+  charge?: { amount: string; settledAt: string };
+  reason:
+    | "confirmed"
+    | "amount_agreement"
+    | "amount"
+    | "ambiguous"
+    | "missing_local"
+    | "missing_provider"
+    | "void"
+    | "outside"
+    | "read_failed"
+    | "not_found"
+    | "missing_events"
+    | "missing_reference"
+    | "invalid"
+    | "pending";
+  processorRef: string | null;
+  providerRefundRef: string | null;
+  paymentRef: string | null;
+  workingOrderId: string | null;
+  externalMachine: string | null;
+  externalRef: string | null;
+  providerAmount: string | null;
+  localAmount: string | null;
+  providerAt: string | null;
+  localAt: string | null;
+}
 export interface BackupAuditView {
+  refundAudit: {
+    complete: boolean;
+    checkedAt: string[];
+    matches: RefundAuditItem[];
+    agreements: RefundAuditItem[];
+    exceptions: RefundAuditItem[];
+    outside: RefundAuditItem[];
+  };
   day: string;
   timeZone: string;
   complete: boolean;
