@@ -1250,7 +1250,6 @@ export async function readReceiptLanguage(
 ): Promise<{ locale: string; invoiceLocales: string[] }> {
   const invoiceLocales = await readInvoiceLocales(tx);
   const locale = invoiceLocales[0];
-  // The column's CHECK holds one or two entries.
   if (locale === undefined) throw new Error("readReceiptLanguage: the venue has no language");
   return { locale, invoiceLocales };
 }

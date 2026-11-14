@@ -1719,9 +1719,11 @@ export function fieldOf(error: unknown): string {
 export function codeMessage(
   code: string,
   locale: string = currentLocale(),
-  params?: { reason?: unknown },
+  params?: { reason?: unknown; count?: unknown },
 ): string {
   if (code === "venue.time_zone_not_ready") return zoneAdmissionMessage(params?.reason, locale);
+  if (code === "receipt.language_orders_open" && typeof params?.count === "number")
+    return ordersOpenMessage(params.count, locale);
   return registeredCodeMessage(code, locale);
 }
 
@@ -1740,4 +1742,9 @@ function zoneAdmissionMessage(reason: unknown, locale: string): string {
         ? "venue.time_zone_restart"
         : "venue.time_zone_wait";
   return pickLocale({ en: en[key], es: es[key] }, locale);
+}
+
+function ordersOpenMessage(count: number, locale: string): string {
+  const key = count === 1 ? "receipts.language_orders_open_one" : "receipts.language_orders_open";
+  return pickLocale({ en: en[key], es: es[key] }, locale).replace("{count}", String(count));
 }

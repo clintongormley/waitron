@@ -646,7 +646,7 @@ describe("developer demo regions", () => {
                     name: "Casa Delgado",
                     postal_code: "28013",
                     province: "Madrid",
-                    receipt: staff === "es" ? "es-ES" : "en-GB",
+                    receipt: "es-ES",
                   };
           const store = await openVenueDatabase(opts.venueDir);
           try {

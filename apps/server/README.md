@@ -947,9 +947,8 @@ The Valencian preset uses Casa Delgado de l'Horta; Galicia uses A Casa Delgado,
 with regional dishes and Albariño. Staff and kitchen names, menus, departments
 and stations follow the seed's English or Spanish language.
 Customer wording keeps each region's translations. A new Catalonia venue uses
-Catalan receipts; the Balearic, Valencian and Galician presets use Spanish receipts.
-Madrid retains the receipt choice from `WAITRON_SEED_LOCALE`. Screens remain
-English or Spanish.
+Catalan receipts; the Madrid, Balearic, Valencian and Galician presets use Spanish receipts.
+Screens remain English or Spanish.
 
 Changing `WAITRON_DEMO_REGION` keeps an existing venue's stored geography and data.
 To replace a throwaway venue you own, run

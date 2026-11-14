@@ -13,7 +13,7 @@ import { DEMO_ADMIN_EMAIL, DEMO_PIN } from "./credentials.js";
 import { DEMO_STAFF } from "./testing/data.js";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
 
-const LOCALE = "en-GB";
+const LOCALE = "es-ES";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),

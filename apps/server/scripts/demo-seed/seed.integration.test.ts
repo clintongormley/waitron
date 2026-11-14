@@ -31,7 +31,7 @@ import { getCountryPack } from "@waitron/country-packs";
 import { seedDemoRestaurant } from "./seed.js";
 import { CASA_DELGADO_ES } from "./testing/data.js";
 
-import { SEED_INVOICE_LOCALE, type SeedLocale } from "./locale.js";
+import type { SeedLocale } from "./locale.js";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
 
 const LOCALE: SeedLocale = "en";
@@ -44,7 +44,8 @@ const suite = useVenueDb({
 
 const provisionVenue = createDemoVenueProvisioner(() => suite.db, {
   nifBase: 95_000_000,
-  invoiceLocale: SEED_INVOICE_LOCALE[LOCALE],
+  invoiceLocale: "es-ES",
+  staffLanguage: LOCALE,
   nifFormat: "calculated",
   adminPin: "5555",
 });
@@ -58,7 +59,7 @@ function tillConfigFor(venue: Venue): OriginConfig {
   return {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(venue.nodeId),
-    locale: SEED_INVOICE_LOCALE[LOCALE],
+    locale: "es-ES",
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

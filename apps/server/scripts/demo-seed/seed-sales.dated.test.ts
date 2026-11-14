@@ -12,7 +12,6 @@ import { planVenue } from "@waitron/provisioning";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { localCalendarDate } from "@waitron/catalogue";
 import { ALL_MODULES } from "../../src/modules.js";
-import { SEED_INVOICE_LOCALE } from "./locale.js";
 import { seedSales } from "./seed-sales.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -57,7 +56,7 @@ describe("seedSales across a rate change", () => {
           legalName: "Casa Delgado SL",
           name: "Sala principal",
           fiscalTerritory: "ES-common",
-          invoiceLocales: [SEED_INVOICE_LOCALE.es],
+          invoiceLocales: ["es-ES"],
           operationDescription: "Venta en establecimiento",
           addressLine1: "Calle Mayor 1",
           addressLine2: null,
@@ -82,7 +81,7 @@ describe("seedSales across a rate change", () => {
 
     await seedSales(suite.db, {
       venue: { nodeId: venue.nodeId, seriesId: venue.seriesIds[0]! },
-      invoiceLocale: SEED_INVOICE_LOCALE.es,
+      invoiceLocale: "es-ES",
       days: 3,
       products: [
         {

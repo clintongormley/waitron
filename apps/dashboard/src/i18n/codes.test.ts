@@ -863,6 +863,39 @@ it.each([
   );
 });
 
+describe("receipt language refusal while orders are open", () => {
+  const code = "receipt.language_orders_open";
+
+  it("names a single open order in English and Spanish", () => {
+    expect(codeMessage(code, "en-GB", { count: 1 })).toBe(
+      "1 order at this venue is still in progress in the current receipt language, so it cannot be changed yet.",
+    );
+    expect(codeMessage(code, "es-ES", { count: 1 })).toBe(
+      "1 pedido de este local sigue en curso en el idioma actual del recibo, así que todavía no se puede cambiar.",
+    );
+  });
+
+  it("names how many open orders in English and Spanish", () => {
+    expect(codeMessage(code, "en-GB", { count: 3 })).toBe(
+      "3 orders at this venue are still in progress in the current receipt language, so it cannot be changed yet.",
+    );
+    expect(codeMessage(code, "es-ES", { count: 3 })).toBe(
+      "3 pedidos de este local siguen en curso en el idioma actual del recibo, así que todavía no se puede cambiar.",
+    );
+  });
+
+  it("keeps the general sentence when the refusal carries no count", () => {
+    for (const params of [undefined, {}, { count: "3" }]) {
+      expect(codeMessage(code, "en-GB", params)).toBe(
+        "Some orders at this venue are still in progress in the current receipt language, so it cannot be changed yet.",
+      );
+      expect(codeMessage(code, "es-ES", params)).toBe(
+        "Algunos pedidos de este local siguen en curso en el idioma actual del recibo, así que todavía no se puede cambiar.",
+      );
+    }
+  });
+});
+
 it("has a sentence in both languages for these handover refusals", () => {
   const GENERIC_EN = codeMessage("test.unmapped_code", "en");
   const GENERIC_ES = codeMessage("test.unmapped_code", "es");

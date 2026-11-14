@@ -245,8 +245,10 @@ export class VenueDefaultsPanel extends LitElement {
     } catch (error) {
       if (draft !== this.draft) return;
       const code = codeOf(error);
-      const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
-      if (LANGUAGE_REFUSALS.has(code)) this.errors = { receiptLanguage: codeMessage(code) };
+      const params = (error as { params?: { field?: unknown; count?: unknown } } | null)?.params;
+      const field = params?.field;
+      if (LANGUAGE_REFUSALS.has(code))
+        this.errors = { receiptLanguage: codeMessage(code, undefined, params) };
       else if (code === "management.request_invalid" && field === "receiptLanguage")
         this.errors = { receiptLanguage: t("receipts.language_invalid") };
       else if (code === "product.invalid" && field === "defaultProductVatClass")

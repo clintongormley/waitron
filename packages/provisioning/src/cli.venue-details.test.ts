@@ -102,7 +102,7 @@ it.each([
   ["address-line2", "Upper floor"],
   ["postal-code", "28014"],
   ["city", "Alcalá de Henares"],
-  ["province", "Barcelona"],
+  ["province", "Sevilla"],
   ["time-zone", "Atlantic/Canary"],
   ["day-cutover", "04:30"],
 ] as const)(

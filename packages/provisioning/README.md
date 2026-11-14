@@ -43,7 +43,7 @@ usage: waitron-provision <command> [options]
   keyring                                            generate the credential key ring
   venue    [--venue-dir <path>] [--country <cc>] [--tax-id <nif>] [--legal-name <name>]
            [--taxpayer-domicile <address>]
-           [--venue-name <name>] [--territory <t>] [--locale <l>]...
+           [--venue-name <name>] [--territory <t>] [--locale <l>]
            [--operation-description <text>] [--address-line1 <text>] [--address-line2 <text>]
            [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]
            [--day-cutover <HH:MM>] [--series-code <code>] [--full-series-code <code>]
@@ -190,9 +190,9 @@ not the venue.
 other value is refused with `fiscal.regime_not_implemented`. The pure `planVenue` also refuses a
 `--locale` count outside one-or-two (`provisioning.invalid_locales`) and duplicate codes among the
 standard, full and rectificative series (`provisioning.duplicate_series_code`) before the directory is opened.
-The first `--locale` is the language receipts print in by default. The command checks it neither against the
-country pack's languages nor against a region that fixes one (Catalonia); the dashboard's Receipts
-page and setup do. Before `planVenue` runs, the command reaches the fiscal regime's own venue-field seat, which
+`--locale` is the language receipts print in by default. As in setup, the command takes exactly one,
+offered by the country's pack, and the region's own where it fixes one (Catalan in Catalonia); two,
+or any other language, is refused with `setup.request_invalid` naming `invoiceLocales`. Before `planVenue` runs, the command reaches the fiscal regime's own venue-field seat, which
 refuses a legal name or operation description carrying a character XML forbids, an operation
 description over 500 characters, and any series code outside AEAT's character set or longer than
 the 21-character base (`setup.request_invalid`, naming the offending field). A concurrent run that
@@ -268,7 +268,7 @@ Every refusal is a structured code and its params on stderr — never a raw driv
 | `provisioning.foreign_tenant`        | The venue already holds a DIFFERENT taxpayer                                                                    | Stop. One tenant per database is the isolation boundary — see the fiscal invariants below.                                                                                                                                           |
 | `provisioning.venue_conflict`        | A concurrent run committed a conflicting row between this run's plan and its apply                              | Re-run. A same-venue re-run is a no-op.                                                                                                                                                                                              |
 | `fiscal.regime_not_implemented`      | `--territory` names a fiscal regime with no module behind it                                                    | Today only `ES-common` is implemented.                                                                                                                                                                                               |
-| `provisioning.invalid_locales`       | `--locale` was given no times, or more than twice                                                               | Give one or two.                                                                                                                                                                                                                     |
+| `provisioning.invalid_locales`       | `--locale` was given no times, or more than twice                                                               | Give one.                                                                                                                                                                                                                            |
 | `provisioning.duplicate_series_code` | Two of `--series-code`, `--full-series-code` and `--rectificative-code` are the same                            | Give each invoice purpose a different code.                                                                                                                                                                                          |
 
 Before a venue is live a code may be deleted freely (CLAUDE.md §3), and this package has deleted

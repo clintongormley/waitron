@@ -3,6 +3,7 @@ import { assertVenueFirstSetupAllowed } from "./first-setup-state.js";
 import { parseArgs } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 import { AppError, isAppError } from "@waitron/shared";
+import { resolveInstalledReceiptLanguageRules } from "@waitron/country-packs";
 import {
   deploymentTableExists,
   isUniqueViolation,
@@ -89,7 +90,7 @@ const USAGE = [
   "  keyring                                            generate the credential key ring",
   "  venue    [--venue-dir <path>] [--country <cc>] [--tax-id <nif>] [--legal-name <name>]",
   "           [--taxpayer-domicile <address>]",
-  "           [--venue-name <name>] [--territory <t>] [--locale <l>]...",
+  "           [--venue-name <name>] [--territory <t>] [--locale <l>]",
   "           [--operation-description <text>] [--address-line1 <text>] [--address-line2 <text>]",
   "           [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]",
   "           [--day-cutover <HH:MM>] [--series-code <code>] [--full-series-code <code>]",
@@ -303,6 +304,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
     const modules = enabledModules(installed, fiscalConfig);
 
     const actions = planVenue(request, modules);
+    assertReceiptLanguage(invoiceLocales, country, province);
     const requested = resolveEnvironment(deps.env);
     const owned =
       runtime !== undefined && modules.some((module) => initialSetupFor(modules, module.name));
@@ -570,25 +572,27 @@ function resolveWithoutPrompt(value: string | undefined): string | null {
   return trimmed === undefined || trimmed === "" ? null : trimmed;
 }
 
-/** An empty list is not special-cased: `planVenue` refuses it, as it does an over-count. */
 async function resolveLocales(supplied: string[] | undefined, deps: CliDeps): Promise<string[]> {
   const fromFlags = (supplied ?? [])
     .map((locale) => locale.trim())
     .filter((locale) => locale !== "");
   if (fromFlags.length > 0) return fromFlags;
-  const locales: string[] = [];
-  for (;;) {
-    const answer = (
-      await deps.io.prompt(
-        locales.length === 0
-          ? "invoice locale (e.g. es-ES): "
-          : "another invoice locale (blank to finish): ",
-      )
-    ).trim();
-    if (answer === "") break;
-    locales.push(answer);
+  const answer = (await deps.io.prompt("invoice locale (e.g. es-ES): ")).trim();
+  return answer === "" ? [] : [answer];
+}
+
+/** The rule setup holds the first venue to: one receipt language, offered by the country pack, and
+ * the region's own where it fixes one. */
+function assertReceiptLanguage(locales: string[], country: string, province: string): void {
+  const rules = resolveInstalledReceiptLanguageRules({ country, area: province });
+  const [locale] = locales;
+  if (
+    locales.length !== 1 ||
+    !rules.choices.includes(locale!) ||
+    (rules.fixed !== undefined && locale !== rules.fixed.locale)
+  ) {
+    throw new AppError("setup.request_invalid", { field: "invoiceLocales" });
   }
-  return locales;
 }
 
 /**

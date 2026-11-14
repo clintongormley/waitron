@@ -637,23 +637,6 @@ Hardware and inbox checks to complete in the owner session.
   then "Pimientos de Padrón 4.00", at 58 and 80 mm. What a line of two printed before slice 1 was not
   checked. Decide whether the extra's row shows its count.
 
-## Bundle: Receipt language loose ends
-
-5 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- The refusal's count of blocking orders is not shown on Venue settings' Defaults card: `codeMessage` fills
-  in no values.
-- The provisioning command (`waitron-provision`) can still store two languages, or one no pack
-  offers; the first entry is the default receipt language. It does not hold Catalonia to Catalan:
-  only the Receipts route and setup do.
-- `cfg.invoiceLocales` (`apps/server/src/till-config.ts`) is no longer read outside tests (by
-  grep) and can be retired.
-- The till reads its fallback receipt language only when it
-  starts (again after a server switch or an enrolment), so a change reaches those after a
-  reload. The on-screen ticket follows each sale's own language.
-- The dev and demo seed's English mode stores `en-GB`; Venue settings' Defaults card shows it as
-  the saved language although it is not offered.
-
 ## Bundle: A print agent somewhere other than the box
 
 4 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).

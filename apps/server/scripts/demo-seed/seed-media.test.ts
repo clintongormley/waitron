@@ -15,7 +15,7 @@ import { seedMedia, demoMediaPath } from "./seed-media.js";
 // The regex the public `GET /media/:filename` route accepts.
 import { MEDIA_FILENAME } from "@waitron/shared";
 
-import { SEED_INVOICE_LOCALE, type SeedLocale } from "./locale.js";
+import type { SeedLocale } from "./locale.js";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
 
 const LOCALE: SeedLocale = "en";
@@ -27,7 +27,8 @@ const suite = useVenueDb({
 
 const provisionVenue = createDemoVenueProvisioner(() => suite.db, {
   nifBase: 51_000_000,
-  invoiceLocale: SEED_INVOICE_LOCALE[LOCALE],
+  invoiceLocale: "es-ES",
+  staffLanguage: LOCALE,
 });
 
 describe("seedMedia", () => {

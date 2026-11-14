@@ -152,7 +152,7 @@ full-tag `invoice_locales` at the single point content enters a fiscal line**:
   inconsistent with its `sale_lines` keys. That residual write-side gap is **not** closed here (backlog
   follow-up: source the whole filed record's locale from the DB location config).
 - The demo seed authors bare content (`SeedLocale = "en" | "es"`) and maps to full-tag config via
-  `SEED_INVOICE_LOCALE` — content authored bare, filed full.
+  `SEED_INVOICE_LOCALE` — content authored bare, filed full. (2026-11-14: that map is gone; the demo seed files in the venue's own receipt language.)
 
 **Deferred follow-up:** authoring-time locale-completeness validation — today nothing requires a product
 to carry every venue invoice-locale's translation, so a missing one graceful-fills (the receipt shows the

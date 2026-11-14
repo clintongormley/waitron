@@ -492,6 +492,44 @@ it("a refusal beside the language marks the field invalid, names the refusal and
   expect(q(el, "[role=status]")).toBeNull();
 });
 
+it.each([
+  [
+    "en-GB",
+    3,
+    "3 orders at this venue are still in progress in the current receipt language, so it cannot be changed yet.",
+  ],
+  [
+    "en-GB",
+    1,
+    "1 order at this venue is still in progress in the current receipt language, so it cannot be changed yet.",
+  ],
+  [
+    "es-ES",
+    3,
+    "3 pedidos de este local siguen en curso en el idioma actual del recibo, así que todavía no se puede cambiar.",
+  ],
+  [
+    "es-ES",
+    1,
+    "1 pedido de este local sigue en curso en el idioma actual del recibo, así que todavía no se puede cambiar.",
+  ],
+])(
+  "in %s, the open-orders refusal names its %i blocking orders",
+  async (locale, count, sentence) => {
+    setLocale(locale);
+    const r = rig();
+    r.api.putVenueDefaults.mockRejectedValueOnce({
+      code: "receipt.language_orders_open",
+      params: { field: "receiptLanguage", count },
+    });
+    const el = await mount(r.api);
+    await edit(el);
+    await pick(el, "receiptLanguage", "ca-ES");
+    saveButton(el).click();
+    await expect.poll(() => combo(el, "receiptLanguage")!.error).toBe(sentence);
+  },
+);
+
 it("keeps a refusal at the bottom through a failed read and its recovery", async () => {
   setLocale("en-GB");
   const r = rig();

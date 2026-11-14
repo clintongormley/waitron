@@ -663,6 +663,10 @@ export const en = {
   "receipts.trim_too_long": "Use at most {max} characters.",
   "receipts.language": "Default receipt language",
   "receipts.language_invalid": "Choose one of the languages offered.",
+  "receipts.language_orders_open":
+    "{count} orders at this venue are still in progress in the current receipt language, so it cannot be changed yet.",
+  "receipts.language_orders_open_one":
+    "1 order at this venue is still in progress in the current receipt language, so it cannot be changed yet.",
   "receipts.language_save_error": "The receipt language could not be saved.",
   "receipts.language_stored": "By default, receipts print in {stored} until you switch to {fixed}.",
   "receipt_language.warning":
@@ -4637,6 +4641,10 @@ export const es: Record<StringKey, string> = {
   "receipts.trim_too_long": "Usa como máximo {max} caracteres.",
   "receipts.language": "Idioma predeterminado del recibo",
   "receipts.language_invalid": "Elige uno de los idiomas ofrecidos.",
+  "receipts.language_orders_open":
+    "{count} pedidos de este local siguen en curso en el idioma actual del recibo, así que todavía no se puede cambiar.",
+  "receipts.language_orders_open_one":
+    "1 pedido de este local sigue en curso en el idioma actual del recibo, así que todavía no se puede cambiar.",
   "receipts.language_save_error": "No se ha podido guardar el idioma del recibo.",
   "receipts.language_stored":
     "Por defecto, los recibos se imprimen en {stored} hasta que cambies a {fixed}.",
