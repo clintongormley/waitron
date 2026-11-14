@@ -1291,14 +1291,6 @@ once released. Belongs with A1016.
   look images for #2250 were taken before its review changed the "not a pack" refusal and added the
   space mark.
 
-## Backups says "try again" after a saved-settings failure it has no words for.
-
-- **Backups says "try again" after a saved-settings failure it has no words for.** The "Backups
-  are off because the saved settings can't be used" line appends the code's dashboard message
-  (`backup-screen.ts`, from #1642), and a code with none, such as `credentials.decrypt_failed`,
-  falls back to "Something went wrong, try again". That names nothing to try, beside a "What the box
-  recorded" panel saying Read again turns nothing on.
-
 ## A route whose failure is the system's `ENOSPC` still answers `server.internal`.
 
 - **A route whose failure is the system's `ENOSPC` still answers `server.internal`.** `diskFullIn`
@@ -1484,16 +1476,9 @@ once released. Belongs with A1016.
 
 ## Bundle: Backups screen leftovers
 
-9 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+6 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06),
+except the last, added 2026-11-14.
 
-- **At 390 px wide, the configuration export's password label overlaps its Show password button.**
-  Found while looking at the Backups screen for A1187 PR D. The markup came with #296 and is
-  believed to predate that branch; nobody photographed it before.
-- **Backups says "try again" after a saved-settings failure it has no words for.**
-  That names nothing to try, beside a "What the box recorded" panel saying Read again turns nothing on.
-  [Detail](box.md#backups-says-try-again-after-a-saved-settings-failure-it-has-no-words-for).
-- **`backup.archive_settings_unusable` is worded only as an alert** (`alert-messages.ts`), not on
-  the Backups screen. Left open by A538-4.
 - **Two small leftovers in the Backups destination form, reported by A639's review and not fixed
   there (#1695).** Neither was reproduced outside the reviewer's run.
   [Detail](box.md#two-small-leftovers-in-the-backups-destination-form-a639-1695)
@@ -1507,9 +1492,11 @@ once released. Belongs with A1016.
 - **Loose ends left by SQLite slice 2 Task 2a (#557, a recovery key that does not need an archive
   destination).**
   [Detail](box.md#loose-ends-left-by-sqlite-slice-2-task-2a-557-a-recovery-key-that-does-not-need-an-archive-destination)
-- **A blank "Time of day" on the backup screen sends `{ hour: 0, minute: NaN }`** — left open by
-  A178 (#1010 to #1019), seen while building, not changed: the same parsing is on `main` before
-  A178b (`#buildSchedule`'s `split(":")`); what the server does with it was not checked.
+- **After a save whose reload fails, Turn on backups stays greyed out until a field changes**, so
+  the only retries are changing a setting or the box's next start. Letting it send the same settings
+  again is an exception to the Forms rule that a save stays quiet until the draft changes (A331), so
+  it needs the owner's decision. Found by fix/backups-screen-small's review, by reading
+  `#apply`'s `scope.commit` and `#applyAction`; not run.
 
 ## Bundle: Box status rows
 

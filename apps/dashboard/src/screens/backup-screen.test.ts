@@ -1,6 +1,7 @@
 import { useLocale } from "../testing/locale-setup.js";
-import { LiveData } from "@waitron/dashboard-kit";
+import { LiveData, hasCodeMessage } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget, quietRejection } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -8,6 +9,7 @@ import { alertMessage } from "../i18n/alerts.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type {
   BackupStatusView,
+  BackupWriteAnswer,
   DashboardApi,
   RecoveryPackStatus,
   StreamSettingsView,
@@ -1664,6 +1666,38 @@ describe("backup-screen retention boxes", () => {
     return el;
   }
 
+  it("a blank time of day sends nothing: the field says why, focus moves to it, and Apply waits until it is filled", async () => {
+    const api = stubApi();
+    const el = await readyToApply(api);
+    await chooseOption(q(el, "[data-test=time-mode]")!, "fixed");
+    await el.updateComplete;
+    const at = q(el, "[data-test=at-time]") as WtInput;
+    expect(at.required).toBe(true);
+    setInput(el, "[data-test=at-time]", "");
+    await el.updateComplete;
+
+    q(el, "[data-test=apply]")!.click();
+    await flush(el);
+
+    expect(api.applyBackup).not.toHaveBeenCalled();
+    expect(at.error).toBe(t("backup.schedule.at_required"));
+    expect(await bottomOf(el, "apply-actions")).toBe(t("form.fix_fields"));
+    expect(el.shadowRoot!.activeElement).toBe(at);
+    expect(q(el, "[data-test=apply]")!.hasAttribute("disabled")).toBe(true);
+
+    setInput(el, "[data-test=at-time]", "04:15");
+    await el.updateComplete;
+    expect(at.error).toBe("");
+    expect(q(el, "[data-test=apply]")!.hasAttribute("disabled")).toBe(false);
+    q(el, "[data-test=apply]")!.click();
+    await flush(el);
+    expect(api.applyBackup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        schedule: { kind: "wall-clock", days: "daily", at: { hour: 4, minute: 15 } },
+      }),
+    );
+  });
+
   it("a blank box sends nothing: the box says why, focus moves to it, and Apply waits until it is filled", async () => {
     const api = stubApi();
     const el = await readyToApply(api);
@@ -2184,6 +2218,42 @@ describe("A1089 unreadable archive settings choices", () => {
       }
     });
 
+    it(`a load failure with no words of its own says what happened and what each choice does (${locale})`, async () => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const api = stubApi({}, { ...OFF, loadErrorCode: "credentials.decrypt_failed" });
+        const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+        await flush(el);
+        const line = q(el, "[data-test=load-failed]")!.textContent!.trim();
+        const words = codeMessage("backup.archive_settings_unusable");
+        expect(hasCodeMessage("backup.archive_settings_unusable")).toBe(true);
+        expect(line).toBe(words);
+        expect(line).not.toContain(codeMessage("server.internal"));
+        expect(words).toContain(t("backup_evidence.heading"));
+        expect(words).toContain(t("backup.apply"));
+        expect(words).not.toMatch(/support|soporte|manager|responsable|encargad/i);
+      } finally {
+        setLocale(previous);
+      }
+    });
+
+    it(`a load failure with words of its own still shows them (${locale})`, async () => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const api = stubApi({}, { ...OFF, loadErrorCode: "backup.archive_settings_invalid" });
+        const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+        await flush(el);
+        const line = q(el, "[data-test=load-failed]")!.textContent!;
+        expect(line).toContain(t("backup.status.load_failed"));
+        expect(line).toContain(codeMessage("backup.archive_settings_invalid"));
+        expect(line).not.toContain(codeMessage("backup.archive_settings_unusable"));
+      } finally {
+        setLocale(previous);
+      }
+    });
+
     it(`explains stopping without replacing unreadable settings (${locale})`, async () => {
       const previous = currentLocale();
       setLocale(locale);
@@ -2200,9 +2270,9 @@ describe("A1089 unreadable archive settings choices", () => {
         await flush(el);
         const message = alertMessage("backup.archive_settings_unusable", {}, locale);
         expect(message).toContain(t("backup.apply"));
-        expect(q(el, "[data-test=load-failed]")!.textContent).toContain(
-          codeMessage("credentials.decrypt_failed"),
-        );
+        const line = q(el, "[data-test=load-failed]")!.textContent!;
+        expect(line).toContain(codeMessage("backup.archive_settings_unusable"));
+        expect(line).not.toContain(codeMessage("credentials.decrypt_failed"));
         setInput(el, "[data-test=destination]", "/mnt/usb/reconsidered");
         await el.updateComplete;
         el.remove();
@@ -2210,6 +2280,104 @@ describe("A1089 unreadable archive settings choices", () => {
         expect(api.applyBackup).not.toHaveBeenCalled();
         expect(api.rotateBackupKey).not.toHaveBeenCalled();
         expect(api.mintBackupKey).not.toHaveBeenCalled();
+      } finally {
+        setLocale(previous);
+      }
+    });
+
+    /** Turns backups on from a box holding a key, answering `answer`; returns the reload line. */
+    async function reloadLineAfterApply(answer: BackupWriteAnswer): Promise<{
+      el: BackupScreen;
+      line: string;
+    }> {
+      const held = { ...OFF, recoveryKeySet: true, keyFingerprint: "ab12cd34" };
+      const api = stubApi({ applyBackup: vi.fn().mockResolvedValue(answer) }, held);
+      const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+      await flush(el);
+      setInput(el, "[data-test=destination]", "/mnt/usb/waitron");
+      await el.updateComplete;
+      q(el, "[data-test=apply]")!.click();
+      await flush(el);
+      expect(api.applyBackup).toHaveBeenCalledOnce();
+      const line = q(el, "[data-test=reload-failed]")!.textContent!.replace(/\s+/g, " ").trim();
+      return { el, line };
+    }
+
+    it(`a save whose reload failed with no words of its own says what retries, not "try again" (${locale})`, async () => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const { el, line } = await reloadLineAfterApply({
+          ...OFF,
+          recoveryKeySet: true,
+          reloadErrorCode: "unknown",
+        });
+        expect(hasCodeMessage("unknown")).toBe(false);
+        expect(line).not.toContain(codeMessage("unknown"));
+        expect(line).toBe(
+          `${t("backup.reload_failed_after_save")} ${t("backup.reload_failed_retry")}`,
+        );
+        expect(line).not.toMatch(/support|soporte|manager|responsable|encargad/i);
+        expect(q(el, "[data-test=status]")!.textContent).toContain(t("backup.status.off"));
+        expect(q(el, "[data-test=load-failed]")).toBeNull();
+      } finally {
+        setLocale(previous);
+      }
+    });
+
+    it(`a save whose reload left settings with no words unusable leaves the explaining to the status line (${locale})`, async () => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const { el, line } = await reloadLineAfterApply({
+          ...OFF,
+          recoveryKeySet: true,
+          loadErrorCode: "credentials.decrypt_failed",
+          backupStatus: { configured: false, loadErrorCode: "credentials.decrypt_failed" },
+          reloadErrorCode: "credentials.decrypt_failed",
+        });
+        expect(line).toBe(t("backup.reload_failed_after_save"));
+        expect(q(el, "[data-test=load-failed]")!.textContent!.trim()).toBe(
+          codeMessage("backup.archive_settings_unusable"),
+        );
+      } finally {
+        setLocale(previous);
+      }
+    });
+
+    it(`a save whose reload left settings unusable shows the code's words once, in the status line (${locale})`, async () => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const { el, line } = await reloadLineAfterApply({
+          ...OFF,
+          recoveryKeySet: true,
+          loadErrorCode: "backup.archive_settings_invalid",
+          backupStatus: { configured: false, loadErrorCode: "backup.archive_settings_invalid" },
+          reloadErrorCode: "backup.archive_settings_invalid",
+        });
+        expect(line).toBe(t("backup.reload_failed_after_save"));
+        const words = codeMessage("backup.archive_settings_invalid");
+        const body = q(el, "#backup-body")!.textContent!;
+        expect(body.split(words)).toHaveLength(2);
+        expect(q(el, "[data-test=load-failed]")!.textContent).toContain(words);
+      } finally {
+        setLocale(previous);
+      }
+    });
+
+    it(`a save whose reload failed with words of its own still shows them (${locale})`, async () => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const { line } = await reloadLineAfterApply({
+          ...OFF,
+          recoveryKeySet: true,
+          reloadErrorCode: "backup.reload_in_progress",
+        });
+        expect(line).toBe(
+          `${t("backup.reload_failed_after_save")} ${codeMessage("backup.reload_in_progress")}`,
+        );
       } finally {
         setLocale(previous);
       }
@@ -2510,4 +2678,31 @@ it("starts Rotate quietly after Apply, then corrects a short key and submits it 
   expect(api.rotateBackupKey).toHaveBeenCalledExactlyOnceWith({
     recoveryKey: "correct-horse-battery-staple",
   });
+});
+
+describe("configuration export at phone width", () => {
+  const viewport = { width: window.innerWidth, height: window.innerHeight };
+  afterEach(async () => {
+    await page.viewport(viewport.width, viewport.height);
+  });
+
+  it.each(["en-GB", "es-ES"])(
+    "keeps each passphrase label clear of its show button at 390 px (%s)",
+    async (locale) => {
+      setLocale(locale);
+      await page.viewport(390, 850);
+      const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+        api: stubApi(),
+      });
+      await flush(el);
+      for (const id of ["configuration-passphrase", "configuration-confirm"]) {
+        const field = q(el, `[data-test=${id}]`) as WtInput;
+        await field.updateComplete;
+        const label = field.shadowRoot!.querySelector(".field-label")!.getBoundingClientRect();
+        const button = q(el, `[data-test=toggle-${id}]`)!.getBoundingClientRect();
+        expect(label.width).toBeGreaterThan(0);
+        expect(label.right).toBeLessThanOrEqual(button.left);
+      }
+    },
+  );
 });

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { codeMessage, codeOf, registerCodeMessages } from "./codes.js";
+import { codeMessage, codeOf, hasCodeMessage, registerCodeMessages } from "./codes.js";
 import { setLocale } from "./i18n.js";
 
 beforeEach(() => {
@@ -29,6 +29,14 @@ it("degrades an unregistered code to GENERIC, never the raw code", () => {
 it("degrades a prototype-chain code (toString/constructor) to GENERIC, never undefined", () => {
   for (const code of ["toString", "constructor", "valueOf", "hasOwnProperty"]) {
     expect(codeMessage(code, "en")).toBe("Something went wrong, try again");
+  }
+});
+
+it("says whether a code has words of its own, never counting prototype names", () => {
+  expect(hasCodeMessage("password.invalid")).toBe(true);
+  expect(hasCodeMessage("settings.out_of_date")).toBe(true);
+  for (const code of ["totally.made.up", "toString", "constructor"]) {
+    expect(hasCodeMessage(code), code).toBe(false);
   }
 });
 

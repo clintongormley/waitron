@@ -1,5 +1,5 @@
 import { dashboardQuery } from "../api/live-queries.js";
-import { QueryController } from "@waitron/dashboard-kit";
+import { QueryController, hasCodeMessage } from "@waitron/dashboard-kit";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing, svg } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { isPlainWebAddress } from "@waitron/shared";
@@ -161,6 +161,14 @@ const WEEKDAYS: { n: number; labelKey: Parameters<typeof t>[0] }[] = [
   { n: 6, labelKey: "backup.weekday.sat" },
   { n: 0, labelKey: "backup.weekday.sun" },
 ];
+
+function revealIcon(visible: boolean): TemplateResult {
+  return html`<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+    <path d="M1 8s2.5-4 7-4 7 4 7 4-2.5 4-7 4-7-4-7-4Z"></path>
+    <circle cx="8" cy="8" r="2"></circle>
+    ${visible ? svg`<path d="m2 2 12 12"></path>` : nothing}
+  </svg>`;
+}
 
 @customElement("dashboard-backup-screen")
 export class BackupScreen extends LitElement {
@@ -614,8 +622,12 @@ export class BackupScreen extends LitElement {
     return parseRetention(this.retainCount) === null || parseRetention(this.retainDays) === null;
   }
 
+  get #timeMissing(): boolean {
+    return this.timeMode === "fixed" && !/^\d{2}:\d{2}/.test(this.atTime);
+  }
+
   get #policyHeld(): boolean {
-    return this.attempted && this.#retentionInvalid;
+    return this.attempted && (this.#retentionInvalid || this.#timeMissing);
   }
 
   get #folderMissing(): boolean {
@@ -691,7 +703,7 @@ export class BackupScreen extends LitElement {
     this.folderRefused = false;
     this.customRefused = null;
     this.formRefusal = null;
-    if (!this.#retentionInvalid && !this.#destinationInvalid) return true;
+    if (!this.#retentionInvalid && !this.#timeMissing && !this.#destinationInvalid) return true;
     this.#focusFirstInvalidBox();
     return false;
   }
@@ -1240,11 +1252,12 @@ export class BackupScreen extends LitElement {
           <wt-button
             slot="end"
             variant="ghost"
+            class="secret-toggle"
             data-test="toggle-configuration-passphrase"
             aria-label=${this.configurationPassphraseVisible ? t("login.hide_password") : t("login.show_password")}
             @click=${() =>
               (this.configurationPassphraseVisible = !this.configurationPassphraseVisible)}
-            >${this.configurationPassphraseVisible ? t("login.hide_password") : t("login.show_password")}</wt-button
+            >${revealIcon(this.configurationPassphraseVisible)}</wt-button
           >
         </wt-input>
         <wt-input
@@ -1264,10 +1277,11 @@ export class BackupScreen extends LitElement {
           <wt-button
             slot="end"
             variant="ghost"
+            class="secret-toggle"
             data-test="toggle-configuration-confirm"
             aria-label=${this.configurationConfirmVisible ? t("login.hide_password") : t("login.show_password")}
             @click=${() => (this.configurationConfirmVisible = !this.configurationConfirmVisible)}
-            >${this.configurationConfirmVisible ? t("login.hide_password") : t("login.show_password")}</wt-button
+            >${revealIcon(this.configurationConfirmVisible)}</wt-button
           >
         </wt-input>
         <wt-form-actions data-test="configuration-actions" .error=${bottom}>
@@ -1292,7 +1306,8 @@ export class BackupScreen extends LitElement {
           this.reloadErrorCode === null
             ? nothing
             : html`<p class="error" role="status" data-test="reload-failed">
-                ${t("backup.reload_failed_after_save")} ${codeMessage(this.reloadErrorCode)}
+                ${t("backup.reload_failed_after_save")}
+                ${this.#reloadFailedDetail(s, this.reloadErrorCode)}
               </p>`
         }
         ${
@@ -1323,6 +1338,13 @@ export class BackupScreen extends LitElement {
     `;
   }
 
+  // The apply route answers a load failure as its reload code too (backup-api.ts), so the status line already says it.
+  #reloadFailedDetail(s: BackupStatusView, code: string): string {
+    if (code === s.loadErrorCode) return "";
+    if (hasCodeMessage(code)) return codeMessage(code);
+    return t("backup.reload_failed_retry");
+  }
+
   #renderStatus(s: BackupStatusView): TemplateResult {
     return html`
       <dl class="status" data-test="status">
@@ -1339,7 +1361,11 @@ export class BackupScreen extends LitElement {
             ${
               s.loadErrorCode
                 ? html`<span class="line stale" data-test="load-failed"
-                      >${t("backup.status.load_failed")} ${codeMessage(s.loadErrorCode)}</span
+                      >${
+                        hasCodeMessage(s.loadErrorCode)
+                          ? `${t("backup.status.load_failed")} ${codeMessage(s.loadErrorCode)}`
+                          : codeMessage("backup.archive_settings_unusable")
+                      }</span
                     ><wt-button
                       class="evidence-open"
                       data-test="evidence-open"
@@ -1587,11 +1613,7 @@ export class BackupScreen extends LitElement {
               data-test="toggle-archive-secret"
               aria-label=${toggleLabel}
               @click=${() => (this.secretVisible = !this.secretVisible)}
-              ><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                <path d="M1 8s2.5-4 7-4 7 4 7 4-2.5 4-7 4-7-4-7-4Z"></path>
-                <circle cx="8" cy="8" r="2"></circle>
-                ${this.secretVisible ? svg`<path d="m2 2 12 12"></path>` : nothing}
-              </svg></wt-button
+              >${revealIcon(this.secretVisible)}</wt-button
             >`
           : nothing
       }</wt-input
@@ -1798,6 +1820,8 @@ export class BackupScreen extends LitElement {
               data-test="at-time"
               name="at-time"
               label=${t("backup.schedule.at")}
+              required
+              error=${this.attempted && this.#timeMissing ? t("backup.schedule.at_required") : ""}
               .value=${this.atTime}
               @keydown=${(event: KeyboardEvent) => this.#submitOnEnter(event)}
               @wt-change=${(e: CustomEvent<{ value: string }>) => (this.atTime = e.detail.value)}

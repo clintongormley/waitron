@@ -1539,7 +1539,7 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
 
 - **There is no Backups guide page**, so the Backups screen and its Recovery pack card link to none.
 
-- **Backups screen leftovers** (bundle of 9, 1 important, size M). [Detail](backlog/box.md#bundle-backups-screen-leftovers)
+- **Backups screen leftovers** (bundle of 6, 1 important, size M). [Detail](backlog/box.md#bundle-backups-screen-leftovers)
 
 - **A1089: authenticated server-certificate recovery is missing from the public connection page.**
   [Detail](backlog/box.md#authenticated-server-certificate-recovery)

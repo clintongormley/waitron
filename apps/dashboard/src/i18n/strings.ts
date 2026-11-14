@@ -2101,6 +2101,8 @@ export const en = {
   "backup_evidence.read_again": "Read again",
   "backup_evidence.stop": "Stop",
   "backup.reload_failed_after_save": "Saved, but the box could not load the new settings.",
+  "backup.reload_failed_retry":
+    "The box tries again the next time it starts, and each time scheduled backups are turned on, changed or turned off.",
   "backup.destination.local": "On this box",
   "backup.destination.off_box": "Off the box",
   "backup.destination.stored": "Stored a backup under the current key",
@@ -2160,6 +2162,7 @@ export const en = {
   "backup.schedule.time_auto": "Let the box choose (after close and the day's reports)",
   "backup.schedule.time_fixed": "At a set time",
   "backup.schedule.at": "Time of day",
+  "backup.schedule.at_required": "Enter a time of day.",
   "backup.retention.count": "Keep at most (backups)",
   "backup.retention.days": "Delete anything older than (days)",
   "backup.retention_invalid": "Enter a whole number of at least 1.",
@@ -6097,6 +6100,8 @@ export const es: Record<StringKey, string> = {
   "backup_evidence.stop": "Parar",
   "backup.reload_failed_after_save":
     "Se ha guardado, pero la caja no ha podido cargar los ajustes nuevos.",
+  "backup.reload_failed_retry":
+    "La caja lo vuelve a intentar la próxima vez que se inicie y cada vez que se activen, cambien o desactiven las copias programadas.",
   "backup.destination.local": "En esta caja",
   "backup.destination.off_box": "Fuera de la caja",
   "backup.destination.stored": "Ha guardado una copia con la clave actual",
@@ -6159,6 +6164,7 @@ export const es: Record<StringKey, string> = {
   "backup.schedule.time_auto": "Que lo decida la caja (tras el cierre y los informes del día)",
   "backup.schedule.time_fixed": "A una hora fija",
   "backup.schedule.at": "Hora del día",
+  "backup.schedule.at_required": "Introduce una hora del día.",
   "backup.retention.count": "Guardar como máximo (copias)",
   "backup.retention.days": "Borrar todo lo anterior a (días)",
   "backup.retention_invalid": "Introduce un número entero de al menos 1.",
