@@ -1210,25 +1210,39 @@ describe("the Edit dialog", () => {
     expect(el.shadowRoot!.activeElement).not.toBeNull();
   });
 
-  it("opens a linked device when an initial failed read recovers", async () => {
-    history.replaceState(null, "", "/manage/devices/device/t1");
-    const liveData = new LiveData();
-    const api = Object.assign(
-      editApi({
-        listPrinters: vi
-          .fn()
-          .mockRejectedValueOnce(Object.assign(new Error(), { code: "connection.failed" }))
-          .mockResolvedValue([]),
-      }),
-      { liveData },
-    );
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await vi.waitFor(() => expect(q(el, "[data-test=page-error]")?.textContent).toBeTruthy());
-    expect(q(el, "[data-test=edit-device-modal]")).toBeNull();
-    liveData.refresh();
-    await vi.waitFor(() => expect(field(el, "edit-name")?.value).toBe("Cash till 1"));
-    expect(location.pathname).toBe("/manage/devices/device/t1");
-  });
+  it.each(["initial", "history"] as const)(
+    "opens a linked device when an initial failed read recovers (%s)",
+    async (entry) => {
+      history.replaceState(
+        null,
+        "",
+        entry === "initial" ? "/manage/devices/device/t1" : "/manage/devices",
+      );
+      const liveData = new LiveData();
+      const api = Object.assign(
+        editApi({
+          [entry === "initial" ? "listPrinters" : "listDevices"]: vi
+            .fn()
+            .mockRejectedValueOnce(Object.assign(new Error(), { code: "connection.failed" }))
+            .mockResolvedValue(entry === "initial" ? [] : [till, kitchen]),
+        }),
+        { liveData },
+      );
+      const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+      await vi.waitFor(() => expect(q(el, "[data-test=page-error]")?.textContent).toBeTruthy());
+      expect(q(el, "[data-test=edit-device-modal]")).toBeNull();
+      if (entry === "history") {
+        history.pushState(null, "", "/manage/devices/device/t1");
+        window.dispatchEvent(new PopStateEvent("popstate"));
+        await flush(el);
+        expect(location.pathname).toBe("/manage/devices/device/t1");
+        expect(q(el, "[data-test=edit-device-modal]")).toBeNull();
+      }
+      liveData.refresh();
+      await vi.waitFor(() => expect(field(el, "edit-name")?.value).toBe("Cash till 1"));
+      expect(location.pathname).toBe("/manage/devices/device/t1");
+    },
+  );
 
   it("closes a linked editor when the address returns to Devices", async () => {
     history.replaceState(null, "", "/manage/devices/device/t1");

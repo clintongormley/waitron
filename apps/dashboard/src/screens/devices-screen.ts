@@ -572,7 +572,7 @@ export class DevicesScreen extends LitElement {
       this.#linkedDevice = this.#addressDevice = id;
       if (id === null) {
         if (previous !== null) this.#endEdit(false);
-      } else if (this.#initialRead) this.#openLinkedDevice();
+      } else if (this.#initialRead && !this.#readErrorShown) this.#openLinkedDevice();
     },
     dashboardPath,
   );

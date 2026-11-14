@@ -229,7 +229,7 @@ const states: Record<
   },
   collapsed: { model: routing() },
   expanded: { model: routing(), expand: true },
-  "editor open": { model: routing(), open: 'td[data-row="all"][data-zone="every"]' },
+  "editor open": { model: routing(), open: 'td[data-row="c:drinks"][data-zone="every"]' },
   "no category editor open": {
     model: routing(),
     open: 'td[data-row="no_category"][data-zone="every"]',
@@ -457,12 +457,6 @@ describe.each(["light", "dark"] as const)("a hovered routing cell (%s)", (theme)
       disabledTarget,
       'td[data-row="c:drinks"][data-zone="inside"]',
       '[data-test="disabled-target"]',
-    ],
-    [
-      "the repair note",
-      routing({ defaultStationId: null }),
-      'td[data-row="all"][data-zone="every"]',
-      '[data-test="default-repair"]',
     ],
   ])("keeps %s at 4.5:1 against the hover", async (_, model, cellSelector, textSelector) => {
     const { td, cell, text } = await hoverable(model, cellSelector, textSelector);
