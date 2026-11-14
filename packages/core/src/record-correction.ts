@@ -153,7 +153,6 @@ export async function recordCorrection(
     throw new AppError("sale.not_found", { saleId: correctsSaleId });
   }
 
-  // A voided sale is not corrected: it was annulled.
   const [voided] = await tx
     .select({ saleId: saleVoids.saleId })
     .from(saleVoids)

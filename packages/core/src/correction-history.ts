@@ -34,9 +34,9 @@ export type CorrectionPreview = CorrectionAmountPreview &
  * What a correction of `selection.gross` from the invoice `saleId`, issued by `issuingNodeId`, would
  * file, as the lines and split `recordCorrection` takes; a replaced invoice is read through its
  * replacement (`correctionTargetFor`), as `recordCorrection` files it. Refused with
- * `sale.correction_not_admitted` when the invoice was replaced by a full invoice, its regime does
- * not admit a correction of it, or the regime's newest filed figures of it or of an earlier
- * correction cannot be read or differ from the stored ones; refused with
+ * `sale.correction_not_admitted` when its regime does not admit a correction of it, or the
+ * regime's newest filed figures of it or of an earlier correction cannot be read or differ from the
+ * stored ones; refused with
  * `sale.correction_unsupported`, as `recordCorrection` is, when the invoice names a customer.
  */
 export async function previewCorrectionAmounts(
