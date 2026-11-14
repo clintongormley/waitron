@@ -11,7 +11,7 @@ import {
   readBackupSettings,
   replaceBackupSettings,
 } from "./backup-env-writer.js";
-import { createTurns } from "./backup-turns.js";
+import type { Turns } from "./backup-turns.js";
 import { peerKeyOf } from "./handover-signing.js";
 import type { Logger } from "./logger.js";
 import type { PeerStatusApiDeps } from "./peer-status-api.js";
@@ -25,8 +25,8 @@ const STATUS = {
 
 const BODY_KEYS = ["settings", "toNodeId"];
 
-// A message holding a minted key and its rotation time is about 400 bytes; the rest is room for a
-// long hand-chosen key.
+// A message holding a minted key and its rotation time is about 400 bytes. The main box's key routes
+// set no maximum, so a key near 64 KiB would never reach the spare.
 const BODY_MAX_BYTES = 64 * 1024;
 
 /**
@@ -38,12 +38,14 @@ const BODY_MAX_BYTES = 64 * 1024;
  */
 export function mountSpareSettingsApi(
   app: Hono,
-  deps: PeerStatusApiDeps & { stateDir: string },
+  deps: PeerStatusApiDeps & {
+    stateDir: string;
+    /** The turns the backup routes write `backup.env` in. */
+    turns: Turns;
+  },
   log: Logger,
 ): void {
   const run = createErrorBoundary(STATUS, "spare-settings.failed");
-  // Two writes side by side would share the file's staging name.
-  const turns = createTurns();
 
   app.post(
     "/api/node/backup-settings",
@@ -55,7 +57,7 @@ export function mountSpareSettingsApi(
     (c) =>
       run(c, log, async () => {
         const raw = await readRawJsonBody<unknown>(c);
-        const digest = await turns(async () => {
+        const digest = await deps.turns(async () => {
           const held = await readNodeMembership(deps.db);
           const verdict = verifyEnvelope<unknown>(
             raw,

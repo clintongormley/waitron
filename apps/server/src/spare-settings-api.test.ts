@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   readNodeMembership,
@@ -22,6 +22,7 @@ import {
 } from "@waitron/membership";
 import { NODE_MIGRATIONS, setNodeMode } from "@waitron/node-db";
 import { replaceBackupSettings } from "./backup-env-writer.js";
+import { createTurns, type Turns } from "./backup-turns.js";
 import { readOfferSettings } from "./handover-manifest.js";
 import { createLogger, type Logger } from "./logger.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
@@ -85,7 +86,7 @@ afterEach(async () => {
   await rm(mainDir, { recursive: true, force: true });
 });
 
-function appFor(): Hono {
+function appFor(turns: Turns = createTurns()): Hono {
   const app = new Hono();
   const log: Logger = createLogger(
     (line) => lines.push(line),
@@ -94,7 +95,7 @@ function appFor(): Hono {
   );
   mountSpareSettingsApi(
     app,
-    { db: suite.db, node: suite.node, ring: RING, nodeId: self, stateDir },
+    { db: suite.db, node: suite.node, ring: RING, nodeId: self, stateDir, turns },
     log,
   );
   return app;
@@ -271,6 +272,26 @@ describe("POST /api/node/backup-settings", () => {
     const answers = await Promise.all(Array.from({ length: 12 }, () => send(envelope, app)));
     expect(answers.map((a) => a.status)).toEqual(Array(12).fill(200));
     expect(await backupEnv()).toBe(await readFile(join(mainDir, "backup.env"), "utf8"));
+  });
+
+  it("writes only in its turn in the queue it is given", async () => {
+    await holdOwnSettings();
+    const shared = createTurns();
+    let release!: () => void;
+    const held = shared(() => new Promise<void>((resolve) => (release = resolve)));
+    const asked = vi.fn();
+    const turns: Turns = (body) => {
+      asked();
+      return shared(body);
+    };
+    const answer = send(envelopeOf(), appFor(turns));
+    await vi.waitFor(() => expect(asked).toHaveBeenCalledOnce(), { timeout: 5_000 });
+    expect(await backupEnv()).toBe(SPARES_OWN);
+
+    release();
+    await held;
+    expect((await answer).status).toBe(200);
+    expect(await backupEnv()).not.toBe(SPARES_OWN);
   });
 
   it("refuses a body larger than any settings message, writing nothing", async () => {

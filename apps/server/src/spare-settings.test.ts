@@ -32,6 +32,7 @@ import {
   replaceBackupSettings,
   writeRecoveryKey,
 } from "./backup-env-writer.js";
+import { createTurns } from "./backup-turns.js";
 import { createLogger, type Logger } from "./logger.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { runSpareSettings, sendBackupSettings } from "./spare-settings.js";
@@ -154,7 +155,14 @@ beforeEach(async () => {
   spareApp = new Hono();
   mountSpareSettingsApi(
     spareApp,
-    { db: spareBox.db, node: spareBox.node, ring: RING, nodeId: spareId, stateDir: spareDir },
+    {
+      db: spareBox.db,
+      node: spareBox.node,
+      ring: RING,
+      nodeId: spareId,
+      stateDir: spareDir,
+      turns: createTurns(),
+    },
     logger(),
   );
 
@@ -565,6 +573,19 @@ describe("sendBackupSettings", () => {
       { nodeId: spareId, contactUrl: SPARE_URL },
     );
     expect(outcome).toEqual({ delivered: false, reason: "digest_differs" });
+  });
+
+  it("a missing state folder is unreadable, and nothing is sent", async () => {
+    const outcome = await sendBackupSettings(
+      {
+        ...deps(),
+        stateDir: join(mainDir, "missing"),
+        exchange: { timeoutMs: 5_000, fetch: exchangeFetch },
+      },
+      { nodeId: spareId, contactUrl: SPARE_URL },
+    );
+    expect(outcome).toEqual({ delivered: false, reason: "unreadable" });
+    expect(requests).toEqual([]);
   });
 
   it("is not delivered when the answer is not JSON", async () => {

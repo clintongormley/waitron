@@ -1,4 +1,4 @@
-import { lstat } from "node:fs/promises";
+import { lstat, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { KeyRing } from "@waitron/credentials";
 import { readNodeMembership, type Database, type NodeDatabase } from "@waitron/db";
@@ -51,6 +51,9 @@ export async function sendBackupSettings(
   const base = to.contactUrl.replace(/\/+$/, "");
   if (deps.exchange.fetch === undefined && URL.parse(base)?.protocol !== "https:")
     return { delivered: false, reason: "not_https" };
+  // A missing folder would read as no file, and sending `null` would remove the spare's settings.
+  const folder = await stat(deps.stateDir).catch(() => null);
+  if (folder === null || !folder.isDirectory()) return { delivered: false, reason: "unreadable" };
   let settings: Record<string, string> | null;
   try {
     settings = await readBackupSettings(deps.stateDir);

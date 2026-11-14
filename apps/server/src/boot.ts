@@ -2817,7 +2817,10 @@ async function bootServer(
     log,
     () => handoverDestinationDuty?.wake(),
   );
-  mountSpareSettingsApi(app, { ...peerDeps, stateDir: config.stateDir }, log);
+  // The backup routes write `backup.env` in these turns too: two writes side by side would share its
+  // staging name.
+  const backupTurns = createTurns();
+  mountSpareSettingsApi(app, { ...peerDeps, stateDir: config.stateDir, turns: backupTurns }, log);
   mountNodeMembershipApi(
     app,
     {
@@ -3443,7 +3446,6 @@ async function bootServer(
     streamService(streamHost, () => holders.singletonRole.current === "primary"),
   );
   health.readStream = () => streamHost.status();
-  const backupTurns = createTurns();
   // Only the one main box records its spare.
   const spareJoin = acceptingSales
     ? startSpareJoin({
