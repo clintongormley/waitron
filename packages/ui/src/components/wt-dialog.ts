@@ -100,7 +100,6 @@ export class WtDialog extends LitElement {
       .body {
         position: relative;
         padding: var(--wt-space-5);
-        --wt-form-actions-scroller-padding: var(--wt-space-5);
         min-height: 0;
         overflow: auto;
         overscroll-behavior: contain;

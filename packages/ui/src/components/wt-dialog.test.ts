@@ -2025,6 +2025,25 @@ test("covers the body's bottom padding below a held body row, so nothing scrolls
     expect(document.elementFromPoint(x, y), `at ${y}`).toBe(row);
 });
 
+test("paints no strip below a row held in a scroller of its own inside the body, which has no bottom padding", async () => {
+  const { el } = await openAtPhoneSize(
+    '<div data-inner style="height: 200px; overflow-y: auto; overflow-x: hidden"><div style="height: 1000px">Lines</div><wt-form-actions><button>Check</button></wt-form-actions></div><div data-after style="height: 1800px">After</div>',
+  );
+  const inner = el.querySelector<HTMLElement>("[data-inner]")!;
+  const row = el.querySelector("wt-form-actions")!;
+  const height = inner.scrollHeight;
+  await frame();
+  await frame();
+  const view = inner.getBoundingClientRect();
+  const box = row.getBoundingClientRect();
+  expect(box.bottom, "the row is held at the inner scroller's bottom").toBe(view.bottom);
+  expect(inner.scrollHeight, "nothing below the row adds to what the inner scroller holds").toBe(
+    height,
+  );
+  const strip = row.shadowRoot!.querySelector(".below")!.getBoundingClientRect();
+  expect(strip.height, "no strip below the row").toBe(0);
+});
+
 /** A body row with a field 300 px below it, the body scrolled until the row lies above its view. */
 async function openScrolledPastRow() {
   const opened = await openAtPhoneSize(

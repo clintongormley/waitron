@@ -31,6 +31,12 @@ function flatParent(node: Node): Node | null {
   return node instanceof ShadowRoot ? node.host : node.parentNode;
 }
 
+/** Whether `element` scrolls the content that overflows it, rather than showing or clipping it. */
+function scrollsOverflow(element: Element): boolean {
+  const overflow = getComputedStyle(element).overflowY;
+  return overflow !== "visible" && overflow !== "clip";
+}
+
 @customElement("wt-form-actions")
 export class WtFormActions extends LitElement {
   static override styles = [
@@ -60,13 +66,12 @@ export class WtFormActions extends LitElement {
       }
 
       /* The scroller's bottom padding, which a held row stops above and content would show
-         through. */
+         through. Its height is measured from the scroller. */
       .below {
         display: none;
         position: absolute;
         inset-inline: 0;
         top: 100%;
-        height: var(--wt-form-actions-scroller-padding, 0px);
         background: var(--wt-form-actions-surface, var(--wt-color-surface));
       }
 
@@ -93,6 +98,18 @@ export class WtFormActions extends LitElement {
           padding-top: 0;
           border-top: 0;
         }
+      }
+
+      /* The same for a row directly in a dialog's footer, also in browsers without style queries. */
+      :host([slot="footer"]) {
+        position: static;
+        padding-bottom: 0;
+        background: none;
+      }
+
+      :host([slot="footer"]) .bar {
+        padding-top: 0;
+        border-top: 0;
       }
 
       .actions {
@@ -129,25 +146,41 @@ export class WtFormActions extends LitElement {
 
   private readonly internals = this.attachInternals();
   private watched!: Node;
+  #focusFrame = 0;
+  readonly #resize = new ResizeObserver(() => this.#fitBelow());
 
   override connectedCallback(): void {
     super.connectedCallback();
     this.watched = this.parentNode!;
     this.watched.addEventListener("focusin", this.onFocusIn);
+    this.#resize.observe(this);
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.watched.removeEventListener("focusin", this.onFocusIn);
+    this.#resize.unobserve(this);
+    cancelAnimationFrame(this.#focusFrame);
+    this.#focusFrame = 0;
   }
 
   /** Keeps a field that focus reaches under the held row in view above it (WCAG 2.4.11). A frame
    * later, so the browser's own scroll to the field has happened. */
   private readonly onFocusIn = (event: Event): void => {
-    const field = event.composedPath()[0];
-    if (!(field instanceof HTMLElement) || event.composedPath().includes(this)) return;
-    for (let at = flatParent(this); at; at = flatParent(at)) if (at === field) return;
-    requestAnimationFrame(() => {
+    cancelAnimationFrame(this.#focusFrame);
+    const path = event.composedPath();
+    const field = path[0];
+    if (!(field instanceof HTMLElement) || path.includes(this)) return;
+    const holders = new Set<Node>();
+    for (let at = flatParent(this); at; at = flatParent(at)) holders.add(at);
+    if (holders.has(field)) return;
+    // A modal dialog or an open popover the row is not in is drawn over it, so is not under it.
+    const over = (at: EventTarget) =>
+      at instanceof Element && !holders.has(at) && at.matches(":modal, :popover-open");
+    if (path.some(over)) return;
+    this.#focusFrame = requestAnimationFrame(() => {
+      this.#focusFrame = 0;
+      if (getComputedStyle(this).position !== "sticky") return;
       const row = this.getBoundingClientRect();
       const covered = Math.max(
         row.bottom,
@@ -155,6 +188,7 @@ export class WtFormActions extends LitElement {
       );
       const box = field.getBoundingClientRect();
       if (box.bottom <= row.top || box.top >= covered) return;
+      if (box.right <= row.left || box.left >= row.right) return;
       this.scroller().scrollBy({ top: box.bottom - row.top });
     });
   };
@@ -163,12 +197,25 @@ export class WtFormActions extends LitElement {
   private scroller(): Element {
     for (let at = flatParent(this); at; at = flatParent(at)) {
       if (!(at instanceof Element) || at.scrollHeight <= at.clientHeight) continue;
-      if (getComputedStyle(at).overflowY !== "visible") return at;
+      if (scrollsOverflow(at)) return at;
     }
     return document.documentElement;
   }
 
-  /** With no buttons and no message shown, the row takes no room and covers nothing. */
+  /** Sizes the strip below the row to the bottom padding of the scroller that holds it. The page
+   * holds it with none. */
+  #fitBelow(): void {
+    let padding = "0px";
+    for (let at = flatParent(this); at && at !== document.body; at = flatParent(at)) {
+      if (at instanceof Element && scrollsOverflow(at)) {
+        padding = getComputedStyle(at).paddingBottom;
+        break;
+      }
+    }
+    this.renderRoot.querySelector<HTMLElement>(".below")!.style.height = padding;
+  }
+
+  /** With no slotted element and no message shown, the row takes no room and covers nothing. */
   private syncEmpty(): void {
     const filled =
       (this.showError && this.error !== "") ||
