@@ -2642,8 +2642,8 @@ describe("mountPrintApi — management: recent jobs", () => {
     const app = mountApp({ practiceMode: true });
     const printerId = await createUsbPrinter(app, "WAITRON-DEMO-PRINTER", "Demo printer");
     await enqueue(printerId, esc(WIDE).line("Kitchen ticket").bytes());
-    await enqueue(printerId, esc(WIDE).line("Receipt").bytes());
-    await withTransaction(suite.db, (tx) =>
+    const receipt = await enqueue(printerId, esc(WIDE).line("Receipt").bytes());
+    const drawer = await withTransaction(suite.db, (tx) =>
       enqueuePrintJob(tx, printerId, esc().kick().bytes(), "drawer"),
     );
     const demo = await configureDemoPrinter(suite.db, true);
@@ -2664,6 +2664,64 @@ describe("mountPrintApi — management: recent jobs", () => {
       (await send(mountApp({ practiceMode: false }), "GET", path, { cookie: managerCookie }))
         .status,
     ).toBe(404);
+    await withTransaction(suite.db, (tx) =>
+      tx
+        .update(printJobs)
+        .set({ payload: new Uint8Array(0) })
+        .where(eq(printJobs.id, receipt)),
+    );
+    const after = await send(app, "GET", path, { cookie: managerCookie });
+    expect(after.status).toBe(200);
+    expect(
+      ((await after.json()) as { kind: string; preview: { text: string } | null }[]).map(
+        ({ kind, preview }) => ({ kind, text: preview?.text ?? null }),
+      ),
+    ).toEqual([
+      { kind: "drawer", text: null },
+      { kind: "document", text: "Kitchen ticket\n" },
+    ]);
+    expect(
+      (await suite.db.select().from(printJobs).where(eq(printJobs.id, receipt)))[0]!.payload
+        .byteLength,
+    ).toBe(0);
+    await withTransaction(suite.db, (tx) =>
+      tx
+        .update(printJobs)
+        .set({ payload: new Uint8Array(0) })
+        .where(eq(printJobs.id, drawer.jobId)),
+    );
+    const withoutDrawer = await send(app, "GET", path, { cookie: managerCookie });
+    expect(((await withoutDrawer.json()) as { kind: string }[]).map((row) => row.kind)).toEqual([
+      "document",
+    ]);
+    expect(
+      (await suite.db.select().from(printJobs).where(eq(printJobs.id, drawer.jobId)))[0]!.payload
+        .byteLength,
+    ).toBe(0);
+  });
+
+  it("answers 409 for an expired print payload resend", async () => {
+    const app = mountApp();
+    const printerId = await createPrinterVia(app, "unused");
+    const id = await enqueue(printerId, new Uint8Array(0));
+    await suite.db.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, id));
+    const response = await send(app, "POST", `/management-api/print-jobs/${id}/resend`, {
+      cookie: managerCookie,
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: "print_job.payload_expired" } });
+  });
+
+  it("explains an expired print payload instead of drawing an empty preview", async () => {
+    const app = mountApp();
+    const printerId = await createPrinterVia(app, "unused");
+    const id = await enqueue(printerId, new Uint8Array(0));
+    await suite.db.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, id));
+    const response = await send(app, "GET", `/management-api/print-jobs/${id}/preview`, {
+      cookie: managerCookie,
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: "print_job.payload_expired" } });
   });
 
   it("returns a job preview only to printer managers", async () => {

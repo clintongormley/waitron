@@ -972,3 +972,20 @@ it.each(["en", "es"] as const)(
     }
   },
 );
+
+it.each([
+  ["en", "Orders", "week", "refund receipts", "dashboard"],
+  ["es", "Pedidos", "semana", "recibos de devolución", "panel"],
+])(
+  "explains expired print payloads and their next step in %s",
+  (locale, orders, week, refunds, dashboard) => {
+    const sale = codeMessage("print_job.sale_payload_expired", locale);
+    expect(sale).toContain(orders);
+    expect(sale).toContain(dashboard);
+    expect(sale).toContain(week);
+    const opaque = codeMessage("print_job.payload_expired", locale);
+    expect(opaque).toContain(refunds);
+    expect(opaque).toContain(week);
+    expect(opaque).not.toContain(orders);
+  },
+);

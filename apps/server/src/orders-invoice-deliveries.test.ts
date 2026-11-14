@@ -210,6 +210,38 @@ async function deliveryCount(): Promise<number> {
 }
 
 describe("dashboard Print invoice", () => {
+  it("rebuilds an expired print payload from Orders with fresh receipt bytes", async () => {
+    const { billId, saleId } = await fullInvoice();
+    expect(
+      (await printInvoice(venue.adminDashboard, billId, printBody(randomUUID(), venue.printerId)))
+        .status,
+    ).toBe(200);
+    const [delivery] = await deliveriesOf(saleId);
+    await inTx(venue, async (tx) => {
+      await tx
+        .update(invoiceDeliveries)
+        .set({ status: "failed" })
+        .where(eq(invoiceDeliveries.id, delivery!.id));
+      await tx
+        .update(printJobs)
+        .set({ status: "failed", attempts: 5, payload: new Uint8Array(0) })
+        .where(eq(printJobs.id, delivery!.printJobId!));
+    });
+    const response = await printInvoice(
+      venue.adminDashboard,
+      billId,
+      printBody(randomUUID(), venue.printerId),
+    );
+    expect(response.status).toBe(200);
+    const fresh = (await deliveriesOf(saleId)).find((row) => row.id !== delivery!.id)!;
+    const [printed] = await inTx(venue, (tx) =>
+      tx.select().from(printJobs).where(eq(printJobs.id, fresh.printJobId!)),
+    );
+    expect(printed!.id).not.toBe(delivery!.printJobId);
+    expect(printed!.saleId).toBe(saleId);
+    expect(printed!.payload.byteLength).toBeGreaterThan(0);
+  });
+
   it("queues an A4 original on the chosen printer for a staff dashboard session", async () => {
     const { billId, saleId } = await fullInvoice();
     const answer = await printInvoice(venue.staffDashboard, billId, printBody());

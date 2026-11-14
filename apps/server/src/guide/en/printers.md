@@ -65,6 +65,10 @@ printer that is disabled, or on a USB or Bluetooth printer no print agent sees, 
 same way, and is cancelled there. Other
 printouts reprint only on their own printer.
 
+If Print Queue says a printout’s saved data has expired, open **Orders** to print a receipt
+or invoice from the sale. Kitchen tickets, refund receipts, payment slips and reports cannot
+be reprinted from that job once its saved data is removed.
+
 ## Print agents {#print-agents}
 
 In **Printers**, open **Print Agents** and choose **Delete** in the agent's menu. Printers reached only through this agent cannot print until you add it again; they stay listed.

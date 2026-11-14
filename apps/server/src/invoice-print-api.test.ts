@@ -1,13 +1,14 @@
 import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   invoiceSeries,
   invoiceDeliveries,
+  receiptReprints,
   nodes,
   printJobs,
   printAgents,
@@ -43,6 +44,7 @@ import {
   claimInvoiceDelivery,
   expireInvoiceDeliveryClaims,
 } from "./invoice-delivery.js";
+import { clearOldPrintPayloads } from "./housekeeping.js";
 import { endInvoicePrintDeliveries, resendInvoicePrintJob } from "./invoice-print.js";
 import { mountPrintApi } from "./print-api.js";
 import { reprintJobOn } from "./print-job-reprint.js";
@@ -661,6 +663,81 @@ async function manager(ctx: Awaited<ReturnType<typeof setup>>) {
 }
 
 describe("management invoice receipt resends", () => {
+  it("retains pending invoice bytes while releasing an audited finished copy", async () => {
+    const ctx = await setup();
+    const copy = await withTransaction(suite.db, (tx) =>
+      enqueuePrintJob(tx, ctx.printer.id, new Uint8Array([27, 64]), "document", {
+        saleId: ctx.sale.saleId,
+        receiptCopy: true,
+      }),
+    );
+    await suite.db
+      .insert(receiptReprints)
+      .values({ saleId: ctx.sale.saleId, printJobId: copy.jobId, personId: "staff" });
+    await suite.db
+      .update(printJobs)
+      .set({ status: "done", createdAt: "2026-10-01T00:00:00.000Z" })
+      .where(inArray(printJobs.id, [ctx.job.jobId, copy.jobId]));
+    const audit = await suite.db.select().from(receiptReprints);
+    for (const [status, changed] of [
+      ["queued", 1],
+      ["sending", 0],
+      ["unknown", 0],
+    ] as const) {
+      await suite.db
+        .update(invoiceDeliveries)
+        .set({ status })
+        .where(eq(invoiceDeliveries.id, ctx.delivery.id));
+      const delivery = await ctx.row();
+      expect(
+        await clearOldPrintPayloads(
+          suite.db,
+          new Date("2026-11-14T04:00:00.000Z"),
+          new AbortController().signal,
+        ),
+      ).toBe(changed);
+      expect((await ctx.jobRow()).payload.byteLength).toBe(2);
+      expect(await ctx.row()).toEqual(delivery);
+    }
+    await suite.db
+      .update(invoiceDeliveries)
+      .set({ status: "failed" })
+      .where(eq(invoiceDeliveries.id, ctx.delivery.id));
+    expect(
+      await clearOldPrintPayloads(
+        suite.db,
+        new Date("2026-11-14T04:00:00.000Z"),
+        new AbortController().signal,
+      ),
+    ).toBe(1);
+    expect(await suite.db.select().from(receiptReprints)).toEqual(audit);
+    expect(await suite.db.select().from(printJobs)).toHaveLength(2);
+  });
+
+  it("refuses expired bytes before a supplied replacement can add a job or delivery", async () => {
+    const ctx = await setup();
+    await suite.db
+      .update(printJobs)
+      .set({
+        payload: new Uint8Array(0),
+        status: "failed",
+        attempts: 5,
+      })
+      .where(eq(printJobs.id, ctx.job.jobId));
+    const beforeJobs = await suite.db.select().from(printJobs);
+    const beforeDeliveries = await suite.db.select().from(invoiceDeliveries);
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        resendInvoicePrintJob(tx, ctx.job.jobId, "staff", ctx.now(), undefined, {
+          printerId: ctx.printer.id,
+          payload: new Uint8Array([27, 64]),
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "print_job.sale_payload_expired" });
+    expect(await suite.db.select().from(printJobs)).toEqual(beforeJobs);
+    expect(await suite.db.select().from(invoiceDeliveries)).toEqual(beforeDeliveries);
+  });
+
   it("enrolls an exhausted receipt predating delivery tracking", async () => {
     const ctx = await setup();
     await suite.db.delete(invoiceDeliveries).where(eq(invoiceDeliveries.id, ctx.delivery.id));

@@ -15,7 +15,11 @@ import {
   textGrid,
 } from "@waitron/printing";
 import { AppError } from "@waitron/shared";
-import { endInvoicePrintDeliveries, resendInvoicePrintJob } from "./invoice-print.js";
+import {
+  assertPrintPayload,
+  endInvoicePrintDeliveries,
+  resendInvoicePrintJob,
+} from "./invoice-print.js";
 import type { LayOutSaleReceipt } from "./receipt-print.js";
 
 /** Whether an agent can reach `printer` now. */
@@ -101,6 +105,7 @@ export async function reprintJobOn(
     .where(eq(printJobs.id, jobId));
   if (found === undefined) throw new AppError("print_job.not_found", { id: jobId });
   const { job } = found;
+  assertPrintPayload(job);
   if (printerId === job.printerId) return resendInvoicePrintJob(tx, jobId, personId, now);
   const resendable = canResendPrintJob(job);
   const stuck = !resendable && isStuckJob(job, found.printer, seen);

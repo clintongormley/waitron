@@ -97,6 +97,8 @@ declare module "@waitron/shared" {
 
     /** Only a receipt, full invoice, kitchen ticket or refund receipt reprints on another printer. */
     "print_job.own_printer_only": { id: string };
+    "print_job.payload_expired": { id: string };
+    "print_job.sale_payload_expired": { id: string };
     /** The reprint's printer is disabled, deleted or narrower than the printout. */
     "print_job.printer_unsuitable": { id: string; printerId: string };
     /** This server owns the transient printer-discovery queue; the printing module owns persisted printers.

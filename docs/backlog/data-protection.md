@@ -163,7 +163,9 @@ by the answers):
   (`working_orders.recipient_tax_id`, `recipient_legal_name`, `recipient_address` and
   `recipient_country_code`), with the email address staged for it (`working_orders.invoice_delivery`),
   kept while the bill's choice is a full invoice, whether or not one was issued from it; and the
-  printer bytes of a printed full invoice (`print_jobs.payload`). Switching a bill back to a
+  printer bytes of a printed full invoice (`print_jobs.payload`) while they remain available.
+  **2026-11-14, A1532:** eligible print payloads are emptied after one week; their rows remain.
+  Switching a bill back to a
   simplified invoice clears the staged customer (`setOrderInvoiceChoice`,
   `apps/server/src/working-order.ts`). The README says the
   box keeps such details and to ask the venue for them. Waits for the owner's answer below.

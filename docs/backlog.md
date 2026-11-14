@@ -1324,8 +1324,8 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **Since W72c an imported print agent arrives with no node; the importing box's own agent still
   enrols as a new row beside it**, as it did before (read, not run). Left open by W72c (#1237).
 
-- **The virtual PDF printer**, and a `print_jobs` retention sweep — nothing deletes a job today.
-  Finished jobs are to be kept one month (owner, 2026-10-14). [Detail](backlog/printers.md#the-virtual-pdf-printer)
+- **The virtual PDF printer.** Print-payload retention is handled by daily housekeeping; virtual PDF output remains.
+  [Detail](backlog/printers.md#the-virtual-pdf-printer)
 
 - **Reprint kitchen tickets and other printouts laid out again for any printer (left open by A405
   point 4, #2678)** — needs a `print_jobs` column.
