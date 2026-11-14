@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { page } from "vitest/browser";
-import { applyTokens } from "@waitron/ui";
+import { page, userEvent } from "vitest/browser";
+import { applyTokens, setHelpMode } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { HolidayFact } from "../hours-types.js";
 import type { SpecialDayDetail } from "../special-days.js";
@@ -26,6 +26,7 @@ import {
 let painter: SpecialDayPainter | undefined;
 beforeEach(() => setLocale("en"));
 afterEach(() => {
+  setHelpMode(false);
   painter?.remove();
   painter = undefined;
   setLocale("en");
@@ -35,6 +36,7 @@ interface Options extends SpecialDayAnswers {
   specialDayId?: string | null;
   date?: string | null;
   lastDate?: string | null;
+  initialDates?: readonly string[] | null;
   addDate?: string | null;
   holidays?: readonly HolidayFact[];
   readOnly?: boolean;
@@ -55,6 +57,7 @@ async function mount(options: Options = {}) {
   painter.specialDayId = options.specialDayId === undefined ? "sd1" : options.specialDayId;
   painter.date = options.date ?? null;
   painter.lastDate = options.lastDate ?? null;
+  painter.initialDates = options.initialDates ?? null;
   painter.addDate = options.addDate ?? null;
   painter.holidays = options.holidays ?? [];
   painter.readOnly = options.readOnly ?? false;
@@ -322,6 +325,28 @@ describe("a new special day", () => {
     expect(saveButton(painter).disabled).toBe(true);
     await typeName(painter, "Autumn fair");
     expect(saveButton(painter).disabled).toBe(false);
+  });
+
+  it("seeds only the selected dates and keeps edits when the same values are handed in again", async () => {
+    const { painter } = await mount({
+      specialDayId: null,
+      initialDates: ["2026-10-20", "2026-10-23"],
+    });
+    expect(chips(painter)).toEqual(["2026-10-20", "2026-10-23"]);
+    await typeName(painter, "Autumn outing");
+    painter.initialDates = ["2026-10-23", "2026-10-20"];
+    await settle(painter);
+    expect(
+      painter.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=name]")!
+        .value,
+    ).toBe("Autumn outing");
+    painter.initialDates = ["2026-10-20", "2026-10-27"];
+    await settle(painter);
+    expect(chips(painter)).toEqual(["2026-10-20", "2026-10-27"]);
+    expect(
+      painter.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=name]")!
+        .value,
+    ).toBe("");
   });
 
   it("a new day on a run takes the first date's holiday name", async () => {
@@ -812,7 +837,7 @@ describe("Every year", () => {
 
   it("explains that the season shows through", async () => {
     const { painter } = await mount();
-    expect(part(painter, "explain")!.textContent).toContain("season");
+    expect(painter.shadowRoot!.querySelector("wt-help-tooltip")!.textContent).toContain("season");
   });
 });
 
@@ -1073,6 +1098,13 @@ it("at 390px the side panel sits above the dates and nothing scrolls sideways", 
     const panel = part(painter, "panel")!.getBoundingClientRect();
     expect(panel.right).toBeLessThanOrEqual(390);
     expect(panel.bottom).toBeLessThanOrEqual(grid(painter).getBoundingClientRect().top + 1);
+    setHelpMode(true);
+    const help = painter.shadowRoot!.querySelector("wt-help-tooltip")!;
+    await help.updateComplete;
+    await userEvent.click(help.shadowRoot!.querySelector("button")!);
+    const scroller = painter.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    expect(scroller.scrollWidth).toBeLessThanOrEqual(scroller.clientWidth);
+    expect(scroller.scrollLeft).toBe(0);
   } finally {
     await page.viewport(old[0]!, old[1]!);
   }

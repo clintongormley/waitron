@@ -30,12 +30,14 @@ export function specialDayPainterPath(address: {
   date?: string | null;
   /** A new day's last date; left out when it is `date`. */
   to?: string | null;
+  dates?: readonly string[] | null;
 }): string {
   return path([
     ["view", "special-day"],
     ["special-day", address.specialDayId],
-    ["date", address.date],
-    ["to", address.to === address.date ? null : address.to],
+    ["date", address.dates ? null : address.date],
+    ["to", address.dates || address.to === address.date ? null : address.to],
+    ["dates", address.dates?.join(",")],
   ]);
 }
 

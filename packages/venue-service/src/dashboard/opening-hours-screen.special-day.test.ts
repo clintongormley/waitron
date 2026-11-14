@@ -20,7 +20,7 @@ import {
   storedDay,
   summaryOf,
 } from "../testing/special-day-painter-fixture.js";
-import { captureShellLinks } from "../testing/shell-link-capture.js";
+import { captureShellLinks, requestCalendarWindow } from "../testing/shell-link-capture.js";
 import "./opening-hours-screen.js";
 
 type Screen = HTMLElementTagNameMap["dashboard-opening-hours-screen"];
@@ -474,17 +474,81 @@ describe("a run picked on the Year", () => {
     expect(writes).toEqual([]);
   });
 
-  it("a double-click on a special day's date opens that day, whatever is picked", async () => {
+  it("a multi-date open on a stored date starts a new draft holding the whole selection", async () => {
     const { el, writes } = await yearShown();
     await drag(el, ["2026-12-12", "2026-12-13", "2026-12-14", "2026-12-15"]);
     await userEvent.dblClick(dayButton(el, "2026-12-14"));
     const painter = await shownPainter(el);
-    expect(location.pathname).toBe("/manage/opening-hours/view/special-day/special-day/sd1");
-    expect(painter.specialDayId).toBe("sd1");
-    expect(nameOf(painter)).toBe("Christmas dinners");
+    expect(location.pathname).toBe(
+      "/manage/opening-hours/view/special-day/date/2026-12-12/to/2026-12-15",
+    );
+    expect(painter.specialDayId).toBeNull();
+    expect(chips(painter)).toEqual(["2026-12-12", "2026-12-13", "2026-12-14", "2026-12-15"]);
+    expect(nameOf(painter)).toBe("");
     await expect.poll(() => el.shadowRoot!.querySelector("calendar-day-box")).toBeNull();
     expect(writes).toEqual([]);
   });
+
+  it("the selected dates survive the action bar address and Back then Forward", async () => {
+    const { el, writes } = await yearShown();
+    await drag(el, run);
+    const modifier = /Mac|iPad|iPhone/.test(navigator.platform) ? "Meta" : "Control";
+    await userEvent.keyboard(`{${modifier}>}`);
+    await userEvent.click(dayButton(el, "2026-10-27"));
+    await userEvent.keyboard(`{/${modifier}}`);
+    await yearOf(el).updateComplete;
+    await userEvent.click(
+      yearOf(el).shadowRoot!.querySelector<HTMLElement>('[data-test="open-selection"]')!,
+    );
+    let painter = await shownPainter(el);
+    const address =
+      "/manage/opening-hours/view/special-day/dates/2026-10-20%2C2026-10-21%2C2026-10-22%2C2026-10-23%2C2026-10-27";
+    expect(location.pathname).toBe(address);
+    expect(chips(painter)).toEqual([
+      "2026-10-20",
+      "2026-10-21",
+      "2026-10-22",
+      "2026-10-23",
+      "2026-10-27",
+    ]);
+    history.back();
+    await expect.poll(() => painterOf(el)).toBeNull();
+    expect(drawnView(el)).toBe("year");
+    history.forward();
+    await expect.poll(() => location.pathname).toBe(address);
+    painter = await shownPainter(el);
+    expect(chips(painter)).toEqual([
+      "2026-10-20",
+      "2026-10-21",
+      "2026-10-22",
+      "2026-10-23",
+      "2026-10-27",
+    ]);
+    expect(writes).toEqual([]);
+  });
+
+  it.each([
+    {
+      label: "sorts and deduplicates",
+      dates: "2026-10-23,2026-10-20,2026-10-23",
+      expected: ["2026-10-20", "2026-10-23"],
+    },
+    { label: "rejects a malformed member", dates: "2026-10-20,invalid", expected: [] },
+    {
+      label: "rejects too many dates",
+      dates: Array.from({ length: 367 }, (_, index) => addDays("2026-01-01", index)).join(","),
+      expected: [],
+    },
+  ])(
+    "a directly loaded date list $label and takes precedence over a single date",
+    async ({ dates, expected }) => {
+      const { el, writes } = await mount(
+        `/manage/opening-hours/view/special-day/date/2026-10-20/dates/${encodeURIComponent(dates)}`,
+      );
+      expect(chips(await shownPainter(el))).toEqual(expected);
+      expect(writes).toEqual([]);
+    },
+  );
 
   it("Back from the painter returns to the Year with the address it had", async () => {
     const address = "/manage/opening-hours/view/year/year/2026";
@@ -1017,10 +1081,8 @@ class AddingGuardedApp extends GuardedApp {
 }
 customElements.define("special-day-adding-test-app", AddingGuardedApp);
 
-describe("the special-day painter's Periods link", () => {
+describe("the special-day painter and Periods window", () => {
   const base = "/manage/opening-hours/view/special-day/special-day/sd1";
-  const link = (painter: SpecialDayPainter) =>
-    painter.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!;
   const periodsWindow = (el: Screen) =>
     el.shadowRoot!.querySelector("[data-test=calendar-window][data-window=periods] periods-list");
 
@@ -1056,7 +1118,7 @@ describe("the special-day painter's Periods link", () => {
     }
   });
 
-  it("the special-day painter's Periods link opens the window over it and keeps its unsaved day", async () => {
+  it("the Periods window over a special-day painter keeps its unsaved day", async () => {
     history.replaceState(null, "", base);
     const app = document.createElement("special-day-guarded-test-app") as GuardedApp;
     applyTokens(app);
@@ -1079,7 +1141,7 @@ describe("the special-day painter's Periods link", () => {
         "wt-unsaved-changes",
       )!;
     const pushes = pushedPaths();
-    await userEvent.click(link(painter));
+    requestCalendarWindow(el, "periods");
     await expect.poll(() => location.pathname).toBe(`${base}/window/periods`);
     await expect.poll(() => periodsWindow(el)).not.toBeNull();
     expect(pushes()).toEqual([`${base}/window/periods`]);
@@ -1115,7 +1177,7 @@ describe("the special-day painter's Periods link", () => {
     );
     await settle(painter);
     expect(painter.shadowRoot!.querySelector('[data-test="paint-p-new"]')).toBeNull();
-    await userEvent.click(link(painter));
+    requestCalendarWindow(el, "periods");
     await expect.poll(() => periodsWindow(el)).not.toBeNull();
     const list = periodsWindow(el) as HTMLElementTagNameMap["periods-list"];
     await expect.poll(() => list.shadowRoot?.querySelector("[data-test=add-period]")).toBeTruthy();
@@ -1158,32 +1220,5 @@ describe("the special-day painter's Periods link", () => {
     expect(nameOf(painter)).toBe("Staff party");
     expect(app.leave.coordinator.isDirty()).toBe(true);
     expect(app.recorded.writes).toHaveLength(1);
-  });
-
-  it("a modified click on its Periods link is left to the browser", async () => {
-    const { el } = await mount(base);
-    const painter = await shownPainter(el);
-    const seen: boolean[] = [];
-    // Bubbling on window runs after the link's own listener, so it sees what the link did.
-    const record = (event: Event) => {
-      seen.push(event.defaultPrevented);
-      event.preventDefault();
-    };
-    window.addEventListener("click", record);
-    try {
-      const press = (init: MouseEventInit) =>
-        link(painter).dispatchEvent(
-          new MouseEvent("click", { bubbles: true, composed: true, cancelable: true, ...init }),
-        );
-      press({ ctrlKey: true });
-      await el.updateComplete;
-      expect(seen).toEqual([false]);
-      expect(location.pathname).toBe(base);
-      press({});
-      expect(seen).toEqual([false, true]);
-      await expect.poll(() => location.pathname).toBe(`${base}/window/periods`);
-    } finally {
-      window.removeEventListener("click", record);
-    }
   });
 });

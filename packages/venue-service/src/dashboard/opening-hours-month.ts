@@ -24,6 +24,7 @@ import {
 } from "./hours-view.js";
 import "./season-chips.js";
 import { DayPicker } from "./day-picking.js";
+import { calendarSelection, calendarSelectionStyles } from "./calendar-selection.js";
 import { closedHatch, periodColourStyles } from "./period-colour-styles.js";
 import { dayNameWords, dayNameWordStyles } from "./day-name-words.js";
 import { fixedTitle, fixedTitleStyles } from "./fixed-title.js";
@@ -48,11 +49,10 @@ export interface CalendarDayOpen {
   returnTo: () => HTMLElement | null;
 }
 
-/** What `calendar-days-open` carries: the date opened and the run of dates it opens. */
+/** The trigger date and exact selected dates, sorted without duplicates. */
 export interface CalendarDaysOpen {
   date: LocalDate;
-  from: LocalDate;
-  to: LocalDate;
+  dates: readonly LocalDate[];
 }
 
 /** A Monday, so its week names the columns Monday first. */
@@ -80,6 +80,7 @@ interface Row {
 @customElement("opening-hours-month")
 export class OpeningHoursMonthView extends LitElement {
   static override styles = [
+    calendarSelectionStyles,
     baseStyles,
     seasonTintStyles,
     fixedTitleStyles,
@@ -335,13 +336,14 @@ export class OpeningHoursMonthView extends LitElement {
   #dayPicker = new DayPicker(this, {
     button: (date) => this.#dayButton(date),
     canPick: () => !this.readOnly && !this.stationMode,
+    multiple: true,
     choose: (date) =>
       this.#emit<CalendarDayOpen>("calendar-day-open", {
         date,
         returnTo: () => this.#dayButton(date),
       }),
-    open: (date, { from, to }) =>
-      this.#emit<CalendarDaysOpen>("calendar-days-open", { date, from, to }),
+    open: (date, _run, _trigger, dates) =>
+      this.#emit<CalendarDaysOpen>("calendar-days-open", { date, dates }),
   });
 
   protected override willUpdate(changes: PropertyValues<this>): void {
@@ -604,7 +606,24 @@ export class OpeningHoursMonthView extends LitElement {
         ${model ? this.#tools(model, chosen, names) : nothing}
       </div>
       ${this.linkYear ? html`<span id="year-hint" class="year-hint">${t("month.year_view_hint")}</span>` : nothing}
-      ${model ? this.#body(model, chosen, names) : nothing}`;
+      ${model ? this.#body(model, chosen, names) : nothing}
+      ${
+        model && !this.readOnly && !this.stationMode
+          ? calendarSelection({
+              dates: this.#dayPicker.dates,
+              clear: () => {
+                const date = this.#dayPicker.focusDate ?? this.#dayPicker.dates[0]!;
+                this.#dayPicker.clear();
+                this.#dayButton(date)?.focus();
+              },
+              open: () =>
+                this.#emit<CalendarDaysOpen>("calendar-days-open", {
+                  date: this.#dayPicker.dates[0]!,
+                  dates: this.#dayPicker.dates,
+                }),
+            })
+          : nothing
+      }`;
   }
 
   #body(model: OpeningHoursMonth, chosen: string, names: MonthNames) {

@@ -14,6 +14,7 @@ import { format, formatLongDate, formatMonthName, formatWeekday } from "./hours-
 import "./season-chips.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { DayPicker } from "./day-picking.js";
+import { calendarSelection, calendarSelectionStyles } from "./calendar-selection.js";
 import type { CalendarDayOpen, CalendarDaysOpen } from "./opening-hours-month.js";
 import type { SpecialDaysApi } from "./special-days-client.js";
 import { t } from "./strings.js";
@@ -35,6 +36,7 @@ const A_MONDAY = "2024-01-01";
 @customElement("opening-hours-year")
 export class OpeningHoursYearView extends LitElement {
   static override styles = [
+    calendarSelectionStyles,
     baseStyles,
     seasonTintStyles,
     css`
@@ -209,13 +211,14 @@ export class OpeningHoursYearView extends LitElement {
   #dayPicker = new DayPicker(this, {
     button: (date) => this.#dayButton(date),
     canPick: () => !this.readOnly,
+    multiple: true,
     choose: (date) =>
       this.#emit<CalendarDayOpen>("calendar-day-open", {
         date,
         returnTo: () => this.#dayButton(date),
       }),
-    open: (date, { from, to }) =>
-      this.#emit<CalendarDaysOpen>("calendar-days-open", { date, from, to }),
+    open: (date, _run, _trigger, dates) =>
+      this.#emit<CalendarDaysOpen>("calendar-days-open", { date, dates }),
   });
   #areaRequest = {};
 
@@ -428,6 +431,22 @@ export class OpeningHoursYearView extends LitElement {
     </div>`;
     return html`${head}${
       model ? this.#body(model) : this.readFailed ? this.#monthList(shown) : nothing
+    }${
+      model && !this.readOnly
+        ? calendarSelection({
+            dates: this.#dayPicker.dates,
+            clear: () => {
+              const date = this.#dayPicker.focusDate ?? this.#dayPicker.dates[0]!;
+              this.#dayPicker.clear();
+              this.#dayButton(date)?.focus();
+            },
+            open: () =>
+              this.#emit<CalendarDaysOpen>("calendar-days-open", {
+                date: this.#dayPicker.dates[0]!,
+                dates: this.#dayPicker.dates,
+              }),
+          })
+        : nothing
     }`;
   }
 

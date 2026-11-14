@@ -28,7 +28,9 @@ import type { AddDates, RemoveDates } from "./add-dates-calendar.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PaintChange, PaintColumn, PaintPeriod } from "./paint-grid.js";
 import { paintRow, paintRowStyles } from "./paint-row.js";
-import { PeriodEditing, periodsLink } from "./period-editing.js";
+import { PeriodEditing } from "./period-editing.js";
+import "@waitron/ui/src/components/wt-help-tooltip.js";
+import { guideHref } from "./help-guide.js";
 import { periodColourStyles } from "./period-colour-styles.js";
 import { segmentedStyles } from "./segmented-styles.js";
 import {
@@ -338,8 +340,7 @@ export class SpecialDayPainter extends LitElement {
         color: var(--wt-color-text);
       }
       .note,
-      .notice,
-      .explain {
+      .notice {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
@@ -380,6 +381,7 @@ export class SpecialDayPainter extends LitElement {
   @property({ attribute: false }) date: LocalDate | null = null;
   /** A new special day's last date, when it opens on a run from {@link date}. */
   @property({ attribute: false }) lastDate: LocalDate | null = null;
+  @property({ attribute: false }) initialDates: readonly LocalDate[] | null = null;
   /** A date added to the stored day's draft, as an unsaved change; a change starts again from it. */
   @property({ attribute: false }) addDate: LocalDate | null = null;
   /** The public holidays the host knows of on the dates in view, for the Every year note. */
@@ -505,11 +507,11 @@ export class SpecialDayPainter extends LitElement {
     if (this.open) this.readSeason();
   }
 
-  /** A stored day's id with its date to add, or `new:<date>..<lastDate>`; a change starts the
-   *  draft again. */
   private seedKey(): string {
     return this.specialDayId === null
-      ? `new:${this.date ?? ""}..${this.lastDate ?? ""}`
+      ? this.initialDates === null
+        ? `new:${this.date ?? ""}..${this.lastDate ?? ""}`
+        : `new:${this.newDates().join(",")}`
       : `${this.specialDayId}+${this.addDate ?? ""}`;
   }
   /** Reads the season of the draft's dates when they, or the model's seasons, change. */
@@ -566,7 +568,7 @@ export class SpecialDayPainter extends LitElement {
     const id = this.specialDayId;
     if (id === null) {
       this.loading = false;
-      const date = this.date && isLocalDate(this.date) ? this.date : undefined;
+      const date = this.newDates()[0];
       const name = date ? holidayDateName(this.holidays, date, "", currentLocale()) : "";
       this.adopt(undefined, this.newDates(), name);
       if (name && date)
@@ -581,8 +583,8 @@ export class SpecialDayPainter extends LitElement {
     }
     this.read(id, this.addDate && isLocalDate(this.addDate) ? [this.addDate] : []);
   }
-  /** A new day's dates: {@link date} through {@link lastDate}, or `date` alone. */
   private newDates(): LocalDate[] {
+    if (this.initialDates !== null) return [...new Set(this.initialDates)].sort();
     const date = this.date && isLocalDate(this.date) ? this.date : undefined;
     if (!date) return [];
     const last = this.lastDate && isLocalDate(this.lastDate) ? this.lastDate : undefined;
@@ -1360,10 +1362,6 @@ export class SpecialDayPainter extends LitElement {
       }}
     ></wt-combobox>`;
   }
-  private linkFor() {
-    const department = this.department();
-    return department ? periodsLink() : nothing;
-  }
   private pickerFor() {
     const department = this.department();
     return department ? this.picker(department, this.zone(department)) : nothing;
@@ -1433,6 +1431,13 @@ export class SpecialDayPainter extends LitElement {
       this.readOnly
         ? nothing
         : paintRow({
+            help: html`<wt-help-tooltip
+              mode="help-mode"
+              aria-label=${t("painter.help")}
+              guide-href=${guideHref("opening-hours")}
+              guide-label=${t("painter.guide")}
+              >${t(zone ? "special.zone_explain" : "special.explain")}</wt-help-tooltip
+            >`,
             pots: [
               ...(zone ? [periods.at(-1)!] : this.periods.pots(department)),
               { id: null, name: t("hours.closed") },
@@ -1633,7 +1638,6 @@ export class SpecialDayPainter extends LitElement {
         ${onHoliday ? html`<p class="note" data-test="holiday-note">${t("special.holiday_note")}</p>` : nothing}
         ${leap ? html`<p class="note" data-test="leap-note">${t("special.leap")}</p>` : nothing}
       </fieldset>
-      <p class="explain" data-test="explain">${t("special.explain")}</p>
     </section>`;
   }
   private offer(offered: { id: string; name: string }) {
@@ -1741,7 +1745,7 @@ export class SpecialDayPainter extends LitElement {
               >`
             : nothing
         }
-        ${this.pickerFor()}${this.linkFor()}
+        ${this.pickerFor()}
         <div class="body">
           ${this.offered ? this.offer(this.offered) : this.panel(locked)}
           <div class="dates">${this.paintArea(locked || this.offered !== undefined)}</div>

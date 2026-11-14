@@ -1,6 +1,9 @@
 import { makeT, registerCatalogue } from "@waitron/dashboard-kit";
 
 const en = {
+  "calendar.selection": "Selected days",
+  "calendar.selection_count": "{count} days selected",
+  "calendar.clear_selection": "Clear",
   "venue.delete_zone_heading": "Delete zone",
   "venue.delete_mark_deleted": "deleted",
   "venue.delete_department_heading": "Delete department",
@@ -113,7 +116,9 @@ const en = {
   "special.changeover_differs":
     "These dates start their day at different times; drawn from {time}.",
   "special.explain":
-    "Each date starts with its season's hours, drawn faded. What you paint replaces them for that stretch. Paint Closed to shut part of a day, or tick Closed under a date to shut all of it.",
+    "Each date starts with its season's usual hours, shown faded. Drag down a day to paint the hours you want instead, or drag over a block to replace it. Paint Closed to shut part of a day, or tick Closed under a date to shut it all day.",
+  "special.zone_explain":
+    "The department's hours and this zone's usual closures are shown faded. Drag down a day with Open or Closed to change that part of the day. Tick Closed under a date to shut it all day.",
   "season.seasons": "Seasons",
   "season.chip": "{name} · {from} – {to}",
   "season.week_named": "{name} · {from} – {to}, edit the standard week",
@@ -205,9 +210,14 @@ const en = {
   "painter.department": "Department or zone",
   "painter.paint": "Paint:",
   "painter.new_period": "+ New period",
-  "painter.edit": "Edit",
   "painter.edit_period": "Edit {name}",
   "painter.hint": "Drag down a day to paint · drag over a block to replace it",
+  "painter.help": "Help: Painting hours",
+  "painter.guide": "Opening hours guide",
+  "painter.explain":
+    "Choose a period, then drag down a day to paint its hours. Drag over a block to replace it. Paint Closed to remove hours.",
+  "painter.zone_explain":
+    "The department's hours are shown faded. Drag down a day with Closed to close part of them.",
   "painter.add_and_paint": "Add and paint with it",
   "painter.removed_one": "{names} was removed; its changes were dropped.",
   "painter.removed_many": "{names} were removed; their changes were dropped.",
@@ -921,6 +931,9 @@ const en = {
 } as const;
 
 const es: Record<keyof typeof en, string> = {
+  "calendar.selection": "Días seleccionados",
+  "calendar.selection_count": "{count} días seleccionados",
+  "calendar.clear_selection": "Borrar selección",
   "venue.delete_item_tables_one": "Elimina 1 mesa.",
   "venue.delete_item_tables": "Elimina {count} mesas.",
   "venue.delete_item_saved_tables_one": "Quita 1 mesa de los planos.",
@@ -1036,7 +1049,9 @@ const es: Record<keyof typeof en, string> = {
   "special.changeover_differs":
     "Estas fechas empiezan el día a horas distintas; se dibujan desde las {time}.",
   "special.explain":
-    "Cada fecha empieza con el horario de su temporada, en tenue. Lo que pintes lo sustituye en ese tramo. Pinta Cerrado para cerrar parte del día, o marca Cerrado bajo una fecha para cerrarla entera.",
+    "Cada fecha empieza con el horario habitual de su temporada, en tenue. Arrastra por un día para pintar el horario que quieras, o sobre un bloque para sustituirlo. Pinta Cerrado para cerrar parte del día, o marca Cerrado bajo una fecha para cerrarla entera.",
+  "special.zone_explain":
+    "El horario del departamento y los cierres habituales de esta zona aparecen en tenue. Arrastra por un día con Abierto o Cerrado para cambiar ese tramo. Marca Cerrado bajo una fecha para cerrarla entera.",
   "season.seasons": "Temporadas",
   "season.chip": "{name} · {from} – {to}",
   "season.week_named": "{name} · {from} – {to}, editar la semana estándar",
@@ -1128,10 +1143,15 @@ const es: Record<keyof typeof en, string> = {
   "painter.department": "Departamento o zona",
   "painter.paint": "Pintar:",
   "painter.new_period": "+ Nuevo periodo",
-  "painter.edit": "Editar",
   "painter.edit_period": "Editar {name}",
   "painter.hint":
     "Arrastra hacia abajo en un día para pintar · arrastra sobre un bloque para sustituirlo",
+  "painter.help": "Ayuda: Pintar horarios",
+  "painter.guide": "Guía de horarios",
+  "painter.explain":
+    "Elige un periodo y arrastra por un día para pintar su horario. Arrastra sobre un bloque para sustituirlo. Pinta Cerrado para quitar horas.",
+  "painter.zone_explain":
+    "El horario del departamento aparece en tenue. Arrastra por un día con Cerrado para cerrar parte de él.",
   "painter.add_and_paint": "Añadir y pintar con él",
   "painter.removed_one": "{names} se eliminó; sus cambios se descartaron.",
   "painter.removed_many": "{names} se eliminaron; sus cambios se descartaron.",

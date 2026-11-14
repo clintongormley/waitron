@@ -680,31 +680,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
     hours"** (or beside "Special day — replaces Winter's standard hours"). "Make a special day"
     and "Open this week" stay at the bottom.
 
-- **A1538. Calendar: a selection of days leads somewhere, and the painting editors get quieter
-  (owner, 2026-11-14).** No migration. Not started.
-  - **A selection bar, on every device.** While two or more days are picked in the Year or Month
-    view, a bar at the bottom of the Calendar reads, for example, "5 days selected · 20–24 Feb",
-    with **Clear** and **Make a special day**, which opens that editor with every picked day in
-    it. Today nothing says what a selection is for.
-  - **Phone:** while the bar shows, a tap adds or removes a day instead of opening the day pop-up;
-    Clear ends the selection. A long press and drag still picks a run (`day-picking.ts`).
-  - **Computer:** a double-click (or Enter) on a picked day opens "Make a special day" with the
-    whole selection. Today it opens with only the day clicked, although `openDays` in
-    `opening-hours-screen.ts` is written to pass the run: find out why first. Shift-click extends
-    the run; Cmd-click (Ctrl-click on Windows) adds a separate day, so a selection can hold several
-    runs and single days, and the special-day editor receives them all.
-  - **The painting editors' always-shown text becomes a help bubble** (`mode="help-mode"`), written
-    from the code: in "Make a special day", the `special.explain` paragraph and the `painter.hint`
-    line ("Drag down a day to paint · drag over a block to replace it"); in a season's
-    standard-week editor, the `painter.hint` line, with a bubble of its own. Reworded more clearly,
-    English and Spanish. A starting draft for the special day: "Each date starts with its season's
-    usual hours, shown faded. Drag down a day to paint the hours you want instead. Paint Closed to
-    shut part of a day, or tick Closed under a date to shut it all day."
-  - **The "Paint:" row shows a pencil icon in place of the word "Edit"** on each period
-    (`paint-row.ts`), still opening that period's window over the editor and still named "Edit
-    Dinner" to a screen reader and on hover. **The "Periods" link in the editor's top right goes**:
-    leaving the editor would ask to discard the painting. The pencil and "+ New period" stay.
-
 - **A1539. Calendar: prep stations, all at once, and said to be stations (owner, 2026-11-14).**
   Reads only, no migration. Not started. Easiest after A1537, which changes the same views; the
   Periods link wants A1536.
