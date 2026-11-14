@@ -230,10 +230,7 @@ export class SetupDoneScreen extends LitElement {
       }
       ${this.restored === undefined ? nothing : this.#deviceSteps()} ${this.#breakGlass()}
       ${
-        // A Cloud restore leaves out the old server's `backup.env`; the other two bring it back.
-        this.onboardingIntent === "demo" ||
-        this.restored === "bucket" ||
-        this.restored === "archive"
+        this.onboardingIntent === "demo" || this.restored === "bucket"
           ? nothing
           : html`<wt-card data-test="backup-nudge">
               <p>${t("done.backup_nudge")}</p>

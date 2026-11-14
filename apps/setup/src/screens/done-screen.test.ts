@@ -549,19 +549,18 @@ describe("setup-done-screen", () => {
   });
 
   it.each([
-    ["an archive restore", "archive", false],
-    ["a Waitron Cloud restore", "cloud", true],
+    ["an archive restore", "archive"],
+    ["a Waitron Cloud restore", "cloud"],
   ] as const)(
-    "after %s, names which devices need a person under a restore heading",
-    async (_, restored, nudge) => {
+    "after %s, names which devices need a person under a restore heading and shows the no-backups nudge",
+    async (_, restored) => {
       const el = await mountDone(() => new Promise(() => {}), { restored });
       expect(q(el, "h1")!.textContent!.trim()).toBe("Restored from your backup");
       const steps = q(el, "[data-test=device-steps]")!.textContent!.replace(/\s+/g, " ");
       expect(steps).toContain("opened at https://waitron.local reconnect by themselves");
       expect(steps).toContain("opened at an IP address");
       expect(steps).toContain("port 9110");
-      // A Cloud restore leaves out the old server's `backup.env`; an archive brings it back.
-      expect(q(el, "[data-test=backup-nudge]") !== null).toBe(nudge);
+      expect(q(el, "[data-test=backup-nudge]")).not.toBeNull();
     },
   );
 
@@ -820,6 +819,16 @@ describe("setup-done-screen layout", () => {
   it.each([
     ["an ordinary setup", { onboardingIntent: "live" }, ["links", "break-glass", "backup-nudge"]],
     ["a rebuild", { restored: "bucket" }, ["links", "device-steps", "break-glass"]],
+    [
+      "an archive restore",
+      { restored: "archive" },
+      ["links", "device-steps", "break-glass", "backup-nudge"],
+    ],
+    [
+      "a Waitron Cloud restore",
+      { restored: "cloud" },
+      ["links", "device-steps", "break-glass", "backup-nudge"],
+    ],
   ] as const)("spaces its blocks by the same token after %s", async (_, extra, order) => {
     const { el, host } = await mountWidget<SetupDoneScreen>("setup-done-screen", {
       api: apiWith(() => new Promise(() => {})),
@@ -830,7 +839,7 @@ describe("setup-done-screen layout", () => {
     host.style.setProperty("--wt-space-4", "21px");
     const blocks = order.map((id) => q(el, `[data-test=${id}]`)!.getBoundingClientRect());
     const gaps = blocks.slice(1).map((block, i) => Math.round(block.top - blocks[i]!.bottom));
-    expect(gaps).toEqual([21, 21]);
+    expect(gaps).toEqual(order.slice(1).map(() => 21));
   });
 
   it("writes its styles in tokens only: no rem or em, no hex colour, no fallback value", () => {
