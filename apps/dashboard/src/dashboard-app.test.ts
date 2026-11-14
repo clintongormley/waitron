@@ -4949,7 +4949,7 @@ describe("dashboard URL navigation", () => {
     async (role, permissions, modules, destination) => {
       history.replaceState(null, "", "/manage/staff");
       history.pushState(null, "", "/manage/printing-rules");
-      const push = vi.spyOn(history, "pushState").mockClear();
+      const push = vi.spyOn(history, "pushState");
       onTestFinished(() => push.mockRestore());
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
@@ -5322,7 +5322,7 @@ describe("dashboard URL navigation", () => {
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-staff"]')!.click();
     await flush(el);
     expect(location.pathname).toBe("/manage/staff");
-    const push = vi.spyOn(history, "pushState").mockClear();
+    const push = vi.spyOn(history, "pushState");
     onTestFinished(() => push.mockRestore());
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-staff"]')!.click();
     await flush(el);
@@ -9589,8 +9589,7 @@ describe("mounted public department dialogs", () => {
   it.each(["departments", "zones", "status", "menus", "kitchen"])(
     "a saved %s bookmark opens the list without an extra history entry",
     async (view) => {
-      const push = vi.spyOn(history, "pushState").mockClear();
-      onTestFinished(() => push.mockRestore());
+      const push = vi.spyOn(history, "pushState");
       const app = await mountDepartments(`/manage/venue-operations/view/${view}?source=bookmark`);
       await expect.poll(() => find(app, "departments-list")).not.toBeNull();
       expect(location.pathname).toBe("/manage/venue-operations");
