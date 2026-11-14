@@ -892,7 +892,8 @@ describe("a draft's chosen station at submission", () => {
       tx
         .select({ stationId: ticketItems.stationId })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, party.tabId)),
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, party.tabId)),
     );
     expect(items.map((item) => item.stationId)).toContain(bar!.id);
     const [defaultStation] = await inTx(venue, (tx) =>

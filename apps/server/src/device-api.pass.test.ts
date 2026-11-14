@@ -135,7 +135,8 @@ async function burgerOrder(v: Awaited<ReturnType<typeof setupPartyVenue>>) {
     tx
       .select({ id: ticketItems.id })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, seated.tabId)),
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, seated.tabId)),
   );
   return item!.id;
 }
@@ -281,7 +282,8 @@ describe("the pass screen's device routes", () => {
       tx
         .select({ id: ticketItems.id })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, counterId)),
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, counterId)),
     );
     const counterOnly = await f.device("Pass Counter", f.kds, {
       kitchenScreen: { kind: "pass", stationIds: null, zoneIds: [f.v.counter.zoneId] },
@@ -390,11 +392,7 @@ describe("the pass screen's device routes", () => {
       .returning({ id: workingOrderLines.id });
     const [foreignItem] = await suite.db
       .insert(ticketItems)
-      .values({
-        workingOrderId: foreignOrder!.id,
-        workingOrderLineId: foreignLine!.id,
-        stationId: foreignStation!.id,
-      })
+      .values({ workingOrderLineId: foreignLine!.id, stationId: foreignStation!.id })
       .returning({ id: ticketItems.id });
     const mixed = await done(f.app, f.a.cookie, {
       ticketItemIds: [local, foreignItem!.id],
@@ -655,7 +653,8 @@ describe("A773 pass display policy", () => {
       tx
         .select({ id: ticketItems.id, stationId: ticketItems.stationId })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, seated.tabId)),
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, seated.tabId)),
     );
     return {
       burger: rows.find((row) => row.stationId === f.grill)!.id,

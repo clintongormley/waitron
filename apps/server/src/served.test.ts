@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { cancelItemForTest } from "./testing/cancel-line.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -374,10 +375,8 @@ async function snapshot(partyId: string) {
       .from(workingOrderLines)
       .where(inArray(workingOrderLines.workingOrderId, billIds))
       .orderBy(workingOrderLines.id),
-    tickets: await suite.db
-      .select()
-      .from(ticketItems)
-      .where(inArray(ticketItems.workingOrderId, billIds))
+    tickets: await ticketItemsWithBill(suite.db)
+      .where(inArray(workingOrderLines.workingOrderId, billIds))
       .orderBy(ticketItems.id),
     commands: await suite.db
       .select()

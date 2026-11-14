@@ -106,6 +106,8 @@ describe("measureVenue", () => {
     expect(seen["floor.open"]).toBe(15);
     for (const name of ["kitchen.queue", "kitchen.screen", "kitchen.pass", "kitchen.pass-screen"])
       expect(seen[name], name).toBe(30);
+    expect(seen["kitchen.pass-release"]).toBe(2);
+    expect(seen["print.problems"]).toBe(1);
     expect(seen["filing.pass"]).toBe(50);
     expect(seen["dashboard.open"]).toBeGreaterThan(0);
   });

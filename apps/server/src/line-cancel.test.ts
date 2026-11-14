@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -97,10 +98,9 @@ async function fixture(release: "fire" | "hold" = "fire", name = "Pizza", quanti
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, order.billId))
       .orderBy(workingOrderLines.lineNo);
-    const tickets = await tx
-      .select()
-      .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, order.billId));
+    const tickets = await ticketItemsWithBill(tx).where(
+      eq(workingOrderLines.workingOrderId, order.billId),
+    );
     return { ...order, parent: lines[0]!, extra: lines[1], tickets };
   });
 }
@@ -173,10 +173,9 @@ async function snapshot(order: Fixture) {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, order.billId))
       .orderBy(workingOrderLines.lineNo),
-    tickets: await tx
-      .select()
-      .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, order.billId)),
+    tickets: await ticketItemsWithBill(tx).where(
+      eq(workingOrderLines.workingOrderId, order.billId),
+    ),
     cancellations: await tx
       .select()
       .from(lineServiceCancellations)
@@ -330,7 +329,7 @@ describe("Cancel item service command", () => {
           insert into cancellation_print_probe select new.id,
             (select count(*) from line_service_cancellations where line_id in
               (select id from working_order_lines where working_order_id in (select id from cancellation_probe_bill))),
-            (select count(*) from ticket_items where working_order_id in (select id from cancellation_probe_bill));
+            (select count(*) from ticket_items where working_order_line_id in (select id from working_order_lines where working_order_id in (select id from cancellation_probe_bill)));
         end`);
       });
       await cancel(order, await askFor(order, "keep_charge", "3"));

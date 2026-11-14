@@ -1,3 +1,6 @@
+import { mountAlertsApi } from "../../src/alerts-api.js";
+import { createAlertRegistry } from "../../src/alerts.js";
+import { printingAlertSource } from "../../src/alert-sources.js";
 import { setBuiltInMembership } from "@waitron/identity";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -660,6 +663,15 @@ function mount(db: Database, cfg: TradingContext, log: Logger): Hono {
       venueLocale: LOCALE,
       credentialKeyRing: TOTP_KEY_RING,
       tableRemovals,
+    },
+    log,
+  );
+  mountAlertsApi(
+    app,
+    {
+      db,
+      now: () => new Date(),
+      registry: createAlertRegistry({ claims: [], sources: [printingAlertSource()] }),
     },
     log,
   );

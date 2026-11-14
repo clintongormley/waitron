@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedZone } from "@waitron/db/testing/seed.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -269,7 +270,7 @@ async function ticketsOf(billId: string) {
       })
       .from(ticketItems)
       .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(ticketItems.workingOrderId, billId))
+      .where(eq(workingOrderLines.workingOrderId, billId))
       .orderBy(asc(workingOrderLines.lineNo)),
   );
 }
@@ -2818,10 +2819,8 @@ describe("A803 split", () => {
     /** The bill's kitchen items with everything stored, by line id. */
     function kitchenRows(billId: string) {
       return act((tx) =>
-        tx
-          .select()
-          .from(ticketItems)
-          .where(eq(ticketItems.workingOrderId, billId))
+        ticketItemsWithBill(tx)
+          .where(eq(workingOrderLines.workingOrderId, billId))
           .orderBy(asc(ticketItems.workingOrderLineId)),
       );
     }

@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
@@ -402,7 +403,8 @@ async function ticketsOf(partyId: string) {
       quantity: ticketItems.quantity,
     })
     .from(ticketItems)
-    .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .where(eq(workingOrders.partyId, partyId));
 }
 
@@ -451,10 +453,8 @@ async function snapshot(v: Venue, partyId: string) {
       .from(workingOrderLines)
       .where(inArray(workingOrderLines.workingOrderId, billIds))
       .orderBy(workingOrderLines.id),
-    tickets: await db
-      .select()
-      .from(ticketItems)
-      .where(inArray(ticketItems.workingOrderId, billIds))
+    tickets: await ticketItemsWithBill(db)
+      .where(inArray(workingOrderLines.workingOrderId, billIds))
       .orderBy(ticketItems.id),
     groups: await db
       .select()
@@ -1080,7 +1080,8 @@ describe("country starter courses in service", () => {
     const tickets = await db
       .select({ firedAt: ticketItems.firedAt })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, id));
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, id));
     expect(tickets).toHaveLength(3);
     expect(tickets.every((ticket) => ticket.firedAt !== null)).toBe(true);
   });
@@ -2927,14 +2928,14 @@ async function splitToCheck(
 async function dishTickets(partyId: string, productId: string) {
   return db
     .select({
-      workingOrderId: ticketItems.workingOrderId,
+      workingOrderId: workingOrderLines.workingOrderId,
       lineId: ticketItems.workingOrderLineId,
       firedAt: ticketItems.firedAt,
       quantity: ticketItems.quantity,
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .where(and(eq(workingOrders.partyId, partyId), eq(workingOrderLines.productId, productId)))
     .orderBy(ticketItems.workingOrderLineId);
 }
@@ -2950,10 +2951,8 @@ function sortedByBill<T extends { workingOrderId: string }>(
 }
 
 async function ticketsOfBill(billId: string) {
-  return db
-    .select()
-    .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, billId))
+  return ticketItemsWithBill(db)
+    .where(eq(workingOrderLines.workingOrderId, billId))
     .orderBy(ticketItems.id);
 }
 
@@ -3704,7 +3703,7 @@ async function groupTickets(groupId: string) {
   return db
     .select({
       id: ticketItems.id,
-      workingOrderId: ticketItems.workingOrderId,
+      workingOrderId: workingOrderLines.workingOrderId,
       state: ticketItems.state,
       firedAt: ticketItems.firedAt,
       readyAt: ticketItems.readyAt,
@@ -4274,10 +4273,8 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
     await fire(v, s.partyId, s.warm);
     const rows = async () => ({
       events: await eventsOf(s.partyId),
-      tickets: await db
-        .select()
-        .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, s.tabId))
+      tickets: await ticketItemsWithBill(db)
+        .where(eq(workingOrderLines.workingOrderId, s.tabId))
         .orderBy(ticketItems.id),
       sent: (await linesOf(s.partyId)).map((row) => [row.id, row.sentAt]),
     });

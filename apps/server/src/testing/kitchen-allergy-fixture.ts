@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./ticket-items-with-bill.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -70,10 +71,9 @@ export async function kitchenFixture(db: Database) {
     }),
   );
   // Burger ×3 is three portions, each with its own ticket item; `ticket` is the first.
-  const tickets = await db
-    .select()
-    .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, party.tabId));
+  const tickets = await ticketItemsWithBill(db).where(
+    eq(workingOrderLines.workingOrderId, party.tabId),
+  );
   const ticket = tickets[0];
   await inTx(v, async (tx) => {
     const printer = await createPrinter(tx, {

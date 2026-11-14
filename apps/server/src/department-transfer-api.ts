@@ -211,7 +211,7 @@ export function mountDepartmentTransferApi(
           .leftJoin(kitchenStations, eq(kitchenStations.id, ticketItems.stationId))
           .where(
             and(
-              eq(ticketItems.workingOrderId, request.tabId),
+              eq(workingOrderLines.workingOrderId, request.tabId),
               eq(ticketItems.madeHere, false),
               gt(firedQuantity, workingOrderLines.servedQuantity),
             ),

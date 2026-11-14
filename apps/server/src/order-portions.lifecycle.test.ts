@@ -161,7 +161,8 @@ function ticketItemsOf(billId: string) {
   return venue.db
     .select({ id: ticketItems.id, lineId: ticketItems.workingOrderLineId })
     .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, billId))
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(eq(workingOrderLines.workingOrderId, billId))
     .orderBy(ticketItems.id);
 }
 
@@ -638,8 +639,13 @@ describe("A803 portion lifecycle: end to end through a submitted draft", () => {
     );
     expect(bindingOf(first!.lineId)).toEqual([{ portion_id: first!.portionId }]);
     const [moved] = await venue.db
-      .select({ id: ticketItems.id, state: ticketItems.state, billId: ticketItems.workingOrderId })
+      .select({
+        id: ticketItems.id,
+        state: ticketItems.state,
+        billId: workingOrderLines.workingOrderId,
+      })
       .from(ticketItems)
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
       .where(eq(ticketItems.workingOrderLineId, first!.lineId));
     expect(moved).toEqual({ id: ticket!.id, state: "preparing", billId: p.otherId });
     const [left, other] = await inTx(venue, async (tx) => [

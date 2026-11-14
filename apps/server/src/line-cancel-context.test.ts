@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -92,10 +93,9 @@ async function snapshot(order: Fixture) {
       .select()
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, order.billId)),
-    tickets: await tx
-      .select()
-      .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, order.billId)),
+    tickets: await ticketItemsWithBill(tx).where(
+      eq(workingOrderLines.workingOrderId, order.billId),
+    ),
     cancellations: await tx
       .select()
       .from(lineServiceCancellations)

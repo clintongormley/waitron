@@ -82,14 +82,9 @@ beforeAll(async () => {
     lineTotal: 121,
   });
   const queuedAt = new Date(Date.now() - 3 * MINUTE_MS).toISOString();
-  await db.insert(ticketItems).values({
-    workingOrderId: orderId,
-    workingOrderLineId: lineId,
-    stationId,
-    state: "ready",
-    queuedAt,
-    firedAt: nowIso(),
-  });
+  await db
+    .insert(ticketItems)
+    .values({ workingOrderLineId: lineId, stationId, state: "ready", queuedAt, firedAt: nowIso() });
   const zone = await seedZone(db, { name: "Tables" });
   tableId = randomUUID();
   await db.insert(diningTables).values({ id: tableId, zoneId: zone!.id, label: "Table 1" });
@@ -190,7 +185,6 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
       lineTotal: 121,
     });
     await db.insert(ticketItems).values({
-      workingOrderId: order!.id,
       workingOrderLineId: drinkLine,
       stationId,
       state: "ready",
@@ -241,7 +235,6 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
       lineTotal: 121,
     });
     await db.insert(ticketItems).values({
-      workingOrderId: orderId,
       workingOrderLineId: lineId,
       stationId,
       state: "ready",

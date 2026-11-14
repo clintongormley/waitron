@@ -1,15 +1,9 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { adjustments } from "@waitron/adjustments";
-import {
-  orderGroups,
-  parties,
-  printJobs,
-  ticketItems,
-  workingOrderLines,
-  workingOrders,
-} from "@waitron/db";
+import { orderGroups, parties, printJobs, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { listStationNotices } from "@waitron/venue-service";
@@ -67,7 +61,7 @@ async function requestedPizzas(release: "fire" | "hold" = "fire") {
       return line!;
     });
     const items = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, order.billId)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, order.billId)),
     );
     expect(items).toMatchObject([
       { workingOrderLineId: parent.id, requestedAt: expect.any(String), firedAt: null },

@@ -817,7 +817,8 @@ export async function handOverFinishedBills(
       await tx
         .selectDistinct({ id: workingOrders.id })
         .from(workingOrders)
-        .innerJoin(ticketItems, eq(ticketItems.workingOrderId, workingOrders.id))
+        .innerJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
+        .innerJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
         .where(
           and(
             inArray(workingOrders.partyId, await partyFamily(tx, partyId)),

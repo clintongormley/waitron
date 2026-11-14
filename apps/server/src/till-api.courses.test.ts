@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -5,13 +6,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import {
-  ticketItems,
-  parties,
-  workingOrderLines,
-  workingOrders,
-  withTransaction,
-} from "@waitron/db";
+import { parties, workingOrderLines, workingOrders, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -609,7 +604,7 @@ describe("KDS-3 expo routes: the All stations board + whole-card ready", () => {
             .select()
             .from(workingOrderLines)
             .where(eq(workingOrderLines.workingOrderId, orderId)),
-          items: await tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, orderId)),
+          items: await ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, orderId)),
         }));
       const before = await stored();
       expect(before.items).toHaveLength(2);

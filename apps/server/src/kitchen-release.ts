@@ -1,4 +1,4 @@
-import { kitchenStations, ticketItems, type Transaction } from "@waitron/db";
+import { kitchenStations, ticketItems, workingOrderLines, type Transaction } from "@waitron/db";
 import { and, eq, inArray, type SQL } from "drizzle-orm";
 import { heldItem } from "./kitchen-phase.js";
 
@@ -49,7 +49,16 @@ export async function requestHeldItems(
   scope: SQL,
   at: string,
 ): Promise<{ released: StampedItem[]; requested: StampedItem[] }> {
-  const inScope = and(eq(ticketItems.workingOrderId, orderId), scope);
+  const inScope = and(
+    inArray(
+      ticketItems.workingOrderLineId,
+      tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, orderId)),
+    ),
+    scope,
+  );
   const held = and(inScope, heldItem());
   const returned = {
     workingOrderLineId: ticketItems.workingOrderLineId,

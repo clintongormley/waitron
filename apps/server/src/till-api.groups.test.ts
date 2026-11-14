@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { ensureFixtureJobRole } from "@waitron/db/testing/seed.js";
 import { cancelItemHttp } from "./testing/cancel-line.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
@@ -1651,10 +1652,9 @@ describe("the pass routes, one after the other", () => {
         inTx(venue, async (tx) => ({
           party: await tx.select().from(parties).where(eq(parties.id, party.partyId)),
           groups: await tx.select().from(orderGroups).where(eq(orderGroups.partyId, party.partyId)),
-          items: await tx
-            .select()
-            .from(ticketItems)
-            .where(eq(ticketItems.workingOrderId, party.tabId)),
+          items: await ticketItemsWithBill(tx).where(
+            eq(workingOrderLines.workingOrderId, party.tabId),
+          ),
           events: await tx
             .select()
             .from(orderGroupEvents)
@@ -2241,10 +2241,8 @@ describe("POST /api/parties/:id/groups/split-line", () => {
         tx.select().from(workingOrders).where(eq(workingOrders.id, party.tabId)),
       ),
       tickets: await inTx(venue, (tx) =>
-        tx
-          .select()
-          .from(ticketItems)
-          .where(eq(ticketItems.workingOrderId, party.tabId))
+        ticketItemsWithBill(tx)
+          .where(eq(workingOrderLines.workingOrderId, party.tabId))
           .orderBy(ticketItems.id),
       ),
     });
@@ -2572,10 +2570,8 @@ describe("one held dish rechecks admission after reading its request", () => {
         .from(orderGroups)
         .where(eq(orderGroups.partyId, party.partyId))
         .orderBy(orderGroups.id),
-      tickets: await venue.db
-        .select()
-        .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, party.tabId))
+      tickets: await ticketItemsWithBill(venue.db)
+        .where(eq(workingOrderLines.workingOrderId, party.tabId))
         .orderBy(ticketItems.id),
       events: await eventCount(party.partyId),
       commands: await commandCount(party.partyId),

@@ -993,8 +993,11 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
     const fired = await db
       .select({ id: ticketItems.id })
       .from(ticketItems)
-      .where(and(eq(ticketItems.workingOrderId, table4.tabId), isNotNull(ticketItems.firedAt)))
-      .orderBy(sql`rowid`);
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(
+        and(eq(workingOrderLines.workingOrderId, table4.tabId), isNotNull(ticketItems.firedAt)),
+      )
+      .orderBy(sql`${ticketItems}.rowid`);
     expect(fired).toHaveLength(2);
     const at = (hours: number, minutes: number) =>
       new Date(Date.UTC(2026, 9, 27, hours - 1, minutes)).toISOString();

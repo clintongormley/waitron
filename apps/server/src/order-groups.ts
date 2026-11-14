@@ -667,7 +667,7 @@ export async function bumpGroupReady(
     args,
     "group.ready",
     async () => {
-      return tx
+      const changed = await tx
         .update(ticketItems)
         .set(advanceSet("ready"))
         .where(
@@ -677,7 +677,18 @@ export async function bumpGroupReady(
             isNotNull(ticketItems.firedAt),
           ),
         )
-        .returning({ orderId: ticketItems.workingOrderId });
+        .returning({ lineId: ticketItems.workingOrderLineId });
+      return changed.length === 0 || attendance === undefined
+        ? []
+        : tx
+            .select({ orderId: workingOrderLines.workingOrderId })
+            .from(workingOrderLines)
+            .where(
+              inArray(
+                workingOrderLines.id,
+                changed.map((row) => row.lineId),
+              ),
+            );
     },
     attendance,
     "personId" in firer ? firer.personId : undefined,
@@ -2330,14 +2341,14 @@ export async function printHoldTickets(
   for (const groupId of groupIds) {
     const items = await tx
       .select({
-        workingOrderId: ticketItems.workingOrderId,
+        workingOrderId: workingOrderLines.workingOrderId,
         workingOrderLineId: ticketItems.workingOrderLineId,
         stationId: ticketItems.stationId,
         quantity: ticketItems.quantity,
       })
       .from(ticketItems)
       .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
+      .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
       .innerJoin(kitchenStations, eq(kitchenStations.id, ticketItems.stationId))
       .where(
         and(
@@ -2586,7 +2597,7 @@ export async function correctJoin(
     if (!holdPaper.has(groupId)) continue;
     const joined = await tx
       .select({
-        workingOrderId: ticketItems.workingOrderId,
+        workingOrderId: workingOrderLines.workingOrderId,
         workingOrderLineId: ticketItems.workingOrderLineId,
         stationId: ticketItems.stationId,
         quantity: firedQuantity,

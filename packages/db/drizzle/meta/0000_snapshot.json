@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "dd5c9d26-14d8-4f2e-8d6e-1b17099ff975",
+  "id": "849a0e17-38b5-4fc3-b8b4-852eb123d486",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -4431,13 +4431,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "working_order_id": {
-          "name": "working_order_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "working_order_line_id": {
           "name": "working_order_line_id",
           "type": "text",
@@ -4583,13 +4576,6 @@
           "columns": [
             "station_id",
             "state"
-          ],
-          "isUnique": false
-        },
-        "ticket_items_order_idx": {
-          "name": "ticket_items_order_idx",
-          "columns": [
-            "working_order_id"
           ],
           "isUnique": false
         },

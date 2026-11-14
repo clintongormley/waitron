@@ -151,8 +151,8 @@ function copies(orderId: string) {
       sql`
     select t.id, t.working_order_line_id as lineId, case when t.allergy_frozen = 1 then t.id else null end as frozen,
       t.allergy_original as original, t.allergy_current as current
-    from ticket_items t
-    where t.working_order_id = ${orderId} order by t.rowid
+    from ticket_items t join working_order_lines l on l.id = t.working_order_line_id
+    where l.working_order_id = ${orderId} order by t.rowid
   `,
     )
     .map(({ original, current, ...row }) => ({
@@ -937,7 +937,8 @@ describe("A669 capture", () => {
       await v.db
         .select({ madeHere: ticketItems.madeHere })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, p.tabId)),
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, p.tabId)),
     ).toEqual([{ madeHere: true }]);
   });
 

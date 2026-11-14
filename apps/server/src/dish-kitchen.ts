@@ -27,7 +27,7 @@ export function dishKitchenItemsQuery(tx: Transaction, dishLineIds: readonly str
       ticketItemId: ticketItems.id,
       workingOrderLineId: workingOrderLines.id,
       parentLineId: workingOrderLines.parentLineId,
-      workingOrderId: ticketItems.workingOrderId,
+      workingOrderId: workingOrderLines.workingOrderId,
       stationId: ticketItems.stationId,
       courseId: ticketItems.courseId,
       firedAt: ticketItems.firedAt,

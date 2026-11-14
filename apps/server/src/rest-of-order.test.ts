@@ -137,7 +137,6 @@ describe("rest of the order read", () => {
         servedQuantity: "served" in item && item.served ? 9000 : 0,
       });
       await db.insert(ticketItems).values({
-        workingOrderId: item.order,
         workingOrderLineId: lineId,
         stationId: station(item.station),
         state: item.state,
@@ -219,6 +218,10 @@ describe("rest of the order read", () => {
     );
     const details = plan.rows.map((row) => row.detail);
     expect(details.some((detail) => detail.startsWith("SCAN ticket_items"))).toBe(false);
-    expect(details.some((detail) => detail.includes("ticket_items_order_idx"))).toBe(true);
+    expect(details.join("\n")).toContain("ticket_items_working_order_line_id_key");
+    expect(details.join("\n")).toMatch(
+      /SEARCH working_order_lines USING (?:COVERING )?INDEX working_order_lines_(?:order_idx|line_no_key) \(working_order_id=\?\)/,
+    );
+    expect(details.join("\n")).not.toMatch(/SCAN working_order_lines\b/);
   });
 });

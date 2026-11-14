@@ -508,7 +508,8 @@ describe("listTablesWithState — A773 no dispatch state", () => {
       tx
         .select({ id: ticketItems.id, lineId: ticketItems.workingOrderLineId })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, tabId)),
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, tabId)),
     );
     for (const item of items) {
       await asApp(cfg, (tx) => advanceTicketItem(tx, item.id, "preparing"));

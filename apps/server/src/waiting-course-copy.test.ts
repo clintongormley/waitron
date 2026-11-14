@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
@@ -169,10 +170,8 @@ function eventsOf(groupId: string) {
 }
 
 function ticketsOf(billIds: string[]) {
-  return v.db
-    .select()
-    .from(ticketItems)
-    .where(inArray(ticketItems.workingOrderId, billIds))
+  return ticketItemsWithBill(v.db)
+    .where(inArray(workingOrderLines.workingOrderId, billIds))
     .orderBy(asc(ticketItems.id));
 }
 

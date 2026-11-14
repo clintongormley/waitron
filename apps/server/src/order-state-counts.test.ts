@@ -661,7 +661,7 @@ async function kitchenItems(billId: string) {
       })
       .from(ticketItems)
       .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(ticketItems.workingOrderId, billId))
+      .where(eq(workingOrderLines.workingOrderId, billId))
       .orderBy(workingOrderLines.lineNo),
   );
   return {

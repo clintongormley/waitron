@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { cancelItemForTest } from "./testing/cancel-line.js";
 
 import { seedBusinessDay, seedActivityActor } from "@waitron/db/testing/seed.js";
@@ -18,7 +19,7 @@ import { deleteCourse } from "./course-delete.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, sql, inArray } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   billPaymentRefunds,
@@ -1221,9 +1222,9 @@ describe("openTab service context", () => {
       ]);
 
       const routed = await tx.execute<{ working_order_id: string; station_id: string }>(sql`
-        select working_order_id, station_id from ticket_items
-        where working_order_id in (${upstairs.tabId}, ${downstairs.tabId})
-        order by working_order_id`);
+        select l.working_order_id, t.station_id from ticket_items t join working_order_lines l on l.id = t.working_order_line_id
+        where l.working_order_id in (${upstairs.tabId}, ${downstairs.tabId})
+        order by l.working_order_id`);
       expect(new Map(routed.rows.map((row) => [row.working_order_id, row.station_id]))).toEqual(
         new Map([
           [upstairs.tabId, upstairsBar.id],
@@ -1258,7 +1259,7 @@ describe("openTab service context", () => {
       const counts = await tx.execute<{ lines: number; tickets: number }>(sql`
         select
           (select cast(count(*) as int) from working_order_lines where working_order_id = ${tabId}) as lines,
-          (select cast(count(*) as int) from ticket_items where working_order_id = ${tabId}) as tickets`);
+          (select cast(count(*) as int) from ticket_items where working_order_line_id in (select id from working_order_lines where working_order_id = ${tabId})) as tickets`);
       expect(counts.rows).toEqual([{ lines: 1, tickets: 0 }]);
     });
   });
@@ -2525,7 +2526,8 @@ describe("updateHeldOrder", () => {
       db
         .select({ id: ticketItems.id, firedAt: ticketItems.firedAt })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, seeded.tabId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, seeded.tabId));
     const before = await linesOf();
     const firedBefore = await itemsOf();
     expect(before).toHaveLength(1);
@@ -2613,7 +2615,8 @@ describe("updateHeldOrder", () => {
         db
           .select({ id: ticketItems.id, firedAt: ticketItems.firedAt, state: ticketItems.state })
           .from(ticketItems)
-          .where(eq(ticketItems.workingOrderId, seeded.tabId));
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+          .where(eq(workingOrderLines.workingOrderId, seeded.tabId));
       if (state === "preparing") {
         const [item] = await itemsOf();
         await withTransaction(db, (tx) => advanceTicketItem(tx, item!.id, "preparing"));
@@ -3455,7 +3458,7 @@ async function ticketItemsFor(
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
-    .where(eq(ticketItems.workingOrderId, orderId));
+    .where(eq(workingOrderLines.workingOrderId, orderId));
 }
 
 const byProduct = (
@@ -3857,7 +3860,8 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       const [before] = await tx
         .select({ note: ticketItems.note })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, orderId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, orderId));
       expect(before).toEqual({ note: "No onion" });
 
       await tx
@@ -3877,7 +3881,8 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       const [after] = await tx
         .select({ note: ticketItems.note })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, orderId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, orderId));
       expect(after).toEqual({ note: "No onion" });
     });
   });
@@ -4105,7 +4110,7 @@ describe("opening hours", () => {
         const first = await fireContextless(tx, cfg, [product]);
         const recorded = () =>
           Promise.all([
-            tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, first.id)),
+            ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, first.id)),
             tx
               .select()
               .from(workingOrderLines)
@@ -4215,7 +4220,11 @@ describe("opening hours", () => {
             await tx
               .select({ note: ticketItems.note })
               .from(ticketItems)
-              .where(eq(ticketItems.workingOrderId, tabId))
+              .innerJoin(
+                workingOrderLines,
+                eq(workingOrderLines.id, ticketItems.workingOrderLineId),
+              )
+              .where(eq(workingOrderLines.workingOrderId, tabId))
           )[0]!.note,
         ).toBe("No ice");
         const [parent] = await tx
@@ -4268,7 +4277,9 @@ describe("opening hours", () => {
           await tx
             .select({ stationId: ticketItems.stationId, note: ticketItems.note })
             .from(ticketItems)
-            .where(eq(ticketItems.workingOrderId, tabId)),
+            .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+            .where(eq(workingOrderLines.workingOrderId, tabId))
+            .orderBy(sql`${ticketItems}.rowid`),
         ).toEqual([
           { stationId: upstairs.id, note: "No ice" },
           { stationId: kitchen.id, note: "No lemon" },
@@ -4328,7 +4339,8 @@ describe("opening hours", () => {
         const sent = await tx
           .select({ lineId: ticketItems.workingOrderLineId, stationId: ticketItems.stationId })
           .from(ticketItems)
-          .where(eq(ticketItems.workingOrderId, tabId));
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+          .where(eq(workingOrderLines.workingOrderId, tabId));
         expect(sent).toHaveLength(2);
         expect(new Map(sent.map((item) => [item.lineId, item.stationId]))).toEqual(
           new Map(lines.map((row) => [row.id, upstairs.id])),
@@ -4390,7 +4402,8 @@ describe("opening hours", () => {
       const [stamp] = await tx
         .select({ firedAt: ticketItems.firedAt })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, orderId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, orderId));
       expect(stamp!.firedAt).toBe("2026-10-02T18:59:59.999Z");
     });
   });
@@ -4417,7 +4430,8 @@ describe("opening hours", () => {
           stationId: ticketItems.stationId,
         })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, orderId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, orderId));
       expect(items).toHaveLength(1);
       expect(items[0]).toMatchObject({
         workingOrderLineId: lines[1]!.id,
@@ -4541,7 +4555,7 @@ describe("a sale on a Spanish public holiday", () => {
       Promise.all([
         db.select().from(workingOrders).where(eq(workingOrders.id, orderId)),
         db.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, orderId)),
-        db.select().from(ticketItems).where(eq(ticketItems.workingOrderId, orderId)),
+        ticketItemsWithBill(db).where(eq(workingOrderLines.workingOrderId, orderId)),
       ]);
 
     const ordinary = await saleOn(ORDINARY);
@@ -4987,7 +5001,7 @@ describe("placeOrder fire ticket items", () => {
       .select({ firedAt: ticketItems.firedAt })
       .from(ticketItems)
       .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
-      .where(eq(ticketItems.workingOrderId, id))
+      .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
     expect(items.map((item) => item.firedAt !== null)).toEqual([true, true]);
   });
@@ -5012,7 +5026,7 @@ describe("placeOrder fire ticket items", () => {
           .select({ firedAt: ticketItems.firedAt })
           .from(ticketItems)
           .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
-          .where(eq(ticketItems.workingOrderId, id))
+          .where(eq(workingOrderLines.workingOrderId, id))
           .orderBy(workingOrderLines.lineNo)
       ).map((item) => item.firedAt !== null);
 
@@ -5087,7 +5101,8 @@ describe("placeOrder fire ticket items", () => {
     const items = await db
       .select({ firedAt: ticketItems.firedAt })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, id));
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, id));
     expect(items.map((item) => item.firedAt !== null)).toEqual([true, true]);
   });
 
@@ -5118,7 +5133,8 @@ describe("placeOrder fire ticket items", () => {
       await db
         .select({ firedAt: ticketItems.firedAt })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, id)),
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, id)),
     ).toEqual([{ firedAt: expect.any(String) }]);
   });
 
@@ -5153,7 +5169,8 @@ describe("placeOrder fire ticket items", () => {
       await db
         .select({ id: ticketItems.id })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, id)),
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, id)),
     ).toEqual([]);
   });
 });
@@ -5168,7 +5185,7 @@ async function ticketItemRows(
     .select({ id: ticketItems.id, lineNo: workingOrderLines.lineNo, state: ticketItems.state })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
-    .where(eq(ticketItems.workingOrderId, orderId))
+    .where(eq(workingOrderLines.workingOrderId, orderId))
     .orderBy(workingOrderLines.lineNo);
 }
 
@@ -5292,10 +5309,10 @@ describe("advanceTicketItem / listStationQueue (bump + queue)", () => {
 
       // Give the ordering fixture distinct times.
       await tx.execute(
-        sql`update ticket_items set queued_at = '2026-07-20T10:00:00Z' where working_order_id = ${order1}`,
+        sql`update ticket_items set queued_at = '2026-07-20T10:00:00Z' where working_order_line_id in (select id from working_order_lines where working_order_id = ${order1})`,
       );
       await tx.execute(
-        sql`update ticket_items set queued_at = '2026-07-20T10:01:00Z' where working_order_id = ${order2}`,
+        sql`update ticket_items set queued_at = '2026-07-20T10:01:00Z' where working_order_line_id in (select id from working_order_lines where working_order_id = ${order2})`,
       );
       const kitchenQueue = await listStationQueue(tx, kitchenStation.id);
       expect(kitchenQueue.map((g) => g.orderId)).toEqual([order1, order2]);
@@ -5776,7 +5793,7 @@ async function courseItemsFor(
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
-    .where(eq(ticketItems.workingOrderId, orderId));
+    .where(eq(workingOrderLines.workingOrderId, orderId));
 }
 
 const byLine = <T extends { productId: string | null }>(items: T[], productId: string): T =>
@@ -6151,7 +6168,7 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
       })
       .from(ticketItems)
       .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
-      .where(eq(ticketItems.workingOrderId, tabId));
+      .where(eq(workingOrderLines.workingOrderId, tabId));
     return new Map(rows.map((r) => [r.lineNo, { firedAt: r.firedAt, queuedAt: r.queuedAt }]));
   }
 
@@ -6177,7 +6194,15 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
       await tx
         .update(ticketItems)
         .set({ queuedAt: AGED })
-        .where(and(eq(ticketItems.workingOrderId, tabId), isNull(ticketItems.firedAt)));
+        .where(
+          and(
+            inArray(
+              ticketItems.workingOrderLineId,
+              sql`(select id from working_order_lines where working_order_id = ${tabId})`,
+            ),
+            isNull(ticketItems.firedAt),
+          ),
+        );
 
       const before = await itemsByLineNo(tx, tabId);
       // Read the stored aged stamp back rather than assuming the literal round-trips, and use THAT
@@ -6254,7 +6279,10 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
         .set({ firedAt: AGED, queuedAt: AGED })
         .where(
           and(
-            eq(ticketItems.workingOrderId, tabId),
+            inArray(
+              ticketItems.workingOrderLineId,
+              sql`(select id from working_order_lines where working_order_id = ${tabId})`,
+            ),
             eq(
               ticketItems.workingOrderLineId,
               tx
@@ -6974,14 +7002,19 @@ describe("bumpBillReady — pass card preparation without dispatch", () => {
       const { orderId } = await firedCourseAcrossTwoStations(tx, cfg, catalogueId);
       await bumpBillReady(tx, orderId);
       const read = () =>
-        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, orderId));
+        ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, orderId));
       const readied = await read();
       expect(readied).toHaveLength(2);
       expect(readied.every((i) => i.state === "ready" && i.readyAt !== null)).toBe(true);
       await tx
         .update(ticketItems)
         .set({ readyAt: "2026-10-20T12:00:00.000Z" })
-        .where(eq(ticketItems.workingOrderId, orderId));
+        .where(
+          inArray(
+            ticketItems.workingOrderLineId,
+            sql`(select id from working_order_lines where working_order_id = ${orderId})`,
+          ),
+        );
       const first = await read();
       await bumpBillReady(tx, orderId);
       expect(await read()).toEqual(first);
@@ -9898,7 +9931,8 @@ describe("a variant is sold as the product it is", () => {
       const stations = await tx
         .select({ lineId: ticketItems.workingOrderLineId, stationId: ticketItems.stationId })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, orderId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, orderId));
       expect(new Map(stations.map((s) => [s.lineId, s.stationId]))).toEqual(
         new Map([
           [first!.id, barStation.id],
@@ -9925,7 +9959,8 @@ describe("a variant is sold as the product it is", () => {
       const stations = await tx
         .select({ lineId: ticketItems.workingOrderLineId, stationId: ticketItems.stationId })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, orderId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, orderId));
       expect(new Map(stations.map((s) => [s.lineId, s.stationId]))).toEqual(
         new Map([
           [first!.id, cellarStation.id],

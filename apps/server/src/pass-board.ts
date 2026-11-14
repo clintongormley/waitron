@@ -177,8 +177,8 @@ async function scopedItems(
       stationId: ticketItems.stationId,
     })
     .from(ticketItems)
-    .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
     .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .innerJoin(workingOrders, eq(workingOrderLines.workingOrderId, workingOrders.id))
     .where(
       and(
         liveKitchenDish(),
@@ -219,8 +219,8 @@ export async function firedPassDishes(
       stationId: ticketItems.stationId,
     })
     .from(ticketItems)
-    .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
     .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .innerJoin(workingOrders, eq(workingOrderLines.workingOrderId, workingOrders.id))
     .where(
       and(
         liveKitchenDish(),

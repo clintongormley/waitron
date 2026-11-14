@@ -1,10 +1,21 @@
+import type { PassBoard } from "../../src/pass-card.js";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { cpus, hostname, totalmem } from "node:os";
 import { join } from "node:path";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { eq, sql } from "drizzle-orm";
-import { devices, orderGroups, ticketItems, withTransaction, workingOrders } from "@waitron/db";
+import {
+  devices,
+  deviceProfiles,
+  kitchenStations,
+  printJobs,
+  orderGroups,
+  ticketItems,
+  withTransaction,
+  workingOrders,
+  workingOrderLines,
+} from "@waitron/db";
 import { DEFAULT_SKIP_RETRY_MS, drain } from "@waitron/fiscal-verifactu";
 import { PERSON_HEADER } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
@@ -38,6 +49,8 @@ export const CASE_NAMES = [
   "kitchen.pass",
   "kitchen.pass-screen",
   "dashboard.open",
+  "kitchen.pass-release",
+  "print.problems",
   // Last: each sample adds 50 sales, which every case after it would also read.
   "filing.pass",
 ] as const;
@@ -362,7 +375,8 @@ async function caseGroups(venue: BenchVenue, clock: BenchClock): Promise<BenchGr
       const tickets = await venue.db
         .select({ id: ticketItems.id, stationId: ticketItems.stationId })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, tabId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, tabId));
       for (const to of ["preparing", "ready"])
         for (const ticket of tickets)
           await call(cookie, "POST", `/api/ticket-items/${ticket.id}/advance`, {
@@ -519,6 +533,16 @@ async function caseGroups(venue: BenchVenue, clock: BenchClock): Promise<BenchGr
           .where(eq(devices.id, passScreen.id));
         const pass = { kind: "pass", stationIds: null, zoneIds: null } as const;
         await withTransaction(venue.db, async (tx) => {
+          const [profile] = await tx
+            .select({ capabilities: deviceProfiles.capabilities })
+            .from(deviceProfiles)
+            .where(eq(deviceProfiles.id, device!.profileId!));
+          const capabilities = profile!.capabilities as string[];
+          if (!capabilities.includes("run-the-pass"))
+            await tx
+              .update(deviceProfiles)
+              .set({ capabilities: [...capabilities, "run-the-pass"] })
+              .where(eq(deviceProfiles.id, device!.profileId!));
           await offerOnProfile(tx, device!.profileId!, pass);
           await VENUE_SERVICE.setDeviceKitchenScreens(tx, {
             deviceId: passScreen.id,
@@ -585,6 +609,93 @@ async function caseGroups(venue: BenchVenue, clock: BenchClock): Promise<BenchGr
             ]);
             const sales = (answers[1]!.body as { counts: { sales: number } }).counts.sales;
             return { outcome: outcomeOf(answers), seen: atLeast("dashboard.open", sales, 1) };
+          },
+        },
+      ],
+    },
+    {
+      cases: [
+        {
+          name: "kitchen.pass-release",
+          sample: async (time) => {
+            await venue.db.update(kitchenStations).set({ waitsForPass: true });
+            const bill = await openBill(tables[0]!, nextDishes(2), false);
+            const { board } = (await call(
+              passScreen.cookie,
+              "GET",
+              "/api/device/pass-board",
+            )) as unknown as { board: PassBoard };
+            const card = board.toFire.find(
+              (card) => card.target.kind === "group" && card.target.partyId === bill.partyId,
+            );
+            if (!card) throw new Error("bench: no two-dish pass release card");
+            const answers = await timed(time, [
+              {
+                cookie: passScreen.cookie,
+                method: "POST",
+                path: "/api/device/pass-screen/release",
+                body: {
+                  submissionId: randomUUID(),
+                  target: card.target,
+                  ticketItemIds: card.releaseTicketItemIds,
+                  expectedContext: card.releaseContext,
+                },
+              },
+            ]);
+            await venue.db.update(kitchenStations).set({ waitsForPass: false });
+            const [group] = await venue.db
+              .select({ id: orderGroups.id })
+              .from(orderGroups)
+              .where(eq(orderGroups.partyId, bill.partyId));
+            await call(
+              passScreen.cookie,
+              "POST",
+              `/api/device/parties/${bill.partyId}/groups/${group!.id}/ready`,
+              {
+                submissionId: randomUUID(),
+                expectedPartyRevision: revision(bill.partyId),
+              },
+            );
+            await call(cookie, "POST", `/api/parties/${bill.partyId}/groups/${group!.id}/served`, {
+              submissionId: randomUUID(),
+              expectedPartyRevision: revision(bill.partyId),
+            });
+            const payment = await cashPayment(bill.tabId, await outstanding(bill.tabId));
+            await call(payment.cookie, payment.method, payment.path, payment.body);
+            await finish(bill.partyId);
+            return {
+              outcome: outcomeOf(answers),
+              seen: (answers[0]!.body as { releasedTicketItemIds: string[] }).releasedTicketItemIds
+                .length,
+            };
+          },
+        },
+        {
+          name: "print.problems",
+          sample: async (time) => {
+            const [job] = await venue.db
+              .select({ id: printJobs.id })
+              .from(printJobs)
+              .where(eq(printJobs.kind, "document"))
+              .orderBy(sql`${printJobs}.rowid desc`)
+              .limit(1);
+            if (!job) throw new Error("bench: no print job for the problem read");
+            await venue.db
+              .update(printJobs)
+              .set({ status: "failed", attempts: 100, lastError: "printer.offline" })
+              .where(eq(printJobs.id, job.id));
+            const answers = await timed(time, [
+              { cookie: venue.managementCookie, method: "GET", path: "/management-api/alerts" },
+            ]);
+            const alerts = (answers[0]!.body as { alerts: { code: string }[] }).alerts;
+            return {
+              outcome: outcomeOf(answers),
+              seen: atLeast(
+                "print.problems",
+                alerts.filter((alert) => alert.code === "printer.jobs_waiting").length,
+                1,
+              ),
+            };
           },
         },
       ],

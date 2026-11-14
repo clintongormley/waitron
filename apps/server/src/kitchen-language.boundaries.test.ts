@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { provisionBillVenue, send } from "./testing/bill-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
@@ -11,7 +12,6 @@ import { eq } from "drizzle-orm";
 import {
   kitchenStations,
   printJobs,
-  ticketItems,
   workingOrderLines,
   products,
   orderGroups,
@@ -118,10 +118,9 @@ describe("A964 language boundaries", () => {
       const before = await v.db.select().from(printJobs);
       expect(before).toHaveLength(2);
       expect(before.every((j) => text(j.payload).includes("Pass roast"))).toBe(true);
-      const tickets = await v.db
-        .select()
-        .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, p.tabId));
+      const tickets = await ticketItemsWithBill(v.db).where(
+        eq(workingOrderLines.workingOrderId, p.tabId),
+      );
       const recorded = await inTx(v, (tx) =>
         VENUE_SERVICE.readTicketAllergies(
           tx,

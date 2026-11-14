@@ -53,7 +53,7 @@ export async function waitingDish(
     randomUUID(),
   );
   await db.execute(
-    sql`update ticket_items set station_id = ${stationId}, fired_at = ${firedAt} where working_order_id = ${orderId}`,
+    sql`update ticket_items set station_id = ${stationId}, fired_at = ${firedAt} where working_order_line_id in (select id from working_order_lines where working_order_id = ${orderId})`,
   );
   return orderId;
 }

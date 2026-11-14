@@ -209,7 +209,8 @@ describe("splitting a dish with split-off extras", () => {
       tx
         .select({ stationId: ticketItems.stationId })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, destination)),
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, destination)),
     );
     expect(new Set(moved.map((item) => item.stationId))).toEqual(
       new Set([venue.stations.grill, venue.stations.fryer]),

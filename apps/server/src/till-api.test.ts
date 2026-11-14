@@ -3397,7 +3397,7 @@ describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
     );
     expect(order.rows[0]).toEqual({ status: "placed" });
     const ticket = await suite.db.execute<{ state: string }>(
-      sql`select state from ticket_items where working_order_id = ${id}`,
+      sql`select state from ticket_items where working_order_line_id in (select id from working_order_lines where working_order_id = ${id})`,
     );
     expect(ticket.rows[0]).toEqual({ state: "queued" });
     const details = await app.request(`/api/working-orders/${id}/lines`, { headers: { cookie } });
@@ -3691,7 +3691,8 @@ describe("KDS-1 station-display operate routes", () => {
         state: ticketItems.state,
       })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, orderId));
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, orderId));
     return item!;
   }
 
@@ -4895,8 +4896,11 @@ describe("sale-policy order flow routes", () => {
       ).toEqual([{ service_mode: want }]);
       await withTransaction(suite.db, (tx) => fireDishesAtPayment(tx, cfg, id));
       expect(
-        (await suite.db.execute(sql`select state from ticket_items where working_order_id = ${id}`))
-          .rows,
+        (
+          await suite.db.execute(
+            sql`select state from ticket_items where working_order_line_id in (select id from working_order_lines where working_order_id = ${id})`,
+          )
+        ).rows,
       ).toEqual(sends ? [{ state: "queued" }] : []);
     },
   );

@@ -210,9 +210,10 @@ export async function freezeKitchenAllergyItems(
       stationId: ticketItems.stationId,
     })
     .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .where(
       and(
-        eq(ticketItems.workingOrderId, orderId),
+        eq(workingOrderLines.workingOrderId, orderId),
         inArray(
           ticketItems.workingOrderLineId,
           items.map((item) => item.workingOrderLineId),
@@ -306,7 +307,7 @@ async function enqueueKitchenAllergyUpdates(
       id: ticketItems.id,
       lineId: workingOrderLines.id,
       parentId: workingOrderLines.parentLineId,
-      orderId: ticketItems.workingOrderId,
+      orderId: workingOrderLines.workingOrderId,
       stationId: ticketItems.stationId,
       firedAt: ticketItems.firedAt,
       madeHere: ticketItems.madeHere,
@@ -323,7 +324,7 @@ async function enqueueKitchenAllergyUpdates(
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .innerJoin(parties, eq(parties.id, changes.partyId))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .where(
@@ -447,7 +448,7 @@ export async function notifyKitchenAllergyDestination(
     .select({
       id: ticketItems.id,
       lineId: workingOrderLines.id,
-      orderId: ticketItems.workingOrderId,
+      orderId: workingOrderLines.workingOrderId,
       stationId: ticketItems.stationId,
       quantity: workingOrderLines.quantity,
       firedQuantity: ticketItems.quantity,
@@ -461,7 +462,7 @@ export async function notifyKitchenAllergyDestination(
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .where(inArray(ticketItems.id, [...ticketItemIds]));
   const copies = await VENUE_SERVICE.readTicketAllergies(

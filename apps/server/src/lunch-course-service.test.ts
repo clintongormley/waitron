@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { attendanceOperationFacts } from "@waitron/workforce";
 import { systemClock } from "./till-backend.js";
@@ -5,7 +6,7 @@ import { applyPartyAllergyPatch, allergyTargets, readAllergySendView } from "./p
 import { VENUE_SERVICE } from "./modules.js";
 import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql, inArray } from "drizzle-orm";
 import {
   ticketItems,
   printJobs,
@@ -138,7 +139,7 @@ async function rows(tx: Transaction, id: string) {
     .orderBy(workingOrderLines.lineNo);
 }
 async function tickets(tx: Transaction, id: string) {
-  return tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, id));
+  return ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, id));
 }
 
 describe("set lunch course service", () => {
@@ -528,7 +529,16 @@ describe("set lunch course service", () => {
           .items[0]!.note,
       ).toBe("No salt");
       expect(
-        (await readPassRows(tx, eq(ticketItems.workingOrderId, id), Date.now()))[0]!.item.note,
+        (
+          await readPassRows(
+            tx,
+            inArray(
+              ticketItems.workingOrderLineId,
+              sql`(select id from working_order_lines where working_order_id = ${id})`,
+            ),
+            Date.now(),
+          )
+        )[0]!.item.note,
       ).toBe("No salt");
     });
   });

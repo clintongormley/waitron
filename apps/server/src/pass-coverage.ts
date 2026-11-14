@@ -49,8 +49,8 @@ export async function readPassCoverage(tx: Transaction): Promise<PassCoverageGap
       stationName: kitchenStations.name,
     })
     .from(ticketItems)
-    .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
     .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .innerJoin(workingOrders, eq(workingOrderLines.workingOrderId, workingOrders.id))
     .innerJoin(kitchenStations, eq(ticketItems.stationId, kitchenStations.id))
     .where(and(liveKitchenDish(), requestedItem()));
   if (stations.length === 0 && dishes.length === 0) return [];

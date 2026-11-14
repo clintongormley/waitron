@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { products, lineServiceCancellations } from "@waitron/db";
 import { createProduct, createExtraList, writeProductModifiers } from "@waitron/catalogue";
 import { seedDeviceProfiles, seedZone } from "@waitron/db/testing/seed.js";
@@ -206,7 +207,7 @@ it("stops the lunch dishes, without treating its priced shell as kitchen work, o
   });
   expect(
     await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, party.tabId)),
     ),
   ).toHaveLength(2);
   const answer = await depart(party.partyId, {
@@ -223,7 +224,7 @@ it("stops the lunch dishes, without treating its priced shell as kitchen work, o
   expect(cancelled.map((row) => row.lineId).sort()).toEqual(children.children.sort());
   expect(
     await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, party.tabId)),
     ),
   ).toEqual([]);
 });
@@ -1180,7 +1181,7 @@ describe("a bill that owes nothing", () => {
     expect(await statusOf(venue, party.tabId)).toBe("settled");
     expect(
       await inTx(venue, (tx) =>
-        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+        ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, party.tabId)),
       ),
     ).toEqual([]);
     expect(
@@ -2079,7 +2080,8 @@ describe("A773 requested lifecycle", () => {
       tx
         .select({ requestedAt: ticketItems.requestedAt, firedAt: ticketItems.firedAt })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, billId)),
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, billId)),
     );
   }
 

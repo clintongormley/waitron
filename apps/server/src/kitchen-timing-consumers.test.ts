@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql, inArray } from "drizzle-orm";
 import { kitchenStations, ticketItems } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -183,7 +183,15 @@ describe("each station's own minutes across consumers", () => {
     );
     const heldAt = new Date(Date.now() - 20 * 60_000).toISOString();
     await inTx(v, (tx) =>
-      tx.update(ticketItems).set({ queuedAt: heldAt }).where(eq(ticketItems.workingOrderId, tabId)),
+      tx
+        .update(ticketItems)
+        .set({ queuedAt: heldAt })
+        .where(
+          inArray(
+            ticketItems.workingOrderLineId,
+            sql`(select id from working_order_lines where working_order_id = ${tabId})`,
+          ),
+        ),
     );
     const fire = { submissionId: randomUUID(), ...(await commandFor(v, partyId)) };
     await inTx(v, (tx) => fireGroup(tx, v.cfg, partyId, placed.groups[0]!.id, fire));

@@ -1,7 +1,8 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
-import { kitchenStations, products, printJobs, ticketItems, workingOrderLines } from "@waitron/db";
+import { kitchenStations, products, printJobs, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
@@ -106,10 +107,9 @@ async function sent(
           allergy,
         }),
   );
-  const [ticket] = await v.db
-    .select()
-    .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, p.tabId));
+  const [ticket] = await ticketItemsWithBill(v.db).where(
+    eq(workingOrderLines.workingOrderId, p.tabId),
+  );
   return { ...p, ticket: ticket! };
 }
 type Sent = Awaited<ReturnType<typeof sent>>;
@@ -144,10 +144,9 @@ async function edit(p: Sent, remove = false) {
   });
 }
 async function copies(p: Sent) {
-  const tickets = await v.db
-    .select()
-    .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, p.tabId));
+  const tickets = await ticketItemsWithBill(v.db).where(
+    eq(workingOrderLines.workingOrderId, p.tabId),
+  );
   const rows = await inTx(v, (tx) =>
     VENUE_SERVICE.readTicketAllergies(
       tx,

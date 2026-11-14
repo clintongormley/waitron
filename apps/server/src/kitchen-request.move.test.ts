@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
@@ -232,10 +233,8 @@ async function transferredCounterOrder(
     tab,
     person!.id,
   );
-  const items = await db
-    .select()
-    .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, tab))
+  const items = await ticketItemsWithBill(db)
+    .where(eq(workingOrderLines.workingOrderId, tab))
     .orderBy(asc(ticketItems.id));
   await beforeTransfer(items);
   const path = `/api/working-orders/${tab}/department-transfers`;

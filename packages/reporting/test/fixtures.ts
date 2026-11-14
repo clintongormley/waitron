@@ -445,7 +445,6 @@ export async function seedFiredLine(
     })
     .returning({ id: workingOrderLines.id });
   await db.insert(ticketItems).values({
-    workingOrderId: opts.orderId,
     workingOrderLineId: line!.id,
     stationId: seed.stationId,
     queuedAt: opts.queuedAt ?? new Date(firedAtMs - opts.ageMinutes * 60_000).toISOString(),

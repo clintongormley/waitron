@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedOrderWriteBody } from "./testing/order-writer-fixture.js";
@@ -351,10 +352,9 @@ it("saved draft keeps and submits its deleted course", async () => {
     expect(item.modifiers).toEqual([
       { name: "K-SAUCE", perDish: 1, addAllergens: null, suitableFor: [] },
     ]);
-  const tickets = await v.db
-    .select()
-    .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, v.tabId));
+  const tickets = await ticketItemsWithBill(v.db).where(
+    eq(workingOrderLines.workingOrderId, v.tabId),
+  );
   expect(tickets.map((row) => [row.courseId, row.quantity, row.firedAt])).toEqual([
     [v.late.id, 1000, null],
     [v.late.id, 1000, null],
@@ -585,17 +585,16 @@ it("routed child extras inherit and release their dish's retained deleted course
   ]);
   await v.remove();
   expect((await v.submit(draft)).status).toBe(200);
-  const rows = await v.db.select().from(ticketItems).where(eq(ticketItems.workingOrderId, v.tabId));
+  const rows = await ticketItemsWithBill(v.db).where(eq(workingOrderLines.workingOrderId, v.tabId));
   expect(rows.map((row) => [row.stationId, row.courseId, row.quantity, row.firedAt])).toEqual([
     [v.stationId, v.late.id, 1000, null],
     [station.id, v.late.id, 1000, null],
   ]);
   expect(rows[0]!.stationId).not.toBe(station.id);
   expect((await v.fireHeldDish()).status).toBe(200);
-  const released = await v.db
-    .select()
-    .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, v.tabId));
+  const released = await ticketItemsWithBill(v.db).where(
+    eq(workingOrderLines.workingOrderId, v.tabId),
+  );
   expect(released.map((row) => [row.id, row.courseId, row.firedAt === null])).toEqual(
     rows.map((row) => [row.id, v.late.id, false]),
   );

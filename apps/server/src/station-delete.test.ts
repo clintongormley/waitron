@@ -106,7 +106,6 @@ async function food(
       .returning();
     if (flags.ticket !== false)
       await tx.insert(ticketItems).values({
-        workingOrderId: order.id,
         workingOrderLineId: line!.id,
         stationId: id,
         state: flags.state ?? "queued",

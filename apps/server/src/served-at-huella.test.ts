@@ -357,7 +357,8 @@ async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; 
     const items = await tx
       .select({ id: ticketItems.id })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, tabId));
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, tabId));
     for (const item of items) {
       await advanceTicketItem(tx, item.id, "preparing");
       await advanceTicketItem(tx, item.id, "ready");
@@ -398,7 +399,8 @@ async function kdsStateOf(shop: Shop, tabId: string): Promise<KdsState> {
     const items = await tx
       .select({ state: ticketItems.state })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, tabId));
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, tabId));
     const [order] = await tx
       .select({ collectedAt: workingOrders.collectedAt })
       .from(workingOrders)

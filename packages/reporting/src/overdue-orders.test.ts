@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql, inArray } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   kitchenStations,
@@ -60,7 +60,12 @@ describe("computeOverdueOrders", () => {
     await suite.db
       .update(ticketItems)
       .set({ madeHere: true })
-      .where(eq(ticketItems.workingOrderId, orderId));
+      .where(
+        inArray(
+          ticketItems.workingOrderLineId,
+          sql`(select id from working_order_lines where working_order_id = ${orderId})`,
+        ),
+      );
     await seedFiredLine(
       suite.db,
       { nodeId: venue.nodeId, stationId },

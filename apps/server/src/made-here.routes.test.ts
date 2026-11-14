@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedZone } from "@waitron/db/testing/seed.js";
 import { cancelItemHttp } from "./testing/cancel-line.js";
@@ -171,7 +172,8 @@ async function assertMadeHere(orderId: string) {
     tx
       .select({ id: ticketItems.id })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, orderId)),
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, orderId)),
   );
   expect(before).toBeUndefined();
   const jobsBefore = await inTx(venue, (tx) =>
@@ -179,7 +181,7 @@ async function assertMadeHere(orderId: string) {
   );
   return async () => {
     const items = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, orderId)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, orderId)),
     );
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ madeHere: true, state: "ready" });
@@ -293,7 +295,7 @@ describe("made-here route wiring", () => {
     );
     expect(held.status).toBe(200);
     const [before] = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, party.tabId)),
     );
     expect(before).toMatchObject({ madeHere: true, state: "ready", firedAt: expect.any(String) });
     const jobsBefore = await inTx(venue, (tx) =>
@@ -308,7 +310,7 @@ describe("made-here route wiring", () => {
     );
     expect(sent.status).toBe(200);
     const [after] = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, party.tabId)),
     );
     expect(after).toEqual(before);
     expect(
@@ -350,7 +352,7 @@ describe("made-here route wiring", () => {
       tx.select().from(orderGroups).where(eq(orderGroups.partyId, party.partyId)),
     );
     const items = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, party.tabId)),
     );
     const drink = items.find((item) => item.madeHere)!;
     const burger = items.find((item) => !item.madeHere)!;
@@ -470,7 +472,7 @@ describe("made-here route wiring", () => {
       ),
     ).toHaveLength(jobsBefore.length);
     const [item] = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, party.tabId)),
     );
     expect(item).toMatchObject({ madeHere: true, firedAt: expect.any(String), state: "ready" });
     const groups = await send(
@@ -575,7 +577,7 @@ describe("made-here route wiring", () => {
     );
     expect(edited.status, JSON.stringify(edited.json)).toBe(200);
     const items = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, party.tabId)),
     );
     expect(items.find((item) => !item.madeHere)).toMatchObject({
       stationId: grillStationId,
@@ -624,7 +626,7 @@ describe("made-here route wiring", () => {
     );
     expect(edited.status).toBe(200);
     const items = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, party.tabId)),
     );
     expect(items.find((item) => item.madeHere)).toMatchObject({
       firedAt: expect.any(String),
@@ -679,7 +681,7 @@ describe("made-here route wiring", () => {
       ]),
     );
     const beforeItems = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, orderId)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, orderId)),
     );
     expect(beforeItems.find((item) => item.courseId === first.id)).toMatchObject({
       firedAt: expect.any(String),
@@ -712,7 +714,7 @@ describe("made-here route wiring", () => {
     });
     expect(edited.status, JSON.stringify(edited.json)).toBe(200);
     const items = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, orderId)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, orderId)),
     );
     expect(items.find((item) => item.madeHere)).toMatchObject({
       state: "ready",
@@ -746,7 +748,7 @@ describe("made-here route wiring", () => {
       ]),
     );
     const [made] = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, orderId)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, orderId)),
     );
     expect(made).toMatchObject({ madeHere: true, state: "ready" });
     const [order] = await inTx(venue, (tx) =>
@@ -771,7 +773,7 @@ describe("made-here route wiring", () => {
       [2, 1000],
     ]);
     const items = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, orderId)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, orderId)),
     );
     expect(items.find((item) => item.id === made!.id)).toMatchObject({ state: "ready" });
   });
@@ -822,7 +824,7 @@ describe("made-here route wiring", () => {
       [line!.lineNo + 1, line!.productId, 1000],
     ]);
     const items = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, party.tabId)),
     );
     expect(items).toHaveLength(2);
     expect(
@@ -873,7 +875,7 @@ describe("made-here route wiring", () => {
           : await sendGroupedDrinks(party, quantity);
       expect(sent.status).toBe(200);
       const [item] = await inTx(venue, (tx) =>
-        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+        ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, party.tabId)),
       );
       expect(item).toMatchObject({ madeHere: true, firedAt: expect.any(String), state: "ready" });
       const jobsBefore = await inTx(venue, (tx) =>
@@ -903,7 +905,7 @@ describe("made-here route wiring", () => {
       ).toHaveLength(jobsBefore.length);
       expect(venue.db.all(sql`select id from kitchen_notices`)).toHaveLength(noticesBefore.length);
       const remaining = await inTx(venue, (tx) =>
-        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+        ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, party.tabId)),
       );
       for (const record of remaining.filter((record) => record.madeHere)) {
         expect(record.firedAt).toEqual(expect.any(String));
@@ -980,7 +982,7 @@ describe("made-here route wiring", () => {
     const sent = await sendGroupedDrinks(party, 2);
     expect(sent.status).toBe(200);
     const [item] = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, party.tabId)),
     );
     expect(item).toMatchObject({ madeHere: true, firedAt: expect.any(String), state: "ready" });
     const [line] = await inTx(venue, (tx) =>
@@ -1000,10 +1002,9 @@ describe("made-here route wiring", () => {
     );
     expect(split.status).toBe(200);
     const [splitItem] = await inTx(venue, (tx) =>
-      tx
-        .select()
-        .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, split.json.billId as string)),
+      ticketItemsWithBill(tx).where(
+        eq(workingOrderLines.workingOrderId, split.json.billId as string),
+      ),
     );
     expect(splitItem).toMatchObject({
       madeHere: true,
@@ -1027,7 +1028,7 @@ describe("made-here route wiring", () => {
     );
     expect(placed.status).toBe(200);
     const [item] = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, orderId)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, orderId)),
     );
     expect(item).toMatchObject({ madeHere: true, firedAt: expect.any(String), state: "ready" });
     const table = await inTx(venue, (tx) =>
@@ -1088,7 +1089,7 @@ describe("made-here route wiring", () => {
     const extra = lines.find((line) => line.parentLineId !== null)!;
     expect(extra).toBeDefined();
     const [item] = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, party.tabId)),
     );
     expect(item).toMatchObject({ madeHere: true, firedAt: expect.any(String), state: "ready" });
     const jobsBefore = await inTx(venue, (tx) =>
@@ -1154,7 +1155,7 @@ describe("made-here route wiring", () => {
     );
     expect(joined.status).toBe(200);
     const items = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, party.tabId)),
     );
     expect(items.find((item) => item.madeHere)).toMatchObject({
       state: "ready",
@@ -1467,7 +1468,8 @@ describe("made-here route wiring", () => {
       tx
         .select({ id: ticketItems.id })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, party.tabId)),
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, party.tabId)),
     );
     const lines = await inTx(venue, (tx) =>
       tx
@@ -1496,7 +1498,7 @@ describe("made-here route wiring", () => {
     );
     expect(answer.status).toBe(200);
     const after = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, party.tabId)),
     );
     expect(after).toHaveLength(before.length + 1);
     expect(after.find((item) => !before.some((old) => old.id === item.id))).toMatchObject({

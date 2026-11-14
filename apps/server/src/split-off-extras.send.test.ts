@@ -76,7 +76,8 @@ async function recordsFor(tx: Transaction, orderId: string) {
       courseId: ticketItems.courseId,
     })
     .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, orderId));
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(eq(workingOrderLines.workingOrderId, orderId));
 }
 
 async function sendWithHold(
@@ -336,7 +337,8 @@ describe("sending split-off extras", () => {
           firedAt: ticketItems.firedAt,
         })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, venue.party.tabId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, venue.party.tabId));
       return { lines, records };
     });
     const dish = result.lines.find((line) => line.parentLineId === null)!;
@@ -1009,7 +1011,8 @@ describe("sending split-off extras", () => {
           state: ticketItems.state,
         })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, orderId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, orderId));
       const dish = records.find((row) => row.stationId === grill.id)!;
       const extra = records.find((row) => row.stationId === bar.id)!;
       expect(dish.firedAt).toBeNull();
@@ -1063,7 +1066,8 @@ describe("sending split-off extras", () => {
           state: ticketItems.state,
         })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, placed.tabId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, placed.tabId));
       const grill = before.find((row) => row.stationId === venue.stations.grill)!;
       const chips = before.find((row) => row.stationId === venue.stations.fryer)!;
       expect(grill.firedAt).toBeNull();
@@ -1086,7 +1090,8 @@ describe("sending split-off extras", () => {
           state: ticketItems.state,
         })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, placed.tabId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, placed.tabId));
       expect(after.find((row) => row.lineId === chips.lineId)).toEqual({
         lineId: chips.lineId,
         firedAt: chips.firedAt,
@@ -1114,7 +1119,8 @@ describe("sending split-off extras", () => {
           madeHere: ticketItems.madeHere,
         })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, peer.tabId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, peer.tabId));
       const heldChips = peerItems.filter((row) => row.stationId === venue.stations.fryer);
       expect(heldChips).toContainEqual({
         stationId: venue.stations.fryer,

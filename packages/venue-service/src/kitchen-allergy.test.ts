@@ -83,7 +83,6 @@ beforeEach(async () => {
   const [ticket] = await suite.db
     .insert(ticketItems)
     .values({
-      workingOrderId: orderId,
       workingOrderLineId: line!.id,
       stationId,
       quantity: 1000,

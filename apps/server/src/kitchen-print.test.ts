@@ -211,7 +211,8 @@ describe("paper for a move to another station", () => {
         const [fired] = await tx
           .select({ workingOrderLineId: ticketItems.workingOrderLineId })
           .from(ticketItems)
-          .where(eq(ticketItems.workingOrderId, orderId));
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+          .where(eq(workingOrderLines.workingOrderId, orderId));
         const before = new Set((await printJobsFor(tx)).map((job) => job.id));
         if (printerOff) await updatePrinter(tx, barPrinter, { active: false });
         await enqueueStationMoved(
@@ -338,7 +339,6 @@ describe("show the rest of the order", () => {
         lineTotal: 150,
       });
       await tx.insert(ticketItems).values({
-        workingOrderId: orderId,
         workingOrderLineId: lineId,
         stationId: cold.id,
         state: "queued",
@@ -386,7 +386,6 @@ describe("show the rest of the order", () => {
           groupId: group!.id,
         });
         await tx.insert(ticketItems).values({
-          workingOrderId: orderId,
           workingOrderLineId: id,
           stationId,
           state: "queued",
@@ -947,7 +946,8 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
           stationId: ticketItems.stationId,
         })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, orderId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, orderId));
       const before = new Set((await printJobsFor(tx)).map((job) => job.id));
       await enqueueCorrectionSlips(
         tx,
@@ -994,7 +994,8 @@ describe("correction slips for a station with no printer", () => {
           stationId: ticketItems.stationId,
         })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, orderId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, orderId));
       expect(fired).toHaveLength(2);
       const before = new Set((await printJobsFor(tx)).map((job) => job.id));
       await enqueueCorrectionSlips(
@@ -1028,7 +1029,8 @@ describe("every correction reaches the station as a notice, printer or not", () 
           stationId: ticketItems.stationId,
         })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, orderId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, orderId));
       await enqueueCorrectionSlips(
         tx,
         cfg,
@@ -1068,7 +1070,8 @@ describe("every correction reaches the station as a notice, printer or not", () 
           stationId: ticketItems.stationId,
         })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, orderId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, orderId));
       const before = new Set((await printJobsFor(tx)).map((job) => job.id));
       await enqueueCorrectionSlips(
         tx,
@@ -1226,7 +1229,8 @@ describe("a dish sold by the piece prints no unit", () => {
           quantity: ticketItems.quantity,
         })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, orderId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, orderId));
       const before = new Set((await printJobsFor(tx)).map((job) => job.id));
       await enqueueCorrectionSlips(
         tx,
@@ -1938,7 +1942,8 @@ describe("dish extras on kitchen tickets", () => {
           stationId: ticketItems.stationId,
         })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, orderId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, orderId));
       const before = new Set((await printJobsFor(tx)).map((job) => job.id));
       await enqueueCorrectionSlips(
         tx,
@@ -2037,7 +2042,8 @@ describe("dish extras on kitchen tickets", () => {
       const ticketItemRows = await tx
         .select({ workingOrderLineId: ticketItems.workingOrderLineId })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, orderId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, orderId));
       return { orderId, parentLineId: parent.id, ticketItemRows };
     });
 
@@ -2222,7 +2228,8 @@ describe("dish extras on kitchen tickets", () => {
           stationId: ticketItems.stationId,
         })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, orderId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, orderId));
       return { stationId: barStation.id, ticketItemRows };
     });
 
@@ -2659,7 +2666,8 @@ describe("a station printer that was deleted", () => {
           stationId: ticketItems.stationId,
         })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, orderId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, orderId));
       await enqueueCorrectionSlips(
         tx,
         cfg,
@@ -3002,7 +3010,9 @@ describe("A803 portion grouping", () => {
       })
       .from(ticketItems)
       .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(and(eq(ticketItems.workingOrderId, orderId), eq(ticketItems.stationId, stationId)));
+      .where(
+        and(eq(workingOrderLines.workingOrderId, orderId), eq(ticketItems.stationId, stationId)),
+      );
     return rows
       .sort((a, b) => a.lineNo - b.lineNo)
       .map((row) => ({

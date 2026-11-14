@@ -894,7 +894,7 @@ describe("paying a parked pay-first order over POST /api/sales sends its dishes 
         (
           await suite.db.execute<{ items: number; fired: number }>(
             sql`select count(*) as items, count(fired_at) as fired from ticket_items
-                where working_order_id = ${id}`,
+                where working_order_line_id in (select id from working_order_lines where working_order_id = ${id})`,
           )
         ).rows[0];
       // The kitchen's items stand for one cohort's portions 1 and 2, each on its own dish line.
@@ -905,7 +905,7 @@ describe("paying a parked pay-first order over POST /api/sales sends its dishes 
                 from ticket_items ti
                 join working_line_portions wlp on wlp.working_order_line_id = ti.working_order_line_id
                 join order_portions p on p.id = wlp.portion_id
-                where ti.working_order_id = ${id}
+                where ti.working_order_line_id in (select id from working_order_lines where working_order_id = ${id})
                 order by p.ordinal`,
           )
         ).rows;

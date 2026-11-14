@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedClosingBody } from "./testing/party-close-fixture.js";
@@ -581,10 +582,9 @@ describe("department transfer till writes", () => {
           .select()
           .from(workingLineContexts)
           .where(eq(workingLineContexts.workingOrderLineId, lineRows[0]!.id));
-        const kitchen = await tx
-          .select()
-          .from(ticketItems)
-          .where(eq(ticketItems.workingOrderId, f.tab));
+        const kitchen = await ticketItemsWithBill(tx).where(
+          eq(workingOrderLines.workingOrderId, f.tab),
+        );
         const recordedSales = await tx.select().from(sales).where(eq(sales.workingOrderId, f.tab));
         const recordedLines = await tx
           .select()
@@ -869,10 +869,9 @@ describe("department transfer durable reads", () => {
       .select()
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, f.tab));
-    const [ticket] = await suite.db
-      .select()
-      .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, f.tab));
+    const [ticket] = await ticketItemsWithBill(suite.db).where(
+      eq(workingOrderLines.workingOrderId, f.tab),
+    );
     await suite.db.update(workingOrders).set({ revision: 7 }).where(eq(workingOrders.id, f.tab));
     await suite.db
       .update(ticketItems)
@@ -1035,10 +1034,9 @@ describe("department transfer read boundaries", () => {
       personId,
     );
     const id = await pending(f);
-    const [ticket] = await suite.db
-      .select()
-      .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, f.tab));
+    const [ticket] = await ticketItemsWithBill(suite.db).where(
+      eq(workingOrderLines.workingOrderId, f.tab),
+    );
     expect(
       (await get(f.desk.cookie, `/api/department-transfers/${id}`)).body.outstandingWork,
     ).toEqual([expect.objectContaining({ id: ticket!.id })]);
@@ -1075,10 +1073,9 @@ describe("department transfer read boundaries", () => {
       personId,
     );
     const id = await pending(f);
-    const [ticket] = await suite.db
-      .select()
-      .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, f.tab));
+    const [ticket] = await ticketItemsWithBill(suite.db).where(
+      eq(workingOrderLines.workingOrderId, f.tab),
+    );
     const requestedAt = "2026-11-03T10:00:00.000Z";
     await suite.db
       .update(ticketItems)
@@ -1121,10 +1118,9 @@ describe("department transfer read boundaries", () => {
         personId,
       );
       const id = await pending(f);
-      const [ticket] = await suite.db
-        .select()
-        .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, f.tab));
+      const [ticket] = await ticketItemsWithBill(suite.db).where(
+        eq(workingOrderLines.workingOrderId, f.tab),
+      );
       await suite.db
         .update(workingOrderLines)
         .set({ servedQuantity: served })
@@ -1138,10 +1134,9 @@ describe("department transfer read boundaries", () => {
           .select()
           .from(workingOrderLines)
           .where(eq(workingOrderLines.workingOrderId, f.tab)),
-        tickets: await suite.db
-          .select()
-          .from(ticketItems)
-          .where(eq(ticketItems.workingOrderId, f.tab)),
+        tickets: await ticketItemsWithBill(suite.db).where(
+          eq(workingOrderLines.workingOrderId, f.tab),
+        ),
         transfer: await state(f.tab),
       };
       const detail = await get(f.desk.cookie, `/api/department-transfers/${id}`);
@@ -1154,10 +1149,9 @@ describe("department transfer read boundaries", () => {
           .select()
           .from(workingOrderLines)
           .where(eq(workingOrderLines.workingOrderId, f.tab)),
-        tickets: await suite.db
-          .select()
-          .from(ticketItems)
-          .where(eq(ticketItems.workingOrderId, f.tab)),
+        tickets: await ticketItemsWithBill(suite.db).where(
+          eq(workingOrderLines.workingOrderId, f.tab),
+        ),
         transfer: await state(f.tab),
       }).toEqual(before);
     },
@@ -1657,10 +1651,9 @@ describe("human transfer identities", () => {
       personId,
     );
     const id = await pending(f);
-    const [ticket] = await suite.db
-      .select()
-      .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, f.tab));
+    const [ticket] = await ticketItemsWithBill(suite.db).where(
+      eq(workingOrderLines.workingOrderId, f.tab),
+    );
     const [station] = await suite.db
       .select()
       .from(kitchenStations)
@@ -1703,7 +1696,7 @@ describe("human transfer identities", () => {
       .select({ id: ticketItems.id, name: workingOrderLines.name })
       .from(ticketItems)
       .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(ticketItems.workingOrderId, f.tab));
+      .where(eq(workingOrderLines.workingOrderId, f.tab));
     expect(items.map((item) => item.name).sort()).toEqual(["Burger", "Paella"]);
     for (const item of items)
       await suite.db

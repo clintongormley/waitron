@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { createTableKitchenOrder } from "./testing/kitchen-table-order.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -158,10 +159,9 @@ describe("device made-here stations", () => {
         .from(ticketItems)
         .where(eq(ticketItems.workingOrderLineId, drink.id));
       expect(after).toEqual(made);
-      const allMade = await tx
-        .select()
-        .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, orderId));
+      const allMade = await ticketItemsWithBill(tx).where(
+        eq(workingOrderLines.workingOrderId, orderId),
+      );
       for (const item of allMade.filter((item) => item.madeHere)) {
         expect(item.firedAt).toEqual(expect.any(String));
         expect(item.state).toBe("ready");
@@ -266,10 +266,9 @@ describe("device made-here stations", () => {
       const bar = await rawLine(tx, orderId, venue.coffeeId, 1);
       const food = await rawLine(tx, orderId, venue.waterId, 2);
       await fireLines(tx, { ...venue.cfg, sendingDeviceId: deviceId }, orderId, [bar, food]);
-      const items = await tx
-        .select()
-        .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, orderId));
+      const items = await ticketItemsWithBill(tx).where(
+        eq(workingOrderLines.workingOrderId, orderId),
+      );
       expect(items.find((item) => item.workingOrderLineId === bar.id)).toMatchObject({
         madeHere: true,
         state: "ready",
@@ -332,10 +331,9 @@ describe("device made-here stations", () => {
           ]),
         },
       );
-      const items = await tx
-        .select()
-        .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, orderId));
+      const items = await ticketItemsWithBill(tx).where(
+        eq(workingOrderLines.workingOrderId, orderId),
+      );
       expect(items.map((item) => item.madeHere)).toEqual([false, false]);
       expect(
         await tx.select().from(printJobs).where(eq(printJobs.printerId, printer)),
@@ -434,10 +432,9 @@ describe("device made-here stations", () => {
       const drink = await rawLine(tx, orderId, venue.coffeeId, 1, first.id);
       const burger = await rawLine(tx, orderId, venue.waterId, 2, second.id);
       await fireLines(tx, { ...venue.cfg, sendingDeviceId: deviceId }, orderId, [drink, burger]);
-      const initial = await tx
-        .select()
-        .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, orderId));
+      const initial = await ticketItemsWithBill(tx).where(
+        eq(workingOrderLines.workingOrderId, orderId),
+      );
       expect(initial.find((item) => item.workingOrderLineId === drink.id)).toMatchObject({
         madeHere: true,
         state: "ready",

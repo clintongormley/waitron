@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { eq, inArray, sql, type Query } from "drizzle-orm";
@@ -78,10 +79,9 @@ async function history(tx: Transaction, billId: string, count = 256, leaveOpen =
     .select()
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, billId));
-  const [ticket] = await tx
-    .select()
-    .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, billId));
+  const [ticket] = await ticketItemsWithBill(tx).where(
+    eq(workingOrderLines.workingOrderId, billId),
+  );
   const ids = Array.from({ length: count }, () => ({ bill: randomUUID(), line: randomUUID() }));
   await insertInChunks(
     tx,
@@ -226,7 +226,11 @@ describe("current service reads with collected history", () => {
       expect(items).toHaveLength(3);
       for (const plan of items) {
         expect(plan.lookupBills).toEqual([venue.party.tabId]);
-        expect(plan.details.join("\n")).toContain("ticket_items_order_idx");
+        expect(plan.details.join("\n")).toContain("ticket_items_working_order_line_id_key");
+        expect(plan.details.join("\n")).toMatch(
+          /SEARCH working_order_lines USING (?:COVERING )?INDEX working_order_lines_(?:order_idx|line_no_key) \(working_order_id=\?\)/,
+        );
+        expect(plan.details.join("\n")).not.toMatch(/SCAN (?:ticket_items|working_order_lines)\b/);
         expect(plan.details.join("\n")).not.toContain("ticket_items_waiting_idx");
         expect(plan.details.join("\n")).not.toContain("ticket_items_queue_idx");
       }

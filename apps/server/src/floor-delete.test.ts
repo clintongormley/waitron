@@ -260,7 +260,15 @@ describe("floor hierarchy deletion", () => {
     const made = await delivery(table, "F made here");
     await pay(v, made, "20.00");
     await inTx(v, (tx) =>
-      tx.update(ticketItems).set({ madeHere: true }).where(eq(ticketItems.workingOrderId, made)),
+      tx
+        .update(ticketItems)
+        .set({ madeHere: true })
+        .where(
+          inArray(
+            ticketItems.workingOrderLineId,
+            sql`(select id from working_order_lines where working_order_id = ${made})`,
+          ),
+        ),
     );
     const before = await inTx(v, snapshot);
     expect((await impact([z])).refusals).toEqual(

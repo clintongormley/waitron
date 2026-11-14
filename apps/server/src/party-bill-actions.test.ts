@@ -531,10 +531,10 @@ describe("a held dish split onto a check", () => {
       where sale_id in (select id from sales where working_order_id = ${billId})`);
   const flanTickets = (partyId: string) =>
     v.db.all(sql`
-      select t.working_order_id as billId, t.fired_at is not null as fired
+      select l.working_order_id as billId, t.fired_at is not null as fired
       from ticket_items t
       join working_order_lines l on l.id = t.working_order_line_id
-      join working_orders o on o.id = t.working_order_id
+      join working_orders o on o.id = l.working_order_id
       where o.party_id = ${partyId} and l.name = 'Flan'`);
 
   async function fireHeld(partyId: string, groupId: string): Promise<void> {
@@ -1391,7 +1391,7 @@ describe("sent work moved between a party's bills at two of its tables", () => {
   /** A new printer at the one station the bill's sent work went to. */
   async function printerFor(billId: string): Promise<string> {
     const stations = v.db.all<{ stationId: string }>(sql`
-      select distinct station_id as stationId from ticket_items where working_order_id = ${billId}`);
+      select distinct station_id as stationId from ticket_items where working_order_line_id in (select id from working_order_lines where working_order_id = ${billId})`);
     expect(stations).toHaveLength(1);
     return inTx(v, async (tx) => {
       const { id } = await createPrinter(tx, {

@@ -1,7 +1,8 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, sql, inArray } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { ticketItems, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -173,7 +174,12 @@ describe("pass screen", () => {
     await suite.db
       .update(ticketItems)
       .set({ madeHere: true })
-      .where(eq(ticketItems.workingOrderId, outside.tabId));
+      .where(
+        inArray(
+          ticketItems.workingOrderLineId,
+          sql`(select id from working_order_lines where working_order_id = ${outside.tabId})`,
+        ),
+      );
     await suite.db.execute(
       sql`update working_orders set status = 'abandoned' where id = ${inside.tabId}`,
     );
@@ -188,7 +194,7 @@ describe("pass screen", () => {
     const party = await seat(v, await v.table("Split table"));
     await orderForParty(v, party.partyId, ["Burger"], party.tabId);
     const [item] = await inTx(v, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, party.tabId)),
     );
     await inTx(v, async (tx) => {
       await tx
@@ -203,7 +209,8 @@ describe("pass screen", () => {
         tx
           .select({ id: ticketItems.id })
           .from(ticketItems)
-          .where(eq(ticketItems.workingOrderId, party.tabId)),
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+          .where(eq(workingOrderLines.workingOrderId, party.tabId)),
       )
     ).map((row) => row.id);
     expect(itemIds).toHaveLength(2);
@@ -309,12 +316,9 @@ describe("pass monitor", () => {
     expect(names(terraceOnly).sort()).toEqual(["BURG", "CANA"]);
 
     const [burger] = await inTx(v, (tx) =>
-      tx
-        .select()
-        .from(ticketItems)
-        .where(
-          and(eq(ticketItems.workingOrderId, outside.tabId), eq(ticketItems.stationId, grill)),
-        ),
+      ticketItemsWithBill(tx).where(
+        and(eq(workingOrderLines.workingOrderId, outside.tabId), eq(ticketItems.stationId, grill)),
+      ),
     );
 
     expect(boardOrderIds(await read(v, EVERY))).toContain(outside.tabId);

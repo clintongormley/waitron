@@ -336,7 +336,8 @@ describe("A773 pass release: set and stamps", () => {
       const [counterItem] = await tx
         .select({ id: ticketItems.id })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, counterId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, counterId));
       return {
         tabBurger: await ticketItemOf(tx, group.lineIds[0]!),
         counterId,

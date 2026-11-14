@@ -1077,7 +1077,8 @@ describe("a cancel's approval (A758 D12, D13)", () => {
           tx
             .select({ requestedAt: ticketItems.requestedAt, firedAt: ticketItems.firedAt })
             .from(ticketItems)
-            .where(eq(ticketItems.workingOrderId, billId)),
+            .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+            .where(eq(workingOrderLines.workingOrderId, billId)),
         ),
       ).toEqual([{ requestedAt: expect.any(String), firedAt: null }]);
       expect(await preview(billId, await cancel(billId))).toMatchObject({ needsApproval: null });
@@ -1400,7 +1401,8 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
         tx
           .select({ requestedAt: ticketItems.requestedAt, firedAt: ticketItems.firedAt })
           .from(ticketItems)
-          .where(eq(ticketItems.workingOrderId, billId)),
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+          .where(eq(workingOrderLines.workingOrderId, billId)),
       );
       expect(waiting).toEqual([{ requestedAt: expect.any(String), firedAt: null }]);
       await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "comp" });
@@ -3204,7 +3206,8 @@ describe("part of a dish with extras (B11d)", () => {
       tx
         .select({ lineId: ticketItems.workingOrderLineId, quantity: ticketItems.quantity })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, billId)),
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, billId)),
     );
     expect(items).toEqual(
       expect.arrayContaining([
@@ -3850,7 +3853,8 @@ async function ticketItemCount(billId: string): Promise<number> {
     tx
       .select({ id: ticketItems.id })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, billId)),
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, billId)),
   );
   return rows.length;
 }

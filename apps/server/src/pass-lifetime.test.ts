@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -63,7 +64,7 @@ describe.each(["table", "counter"] as const)("A773 no dispatch projection: %s", 
               const id = await counterOrder(v, "Burger");
               await pay(v, id, "12.00");
               const [item] = await inTx(v, (tx) =>
-                tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, id)),
+                ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, id)),
               );
               await inTx(v, async (tx) => {
                 await advanceTicketItem(tx, item!.id, "preparing");
@@ -122,7 +123,7 @@ async function tableWork(quantity = "1", shape?: "grouped") {
         }),
   );
   const [item] = await inTx(v, (tx) =>
-    tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+    ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, party.tabId)),
   );
   await inTx(v, async (tx) => {
     await advanceTicketItem(tx, item!.id, "preparing");
@@ -221,7 +222,7 @@ describe("A773 lifetime", () => {
     const id = await counterOrder(v, "Burger");
     await pay(v, id, "12.00");
     const [item] = await inTx(v, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, id)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, id)),
     );
     await inTx(v, async (tx) => {
       await advanceTicketItem(tx, item!.id, "preparing");
@@ -243,7 +244,7 @@ describe("A773 lifetime", () => {
     const id = await counterOrder(v, "Burger");
     await pay(v, id, "12.00");
     const [item] = await inTx(v, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, id)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, id)),
     );
     await inTx(v, async (tx) => {
       await tx.execute(sql`delete from order_service_contexts where working_order_id = ${id}`);
@@ -365,7 +366,7 @@ describe("a dish the waiter serves leaves the station's screen, as it leaves the
     };
     await inTx(v, (tx) => placeGroupedRound(tx, v.cfg, party, group, OPERATOR));
     const [item, ...others] = await inTx(v, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, party.tabId)),
     );
     expect(others).toEqual([]);
     expect(item).toMatchObject(

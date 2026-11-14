@@ -112,7 +112,7 @@ export function waitingDishesQuery(tx: Transaction, now: Date, stationIds?: read
     .from(kitchenStations)
     .innerJoin(ticketItems, eq(ticketItems.stationId, kitchenStations.id))
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .where(
       and(
         stationIds === undefined ? undefined : inArray(kitchenStations.id, [...stationIds]),

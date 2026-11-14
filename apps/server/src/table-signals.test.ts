@@ -3,7 +3,7 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
-import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, sql, inArray } from "drizzle-orm";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -106,7 +106,7 @@ async function makeReady(v: PartyVenue, billId: string, name: string): Promise<v
       .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
       .where(
         and(
-          eq(ticketItems.workingOrderId, billId),
+          eq(workingOrderLines.workingOrderId, billId),
           eq(workingOrderLines.name, name),
           isNotNull(ticketItems.firedAt),
         ),
@@ -122,7 +122,15 @@ async function makeReady(v: PartyVenue, billId: string, name: string): Promise<v
 async function queuedAgo(v: PartyVenue, billId: string, minutes: number): Promise<void> {
   const at = new Date(Date.now() - minutes * 60_000).toISOString();
   await inTx(v, (tx) =>
-    tx.update(ticketItems).set({ queuedAt: at }).where(eq(ticketItems.workingOrderId, billId)),
+    tx
+      .update(ticketItems)
+      .set({ queuedAt: at })
+      .where(
+        inArray(
+          ticketItems.workingOrderLineId,
+          sql`(select id from working_order_lines where working_order_id = ${billId})`,
+        ),
+      ),
   );
 }
 
@@ -146,7 +154,7 @@ async function readyAtOf(v: PartyVenue, billId: string, name: string): Promise<s
       .select({ at: sql<string>`min(${ticketItems.readyAt})` })
       .from(ticketItems)
       .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(and(eq(ticketItems.workingOrderId, billId), eq(workingOrderLines.name, name))),
+      .where(and(eq(workingOrderLines.workingOrderId, billId), eq(workingOrderLines.name, name))),
   );
   expect(row!.at).toEqual(expect.any(String));
   return row!.at;
@@ -334,7 +342,15 @@ describe("the floor's attention signals", () => {
       tx
         .update(ticketItems)
         .set({ madeHere: true })
-        .where(and(eq(ticketItems.workingOrderId, tabId), eq(ticketItems.stationId, bar))),
+        .where(
+          and(
+            inArray(
+              ticketItems.workingOrderLineId,
+              sql`(select id from working_order_lines where working_order_id = ${tabId})`,
+            ),
+            eq(ticketItems.stationId, bar),
+          ),
+        ),
     );
     expect((await floorRow(v, table2)).signals).toEqual([]);
   });
@@ -1228,7 +1244,8 @@ describe("a ready dish a cook puts back to Preparing", () => {
             readyAt: ticketItems.readyAt,
           })
           .from(ticketItems)
-          .where(eq(ticketItems.workingOrderId, tabId)),
+          .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+          .where(eq(workingOrderLines.workingOrderId, tabId)),
       );
       return row!;
     };

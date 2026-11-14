@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -111,10 +112,9 @@ async function dish(station = grill) {
   const tableName = `Dish ${randomUUID()}`;
   const group = await seat(v, await v.table(tableName));
   await orderForParty(v, group.partyId, ["Burger"], group.tabId);
-  const [item] = await suite.db
-    .select()
-    .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, group.tabId));
+  const [item] = await ticketItemsWithBill(suite.db).where(
+    eq(workingOrderLines.workingOrderId, group.tabId),
+  );
   expect(item!.stationId).toBe(station);
   return { ...item!, tableName };
 }
@@ -417,7 +417,7 @@ it("Permitted Delete removes routing cell and sends new work to the default", as
   await orderForParty(v, group.partyId, ["Burger"], group.tabId);
   expect(
     (
-      await suite.db.select().from(ticketItems).where(eq(ticketItems.workingOrderId, group.tabId))
+      await ticketItemsWithBill(suite.db).where(eq(workingOrderLines.workingOrderId, group.tabId))
     )[0]!.stationId,
   ).toBe(bar);
   const { routingCells } = await import("@waitron/venue-service");
@@ -489,10 +489,9 @@ it.each(["leave", "send", "move", "split"] as const)(
         billId: seated.tabId,
       }),
     );
-    const [item] = await suite.db
-      .select()
-      .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, seated.tabId));
+    const [item] = await ticketItemsWithBill(suite.db).where(
+      eq(workingOrderLines.workingOrderId, seated.tabId),
+    );
     expect(item).toMatchObject({
       stationId: grill,
       firedAt: null,
@@ -533,10 +532,9 @@ it.each(["leave", "send", "move", "split"] as const)(
         });
         await carveOffLines(tx, v.cfg, seated.tabId, otherBill, [{ lineNo: 1, quantity: "1" }], {});
       });
-      const split = await suite.db
-        .select()
-        .from(ticketItems)
-        .where(inArray(ticketItems.workingOrderId, billIds));
+      const split = await ticketItemsWithBill(suite.db).where(
+        inArray(workingOrderLines.workingOrderId, billIds),
+      );
       expect(split).toHaveLength(2);
       for (const row of split)
         expect(row).toMatchObject({
@@ -583,10 +581,9 @@ it.each(["leave", "send", "move", "split"] as const)(
     if (openDishes !== "move") expect(after!.stationChosenAt).toBe(retained!.stationChosenAt);
     expect(after!.firedAt).not.toBeNull();
     if (openDishes === "split") {
-      const split = await suite.db
-        .select()
-        .from(ticketItems)
-        .where(inArray(ticketItems.workingOrderId, billIds));
+      const split = await ticketItemsWithBill(suite.db).where(
+        inArray(workingOrderLines.workingOrderId, billIds),
+      );
       expect(split).toHaveLength(2);
       for (const row of split) {
         expect(row).toMatchObject({ stationId: grill, stationRetainedAtRelease: false });

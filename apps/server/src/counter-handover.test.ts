@@ -136,7 +136,7 @@ async function orderRow(id: string) {
 
 function ticketItemCount(id: string): number {
   const [row] = venue.db.all<{ count: number }>(
-    sql`select count(*) as count from ticket_items where working_order_id = ${id}`,
+    sql`select count(*) as count from ticket_items where working_order_line_id in (select id from working_order_lines where working_order_id = ${id})`,
   );
   return Number(row!.count);
 }
@@ -452,7 +452,7 @@ async function waitingRow(id: string): Promise<Record<string, unknown> | undefin
 /** How many of the stations this order's dishes went to list it on their queue, of how many. */
 async function stationQueuesListing(id: string): Promise<{ listing: number; stations: number }> {
   const stations = venue.db.all<{ stationId: string }>(
-    sql`select distinct station_id as stationId from ticket_items where working_order_id = ${id}`,
+    sql`select distinct station_id as stationId from ticket_items where working_order_line_id in (select id from working_order_lines where working_order_id = ${id})`,
   );
   let listing = 0;
   for (const { stationId } of stations) {
@@ -929,7 +929,7 @@ describe("GET /api/orders/counter-waiting", () => {
       venue.db
         .all<{ lineId: string; stationId: string }>(
           sql`select working_order_line_id as lineId, station_id as stationId
-              from ticket_items where working_order_id = ${id}`,
+              from ticket_items where working_order_line_id in (select id from working_order_lines where working_order_id = ${id})`,
         )
         .map((row) => [row.lineId, row.stationId]),
     );
@@ -938,9 +938,9 @@ describe("GET /api/orders/counter-waiting", () => {
     expect(stationOf.has(extra)).toBe(false);
     venue.db.run(
       sql`insert into ticket_items
-            (id, working_order_id, working_order_line_id, station_id, state, queued_at,
+            (id, working_order_line_id, station_id, state, queued_at,
              fired_at, quantity, made_here)
-          select ${randomUUID()}, working_order_id, ${extra}, station_id, 'queued',
+          select ${randomUUID()}, ${extra}, station_id, 'queued',
                  queued_at, fired_at, quantity, 0
           from ticket_items where working_order_line_id = ${queued}`,
     );
@@ -964,7 +964,7 @@ describe("GET /api/orders/counter-waiting", () => {
     expect((await waitingRow(id))?.counts).toEqual({ ...oneDish, waiting: 1 });
 
     const [item] = venue.db.all<{ id: string }>(
-      sql`select id from ticket_items where working_order_id = ${id}`,
+      sql`select id from ticket_items where working_order_line_id in (select id from working_order_lines where working_order_id = ${id})`,
     );
     await inTx(venue, async (tx) => {
       await advanceTicketItem(tx, item!.id, "preparing");

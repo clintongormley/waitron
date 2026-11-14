@@ -56,7 +56,7 @@ async function stationDeleteRules(tx: Transaction, id: string) {
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .where(
       and(
         eq(ticketItems.stationId, id),

@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -106,10 +107,8 @@ async function snapshot(order: Fixture) {
       .select()
       .from(lineServiceCancellations)
       .where(eq(lineServiceCancellations.lineId, order.parent.id)),
-    tickets: await tx
-      .select()
-      .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, order.billId))
+    tickets: await ticketItemsWithBill(tx)
+      .where(eq(workingOrderLines.workingOrderId, order.billId))
       .orderBy(ticketItems.workingOrderLineId),
     jobs: await tx.select().from(printJobs).orderBy(printJobs.id),
     adjustments: await tx

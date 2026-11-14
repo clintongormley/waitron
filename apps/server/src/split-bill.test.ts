@@ -321,7 +321,9 @@ async function linesWithTickets(orderId: string) {
       note: workingOrderLines.note,
       extraListId: workingOrderLines.extraListId,
       ticketId: ticketItems.id,
-      ticketOrderId: ticketItems.workingOrderId,
+      ticketOrderId: sql<
+        string | null
+      >`case when ${ticketItems.id} is not null then ${workingOrderLines.workingOrderId} end`,
       ticketQuantity: ticketItems.quantity,
       ticketState: ticketItems.state,
     })

@@ -162,7 +162,12 @@ it.each(["none", "served", "made-here", "collected", "abandoned"] as const)(
         await tx
           .update(ticketItems)
           .set({ madeHere: true })
-          .where(eq(ticketItems.workingOrderId, p.tabId));
+          .where(
+            inArray(
+              ticketItems.workingOrderLineId,
+              sql`(select id from working_order_lines where working_order_id = ${p.tabId})`,
+            ),
+          );
       if (kind === "collected")
         await tx
           .update(workingOrders)

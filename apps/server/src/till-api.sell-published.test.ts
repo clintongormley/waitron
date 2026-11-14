@@ -917,7 +917,8 @@ describe("who may order a product on its own (spec §9, D12)", () => {
     const tickets = await suite.db
       .select({ lineId: ticketItems.workingOrderLineId })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, id));
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, id));
     expect(tickets).toEqual([{ lineId: stored!.id }]);
   });
 
@@ -974,7 +975,7 @@ describe("who may order a product on its own (spec §9, D12)", () => {
         .select({ productId: workingOrderLines.productId, firedAt: ticketItems.firedAt })
         .from(ticketItems)
         .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(ticketItems.workingOrderId, party.tabId));
+        .where(eq(workingOrderLines.workingOrderId, party.tabId));
     expect(await ticketed()).toEqual([{ productId: bacon.productId, firedAt: null }]);
 
     const fired = await send(

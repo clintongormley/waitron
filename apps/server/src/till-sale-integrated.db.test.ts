@@ -379,7 +379,7 @@ async function fiscalRecordCount(workingOrderId: string): Promise<number> {
 
 async function preparationTicketCount(workingOrderId: string): Promise<number> {
   const rows = suite.db.all<{ count: string }>(sql`
-    select cast(count(*) as text) as count from ticket_items where working_order_id = ${workingOrderId}
+    select cast(count(*) as text) as count from ticket_items where working_order_line_id in (select id from working_order_lines where working_order_id = ${workingOrderId})
   `);
   return Number(rows[0]!.count);
 }

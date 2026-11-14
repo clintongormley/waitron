@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
@@ -48,10 +49,8 @@ async function snapshot(billId: string) {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, billId))
       .orderBy(workingOrderLines.lineNo),
-    items: await tx
-      .select()
-      .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, billId))
+    items: await ticketItemsWithBill(tx)
+      .where(eq(workingOrderLines.workingOrderId, billId))
       .orderBy(ticketItems.id),
   }));
 }

@@ -651,7 +651,6 @@ CREATE TABLE `kitchen_courses` (
 CREATE UNIQUE INDEX `kitchen_courses_name_key` ON `kitchen_courses` (`name`) WHERE "kitchen_courses"."active" = 1;--> statement-breakpoint
 CREATE TABLE `ticket_items` (
 	`id` text PRIMARY KEY NOT NULL,
-	`working_order_id` text NOT NULL,
 	`working_order_line_id` text NOT NULL,
 	`station_id` text NOT NULL,
 	`state` text DEFAULT 'queued' NOT NULL,
@@ -711,7 +710,6 @@ CREATE TABLE `ticket_items` (
 );
 --> statement-breakpoint
 CREATE INDEX `ticket_items_queue_idx` ON `ticket_items` (`station_id`,`state`);--> statement-breakpoint
-CREATE INDEX `ticket_items_order_idx` ON `ticket_items` (`working_order_id`);--> statement-breakpoint
 CREATE INDEX `ticket_items_course_idx` ON `ticket_items` (`course_id`);--> statement-breakpoint
 CREATE INDEX `ticket_items_waiting_idx` ON `ticket_items` (`station_id`,`state`,`fired_at`);--> statement-breakpoint
 CREATE UNIQUE INDEX `ticket_items_working_order_line_id_key` ON `ticket_items` (`working_order_line_id`);--> statement-breakpoint

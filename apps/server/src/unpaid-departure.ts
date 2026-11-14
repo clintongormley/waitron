@@ -3,7 +3,7 @@ import { requireEconomicWrite, type TradingAdmission } from "./trading-admission
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { clearBillRequestIfPaid } from "./bill-request.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
-import { and, inArray, isNull } from "drizzle-orm";
+import { and, inArray, isNull, eq, getTableColumns } from "drizzle-orm";
 import {
   lineServiceCancellations,
   nowIso,
@@ -209,9 +209,10 @@ async function stopDepartureKitchen(
     );
   const ids = bills.map((bill) => bill.id);
   const tickets = await tx
-    .select()
+    .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
     .from(ticketItems)
-    .where(inArray(ticketItems.workingOrderId, ids));
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(inArray(workingOrderLines.workingOrderId, ids));
   const remote = new Set(
     tickets.filter((item) => !item.madeHere).map((item) => item.workingOrderLineId),
   );

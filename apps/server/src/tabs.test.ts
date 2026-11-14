@@ -423,7 +423,8 @@ describe("addTabRound (append-only, no re-price)", () => {
     const fired = await db
       .select({ workingOrderLineId: ticketItems.workingOrderLineId })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, tabId));
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, tabId));
     expect(fired).toEqual([{ workingOrderLineId: parent!.id }]);
   });
 
@@ -1345,7 +1346,8 @@ async function sentState(orderId: string): Promise<
       firedAt: ticketItems.firedAt,
     })
     .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, orderId));
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(eq(workingOrderLines.workingOrderId, orderId));
   const ticketByLine = new Map(tickets.map((t) => [t.lineId, t]));
   return lines.map((line) => {
     const ticket = ticketByLine.get(line.id);
@@ -1556,7 +1558,8 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
     const [{ stationId }] = await db
       .select({ stationId: ticketItems.stationId })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, tabId));
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, tabId));
     const queued = async () =>
       asApp(cfg, async (tx) => ({
         station: (await listStationQueue(tx, stationId!))[0]!.items[0]!.quantity,
@@ -1567,7 +1570,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
 
     // A ticket fired before the column existed carries no quantity.
     await db.execute(
-      sql`update ticket_items set quantity = null where working_order_id = ${tabId}`,
+      sql`update ticket_items set quantity = null where working_order_line_id in (select id from working_order_lines where working_order_id = ${tabId})`,
     );
     expect(await queued()).toEqual({ station: "3.000", expo: "3.000" });
   });
@@ -1786,13 +1789,9 @@ async function heldDishWithExtraApart() {
     vatClass: "general",
     groupId: dish!.groupId,
   });
-  await db.insert(ticketItems).values({
-    workingOrderId: tabId,
-    workingOrderLineId: extraId,
-    stationId: sideId,
-    state: "queued",
-    firedAt: null,
-  });
+  await db
+    .insert(ticketItems)
+    .values({ workingOrderLineId: extraId, stationId: sideId, state: "queued", firedAt: null });
   const dishTicket = await ticketOfLine(tabId, 1);
   return { ...venue, tabId, sideId, dishStationId: dishTicket.stationId };
 }

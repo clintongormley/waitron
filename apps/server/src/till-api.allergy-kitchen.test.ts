@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -5,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { kitchenStations, ticketItems } from "@waitron/db";
+import { kitchenStations, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashSessionToken, sessions } from "@waitron/identity";
@@ -68,10 +69,9 @@ async function fixture() {
       },
     }),
   );
-  const [ticket] = await v.db
-    .select()
-    .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, party.tabId));
+  const [ticket] = await ticketItemsWithBill(v.db).where(
+    eq(workingOrderLines.workingOrderId, party.tabId),
+  );
   const [station] = await v.db
     .select()
     .from(kitchenStations)

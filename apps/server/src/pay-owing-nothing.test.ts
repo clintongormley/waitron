@@ -14,6 +14,7 @@ import {
   sales,
   ticketItems,
   workingOrders,
+  workingOrderLines,
 } from "@waitron/db";
 import { createProduct } from "@waitron/catalogue";
 import { payments } from "@waitron/payments";
@@ -130,7 +131,8 @@ async function ticketCount(billId: string): Promise<number> {
     tx
       .select({ id: ticketItems.id })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, billId)),
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, billId)),
   );
   return items.length;
 }

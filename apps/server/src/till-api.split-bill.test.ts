@@ -278,7 +278,7 @@ describe("POST /api/bills/:id/merge of a check back into the tab it was split fr
       })
       .from(ticketItems)
       .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(ticketItems.workingOrderId, orderId))
+      .where(eq(workingOrderLines.workingOrderId, orderId))
       .orderBy(workingOrderLines.lineNo);
   }
 

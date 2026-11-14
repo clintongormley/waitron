@@ -2,7 +2,7 @@ import { addTabRound } from "./testing/order-writer-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { deleteCourse } from "./course-delete.js";
 import { randomUUID } from "node:crypto";
-import { eq, getTableName, sql } from "drizzle-orm";
+import { eq, getTableName, sql, inArray } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
   kitchenCourses,
@@ -87,7 +87,15 @@ describe("removing a course", () => {
     const id = await course(v);
     const tabId = await orderedWith(v, id);
     await inTx(v, (tx) =>
-      tx.update(ticketItems).set({ courseId: null }).where(eq(ticketItems.workingOrderId, tabId)),
+      tx
+        .update(ticketItems)
+        .set({ courseId: null })
+        .where(
+          inArray(
+            ticketItems.workingOrderLineId,
+            sql`(select id from working_order_lines where working_order_id = ${tabId})`,
+          ),
+        ),
     );
     expect(
       await inTx(v, (tx) =>
@@ -116,7 +124,8 @@ describe("removing a course", () => {
         tx
           .select({ courseId: ticketItems.courseId })
           .from(ticketItems)
-          .where(eq(ticketItems.workingOrderId, tabId)),
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+          .where(eq(workingOrderLines.workingOrderId, tabId)),
       ),
     ).toEqual([{ courseId: id }]);
     await inTx(v, (tx) => deleteCourse(tx, id));
