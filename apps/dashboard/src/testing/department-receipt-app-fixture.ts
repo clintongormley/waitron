@@ -19,13 +19,14 @@ export function deep(root: ShadowRoot | Element, selector: string): Element | nu
   return null;
 }
 export function venueServiceModel(
-  departments: { id: string; name?: string }[] = [{ id: "bar", name: "Bar" }],
+  departments: { id: string; name?: string; active?: boolean }[] = [{ id: "bar", name: "Bar" }],
 ) {
   return {
     departments: departments.map((department) => ({
       ...department,
       tradingName: "Casa",
-      active: true,
+      active: department.active ?? true,
+      isDefault: department.id === "bar",
     })),
     zones: [],
     floorZones: [],
@@ -50,9 +51,10 @@ export function venueServiceModel(
 export async function mountReceiptApp(
   options: {
     permissions?: string[];
+    modules?: string[];
     required?: boolean;
     path?: string;
-    departments?: { id: string; name: string }[];
+    departments?: { id: string; name: string; active?: boolean }[];
     locale?: string;
     theme?: Theme;
     respond?: (path: string, init: RequestInit) => Promise<Response> | undefined;
@@ -88,7 +90,7 @@ export async function mountReceiptApp(
         sessionDefault: "en-GB",
         venueName: "Casa SL",
         permissions,
-        modules: ["venue-service"],
+        modules: options.modules ?? ["venue-service"],
       },
       "/management-api/locales": {
         locales: [
@@ -117,6 +119,10 @@ export async function mountReceiptApp(
         topSellers: [],
       } satisfies SalesOverview,
       "/management-api/venue-service": model,
+      "/management-api/venue-service/departments-and-zones": {
+        departments: model.departments,
+        zones: [],
+      },
       "/management-api/receipt-preview": preview(),
       "/management-api/receipt": { receipt: {}, venueAddress: [] },
       "/management-api/receipt-settings": { settings: {} },

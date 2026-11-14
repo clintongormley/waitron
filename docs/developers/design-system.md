@@ -4082,7 +4082,7 @@ unreadable parent or a denied child gate removes its destinations. Click and Ent
 complete address through the draft-change question. Keep editing retains the search and drawer;
 accepted navigation clears them. Enter opens an inner destination only when no page matches.
 
-Settings inside department Details, Service and Transfers add their tab to the location, for
+Settings inside department Details, Service, Transfers and Receipt add their tab to the location, for
 example **Remind to fire the next course after — in Departments and zones / Service**. One available
 department opens directly; several open a compact chooser, including the current department.
 Open stays quiet and disabled until you choose. Cancel keeps your search. A failed read offers
