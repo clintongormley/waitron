@@ -243,7 +243,7 @@ entrada por cada uso. Cópialas en tu propio registro, sustituye cada parte en c
 haces fuera de Waitron, como las nóminas que lleva tu gestor. Dos hechos se aplican a todas las
 entradas, así que no se repiten en cada una:
 
-- Waitron no cifra la base de datos en el disco del equipo. Para la copia en el bucket,
+- Waitron no cifra la base de datos en el disco del servidor. Para la copia en el bucket,
   envía al proveedor de almacenamiento una clave de cifrado independiente derivada de tu clave de
   recuperación. Las copias programadas van cifradas con la clave de recuperación. El equipo guarda
   estas claves, así que el acceso al equipo también puede exponer las copias.
@@ -433,7 +433,7 @@ configuración para poner en marcha otro local.
   guarda una copia programada en un destino, borra de ese destino las copias que pasen de las 7 más
   recientes y las de más de 30 días, salvo que cambies esos ajustes. Antes de una copia, cuando
   al disco del equipo le quedan menos de unos 2 GB libres, o al arrancar con el disco lleno, también puede borrar sus copias más antiguas de las carpetas
-  de ese disco, nunca la más reciente de cada una. Durante un tiempo después de que el equipo ponga
+  de ese disco, nunca la más reciente de cada una. Durante un tiempo después de que el servidor ponga
   su propio reloj en hora, conserva algunas de las copias fechadas con el reloj equivocado o las borra las
   últimas; el arranque con el disco lleno aún no lo hace (lo explica [Estado del
   servidor](box-status.md#free-space)). Desactivar la copia en el bucket o las copias

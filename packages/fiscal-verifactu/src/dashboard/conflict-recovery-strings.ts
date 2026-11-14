@@ -59,21 +59,21 @@ export const CONFLICT_RECOVERY_STRINGS = {
     "conflict_recovery.not_primary":
       "Este servidor no puede emitir facturas con su función actual. Elige Detener y abre la recuperación en el servidor principal que usan tus terminales.",
     "conflict_recovery.no_conflict":
-      "Esta caja no tiene ningún conflicto activo de identidad de facturación.",
+      "Este servidor no tiene ningún conflicto activo de identidad de facturación.",
     "conflict_recovery.explanation":
-      "No se pueden emitir facturas nuevas porque la identidad de facturación de esta caja entra en conflicto con una respuesta de envío o una consulta a Hacienda. Una copia, una caja antigua que sigue facturando u otro programa de facturación podrían estar usando la misma identidad.",
+      "No se pueden emitir facturas nuevas porque la identidad de facturación de este servidor entra en conflicto con una respuesta de envío o una consulta a Hacienda. Una copia, un servidor antiguo que sigue facturando u otro programa de facturación podrían estar usando la misma identidad.",
     "conflict_recovery.preserved":
-      "El cambio conserva tus pedidos, pagos e historial. Los resultados de envío y las incidencias existentes no cambian. El cambio no repara el historial que falta ni detiene otra caja.",
-    "conflict_recovery.offline": "He desconectado la caja antigua o copiada *",
+      "El cambio conserva tus pedidos, pagos e historial. Los resultados de envío y las incidencias existentes no cambian. El cambio no repara el historial que falta ni detiene otro servidor.",
+    "conflict_recovery.offline": "He desconectado el servidor antiguo o copiado *",
     "conflict_recovery.parallel": "Nadie más está recuperando esta identidad *",
     "conflict_recovery.confirm":
       "Confirma las dos respuestas sobre el aislamiento antes de continuar.",
     "conflict_recovery.compare": "Comparar relojes",
     "conflict_recovery.switch": "Cambiar identidad",
     "conflict_recovery.clock_disagrees":
-      "Los relojes no coinciden. Comprueba el reloj de esta caja y el de este dispositivo y vuelve a compararlos, o elige Detener.",
+      "Los relojes no coinciden. Comprueba el reloj de este servidor y el de este dispositivo y vuelve a compararlos, o elige Detener.",
     "conflict_recovery.clock_missing":
-      "Un segundo reloj no ha confirmado la hora de la caja. Comprueba el reloj de este dispositivo y vuelve a compararlos, o elige Detener.",
+      "Un segundo reloj no ha confirmado la hora del servidor. Comprueba el reloj de este dispositivo y vuelve a compararlos, o elige Detener.",
     "conflict_recovery.complete": "Identidad cambiada. Nuevas series de facturas:",
     "conflict_recovery.uncertain":
       "No se ha confirmado el resultado del cambio. Consúltalo con la clave de recuperación actual. Detener no puede deshacer un cambio ya confirmado en el servidor.",
@@ -83,7 +83,7 @@ export const CONFLICT_RECOVERY_STRINGS = {
     "conflict_recovery.limited":
       "Hay demasiadas solicitudes de recuperación en curso o recientes. Espera un minuto, vuelve a introducir la clave actual e inténtalo de nuevo, o elige Detener.",
     "conflict_recovery.wait":
-      "Esperando un minuto disponible: {seconds} segundos. La caja comprueba cada cinco segundos. Vuelve a comparar los relojes cuando termine la espera; el cambio siempre requiere tu elección.",
+      "Esperando un minuto disponible: {seconds} segundos. El servidor comprueba cada cinco segundos. Vuelve a comparar los relojes cuando termine la espera; el cambio siempre requiere tu elección.",
     "conflict_recovery.leave_title": "¿Salir de la recuperación?",
     "conflict_recovery.leave_message":
       "Al salir se borran la clave de recuperación y tus confirmaciones. No se puede deshacer un cambio de identidad ya confirmado en el servidor. Abre la recuperación otra vez para consultar el resultado.",
