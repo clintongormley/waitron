@@ -540,6 +540,7 @@ A1406, A1407 and A1408.
 - **The VAT return sorts by issue date** (`computeVatReturn`), so a misdated sale lands in the wrong
   period in that report.
 - **Three identical refusals hold the rest of a chain**, so a clock a day ahead could stop later filings.
+  *(2026-11-14: since A1420 PR 2, a run of `1112` refusals holds nothing.)*
 - **Clocks running behind are not listed** for the owner, though they need the same remedy.
 - **AEAT's receipt time is read but not kept.** Stored with each record, it would prove the real time
   of most sales. It needs a column, so it waits for A760.

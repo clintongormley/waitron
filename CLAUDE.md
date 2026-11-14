@@ -916,7 +916,9 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   whichever node is primary, except that, on a box that files records and whose time service is not
   synchronised, a start, or a clock jump of over a minute once the clock watch's next look (15
   seconds after the last ends) finds it, waits for two devices or a person to confirm its time
-  before any later payment (owner, 2026-11-10; the jump, 2026-11-11): records chain locally and the outbox drains later; a card falls back to 4G, a standalone terminal or cash. The till follows
+  before any later payment (owner, 2026-11-10; the jump, 2026-11-11), and AEAT refusing as dated in
+  the future (`1112`) a record written since its time was last confirmed makes it wait for a person
+  or its time service (owner, 2026-11-10 and 2026-11-11; A1420 D9): records chain locally and the outbox drains later; a card falls back to 4G, a standalone terminal or cash. The till follows
   the primary and never chooses; only the primary sells. Fiscal submission is an outbox, never
   inline. TODAY a venue has ONE node and no failover at all. Detail:
   [conventions-data.md](docs/developers/conventions-data.md).
@@ -958,8 +960,11 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   NTP"). **A refusal by AEAT of a record dated in the future (`1112`) sends a box whose time
   service is not synchronised back to waiting once, if that record was written since the time was
   last confirmed; a box synchronised when the refusal arrives is never sent back, two devices do
-  not end that wait, and such refusals never start a hold on later records** (owner, 2026-11-10:
-  "We fix the clock we start sending correct invoices … No waiting"). Guards:
+  not end that wait, and such refusals never start a hold on later records** (the stop, owner,
+  2026-11-10 14:59: "we should respond appropriately by stopping selling and resetting the clock",
+  and 2026-11-11 14:34: "or AEAT refuses an invoice because of time"; no hold, 2026-11-10 15:31:
+  "We fix the clock we start sending correct invoices … No waiting"; devices, A1420 D9, the
+  watcher's, 2026-11-10 17:28, not the owner's). Guards:
   `apps/server/src/clock-watch.start-up.test.ts`, `apps/server/src/clock-correction.test.ts`,
   `apps/server/src/start-clock-check.test.ts`, `apps/server/src/clock-watch.future-date.test.ts`,
   `apps/server/src/boot.start-clock-gate.test.ts` and

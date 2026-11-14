@@ -306,7 +306,7 @@ correo nombran al empleado y a la caja. Cuando se usa la hora de la caja, las le
 dispositivos no lo impiden.
 
 El arranque termina en cuanto el servidor ve que el reloj ya no para los cobros. Desde entonces, en cuanto
-internet ha confirmado la hora del servidor, un empleado ya no puede poner la hora desde una caja, hasta que su reloj salte y vuelva a esperar su
+internet ha confirmado la hora del servidor, un empleado ya no puede poner la hora desde una caja, hasta que su reloj salte, o Hacienda rechace una venta por tener fecha futura, y vuelva a esperar su
 hora.
 
 ## Cuando los cobros esperan la hora del servidor {#clock-waiting}

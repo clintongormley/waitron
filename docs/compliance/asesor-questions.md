@@ -420,6 +420,7 @@ copies do not carry it. Q13(d), Q49 and Q50, on tips and service charges, were a
   as a duplicate and to a cancellation it never received. Given «no pueden quedar RF generados sin
   remitir a la AEAT» (developer FAQ §5) and the hourly retry (OM art. 16.4), may we hold them, or
   must they be sent? If we may, until when, and what must we keep?
+  *(2026-11-14: since A1420 PR 2, a run of `1112` refusals, a date in the future, holds nothing.)*
 
 **Review list: read, and correct only where we are wrong.**
 
@@ -573,7 +574,7 @@ copies do not carry it. Q13(d), Q49 and Q50, on tips and service charges, were a
 > a uno rechazado por duplicado y a una anulación que nunca recibió. Dado que «no pueden quedar RF
 > generados sin remitir a la AEAT» (FAQ de desarrolladores §5) y que hay que reintentar el envío al
 > menos cada hora (OM art. 16.4), ¿podemos retenerlos o debemos remitirlos? Si podemos, ¿hasta
-> cuándo y qué debemos conservar?
+> cuándo y qué debemos conservar? *(2026-11-14: desde A1420 PR 2, una serie de rechazos `1112`, por fecha futura, no retiene nada.)*
 >
 > **Para revisar: corríjanos solo si nos equivocamos.**
 >
@@ -3687,7 +3688,7 @@ What Waitron does today, in `packages/fiscal-verifactu/src/drain.ts`:
    unknown, a later record not yet sent waits, and goes once that earlier record has its answer.
 2. After three refusals in a row with one code, the chain's next records are held; the first held
    record is sent again once an hour, and an accept or a refusal with another code can release
-   the rest.
+   the rest. *(2026-11-14: since A1420 PR 2, a run of `1112` refusals, a date in the future, holds nothing.)*
 
 After a single refusal, Waitron keeps sending the later records (design D2). Since 2026-10-12 that
 includes a duplicate refusal (3000) where AEAT holds a different or cancelled record under that
@@ -3705,7 +3706,7 @@ Waitron sets `SinRegistroPrevio` yet (Q40(c)).
 > 1. mientras se desconoce la respuesta de la AEAT a un registro anterior y está pendiente su
 >    reenvío; se remiten en cuanto ese registro tiene respuesta;
 > 2. tras tres rechazos seguidos con el mismo código; el primero retenido se reenvía cada hora y,
->    si la respuesta es otra, pueden remitirse los demás.
+>    si la respuesta es otra, pueden remitirse los demás. *(2026-11-14: desde A1420 PR 2, una serie de rechazos `1112`, por fecha futura, no retiene nada.)*
 >
 > Tras un rechazo aislado seguimos remitiendo los posteriores, también tras un rechazo por duplicado
 > (error 3000) cuando la AEAT conserva con ese número y fecha otro registro distinto o uno anulado

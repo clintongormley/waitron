@@ -4227,7 +4227,9 @@ needs the venue's PRIMARY.** AEAT, the card network and the internet are never o
 whichever node is primary, except that, on a box that files records and whose time service is not
 synchronised, a start, or a clock jump of over a minute once the clock watch's next look (15 seconds
 after the last ends) finds it, waits for two devices or a person to confirm its time before any
-later payment (owner, 2026-11-10; the jump, 2026-11-11; [below](#every-start-confirms-the-boxs-time-before-it-trades)): records chain locally
+later payment (owner, 2026-11-10; the jump, 2026-11-11; [below](#every-start-confirms-the-boxs-time-before-it-trades)),
+and AEAT refusing as dated in the future (`1112`) a record written since its time was last confirmed
+makes it wait for a person or its time service (owner, 2026-11-10 and 2026-11-11; A1420 D9): records chain locally
 and the outbox drains later; a card falls back to 4G, a standalone terminal or cash. Fiscal submission
 is an outbox, never inline.
 
@@ -4473,7 +4475,9 @@ any remedy runs (`packages/fiscal-verifactu/src/record-remedy-routes.ts`, `requi
 `apps/server/src/clock-start-up.ts`). While the start is `waiting` on a box that files records,
 staff signed in on a till see `clock.unconfirmed`, "Payments wait: the server is waiting for
 devices to connect and agree with its time (… of 2 so far)" (after a jump, "Payments wait: the
-server's clock jumped …"), with “Check the time”, whatever the
+server's clock jumped …"; after AEAT refuses a sale as dated in the future, "The tax agency refused
+a sale because the server's date was ahead. Payments wait until someone checks the time.", with no
+count), with “Check the time”, whatever the
 start-up window says. The PIN screen shows the same line, without the action. The count shows at most 1, since two confirm at the next look. While
 the start waits, the challenge needs no stop and does not ask the start-up window; it
 answers `keepOffered: true` unless the clock reads before 28-10-2024. The
@@ -4516,7 +4520,8 @@ device's steady clock since the read that drew it; it says the time changed and 
 again.
 
 A box whose host service does not answer waits at every start and cannot be set through it, so
-devices or a person confirm its time as it stands (plan D12).
+devices (not in a wait for AEAT's future-date refusal) or a person confirm its time as it stands
+(plan D12).
 
 Guards: `apps/server/src/start-clock-check.test.ts`, `apps/server/src/start-clock-gate.test.ts`,
 `apps/server/src/clock-unconfirmed-gate.test.ts`, `apps/server/src/boot.start-clock-gate.test.ts`,

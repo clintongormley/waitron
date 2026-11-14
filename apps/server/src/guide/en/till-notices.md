@@ -64,8 +64,8 @@ what is sent.
 
 - When the two times are more than a minute apart, it asks which is correct. Press **This device**
   if the till's time is right: the server's clock is set to it and payments start again. Press **The
-  server** if the server's time is right: when **Payments wait** is the only red clock line, the
-  server keeps its time and payments start again; otherwise the dialog asks you to correct the
+  server** if the server's time is right: when a red clock line says payments wait and **Sales
+  can't be recorded** is not shown, the server keeps its time and payments start again; otherwise the dialog asks you to correct the
   till's time, as it does for **Both times are wrong**. Press **Both times are wrong** if neither
   is.
 - When they agree, it asks whether the time is correct. Press **Yes** if it is; payments start

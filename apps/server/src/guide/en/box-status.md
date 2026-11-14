@@ -282,7 +282,7 @@ box's clock. Each of these the box accepts restarts payments. When the box sets 
 staff member and the till. When the till's time is used, other devices' readings do not stop it.
 
 Start-up ends as soon as the box finds that the clock no longer stops payments. From then on, once
-the internet has confirmed the box's time, a staff member can no longer set the clock from a till, until its clock jumps and it waits for its time
+the internet has confirmed the box's time, a staff member can no longer set the clock from a till, until its clock jumps, or the tax agency refuses a sale as dated in the future, and it waits for its time
 again.
 
 ## When payments wait for the box's time {#clock-waiting}

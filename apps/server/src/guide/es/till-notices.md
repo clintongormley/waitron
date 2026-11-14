@@ -73,8 +73,8 @@ la hora de la propia caja.
 - Cuando las dos horas están a más de un minuto, pregunta cuál es la correcta. Pulsa **Este
   dispositivo** si la hora de la caja es la buena: el reloj del servidor se pone a esa hora y se
   puede volver a cobrar. Pulsa **El servidor** si la hora del servidor es la
-  buena: cuando **Los cobros esperan** es la única línea roja de la hora, el servidor mantiene su
-  hora y se puede volver a cobrar; si no, el diálogo te pide que corrijas la hora de la caja, como
+  buena: cuando una línea roja de la hora dice que los cobros esperan y no se muestra **No se
+  pueden registrar ventas**, el servidor mantiene su hora y se puede volver a cobrar; si no, el diálogo te pide que corrijas la hora de la caja, como
   con **Las dos horas están mal**. Pulsa **Las dos horas están mal** si ninguna lo es.
 - Cuando coinciden, pregunta si la hora es correcta. Pulsa **Sí** si lo es; se puede volver a
   cobrar. Pulsa **No** si no lo es.

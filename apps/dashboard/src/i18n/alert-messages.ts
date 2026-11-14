@@ -291,8 +291,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "La hora de este servidor ha retrocedido: ha cambiado {wallClockDeltaSeconds} segundos. Revisa su fecha y hora.",
   },
   "fiscal.registro_rechazado": {
-    en: "The tax agency (AEAT) rejected an invoice record: {mensaje} (code {codigo}). The record and AEAT's answer are on Fiscal filing. Waitron keeps sending later records unless AEAT refuses several in a row with the same code.",
-    es: "La AEAT ha rechazado un registro de facturación: {mensaje} (código {codigo}). El registro y la respuesta de la AEAT están en Remisión a la AEAT. Waitron sigue enviando los registros posteriores salvo que la AEAT rechace varios seguidos con el mismo código.",
+    en: "The tax agency (AEAT) rejected an invoice record: {mensaje} (code {codigo}). The record and AEAT's answer are on Fiscal filing. Waitron keeps sending later records unless AEAT refuses several in a row with the same code, other than a date in the future.",
+    es: "La AEAT ha rechazado un registro de facturación: {mensaje} (código {codigo}). El registro y la respuesta de la AEAT están en Remisión a la AEAT. Waitron sigue enviando los registros posteriores salvo que la AEAT rechace varios seguidos con el mismo código, que no sea por una fecha futura.",
   },
   "fiscal.aceptado_con_errores": {
     en: "The tax agency (AEAT) accepted an invoice record but reported a problem: {mensaje} (code {codigo}).",
