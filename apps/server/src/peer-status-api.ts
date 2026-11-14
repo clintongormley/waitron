@@ -1,8 +1,10 @@
+import { peerBodyLimit } from "./peer-route-limits.js";
 import type { Context, Hono } from "hono";
 import type { KeyRing } from "@waitron/credentials";
 import { readNodeMembership, type Database, type NodeDatabase } from "@waitron/db";
 import {
   refuseRequest,
+  isOperationId,
   verifyEnvelope,
   type HandoverRole,
   type HandoverState,
@@ -71,7 +73,7 @@ export interface PeerStatusBody {
 }
 
 const STATUS = {
-  "handover.peer_unknown": 403,
+  "handover.peer_unknown": 401,
   "handover.request_invalid": 400,
 } as const;
 
@@ -92,8 +94,7 @@ function parseQuery(body: unknown): PeerQueryBody {
     if (purpose !== undefined) refuseRequest("purpose");
     return { nonce, atMs };
   }
-  if (typeof operationId !== "string" || operationId.length === 0 || operationId.length > 64)
-    refuseRequest("operationId");
+  if (!isOperationId(operationId)) refuseRequest("operationId");
   if (!isPurpose(purpose)) refuseRequest("purpose");
   return { nonce, atMs, operationId, purpose };
 }
@@ -137,6 +138,7 @@ function operationStatus(row: HandoverOperation | null): PeerOperationStatus | n
 export function mountPeerStatusApi(app: Hono, deps: PeerStatusApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "peer-status.failed");
 
+  app.use("/api/node/peer-status", peerBodyLimit(65536));
   app.post("/api/node/peer-status", (c) =>
     run(c, log, async () => {
       const { query } = await verifiedPeerQuery(c, deps);

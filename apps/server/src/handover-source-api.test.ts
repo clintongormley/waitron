@@ -264,6 +264,17 @@ describe("the final copy and its indicator, served to the selected box only", ()
     });
   });
 
+  it("non-UUID source queries are refused before operation lookup", async () => {
+    const { app, destination } = await boxes();
+    for (const route of ["indicator", "final-copy"] as const) {
+      const response = await ask(app, route, destination, "not-a-uuid");
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "handover.request_invalid", params: { field: "operationId" } },
+      });
+    }
+  });
+
   it("the same signed query opens its own route again", async () => {
     const { app, destination } = await boxes();
     const envelope = JSON.stringify(

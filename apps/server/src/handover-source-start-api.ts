@@ -1,3 +1,4 @@
+import { peerBodyLimit } from "./peer-route-limits.js";
 import { trimTrailingSlashes } from "./trim-trailing-slashes.js";
 import { isDeepStrictEqual } from "node:util";
 import { eq } from "drizzle-orm";
@@ -461,6 +462,7 @@ export function mountHandoverSourceStartApi(
     return offerThenStepDown(c, binding, contactUrl, JSON.stringify(envelope));
   };
 
+  app.use("/management-api/handover", peerBodyLimit(1048576));
   app.post("/management-api/handover", (c) =>
     run(c, log, async () => {
       c.header("Cache-Control", "no-store");

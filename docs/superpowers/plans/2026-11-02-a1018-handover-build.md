@@ -1478,6 +1478,8 @@ A947 3b no such box exists (fact 3), so on today's boxes every start proceeds as
 
 #### Task 3.1: The signed peer query
 
+**14 November 2026 update:** the [peer-route limits plan](2026-11-14-peer-route-limits.md) supersedes this task’s peer-status authentication status and peer-query operation-id parsing, and adds request-body budgets. The steps below retain the original build record.
+
 **Files:** Create `apps/server/src/peer-status-api.ts`; mount it in the full start, the restricted
 start, the pending-adoption start (`boot.ts:1540-1579`) and the waiting start (Task 3.5). Test
 `apps/server/src/peer-status-api.test.ts`.

@@ -1,3 +1,4 @@
+import { peerBodyLimit } from "./peer-route-limits.js";
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -182,6 +183,7 @@ export function mountHandoverActivationApi(
   const run = createErrorBoundary(STATUS, "handover-activation.failed");
   const throttle = deps.passwordThrottle ?? createPasswordThrottle();
 
+  app.use("/api/node/handover/:operationId/activate", peerBodyLimit(1048576));
   app.post("/api/node/handover/:operationId/activate", (c) =>
     run(c, log, async () => {
       c.header("Cache-Control", "no-store");
