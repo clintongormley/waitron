@@ -574,11 +574,11 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.refused.fresh_sign_in":
     "Waitron necesita que vuelvas a iniciar sesión antes de enviarlo. Envía de nuevo para que te lo pida.",
   "fiscal_filing.refused.clock_unconfirmed":
-    "El servidor está esperando a que se confirme su hora. Confírmala en una caja o en Estado del equipo y envía de nuevo.",
+    "El servidor está esperando a que se confirme su hora. Confírmala en una caja o en Estado del servidor y envía de nuevo.",
   "fiscal_filing.refused.clock_behind":
-    "La hora del servidor es anterior a su última factura, así que no se ha enviado nada. Confirma la hora en Estado del equipo y envía de nuevo.",
+    "La hora del servidor es anterior a su última factura, así que no se ha enviado nada. Confirma la hora en Estado del servidor y envía de nuevo.",
   "fiscal_filing.refused.clock_unusable":
-    "La hora del servidor es incorrecta, así que no se ha enviado nada. Con internet, el servidor la corrige solo; si no, ponla en hora en Estado del equipo y envía de nuevo.",
+    "La hora del servidor es incorrecta, así que no se ha enviado nada. Con internet, el servidor la corrige solo; si no, ponla en hora en Estado del servidor y envía de nuevo.",
   "fiscal_filing.refused.time_zone":
     "La zona horaria del local no está lista, así que no se ha enviado nada. Revísala en Ajustes del local y envía de nuevo.",
   "fiscal_filing.refused.not_main":
