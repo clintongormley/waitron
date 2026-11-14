@@ -1013,6 +1013,14 @@ for (const locale of ["en", "es"] as const) {
         );
       }
       expected[phase] = madridWithDroppedColumns(expected[phase], DROPPED_COLUMNS);
+      // The captured `sales.operation_date` is dropped above; the replacement-only one returns here.
+      const replacedSales = expected[phase].tables.sales!;
+      replacedSales.columns.splice(
+        replacedSales.columns.findIndex((column) => column.name === "replaces_original") + 1,
+        0,
+        { name: "operation_date", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
+      );
+      for (const row of Object.values(replacedSales.rows)) row.operation_date = null;
       const live = expected[phase].tables.dining_tables!;
       const todayIds = new Set(
         Object.values(expected[phase].tables.floor_today_tables!.rows).map((row) => row.table_id),
