@@ -1,5 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { lstatSync, mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import {
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+  existsSync,
+} from "node:fs";
 import { dirname, matchesGlob, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -105,7 +112,6 @@ export function rewriteText(text, file, before, moves, rows = MOVES) {
   for (const [from, to] of moves) {
     if (from === to) continue;
     pairs.push([from, to]);
-    if (from.endsWith(".ts")) pairs.push([from.slice(0, -3) + ".js", to.slice(0, -3) + ".js"]);
   }
   // The folder spelling also appears without a slash in documentation and path assertions.
   const bareFolders = rows
@@ -134,6 +140,25 @@ export function rewriteText(text, file, before, moves, rows = MOVES) {
       /(export const STILL_TO_CLEAN[^=]*= \[\n)([\s\S]*?)(\n\];)/,
       (_whole, head, paths, tail) => head + paths.split("\n").sort().join("\n") + tail,
     );
+  if (
+    [
+      "apps/server/test-durations.json",
+      "apps/dashboard/test-durations.json",
+      "packages/db/mutation-costs.json",
+    ].includes(file)
+  ) {
+    const table = JSON.parse(text);
+    text =
+      JSON.stringify(
+        Object.fromEntries(
+          Object.keys(table)
+            .sort()
+            .map((path) => [path, table[path]]),
+        ),
+        null,
+        2,
+      ) + "\n";
+  }
   return text;
 }
 
@@ -188,5 +213,5 @@ export function main(args, root) {
   console.log(`moved ${result.moved}, rewrote ${result.rewrote}`);
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url))
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url))
   main(process.argv.slice(2), process.cwd());

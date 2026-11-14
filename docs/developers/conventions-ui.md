@@ -530,7 +530,7 @@ does not say which. What the save path can carry is pinned where it is thrown, i
 "refuses nutrition input without naming any field"): generic allergen and dietary refusals name
 neither a field nor a language. The kind-specific `allergen.kinds_required` and
 `allergen.invalid_kind` refusals are mapped explicitly to the editor's Nutrition section by
-`catalogue-screen.ts`; they do not acquire a `field` parameter.
+`products-screen.ts`; they do not acquire a `field` parameter.
 
 `productEditorTranslationField` (`apps/dashboard/src/widgets/product-editor.ts`) resolves the
 language onto a value by reading the body that was submitted: every checked translated value missing
@@ -1707,7 +1707,7 @@ renderer/security cases in each shell's suite.
 The Unit form compares its trimmed translated request body, preserving translations it does not
 show and invalid precision input. A Related Unit registers under its Product, and its successful
 write commits the child before the Product accepts the new unit id. The Units screen commits
-before its lookup refresh. Behavioral cases: `catalogue-forms.unsaved.test.ts` and
+before its lookup refresh. Behavioral cases: `product-forms.unsaved.test.ts` and
 `unit-owners.unsaved.test.ts` under `apps/dashboard/src/`. Category colour selection submits
 immediately and remains exempt.
 

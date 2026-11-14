@@ -965,8 +965,6 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
   menu activation, the sealed-key copy and public `/health` reports. The bucket copy runs as a
   service; close stops runner jobs first and the bucket copy last.
   [A1279](replication-cloud.md#a1279-a-local-secondary-promotes-only-over-a-chart-it-signed-itself) owns immediate role wiring and the real promotion test, including a mirror, if its live-promotion path gains a production caller. Codex attached this to A1279 after the watcher deferred immediate wiring on 2026-11-11 at 05:18.
-  Menu code uses `@waitron/menu` and menu/product file paths; its tables, identifiers, routes
-  and visible wording still await the menu slices that follow the path rename.
   The six watches (append-only protections, clock, free space, Cloud connection, translation
   suggestions and practice printing) also run there. Repeated thrown passes raise one dashboard
   alert per job after ten minutes and three failures; the manager’s box-status read includes the
@@ -1015,6 +1013,8 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
   S23 builds no `venue_settings`, because the venue's settings become documents in the shared
   `settings` table. It also renames every leftover "tenant" name: the `tenants` table becomes
   `taxpayer`, and names that mean the venue or box get that name (owner, 2026-11-02; design §5 U9).
+  Menu code uses `@waitron/menu` and menu/product file paths; its tables, identifiers, routes
+  and visible wording still await the menu slices that follow the path rename.
 
 ## Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables
 
@@ -1078,7 +1078,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   **Next action:** keep it in step with the unit or drop it.
   [Detail](catalogue.md#two-signals-say-whether-a-dish-is-sold-by-weight-and-they-can-disagree-in-storage)
 - **The catalogue picker was deleted and nothing replaced it.** `selectedCatalogueId`
-  (`catalogue-screen.ts`) takes the first catalogue in the list, which is also the one every new
+  (`products-screen.ts`) takes the first catalogue in the list, which is also the one every new
   product is created in; with two, the second becomes unreachable from the dashboard. **Next
   action:** decide whether more than one catalogue is a case Waitron supports.
 - **A backup setting in `trading.env` or `secrets.env` is not compared at a handover.** Only a hand

@@ -1455,7 +1455,7 @@ file under `packages/provisioning/src` calls `applyMigrations` at all (the one c
 `apps/server/scripts/dev-setup.ts` and `apps/server/scripts/dev-onboard.ts`, are converted: each
 calls `applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null))`, so each installs the
 triggers the way everything else does. The retired fake-backend demos now run as ordinary server
-integration tests in `catalogue-allergen-workflow.test.ts` and `reporting-write-workflows.test.ts`;
+integration tests in `menu-allergen-workflow.test.ts` and `reporting-write-workflows.test.ts`;
 `useVenueDb` applies their migration sets.
 
 **2026-09-22: the names do NOT come from the `ledger` class, and for one step group they were

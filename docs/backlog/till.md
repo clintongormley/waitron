@@ -33,7 +33,7 @@ their full text.
   form" and aggregate-pair history and a "KDS-1 §3d" pointer. "A line with no course fires
   earliest", which #623 cut from `working-order.ts` because a line sent with `hold: true` is held
   whatever its course, is still in `apps/server/src/kitchen.ts:264` and four
-  `packages/db/src/schema` files (`catalogue.ts`, `kitchen-courses.ts`, `ticket-items.ts`,
+  `packages/db/src/schema` files (`menus.ts`, `kitchen-courses.ts`, `ticket-items.ts`,
   `orders.ts`). Stale test titles: "lists the node's open orders" in `working-order.test.ts`;
   "(Task B1, …)" in `working-order.pay-and-dispatch.test.ts`; "an UNLOCKED read" in
   `tabs.test.ts`; "recordSale UNCHANGED" in `tabs.filing.test.ts`; many "(KDS-…)" and

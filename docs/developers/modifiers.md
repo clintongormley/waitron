@@ -519,6 +519,6 @@ not one of them.
 `scripts/postgres-sql-residue.test.ts`, whose `ROOTS` are `apps/server/src`,
 `packages/reporting/src`, `packages/reporting/test`, `packages/workforce/src` and
 `packages/payments/src/reconciliation-schedule` — `packages/menu` is not one of them, a gap that guard's own pattern
-comment and `catalogue-engine-neutral`'s header both state. So a `for update` written back into
+comment and `menu-engine-neutral`'s header both state. So a `for update` written back into
 these files is caught by review, or by the engine when the statement is prepared, and by no guard
 in between.

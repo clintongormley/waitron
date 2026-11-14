@@ -262,7 +262,7 @@ interface RawProduct {
   courseId: string | null;
 }
 
-// `pricing_unit`/`vat_class` are constrained to their unions by a CHECK (catalogue.ts), which is
+// `pricing_unit`/`vat_class` are constrained to their unions by a CHECK (packages/db/src/schema/menus.ts), which is
 // what makes the casts below safe.
 function toProduct(row: RawProduct, variants: ListedVariant[] = []): Product {
   const {

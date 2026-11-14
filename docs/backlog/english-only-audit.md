@@ -1,5 +1,7 @@
 # A913 — non-English text in general code: the audit
 
+_2026-11-14, A1308 mn1: the cited server suites now use `menu-allergen-workflow.test.ts` and `seed-menus.ts`; the older names below record the audited tree._
+
 _2026-11-10, A1488: the working-time export writes its coded values and yes/no values as words in the file's language; the access-holder row in Bucket B records the earlier tree._
 
 _2026-11-10, A1308 slice 4b: `WAITRON_TILL_LOCALE` is gone; kitchen-ticket units and the other `cfg.locale` readers follow the venue's display language (`readVenueLocale`). References below describe the earlier setting._

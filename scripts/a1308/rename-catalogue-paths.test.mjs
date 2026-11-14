@@ -1,6 +1,14 @@
 import { Buffer } from "node:buffer";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { URL } from "node:url";
@@ -102,6 +110,15 @@ it("recalculates imports when the importer changes depth and the target stays", 
   );
 });
 
+it("resolves a directory import when no sibling module exists", () => {
+  const root = fixture({
+    "packages/db/src/schema/index.ts": 'export * from "./catalogue";',
+    "packages/db/src/schema/catalogue/index.ts": "export {};",
+  });
+  run({ root });
+  expect(read(root, "packages/db/src/schema/index.ts")).toBe('export * from "./menu";');
+});
+
 it("rewrites package specifiers, subpaths and folder paths without matching longer names", () => {
   const root = fixture({
     "apps/server/src/a.ts": [
@@ -126,14 +143,14 @@ it("rewrites package-relative paths and bare filenames only in the owning packag
   const input = '"src/catalogue-api.test.ts" "catalogue-api.test.ts" "catalogue-api.test.ts-extra"';
   const root = fixture({
     "apps/server/src/catalogue-api.test.ts": "test();",
-    "apps/server/test-durations.json": input,
+    "apps/server/paths.txt": input,
     "apps/server/src/testing/m.ts": input,
     "packages/db/x.json": input,
     "README.md": "apps/server/src/catalogue-api.test.ts",
   });
   run({ root });
   const expected = '"src/menu-api.test.ts" "menu-api.test.ts" "catalogue-api.test.ts-extra"';
-  expect(read(root, "apps/server/test-durations.json")).toBe(expected);
+  expect(read(root, "apps/server/paths.txt")).toBe(expected);
   expect(read(root, "apps/server/src/testing/m.ts")).toBe(expected);
   expect(read(root, "packages/db/x.json")).toBe(input);
   expect(read(root, "README.md")).toBe("apps/server/src/menu-api.test.ts");
@@ -151,10 +168,12 @@ it("rewrites the db export key and value without changing another package's key"
 
 it("leaves prose without paths byte-identical when the package moves", () => {
   const root = fixture({
-    "packages/catalogue/src/a.ts": "catalogue CatalogueScreen catalogues menu",
+    "packages/catalogue/src/a.ts": 'const text = "catalogue CatalogueScreen catalogues menu";',
   });
-  run({ root });
-  expect(read(root, "packages/menu/src/a.ts")).toBe("catalogue CatalogueScreen catalogues menu");
+  run({ root, moves: [["packages/catalogue/", "packages/menu/nested/"]] });
+  expect(read(root, "packages/menu/nested/src/a.ts")).toBe(
+    'const text = "catalogue CatalogueScreen catalogues menu";',
+  );
 });
 
 it("keeps the English-only inventory sorted after its path renames", () => {
@@ -277,4 +296,40 @@ it("prints each preview entry before its summary", () => {
   } finally {
     output.mockRestore();
   }
+});
+
+it.each([
+  {
+    file: "apps/server/test-durations.json",
+    old: "src/catalogue-api.test.ts",
+    next: "src/menu-api.test.ts",
+  },
+  {
+    file: "apps/dashboard/test-durations.json",
+    old: "src/screens/catalogue-screen.test.ts",
+    next: "src/screens/products-screen.test.ts",
+  },
+  {
+    file: "packages/db/mutation-costs.json",
+    old: "src/schema/catalogue.ts",
+    next: "src/schema/menus.ts",
+  },
+])("keeps $file in generator order without changing measurements", ({ file, old, next }) => {
+  const root = fixture({
+    [file]:
+      JSON.stringify({ [old]: 2.1, "src/sentinel.ts": 3.7, "src/first.ts": 1.2 }, null, 2) + "\n",
+  });
+  run({ root });
+  expect(read(root, file)).toBe(
+    JSON.stringify({ "src/first.ts": 1.2, [next]: 2.1, "src/sentinel.ts": 3.7 }, null, 2) + "\n",
+  );
+});
+
+it("runs the command through a symlink to its module", () => {
+  const root = fixture({ "packages/catalogue/src/a.ts": "export {};" });
+  const link = join(root, "rename.mjs");
+  symlinkSync(new URL("./rename-catalogue-paths.mjs", import.meta.url).pathname, link);
+  const output = execFileSync(process.execPath, [link], { cwd: root, env, encoding: "utf8" });
+  expect(output).toBe("moved 1, rewrote 0\n");
+  expect(read(root, "packages/menu/src/a.ts")).toBe("export {};");
 });

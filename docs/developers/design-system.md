@@ -3024,7 +3024,7 @@ and the staffing grid's block editor in the A761 entry):
   edit and new person forms, the variant and purchase forms, the bookings form, the
   product editor and the department dialogs, Settings and zone settings and the Patch live menu
   window do this; with the check deleted, a reconnect case in the `*.unsaved.test.ts` that
-  covers it fails (the unit form's is in `catalogue-forms.unsaved.test.ts`);
+  covers it fails (the unit form's is in `product-forms.unsaved.test.ts`);
 - an edit made BEFORE the form is taken out still counts once it is put back: keep the value the
   scope last committed — the opened value, then each saved value and, in the till's party name, bill name and Guests
   windows and the guest counts of Split a table's panel, each value stored on another till while they are open — in a field the disconnect does
