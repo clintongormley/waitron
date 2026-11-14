@@ -1,6 +1,6 @@
-import { LitElement, css, html, type PropertyValues } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, draftScopeFor, type DraftScope } from "@waitron/ui";
+import { baseStyles, draftScopeFor, visuallyHiddenStyles, type DraftScope } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-file-input.js";
 import { fileInputCopy } from "../file-input-copy.js";
@@ -50,6 +50,9 @@ export class RecoveryKeyEntry extends LitElement {
       wt-file-input {
         display: block;
         margin-block: var(--wt-space-3);
+      }
+      .visually-hidden {
+        ${visuallyHiddenStyles}
       }
     `,
   ];
@@ -238,7 +241,10 @@ export class RecoveryKeyEntry extends LitElement {
           void this.importFile(event.detail.files[0]);
         }}
       ></wt-file-input>
-      <p role="status">${this.loaded ? (en ? "Key loaded" : "Clave cargada") : ""}</p>
+      <p role="status">
+        ${this.loaded ? (en ? "Key loaded" : "Clave cargada") : nothing}
+        ${pdfError ? html`<span class="visually-hidden">${pdfError}</span>` : nothing}
+      </p>
       <wt-input
         name="printed-recovery-key"
         type="password"
