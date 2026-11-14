@@ -1922,6 +1922,8 @@ export const en = {
   "printers.resolution_203": "203 dpi",
   "printers.agent_setup": "Open print agent",
   "printers.calibrate": "Calibrate printer",
+  "printers.setting_unavailable":
+    "This setting is not available for this printer. Close closes this window.",
   "printers.calibration_progress": "Step {step} of 3",
   "printers.calibration_job_failed": "Not printed: {reason}",
   "printers.calibration_layout": "Set paper width and resolution",
@@ -6164,6 +6166,8 @@ export const es: Record<StringKey, string> = {
   "printers.resolution_203": "203 ppp",
   "printers.agent_setup": "Abrir agente de impresión",
   "printers.calibrate": "Calibrar impresora",
+  "printers.setting_unavailable":
+    "Este ajuste no está disponible para esta impresora. Cerrar cierra esta ventana.",
   "printers.calibration_progress": "Paso {step} de 3",
   "printers.calibration_job_failed": "No se ha impreso: {reason}",
   "printers.calibration_layout": "Ajusta el ancho y la resolución",

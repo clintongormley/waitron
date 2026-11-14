@@ -4131,6 +4131,12 @@ reuse their label keys and tab mapping; a mounted EN/ES check compares them with
 in both directions. Zone settings use **Edit zone** as their location. Their chooser labels pair the
 department and zone names; the selected zone opens its existing editor, keeping an edited draft
 when it is already open. Zone declarations have the same mounted EN/ES label/control check.
+Printer settings use **Edit** or **Calibrate printer** as their location. Name offers receipt and A4
+printers; address and port offer network receipt printers; calibration offers receipt printers,
+including switched-off ones. Calibration opens the step holding the setting. Its Continue and Back
+buttons retain the draft and replace the address; searching another step uses Keep editing/Discard.
+The chooser shows saved printer names, including identical names across receipt and A4 printers.
+Mounted EN/ES checks compare the Edit and calibration controls and result labels with declarations.
 
 When nothing matches, the nav says **No pages
 match.** in a `role="status"` message. Enter opens the first result shown, in the order shown, and does
