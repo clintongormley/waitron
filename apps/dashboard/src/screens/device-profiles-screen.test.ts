@@ -1,4 +1,9 @@
-import { profileAction, profileListRoot, withProfileListRead } from "../testing/profile-table.js";
+import {
+  selectProfileTab,
+  profileAction,
+  profileListRoot,
+  withProfileListRead,
+} from "../testing/profile-table.js";
 import { page, userEvent } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
@@ -195,6 +200,134 @@ async function expectSaveQuiet(el: DeviceProfilesScreen) {
 function selectFormFactor(el: DeviceProfilesScreen, value: string) {
   void chooseOption(el.shadowRoot!.querySelector("[data-test=profile-form-factor]")!, value);
 }
+
+describe("device profile editor tabs", () => {
+  it.each([390, 900, 1280])(
+    "places actions and screens in columns that stack at %ipx",
+    async (width) => {
+      const viewport = { width: innerWidth, height: innerHeight };
+      try {
+        await page.viewport(width, 900);
+        const el = await mount();
+        await profileAction(el, "edit-p1");
+        await flush(el);
+        await selectProfileTab(el, "capabilities");
+        const actions = el
+          .shadowRoot!.querySelector("[data-test=profile-actions]")!
+          .getBoundingClientRect();
+        const screens = el
+          .shadowRoot!.querySelector("[data-test=profile-screens]")!
+          .getBoundingClientRect();
+        if (width === 390) {
+          expect(screens.left).toBe(actions.left);
+          expect(screens.top).toBeGreaterThanOrEqual(actions.bottom);
+        } else {
+          expect(screens.top).toBe(actions.top);
+          expect(screens.left).toBeGreaterThan(actions.right);
+        }
+      } finally {
+        await page.viewport(viewport.width, viewport.height);
+      }
+    },
+  );
+
+  it.each(["till", "kds"] as const)(
+    "groups a %s profile's fields and preserves its draft across tabs",
+    async (formFactor) => {
+      const api = stubApi({
+        getDeviceProfile: vi.fn().mockResolvedValue({ ...profiles[0]!, formFactor }),
+      });
+      const el = await mount(api);
+      await profileAction(el, "edit-p1");
+      await flush(el);
+      const tabs = el.shadowRoot!.querySelector("wt-tabs");
+      expect(tabs).not.toBeNull();
+      expect(tabs!.items.map((item) => item.key)).toEqual(
+        formFactor === "till"
+          ? ["general", "where", "who", "capabilities", "equipment"]
+          : ["general", "kitchen", "capabilities", "equipment"],
+      );
+      expect(tabs!.value).toBe("general");
+      const name = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+        "[data-test=profile-name]",
+      )!;
+      change(el, "profile-name", "Draft counter");
+      const placements =
+        formFactor === "till"
+          ? [
+              ["profile-starting-screen", "general"],
+              ["profile-department", "where"],
+              ["profile-roles", "who"],
+              ["profile-actions", "capabilities"],
+            ]
+          : [
+              ["profile-kitchen-screens", "kitchen"],
+              ["profile-actions", "capabilities"],
+            ];
+      for (const [field, tab] of placements) {
+        await selectProfileTab(el, tab!);
+        const control = el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${field}]`)!;
+        expect(control.closest("[slot]")!.getAttribute("slot")).toBe(tab);
+        expect(control.checkVisibility()).toBe(true);
+      }
+      await selectProfileTab(el, "equipment");
+      expect(name.checkVisibility()).toBe(false);
+      expect(el.shadowRoot!.querySelector("wt-form-actions")!.closest("wt-tabs")).toBeNull();
+      await selectProfileTab(el, "general");
+      expect(el.shadowRoot!.querySelector("[data-test=profile-name]")).toBe(name);
+      expect(name.value).toBe("Draft counter");
+      change(el, "profile-name", profiles[0]!.name);
+      await flush(el);
+      await selectProfileTab(el, "equipment");
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-cancel]")!.click();
+      await flush(el);
+      await profileAction(el, "edit-p1");
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("general");
+    },
+  );
+
+  it.each([
+    ["departmentId", "profile-department", "where"],
+    ["admittedStaffRoleIds", "profile-roles", "who"],
+    ["capabilities", "profile-actions", "capabilities"],
+  ])(
+    "opens and marks the tab for a refused %s, then clears its mark after repair",
+    async (field, target, tab) => {
+      const el = await mount(
+        stubApi({
+          updateDeviceProfile: vi.fn().mockRejectedValue({
+            code: "management.request_invalid",
+            params: { field },
+          }),
+        }),
+      );
+      await profileAction(el, "edit-p1");
+      await flush(el);
+      rename(el);
+      await flush(el);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+      const tabs = el.shadowRoot!.querySelector("wt-tabs");
+      await vi.waitFor(() => expect(tabs?.value).toBe(tab));
+      expect(tabs!.items.filter((item) => item.marked).map((item) => item.key)).toEqual([tab]);
+      expect(tabs!.items.find((item) => item.key === tab)!.marked).toBe(t("form.fix_fields"));
+      const control = el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${target}]`)!;
+      expect(control.checkVisibility()).toBe(true);
+      expect(
+        el.shadowRoot!.activeElement === control || control.contains(el.shadowRoot!.activeElement),
+      ).toBe(true);
+      (control.querySelector("wt-switch") ?? control).dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: { value: "d1", checked: true },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      expect(tabs!.items.some((item) => item.marked)).toBe(false);
+    },
+  );
+});
 
 describe("device-profiles-screen list mode", () => {
   const capableProfile: DeviceProfile = {
@@ -1700,6 +1833,30 @@ describe("device-profiles-screen kitchen screens", () => {
     });
   });
 
+  it.each(["till", "kds"] as const)(
+    "focuses a %s profile's refused station-screen choice in its own tab",
+    async (formFactor) => {
+      const profile =
+        formFactor === "till" ? { ...profiles[0]!, capabilities: ["show-station"] } : kitchen;
+      const { el } = await edit(profile, stored, {
+        updateDeviceProfile: vi.fn().mockRejectedValue({
+          code: "device_profile.access_invalid",
+          params: { field: "kitchenScreens", reason: "not_for_screen" },
+        }),
+      });
+      rename(el);
+      await save(el);
+      const tab = formFactor === "till" ? "capabilities" : "kitchen";
+      await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe(tab));
+      const group = el.shadowRoot!.querySelector(
+        formFactor === "till"
+          ? "[data-test=profile-screens]"
+          : "[data-test=profile-kitchen-screens]",
+      )!;
+      expect(group.contains(el.shadowRoot!.activeElement)).toBe(true);
+    },
+  );
+
   it.each([
     ["passMonitorZones", "empty", "profile-pass-monitor-zones", "device_profiles.err_list_empty"],
     ["stationScreenStations", "not_found", "profile-station-screen-stations", null],
@@ -1720,6 +1877,13 @@ describe("device-profiles-screen kitchen screens", () => {
       toggle(el, "profile-station-screen-station-s2", true);
       await flush(el);
       await save(el);
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("kitchen"),
+      );
+      expect(
+        el.shadowRoot!.querySelector("wt-tabs")!.items.find((item) => item.key === "kitchen")!
+          .marked,
+      ).toBe(t("form.fix_fields"));
       expect(text(el, `${group}-error`)).toBe(
         sentence === null ? codeMessage("device_profile.access_invalid") : t(sentence),
       );

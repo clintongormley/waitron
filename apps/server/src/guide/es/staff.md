@@ -161,6 +161,11 @@ ver sus puestos actuales antes de elegir de nuevo.
 En **Hardware**, abre **Perfiles de dispositivo**. Busca el perfil que necesitas y selecciona su
 fila para editarlo. Usa su menú **⋮** para duplicarlo o eliminarlo.
 
+Elige una pestaña para editar esa parte del perfil. **General** reúne su nombre, tipo de dispositivo,
+cierre de sesión automático y pantalla inicial. Usa **Qué puede hacer** para acciones y pantallas,
+e **Impresoras y lectores de tarjetas** para su equipo. Una pestaña marcada contiene un campo que
+debes corregir. Pulsa **Guardar** cuando termines.
+
 ## Quién puede iniciar sesión en un dispositivo {#device-profile-sign-in}
 
 Abre **Perfiles de dispositivo** y edita el perfil que usa el dispositivo. En **Quién puede iniciar

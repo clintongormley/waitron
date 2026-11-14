@@ -1,4 +1,4 @@
-import { profileAction, profileListRoot } from "../testing/profile-table.js";
+import { selectProfileTab, profileAction, profileListRoot } from "../testing/profile-table.js";
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -87,6 +87,7 @@ describe("clock-in profile action", () => {
       setLocale(locale!);
       const f = fixture();
       const el = await editor(f.api);
+      await selectProfileTab(el, "capabilities");
       const clock = el.shadowRoot!.querySelector<HTMLElement>("[data-test=cap-clock-in]");
       expect(clock).not.toBeNull();
       expect(clock!.closest("[data-test=profile-actions]")).not.toBeNull();

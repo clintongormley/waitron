@@ -150,6 +150,10 @@ roles before choosing again.
 In **Hardware**, open **Device profiles**. Search for the profile you need, then select its row to
 edit. Use its **⋮** menu to duplicate or delete it.
 
+Choose a tab to edit that part of the profile. **General** holds its name, device type, auto logout
+and opening screen. Use **What it can do** for actions and screens, and **Printers and card readers**
+for its equipment. A marked tab holds a field to fix. Choose **Save** when you have finished.
+
 ## Who can sign in on a device {#device-profile-sign-in}
 
 Open **Device profiles** and edit the profile used by the device. Under **Who can sign in**,

@@ -20,7 +20,8 @@ import {
 import { sameValue } from "../widgets/product-editor-model.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
-import "@waitron/ui/src/components/wt-disclosure.js";
+import "@waitron/ui/src/components/wt-tabs.js";
+import type { TabItem } from "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -291,12 +292,12 @@ function liveZones(
 const FIELDS = [
   "name",
   "inactivity",
+  "startingScreen",
   "department",
   "zones",
   "startingZone",
   "roles",
   "actions",
-  "startingScreen",
   "kitchenScreens",
   "stationScreenStations",
   "passScreenStations",
@@ -312,6 +313,30 @@ const FIELDS = [
 ] as const;
 type EditorField = (typeof FIELDS)[number];
 type FieldErrors = Partial<Record<EditorField, string>>;
+
+type EditorTab = "general" | "where" | "who" | "kitchen" | "capabilities" | "equipment";
+const FIELD_TAB: Record<EditorField, EditorTab> = {
+  name: "general",
+  inactivity: "general",
+  startingScreen: "general",
+  department: "where",
+  zones: "where",
+  startingZone: "where",
+  roles: "who",
+  actions: "capabilities",
+  kitchenScreens: "kitchen",
+  stationScreenStations: "kitchen",
+  passScreenStations: "kitchen",
+  passScreenZones: "kitchen",
+  passMonitorStations: "kitchen",
+  passMonitorZones: "kitchen",
+  receiptDefault: "equipment",
+  slipDefault: "equipment",
+  drawerList: "equipment",
+  drawerDefault: "equipment",
+  invoiceDefault: "equipment",
+  readerDefault: "equipment",
+};
 
 /** Where each field is drawn; a group of switches takes focus on its first switch. */
 const FIELD_TARGET: Record<EditorField, string> = {
@@ -421,6 +446,15 @@ export class DeviceProfilesScreen extends LitElement {
       wt-data-table::part(profile-summary) {
         white-space: nowrap;
       }
+      .capability-columns {
+        display: grid;
+        grid-template-columns: repeat(
+          auto-fit,
+          minmax(min(100%, calc(var(--wt-form-max-width) / 2)), 1fr)
+        );
+        gap: var(--wt-space-5);
+        align-items: start;
+      }
       .field {
         display: block;
         margin-bottom: var(--wt-space-4);
@@ -503,6 +537,7 @@ export class DeviceProfilesScreen extends LitElement {
   );
 
   @state() private mode: "list" | "editor" = "list";
+  @state() private editorTab: EditorTab = "general";
   /** A `profile` in the path names the profile whose editor is open, written and cleared by
    * replacing, so Back still leaves the screen. */
   readonly #url = new UrlStateController(
@@ -929,11 +964,44 @@ export class DeviceProfilesScreen extends LitElement {
       this.fieldRefusal = null;
   }
 
+  #fieldTab(field: EditorField): EditorTab {
+    const tab = FIELD_TAB[field];
+    return tab === "kitchen" && this.#ordering() ? "capabilities" : tab;
+  }
+
+  #editorTabs(errors: FieldErrors): TabItem[] {
+    const tabs: { key: EditorTab; label: StringKey }[] = [
+      { key: "general", label: "device_profiles.tab.general" },
+      ...(this.#ordering()
+        ? [
+            { key: "where" as const, label: "device_profiles.where_heading" as const },
+            { key: "who" as const, label: "device_profiles.who_heading" as const },
+          ]
+        : [{ key: "kitchen" as const, label: "device_profiles.tab.kitchen" as const }]),
+      { key: "capabilities", label: "device_profiles.tab.capabilities" },
+      { key: "equipment", label: "device_profiles.tab.equipment" },
+    ];
+    return tabs.map(({ key, label }) => ({
+      key,
+      label: t(label),
+      marked: FIELDS.some((field) => errors[field] && this.#fieldTab(field) === key)
+        ? t("form.fix_fields")
+        : undefined,
+    }));
+  }
+
   async #focusFirstError(errors: FieldErrors): Promise<void> {
     await this.updateComplete;
     const field = FIELDS.find((name) => errors[name]);
     if (field === undefined) return;
-    this.renderRoot.querySelector<HTMLElement>(FIELD_TARGET[field])?.focus();
+    this.editorTab = this.#fieldTab(field);
+    await this.updateComplete;
+    await this.renderRoot.querySelector("wt-tabs")?.updateComplete;
+    const target =
+      field === "kitchenScreens" && this.#ordering()
+        ? "[data-test=profile-screens] wt-switch"
+        : FIELD_TARGET[field];
+    this.renderRoot.querySelector<HTMLElement>(target)?.focus();
   }
 
   // ── Where it serves ──────────────────────────────────────────────────────────────────────────────
@@ -1028,6 +1096,7 @@ export class DeviceProfilesScreen extends LitElement {
     this.#leave = undefined;
     this.#openingId = null;
     this.editingId = null;
+    this.editorTab = "general";
     this.draftName = "";
     this.draftCapabilities = [];
     this.draftFormFactor = FORM_FACTORS[0];
@@ -2429,7 +2498,7 @@ export class DeviceProfilesScreen extends LitElement {
   #renderCapabilities(errors: FieldErrors): TemplateResult {
     const kds = !this.#ordering();
     const actions = PROFILE_ACTIONS.filter((flag) => !kds || sharedDisplayMay(flag));
-    return html`
+    return html`<div class="capability-columns">
       ${this.#switchGroup(
         "profile-actions",
         t("device_profiles.actions"),
@@ -2464,8 +2533,13 @@ export class DeviceProfilesScreen extends LitElement {
                 : this.#capabilitySwitch(flag),
         ),
       )}
+    </div>`;
+  }
+
+  #renderStartingScreen(errors: FieldErrors): TemplateResult {
+    return html`
       ${
-        kds
+        !this.#ordering()
           ? nothing
           : html`<wt-combobox
               class="field"
@@ -2516,49 +2590,68 @@ export class DeviceProfilesScreen extends LitElement {
           ><span aria-hidden="true">›</span>
         </nav>
         <h1 class="title">${this.#loaded?.name ?? t("device_profiles.create")}</h1>
-        <wt-input
-          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]"))}
-          class="field"
-          data-test="profile-name"
-          name="name"
-          required
-          label=${t("device_profiles.name")}
-          .value=${this.draftName}
-          .error=${errors.name ?? ""}
-          @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onName(e)}
-        ></wt-input>
-        <wt-combobox
-          class="field"
-          data-test="profile-form-factor"
-          name="formFactor"
-          label=${t("device_profiles.form_factor")}
-          search="auto"
-          .options=${FORM_FACTORS.map((ff) => ({
-            value: ff,
-            label: t(`device_profiles.form_factor.${ff}` as StringKey),
-          }))}
-          .value=${this.draftFormFactor}
-          @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onFormFactor(e)}
-        ></wt-combobox>
-        ${
-          ordering
-            ? html`<wt-input
-                @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]"))}
-                class="field"
-                decimal-locale=${currentLocale()}
-                data-test="profile-inactivity"
-                name="inactivityTimeout"
-                label=${t("device_profiles.inactivity_timeout_label")}
-                .value=${this.invalidInactivityText ?? (this.draftInactivityMinutes == null ? "" : String(this.draftInactivityMinutes))}
-                .error=${errors.inactivity ?? ""}
-                @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onInactivity(e)}
-              ></wt-input>`
-            : nothing
-        }
-        ${ordering ? this.#renderWhere(errors) : nothing}
-        ${ordering ? this.#renderWho(errors) : nothing} ${this.#renderCapabilities(errors)}
-        ${this.#renderPrinterLists(errors)} ${ordering ? this.#renderReaders(errors) : nothing}
-        ${ordering ? nothing : this.#renderKitchenScreens(errors)} ${this.#renderNarrowed()}
+        <wt-tabs
+          label=${t("device_profiles.title")}
+          .items=${this.#editorTabs(errors)}
+          .value=${this.editorTab}
+          @wt-tab-change=${(event: CustomEvent<{ value: EditorTab }>) => {
+            this.editorTab = event.detail.value;
+          }}
+        >
+          <section slot="general">
+            <wt-input
+              @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]"))}
+              class="field"
+              data-test="profile-name"
+              name="name"
+              required
+              label=${t("device_profiles.name")}
+              .value=${this.draftName}
+              .error=${errors.name ?? ""}
+              @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onName(e)}
+            ></wt-input>
+            <wt-combobox
+              class="field"
+              data-test="profile-form-factor"
+              name="formFactor"
+              label=${t("device_profiles.form_factor")}
+              search="auto"
+              .options=${FORM_FACTORS.map((ff) => ({
+                value: ff,
+                label: t(`device_profiles.form_factor.${ff}` as StringKey),
+              }))}
+              .value=${this.draftFormFactor}
+              @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onFormFactor(e)}
+            ></wt-combobox>
+            ${
+              ordering
+                ? html`<wt-input
+                    @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]"))}
+                    class="field"
+                    decimal-locale=${currentLocale()}
+                    data-test="profile-inactivity"
+                    name="inactivityTimeout"
+                    label=${t("device_profiles.inactivity_timeout_label")}
+                    .value=${this.invalidInactivityText ?? (this.draftInactivityMinutes == null ? "" : String(this.draftInactivityMinutes))}
+                    .error=${errors.inactivity ?? ""}
+                    @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onInactivity(e)}
+                  ></wt-input>`
+                : nothing
+            }
+            ${ordering ? this.#renderStartingScreen(errors) : nothing}
+          </section>
+          ${
+            ordering
+              ? html`<section slot="where">${this.#renderWhere(errors)}</section>
+                  <section slot="who">${this.#renderWho(errors)}</section>`
+              : html`<section slot="kitchen">${this.#renderKitchenScreens(errors)}</section>`
+          }
+          <section slot="capabilities">${this.#renderCapabilities(errors)}</section>
+          <section slot="equipment">
+            ${this.#renderPrinterLists(errors)} ${ordering ? this.#renderReaders(errors) : nothing}
+          </section>
+        </wt-tabs>
+        ${this.#renderNarrowed()}
         <wt-form-actions .error=${message}>
           <wt-button
             slot="cancel"
