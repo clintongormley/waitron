@@ -793,8 +793,8 @@ the helper's constant status is not evidence of the write.
   `served.test.ts`, `report-api.categories-reconcile.test.ts` and `demo-seed.db.test.ts` use English staff display names.
   The recovery-page personal-data suite uses Martha Lewis and George Hill as staff samples. Its Spanish venue legal-name, location and table-name samples remain.
   The shared boot provision-body and stream-pause fixtures use Administrator for their staff display sample.
-  Other local and shared staff-name samples still need triage, excluding the catalogue include-folder,
-  menu-patch and menu-schedule manager samples; preserve deliberate name and locale cases.
+  The catalogue include-folder, menu-patch and menu-schedule route suites use English staff display names.
+  Other local and shared staff-name samples still need triage; preserve deliberate name and locale cases.
   Logger personal-name samples use English names, except the deliberate accented `Àngel` cases
   and short-email `ana@bo.es` sample;
   made-here and till-table supervisor display samples use English names.
