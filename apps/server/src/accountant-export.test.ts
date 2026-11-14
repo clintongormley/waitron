@@ -39,7 +39,6 @@ const invoice = {
   correctsSaleId: null,
   originalInvoiceNumber: null,
   voidedAt: "2026-12-01T12:00:00Z",
-  operationDate: null,
   vatBreakdown: [
     { rate: "10.00", base: "10.00", tax: "1.00" },
     { rate: "21.00", base: "10.00", tax: "2.10" },
@@ -250,7 +249,6 @@ describe("accountant workbook", () => {
       "",
       "2026-12-01T12:00:00Z",
       "",
-      "",
     ]);
     expect(row(xml, 3).slice(11, 19)).toEqual([
       "21.00",
@@ -300,35 +298,6 @@ describe("accountant workbook", () => {
       );
       const xml = strFromU8(files["xl/worksheets/sheet1.xml"]!);
       expect([row(xml, 2)[3], row(xml, 3)[3]]).toEqual(["F2", replacementType]);
-    },
-  );
-
-  it.each([
-    ["en", "Operation date"],
-    ["es", "Fecha de operación"],
-  ] as const)(
-    "gives a replaced invoice's row its real day under the operation date column, in %s",
-    async (language, heading) => {
-      const files = unzipSync(
-        await renderAccountantWorkbook(
-          {
-            invoices: [
-              { ...invoice, invoiceType: "F2", operationDate: "2026-02-28" },
-              { ...invoice, id: "replacement-1", invoiceType: "replacement", vatBreakdown: [] },
-            ],
-            purchases: [],
-            outsidePayments: [],
-          },
-          language,
-        ),
-      );
-      const xml = strFromU8(files["xl/worksheets/sheet1.xml"]!);
-      expect(row(xml, 1)[19]).toBe(heading);
-      expect([row(xml, 2)[19], row(xml, 3)[19], row(xml, 4)[19]]).toEqual([
-        "2026-02-28",
-        "2026-02-28",
-        "",
-      ]);
     },
   );
 
@@ -507,7 +476,6 @@ describe("accountant period selection", () => {
         correctsSaleId: null,
         originalInvoiceNumber: null,
         voidedAt: null,
-        operationDate: null,
       },
       {
         id: last,
@@ -526,7 +494,6 @@ describe("accountant period selection", () => {
         correctsSaleId: null,
         originalInvoiceNumber: null,
         voidedAt: null,
-        operationDate: null,
       },
     ]);
     expect(await list("2027-01-01", "2027-01-01")).toEqual({
@@ -637,50 +604,6 @@ describe("accountant period selection", () => {
       correctsSaleId: original,
       originalInvoiceNumber: "A/1",
     });
-  });
-
-  it("gives a replaced ticket the real day its replacement names, and no other row a day", async () => {
-    const [series] = await suite.db
-      .insert(invoiceSeries)
-      .values({ nodeId: venue.nodeId, code: "R", purpose: "rectificative" })
-      .returning({ id: invoiceSeries.id });
-    const rectificative = { ...venue, seriesId: series!.id as SeededVenue["seriesId"] };
-    const replaced = await seedSale(suite.db, venue, {
-      invoiceNumber: 1,
-      issuedAt: "2026-11-02T12:00:00.000Z",
-      total: "12.10",
-      lines: [{ vatRate: "10.00", lineTotal: "11.00" }],
-    });
-    const plain = await seedSale(suite.db, venue, {
-      invoiceNumber: 2,
-      issuedAt: "2026-11-02T13:00:00.000Z",
-      total: "12.10",
-      lines: [{ vatRate: "10.00", lineTotal: "11.00" }],
-    });
-    const replacement = await seedSale(suite.db, rectificative, {
-      invoiceNumber: 1,
-      issuedAt: "2026-11-03T12:00:00.000Z",
-      total: "12.10",
-      correctsSaleId: replaced,
-      replacesOriginal: true,
-      operationDate: "2026-10-30",
-      lines: [{ vatRate: "10.00", lineTotal: "11.00" }],
-    });
-    const refund = await seedSale(suite.db, rectificative, {
-      invoiceNumber: 2,
-      issuedAt: "2026-11-04T12:00:00.000Z",
-      total: "-3.30",
-      correctsSaleId: replacement,
-      lines: [{ vatRate: "10.00", lineTotal: "-3.00" }],
-    });
-
-    const rows = (await list()).invoices;
-    expect(rows.map((row) => [row.id, row.operationDate])).toEqual([
-      [replaced, "2026-10-30"],
-      [plain, null],
-      [replacement, null],
-      [refund, null],
-    ]);
   });
 
   it("lists a sale with ordinary refunds once, under its own type", async () => {

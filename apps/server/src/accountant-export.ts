@@ -40,8 +40,6 @@ export interface AccountantInvoice {
   correctsSaleId: string | null;
   originalInvoiceNumber: string | null;
   voidedAt: string | null;
-  /** On a replaced invoice only: the day it really happened, as its replacement filed it. */
-  operationDate: string | null;
 }
 
 export interface AccountantExport {
@@ -119,7 +117,6 @@ export async function renderAccountantWorkbook(
         invoice.originalInvoiceNumber,
         invoice.voidedAt,
         null,
-        invoice.operationDate,
       ]);
     }
   }
@@ -200,7 +197,6 @@ export async function listAccountantExport(
 ): Promise<AccountantExport> {
   const original = alias(sales, "original_invoice");
   const originalSeries = alias(invoiceSeries, "original_series");
-  const replacement = alias(sales, "replacement_invoice");
   const civilDate = sql<string>`date(${sales.issuedAt}, printf('%+d minutes', ${sales.issuedOffsetMinutes}))`;
   const rows = await tx
     .select({
@@ -222,18 +218,12 @@ export async function listAccountantExport(
       originalCode: originalSeries.code,
       originalNumber: original.invoiceNumber,
       voidedAt: saleVoids.voidedAt,
-      operationDate: replacement.operationDate,
     })
     .from(sales)
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
     .leftJoin(original, eq(original.id, sales.correctsSaleId))
     .leftJoin(originalSeries, eq(originalSeries.id, original.seriesId))
     .leftJoin(saleVoids, eq(saleVoids.saleId, sales.id))
-    // `sales_one_replacement_uq`: at most one row joins, so no invoice is listed twice.
-    .leftJoin(
-      replacement,
-      and(eq(replacement.correctsSaleId, sales.id), eq(replacement.replacesOriginal, true)),
-    )
     .leftJoin(saleSubstitutions, eq(saleSubstitutions.substitutionSaleId, sales.id))
     .where(and(between(civilDate, range.from, range.to), isNull(saleSubstitutions.id)))
     .orderBy(asc(civilDate), asc(sales.issuedAt), asc(sales.id));
