@@ -61,3 +61,6 @@ says that an invoice is missing.
 
 When either list has a line, choose **Export these cases for your tax adviser**: the file carries
 both lists.
+
+The check with AEAT starts at the oldest month of invoices this box holds. Before relying on
+earlier months, ask your tax adviser to check AEAT's records for them.

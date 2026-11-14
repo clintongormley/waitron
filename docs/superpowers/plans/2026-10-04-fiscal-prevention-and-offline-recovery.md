@@ -677,6 +677,13 @@ and §6](../specs/2026-10-19-a798-degraded-trading-design.md).
 
 ## Task 11: full offline exercise and operator instructions
 
+**14 November 2026, re-mapped and built as W41s-11:** the bullets below are historical. What was
+built, kept or dropped, and why, is in
+[the W41s-11 plan](2026-11-14-w41s-11-offline-exercise.md). The procedure is the in-app guide's
+[After a recovery](../../../apps/server/src/guide/en/backup-recovery.md) section, not
+`docs/operations/fiscal-recovery.md`. The 9 November note under Task 10 overstates fencing: a
+one-box venue is not fenced, because A1418 part 1 is a plan only.
+
 **Create:** `apps/server/src/fiscal-offline-recovery.e2e.test.ts`;
 `docs/operations/fiscal-recovery.md`. **Modify:** compliance findings with dated receipts,
 adviser questions as actual answers arrive, and W41s in the backlog.

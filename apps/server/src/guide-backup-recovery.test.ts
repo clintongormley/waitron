@@ -19,6 +19,7 @@ it.each(["en", "es"])(
       "proof",
       "series",
       "resume",
+      "after-recovery",
       "invoice-conflict",
     ])
       expect(html).toContain(`id="${section}"`);
@@ -29,6 +30,7 @@ it.each(["en", "es"])(
       "proof",
       "series",
       "resume",
+      "after-recovery",
       "invoice-conflict",
     ]);
   },

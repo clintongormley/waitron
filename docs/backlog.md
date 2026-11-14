@@ -289,16 +289,15 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   The precise H2 writer approval, released clock/Pay contracts and separate F1/delivery/physical gates remain.
   [Design](superpowers/specs/2026-10-22-a275-final-transfer-close-design.md), [detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--design-now-2026-10-17).
 
-- **W41s. Fiscal prevention and offline recovery.** The complete old-backup/new-hardware exercise
-  (W41s-11) remains; it reads the possibly-missing-history lists on **Reporting → Fiscal filing**
-  (W41s-9).
+- **W41s. Fiscal prevention and offline recovery.**
   Importing, matching or reconciling recovered history, and any missing-history remedy, wait for
   the adviser's answer to Q41. Signed witnesses and fencing (W41s-10b)
-  were retired on 9 November 2026: A1342 (#2654) and A1418 with A1425 cover them. Qualify live AEAT reconciliation, production TLS, a till payment through a booted
-  restored server, and history before the oldest known month. Of Task 8's disputed production
-  remedies, the corrective invoice (the replacement) waits on Q37-FIX Task 3, which waits on the
-  owner's answers to questions A–E (lane L, 2026-11-14); the others stay disabled pending
-  Q35/Q38/Q40 or a case-specific owner decision. Once its original's
+  were retired on 9 November 2026: A1342 (#2654) stops a returning old box on a two-box venue; on a
+  one-box venue nothing stops it until A1418 part 1, still a plan, is built. Qualify live AEAT
+  reconciliation, production TLS and a till payment through a booted restored server. Of Task 8's
+  disputed production remedies, the corrective invoice (the replacement) waits on Q37-FIX Task 3,
+  which waits on the owner's answers to questions A–E (lane L, 2026-11-14); the others stay disabled
+  pending Q35/Q38/Q40 or a case-specific owner decision. Once its original's
   correction is accepted, on any issuing chain, an administrator may release a held cancellation
   through a remedy, which only a test policy enables today (production's `ENABLED_REMEDIES` holds
   only `record-correction`, for rejected records only,

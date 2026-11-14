@@ -338,13 +338,12 @@ file's edit scope is authorised. The live procedure is documented in
 
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
-**Reporting → Fiscal filing** lists invoices a check with AEAT found under a series this box no
-longer uses and that this box did not issue, and fiscal identity changes without a handover (W41s-9,
-[plan](../superpowers/plans/2026-11-09-w41s-9-fiscal-filing-screen.md)); the complete
-old-backup/new-hardware exercise (W41s-11), still to do, reads them. Importing, matching or reconciling recovered
+Importing, matching or reconciling recovered
 history, and any missing-history remedy, stay out until the adviser answers Q41. Signed witnesses and fencing (W41s-10b) were retired on 9 November 2026: A1342
-(#2654) stops a returning old main box on signed newer evidence in the backup bucket, and A1418
-with A1425 cover a one-box venue restored from its backup. Keep their authority, recovery and
+(#2654) stops a returning old main box on a two-box venue, on signed newer evidence in the backup
+bucket. A one-box venue restored from its backup is not fenced: A1418 part 1 is a plan only
+([plan](../superpowers/plans/2026-11-07-a1418-part-1-stop-marks.md)), and until it is built the
+guide tells the owner to keep the old box off and disconnected. Keep their authority, recovery and
 public fiscal-enablement gates. W41s-10a's remaining qualification work follows.
 
 ### Qualify reconciliation against live AEAT
@@ -356,25 +355,17 @@ fencing belong to A1342 (landed) and A1418.
 
 ### Qualify offline recovery through production TLS
 
-Extend W41s-11's old-backup/new-hardware exercise to the production HTTPS connection and fresh
-device pairing. Keep the administrator approval, cookie admission, recovered-series and retired
+Extend the old-backup/new-hardware exercise (`apps/server/src/fiscal-offline-recovery.e2e.test.ts`)
+to the production HTTPS connection and fresh device pairing. Keep the administrator approval, cookie admission, recovered-series and retired
 counter checks. The loopback HTTP qualification in #2449 is not a production TLS result.
 
 ### Take a till payment through a booted restored server
 
-In W41s-11, restore both archive and stream backups without enrolled devices or internet time,
+Left open by W41s-11: restore both archive and stream backups without enrolled devices or internet time,
 start the recovered server, pair a fresh till and take a payment through its API. Check the
 recovered series, one invoice and one tender, original records, retired counters and replay.
 Keep optional browser receipt observations separate from recovery authority; missing storage or
 an unlisted invoice number is not proof that a number was unused.
-
-### Account for history before the oldest known month
-
-W41s-10a's monthly starting point can omit a wholly missing earlier period. Carry that uncertainty
-into W41s-11's exercise. The backup bucket records no invoice range, so no signed witness settles
-it. Name the evidence required before
-claiming completeness; querying later months or showing retained receipt observations alone does
-not resolve earlier missing history.
 
 Evidence inspection and persistent-repair policy remain separate A1089 work.
 
@@ -1040,6 +1031,14 @@ here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is create
   `inmutabilidad.test.ts`. Rename it in the same authorised edit. Left by the T2 sweep (2026-09-23).
 
 ## Decisions and deliberate limits
+
+### W41s-11: the guide is the recovery procedure, and an old one-box box is kept off by hand (watcher, 2026-11-14)
+
+The recovery guide's **After a recovery** section (`apps/server/src/guide/en/backup-recovery.md`,
+`#after-recovery`, and its Spanish twin) is the procedure after restoring on new hardware; there is
+no separate operations file. It tells the owner to keep the old box switched off and disconnected,
+because on a one-box venue nothing stops it selling if it is switched on again. Revisit that
+sentence when A1418 part 1 lands.
 
 ### A555: counter full invoices stay as the Pay window issues them (owner, 2026-11-12)
 

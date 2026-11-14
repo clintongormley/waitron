@@ -65,3 +65,7 @@ Ninguna de las dos listas dice que falte una factura.
 
 Si alguna de las dos listas tiene una línea, elige **Exportar estos casos para tu asesor fiscal**: el
 archivo incluye las dos listas.
+
+La comprobación con la AEAT empieza en el mes más antiguo de las facturas que tiene este servidor.
+Antes de dar por buenos los meses anteriores, pide a tu asesor fiscal que revise los registros de
+la AEAT de esos meses.
