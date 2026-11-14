@@ -3,6 +3,7 @@ import { page } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import {
   cleanupDepartmentEditors,
+  departmentActions,
   mountDepartmentEditor,
   selectDepartmentTab,
   supplyReceiptEditor,
@@ -87,7 +88,7 @@ describe.each(["light", "dark"] as const)("department phone bounds (%s)", (theme
         ...destinations,
         section.querySelector("fieldset")!,
         section.querySelector("wt-combobox")!,
-        ...form.shadowRoot!.querySelector("wt-form-actions")!.children,
+        ...departmentActions(form).children,
       ])
         inside(field, bounds);
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
