@@ -63,6 +63,7 @@ export class StationTable extends LitElement {
     {};
   @property({ attribute: false }) actions: Readonly<Record<string, TemplateResult>> = {};
   @property({ attribute: false }) stations: readonly PrepStation[] = [];
+  @property({ type: Boolean }) disabled = false;
   @property({ attribute: false }) outputs: Readonly<
     Record<string, { printedOn: string | TemplateResult; shownOn: string | TemplateResult }>
   > = {};
@@ -126,6 +127,19 @@ export class StationTable extends LitElement {
       .columns=${this.#columns()}
       .rows=${rows}
       .rowKey=${(station: PrepStation) => station.id}
+      .rowClickLabel=${() => t("prep.edit_station")}
+      .rowClick=${
+        this.disabled
+          ? undefined
+          : (station: PrepStation) =>
+              this.dispatchEvent(
+                new CustomEvent("station-edit", {
+                  detail: { station },
+                  bubbles: true,
+                  composed: true,
+                }),
+              )
+      }
       emptyMessage=${t("prep.stations_empty")}
     ></wt-data-table>`;
   }

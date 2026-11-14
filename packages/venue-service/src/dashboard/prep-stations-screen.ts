@@ -97,24 +97,27 @@ const PREP_TABS = ["stations", "routing"] as const;
 type PrepTab = (typeof PREP_TABS)[number];
 const sameAddress = (a: CellAddress, b: CellAddress) => cellKey(a) === cellKey(b);
 
-/** One line per active device whose kitchen screens show the station, naming those screens' kinds. */
 function screenDevices(devices: PrepStationsView["devices"], stationId: string) {
-  const lines = devices.flatMap((device) => {
-    if (!device.active) return [];
-    const kinds = device.kitchenScreens
-      .filter(
+  const shown = devices.filter(
+    (device) =>
+      device.active &&
+      device.kitchenScreens.some(
         (screen) =>
           screen.available &&
           screen.stations.some((slot) => slot.id === stationId && slot.available),
-      )
-      .map((screen) => t(`prep.screen_kind.${screen.kind}`));
-    return kinds.length === 0
-      ? []
-      : [format("prep.tickets.screen_device", { device: device.label, kinds: kinds.join(", ") })];
-  });
-  return lines.length === 0
+      ),
+  );
+  return shown.length === 0
     ? t("prep.none")
-    : lines.map((line) => html`<span data-test="screen-device">${line}</span>`);
+    : shown.map(
+        (device) =>
+          html`<a
+            part="devices-link"
+            data-test="screen-device"
+            href=${`/manage/devices/device/${encodeURIComponent(device.id)}`}
+            >${device.label}</a
+          >`,
+      );
 }
 
 @customElement("dashboard-prep-stations-screen")
@@ -739,6 +742,11 @@ export class PrepStationsScreen extends LitElement {
     this.pending = undefined;
     this.cellChoice = null;
   }
+  #editStation(station: PrepStation) {
+    this.stationEditBusy = false;
+    this.stationEditRefusal = undefined;
+    this.stationEdit = { token: {}, station };
+  }
   #stationMenu(station: PrepStation) {
     return html`<wt-row-actions
       data-station-id=${station.id}
@@ -748,11 +756,7 @@ export class PrepStationsScreen extends LitElement {
       <wt-button
         data-test=${`edit-${station.id}`}
         ?disabled=${this.busy}
-        @click=${() => {
-          this.stationEditBusy = false;
-          this.stationEditRefusal = undefined;
-          this.stationEdit = { token: {}, station };
-        }}
+        @click=${() => this.#editStation(station)}
         >${t("venue.edit")}</wt-button
       >
       ${
@@ -783,8 +787,7 @@ export class PrepStationsScreen extends LitElement {
           station.id,
           {
             printedOn: printers.join(", ") || t("prep.no_printer"),
-            shownOn: html`${screenDevices(view.devices, station.id)}
-              <a part="devices-link" href="/manage/devices">${t("prep.devices")}</a>`,
+            shownOn: html`${screenDevices(view.devices, station.id)}`,
           },
         ];
       }),
@@ -1541,6 +1544,8 @@ export class PrepStationsScreen extends LitElement {
               <div slot="stations">
                 <prep-station-table
                   .stations=${view.stations}
+                  .disabled=${this.busy}
+                  @station-edit=${(event: CustomEvent<{ station: PrepStation }>) => this.#editStation(event.detail.station)}
                   .actions=${Object.fromEntries(view.stations.map((station) => [station.id, this.#stationMenu(station)]))}
                   .outputs=${this.#stationOutputs(view)}
                   .statusNotes=${Object.fromEntries(

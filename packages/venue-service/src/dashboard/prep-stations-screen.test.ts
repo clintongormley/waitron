@@ -600,7 +600,7 @@ it("shows linked printers and kitchen screens in Stations", async () => {
       stationPrinters: [{ stationId: "bar", printerId: "p1" }],
       devices: [
         {
-          id: "d1",
+          id: "d/one",
           label: "Bar display",
           kitchenScreens: [stationScreen([slot("bar", "Bar")])],
           kind: "kds_station",
@@ -614,7 +614,7 @@ it("shows linked printers and kitchen screens in Stations", async () => {
   const screens = q(el, '[data-test="screens-bar"]')!;
   expect(printers.textContent).toContain("Bar printer");
   expect(screens.textContent).toContain("Bar display");
-  expect(screens.querySelector("a")?.getAttribute("href")).toBe("/manage/devices");
+  expect(screens.querySelector("a")?.getAttribute("href")).toBe("/manage/devices/device/d%2Fone");
   expect(
     el
       .shadowRoot!.querySelector('[slot="routing"]')!
@@ -2787,7 +2787,7 @@ async function cancelEditor(el: PrepStationsScreen) {
   await settle(el);
 }
 
-it("Stations names each station's printers and the screens that show it, with a link to Devices", async () => {
+it("Stations names each station's printers and links the devices that show it", async () => {
   const { el } = await mountStations();
   const printed = q(el, '[data-test="printed-on-bar"]')!;
   expect(printed.textContent).toContain("Old printer");
@@ -2795,7 +2795,7 @@ it("Stations names each station's printers and the screens that show it, with a 
   expect(bar.textContent).toContain("Bar screen");
   expect(bar.textContent).not.toContain("Other screen");
   expect(bar.textContent).not.toContain("Disabled screen");
-  expect(bar.querySelector("a")!.getAttribute("href")).toBe("/manage/devices");
+  expect(bar.querySelector("a")!.getAttribute("href")).toBe("/manage/devices/device/current");
   expect(printed.querySelector("wt-combobox, button")).toBeNull();
   expect(bar.querySelector("wt-combobox")).toBeNull();
 });
@@ -2810,33 +2810,14 @@ it.each(["light", "dark"] as const)(
     probe.style.color = "var(--wt-color-primary-text)";
     el.parentElement!.append(probe);
     const token = getComputedStyle(probe).color;
-    const devices = q(el, '[data-test="screens-bar"] a[href="/manage/devices"]')!;
+    const devices = q(el, '[data-test="screens-bar"] a[href="/manage/devices/device/current"]')!;
     expect(getComputedStyle(devices).color).toBe(token);
   },
 );
 
-it.each([
-  {
-    locale: "en",
-    bar: ["Bar screen — station screen", "Pass — pass screen", "Till 2 — station screen"],
-    upstairs: ["Other screen — station screen", "Pass — pass screen", "Expo — pass monitor"],
-  },
-  {
-    locale: "es",
-    bar: [
-      "Bar screen — pantalla de estación",
-      "Pass — pantalla de pase",
-      "Till 2 — pantalla de estación",
-    ],
-    upstairs: [
-      "Other screen — pantalla de estación",
-      "Pass — pantalla de pase",
-      "Expo — monitor de pase",
-    ],
-  },
-])(
-  "Stations names every device whose kitchen screen shows the station, with the screen's kind ($locale)",
-  async ({ locale, bar, upstairs }) => {
+it.each(["en", "es"])(
+  "Stations links each active device once, using its name only (%s)",
+  async (locale) => {
     const server = structuredClone(ticketView);
     server.devices.push(
       {
@@ -2846,6 +2827,7 @@ it.each([
         active: true,
         kitchenScreens: [
           stationScreen([slot("bar", "Bar"), slot("upstairs", "Upstairs bar")], "pass"),
+          stationScreen([slot("bar", "Bar")]),
         ],
       },
       {
@@ -2875,8 +2857,17 @@ it.each([
       [...q(el, `[data-test="screens-${id}"]`)!.querySelectorAll("[data-test=screen-device]")].map(
         (device) => device.textContent!.trim(),
       );
-    expect(names("bar")).toEqual(bar);
-    expect(names("upstairs")).toEqual(upstairs);
+    expect(names("bar")).toEqual(["Bar screen", "Pass", "Till 2"]);
+    expect(names("upstairs")).toEqual(["Other screen", "Pass", "Expo"]);
+    expect(
+      [...q(el, '[data-test="screens-bar"]')!.querySelectorAll("a")].map((link) =>
+        link.getAttribute("href"),
+      ),
+    ).toEqual([
+      "/manage/devices/device/current",
+      "/manage/devices/device/pass",
+      "/manage/devices/device/till-grill",
+    ]);
   },
 );
 

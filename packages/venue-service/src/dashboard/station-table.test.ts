@@ -1,4 +1,4 @@
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { html } from "lit";
 import { applyTokens } from "@waitron/ui";
@@ -56,20 +56,29 @@ it("draws its rows from the stations list, with its daily status beside Name", a
   expect(rows[0]!.textContent).toContain("Bar");
   expect(rows[0]!.textContent).toContain("Default");
   expect(rows[0]!.textContent).toContain("Closed for today → Grill");
-  expect(table(el)?.querySelector("button")).toBeNull();
+  expect(table(el)?.querySelector("button:not(.row-activate)")).toBeNull();
   expect(el.shadowRoot?.textContent).not.toContain("Loading station health");
+});
+it("activates a station row with the station to edit", async () => {
+  const el = await mount();
+  const edits: unknown[] = [];
+  el.parentElement!.addEventListener("station-edit", (event) => {
+    edits.push((event as CustomEvent).detail);
+  });
+  await userEvent.click(table(el)!.querySelector("tbody tr td")!);
+  expect(edits).toEqual([{ station: bar }]);
 });
 it("puts the row menu in its own Actions column, pinned to the end, without a grip", async () => {
   const el = await mount();
   el.actions = { bar: html`<button type="button" data-test="menu-bar">⋮</button>` };
   await new Promise((resolve) => setTimeout(resolve, 0));
   const cells = [...table(el)!.querySelectorAll("tbody tr td")];
-  expect(cells[0]!.querySelector("button")).toBeNull();
+  expect(cells[0]!.querySelector("button:not(.row-activate)")).toBeNull();
   expect(cells[0]!.querySelector('[data-test="menu-bar"]')).toBeNull();
   const last = cells.at(-1)!;
   expect(last.getAttribute("data-pinned")).toBe("end");
   expect(last.querySelector('[data-test="menu-bar"]')).not.toBeNull();
-  expect(table(el)!.querySelectorAll("tbody tr button")).toHaveLength(1);
+  expect(table(el)!.querySelectorAll("tbody tr button:not(.row-activate)")).toHaveLength(1);
 });
 it("names its columns in Spanish, and says so when there are no stations", async () => {
   setLocale("es");
