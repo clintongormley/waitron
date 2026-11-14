@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
-import { applyTokens, type WtDataTable, type WtModal } from "@waitron/ui";
+import { applyTokens, type WtDataTable } from "@waitron/ui";
 import { CALENDAR_COLOURS } from "../hours-types.js";
 import type { PeriodFloorPlans } from "../floor-plan-set-types.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
@@ -10,7 +10,6 @@ import type { PeriodDialog } from "./period-dialog.js";
 import type { PeriodRow, PeriodsList } from "./periods-list.js";
 import { seasonTints } from "./season-tint.js";
 
-import "@waitron/ui/src/components/wt-modal.js";
 import "./periods-list.js";
 
 const hosts: HTMLElement[] = [];
@@ -262,9 +261,9 @@ it("Painted in lists the seasons in order, then the special days, each linking t
     "Company dinners",
   ]);
   expect(chips.map((chip) => chip.getAttribute("href"))).toEqual([
-    "/manage/opening-hours/view/season/season/summer/department/restaurant",
-    "/manage/opening-hours/view/season/season/winter/department/restaurant",
-    "/manage/opening-hours/view/special-day/special-day/sd1",
+    "/manage/opening-hours/view/season/season/summer/department/restaurant?back=/manage/periods",
+    "/manage/opening-hours/view/season/season/winter/department/restaurant?back=/manage/periods",
+    "/manage/opening-hours/view/special-day/special-day/sd1?back=/manage/periods",
   ]);
   const winter = chips[1]!;
   expect(getComputedStyle(winter).backgroundColor).not.toBe(
@@ -325,9 +324,10 @@ it.each(["en", "es"])("heading and + Add period share the top row (%s)", async (
   setLocale(locale);
   const el = await mount();
   await loaded(el);
-  const heading = el.shadowRoot!.querySelector("h2")!;
+  const heading = el.shadowRoot!.querySelector("h1")!;
+  expect(heading, "Periods has a page heading").not.toBeNull();
   expect(heading.textContent).toBe(locale === "en" ? "Periods" : "Periodos");
-  expect(el.shadowRoot!.querySelector("h1")).toBeNull();
+  expect(el.shadowRoot!.querySelector("h2")).toBeNull();
   const h = heading.getBoundingClientRect();
   const add = el.shadowRoot!.querySelector("[data-test=add-period]")!.getBoundingClientRect();
   const middle = (h.top + h.bottom) / 2;
@@ -385,7 +385,7 @@ it("a period row opens its dialog; a department row opens nothing; the pinned ac
     .poll(() => el.shadowRoot!.querySelector("period-delete-dialog")?.period?.id)
     .toBe("p1");
   expect(dialogOf(el)).toBeNull();
-  expect(el.shadowRoot!.querySelector("h2")!.textContent).toBe("Periods");
+  expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Periods");
   expect(el.shadowRoot!.querySelector("[data-test=add-period]")!.textContent!.trim()).toBe(
     "+ Add period",
   );
@@ -523,7 +523,7 @@ it("Spanish: Periodos, Carta de clientes, Pintado en, Sin pintar en ningún siti
   setLocale("es");
   const el = await mount();
   const grid = await loaded(el);
-  expect(el.shadowRoot!.querySelector("h2")!.textContent).toBe("Periodos");
+  expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Periodos");
   expect(el.shadowRoot!.querySelector("[data-test=add-period]")!.textContent!.trim()).toBe(
     "+ Añadir periodo",
   );
@@ -587,11 +587,7 @@ it.each(
         },
         { periodId: "p2", seasons: [], specialDays: [] },
       ];
-      // Match the Periods window’s wide, medium-height frame.
-      const frame = document.createElement("wt-modal") as WtModal;
-      frame.size = "wide";
-      frame.height = "medium";
-      frame.open = true;
+      const frame = document.createElement("div");
       applyTokens(frame);
       document.body.append(frame);
       hosts.push(frame);

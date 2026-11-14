@@ -1,3 +1,4 @@
+import { seasonsPath, periodsPath } from "./opening-hours-paths.js";
 import { currentLocale } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -488,31 +489,8 @@ export class OpeningHoursYearView extends LitElement {
         (date): date is LocalDate => date != null && date.startsWith(prefix),
       ) ?? `${prefix}01-01`;
     return html`<season-chips .seasons=${model.seasons} .readOnly=${this.readOnly}
-        ><wt-button
-          data-test="open-seasons"
-          variant="secondary"
-          @click=${() =>
-            this.dispatchEvent(
-              new CustomEvent("calendar-window-open", {
-                detail: { window: "seasons" },
-                bubbles: true,
-                composed: true,
-              }),
-            )}
-          >${t("season.open_window")}</wt-button
-        ><wt-button
-          data-test="open-periods"
-          variant="secondary"
-          @click=${() =>
-            this.dispatchEvent(
-              new CustomEvent("calendar-window-open", {
-                detail: { window: "periods" },
-                bubbles: true,
-                composed: true,
-              }),
-            )}
-          >${t("period.open_window")}</wt-button
-        ></season-chips
+        ><a data-test="open-seasons" href=${seasonsPath}>${t("season.seasons")}</a
+        ><a data-test="open-periods" href=${periodsPath}>${t("period.title")}</a></season-chips
       >
       ${
         model.publicHolidaysAvailable

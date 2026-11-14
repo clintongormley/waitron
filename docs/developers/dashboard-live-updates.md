@@ -166,6 +166,9 @@ started after its last impact read answers (`rereadImpact`, `periods-screen.ts`;
 `model-watch.ts`), and after a delete refused as `hours.clock_changed`. The impact answer carries
 the clock revision it was read under, and the delete sends that one, so the order the page's reads
 answer in decides nothing about the revision sent.
+2026-11-14, A1536: that read-number condition is retired. `periods-list.ts` now re-reads an open
+delete dialog's impact passively on each new hours-model or Painted-in snapshot, retaining the
+latest-answer check. `nextReadNumber` is removed; a page re-read can produce two impact reads.
 2026-10-14, A506-12: Prep stations' Times tab reads `/opening-hours/month` through
 `OpeningHoursApi.watchMonth`, as the Month does, and the station's `…/service-times` through
 `watchStationTimes`, on the `routing`, `opening-hours` and `opening-hours-month` dependencies

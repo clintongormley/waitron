@@ -120,6 +120,8 @@ const en = {
   "special.zone_explain":
     "The department's hours and this zone's usual closures are shown faded. Drag down a day with Open or Closed to change that part of the day. Tick Closed under a date to shut it all day.",
   "season.seasons": "Seasons",
+  "season.new_row": "New season {number}",
+  "season.row_field": "{field}: {name}",
   "season.chip": "{name} · {from} – {to}",
   "season.week_named": "{name} · {from} – {to}, edit the standard week",
   "season.week_shown": "{name} · {from} – {to}, show the standard week",
@@ -132,9 +134,10 @@ const en = {
   "season.start_required": "Choose a day and a month.",
   "season.last": "A venue keeps at least one season.",
   "season.not_found": "This season no longer exists.",
+  "season.deleted_before_save":
+    "{name} no longer exists. Check the remaining changes before saving.",
   "season.delete_loses": "The hours of {departments} in it are lost.",
   "season.delete_loses_none": "No department has hours in it.",
-  "season.open_window": "Seasons…",
   "season.column_name": "Season",
   "season.runs_until": "Runs until",
   "season.window_hint":
@@ -144,7 +147,6 @@ const en = {
   "season.delete_pending": "Saving deletes {name}; its days join {previous}.",
   "season.delete_pending_alone": "Saving deletes {name}.",
   "season.delete_loses_unknown": "Which departments lose hours could not be read.",
-  "calendar.window.close": "Close",
   "year.holidays_unavailable": "Public holidays for {year} are not available yet",
   "month.previous": "Previous month",
   "month.next": "Next month",
@@ -778,7 +780,6 @@ const en = {
   "menu.period_name": "Name",
   "menu.actions": "Actions",
   "period.title": "Periods",
-  "period.open_window": "Periods…",
   "period.add_button": "+ Add period",
   "period.column.period": "Period",
   "period.load_error": "Periods could not be loaded. It will be tried again.",
@@ -1051,6 +1052,8 @@ const es: Record<keyof typeof en, string> = {
   "special.zone_explain":
     "El horario del departamento y los cierres habituales de esta zona aparecen en tenue. Arrastra por un día con Abierto o Cerrado para cambiar ese tramo. Marca Cerrado bajo una fecha para cerrarla entera.",
   "season.seasons": "Temporadas",
+  "season.new_row": "Temporada nueva {number}",
+  "season.row_field": "{field}: {name}",
   "season.chip": "{name} · {from} – {to}",
   "season.week_named": "{name} · {from} – {to}, editar la semana estándar",
   "season.week_shown": "{name} · {from} – {to}, ver la semana estándar",
@@ -1063,9 +1066,10 @@ const es: Record<keyof typeof en, string> = {
   "season.start_required": "Elige un día y un mes.",
   "season.last": "Un local conserva al menos una temporada.",
   "season.not_found": "Esta temporada ya no existe.",
+  "season.deleted_before_save":
+    "{name} ya no existe. Revisa los cambios restantes antes de guardar.",
   "season.delete_loses": "Se pierden los horarios de {departments} en ella.",
   "season.delete_loses_none": "Ningún departamento tiene horarios en ella.",
-  "season.open_window": "Temporadas…",
   "season.column_name": "Temporada",
   "season.runs_until": "Hasta el",
   "season.window_hint":
@@ -1075,7 +1079,6 @@ const es: Record<keyof typeof en, string> = {
   "season.delete_pending": "Al guardar se elimina {name}; sus días pasan a {previous}.",
   "season.delete_pending_alone": "Al guardar se elimina {name}.",
   "season.delete_loses_unknown": "No se pudo saber qué departamentos pierden horarios.",
-  "calendar.window.close": "Cerrar",
   "year.holidays_unavailable": "Los festivos oficiales de {year} aún no están disponibles",
   "month.previous": "Mes anterior",
   "month.next": "Mes siguiente",
@@ -1728,7 +1731,6 @@ const es: Record<keyof typeof en, string> = {
   "menu.period_name": "Nombre",
   "menu.actions": "Acciones",
   "period.title": "Periodos",
-  "period.open_window": "Periodos…",
   "period.add_button": "+ Añadir periodo",
   "period.column.period": "Periodo",
   "period.load_error": "No se pudieron cargar los periodos. Se volverá a intentar.",

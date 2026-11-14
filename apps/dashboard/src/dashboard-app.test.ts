@@ -7925,6 +7925,8 @@ describe("dashboard-app: remaining faces and shell controls", () => {
       "nav-prep-stations",
       "nav-floor-plans",
       "nav-opening-hours",
+      "nav-seasons",
+      "nav-periods",
       "nav-venue-settings",
     ]);
     expect(navItem(el, "venue-operations")!.textContent!.trim()).toBe("Departamentos y zonas");
@@ -9668,17 +9670,14 @@ describe("mounted public department dialogs", () => {
     },
   );
 
-  const periodsWindow = "/manage/opening-hours/view/year/window/periods";
-  const windowList = (app: DashboardApp) =>
-    find(app, "dashboard-opening-hours-screen")?.shadowRoot!.querySelector(
-      "[data-test=calendar-window][data-window=periods] periods-list",
-    ) ?? null;
+  const periodsPage = "/manage/periods";
+  const periodsList = (app: DashboardApp) => find(app, "periods-list") ?? null;
 
-  it("the real Set up periods link keeps Settings edits until Discard and then pushes the Calendar's Periods window", async () => {
+  it("the real Set up periods link keeps Settings edits until Discard and then pushes the Periods page", async () => {
     const app = await mountDepartments("/manage/venue-operations/department/d1", undefined, true);
     const box = await draft(app);
     const link = find(app, '[part="setup-issue"] a') as HTMLAnchorElement;
-    expect(link.getAttribute("href")).toBe(periodsWindow);
+    expect(link.getAttribute("href")).toBe(periodsPage);
     const pushed = vi.spyOn(history, "pushState");
     link.click();
     await choose(app, "keep");
@@ -9689,12 +9688,12 @@ describe("mounted public department dialogs", () => {
     expect(leaveCoordinatorFor(box)!.isDirty()).toBe(true);
     link.click();
     await choose(app, "discard");
-    await expect.poll(() => location.pathname).toBe(periodsWindow);
+    await expect.poll(() => location.pathname).toBe(periodsPage);
     expect(new URL(navigationGuardFor(window)!.href).pathname).toBe(location.pathname);
     expect(
       pushed.mock.calls.map((call) => new URL(String(call[2]), location.origin).pathname),
-    ).toEqual([periodsWindow]);
-    await expect.poll(() => windowList(app)).not.toBeNull();
+    ).toEqual([periodsPage]);
+    await expect.poll(() => periodsList(app)).not.toBeNull();
     expect(leaveCoordinatorFor(app)!.isDirty()).toBe(false);
   });
 
@@ -9705,35 +9704,34 @@ describe("mounted public department dialogs", () => {
     const pushedPaths = () =>
       pushed.mock.calls.map((call) => new URL(String(call[2]), location.origin).pathname);
     find(app, '[part="setup-issue"] a')!.click();
-    await expect.poll(() => location.pathname).toBe(periodsWindow);
-    await expect.poll(() => windowList(app)).not.toBeNull();
-    expect(pushedPaths()).toEqual([periodsWindow]);
+    await expect.poll(() => location.pathname).toBe(periodsPage);
+    await expect.poll(() => periodsList(app)).not.toBeNull();
+    expect(pushedPaths()).toEqual([periodsPage]);
     history.back();
     await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d1");
     await expect.poll(() => find(app, "department-settings")).not.toBeNull();
-    expect(pushedPaths()).toEqual([periodsWindow]);
+    expect(pushedPaths()).toEqual([periodsPage]);
     const box = await draft(app);
     history.forward();
     await choose(app, "keep");
     expect(location.pathname).toBe("/manage/venue-operations/department/d1");
-    expect(pushedPaths()).toEqual([periodsWindow]);
+    expect(pushedPaths()).toEqual([periodsPage]);
     expect(box.value).toBe("Draft restaurant");
     expect(leaveCoordinatorFor(box)!.isDirty()).toBe(true);
     history.forward();
     await choose(app, "discard");
-    await expect.poll(() => location.pathname).toBe(periodsWindow);
+    await expect.poll(() => location.pathname).toBe(periodsPage);
     expect(new URL(navigationGuardFor(window)!.href).pathname).toBe(location.pathname);
-    expect(pushedPaths()).toEqual([periodsWindow]);
-    await expect.poll(() => windowList(app)).not.toBeNull();
+    expect(pushedPaths()).toEqual([periodsPage]);
+    await expect.poll(() => periodsList(app)).not.toBeNull();
     expect(leaveCoordinatorFor(app)!.isDirty()).toBe(false);
   });
 
-  it("an old Periods page address falls back to the role home", async () => {
+  it("the Periods page address opens its module-contributed page", async () => {
     const app = await mountDepartments("/manage/periods");
-    await expect.poll(() => find(app, "[data-test=nav-opening-hours]")).not.toBeNull();
-    expect(find(app, "[data-test=nav-periods]")).toBeNull();
-    expect(find(app, "periods-list")).toBeNull();
-    expect(mountedScreens(app)).toEqual(["dashboard-overview-screen"]);
+    await expect.poll(() => find(app, "periods-list")).not.toBeNull();
+    expect(find(app, "[data-test=nav-periods]")).not.toBeNull();
+    expect(location.pathname).toBe("/manage/periods");
   });
 });
 

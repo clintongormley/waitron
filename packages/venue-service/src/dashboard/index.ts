@@ -1,5 +1,4 @@
 import { createRef, ref } from "lit/directives/ref.js";
-import type { OpeningHoursScreen } from "./opening-hours-screen.js";
 import type { VenueOperationsScreen } from "./venue-operations-screen.js";
 import { html } from "lit";
 import type { DashboardContribution, DashboardFurtherScreen } from "@waitron/dashboard-kit";
@@ -12,6 +11,8 @@ import { VENUE_SERVICE_STRINGS } from "./strings.js";
 import "./venue-operations-screen.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import "./opening-hours-screen.js";
+import "./periods-list.js";
+import "./seasons-screen.js";
 import "./floor-plans-screen.js";
 
 export const VENUE_SERVICE_DASHBOARD: DashboardContribution & DashboardFurtherScreen = {
@@ -26,18 +27,6 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution & DashboardFurtherSc
   searchDestinations: [
     ...departmentSettingSearchDestinations,
     ...zoneSettingSearchDestinations,
-    {
-      id: "venue-service:seasons",
-      screen: "opening-hours",
-      labelKey: "season.seasons",
-      path: "/manage/opening-hours/view/year/window/seasons",
-    },
-    {
-      id: "venue-service:periods",
-      screen: "opening-hours",
-      labelKey: "period.title",
-      path: "/manage/opening-hours/view/year/window/periods",
-    },
     {
       id: "venue-service:year",
       screen: "opening-hours",
@@ -126,16 +115,50 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution & DashboardFurtherSc
       create(ctx) {
         const api = new OpeningHoursApi(ctx.request, ctx.liveData);
         const calendar = { ctx, views: ctx.calendarViews ?? [] };
-        const screen = createRef<OpeningHoursScreen>();
         return {
-          navigationScopes: (destination) => screen.value?.navigationScopes(destination),
           render: (readOnly = false) =>
             html`<dashboard-opening-hours-screen
-              ${ref(screen)}
               .api=${api}
               .readOnly=${readOnly}
               .calendar=${calendar}
             ></dashboard-opening-hours-screen>`,
+        };
+      },
+    },
+    {
+      screen: {
+        id: "seasons",
+        navLabelKey: "season.seasons",
+        group: "operations",
+        order: 16,
+        requiresPermission: "venue.configure",
+        readPermission: "venue.view",
+      },
+      create(ctx) {
+        const api = new OpeningHoursApi(ctx.request, ctx.liveData);
+        return {
+          render: (readOnly = false) =>
+            html`<dashboard-seasons-screen
+              .api=${api}
+              .readOnly=${readOnly}
+            ></dashboard-seasons-screen>`,
+        };
+      },
+    },
+    {
+      screen: {
+        id: "periods",
+        navLabelKey: "period.title",
+        group: "operations",
+        order: 17,
+        requiresPermission: "venue.configure",
+        readPermission: "venue.view",
+      },
+      create(ctx) {
+        const api = new OpeningHoursApi(ctx.request, ctx.liveData);
+        return {
+          render: (readOnly = false) =>
+            html`<periods-list .api=${api} .readOnly=${readOnly}></periods-list>`,
         };
       },
     },

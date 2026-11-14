@@ -79,18 +79,12 @@ async function press(el: SeasonsWindow, target: HTMLElement) {
   await el.updateComplete;
 }
 
-it("draws a wide modal headed Seasons, marked as the seasons calendar window", async () => {
+it("draws editor body and actions without a Calendar window", async () => {
   const el = await mount();
-  expect(el.dataset.test).toBe("calendar-window");
-  expect(el.dataset.window).toBe("seasons");
-  const modal = root(el).querySelector("wt-modal")!;
-  expect(modal.heading).toBe("Seasons");
-  expect(modal.size).toBeUndefined();
-  const guard = vi.fn(async () => true);
-  el.beforeClose = guard;
-  await el.updateComplete;
-  expect(await modal.beforeClose!("cancel")).toBe(true);
-  expect(guard).toHaveBeenCalledWith("cancel");
+  expect(root(el).querySelector("wt-modal")).toBeNull();
+  expect(el.dataset.test).toBeUndefined();
+  expect(el.dataset.window).toBeUndefined();
+  expect(root(el).querySelector("table")).not.toBeNull();
 });
 
 it("lists every season from the one in force on 1 January, with colour, name, start and Runs until", async () => {
@@ -102,12 +96,12 @@ it("lists every season from the one in force on 1 January, with colour, name, st
   )!;
   expect(colour.value).toBe("blue");
   expect(colour.hideLabel).toBe(true);
-  expect(colour.label).toBe("Colour");
-  expect(field(el, "season-0-name").getAttribute("label")).toBe("Name");
+  expect(colour.label).toBe("Colour: Winter");
+  expect(field(el, "season-0-name").getAttribute("label")).toBe("Name: Winter");
   expect(field(el, "season-0-day").value).toBe("1");
-  expect(field(el, "season-0-day").getAttribute("label")).toBe("Day");
+  expect(field(el, "season-0-day").getAttribute("label")).toBe("Day: Winter");
   expect(field(el, "season-0-month").value).toBe("12");
-  expect(field(el, "season-0-month").getAttribute("label")).toBe("Month");
+  expect(field(el, "season-0-month").getAttribute("label")).toBe("Month: Winter");
   for (const name of ["season-0-name", "season-0-day", "season-0-month"])
     expect(field(el, name).hasAttribute("hide-label"), name).toBe(true);
   expect(runsUntil(el, "winter")).toBe("28 Feb");
@@ -174,6 +168,25 @@ it("the colour chooser names the other rows that use each colour", async () => {
   expect(chooser.usedByLabel!("Green", "Spring")).toBe("Green, used by Spring");
 });
 
+it("names unnamed rows by their position", async () => {
+  const el = await mount();
+  await press(el, button(el, "add-season")!);
+  expect(field(el, "season-4-name").getAttribute("label")).toBe("Name: New season 5");
+  expect(field(el, "season-4-day").getAttribute("label")).toBe("Day: New season 5");
+  expect(field(el, "season-4-month").getAttribute("label")).toBe("Month: New season 5");
+  await change(el, "season-4-name", "Late winter");
+  expect(field(el, "season-4-day").getAttribute("label")).toBe("Day: Late winter");
+});
+
+it("paints the season chooser with pale tints", async () => {
+  const el = await mount();
+  const chooser =
+    root(el).querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>("[name=season-0-colour]")!;
+  expect(chooser.choices.find((choice) => choice.value === "blue")?.fill).toBe(
+    "var(--wt-color-station-blue)",
+  );
+});
+
 it("the bin removes a row; the last row's bin is disabled", async () => {
   const el = await mount();
   expect(bins(el).map((bin) => bin.getAttribute("aria-label"))).toEqual([
@@ -221,19 +234,6 @@ it("a bin pressed from the keyboard on the last row hands focus to the row above
   expect(focused(el)).toBe(button(el, "add-season"));
 });
 
-it("after a bin, Escape asks the leave question without a Tab first", async () => {
-  const el = await mount();
-  const guard = vi.fn(async () => false);
-  el.beforeClose = guard;
-  await el.updateComplete;
-  await userEvent.click(innerButton(bins(el)[0]!));
-  await el.updateComplete;
-  await userEvent.keyboard("{Escape}");
-  await expect.poll(() => guard.mock.calls.length).toBe(1);
-  expect(guard).toHaveBeenCalledWith("escape");
-  expect(root(el).querySelector("wt-modal")!.open).toBe(true);
-});
-
 it("marks the name, day and month of every row required, the heading drawing the one asterisk", async () => {
   const el = await mount();
   const marks = [...root(el).querySelectorAll("thead th")].map(
@@ -272,24 +272,22 @@ it("Save stays quiet and disabled until the draft changes", async () => {
   expect(save.variant).toBe("primary");
 });
 
-it("Cancel asks the modal to close for cancel", async () => {
+it("Cancel restores the latest baseline in place, clearing deleted rows and refusing no navigation", async () => {
   const el = await mount();
-  const reasons: string[] = [];
-  el.beforeClose = async (reason) => {
-    reasons.push(reason);
-    return true;
-  };
-  await el.updateComplete;
-  const closed = new Promise((resolve) => el.addEventListener("wt-close", resolve, { once: true }));
+  await change(el, "season-1-name", "Early spring");
+  await press(el, bins(el)[0]!);
+  await press(el, button(el, "add-season")!);
   const cancel = button(el, "cancel-seasons")!;
-  expect(cancel.getAttribute("slot")).toBe("cancel");
   expect(cancel.textContent!.trim()).toBe("Cancel");
   await userEvent.click(cancel);
-  await closed;
-  expect(reasons).toEqual(["cancel"]);
+  await el.updateComplete;
+  expect(rowNames(el)).toEqual(["Winter", "Spring", "Summer", "Autumn"]);
+  expect(root(el).querySelectorAll("[data-test=delete-note]")).toHaveLength(0);
+  expect(save(el).disabled).toBe(true);
+  expect(el.isConnected).toBe(true);
 });
 
-it("a viewer sees the table as text with Close and nothing to change", async () => {
+it("a viewer sees the table as text with no editing actions", async () => {
   const el = await mount(true);
   for (const selector of [
     "wt-input",
@@ -311,12 +309,7 @@ it("a viewer sees the table as text with Close and nothing to change", async () 
   expect(swatch.dataset.tint).toBe("blue");
   expect(getComputedStyle(swatch).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
   expect(headings(el)).toEqual(["Colour", "Season", "Starts on", "Runs until"]);
-  const close = button(el, "close-seasons")!;
-  expect(close.getAttribute("slot")).toBe("cancel");
-  expect(close.textContent!.trim()).toBe("Close");
-  const closed = new Promise((resolve) => el.addEventListener("wt-close", resolve, { once: true }));
-  await userEvent.click(close);
-  await closed;
+  expect(button(el, "close-seasons")).toBeNull();
 });
 
 it("Spanish", async () => {
@@ -349,7 +342,7 @@ function inside(box: DOMRect) {
 }
 
 it.each(["en", "es"] as const)(
-  "fits the window at 1280 and scrolls only its table at 390 (%s)",
+  "fits the page at 1280 and scrolls only its table at 390 (%s)",
   async (locale) => {
     const old = [window.innerWidth, window.innerHeight] as const;
     try {
@@ -369,12 +362,7 @@ it.each(["en", "es"] as const)(
       await frames();
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
       expect(region.scrollWidth).toBeGreaterThan(region.clientWidth);
-      const body = root(el)
-        .querySelector("wt-modal")!
-        .shadowRoot!.querySelector<HTMLElement>(".body")!;
-      expect(body.scrollWidth, "the window's body scrolls sideways").toBeLessThanOrEqual(
-        body.clientWidth,
-      );
+      expect(el.scrollWidth, "only the table scrolls sideways").toBeLessThanOrEqual(el.clientWidth);
       for (const test of ["cancel-seasons", "save-seasons"])
         inside(button(el, test)!.getBoundingClientRect());
       const chooser = field(el, "season-0-colour");
@@ -391,7 +379,7 @@ it.each(["en", "es"] as const)(
 );
 
 it.each(["en", "es"] as const)(
-  "at 390 every row's bin and date controls are on screen even with a wide font, and the bin stays put while the table scrolls (%s)",
+  "at 390 full colour labels fit and scrolling reveals each date beside the pinned bin, even with a wide font (%s)",
   async (locale) => {
     const old = [window.innerWidth, window.innerHeight] as const;
     try {
@@ -404,12 +392,18 @@ it.each(["en", "es"] as const)(
       // The longest colour name in each language: Turquesa in Spanish, Magenta in English.
       await change(el, "season-0-colour", locale === "es" ? "teal" : "magenta");
       await frames();
+      const colourLabel = field(el, "season-0-colour").shadowRoot!.querySelector<HTMLElement>(
+        ".value",
+      )!;
+      expect(colourLabel.textContent!.trim()).toBe(locale === "es" ? "Turquesa" : "Magenta");
+      expect(colourLabel.scrollWidth, "the selected colour is shown whole").toBeLessThanOrEqual(
+        colourLabel.clientWidth,
+      );
       expect(document.documentElement.scrollWidth).toBe(window.innerWidth);
       const day = field(el, "season-1-day").shadowRoot!.querySelector<HTMLElement>(".value")!;
       expect(day.textContent!.trim()).toBe("31");
       expect(day.scrollWidth, "the Day box shows 31 whole").toBeLessThanOrEqual(day.clientWidth);
-      const modal = root(el).querySelector("wt-modal")!;
-      const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!.getBoundingClientRect();
+      const body = el.getBoundingClientRect();
       const region = root(el).querySelector<HTMLElement>(".table-wrap")!;
       const shown = region.getBoundingClientRect();
       const within = (box: DOMRect, what: string) => {
@@ -431,6 +425,9 @@ it.each(["en", "es"] as const)(
         field(el, "season-3-month").shadowRoot!.querySelector(".value")!.textContent!.trim(),
       ).toBe(locale === "en" ? "Sept" : "sept");
       const binCell = rows[0]!.querySelector<HTMLElement>("td.bin")!;
+      const month = field(el, "season-3-month").getBoundingClientRect();
+      region.scrollLeft += Math.max(0, month.right - binCell.getBoundingClientRect().left + 8);
+      await frames();
       const heading = root(el).querySelector("thead th:nth-child(3)")!;
       const label = document.createRange();
       label.selectNodeContents(heading);
@@ -442,7 +439,7 @@ it.each(["en", "es"] as const)(
         const day = row.querySelector("wt-combobox[name$=-day]")!.getBoundingClientRect();
         const name = row.querySelector("wt-input")!.getBoundingClientRect();
         expect(name.right, `row ${index}'s Name stays separate from Day`).toBeLessThan(day.left);
-        within(day, `row ${index}'s Day box`);
+        within(day, `row ${index}'s Day box after scrolling`);
         expect(day.right, `row ${index}'s Day box clears the bin column`).toBeLessThanOrEqual(
           binCell.getBoundingClientRect().left,
         );
@@ -464,7 +461,7 @@ it.each(["en", "es"] as const)(
       await frames();
       expect(region.scrollLeft).toBeGreaterThan(0);
       check();
-      const surface = getComputedStyle(modal.shadowRoot!.querySelector("dialog")!).backgroundColor;
+      const surface = getComputedStyle(el).backgroundColor;
       for (const cell of [binCell, root(el).querySelector<HTMLElement>("thead th:last-child")!])
         expect(getComputedStyle(cell).backgroundColor).toBe(surface);
     } finally {
@@ -566,6 +563,19 @@ it("takes a clock revision that arrives while the draft is clean", async () => {
   el.clockRevision = 5;
   await el.updateComplete;
   await change(el, "season-0-name", "Deep winter");
+  await press(el, save(el));
+  await expect.poll(() => saveSeasons.mock.calls.length).toBe(1);
+  expect(saveSeasons.mock.calls[0]![1]).toBe(5);
+});
+
+it("Cancel takes the current clock revision before the next edit is saved", async () => {
+  const saveSeasons = vi.fn<WindowApi["saveSeasons"]>(async () => [...seasons]);
+  const el = await mount(false, { saveSeasons });
+  await change(el, "season-0-name", "Deep winter");
+  el.clockRevision = 5;
+  await el.updateComplete;
+  await press(el, button(el, "cancel-seasons")!);
+  await change(el, "season-0-name", "Late winter");
   await press(el, save(el));
   await expect.poll(() => saveSeasons.mock.calls.length).toBe(1);
   expect(saveSeasons.mock.calls[0]![1]).toBe(5);
@@ -719,18 +729,16 @@ it.each([
     await expect.poll(() => bottom(el)).toBe(message);
     expect(rowErrorsShown(el)).toBe(0);
     expect(field(el, "season-3-day").value).toBe("15");
-    expect(root(el).querySelector("wt-modal")!.open).toBe(true);
+    expect(el.isConnected).toBe(true);
     expect(events).toEqual([]);
     expect(save(el).disabled).toBe(false);
   },
 );
 
-it("while saving, Save shows busy, nothing else acts, and Escape does not close until the save ends", async () => {
+it("while saving, Save shows busy and the editor actions stay disabled", async () => {
   const { answer, reject } = held();
   const saveSeasons = vi.fn(() => answer);
   const el = await mount(false, { saveSeasons });
-  const guard = vi.fn(async () => true);
-  el.beforeClose = guard;
   await change(el, "season-0-name", "Deep winter");
   await press(el, save(el));
   expect(save(el).loading).toBe(true);
@@ -743,24 +751,9 @@ it("while saving, Save shows busy, nothing else acts, and Escape does not close 
   save(el).dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
   await el.updateComplete;
   expect(saveSeasons).toHaveBeenCalledTimes(1);
-  const modal = root(el).querySelector("wt-modal")!;
-  expect(await modal.requestClose("escape")).toBe(false);
-  expect(await modal.requestClose("cancel")).toBe(false);
-  await userEvent.keyboard("{Escape}");
-  await el.updateComplete;
-  expect(modal.open).toBe(true);
-  expect(guard).not.toHaveBeenCalled();
   reject({ code: "hours.clock_changed" });
   await expect.poll(() => save(el).loading).toBe(false);
   expect(field(el, "season-0-name").hasAttribute("disabled")).toBe(false);
-  const closed = new Promise<void>((resolve) =>
-    modal.addEventListener("wt-close", () => resolve(), { once: true }),
-  );
-  field(el, "season-0-name").focus();
-  await userEvent.keyboard("{Escape}");
-  await closed;
-  expect(guard).toHaveBeenCalledTimes(1);
-  expect(guard).toHaveBeenCalledWith("escape");
 });
 
 it("Enter in a field presses Save", async () => {
@@ -772,7 +765,7 @@ it("Enter in a field presses Save", async () => {
   await expect.poll(() => saveSeasons.mock.calls.length).toBe(1);
 });
 
-it("a save's answer that arrives after the window was closed and reopened neither closes the new window nor commits its draft", async () => {
+it("a save's answer that arrives after the editor was detached and reattached neither closes the reattached editor nor commits its draft", async () => {
   const { answer, resolve } = held();
   const el = await mount(false, { saveSeasons: vi.fn(() => answer) });
   const events = savedEvents();
@@ -883,7 +876,7 @@ it("a Discard restores the baseline but never reuses a new row's key", async () 
   expect(rowErrorsShown(el)).toBe(0);
 });
 
-it("a window taken off the page and put back after a redraw still guards and saves its edit", async () => {
+it("an editor taken off the page and put back after a redraw still guards and saves its edit", async () => {
   const leave = fakeCoordinator();
   const saveSeasons = vi.fn<WindowApi["saveSeasons"]>(async () => [...seasons]);
   const el = await mount(false, { saveSeasons });
@@ -1186,7 +1179,7 @@ it("a list set after the first draw fills the rows", async () => {
   expect(save(el).disabled).toBe(true);
 });
 
-it("a window put back on the page while clean shows the list that changed while it was away", async () => {
+it("an editor put back on the page while clean shows the list that changed while it was away", async () => {
   const el = await mount();
   el.remove();
   el.seasons = [...seasons, feria];
@@ -1361,7 +1354,7 @@ it("a Save refused because a changed season is gone marks that row until it is b
   });
 });
 
-it("a Save refused because a binned season is gone drops its delete and its note", async () => {
+it("a Save refused because a binned season is gone names it, drops its delete and keeps the other edits", async () => {
   const saveSeasons = vi
     .fn<WindowApi["saveSeasons"]>()
     .mockRejectedValueOnce({ code: "season.not_found", params: { seasonId: "autumn" } })
@@ -1374,7 +1367,7 @@ it("a Save refused because a binned season is gone drops its delete and its note
   await press(el, bins(el)[3]!);
   await press(el, save(el));
   await expect.poll(() => notes(el)).toEqual([]);
-  expect(bottom(el)).toBe("");
+  expect(bottom(el)).toBe("Autumn no longer exists. Check the remaining changes before saving.");
   expect(save(el).disabled).toBe(false);
   await press(el, save(el));
   await expect.poll(() => saveSeasons.mock.calls.length).toBe(2);

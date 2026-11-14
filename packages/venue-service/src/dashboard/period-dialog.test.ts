@@ -717,21 +717,21 @@ it("Painted in shows season chips in the order given with their tints, then spec
     {
       text: "Winter",
       tag: "a",
-      href: "/manage/opening-hours/view/season/season/winter/department/restaurant",
+      href: "/manage/opening-hours/view/season/season/winter/department/restaurant?back=/manage/periods",
       tint: "blue",
       special: false,
     },
     {
       text: "Summer",
       tag: "a",
-      href: "/manage/opening-hours/view/season/season/summer/department/restaurant",
+      href: "/manage/opening-hours/view/season/season/summer/department/restaurant?back=/manage/periods",
       tint: "amber",
       special: false,
     },
     {
       text: "Company dinners",
       tag: "a",
-      href: "/manage/opening-hours/view/special-day/special-day/sd1",
+      href: "/manage/opening-hours/view/special-day/special-day/sd1?back=/manage/periods",
       tint: null,
       special: true,
     },
@@ -926,7 +926,7 @@ async function mountAdd(list: typeof departments | (typeof departments)[number][
   return el;
 }
 
-it("from the Periods window, Add asks for the department first, preselects a lone department, and sends it", async () => {
+it("from the Periods page, Add asks for the department first, preselects a lone department, and sends it", async () => {
   const el = await mountAdd([departments[1]!]);
   const names = [...el.shadowRoot!.querySelectorAll("[name]")].map((n) => n.getAttribute("name"));
   expect(names[0]).toBe("departmentId");

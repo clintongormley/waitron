@@ -1,8 +1,6 @@
 import { decodePathSegment } from "@waitron/ui";
 import {
   calendarViewPath,
-  calendarWindowPath,
-  periodsWindowPath,
   seasonPainterPath,
   specialDayPainterPath,
 } from "./opening-hours-paths.js";
@@ -57,28 +55,4 @@ describe("opening hours paths", () => {
       "~",
     ]);
   });
-});
-
-it("adds replaces and removes only the Calendar window pair", () => {
-  const base = "/manage/opening-hours/view/season/season/winter/department/bar/zone/terrace";
-  expect(calendarWindowPath(base, "seasons")).toBe(`${base}/window/seasons`);
-  expect(calendarWindowPath(`${base}/window/periods`, "seasons")).toBe(`${base}/window/seasons`);
-  expect(calendarWindowPath(`${base}/window/seasons`, null)).toBe(base);
-  expect(calendarWindowPath(`${base}/window/seasons`, "periods")).toBe(`${base}/window/periods`);
-  expect(readBack(calendarWindowPath(base, "a/b"))).toEqual([
-    "view",
-    "season",
-    "season",
-    "winter",
-    "department",
-    "bar",
-    "zone",
-    "terrace",
-    "window",
-    "a/b",
-  ]);
-});
-
-it("names the Periods window over the Year", () => {
-  expect(periodsWindowPath).toBe("/manage/opening-hours/view/year/window/periods");
 });

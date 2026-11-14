@@ -285,23 +285,6 @@ readers show the trading name off; PATCH of `orderStart` inserts a row with it o
 align `setDepartmentSalePolicyField` repair defaults with the existing readers, with a failing
 authenticated route case first. The combined department editor preserves the off fallback.
 
-## At phone width the Seasons window cuts longer colour names
-
-**At phone width the Seasons window cuts longer colour names** ("Oran…", "Turq…"; at 390 px on
-2026-10-18, Magenta and Orange in English, and Magenta, Amarillo, Naranja and Celeste in Spanish): while the table is
-narrower than 480 px, each row's colour button is capped at 120 px so the start date stays clear of the pinned bin column
-(`seasons-window.ts`, #1843). 1280 px is unchanged. Owner's call whether the cut is acceptable or the
-row should stack on a phone. Left open by A721.
-
-## A season reads two shades of its colour
-
-The Seasons window's colour chooser paints the solid
-palette colour (Winter `rgb(47, 85, 212)`), while the season chips, the Year's days and a viewer's
-swatches paint the paler station tint (`rgb(220, 230, 251)`); a period shows one solid colour
-everywhere. It follows from A721's Decision 10 (seasons take the station tints) meeting the shared
-`wt-colour-chooser`. Owner's call: keep, or have the chooser show the tint for seasons. Measured in
-A721's LOOK, 2026-10-18 (#1843). Left open by A721.
-
 ## Loose ends left by A506-4 (#1597).
 
 - A special-day line in the Business day start dialog shows its date unformatted ("2026-11-03").
@@ -429,32 +412,6 @@ The owner decided the rule on 2026-11-06: a closure outside its department's hou
   (`packages/venue-service/src/zone-closure-hours.ts`), so the first save of the Terrace's week
   from the dashboard would fail.
 
-## Bundle: Seasons window
-
-5 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-Taken in by A1536 (owner, 2026-11-14): fixed on the new Seasons page, or deleted where the page makes it moot.
-
-- **A Save refused because a season the person binned was deleted elsewhere says nothing**: the
-  window drops the bin's note and the delete, and Save offers the rest of the draft again with no
-  message (`save`, `seasons-window.ts`). Whether it should say so is the owner's call. Left open by A721.
-- **The Seasons window names each row's fields by their field label alone** — "Name", "Day", "Month"
-  and "Colour", the last three followed by the chosen value — never by the row's season. Consider
-  naming each by its row ("Day: Winter"), as `variant-table.ts` names a row's buttons
-  ("Edit: {variant}"). Left open by A721.
-- **A season reads two shades of its colour**
-  [Detail](service-periods.md#a-season-reads-two-shades-of-its-colour)
-- **At phone width the Seasons window cuts longer colour names**
-  [Detail](service-periods.md#at-phone-width-the-seasons-window-cuts-longer-colour-names)
-
-## Bundle: Period dialogs
-
-1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
-Taken in by A1536 (owner, 2026-11-14): fixed on the new Periods page, or deleted where the page makes it moot.
-
-- **The period delete dialog can skip a re-read and show slightly old counts** in a rare order of
-  updates; the server still refuses a delete sent with an old clock revision — left open by
-  A506-11, #1694.
-
 ## Bundle: Calendar marks
 
 2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -466,6 +423,12 @@ Taken in by A1536 (owner, 2026-11-14): fixed on the new Periods page, or deleted
   Month does not. The owner's "even on the month view the special day is not shown" may mean it too.
 
 ## Decisions and deliberate limits
+
+_2026-11-14, A1536: Seasons and Periods now have module-contributed pages beside Calendar.
+The A719/A721 window decisions below describe their earlier presentation; see
+[the current page contracts](../developers/design-system.md#periods-page). Cancel on Seasons now
+restores its draft in place; navigation asks before discarding. The page's chooser uses pale season
+tints and full phone labels, and its fields name their row._
 
 _2026-11-14: DEAD-CODE-1 retires the separate menu-week and closed-week HTTP routes;
 the season painter continues saving through the season-week route._

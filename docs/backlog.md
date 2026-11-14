@@ -643,18 +643,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   hours and closures kept in Waitron update the venue's Google Business Profile, so Google Maps never
   shows a closed venue as open. Needs a design. Not started.
 
-- **A1536. Seasons and Periods get pages of their own in the menu (owner, 2026-11-14).** Periods
-  are important data, hidden today behind the Calendar's "Periods…" button in a small window that
-  packs a table, its menus, floor plan and painted seasons, and a second window to edit one. Seasons
-  and Periods become two pages under Venue operations, next to Calendar, the way Units has its own
-  page under Products and menus. They replace the Seasons and Periods windows
-  (`seasons-window.ts`, `periods-list.ts`, registered as `venue-service:seasons` and
-  `venue-service:periods`); the Calendar's two buttons become links to the pages. Takes in the
-  **Seasons window** bundle ([Detail](backlog/service-periods.md#bundle-seasons-window)) and the
-  **Period dialogs** bundle ([Detail](backlog/service-periods.md#bundle-period-dialogs)): fix each
-  on the new pages, or delete it where the page makes it moot (the phone-width colour names may
-  be). A1539's line about prep-station hours links to the Periods page. No migration. Not started.
-
 - **A1540. Clarify the Calendar Show option spacing report (owner, 2026-11-14).** Shared action
   and choice appearance and grouped-option indent are built. The reported uneven option gaps
   did not reproduce: the real Calendar layout measured zero gaps between options, 27 px only

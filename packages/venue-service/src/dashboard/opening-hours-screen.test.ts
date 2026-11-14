@@ -1387,24 +1387,6 @@ describe("Year view", () => {
     expect(drawnView(el)).toBe("month");
   });
 
-  it("re-reads the year and the opening hours after the window saves", async () => {
-    const { el, view, years, openingReads } = await yearMount(
-      "/manage/opening-hours/view/year/window/seasons",
-    );
-    await expect.poll(() => view()?.model?.year).toBe(2026);
-    const win = await expect
-      .poll(() => el.shadowRoot!.querySelector("[data-test=calendar-window][data-window=seasons]"))
-      .not.toBeNull()
-      .then(() => el.shadowRoot!.querySelector("[data-window=seasons]")!);
-    const before = openingReads();
-    win.dispatchEvent(
-      new CustomEvent("seasons-saved", { detail: { seasons: [] }, bubbles: true, composed: true }),
-    );
-    await expect.poll(() => years).toEqual(["2026", "2026"]);
-    await expect.poll(openingReads).toBe(before + 1);
-    await expect.poll(() => el.shadowRoot!.querySelector("[data-window=seasons]")).toBeNull();
-  });
-
   it("re-reads the year after the year view saves the holiday area", async () => {
     const { view, years, writes } = await yearMount("/manage/opening-hours/view/year");
     await expect.poll(() => view()?.model?.year).toBe(2026);

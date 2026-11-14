@@ -9,7 +9,7 @@ import {
 } from "../season-rules.js";
 import { firstUnusedCalendarColour } from "./calendar-colours.js";
 
-/** One row of the Seasons window: `key` is the season's id, or `new-<n>` for a row not yet saved. */
+/** One season row: `key` is the season's id, or `new-<n>` for a row not yet saved. */
 export interface SeasonRow {
   key: string;
   id?: string;
