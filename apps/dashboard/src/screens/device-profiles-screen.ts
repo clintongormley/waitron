@@ -709,6 +709,7 @@ export class DeviceProfilesScreen extends LitElement {
 
   async #load(): Promise<void> {
     this.#showError(null);
+    this.listScopeError = null;
     this.jobRolesRead = false;
     try {
       this.#jobRolesReady = this.#queries.watch("listJobRoles", [], (value) => {

@@ -302,6 +302,26 @@ describe("device-profiles-screen list mode", () => {
     await flush(el);
     expect(el.shadowRoot!.querySelector('[data-test="editor-form"]')).not.toBeNull();
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+    let finishNames!: (value: ProfileScopeChoices) => void;
+    names.mockImplementation(
+      () =>
+        new Promise<ProfileScopeChoices>((resolve) => {
+          finishNames = resolve;
+        }),
+    );
+    const host = el.parentElement!;
+    el.remove();
+    host.append(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+    expect(profileListRoot(el).querySelector('[data-test="profile-scope-p1"]')!.textContent).toBe(
+      t("device_profiles.scope_loading"),
+    );
+    finishNames(scopeChoices);
+    await flush(el);
+    expect(
+      profileListRoot(el).querySelector('[data-test="profile-scope-p1"]')!.textContent,
+    ).toContain("Restaurant");
   });
 
   it.each([
