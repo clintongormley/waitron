@@ -77,6 +77,7 @@ plumbing in the remaining dashboard editors and the till's forms onto `FormFeedb
 form, invoice-customer Find and menu-publication Schedule also use it;
 keep their field-specific or guarded refusal focus local. Station refusal-dismissal remains
 open. Inventory each later batch before migrating it; leave single-job forms local.
+Keep the translation editor local: the helper removes no duplicated logic while its refusal clearing and reveal/focus remain local.
 Preserve each form's field mapping and message behavior; keep domain-specific refusal clearing local. See the
 [second-slice inventory](../superpowers/plans/2026-11-12-d-form-plumbing-2.md) and the
 [inventory of the remaining venue forms](../superpowers/plans/2026-11-13-d-form-plumbing-venue-batch.md).
