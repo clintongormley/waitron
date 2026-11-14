@@ -56,7 +56,9 @@ be undone.
 
 Open the spare’s HTTPS address with `/handover/emergency` at the end, for example
 `https://spare.example/handover/emergency`. Sign in with an administrator account’s password and
-current authenticator code, if set up, then choose **Check this copy**. Read its latest dated
+current authenticator code, if set up, then choose **Check this copy**. The spare first brings its
+copy up to date and restarts; keep the page open. If that takes more than a minute or cannot be done, **Use the copy this spare holds**
+offers the copy already on it, usually the one from when it joined, with nothing newer. Read the copy's latest dated
 activity. Anything newer may be missing; if no date is available, the page says so.
 
 If the page reports too little temporary space, free disk space on the spare before choosing

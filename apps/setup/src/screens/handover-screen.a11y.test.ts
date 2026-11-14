@@ -53,13 +53,13 @@ describe.each(["en-GB", "es-ES"])("handover page %s", (locale) => {
 
 describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
   it.each(["light", "dark"] as const)(
-    "is accessible during declaration, resume, refusal and clock check in %s",
+    "is accessible during declaration, resume, refusal, clock check and the take's waits in %s",
     async (theme) => {
       const { page } = await import("vitest/browser");
       setLocale(locale);
       try {
         await page.viewport(390, 2000);
-        for (const stage of ["declaration", "resume", "refusal", "clock"]) {
+        for (const stage of ["declaration", "resume", "refusal", "clock", "waiting", "held"]) {
           const api = new SetupApi("", async (input, init) => {
             if (init?.method === "GET")
               return new Response(
@@ -75,6 +75,12 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
                   },
                 }),
               );
+            if (String(input).endsWith("/followed"))
+              return stage === "waiting"
+                ? new Response(JSON.stringify({ state: "catching-up" }))
+                : new Response(JSON.stringify({ error: { code: "handover.chain_broken" } }), {
+                    status: 409,
+                  });
             if (String(input).endsWith("/preview")) {
               if (stage === "refusal")
                 return new Response(JSON.stringify({ error: { code: "handover.copy_mismatch" } }), {
@@ -86,18 +92,20 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
                   destinationNodeId: "new",
                   sourceServersUrl: "https://main.example/manage/servers",
                   copy: {
-                    source: "mirror-copy",
+                    ...(stage === "declaration"
+                      ? { source: "followed-copy", sourceId: "c".repeat(64) }
+                      : { source: "mirror-copy" }),
                     identifier: "a".repeat(64),
                     lastChangeAtMs: 1792147200000,
                   },
-                  operation:
-                    stage === "declaration"
-                      ? null
-                      : {
-                          operationId: "emergency",
-                          reason: "The old box has failed",
-                          declaredAtMs: 1792147200000,
-                        },
+                  joinedAtMs: 1789819200000,
+                  operation: ["declaration", "waiting", "held"].includes(stage)
+                    ? null
+                    : {
+                        operationId: "emergency",
+                        reason: "The old box has failed",
+                        declaredAtMs: 1792147200000,
+                      },
                 }),
               );
             }
@@ -124,6 +132,16 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
           el.shadowRoot!.querySelector<HTMLElement>("[data-test=emergency-preview]")!.click();
           await vi.waitFor(() => expect(Reflect.get(el, "busy")).toBe(false));
           await el.updateComplete;
+          if (stage === "waiting")
+            await vi.waitFor(() =>
+              expect(el.shadowRoot!.querySelector('[role="status"]')).not.toBeNull(),
+            );
+          if (stage === "held")
+            await vi.waitFor(
+              () =>
+                expect(el.shadowRoot!.querySelector("[data-test=emergency-held]")).not.toBeNull(),
+              { timeout: 10_000 },
+            );
           if (stage === "clock") {
             el.shadowRoot!.querySelector<HTMLElement>("[data-test=authenticate]")!.click();
             await vi.waitFor(() =>

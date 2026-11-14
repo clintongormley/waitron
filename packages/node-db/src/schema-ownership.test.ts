@@ -18,6 +18,7 @@ const OWNED = [
   "node_primary_key",
   "node_recovery_key",
   "node_signing_key",
+  "node_take_failures",
 ];
 
 const drizzleDir = fileURLToPath(new URL("../drizzle", import.meta.url));

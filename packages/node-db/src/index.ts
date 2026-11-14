@@ -11,6 +11,7 @@ export {
   nodePrimaryKey,
   nodeRecoveryKey,
   nodeSigningKey,
+  nodeTakeFailures,
 } from "./schema/index.js";
 export {
   HANDOVER_CLOSED_STATES,
@@ -64,3 +65,9 @@ export {
   readPinnedPrimaryKey,
 } from "./primary-key.js";
 export type { PinnedPrimaryKey } from "./primary-key.js";
+export {
+  clearTakeFailuresTx,
+  deleteNodeTakeFailuresOtherThanTx,
+  readTakeFailures,
+  recordTakeFailureTx,
+} from "./take-failures.js";

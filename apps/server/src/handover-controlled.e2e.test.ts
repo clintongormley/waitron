@@ -99,6 +99,7 @@ import { provisionBillVenue, tabWith, type BillVenue } from "./testing/bill-venu
 import { freePorts } from "./testing/free-ports.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { createHourTestClock, selectPastWaits } from "./testing/hour-test-clock.js";
+import type { FakeAeat } from "@waitron/verifactu/testing";
 import { serverFixture } from "./testing/server-fixture.js";
 import { synchronisedBoxHost } from "./testing/synchronised-box-host.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -136,6 +137,15 @@ const outside = vi.hoisted(() => ({
   holdSubmit: null as Promise<void> | null,
   /** Every cancellation AEAT was sent, by whichever box sent it. */
   anulaciones: [] as { venueFile: string; record: unknown }[],
+  /** AEAT's answer to each record, in the order the answers came back. */
+  answers: [] as {
+    venueFile: string;
+    recordId: string | undefined;
+    codigo: number | undefined;
+    duplicado: string | undefined;
+  }[],
+  /** Every lookup a box made of what AEAT holds, by the invoice it asked about. */
+  lookups: [] as { venueFile: string; numSerieFactura: string | undefined }[],
   fake: null as unknown,
 }));
 
@@ -212,7 +222,19 @@ vi.mock("@waitron/module", async (importOriginal) => {
             const hold = outside.holdSubmit;
             outside.holdSubmit = null;
             if (hold !== null) await hold;
-            return fake.submit(...submitted);
+            const answer = await fake.submit(...submitted);
+            for (const line of answer.RespuestaLinea)
+              outside.answers.push({
+                venueFile,
+                recordId: line.RefExterna,
+                codigo: line.CodigoErrorRegistro,
+                duplicado: line.RegistroDuplicado?.EstadoRegistroDuplicado,
+              });
+            return answer;
+          },
+          consultar: (...asked: Parameters<typeof fake.consultar>) => {
+            outside.lookups.push({ venueFile, numSerieFactura: asked[1].NumSerieFactura });
+            return fake.consultar(...asked);
           },
         };
         return drain(
@@ -284,7 +306,9 @@ const SELLING_MS = 4 * START_MS + 2 * ROUTER_PROBE_MS + 60_000 + 20_000;
 const RESTARTS_MS = 2 * START_MS + 15_000 + 10_000;
 const FIRST_SETUP_MS = 90_000;
 const INHERITED_MS = 2 * START_MS + 45_000;
-const HOOK_MS = STEPDOWN_MS + PLACING_MS + SELLING_MS + INHERITED_MS + RESTARTS_MS + FIRST_SETUP_MS;
+const REFILING_MS = 2 * START_MS + 2 * 15_000 + 10_000;
+const HOOK_MS =
+  STEPDOWN_MS + PLACING_MS + SELLING_MS + INHERITED_MS + RESTARTS_MS + REFILING_MS + FIRST_SETUP_MS;
 
 function hold() {
   let release!: () => void;
@@ -1796,6 +1820,110 @@ async function inheritedWork(
   };
 }
 
+/** What M2 sent, heard and holds for one inherited record it started with as being sent. */
+interface Resent {
+  sent: HeardBatch[];
+  answers: (typeof outside.answers)[number][];
+  lookups: (typeof outside.lookups)[number][];
+  estado: string | undefined;
+  cases: { cause: string }[];
+}
+
+/** What the re-filing stage saw, and M2's records and invoice numbers on each side of it. */
+interface RefilingSeen {
+  m1Batch: HeardBatch;
+  numSerieFactura: string;
+  settled: Resent;
+  annulled: Resent;
+  records: { before: string[]; after: string[] };
+  invoiceNumbers: { before: string[]; after: string[] };
+}
+
+/**
+ * Closes M2, sets `recordId` in M2's own venue.db to `enviando` with no answer and no ack, starts
+ * M2 and asks for a filing pass.
+ */
+async function resendAfterRestart(boxes: Boxes, recordId: string): Promise<Resent> {
+  const { m2 } = boxes;
+  await m2.server!.close();
+  const raw = new DatabaseSync(m2.venueFile);
+  try {
+    raw
+      .prepare(
+        `update envios set estado = 'enviando', csv = null, codigo_error = null,
+         mensaje_error = null, confirmado_en = null where registro_id = ?`,
+      )
+      .run(recordId);
+    raw.prepare("delete from acks where registro_id = ?").run(recordId);
+  } finally {
+    raw.close();
+  }
+  const from = {
+    sent: outside.submits.length,
+    answers: outside.answers.length,
+    lookups: outside.lookups.length,
+  };
+  await start(m2);
+  await sendOutbox(boxes, m2);
+  // Not fatal: a record left waiting reports its state in the cases.
+  await vi
+    .waitFor(
+      () => expect(["aceptado", "rechazado"]).toContain(filingStateOf(m2.venueFile, recordId)),
+      { timeout: 15_000, interval: 100 },
+    )
+    .catch(() => {});
+  return {
+    sent: outside.submits.slice(from.sent).filter((batch) => batch.recordIds.includes(recordId)),
+    answers: outside.answers.slice(from.answers).filter((line) => line.recordId === recordId),
+    lookups: outside.lookups.slice(from.lookups),
+    estado: filingStateOf(m2.venueFile, recordId),
+    cases: readRows(m2.venueFile, "select cause from filing_cases where registro_id = ?", recordId),
+  };
+}
+
+/**
+ * With M2 the main box and M1 switched off, M1's in-flight record, which AEAT accepted from M1, is
+ * set back to being sent in M2's files twice: once as AEAT holds it, and once after `fake.annul`
+ * marks it annulled there, standing for an annulment of M1's (M1 files nothing after its stepdown).
+ */
+async function refileInherited(boxes: Boxes, stepdown: StepdownSeen): Promise<RefilingSeen> {
+  const { m1, m2 } = boxes;
+  const recordId = stepdown.records.inFlight;
+  const m1Batch = outside.submits.find(
+    (batch) => batch.venueFile === m1.venueFile && batch.recordIds.includes(recordId),
+  )!;
+  const [{ num_serie_factura: numSerieFactura }] = readRows<{ num_serie_factura: string }>(
+    m2.venueFile,
+    "select num_serie_factura from registros_facturacion where id = ?",
+    recordId,
+  ) as [{ num_serie_factura: string }];
+  const invoiceNumbers = () =>
+    readRows<{ number: string }>(
+      m2.venueFile,
+      "select series_id || '/' || invoice_number as number from sales order by number",
+    ).map((row) => row.number);
+  const recordsBefore = recordIds(m2.venueFile).sort();
+  const invoiceNumbersBefore = invoiceNumbers();
+
+  const settled = await resendAfterRestart(boxes, recordId);
+  const records = { before: recordsBefore, after: recordIds(m2.venueFile).sort() };
+  const numbers = { before: invoiceNumbersBefore, after: invoiceNumbers() };
+
+  const aeat = outside.fake as FakeAeat;
+  const held = aeat.stored().find((stored) => stored.refExterna === recordId);
+  if (held !== undefined) aeat.annul(held.key);
+  const annulled = await resendAfterRestart(boxes, recordId);
+
+  return {
+    m1Batch,
+    numSerieFactura,
+    settled,
+    annulled,
+    records,
+    invoiceNumbers: numbers,
+  };
+}
+
 describe("a controlled handover between two boxes, simulated in one process", () => {
   let scratch: string | undefined;
   let boxes: Boxes | undefined;
@@ -1809,6 +1937,8 @@ describe("a controlled handover between two boxes, simulated in one process", ()
   let restartsFailure: unknown;
   let inherited: InheritedSeen | undefined;
   let inheritedFailure: unknown;
+  let refiling: RefilingSeen | undefined;
+  let refilingFailure: unknown;
   let stopsAskedAtEnd = 0;
   const kill = vi.spyOn(process, "kill").mockImplementation(() => true);
 
@@ -1842,6 +1972,15 @@ describe("a controlled handover between two boxes, simulated in one process", ()
           inheritedFailure = error;
         }
         restarts = await within(restartWithM1Off(boxes, selling), RESTARTS_MS, "the restart stage");
+        try {
+          refiling = await within(
+            refileInherited(boxes, stepdown),
+            REFILING_MS,
+            "the re-filing stage",
+          );
+        } catch (error) {
+          refilingFailure = error;
+        }
       } catch (error) {
         if (selling === undefined) sellingFailure = error;
         restartsFailure = error;
@@ -1884,6 +2023,10 @@ describe("a controlled handover between two boxes, simulated in one process", ()
   const restarted = (): { b: Boxes; run: StepdownSeen; on: SellingSeen; after: RestartsSeen } => {
     if (restarts === undefined) throw restartsFailure ?? new Error("M2 was never restarted");
     return { ...sold(), after: restarts };
+  };
+  const refiled = (): { b: Boxes; run: StepdownSeen; again: RefilingSeen } => {
+    if (refiling === undefined) throw refilingFailure ?? new Error("M2 never re-filed a record");
+    return { ...seen(), again: refiling };
   };
 
   it("starts with M1 selling, and M2 a mirror holding nothing M1 recorded after its seed", () => {
@@ -2019,6 +2162,59 @@ describe("a controlled handover between two boxes, simulated in one process", ()
       },
     ]);
     expect(on.ownRecordFiling).toBe("aceptado");
+  });
+
+  it("an inherited record the old box had filed is settled through AEAT's duplicate answer", () => {
+    const { b, run, again } = refiled();
+    const { settled } = again;
+    expect(again.m1Batch.recordIds).toEqual([run.records.inFlight]);
+    expect(settled.sent).toEqual([
+      {
+        venueFile: b.m2.venueFile,
+        recordIds: [run.records.inFlight],
+        idSistemaInformatico: again.m1Batch.idSistemaInformatico,
+        numeroInstalacion: again.m1Batch.numeroInstalacion,
+      },
+    ]);
+    expect(settled.answers).toEqual([
+      {
+        venueFile: b.m2.venueFile,
+        recordId: run.records.inFlight,
+        codigo: 3000,
+        duplicado: "Correcta",
+      },
+    ]);
+    expect(settled.lookups).toContainEqual({
+      venueFile: b.m2.venueFile,
+      numSerieFactura: again.numSerieFactura,
+    });
+    expect(settled.estado).toBe("aceptado");
+    expect(settled.cases).toEqual([]);
+    expect(again.records.after).toEqual(again.records.before);
+    expect(again.invoiceNumbers.after).toEqual(again.invoiceNumbers.before);
+  });
+
+  it("an inherited record AEAT holds as annulled opens a filing case", () => {
+    const { b, run, again } = refiled();
+    const { annulled } = again;
+    expect(annulled.sent).toEqual([
+      {
+        venueFile: b.m2.venueFile,
+        recordIds: [run.records.inFlight],
+        idSistemaInformatico: again.m1Batch.idSistemaInformatico,
+        numeroInstalacion: again.m1Batch.numeroInstalacion,
+      },
+    ]);
+    expect(annulled.answers).toEqual([
+      {
+        venueFile: b.m2.venueFile,
+        recordId: run.records.inFlight,
+        codigo: 3000,
+        duplicado: "Anulada",
+      },
+    ]);
+    expect(annulled.estado).toBe("rechazado");
+    expect(annulled.cases).toEqual([{ cause: "fiscal.duplicado_anulado" }]);
   });
 
   it("the open table is on M2, through its till route, as it stands on M1", () => {

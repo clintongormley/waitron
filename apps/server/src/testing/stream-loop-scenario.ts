@@ -57,7 +57,7 @@ import { freePort } from "./free-ports.js";
 import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 import { stageClock, waitUntil } from "./scenario-stages.js";
 import { bootEnv, boxDirs, copyMigrations, provisionStreamBox } from "./stream-box.js";
-import { STREAM_LOOP_SPARE_PHASES, runLoopSpare } from "./stream-loop-spare.js";
+import { STREAM_LOOP_SPARE_PHASES, runLoopSpare, type StartedFollow } from "./stream-loop-spare.js";
 
 const RECOVERY_KEY = "stream-loop-e2e-recovery-key";
 const LOCALE = "es-ES";
@@ -156,6 +156,8 @@ export interface StreamLoopFixture {
   serverSeams?: Pick<StreamHostDeps, "spawn">;
   /** The versitygw a spare runs its store on; without it the spare's phases are skipped. */
   versitygwBin?: string;
+  /** Every spare follower started in this process, which the spare's phases need. */
+  spareFollowers?: () => readonly StartedFollow[];
 }
 
 /** Keys in the bucket containing `fragment`, whether the store returns them with its prefix or without. */
@@ -762,6 +764,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
           portB,
           nodeIdB: a.nodeId,
           saleIds: [saleA.saleId, saleB.saleId, lastSaleId],
+          followers: fixture.spareFollowers ?? (() => []),
           ...(fixture.serverSeams === undefined ? {} : { serverSeams: fixture.serverSeams }),
           ...(signal === undefined ? {} : { signal }),
           begin: (phase) => clock.begin(phase),

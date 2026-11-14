@@ -986,7 +986,7 @@ calendar.
 ## A write of a table `scripts/write-path-tables.json` lists lives only in the files it names
 
 `venue.db`'s `taxpayer`, `nodes`, `deployment`, `settings`, `activity_log`, `invoice_corrections` and `invoice_correction_refunds`, and `node.db`'s `node_mode`, `node_mirror_link`,
-`node_pair_link`, `node_primary_key`, `node_recovery_key`, `node_signing_key`, `node_handover_operations`,
+`node_pair_link`, `node_primary_key`, `node_recovery_key`, `node_signing_key`, `node_take_failures`, `node_handover_operations`,
 `node_handover_events` and `node_handover_restriction`. NOTHING BUT
 `scripts/write-path-tables.test.ts` REFUSES THEM.
 SQLite has no roles and no grants, and every path, request and provisioning alike, shares the one
@@ -1010,7 +1010,8 @@ Real code does write them, legitimately: the setup-mode provision route reaches 
 `nodes` and `deployment`; joining as a spare (`apps/server/src/adopt.ts`) reaches `deployment`,
 `node_mode`, `node_mirror_link`, `node_pair_link`, `node_primary_key`, `node_recovery_key` and
 `node_signing_key`, writing this box's rows and deleting any an abandoned earlier attempt left in
-those six `node.db` tables under another node id; the main box's joining route
+those six `node.db` tables and in `node_take_failures` under another node id; the emergency
+switch's take (`apps/server/src/handover-emergency-api.ts`) reaches `node_take_failures`; the main box's joining route
 (`apps/server/src/mirror-bundle-api.ts`) reaches `node_pair_link`; promotion and its repair (`promote.ts`, `promoted-role.ts`) reach
 `node_mode`; first setup and replacing the recovery key reach `node_recovery_key`; first setup and
 `waitron-credentials rotate` reach `node_signing_key`; a handover (`apps/server/src/handover-store.ts`, and the server's files that call `appendHandoverEventTx` directly) reaches `node_handover_operations` and `node_handover_events`, and a stepdown (`apps/server/src/handover-stepdown.ts`) reaches `node_handover_restriction`; and the dashboard's legal-name change
@@ -1598,7 +1599,8 @@ one is set up. `node.db`, beside it, holds what a box must remember about itself
 singleton role (`node_mode`), its link to the main box (`node_mirror_link`), its link to the other box of its pair — the spare's
 store address and the store's access key, its secret sealed (`node_pair_link`) — the main box's key it
 pinned when it joined (`node_primary_key`), its recovery-key check (`node_recovery_key`), its
-sealed signing key (`node_signing_key`), and its handover records: each handover operation it
+sealed signing key (`node_signing_key`), the failed takes of an emergency switch, which must
+outlive the restart each one causes (`node_take_failures`), and its handover records: each handover operation it
 takes part in (`node_handover_operations`), what it decided and received during them
 (`node_handover_events`), and why it no longer acts as the main box (`node_handover_restriction`) — so a spare holding a copy of the main box's `venue.db`
 still knows who it is (A947 slice 3a). `node.db` is never streamed (`packages/stream/src/litestream.ts`
@@ -3416,9 +3418,10 @@ dies leaves its file behind; the next holder overwrites it.
 that lock fails for another reason.** `freeSpaceAtStart` in the box's entry and `emptyScratch` in
 `bootServer` delete every entry in `<state>/scratch/`, keeping the root. Backup staging is
 `scratch/backup`; restore staging is `scratch/restore`. Stream restores, staged-restore entries,
-setup holdings copies and node copies also live below scratch, except a spare's first copy and an
-admitted mirror's selected handover backup, which wait in `<state>/pair-copy/` across the restart
-that places them (`spare-copy.ts`, `handover-copy-from-backup.ts`). The root is never followed when
+setup holdings copies and node copies also live below scratch, except a spare's first copy, an
+admitted mirror's selected handover backup and a spare's followed copy taken for an emergency
+switch, which wait in `<state>/pair-copy/` across the restart that places them (`spare-copy.ts`,
+`handover-copy-from-backup.ts`, `handover-copy-from-follow.ts`). The root is never followed when
 it is a symbolic link. Both sweeps run before this process starts its backup supervisor.
 The staged-recovery
 folder is where the setup wizard's recovery step (`stage` in `createSetupRecoveryPreparation`,
@@ -3709,7 +3712,8 @@ data in `<state>/pair-store/` (`apps/server/src/spare-store.ts:74`). The spare's
 restored from that store into `<state>/pair-copy/`, outside `scratch/` because it must survive the
 restart that puts it in place of `venue.db` (`apps/server/src/spare-copy.ts`,
 `spare-copy-placement.ts`). An admitted mirror's selected handover backup also waits there across
-its placing restart; `ready.json` names only staged input and `placed.json` keeps the archive's source id until activation, while preview and
+its placing restart, as does a spare's followed copy taken by the emergency switch
+(`handover-copy-from-follow.ts`, marker source `followed-copy`); `ready.json` names only staged input and `placed.json` keeps the source id until activation, while preview and
 declaration check the live copy after migration. That placement keeps the mirror's own `node.db`
 and secrets (`handover-copy-from-backup.ts`, `handover-copy-selection.ts`). Both folders are named in `packages/store/src/state-layout.ts` and
 deleted by a plain reset.

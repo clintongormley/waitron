@@ -122,6 +122,13 @@ export const READ_ONLY_EXEMPTIONS: readonly ReadOnlyExemption[] = [
     authenticates:
       "own-origin HTTPS, fresh node.manage sign-in, no open handover, source silence and a checked archive admitting this mirror under its held main box (handover-emergency-api.ts)",
   },
+  {
+    method: "POST",
+    path: "/api/node/handover/emergency/followed",
+    boxes: ["mirror"],
+    authenticates:
+      "own-origin HTTPS, no open handover, source silence, wrong sign-ins counted in node.db, then a checked followed copy admitting this mirror under its held main box and a fresh node.manage sign-in against that copy (handover-emergency-api.ts)",
+  },
 ];
 
 export function pathMatches(rowPath: string, requestPath: string): boolean {

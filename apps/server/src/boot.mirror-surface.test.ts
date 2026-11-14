@@ -298,6 +298,7 @@ const MIRROR_WRITES: Record<string, Answer> = {
   "/api/node/handover/emergency/preview": { status: 403, code: "authorization.not_permitted" },
   "/api/node/backup-settings": { status: 400, code: "spare.settings_invalid" },
   "/api/node/handover/emergency/backup": { status: 403, code: "authorization.not_permitted" },
+  "/api/node/handover/emergency/followed": { status: 403, code: "authorization.not_permitted" },
   "/setup-api/connection/repair": { status: 403, code: "connection.refused" },
   "/setup-api/connection/continue": { status: 403, code: "connection.refused" },
 };

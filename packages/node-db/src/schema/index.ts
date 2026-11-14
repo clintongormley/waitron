@@ -10,3 +10,4 @@ export { nodePairLink } from "./node-pair-link.js";
 export { nodePrimaryKey } from "./node-primary-key.js";
 export { nodeRecoveryKey } from "./node-recovery-key.js";
 export { nodeSigningKey } from "./node-signing-key.js";
+export { nodeTakeFailures } from "./node-take-failures.js";

@@ -25,6 +25,7 @@ describe("the public surface", () => {
         "nodePrimaryKey",
         "nodeRecoveryKey",
         "nodeSigningKey",
+        "nodeTakeFailures",
         "readMirrorLink",
         "writeMirrorLink",
         "writeMirrorLinkTx",
@@ -46,6 +47,10 @@ describe("the public surface", () => {
         "deleteNodeModeOtherThanTx",
         "deleteNodePrimaryKeyOtherThanTx",
         "deleteNodeRecoveryKeyOtherThanTx",
+        "clearTakeFailuresTx",
+        "deleteNodeTakeFailuresOtherThanTx",
+        "readTakeFailures",
+        "recordTakeFailureTx",
       ].sort(),
     );
   });

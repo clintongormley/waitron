@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { SPARE_FOLLOW_DIR, VENUE_FILE } from "@waitron/store";
 import { join } from "node:path";
@@ -286,5 +286,153 @@ describe("spare following", () => {
       await running?.stop();
       clock.mockRestore();
     }
+  });
+  describe("stopForSwitch", () => {
+    async function following(
+      next: () => Partial<FollowProgress>,
+      exitOnStop: { exitCode: number | null; category: string } = { exitCode: 0, category: "ok" },
+      readMs = 0,
+    ) {
+      const deps = await setup("serves");
+      const store = createMemoryObjectStore();
+      await store.put(
+        "current.json",
+        new TextEncoder().encode(
+          JSON.stringify(
+            signPointer(
+              {
+                streamId: "venue-1",
+                term: 1,
+                nodeId: main.nodeId,
+                generation,
+                writtenAt: "2026-11-14T12:00:00.000Z",
+              },
+              main.privateKey,
+            ),
+          ),
+        ),
+      );
+      const events: string[] = [];
+      const follow = vi.fn(async (args: FollowArgs) => {
+        let exited: { exitCode: number | null; category: string } | null = null;
+        return {
+          exit: () => exited,
+          read: async () => {
+            await new Promise((resolve) => setTimeout(resolve, readMs));
+            return { ...progress, generation: args.generation, ...next() };
+          },
+          stop: async () => {
+            events.push("stop");
+            exited = exitOnStop;
+          },
+        } satisfies Follower;
+      });
+      running = startSpareFollow({
+        ...deps,
+        mirror: true,
+        store: { loopbackUrl: "http://127.0.0.1:9000", stop: async () => {} },
+        openStore: () => store,
+        follow,
+      });
+      await vi.waitFor(() => expect(running!.progress()).not.toBeNull());
+      return { events, follow, out: join(dir, SPARE_FOLLOW_DIR, VENUE_FILE) };
+    }
+
+    it("waits for the store to be applied, then stops and reads the position from the output", async () => {
+      let applied = "0000000000000001";
+      const { events, out } = await following(() => ({
+        appliedTXID: applied,
+        uploadedTXID: "0000000000000002",
+      }));
+      const answer = running!.stopForSwitch({ catchUpMs: 5000 });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(events).toEqual([]);
+      await writeFile(`${out}-txid`, "0000000000000003\n");
+      applied = "0000000000000002";
+      await expect(answer).resolves.toEqual({
+        kind: "stopped",
+        generation,
+        appliedTXID: "0000000000000003",
+        path: out,
+      });
+      expect(events).toEqual(["stop"]);
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(events).toEqual(["stop"]);
+      expect(running!.progress()).toBeNull();
+    });
+
+    it("answers catching-up and keeps following while rebuilding", async () => {
+      const { events, follow } = await following(() => ({
+        state: "rebuilding",
+        appliedTXID: null,
+        uploadedTXID: null,
+        lagMs: null,
+      }));
+      await expect(running!.stopForSwitch({ catchUpMs: 20 })).resolves.toEqual({
+        kind: "catching-up",
+        progress: expect.objectContaining({ state: "rebuilding" }),
+      });
+      expect(events).toEqual([]);
+      await vi.waitFor(() => expect(running!.progress()?.state).toBe("rebuilding"));
+      expect(follow).toHaveBeenCalledTimes(1);
+    });
+
+    it("answers catching-up when applied stays behind uploaded past the wait", async () => {
+      const { events } = await following(() => ({
+        appliedTXID: "0000000000000001",
+        uploadedTXID: "0000000000000002",
+      }));
+      await expect(running!.stopForSwitch({ catchUpMs: 20 })).resolves.toEqual({
+        kind: "catching-up",
+        progress: expect.objectContaining({
+          state: "following",
+          appliedTXID: "0000000000000001",
+          uploadedTXID: "0000000000000002",
+        }),
+      });
+      expect(events).toEqual([]);
+      await vi.waitFor(() => expect(running!.progress()?.state).toBe("following"));
+    });
+
+    it("with no wait, answers catching-up rather than waiting for a follower about to catch up", async () => {
+      let applied = "0000000000000001";
+      const { events, out } = await following(() => ({
+        appliedTXID: applied,
+        uploadedTXID: "0000000000000002",
+      }));
+      await writeFile(`${out}-txid`, "0000000000000002\n");
+      const caughtUp = setTimeout(() => (applied = "0000000000000002"), 50);
+      try {
+        await expect(running!.stopForSwitch({ catchUpMs: 0 })).resolves.toMatchObject({
+          kind: "catching-up",
+        });
+        expect(events).toEqual([]);
+      } finally {
+        clearTimeout(caughtUp);
+      }
+    });
+
+    it("keeps the output when a pass waits behind the stop", async () => {
+      const { out } = await following(() => ({}), { exitCode: 0, category: "ok" }, 30);
+      await writeFile(out, "followed bytes");
+      await writeFile(`${out}-txid`, "0000000000000002\n");
+      await expect(running!.stopForSwitch({ catchUpMs: 1000 })).resolves.toMatchObject({
+        kind: "stopped",
+      });
+      await running!.stop();
+      expect(await readFile(out, "utf8")).toBe("followed bytes");
+    });
+
+    it("refuses a follower that exits with a non-zero code", async () => {
+      const { events, out } = await following(() => ({}), {
+        exitCode: 1,
+        category: "bucket_refused",
+      });
+      await writeFile(`${out}-txid`, "0000000000000002\n");
+      await expect(running!.stopForSwitch({ catchUpMs: 1000 })).rejects.toMatchObject({
+        code: "handover.copy_damaged",
+      });
+      expect(events).toEqual(["stop"]);
+    });
   });
 });

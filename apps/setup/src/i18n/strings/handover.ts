@@ -33,6 +33,24 @@ export const handoverEn = {
     "This declaration is saved and cannot be undone. Stop leaves this page; it does not cancel the declaration.",
   "handover.emergency.copy": "Copy held on this spare",
   "handover.emergency.selected_backup": "Selected backup",
+  "handover.emergency.followed": "Latest copy from the main box",
+  "handover.emergency.catching_up": "Bringing this spare's copy up to date…",
+  "handover.emergency.still_catching_up":
+    "This can take a while. Keep waiting, use the copy this spare holds, or choose a backup.",
+  "handover.emergency.followed_restarting":
+    "Placing the up-to-date copy. Keep this page open while this box restarts.",
+  "handover.emergency.followed_not_admitted":
+    "The main box's latest copy does not admit this spare. Use the copy this spare holds, or choose a backup.",
+  "handover.emergency.followed_ahead":
+    "The main box's latest copy needs newer software than this spare runs. Use the copy this spare holds, or choose a backup.",
+  "handover.emergency.followed_failed":
+    "The main box's latest copy failed its checks on this spare. Use the copy this spare holds, or choose a backup.",
+  "handover.emergency.use_held": "Use the copy this spare holds",
+  "handover.emergency.held_waiting": "This spare is restarting. Keep this page open.",
+  "handover.emergency.held_joined":
+    "This is the copy from when this spare joined, on {joined}. It has nothing newer.",
+  "handover.emergency.held_undated":
+    "This is the copy from when this spare joined. It has nothing newer.",
   "handover.emergency.backup_intro":
     "To use an encrypted backup instead, choose its file. This replaces the copy on this spare and restarts it before you review and declare.",
   "handover.emergency.backup_file": "Encrypted backup file",
@@ -92,6 +110,25 @@ export const handoverEn = {
 } as const;
 export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.selected_backup": "Copia de seguridad seleccionada",
+  "handover.emergency.followed": "Última copia del servidor principal",
+  "handover.emergency.catching_up": "Poniendo al día la copia de este servidor de reserva…",
+  "handover.emergency.still_catching_up":
+    "Puede tardar. Sigue esperando, usa la copia que guarda este servidor de reserva o elige una copia de seguridad.",
+  "handover.emergency.followed_restarting":
+    "Colocando la copia al día. Mantén esta página abierta mientras se reinicia el servidor.",
+  "handover.emergency.followed_not_admitted":
+    "La última copia del servidor principal no admite este servidor de reserva. Usa la copia que guarda este servidor de reserva o elige una copia de seguridad.",
+  "handover.emergency.followed_ahead":
+    "La última copia del servidor principal necesita una versión más nueva que la de este servidor de reserva. Usa la copia que guarda este servidor de reserva o elige una copia de seguridad.",
+  "handover.emergency.followed_failed":
+    "La última copia del servidor principal no superó las comprobaciones en este servidor de reserva. Usa la copia que guarda este servidor de reserva o elige una copia de seguridad.",
+  "handover.emergency.use_held": "Usar la copia que guarda este servidor de reserva",
+  "handover.emergency.held_waiting":
+    "Este servidor de reserva se está reiniciando. Mantén esta página abierta.",
+  "handover.emergency.held_joined":
+    "Es la copia de cuando se incorporó este servidor de reserva, el {joined}. No tiene nada posterior.",
+  "handover.emergency.held_undated":
+    "Es la copia de cuando se incorporó este servidor de reserva. No tiene nada posterior.",
   "handover.emergency.backup_intro":
     "Para usar una copia de seguridad cifrada, elige su archivo. Sustituye la copia de este servidor de reserva y lo reinicia antes de que la revises y hagas la declaración.",
   "handover.emergency.backup_file": "Archivo de copia de seguridad cifrada",

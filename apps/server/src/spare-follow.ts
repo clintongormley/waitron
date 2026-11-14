@@ -1,10 +1,12 @@
-import { mkdir, rm } from "node:fs/promises";
+import "./errors.js";
+import { mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { readPairSecret, type KeyRing } from "@waitron/credentials";
 import { readNodeMembership, type Database, type NodeDatabase } from "@waitron/db";
 import { routableServers, servingPrimaryNodeId } from "@waitron/membership";
 import { readPairLink, readPinnedPrimaryKey } from "@waitron/node-db";
 import { codeOf } from "@waitron/server-kit";
+import { AppError } from "@waitron/shared";
 import { SPARE_FOLLOW_DIR, VENUE_FILE } from "@waitron/store";
 import {
   createS3ObjectStore,
@@ -17,6 +19,7 @@ import {
   type SpawnFn,
 } from "@waitron/stream";
 import { askPeerStatus, readVenueAuthority, type AskPeerStatusDeps } from "./boot-peer-check.js";
+import { createTurns } from "./backup-turns.js";
 import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
 import { boundObjectStore } from "./bounded-store.js";
 import type { Logger } from "./logger.js";
@@ -103,7 +106,10 @@ export function startSpareFollow(deps: SpareFollowDeps) {
         observedAt: string;
       }
     | undefined;
-  const folder = join(deps.stateDir, SPARE_FOLLOW_DIR);
+  const folder = join(deps.stateDir, SPARE_FOLLOW_DIR),
+    outPath = join(folder, VENUE_FILE);
+  // A switch's stop takes a turn between passes, so no pass replaces the output it reads.
+  const turns = createTurns();
   const clear = async () => {
     local = null;
     await follower?.stop();
@@ -118,6 +124,7 @@ export function startSpareFollow(deps: SpareFollowDeps) {
     return { link, chart, stream, key };
   }
   async function pass() {
+    if (stopped) return;
     const { link, chart, stream, key } = await context();
     if (deps.mirror) {
       if (
@@ -159,7 +166,7 @@ export function startSpareFollow(deps: SpareFollowDeps) {
           bucket,
           streamKey: source.streamKey,
           generation: source.generation,
-          outPath: join(folder, VENUE_FILE),
+          outPath,
           now: deps.now,
           signal: stopping.signal,
           ...(deps.spawn === undefined ? {} : { spawn: deps.spawn }),
@@ -225,7 +232,7 @@ export function startSpareFollow(deps: SpareFollowDeps) {
     authority = await readVenueAuthority(deps.stateDir);
     while (!stopped) {
       try {
-        await pass();
+        await turns(pass);
       } catch (error) {
         remote = undefined;
         await clear();
@@ -277,6 +284,49 @@ export function startSpareFollow(deps: SpareFollowDeps) {
         clockAt: cached.clockAt,
         lagMs: progress.lagMs === null ? null : Math.max(stream?.lagMs ?? 0, progress.lagMs),
       };
+    },
+    async stopForSwitch(options: {
+      catchUpMs: number;
+    }): Promise<
+      | { kind: "stopped"; generation: string; appliedTXID: string; path: string }
+      | { kind: "catching-up"; progress: FollowProgress | null }
+    > {
+      const deadline = performance.now() + options.catchUpMs;
+      for (;;) {
+        const answer = await turns(async () => {
+          const current = follower;
+          if (stopped || current === undefined) return null;
+          const seen = await current.read();
+          if (
+            seen.state !== "following" ||
+            seen.appliedTXID === null ||
+            seen.appliedTXID !== seen.uploadedTXID
+          )
+            return seen;
+          stopped = true;
+          stopping.abort();
+          local = null;
+          follower = undefined;
+          binding = undefined;
+          await current.stop();
+          if (current.exit()?.exitCode !== 0) throw new AppError("handover.copy_damaged", {});
+          const appliedTXID = await readFile(`${outPath}-txid`, "utf8").then(
+            (text) => text.trim(),
+            () => "",
+          );
+          if (!/^[0-9a-f]{16}$/.test(appliedTXID)) throw new AppError("handover.copy_damaged", {});
+          return {
+            kind: "stopped" as const,
+            generation: seen.generation,
+            appliedTXID,
+            path: outPath,
+          };
+        });
+        if (answer !== null && "kind" in answer) return answer;
+        const left = deadline - performance.now();
+        if (left <= 0 || stopped) return { kind: "catching-up", progress: answer };
+        await sleep(Math.min(interval, left), stopping.signal);
+      }
     },
     async stop() {
       stopped = true;

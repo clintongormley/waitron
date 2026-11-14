@@ -50,6 +50,8 @@ const CO_NAMERS: Readonly<Record<string, string>> = {
     "removes only its own unsigned final copy under the state folder's handover folder",
   "apps/server/src/handover-copy-from-backup.ts":
     "stages only a checked copy under pair-copy, not the live database",
+  "apps/server/src/handover-copy-selection.ts":
+    "discards only a staged copy under pair-copy, not the live database",
   "apps/server/src/node-entry.ts": "names venue.db in prose and `docker compose run --rm`",
   "apps/server/src/recovery-preparation.ts":
     "reads the live database; removes only its staging folder",

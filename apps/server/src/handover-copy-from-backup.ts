@@ -22,16 +22,70 @@ import { checkIntegrity } from "./restore-stream.js";
 import { checkCopy } from "./spare-copy.js";
 import { reachDisk } from "./sync-path.js";
 
+export type CheckedCopyDeps = StoredTrustDeps & {
+  db: Database;
+  stateDir: string;
+  modules: readonly WaitronModule[];
+  migrationsRoot: string | null;
+};
+
+/** Checks a copy read-only where it lies, then publishes one copy of it under `selection`. */
+export async function stageCheckedCopy(
+  deps: CheckedCopyDeps,
+  path: string,
+  selection: SelectedCopy,
+): Promise<void> {
+  if (!(await checkIntegrity(path))) throw new AppError("handover.copy_damaged", {});
+  const publicKey = nodeSigningPublicKey(
+    await readNodeIdentityKey(deps.node, deps.ring, deps.nodeId),
+  );
+  if (!(await checkCopy(path, deps.nodeId, publicKey, deps.migrationsRoot)))
+    throw new AppError("handover.copy_predates_destination", {});
+  const opened = await openBackupQuery(path);
+  try {
+    let chart: SignedMembershipDocument | null = null;
+    for await (const row of opened.query.rows("select document from node_membership where id = 1"))
+      chart = JSON.parse(String(row.document)) as SignedMembershipDocument;
+    const heldChart = await readNodeMembership(deps.db);
+    const source = heldChart === null ? undefined : servingPrimaryNodeId(heldChart);
+    if (
+      chart === null ||
+      !verifyMembershipDocument(chart, await readStoredTrustSet(deps)).valid ||
+      source === undefined ||
+      servingPrimaryNodeId(chart) !== source ||
+      !chart.body.nodes.some(
+        (node) => node.nodeId === deps.nodeId && node.standing === "serving-secondary",
+      )
+    )
+      throw new AppError("handover.copy_predates_destination", {});
+    const checked = await checkHandoverCopy(deps.modules, opened.query);
+    if (!checked.ok) throw new AppError("handover.chain_broken", { module: checked.module });
+  } finally {
+    await opened.close();
+  }
+  const folder = join(deps.stateDir, PAIR_COPY_DIR);
+  await mkdir(folder, { recursive: true, mode: 0o700 });
+  // A stopped replacement must never leave an old marker vouching for partial new bytes.
+  await rm(join(folder, COPY_READY_FILE), { force: true });
+  await reachDisk(folder);
+  try {
+    await copyFile(path, join(folder, VENUE_FILE));
+    await reachDisk(join(folder, VENUE_FILE));
+    await writeFileDurable(join(folder, COPY_READY_FILE), JSON.stringify(selection), 0o600);
+  } catch (error) {
+    // A published marker still owns a whole checked copy, even if its folder sync failed.
+    if (!existsSync(join(folder, COPY_READY_FILE)))
+      await rm(join(folder, VENUE_FILE), { force: true }).catch(() => {});
+    throw error;
+  }
+}
+
 export async function stageBackupAsCopy(
-  deps: StoredTrustDeps & {
-    db: Database;
-    stateDir: string;
+  deps: CheckedCopyDeps & {
     artifactPath: string;
     recoveryKey?: string;
     readRecoveryKey(): Promise<string | undefined>;
-    modules: readonly WaitronModule[];
     environment: DeploymentEnvironment;
-    migrationsRoot: string | null;
   },
 ): Promise<SelectedCopy> {
   const recoveryKey =
@@ -44,53 +98,8 @@ export async function stageBackupAsCopy(
     skipSecrets: true,
   });
   try {
-    const path = validated.databasePath;
-    if (!(await checkIntegrity(path))) throw new AppError("handover.copy_damaged", {});
-    const publicKey = nodeSigningPublicKey(
-      await readNodeIdentityKey(deps.node, deps.ring, deps.nodeId),
-    );
-    if (!(await checkCopy(path, deps.nodeId, publicKey, deps.migrationsRoot)))
-      throw new AppError("handover.copy_predates_destination", {});
-    const opened = await openBackupQuery(path);
-    try {
-      let chart: SignedMembershipDocument | null = null;
-      for await (const row of opened.query.rows(
-        "select document from node_membership where id = 1",
-      ))
-        chart = JSON.parse(String(row.document)) as SignedMembershipDocument;
-      const heldChart = await readNodeMembership(deps.db);
-      const source = heldChart === null ? undefined : servingPrimaryNodeId(heldChart);
-      if (
-        chart === null ||
-        !verifyMembershipDocument(chart, await readStoredTrustSet(deps)).valid ||
-        source === undefined ||
-        servingPrimaryNodeId(chart) !== source ||
-        !chart.body.nodes.some(
-          (node) => node.nodeId === deps.nodeId && node.standing === "serving-secondary",
-        )
-      )
-        throw new AppError("handover.copy_predates_destination", {});
-      const checked = await checkHandoverCopy(deps.modules, opened.query);
-      if (!checked.ok) throw new AppError("handover.chain_broken", { module: checked.module });
-    } finally {
-      await opened.close();
-    }
-    const folder = join(deps.stateDir, PAIR_COPY_DIR);
-    await mkdir(folder, { recursive: true, mode: 0o700 });
-    // A stopped replacement must never leave an old marker vouching for partial new bytes.
-    await rm(join(folder, COPY_READY_FILE), { force: true });
-    await reachDisk(folder);
     const selection: SelectedCopy = { source: "selected-backup", sourceId: validated.sourceId };
-    try {
-      await copyFile(path, join(folder, VENUE_FILE));
-      await reachDisk(join(folder, VENUE_FILE));
-      await writeFileDurable(join(folder, COPY_READY_FILE), JSON.stringify(selection), 0o600);
-    } catch (error) {
-      // A published marker still owns a whole checked copy, even if its folder sync failed.
-      if (!existsSync(join(folder, COPY_READY_FILE)))
-        await rm(join(folder, VENUE_FILE), { force: true }).catch(() => {});
-      throw error;
-    }
+    await stageCheckedCopy(deps, validated.databasePath, selection);
     return selection;
   } finally {
     await validated.discard();

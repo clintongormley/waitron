@@ -4172,6 +4172,16 @@ async function bootServer(
       origin: config.managementOrigin,
       credentialKeyRing: totpKeyRing,
       passwordThrottle: handoverPasswordThrottle,
+      ...(spareFollow === undefined
+        ? {}
+        : {
+            follow: {
+              stopForSwitch: (options) => spareFollow.stopForSwitch(options),
+              progress: () => spareFollow.progress(),
+              restart,
+              migrationsRoot: config.migrationsRoot,
+            },
+          }),
       backup: {
         readRecoveryKey: async () => loadRecoveryKey(await loadBoxEnv(base, config.stateDir)),
         environment: config.environment,

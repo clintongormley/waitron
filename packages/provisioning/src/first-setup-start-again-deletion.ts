@@ -36,6 +36,7 @@ import {
   nodePrimaryKey,
   nodeRecoveryKey,
   nodeSigningKey,
+  nodeTakeFailures,
 } from "@waitron/node-db";
 import { AppError, isUuid } from "@waitron/shared";
 import { clearModulePrepared } from "./module-records.js";
@@ -438,6 +439,7 @@ const NODE_TABLES: readonly (readonly [SQLiteTable, number])[] = [
   [nodePrimaryKey, 0],
   [nodeRecoveryKey, 1],
   [nodeSigningKey, 1],
+  [nodeTakeFailures, 0],
   [nodeHandoverOperations, 0],
   [nodeHandoverEvents, 0],
   [nodeHandoverRestriction, 0],

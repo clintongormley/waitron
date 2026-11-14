@@ -70,7 +70,7 @@
 >    while no other box answers it. This was listed in the plan's departures table, was not put to
 >    the owner, and was cleared by the campaign watcher on 2026-11-10.
 > 6. The exposed-mirror guard is retired: a mirror listens on the venue's network with a listed
->    surface, and accepts promotion only from its own screen until 4b.
+>    surface, and accepts promotion only from its own screen until 4c (the A947 4b plan, 2026-11-14, did not lift it).
 > 7. A box that lost its `node.db` refuses to start rather than start as a selling box.
 > 8. §4 item 1: no key ring rotation while a spare holds the ring; a spare that finished joining
 >    cannot be removed in this version, so its venue does not rotate.
@@ -771,7 +771,7 @@ In this order, each step refusing cleanly before the next (the existing promotio
    `packages/identity/src/passkey.ts:232-235`) to a `state` table that streams with the database
    (`packages/identity/src/classification.ts:40-44`); on a following spare that row would land in
    the copy Litestream is writing. So the waiting spare keeps the switch's challenge **in memory**
-   and checks it there after stopping (slice 4b). The request names no person: it accepts any
+   and checks it there after stopping (slice 4b; moved to 4c by the watcher on 2026-11-14 — see §11's 4b line). The request names no person: it accepts any
    passkey registered for the venue's name (`passkey.ts:228-231` sets no allowed-key list), and the
    person is known from the key that answers. Stopping is **designed** to be reversible — a refused
    check resumes following, so nothing irreversible happens before the person is known — but
@@ -1861,7 +1861,11 @@ loop test (`apps/server/src/stream-loop.e2e.test.ts`), which grows into the two-
 - **4b. Promotion from a followed copy.** Stop, verify, check the person, `promoteMirrorToPrimary`
   with 4a's name and W41s's activation, the stored-key check, restart, the in-flight reset; tests
   for the spare re-filing an inherited record against the drain's real duplicate handling (§7.1).
-  **Fiscal.**
+  **Fiscal.** Built as
+  [`2026-11-14-a947-4b-promote-from-followed-copy.md`](../plans/2026-11-14-a947-4b-promote-from-followed-copy.md)
+  (2026-11-14): the in-memory passkey challenge moved to 4c (watcher, 2026-11-14 16:12), and the
+  switch page offers the copy the spare took when it joined, dated, when the followed copy cannot be
+  taken (owner, 2026-11-14 16:16).
 - **4c. Devices follow, and the take-over screens.** The strip, the dialog and its refusals (a till
   or the spare still reaching the main box), the switch's proof — a passkey or a password and, when
   enrolled, a code, on a till as on the dashboard (§6.2), and the dialog's explained waits and

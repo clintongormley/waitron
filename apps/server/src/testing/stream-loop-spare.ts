@@ -2,14 +2,23 @@
 // C: refused while B streams to the loop's bucket, then joined once B stops, with nothing fiscal
 // written on either box; C starts as a mirror holding B's sales, and B's next start counts C.
 // `stream-loop-scenario.ts` runs these phases after its own; the two-box steps they repeat are
-// `spare-join-scenario.ts`'s, on a main box that does not file.
-import { readFile } from "node:fs/promises";
+// `spare-join-scenario.ts`'s, on a main box that does not file. A switch's stop of C's follower
+// then stages, places and checks the followed copy in the test's own folders.
+import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { expect } from "vitest";
-import { SPARE_FOLLOW_DIR } from "@waitron/store";
+import { ALL_MODULES } from "@waitron/composition";
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { enabledModules } from "@waitron/module";
+import { NODE_FILE, SPARE_FOLLOW_DIR } from "@waitron/store";
 import { readPairLink } from "@waitron/node-db";
 import { BOX_HOSTNAME, ownContactUrl } from "../box-name.js";
+import { followedCopyId, stageFollowedAsCopy } from "../handover-copy-from-follow.js";
+import { checkEmergencyCopy } from "../handover-emergency-check.js";
+import { readModuleConfig } from "../module-config.js";
+import { placeFirstCopy } from "../spare-copy-placement.js";
+import type { startSpareFollow } from "../spare-follow.js";
 import type { StreamHostDeps } from "../stream-host.js";
 import {
   POLL_INTERVAL_MS,
@@ -59,10 +68,11 @@ const HEALTH_MS = POLL_TRIES * POLL_INTERVAL_MS;
 const SPARE_UNTIMED_MS = 30_000;
 // B and C start side by side under one BOOT_MS; B restarts for the start check and C after its
 // followed copy is inspected with the follower stopped. C's
-// restarts during the join happen inside the link, copy and mirror waits, which bound them.
+// restarts during the join happen inside the link, copy and mirror waits, which bound them. The
+// switch's stop waits up to one more STREAM_WAIT_MS for C's follower to catch up.
 export const STREAM_LOOP_SPARE_MS =
   3 * BOOT_MS +
-  2 * STREAM_WAIT_MS +
+  3 * STREAM_WAIT_MS +
   2 * HEALTH_MS +
   STREAM_WAIT_MS +
   LINK_WAIT_MS +
@@ -85,6 +95,12 @@ function fiscalRowsIn(venueDir: string): Record<string, unknown[]> {
   }
 }
 
+/** A follower a server in this process started, with what it was started with. */
+export interface StartedFollow {
+  deps: Parameters<typeof startSpareFollow>[0];
+  follow: ReturnType<typeof startSpareFollow>;
+}
+
 export interface LoopSpareInput {
   scratch: string;
   migrationsRoot: string;
@@ -97,6 +113,8 @@ export interface LoopSpareInput {
   /** Sales B's database holds, which C's copy must hold too. */
   saleIds: readonly string[];
   serverSeams?: Pick<StreamHostDeps, "spawn">;
+  /** Every follower started so far, oldest first. */
+  followers: () => readonly StartedFollow[];
   signal?: AbortSignal;
   begin(phase: StreamLoopSparePhase): void;
 }
@@ -314,6 +332,55 @@ async function runCaptured(input: LoopSpareInput, log: readonly string[]): Promi
     expect(checks.map(({ result, peers }) => ({ result, peers }))).toEqual([
       { result: "proceed", peers: [{ nodeId: nodeIdC, answer: "=", counted: true }] },
     ]);
+    // A switch's stop of the follower C started after its restart, and its output staged, placed,
+    // migrated and checked in folders of the test's, so C's own next start has nothing to place.
+    const followC = [...input.followers()]
+      .reverse()
+      .find(({ deps }) => deps.stateDir === dirsC.state);
+    if (followC === undefined) throw new Error("no follower was started for C");
+    const switched = await followC.follow.stopForSwitch({ catchUpMs: STREAM_WAIT_MS });
+    if (switched.kind !== "stopped")
+      throw new Error(`C's follower did not stop for the switch: ${JSON.stringify(switched)}`);
+    const switchState = join(input.scratch, "switch-c", "state");
+    const switchVenue = join(input.scratch, "switch-c", "venue");
+    await mkdir(switchState, { recursive: true });
+    await mkdir(switchVenue, { recursive: true });
+    const { db, node: nodeDb, ring, nodeId } = followC.deps;
+    const modules = enabledModules(ALL_MODULES, await readModuleConfig(db));
+    const staged = await stageFollowedAsCopy(
+      {
+        db,
+        node: nodeDb,
+        ring,
+        nodeId,
+        stateDir: switchState,
+        modules,
+        migrationsRoot: input.migrationsRoot,
+      },
+      switched,
+    );
+    expect(staged).toEqual({ source: "followed-copy", sourceId: followedCopyId(switched) });
+    // Placing reads the destination's node mode, so the switch folder holds a copy of C's node.db.
+    const nodeFileC = new DatabaseSync(join(dirsC.venue, NODE_FILE), { readOnly: true });
+    try {
+      nodeFileC.prepare("vacuum into ?").run(join(switchVenue, NODE_FILE));
+    } finally {
+      nodeFileC.close();
+    }
+    expect(
+      await placeFirstCopy({
+        stateDir: switchState,
+        venueDir: switchVenue,
+        nodeId: nodeIdC,
+        log: () => {},
+      }),
+    ).toBe(true);
+    await applyMigrations(switchVenue, migrationOptionsFor(manifestSets(), null));
+    expect(
+      await checkEmergencyCopy({ venueDir: switchVenue, stateDir: switchState, modules }),
+    ).toMatchObject(staged);
+    expect(firstRowIn(switchVenue, nameSql)).toEqual({ name: changedName });
+    expect(fiscalRowsIn(switchVenue)).toEqual(fiscalAtJoin);
   } catch (error) {
     failures.push(error);
   } finally {

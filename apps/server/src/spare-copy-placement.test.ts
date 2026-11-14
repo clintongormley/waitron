@@ -4,7 +4,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, withNodeTransaction } from "@waitron/db";
+import { sql } from "drizzle-orm";
+import { CORE_MIGRATIONS, openVenueDatabase, withNodeTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { NODE_MIGRATIONS, setNodeModeTx } from "@waitron/node-db";
 import {
@@ -118,6 +119,34 @@ describe("placeFirstCopy", () => {
       } else expect(existsSync(copyFolder())).toBe(false);
     },
   );
+
+  it("places a staged followed copy on a mirror and keeps its marker until activation", async () => {
+    spareWithReadyCopy();
+    await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, nodeId, "mirror"));
+    await rm(join(venueDir, NODE_FILE));
+    await suite.node.archiveTo(join(venueDir, NODE_FILE));
+    await rm(join(copyFolder(), VENUE_FILE));
+    await suite.db.archiveTo(join(copyFolder(), VENUE_FILE));
+    const followed = readFileSync(join(copyFolder(), VENUE_FILE));
+    followed[18] = 1;
+    followed[19] = 1;
+    writeFileSync(join(copyFolder(), VENUE_FILE), followed);
+    const selection = { source: "followed-copy", sourceId: "b".repeat(64) };
+    writeFileSync(join(copyFolder(), PAIR_COPY_READY_FILE), JSON.stringify(selection));
+
+    expect(await place()).toBe(true);
+
+    expect(readFileSync(live())).toEqual(followed);
+    expect(JSON.parse(readFileSync(join(copyFolder(), "placed.json"), "utf8"))).toEqual(selection);
+    expect(await place()).toBe(false);
+    expect(JSON.parse(readFileSync(join(copyFolder(), "placed.json"), "utf8"))).toEqual(selection);
+    const opened = await openVenueDatabase(venueDir);
+    try {
+      expect(opened.venue.get(sql.raw("pragma journal_mode"))).toEqual({ journal_mode: "wal" });
+    } finally {
+      await opened.close();
+    }
+  });
 
   it("finishes selected provenance after a crash just after the live rename", async () => {
     spareWithReadyCopy();

@@ -2,10 +2,11 @@ import { peerBodyLimit } from "./peer-route-limits.js";
 import "./errors.js";
 import { isDeepStrictEqual } from "node:util";
 import { mkdir, mkdtemp, writeFile, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { eq } from "drizzle-orm";
 import type { Hono } from "hono";
 import {
+  openVenueDatabase,
   readNodeMembership,
   withNodeTransaction,
   withTransaction,
@@ -28,20 +29,28 @@ import {
   endManagementSession,
   loginManagerById,
   persons,
+  pinThrottleIdle,
+  pinThrottleRetryAfterSeconds,
+  pinThrottleUnlockAt,
   type TotpKeyRing,
 } from "@waitron/identity";
 import { servingPrimaryNodeId, type CanonicalValue } from "@waitron/membership";
 import type { WaitronModule } from "@waitron/module";
 import {
+  clearTakeFailuresTx,
   readHandoverOperation,
   readNodeMode,
   readOpenHandoverOperation,
+  readPairLink,
+  readTakeFailures,
+  recordTakeFailureTx,
   type HandoverOperation,
 } from "@waitron/node-db";
 import { inTurn } from "@waitron/provisioning";
-import { createErrorBoundary, readJsonBody } from "@waitron/server-kit";
+import { codeOf, createErrorBoundary, readJsonBody } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { SCRATCH_DIR } from "@waitron/store";
+import type { FollowProgress } from "@waitron/stream";
 import {
   askPeerStatus,
   isRecord,
@@ -60,6 +69,13 @@ import { assertHeldDocumentReadable } from "./membership-trust.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
 import { stageBackupAsCopy } from "./handover-copy-from-backup.js";
+import { followedCopyId, stageFollowedAsCopy } from "./handover-copy-from-follow.js";
+import {
+  discardStagedCopy,
+  readSelectedCopy,
+  readStagedCopy,
+  SELECTED_COPY_SOURCES,
+} from "./handover-copy-selection.js";
 import { readUpload } from "./setup-recovery-preparation-api.js";
 import { MAX_RESTORE_UPLOAD_BYTES } from "./setup-api.js";
 
@@ -88,6 +104,17 @@ interface Deps {
   credentialKeyRing: TotpKeyRing;
   passwordThrottle?: PasswordThrottle;
   fetch?: AskPeerStatusDeps["fetch"];
+  follow?: {
+    stopForSwitch(options: {
+      catchUpMs: number;
+    }): Promise<
+      | { kind: "stopped"; generation: string; appliedTXID: string; path: string }
+      | { kind: "catching-up"; progress: FollowProgress | null }
+    >;
+    progress(): FollowProgress | null;
+    restart(): void;
+    migrationsRoot: string | null;
+  };
   backup?: {
     readRecoveryKey(): Promise<string | undefined>;
     environment: DeploymentEnvironment;
@@ -129,6 +156,10 @@ const STATUS = {
   "provisioning.database_ahead": 409,
 } as const;
 
+function isCopySource(value: unknown): value is EmergencyCopy["source"] {
+  return value === "mirror-copy" || SELECTED_COPY_SOURCES.some((source) => source === value);
+}
+
 function parse(raw: unknown) {
   if (!isRecord(raw)) refuseRequest("body");
   const { operationId, statements, reason, locale, provider } = raw;
@@ -151,9 +182,9 @@ function parse(raw: unknown) {
     )
   )
     refuseRequest("expectedCopy");
-  if (expectedCopy.source !== "mirror-copy" && expectedCopy.source !== "selected-backup")
-    refuseRequest("expectedCopy.source");
-  if (expectedCopy.source === "selected-backup" && !isSha256Hex(expectedCopy.sourceId))
+  const source: unknown = expectedCopy.source;
+  if (!isCopySource(source)) refuseRequest("expectedCopy.source");
+  if (source !== "mirror-copy" && !isSha256Hex(expectedCopy.sourceId))
     refuseRequest("expectedCopy.sourceId");
   return {
     operationId,
@@ -166,9 +197,9 @@ function parse(raw: unknown) {
     locale: locale as "en" | "es",
     signIn: raw.signIn,
     expectedCopy: {
-      ...(expectedCopy.source === "selected-backup"
-        ? { source: "selected-backup" as const, sourceId: expectedCopy.sourceId as string }
-        : { source: "mirror-copy" as const }),
+      ...(source === "mirror-copy"
+        ? { source }
+        : { source, sourceId: expectedCopy.sourceId as string }),
       identifier: expectedCopy.identifier,
       lastChangeAtMs: expectedCopy.lastChangeAtMs,
     },
@@ -214,8 +245,8 @@ export function mountHandoverEmergencyApi(
       sourceServersUrl: new URL("/manage/servers", originOf(source!.contactUrl)).href,
     });
   }
-  async function authenticate(signIn: unknown) {
-    const credentials = await signInCredentials(deps.db, signIn);
+  async function authenticate(signIn: unknown, db: Database = deps.db) {
+    const credentials = await signInCredentials(db, signIn);
     if (
       typeof credentials.password !== "string" ||
       (credentials.totp !== undefined && typeof credentials.totp !== "string")
@@ -229,9 +260,9 @@ export function mountHandoverEmergencyApi(
     // End the sign-in transaction before checking the copy or the network. Only a passing check
     // reaches the separate node transaction, so neither slow operation holds a write lock.
     return handoverSignInAttempt(throttle, credentials, () =>
-      inTurn(deps.db, personId, async () => {
-        const secret = await checkManagerPassword(deps.db, { personId }, password);
-        return withTransaction(deps.db, async (tx) => {
+      inTurn(db, personId, async () => {
+        const secret = await checkManagerPassword(db, { personId }, password);
+        return withTransaction(db, async (tx) => {
           const session = await loginManagerById(tx, {
             personId,
             password,
@@ -305,11 +336,15 @@ export function mountHandoverEmergencyApi(
         ? await checkEmergencyCopy(deps)
         : await compareCopy(declaration.lastCopy);
     await sourceSilent(sourceNodeId, declaration !== null);
+    // The pair link turns `copied` when joining finishes, after the copy taken then is placed.
+    const link = await readPairLink(deps.node, deps.nodeId);
     return {
       sourceNodeId,
       destinationNodeId: deps.nodeId,
       sourceServersUrl: new URL("/manage/servers", originOf(source.contactUrl)).href,
       copy,
+      joinedAtMs:
+        link?.role === "serves" && link.state === "copied" ? link.updatedAt.getTime() : null,
       operation:
         operation === null
           ? null
@@ -369,6 +404,116 @@ export function mountHandoverEmergencyApi(
         setTimeout(deps.backup.restart, 0);
         return response;
       });
+    }),
+  );
+  async function refuseRepeatedFailures(): Promise<void> {
+    const failed = await readTakeFailures(deps.node, deps.nodeId);
+    if (failed === null) return;
+    const now = Date.now();
+    const lastAt = failed.lastFailedAt.getTime();
+    const unlockAt = pinThrottleUnlockAt(failed.failures, lastAt);
+    if (!pinThrottleIdle(lastAt, now) && now < unlockAt)
+      throw new AppError("password.throttled", {
+        retryAfterSeconds: pinThrottleRetryAfterSeconds(unlockAt, now),
+      });
+  }
+  /** Every failed take after the stop restarts the box, so each counts, whatever refused it. */
+  async function countFailedTake(): Promise<void> {
+    await withNodeTransaction(deps.node, async (tx) => {
+      const failed = await readTakeFailures(tx, deps.nodeId);
+      if (failed !== null && pinThrottleIdle(failed.lastFailedAt.getTime(), Date.now()))
+        await clearTakeFailuresTx(tx, deps.nodeId);
+      await recordTakeFailureTx(tx, deps.nodeId, new Date());
+    }).catch((written: unknown) =>
+      log("warn", "handover.take_failure_not_counted", { errorCode: codeOf(written) }),
+    );
+  }
+  async function signInAgainstFollowed(signIn: unknown, path: string): Promise<void> {
+    const followed = await openVenueDatabase(dirname(path));
+    try {
+      await authenticate(signIn, followed.venue);
+    } finally {
+      await followed.close();
+    }
+  }
+  async function take(signIn: unknown) {
+    // A malformed sign-in could never pass, so it is refused before anything is stopped.
+    if (
+      !isRecord(signIn) ||
+      typeof signIn.email !== "string" ||
+      typeof signIn.password !== "string" ||
+      (signIn.totp !== undefined && typeof signIn.totp !== "string")
+    )
+      refuseRequest("signIn");
+    const { sourceNodeId } = await mirrorSource();
+    const open = await readOpenHandoverOperation(deps.node, deps.nodeId);
+    if (open !== null)
+      throw new AppError("handover.controlled_unresolved", { operationId: open.operationId });
+    const staged = await readStagedCopy(deps.stateDir);
+    const placed = await readSelectedCopy(deps.stateDir);
+    if (staged?.source === "selected-backup" || placed?.source === "selected-backup")
+      return { state: "taken" as const };
+    if (staged !== null) return { state: "restarting" as const };
+    const seen = deps.follow?.progress() ?? null;
+    if (
+      placed !== null &&
+      (seen === null ||
+        seen.state === "rebuilding" ||
+        (seen.appliedTXID !== null &&
+          followedCopyId({ generation: seen.generation, appliedTXID: seen.appliedTXID }) ===
+            placed.sourceId))
+    )
+      return { state: "taken" as const };
+    const follow = deps.follow;
+    // The page asks again every 2 seconds, so a follower last seen behind answers without asking
+    // the main box, and the stop below looks once rather than holding this turn while it waits.
+    if (
+      follow === undefined ||
+      seen === null ||
+      seen.state !== "following" ||
+      seen.appliedTXID === null ||
+      seen.appliedTXID !== seen.uploadedTXID
+    )
+      return { state: "catching-up" as const };
+    await refuseRepeatedFailures();
+    await sourceSilent(sourceNodeId, false);
+    let stopping = true;
+    try {
+      const stopped = await follow.stopForSwitch({ catchUpMs: 0 });
+      if (stopped.kind === "catching-up") {
+        stopping = false;
+        return { state: "catching-up" as const };
+      }
+      await stageFollowedAsCopy({ ...deps, migrationsRoot: follow.migrationsRoot }, stopped);
+      try {
+        await signInAgainstFollowed(signIn, stopped.path);
+      } catch (error) {
+        await discardStagedCopy(deps.stateDir);
+        throw error;
+      }
+      // The copy is staged and the restart places it, so a count that stays is logged, not answered.
+      await withNodeTransaction(deps.node, (tx) => clearTakeFailuresTx(tx, deps.nodeId)).catch(
+        (written: unknown) =>
+          log("warn", "handover.take_failures_not_cleared", { errorCode: codeOf(written) }),
+      );
+      return { state: "restarting" as const };
+    } catch (error) {
+      if (stopping) await countFailedTake();
+      throw error;
+    } finally {
+      // Following never resumes in this process once stopped, so every outcome but waiting starts
+      // it again; a throw from the stop itself may come after it stopped.
+      if (stopping) setTimeout(follow.restart, 0);
+    }
+  }
+  app.use("/api/node/handover/emergency/followed", peerBodyLimit(65536));
+  app.post("/api/node/handover/emergency/followed", (c) =>
+    boundary(c, log, async () => {
+      c.header("Cache-Control", "no-store");
+      requireNodeOperationHttps(c);
+      const body = await readJsonBody<unknown>(c);
+      if (!isRecord(body)) refuseRequest("body");
+      return c.json(await inTurn(deps.node, "handover-emergency", () => take(body.signIn)));
     }),
   );
   async function declare(raw: unknown) {
