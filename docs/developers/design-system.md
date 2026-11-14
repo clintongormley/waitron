@@ -5021,8 +5021,9 @@ so a screen that nests one strip inside another's panel needs that check on the 
 The component updates its own selection, while your screen records it with `UrlStateController`.
 An unknown or omitted value shows the first tab. Arrow keys wrap between tabs; Home and End
 select the first and last tab. The tab strip scrolls on narrow screens and brings the selected tab
-into view when a page opens directly on it and whenever the strip changes width (a tab wider than
-the strip shows its start). When the tabs overflow, the strip fades each cut end over twice
+into view when a page opens directly on it, whenever the strip changes width, and when the selected
+tab changes width while the strip is still where it last showed that tab (a tab wider than the strip
+shows its start). When the tabs overflow, the strip fades each cut end over twice
 `--wt-space-6`, so a person sees that it scrolls: `wt-tabs` sets `data-overflow` (`start`, `end`
 or `both`) from the scroll position, and a mask draws the fade. A selected tab stops clear of a
 faded end that has another tab beyond it, and where the room beside the selected tab is short the

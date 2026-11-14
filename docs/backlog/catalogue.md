@@ -661,14 +661,6 @@ decimal unit does — which would change the other readers of the till's `soldBy
 control (`apps/till/src/screens/till-table-order-screen.ts`), and the price label
 (`apps/till/src/widgets/basket-refresh-dialog.ts`). Read, not run.
 
-## Modifiers' Spanish "Opciones" tab was cut at a 310 px screen on CI's Linux fonts
-
-**Modifiers' Spanish "Opciones" tab was cut at a 310 px screen on CI's Linux fonts** in
-A424 (#1452). A434's macOS Chromium probe measured the whole tab at screen widths 310 and
-390 px (tab 95.67 px; strip 106.42 and 186.42 px). The owner has not ruled on Modifiers;
-reproduce with the Linux fonts before choosing a change. The Printers tab's shorter label
-was the separate A434 ruling.
-
 ## A670 — guest-menu sharing and fixed A4 presets
 
 The manager’s guest preview reads the published menu, with guest/default/internal name fallback,
@@ -1020,16 +1012,6 @@ tests. Media still validates required image names and translates its refusal to
 - **A1074. A configuration import does not range-check a department's reminder minutes**, so a
   file could store a negative number or 999; only the department save refuses them. Left open
   by A756 PR 4's review (#2020).
-
-## Bundle: Tabs selected visible
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Modifiers' Spanish "Opciones" tab was cut at a 310 px screen on CI's Linux fonts**. The owner
-  has not ruled on Modifiers; reproduce with the Linux fonts before choosing a change.
-  [Detail](catalogue.md#modifiers-spanish-opciones-tab-was-cut-at-a-310-px-screen-on-cis-linux-fonts)
-- **A selected tab that grows while its strip keeps its width is not scrolled back into view** — left open by A487a (#1540).
-  [Detail](kitchen.md#a-selected-tab-that-grows-while-its-strip-keeps-its-width-is-not-scrolled-back-into-view)
 
 ## Bundle: Tree drag shared
 
