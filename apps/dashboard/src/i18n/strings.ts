@@ -3137,6 +3137,13 @@ export const en = {
   "menus.schedule_not_saved":
     "The schedule change for {name} was not confirmed. Open its Preview tab and check Scheduled versions before trying again.",
   "menus.change_not_saved": "Your change to {name} was not saved. {reason}",
+  "menus.guest_local_link": "Open the shared menu on this box",
+  "menus.guest_sharing_on":
+    "Public sharing is On for the default menu. Only its published version is shared. Cloud delivery is not available yet.",
+  "menus.guest_sharing_off":
+    "Public sharing is Off. Turning it on shares the default menu’s published version on this box, not necessarily the menu shown here. Cloud delivery is not available yet.",
+  "menus.guest_turn_on": "Turn sharing on",
+  "menus.guest_turn_off": "Turn sharing off",
   "menus.guest_preview": "Guest menu preview",
   "menus.guest_language": "Guest language",
   "menus.guest_unpublished": "Publish this menu to preview what guests will read.",
@@ -7133,6 +7140,13 @@ export const es: Record<StringKey, string> = {
   "menus.schedule_not_saved":
     "No se ha confirmado el cambio de programación de {name}. Abre su pestaña Vista previa y comprueba las Versiones programadas antes de volver a intentarlo.",
   "menus.change_not_saved": "No se ha guardado tu cambio en {name}. {reason}",
+  "menus.guest_local_link": "Abrir la carta compartida en esta caja",
+  "menus.guest_sharing_on":
+    "La carta predeterminada está compartida. Solo se comparte su versión publicada. El envío a Cloud aún no está disponible.",
+  "menus.guest_sharing_off":
+    "La carta no está compartida. Al activarlo, se comparte la versión publicada de la carta predeterminada en esta caja, que puede no ser la que ves aquí. El envío a Cloud aún no está disponible.",
+  "menus.guest_turn_on": "Compartir carta",
+  "menus.guest_turn_off": "Dejar de compartir",
   "menus.guest_preview": "Vista previa para clientes",
   "menus.guest_language": "Idioma del cliente",
   "menus.guest_unpublished": "Publica esta carta para ver lo que leerán los clientes.",

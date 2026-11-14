@@ -1,6 +1,11 @@
 import type { Hono } from "hono";
 import { readSettings, readVenue, saveSettings, withTransaction, type Database } from "@waitron/db";
-import { GUEST_MENU_SETTINGS, readContentLanguages, readLiveMenu } from "@waitron/catalogue";
+import {
+  GUEST_MENU_SETTINGS,
+  readContentLanguages,
+  readLiveMenu,
+  readGuestMenu,
+} from "@waitron/catalogue";
 import { authorizeManager } from "@waitron/identity";
 import {
   createErrorBoundary,
@@ -11,6 +16,7 @@ import {
 import { AppError, FALLBACK_LOCALE, publicGuestMenu } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { renderGuestMenuPage } from "./guest-menu-page.js";
+import { readVenueLocale } from "./venue-locale.js";
 import "./errors.js";
 const run = createErrorBoundary(
   {
@@ -95,4 +101,37 @@ export function mountGuestMenuApi(
       return c.json(result);
     }),
   );
+}
+
+export function mountPublicGuestMenu(
+  app: Hono,
+  deps: { db: Database; serving: () => boolean },
+  log: Logger,
+): void {
+  app.all("/public/menu", (c) =>
+    run(c, log, async () => {
+      c.header("Cache-Control", "no-store");
+      if (c.req.method !== "GET" && c.req.method !== "HEAD") return c.body(null, 405);
+      if (!deps.serving()) return c.body(null, 503);
+      const locale = await readVenueLocale(deps.db);
+      const html = await withTransaction(deps.db, async (tx) => {
+        const live = await readGuestMenu(tx);
+        if (live === null) return null;
+        const languages = await readContentLanguages(tx, locale);
+        const menu = publicGuestMenu(
+          live.document,
+          languages,
+          c.req.query("language") ?? languages.defaultLanguage,
+        );
+        return renderGuestMenuPage(
+          menu,
+          (await readVenue(tx)).name,
+          languages.defaultLanguage,
+          true,
+        );
+      });
+      return html === null ? c.body(null, 404) : c.html(html);
+    }),
+  );
+  app.all("/public/menu/*", (c) => c.body(null, 404));
 }

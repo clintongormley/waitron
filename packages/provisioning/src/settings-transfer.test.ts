@@ -1,6 +1,7 @@
 import { configurationBundle } from "../test/configuration-bundle.js";
 import { validateConfigurationBundle } from "./configuration-transfer.js";
 import { expect, it } from "vitest";
+import { GUEST_MENU_SETTINGS } from "@waitron/catalogue";
 import { ALL_MODULES } from "@waitron/composition";
 import { CORE_MIGRATIONS, readSettings, saveSettings, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -119,3 +120,25 @@ it("keeps the module mismatch refusal ahead of document checking", () => {
     }),
   );
 });
+
+it.each([false, true])(
+  "keeps this box's guest sharing %s across configuration imports",
+  async (enabled) => {
+    await withTransaction(suite.db, (tx) =>
+      saveSettings(tx, GUEST_MENU_SETTINGS, {
+        doc: { enabled },
+        expectedRevision: 0,
+        personId: null,
+      }),
+    );
+    expect(await exportSettingsDocuments(suite.db, ALL_MODULES)).toEqual({});
+    await imported();
+    expect(await readSettings(suite.db, GUEST_MENU_SETTINGS)).toEqual({
+      doc: { enabled },
+      revision: 1,
+    });
+    expect(() =>
+      checkImportedSettings({ catalogue: { version: 1, doc: { enabled: !enabled } } }, ALL_MODULES),
+    ).toThrow(expect.objectContaining({ code: "setup.request_invalid" }));
+  },
+);

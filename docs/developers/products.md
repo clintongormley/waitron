@@ -13,7 +13,7 @@ So a product carries up to three names, and so does each of its variants.
 | Name | Stored as | Who reads it |
 | --- | --- | --- |
 | **Name** | `products.name` — plain text, `not null` | Staff. The dashboard, the till's product buttons and basket, a table tab's line list, the sales reports, the image library's "what uses this photo" list |
-| **Customer-facing name** | `products.customer_name` — a language map (JSON), nullable | Diners. The printed receipt, invoice and published guest-menu preview |
+| **Customer-facing name** | `products.customer_name` — a language map (JSON), nullable | Diners. The printed receipt, invoice and published guest menu |
 | **Kitchen name** | `products.kitchen_name` — plain text, nullable | Cooks. The kitchen ticket and the kitchen display |
 
 A variant is itself a `products` row whose `parent_id` names its parent, so it carries the same
@@ -973,3 +973,7 @@ this temporary draft marker is never a venue-table field.
 default, then each identity’s own staff name. Product, variant and extra halves resolve separately;
 kitchen names do not enter the projection. The server’s `guest-menu-page.ts` renders that
 allowlisted publication as text-safe HTML; working changes reach the preview only after publication.
+
+The public `/public/menu` page resolves only the opted-in active default publication while the box
+is serving. It uses the same projection and renderer as the protected preview. Sharing is a
+non-transferring catalogue settings document: configuration imports retain this box’s choice.

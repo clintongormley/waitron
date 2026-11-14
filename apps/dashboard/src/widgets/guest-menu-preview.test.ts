@@ -91,3 +91,72 @@ it("lets a manager open the rendered page and change its language", async () => 
     cleanupWidgets();
   }
 });
+
+it("reads sharing passively, changes the default menu's sharing, and lets a refused action retry", async () => {
+  const { DashboardApi } = await import("../api/client.js");
+  const { mountWidget, cleanupWidgets } = await import("./test-helpers.js");
+  let enabled = false;
+  let revision = 0;
+  let refuse = true;
+  const api = new DashboardApi("", async (input, init) => {
+    const url = new URL(String(input), location.origin);
+    if (url.pathname === "/management-api/guest-menu") {
+      if (init?.method === "GET") {
+        if (new Headers(init.headers).get("x-waitron-live") !== "1")
+          return new Response("", { status: 400 });
+      } else if (init?.method === "PUT") {
+        const body = JSON.parse(String(init.body)) as {
+          enabled: boolean;
+          expectedRevision: number;
+        };
+        if (refuse) {
+          refuse = false;
+          revision++;
+          return new Response(JSON.stringify({ error: { code: "settings.out_of_date" } }), {
+            status: 409,
+          });
+        }
+        if (body.expectedRevision !== revision || body.enabled === enabled)
+          return new Response("", { status: 400 });
+        enabled = body.enabled;
+        revision++;
+      } else return new Response("", { status: 405 });
+      return new Response(JSON.stringify({ enabled, revision }));
+    }
+    return new Response("null");
+  });
+  const { el } = await mountWidget<GuestMenuPreview>("dashboard-guest-menu-preview", {
+    api,
+    menuId: "menu",
+  });
+  try {
+    await page.elementLocator(el.shadowRoot!.querySelector("wt-button")!).click();
+    await expect
+      .poll(
+        () =>
+          el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("#sharing-action")
+            ?.disabled,
+      )
+      .toBe(false);
+    const action = () =>
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("#sharing-action")!;
+    await page.elementLocator(action()).click();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("#sharing-error")?.textContent)
+      .toBeTruthy();
+    await expect.poll(() => action().disabled).toBe(false);
+    await page.elementLocator(action()).click();
+    await expect.poll(() => enabled).toBe(true);
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("a[href='/public/menu']")?.textContent)
+      .toBeTruthy();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("#sharing-error")?.textContent ?? "")
+      .toBe("");
+    await page.elementLocator(action()).click();
+    await expect.poll(() => enabled).toBe(false);
+    expect(revision).toBe(3);
+  } finally {
+    cleanupWidgets();
+  }
+});

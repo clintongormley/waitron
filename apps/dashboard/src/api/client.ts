@@ -3133,6 +3133,17 @@ export class DashboardApi {
     });
   }
 
+  getGuestMenuSharing(): Promise<{ enabled: boolean; revision: number }> {
+    return this.#request("/management-api/guest-menu", "GET", undefined, { passive: true });
+  }
+
+  setGuestMenuSharing(
+    enabled: boolean,
+    expectedRevision: number,
+  ): Promise<{ enabled: boolean; revision: number }> {
+    return this.#request("/management-api/guest-menu", "PUT", { enabled, expectedRevision });
+  }
+
   getGuestMenuPreview(
     menuId: string,
     language?: string,

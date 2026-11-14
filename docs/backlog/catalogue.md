@@ -672,13 +672,13 @@ was the separate A434 ruling.
 ## A670 — guest-menu sharing and fixed A4 presets
 
 The manager’s guest preview reads the published menu, with guest/default/internal name fallback,
-separately priced sizes/extras and declarations. It adds no public link or printing.
+separately priced sizes/extras and declarations. Local opt-in sharing exposes only the active default publication on the serving box; printing and a mobile-data guest link remain unavailable.
 
 Remaining work follows the watcher-cleared [build plan](../superpowers/plans/2026-11-13-a670-guest-menu-build.md):
-sharing of the existing default menu; delivery/confirmation of Cloud’s hosted copy under lane G’s
+delivery/confirmation of Cloud’s hosted copy under lane G’s
 A670-CLOUD contract; then fixed A4 presets with browser Print / Save as PDF. The watcher cleared paper
 work before the Cloud integration if its contract is still waiting. Cloud readiness remains
-unverified; ordering is separate.
+unverified; ordering is separate. Choosing a guest menu independently of the default menu is a later feature.
 
 The owner’s 13 November 22:31 answers, relayed by the watcher in Lane D `questions.md`, choose
 forwarding to the box with a hosted published read-only copy when unreachable, fixed presets

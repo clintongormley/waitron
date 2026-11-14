@@ -1,5 +1,6 @@
 import {
   guestMenuWords,
+  languageDisplayName,
   formatMoney,
   decimal,
   toScale,
@@ -16,6 +17,7 @@ export function renderGuestMenuPage(
   menu: PublicGuestMenu,
   venueName: string,
   defaultLanguage: string,
+  languageLinks = false,
 ): string {
   const { language, text: words } = guestMenuWords(menu.language, defaultLanguage);
   const used = new Set<string>();
@@ -97,5 +99,5 @@ svg{width:var(--wt-space-4);height:var(--wt-space-4);fill:currentColor;vertical-
 small{color:var(--wt-color-text-muted)}
 [popover]{color:var(--wt-color-text);background:var(--wt-color-bg);padding:var(--wt-space-5);border:1px solid var(--wt-color-border);border-radius:var(--wt-radius-md);max-width:calc(100% - var(--wt-space-6))}
 footer{margin-top:var(--wt-space-6)}footer li{margin-bottom:var(--wt-space-2)}
-</style></head><body><main><header><p>${esc(venueName)}</p><h1>${esc(menu.name)}</h1></header><nav aria-label="${esc(menu.name)}">${sections.map((s) => `<a href="#${s.id}">${esc(s.name)}</a>`).join("")}</nav>${body}<footer lang="${language}"><h2>${esc(words.key!)}</h2><p>${esc(words.keyLanguage!)}</p><p>${esc(words.note!)}</p><ul>${key(false)}</ul>${dietKey ? `<h2>${esc(words.diet!)}</h2><ul>${dietKey}</ul>` : ""}</footer></main></body></html>`;
+</style></head><body><main><header><p>${esc(venueName)}</p><h1>${esc(menu.name)}</h1></header><nav aria-label="${esc(menu.name)}">${sections.map((s) => `<a href="#${s.id}">${esc(s.name)}</a>`).join("")}</nav>${languageLinks ? `<nav aria-label="${esc(words.keyLanguage!)}">${menu.languages.map((code) => `<a href="?language=${encodeURIComponent(code)}" lang="${esc(code)}">${esc(languageDisplayName(code, menu.language))}</a>`).join(" · ")}</nav>` : ""}${body}<footer lang="${language}"><h2>${esc(words.key!)}</h2><p>${esc(words.keyLanguage!)}</p><p>${esc(words.note!)}</p><ul>${key(false)}</ul>${dietKey ? `<h2>${esc(words.diet!)}</h2><ul>${dietKey}</ul>` : ""}</footer></main></body></html>`;
 }
