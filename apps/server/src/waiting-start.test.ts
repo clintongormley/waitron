@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm";
 import type { Hono } from "hono";
 import { generateSync } from "otplib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { withNodeTransaction, withTransaction } from "@waitron/db";
+import { withNodeTransaction, withTransaction, type NodeDatabase } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   beginOwnTotpEnrollment,
@@ -98,6 +98,62 @@ function harness(
   });
   return { waiting, app: () => app!, health, closeListeners, closeStore, restart };
 }
+
+/**
+ * The suite's real node.db, except that each query begun with `select` waits until the test lets
+ * it through, in the order they began. A superseded stepdown's first query is its read of the
+ * stored restriction.
+ */
+function holdingReads(node: NodeDatabase) {
+  const gates: (() => void)[] = [];
+  let released = 0;
+  const held = (value: object, gate: Promise<void>): object =>
+    new Proxy(value, {
+      get(target, key) {
+        const member: unknown = Reflect.get(target, key, target);
+        if (typeof member !== "function") return member;
+        const call = member as (...args: unknown[]) => unknown;
+        if (key === "then")
+          return (...args: unknown[]) => gate.then(() => call.apply(target, args));
+        return (...args: unknown[]) => {
+          const out = call.apply(target, args);
+          return typeof out === "object" && out !== null ? held(out, gate) : out;
+        };
+      },
+    });
+  const handle = new Proxy(node, {
+    get(target, key) {
+      const member: unknown = Reflect.get(target, key, target);
+      if (typeof member !== "function") return member;
+      const call = member as (...args: unknown[]) => unknown;
+      if (key !== "select") return call.bind(target);
+      return (...args: unknown[]) =>
+        held(call.apply(target, args) as object, new Promise<void>((open) => gates.push(open)));
+    },
+  });
+  return {
+    node: handle,
+    arrived: () => gates.length,
+    releaseNext: () => gates[released++]!(),
+  };
+}
+
+/** `POST /step` asks for a superseded stepdown naming SPARE_ID, answering a refusal's code. */
+const stepRoute: WaitingStartDeps["routes"][number] = (app, hooks) =>
+  app.post("/step", async (c) => {
+    try {
+      return c.json(
+        await hooks.stepDown({
+          kind: "superseded",
+          successorNodeId: SPARE_ID,
+          membershipTerm: 4,
+          self: c,
+        }),
+      );
+    } catch (error) {
+      return c.json({ refused: (error as { code?: string }).code }, 409);
+    }
+  });
 
 describe("the waiting start", () => {
   it("waits, answering `acceptingSales: false` with its term", async () => {
@@ -487,23 +543,33 @@ describe("the waiting start", () => {
       await vi.waitFor(() => expect(h.restart).toHaveBeenCalledTimes(1));
     });
 
+    /** A restriction for another successor, so a stepdown naming SPARE_ID is refused. */
+    const recordConflictingRestriction = () =>
+      withNodeTransaction(suite.node, (tx) =>
+        recordHandoverRestrictionTx(tx, {
+          nodeId: NODE_ID,
+          operationId: null,
+          kind: "superseded",
+          successorNodeId: TERRACE_ID,
+          membershipTerm: 5,
+        }),
+      );
+
     /**
      * A peer's answer ends the wait and the listeners begin to close; a stepdown then starts, the
      * close settles, and only then is the stepdown refused, before it has closed the gate.
      */
     async function refusedAfterTheListenersClose(closeFailure: Error | null) {
+      await recordConflictingRestriction();
       let answer: (outcome: StartPeerCheckOutcome) => void = () => {};
       const pending = new Promise<StartPeerCheckOutcome>((done) => (answer = done));
-      let refuse: (error: Error) => void = () => {};
-      const read = new Promise<never>((_, fail) => (refuse = fail));
-      // Stands in for node.db: the stepdown's read of the stored restriction waits for `refuse`.
-      const node = { select: () => ({ from: () => ({ where: () => read }) }) } as never;
+      const reads = holdingReads(suite.node);
       let closeNow: () => void = () => {};
       const closing = new Promise<void>((done) => (closeNow = done));
       let closeSettled = false;
       let app: Hono | undefined;
       const h = harness(() => pending, {
-        node,
+        node: reads.node,
         intervalMs: 1,
         listen: (bound) => {
           app = bound;
@@ -518,23 +584,7 @@ describe("the waiting start", () => {
             },
           };
         },
-        routes: [
-          (app, hooks) =>
-            app.post("/step", async (c) => {
-              try {
-                return c.json(
-                  await hooks.stepDown({
-                    kind: "superseded",
-                    successorNodeId: SPARE_ID,
-                    membershipTerm: 4,
-                    self: c,
-                  }),
-                );
-              } catch (error) {
-                return c.json({ refused: (error as Error).message }, 409);
-              }
-            }),
-        ],
+        routes: [stepRoute],
       });
       // A failed start is asserted by the caller, after this rejection lands.
       h.waiting.ended.catch(() => {});
@@ -542,12 +592,12 @@ describe("the waiting start", () => {
       answer(PROCEED);
       await new Promise((done) => setTimeout(done, 10));
       const stepping = Promise.resolve(app!.request("/step", { method: "POST" }));
-      await new Promise((done) => setTimeout(done, 10));
+      await vi.waitFor(() => expect(reads.arrived()).toBe(1));
       closeNow();
       await vi.waitFor(() => expect(closeSettled).toBe(true));
       await new Promise((done) => setTimeout(done, 10));
-      refuse(new Error("refused"));
-      expect(await (await stepping).json()).toEqual({ refused: "refused" });
+      reads.releaseNext();
+      expect(await (await stepping).json()).toEqual({ refused: "handover.restriction_conflict" });
       return h;
     }
 
