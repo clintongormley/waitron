@@ -492,7 +492,7 @@ that operation's reader. Do not remove exact-content checks to make a large file
 
 ## Bundle: File input sweep
 
-1 entry, size M.
+1 entry, size M, from the backlog review of 2026-11-06.
 
 - **File pickers the browser still draws show "Choose File / No file chosen" in the browser's
   language**, not the chooser's. Left: the dashboard's node recovery panel, and the fiscal
