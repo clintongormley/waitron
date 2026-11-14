@@ -146,6 +146,12 @@ async function imageFixture({
     if (args[0] === "run" && ["capture", "trial"].some((mode) => args.includes(mode))) {
       expect(options.timeout).toBe(180_000);
       const mode = args.includes("capture") ? "capture" : "trial";
+      if (onlineTrial === "maxbuffer")
+        throw Object.assign(new Error("output limit"), {
+          killed: true,
+          code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER",
+          stderr: "too much output",
+        });
       if (onlineTrial === "timeout")
         throw Object.assign(new Error("Command failed"), {
           killed: true,
@@ -934,4 +940,11 @@ it("names a timed-out capture rather than presenting its partial log as the fail
 it.each([undefined, null])("accepts an absent Compose environment (%s)", async (environment) => {
   const { upgradeEnvironment } = await import("./host.mjs");
   expect(upgradeEnvironment(environment)).toBe("\n");
+});
+
+it("reports an output limit as output failure rather than a timeout", async () => {
+  const t = await imageFixture({ prepare: false, onlineTrial: "maxbuffer" });
+  await expect(t.f.host.prepareImages()).rejects.toThrow(
+    "Online migration capture failed: too much output; the selling version and its data are unchanged",
+  );
 });

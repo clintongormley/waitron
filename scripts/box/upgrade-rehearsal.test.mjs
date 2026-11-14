@@ -235,7 +235,7 @@ it("makes an unexpectedly successful online failure probe fail the Linux rehears
   }
 });
 
-it.each([false, true])(
+it.each([false, true, "refused"])(
   "requires the successful Linux attempt to report an online pass (%s)",
   (pass) => {
     const root = mkdtempSync(join(tmpdir(), "upgrade-pass-check-"));
@@ -245,7 +245,10 @@ it.each([false, true])(
       mkdirSync(join(root, "box"));
       writeFileSync(
         join(bin, "flock"),
-        "#!/bin/sh\n" + (pass ? 'echo "Online migration trial passed" >&2\n' : "") + "exit 0\n",
+        "#!/bin/sh\n" +
+          (pass === "refused"
+            ? 'echo "actual upgrade refusal" >&2\nexit 7\n'
+            : (pass ? 'echo "Online migration trial passed" >&2\n' : "") + "exit 0\n"),
         { mode: 0o700 },
       );
       const lines = upgradePayload("manual").split("\n");
@@ -262,7 +265,8 @@ it.each([false, true])(
         encoding: "utf8",
         timeout: 5000,
       });
-      expect(result.status, result.stderr).toBe(pass ? 0 : 1);
+      expect(result.status, result.stderr).toBe(pass === "refused" ? 7 : pass ? 0 : 1);
+      if (pass === "refused") expect(result.stderr).toContain("actual upgrade refusal");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

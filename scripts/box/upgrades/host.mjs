@@ -715,9 +715,10 @@ async function runOnlineTrial({ work, state, image, environment, run }) {
     }
   }
   if (failure) {
-    const detail = failure.killed
-      ? "timed out after 180 seconds"
-      : failure.stderr?.trim() || failure.message;
+    const detail =
+      failure.killed && failure.code !== "ERR_CHILD_PROCESS_STDIO_MAXBUFFER"
+        ? "timed out after 180 seconds"
+        : failure.stderr?.trim() || failure.message;
     throw new Error(
       `Online migration ${operation} failed: ${detail}; the selling version and its data are unchanged`,
     );

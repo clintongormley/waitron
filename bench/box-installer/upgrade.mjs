@@ -113,7 +113,8 @@ export function upgradePayload(mode) {
     return `set -euxo pipefail
 ${start}
 ${failedOnlineTrialProbe}
-${apply} >/opt/waitron/success.json 2>/opt/waitron/success.log
+${apply} >/opt/waitron/success.json 2>/opt/waitron/success.log || { upgrade_exit=$?; cat /opt/waitron/success.log >&2; exit "$upgrade_exit"; }
+cat /opt/waitron/success.log >&2
 grep -q "Online migration trial passed" /opt/waitron/success.log
 jq -e '.phase=="committed" and .target=="candidate" and ([.checks[]|select(.name=="sale" and .ok==true and .details.total=="1.00" and .details.fiscalRecords==2)]|length)==1' /opt/waitron/success.json
 ${compare}
