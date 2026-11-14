@@ -223,6 +223,7 @@ export class TestBox {
   private starting: Promise<void> | undefined;
   private restarting: Promise<void> | undefined;
   private restartFailure: unknown;
+  private lateCloseFailure: unknown;
   private closed = false;
 
   constructor(
@@ -237,6 +238,7 @@ export class TestBox {
   }
 
   start(): Promise<void> {
+    if (this.closed) return Promise.reject(this.closedWhileStarting());
     const starting = this.boot();
     this.starting = starting.catch(() => {});
     return starting;
@@ -255,10 +257,20 @@ export class TestBox {
         restart: () => void this.restart(),
       },
     );
+    if (this.closed) {
+      // `close` may already have finished, so nothing else would close this server.
+      try {
+        await server.close();
+      } catch (error) {
+        this.lateCloseFailure = error;
+      }
+      throw this.closedWhileStarting();
+    }
     this.server = server;
-    // `close` closes it once this start has settled.
-    if (this.closed)
-      throw new ClosedWhileStarting(`the box on port ${this.port} was closed while it started`);
+  }
+
+  private closedWhileStarting(): ClosedWhileStarting {
+    return new ClosedWhileStarting(`the box on port ${this.port} was closed while it started`);
   }
 
   /** Settles once this restart, and every one asked for before it, has finished. */
@@ -303,6 +315,7 @@ export class TestBox {
     await this.restarting;
     await this.starting;
     if (this.restartFailure !== undefined) failures.push(this.restartFailure);
+    if (this.lateCloseFailure !== undefined) failures.push(this.lateCloseFailure);
     const server = this.server;
     this.server = undefined;
     try {
@@ -592,11 +605,15 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
       expect(saleOf(dirsM.venue, workingOrderId)).toBe(true);
       return { caM, viaM };
     })();
-    // S's setup start reads nothing of M's, so it runs while M starts and sells.
-    const [{ caM, viaM }] = await Promise.all([
+    // S's setup start reads nothing of M's, so it runs while M starts and sells. Both settle before
+    // either failure is thrown, so cleanup never runs while M's branch can still open a client.
+    const [selling, settingUp] = await Promise.allSettled([
       sellingOnM,
       boundedStart(boxS.start(), "S's setup start"),
     ]);
+    if (selling.status === "rejected") throw selling.reason;
+    if (settingUp.status === "rejected") throw settingUp.reason;
+    const { caM, viaM } = selling.value;
     const urlS = `https://127.0.0.1:${portS}`;
     const caS = await readFile(join(dirsS.state, "tls", "ca.crt"), "utf8");
     // In setup S answers under its own authority; once it adopts, under the venue's, M's.

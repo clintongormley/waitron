@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { startServer, type StartedServer } from "../boot.js";
 import { closeBoxes, TestBox } from "./spare-join-scenario.js";
 
@@ -39,6 +39,10 @@ async function turns(count = 10): Promise<void> {
 }
 
 describe("the two-box harness's close", () => {
+  afterEach(() => {
+    vi.mocked(startServer).mockReset();
+  });
+
   it("waits for a start still running, then closes the server that start returns", async () => {
     const booting = deferred<StartedServer>();
     vi.mocked(startServer).mockReturnValueOnce(booting.promise);
@@ -76,6 +80,23 @@ describe("the two-box harness's close", () => {
       }),
     );
     expect(await closing).toEqual([refusal]);
+  });
+
+  it("never leaves a server open for a box closed before its start began", async () => {
+    const server = fakeServer();
+    vi.mocked(startServer).mockResolvedValueOnce(server);
+    const box = testBox(1);
+    expect(await closeBoxes([box])).toEqual([]);
+
+    const outcome = await box.start().then(
+      () => "started",
+      (error: unknown) => (error as Error).constructor.name,
+    );
+    await turns();
+    expect(outcome).toBe("ClosedWhileStarting");
+    const startedCalls = vi.mocked(startServer).mock.calls.length;
+    expect(startedCalls === 0 || server.close.mock.calls.length === 1).toBe(true);
+    expect(box.server).toBeUndefined();
   });
 
   it("asks every box to close at once, so one stalled close does not keep another open", async () => {
