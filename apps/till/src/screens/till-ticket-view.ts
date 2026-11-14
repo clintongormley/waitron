@@ -1262,7 +1262,7 @@ export class TillTicketView extends LitElement {
           ${
             r.corrects
               ? html`<p class="corrects meta-label" data-test="corrects-invoice">
-                    ${labels.correctsInvoice}
+                    ${r.corrects.inFull ? labels.replacesInvoiceInFull : labels.correctsInvoice}
                   </p>
                   <div class="meta-row">
                     <span class="meta-label">${labels.invoice}</span>
@@ -1273,7 +1273,15 @@ export class TillTicketView extends LitElement {
                     <span
                       >${issueDate(r.corrects.issuedAt, format, r.corrects.issuedOffsetMinutes)}</span
                     >
-                  </div>`
+                  </div>
+                  ${
+                    r.corrects.inFull
+                      ? html`<div class="meta-row" data-test="rectification-amount">
+                          <span class="meta-label">${labels.rectificationAmount}</span>
+                          <span>${formatMoney("0.00", format)}</span>
+                        </div>`
+                      : nothing
+                  }`
               : nothing
           }
           <div class="meta-row order-group">
