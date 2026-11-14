@@ -17,7 +17,7 @@ import {
   CORE_MIGRATIONS,
   stampDeployment,
   lockVenueDatabase,
-  tenants,
+  taxpayer,
   nodes,
   type Database,
   type DeploymentEnvironment,
@@ -358,7 +358,7 @@ it("boots real HTTPS first setup after Move and previews another backup", async 
   expect((await post(app, { choice: "move", password: PASSWORD })).status).toBe(200);
   const sourceNode = "ca278f55-6259-4658-a90c-faf628c0441b";
   await suite.db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Selected business" });
   await seedBusinessDay(suite.db, {});
   await seedVenueSettings(suite.db, { name: "Selected venue", invoiceLocales: ["en-GB"] });

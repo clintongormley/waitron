@@ -81,7 +81,7 @@ export async function seedVenueSettings(
 // The taxpayer row is a singleton keyed on id = 1, so a suite has at most one NIF in play and a
 // second seed is a no-op. The counter survives because other fixtures still mint their own NIFs for
 // rows that are not the taxpayer (a restore's recorded identity, for one), and because a suite that
-// truncates `tenants` between tests re-seeds a row whose NIF need not repeat.
+// truncates `taxpayer` between tests re-seeds a row whose NIF need not repeat.
 let nifCounter = 0;
 
 /** Returns a NIF unused so far in this test run. */
@@ -91,26 +91,26 @@ export function freshNif(): string {
 }
 
 /**
- * Makes sure the database's ONE taxpayer row exists. Idempotent: `tenants.id` is pinned to 1 by its
- * primary key and `tenants_singleton_ck`, so a second call adds nothing and returns nothing to
+ * Makes sure the database's ONE taxpayer row exists. Idempotent: `taxpayer.id` is pinned to 1 by its
+ * primary key and `taxpayer_singleton_ck`, so a second call adds nothing and returns nothing to
  * scope a query by.
  */
-export async function seedTenant(db: Database | Transaction): Promise<void> {
+export async function seedTaxpayer(db: Database | Transaction): Promise<void> {
   // Plain SQL: upgrade tests seed a database migrated only to an earlier point, where today's
   // columns do not exist yet.
-  await db.run(sql`insert into tenants (id, country, tax_id, legal_name, created_at)
+  await db.run(sql`insert into taxpayer (id, country, tax_id, legal_name, created_at)
     values (1, 'ES', ${freshNif()}, 'Test SL', ${nowIso()})
     on conflict (id) do nothing`);
 }
 
-/** Writes the taxpayer row ({@link seedTenant}) and the one venue; refuses a second venue. */
+/** Writes the taxpayer row ({@link seedTaxpayer}) and the one venue; refuses a second venue. */
 export async function seedVenue(
   db: Database | Transaction,
   overrides: Partial<Venue> & { defaultCatalogueId?: string | null } = {},
 ): Promise<void> {
   const existing = await readSettings(db, VENUE_SETTINGS);
   if (existing.revision > 0) throw new Error("seedVenue: a venue document already exists");
-  await seedTenant(db);
+  await seedTaxpayer(db);
   const {
     defaultCatalogueId,
     invoiceLocales,

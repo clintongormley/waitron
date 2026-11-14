@@ -2,14 +2,14 @@ import {
   resolveInstalledStarterLanguages,
   type StarterStaffLanguage,
 } from "@waitron/country-packs";
-import { readTenant, readVenue, type Transaction } from "@waitron/db";
+import { readTaxpayer, readVenue, type Transaction } from "@waitron/db";
 
-/** A database with no tenant row still reads the receipt language. */
+/** A database with no taxpayer row still reads the receipt language. */
 export async function readStarterStaffLanguage(tx: Transaction): Promise<StarterStaffLanguage> {
   const venue = await readVenue(tx);
-  const tenant = await readTenant(tx);
+  const taxpayer = await readTaxpayer(tx);
   return resolveInstalledStarterLanguages({
-    country: tenant?.country,
+    country: taxpayer?.country,
     area: venue.province,
     receiptLocale: venue.invoiceLocales[0],
   }).staffLanguage;

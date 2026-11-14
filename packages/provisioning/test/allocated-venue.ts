@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { readTenant, stampDeployment } from "@waitron/db";
+import { readTaxpayer, stampDeployment } from "@waitron/db";
 import { nodeId } from "@waitron/shared";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
@@ -21,10 +21,10 @@ export function applyHistoricalTestVenue(actions: readonly VenueAction[], deps: 
               seed: {
                 summary: "seed a historical fiscal identity for an existing-sale fixture",
                 async run(tx, node) {
-                  const tenant = (await readTenant(tx))!;
+                  const taxpayer = (await readTaxpayer(tx))!;
                   const sif = await seedFixtureSif(tx, {
                     nodeId: node.nodeId,
-                    nif: tenant.taxId,
+                    nif: taxpayer.taxId,
                     idSistemaInformatico: "W1",
                   });
                   return `SIF ${sif.id} (installation ${sif.numeroInstalacion})`;
@@ -41,7 +41,7 @@ export async function applyAllocatedTestVenue(
   actions: readonly VenueAction[],
   deps: VenueApplyDeps,
 ) {
-  const taxpayer = actions.find((action) => action.kind === "ensure-tenant");
+  const taxpayer = actions.find((action) => action.kind === "ensure-taxpayer");
   const seed = actions.find(
     (action) => action.kind === "seed-module" && action.module === "fiscal-verifactu",
   );

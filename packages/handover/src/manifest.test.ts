@@ -27,7 +27,7 @@ describe("the node-local manifest", () => {
       "device_invoice_save_operations|venue.db|source-only",
       "fiscal_certificate_installs|venue.db|transferred",
       "fiscal_certificate_reminders|venue.db|transferred",
-      "tenant_credentials|venue.db|transferred",
+      "venue_credentials|venue.db|transferred",
       "secrets.env|state|transferred",
       "trading.env|state|destination-owned",
       "tls/ca.crt|state|destination-owned",
@@ -56,7 +56,7 @@ describe("the node-local manifest", () => {
     const classOf = (item: string) => NODE_LOCAL_MANIFEST.find((row) => row.item === item)?.class;
     expect(classOf("node_signing_key")).toBe("source-only");
     expect(classOf("secrets.env")).toBe("transferred");
-    expect(classOf("tenant_credentials")).toBe("transferred");
+    expect(classOf("venue_credentials")).toBe("transferred");
     expect(classOf("trading.env")).toBe("destination-owned");
     expect(classOf("change_log")).toBe("rebuildable");
   });

@@ -12,7 +12,7 @@ import {
   withTransaction,
   type Transaction,
 } from "@waitron/db";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
 import { duplicateMenu } from "./menu-copy.js";
 import { createCatalogue, createProduct, updateMenuItem } from "./operations.js";
@@ -46,7 +46,7 @@ interface Fixture {
  * of Desserts (reachable only through the include) and one left missing by a deleted section.
  */
 async function fixture(): Promise<Fixture> {
-  await seedTenant(fx.db);
+  await seedTaxpayer(fx.db);
   await seedLegacySellingUnits(fx.db);
   return app(async (tx) => {
     const lunch = (
@@ -366,7 +366,7 @@ describe("duplicateMenu", () => {
   });
 
   it("keeps stored positions and the source's order where members share a position", async () => {
-    await seedTenant(fx.db);
+    await seedTaxpayer(fx.db);
     const source = (await app((tx) => createCatalogue(tx, { name: "Tied" }))).id;
     const entries = 20;
     await app(async (tx) => {
@@ -428,7 +428,7 @@ describe("duplicateMenu", () => {
   });
 
   it("refuses a menu that does not exist with catalogue.not_found", async () => {
-    await seedTenant(fx.db);
+    await seedTaxpayer(fx.db);
     await expect(
       app((tx) => duplicateMenu(tx, "00000000-0000-4000-8000-000000000000", "Copy")),
     ).rejects.toMatchObject({ code: "catalogue.not_found" });

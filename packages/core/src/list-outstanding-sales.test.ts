@@ -9,7 +9,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
-import { seedBareSale, seedTenant } from "../test/fixtures.js";
+import { seedBareSale, seedTaxpayer } from "../test/fixtures.js";
 import { listOutstandingSales } from "./list-outstanding-sales.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
@@ -19,7 +19,7 @@ let nodeId: NodeId;
 let seriesId: SeriesId;
 
 beforeEach(async () => {
-  ({ deviceId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ deviceId, nodeId, seriesId } = await seedTaxpayer(suite.db));
 });
 
 function list() {

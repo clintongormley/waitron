@@ -9,7 +9,7 @@ import {
   readSettings,
   VENUE_SETTINGS,
   specialDays,
-  tenants,
+  taxpayer,
   withTransaction,
   type Database,
   type Transaction,
@@ -42,19 +42,19 @@ beforeAll(() => {
   db = suite.db;
 });
 
-// The tenant row is the database's one country; each test sets Spain and puts the row back after.
+// The taxpayer row is the database's one country; each test sets Spain and puts the row back after.
 beforeEach(async () => {
-  const before = await db.select().from(tenants);
+  const before = await db.select().from(taxpayer);
   onTestFinished(() =>
     withTransaction(db, async (tx) => {
-      await tx.delete(tenants);
-      if (before.length > 0) await tx.insert(tenants).values(before);
+      await tx.delete(taxpayer);
+      if (before.length > 0) await tx.insert(taxpayer).values(before);
     }),
   );
   await db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Invented SL" })
-    .onConflictDoUpdate({ target: tenants.id, set: { country: "ES" } });
+    .onConflictDoUpdate({ target: taxpayer.id, set: { country: "ES" } });
 });
 
 const BASE = "/management-api/venue-service";

@@ -13,7 +13,7 @@ import {
   printers,
   withTransaction,
   deviceInvoiceRevisions,
-  tenants,
+  taxpayer,
   products,
   floorZones,
 } from "@waitron/db";
@@ -54,7 +54,7 @@ beforeEach(async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(frozen);
   venue = await provisionOrderVenue(suite.db);
-  await suite.db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
+  await suite.db.update(taxpayer).set({ taxpayerDomicile: "Saved domicile" });
   deps = {
     backend: venue.backend,
     cfg: { ...venue.cfg, locale: "en" },

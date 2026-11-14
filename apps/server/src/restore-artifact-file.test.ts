@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { invoiceSeries, nodes, tenants, withTransaction, openVenueDatabase } from "@waitron/db";
+import { invoiceSeries, nodes, taxpayer, withTransaction, openVenueDatabase } from "@waitron/db";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import { buildManifest } from "./backup-manifest.js";
@@ -44,7 +44,7 @@ const ids = {
 beforeAll(async () => {
   await withTransaction(suite.db, async (tx) => {
     await tx
-      .insert(tenants)
+      .insert(taxpayer)
       .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "File roundtrip" });
     await seedVenueSettings(tx, {
       name: "File venue",
@@ -123,7 +123,7 @@ it("validates one protected database, owns cleanup and retains the encrypted sou
   expect(await readdir(join(validated.databasePath, ".."))).toEqual(["node.db", "venue.db"]);
   const opened = await openVenueDatabase(join(validated.databasePath, ".."));
   try {
-    expect((await opened.venue.select().from(tenants))[0].legalName).toBe("File roundtrip");
+    expect((await opened.venue.select().from(taxpayer))[0].legalName).toBe("File roundtrip");
   } finally {
     await opened.close();
   }
@@ -171,7 +171,7 @@ it("disposes validation on source refusal before changing identity or database",
       checkSourceLive: async (validated) => {
         const opened = await openVenueDatabase(join(validated.databasePath, ".."));
         try {
-          expect((await opened.venue.select().from(tenants))[0].legalName).toBe("File roundtrip");
+          expect((await opened.venue.select().from(taxpayer))[0].legalName).toBe("File roundtrip");
         } finally {
           await opened.close();
         }
@@ -219,7 +219,7 @@ it("roundtrips real SQLite and state through scheduled capture, local file stora
   await restoreFromArtifactFile(f);
   const opened = await openVenueDatabase(f.venueDir);
   try {
-    expect((await opened.venue.select().from(tenants))[0].legalName).toBe("File roundtrip");
+    expect((await opened.venue.select().from(taxpayer))[0].legalName).toBe("File roundtrip");
   } finally {
     await opened.close();
   }
@@ -289,7 +289,7 @@ it("default staged archive keeps its payload on a real busy lock, then restores 
   expect(await runStagedRestore(f)).toBe(false);
   const opened = await openVenueDatabase(f.venueDir);
   try {
-    expect((await opened.venue.select().from(tenants))[0].legalName).toBe("File roundtrip");
+    expect((await opened.venue.select().from(taxpayer))[0].legalName).toBe("File roundtrip");
   } finally {
     await opened.close();
   }

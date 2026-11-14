@@ -286,15 +286,15 @@ describe("signing and verifying handover envelopes between boxes", () => {
     const selfKey = await readNodeIdentityKey(suite.node, RING, self);
     const held = chart(self, selfKey, [self, peer], []);
     await writeNodeMembership(db, held);
-    const [tenant] = db.all<{ country: string; tax_id: string }>(
-      sql`select country, tax_id from tenants where id = 1`,
+    const [taxpayer] = db.all<{ country: string; tax_id: string }>(
+      sql`select country, tax_id from taxpayer where id = 1`,
     );
 
     const binding = await currentBinding({ db }, "controlled", self, peer, OP);
     expect(binding).toEqual({
       operationId: OP,
       scenario: "controlled",
-      venue: { country: tenant!.country, taxId: tenant!.tax_id, environment: "preproduction" },
+      venue: { country: taxpayer!.country, taxId: taxpayer!.tax_id, environment: "preproduction" },
       sourceNodeId: self,
       destinationNodeId: peer,
       membership: {

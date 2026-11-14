@@ -2,7 +2,7 @@ import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { tenants } from "@waitron/db";
+import { taxpayer } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { venueFiscalSelection } from "@waitron/provisioning";
@@ -32,7 +32,7 @@ function save(body: unknown, cookie: string | null = venue.managerCookie) {
   });
 }
 async function taxpayer() {
-  const [row] = await suite.db.select().from(tenants).where(eq(tenants.id, 1));
+  const [row] = await suite.db.select().from(taxpayer).where(eq(taxpayer.id, 1));
   return row!;
 }
 const unset = { privacyNoticeUrl: null, privacyEmail: null };
@@ -81,7 +81,7 @@ describe("the venue's privacy contact", () => {
     expect(await response.json()).toEqual(unset);
     expect(await taxpayer()).toEqual({ ...before, ...unset });
     const { rows } = await suite.db.execute<{ url: string | null; email: string | null }>(
-      sql`select privacy_notice_url as url, privacy_email as email from tenants where id = 1`,
+      sql`select privacy_notice_url as url, privacy_email as email from taxpayer where id = 1`,
     );
     expect(rows).toEqual([{ url: null, email: null }]);
   });
@@ -205,7 +205,7 @@ describe("the venue's privacy contact", () => {
   });
 
   it("answers both routes with the venue refusal when there is no taxpayer row", async () => {
-    await suite.db.execute(sql`delete from tenants`);
+    await suite.db.execute(sql`delete from taxpayer`);
     for (const response of [await read(), await save(stored)]) {
       expect(response.status).toBe(409);
       expect(await response.json()).toEqual({

@@ -40,12 +40,12 @@ function nextNif(): string {
 
 /** The database is not reset between tests, so every group shares the venue provisioned first. */
 let provisioned: Promise<Record<string, never>> | undefined;
-function setupTenant(): Promise<Record<string, never>> {
-  provisioned ??= provisionTenant();
+function setupVenue(): Promise<Record<string, never>> {
+  provisioned ??= provisionVenue();
   return provisioned;
 }
 
-async function provisionTenant(): Promise<Record<string, never>> {
+async function provisionVenue(): Promise<Record<string, never>> {
   await applyVenue(
     planVenue(
       {
@@ -124,7 +124,7 @@ const JSON_HEADERS = { "content-type": "application/json" };
 
 describe("A182 canvas retirement", () => {
   it("answers retired canvas routes like an unknown route while profiles remain available", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     for (const [path, method] of [
@@ -155,7 +155,7 @@ describe("A182 canvas retirement", () => {
 });
 
 it("streams a retained profile change while refusing the retired canvas subscription", async () => {
-  await setupTenant();
+  await setupVenue();
   const app = mountApp();
   const sources = ALL_MODULES.flatMap((module) => module.changes ?? []);
   await installChangeFeed(suite.db, sources);

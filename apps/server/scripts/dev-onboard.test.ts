@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { openVenueDatabase, tenants } from "@waitron/db";
+import { openVenueDatabase, taxpayer } from "@waitron/db";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -76,15 +76,15 @@ describe("devOnboard against a real venue directory", () => {
     }
   }
 
-  async function tenantsCount(): Promise<number> {
+  async function taxpayerCount(): Promise<number> {
     return inVenue(async (db) => {
-      const { rows } = await db.execute<{ n: number }>(sql`select count(*) as n from tenants`);
+      const { rows } = await db.execute<{ n: number }>(sql`select count(*) as n from taxpayer`);
       return rows[0]!.n;
     });
   }
 
   it("migrates a virgin directory and writes a venue-less .env, provisioning no venue", async () => {
-    expect(await tenantsCount()).toBe(0);
+    expect(await taxpayerCount()).toBe(0);
 
     const written = parseEnvFile(readFileSync(envPath, "utf8"));
     expect(written).toEqual({ ...first.env });
@@ -136,7 +136,7 @@ describe("devOnboard against a real venue directory", () => {
   it("migrates the venue file the written .env names, not somewhere else", async () => {
     const present = await inVenue(async (db) => {
       const { rows } = await db.execute<{ name: string }>(
-        sql`select name from sqlite_master where type = 'table' and name = ${"tenants"}`,
+        sql`select name from sqlite_master where type = 'table' and name = ${"taxpayer"}`,
       );
       return rows.length;
     });
@@ -158,13 +158,13 @@ describe("devOnboard against a real venue directory", () => {
     // Runs last, so the assertions above saw the venue-less directory.
     await inVenue(async (db) => {
       await db
-        .insert(tenants)
+        .insert(taxpayer)
         .values({ id: 1, country: "ES", taxId: "00000000T", legalName: "Onboard Refuse SL" });
     });
     await expect(
       devOnboard({ venueDir, envPath, environment: process.env, log: () => {} }),
     ).rejects.toThrow(/already holds a venue/i);
-    expect(await tenantsCount()).toBe(1);
+    expect(await taxpayerCount()).toBe(1);
   });
 });
 

@@ -2,7 +2,7 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { invoiceSeries, sales, tenants, workingOrders } from "@waitron/db";
+import { invoiceSeries, sales, taxpayer, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { inTx, seatedWith, send } from "./testing/bill-venue.js";
@@ -26,7 +26,7 @@ const suite = useVenueDb({
   resetPerTest: false,
   setup: async (db) => {
     venue = await provisionOrderVenue(db);
-    await db.update(tenants).set({ taxpayerDomicile: "8 Fiscal Street" });
+    await db.update(taxpayer).set({ taxpayerDomicile: "8 Fiscal Street" });
     walkupZone = (
       await inTx(venue, (tx) =>
         offerProducts(tx, venue.cfg, {

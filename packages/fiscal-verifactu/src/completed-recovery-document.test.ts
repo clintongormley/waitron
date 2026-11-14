@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { deployment, invoiceSeries, tenants, stampDeployment, withTransaction } from "@waitron/db";
+import { deployment, invoiceSeries, taxpayer, stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { FISCAL_RECOVERY_PACK_PAGE } from "./completed-recovery-document.js";
 import { recoveryDocumentBytes } from "./recovery-document.js";
@@ -176,7 +176,7 @@ describe("the pack's server-key page seat", () => {
     [
       "a taxpayer whose NIF is not the invoice system's",
       async () => {
-        await suite.db.update(tenants).set({ taxId: "B12345674" });
+        await suite.db.update(taxpayer).set({ taxId: "B12345674" });
         return {};
       },
     ],

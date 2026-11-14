@@ -5,7 +5,7 @@ import { X509Certificate } from "node:crypto";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import { readDeploymentEnvironment, stampDeployment, tenants, withTransaction } from "@waitron/db";
+import { readDeploymentEnvironment, stampDeployment, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
@@ -68,7 +68,7 @@ vi.mock("./reserved-identity.js", async (importOriginal) => {
 });
 
 // Cases depend on `useVenueDb`'s default `resetPerTest`: each starts from an unstamped `deployment`
-// and an empty `tenants`.
+// and an empty `taxpayer`.
 
 // Adopt never reads these ids back from the database, so a fixed set is enough.
 const DESIGNATED = {
@@ -104,7 +104,7 @@ const CA_KEY_PEM = MAIN_AUTHORITY.caKeyPem;
 function makeBundle(over: Partial<MirrorBundle> = {}): MirrorBundle {
   return {
     designated: DESIGNATED,
-    tenant: { country: "ES", taxId: "80000001K" },
+    taxpayer: { country: "ES", taxId: "80000001K" },
     primaryNode: { name: "Caja 1", filingModule: "fiscal-verifactu", taxModule: null },
     environment: "preproduction",
     boxHostname: "waitron.local",
@@ -364,7 +364,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(nodeSigningPublicKey(sealed!)).toBe(sent!.publicKey);
     const latch = await readFile(join(stateDir, "pending-adoption.json"), "utf8");
     expect(latch).not.toContain(sealed!);
-    expect(await suite.db.execute(sql`select 1 from tenant_credentials`)).toMatchObject({
+    expect(await suite.db.execute(sql`select 1 from venue_credentials`)).toMatchObject({
       rows: [],
     });
   });
@@ -568,7 +568,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(await readDeploymentEnvironment(suite.db)).toBeNull();
   });
 
-  it("never calls beforeFirstWrite for an environment mismatch or a foreign tenant", async () => {
+  it("never calls beforeFirstWrite for an environment mismatch or a foreign taxpayer", async () => {
     const beforeFirstWrite = vi.fn(async () => {});
     const mismatch = await adoptFromPrimary(
       deps({ fetchBundle: async () => makeBundle({ environment: "production" }) }),
@@ -578,17 +578,17 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(isAppError(mismatch) && mismatch.code).toBe("mirror.environment_mismatch");
 
     await suite.db
-      .insert(tenants)
+      .insert(taxpayer)
       .values({ id: 1, country: "ES", taxId: "99999999R", legalName: "Incumbent SL" });
     const foreign = await adoptFromPrimary(deps(), REQ, { beforeFirstWrite }).catch(
       (e: unknown) => e,
     );
-    expect(isAppError(foreign) && foreign.code).toBe("provisioning.foreign_tenant");
+    expect(isAppError(foreign) && foreign.code).toBe("provisioning.foreign_taxpayer");
 
     expect(beforeFirstWrite).not.toHaveBeenCalled();
   });
 
-  it("never calls beforeFirstWrite for an unknown module or a same-tenant venue", async () => {
+  it("never calls beforeFirstWrite for an unknown module or a same-taxpayer venue", async () => {
     const beforeFirstWrite = vi.fn(async () => {});
     const unknown = await adoptFromPrimary(
       deps({
@@ -601,7 +601,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(beforeFirstWrite).not.toHaveBeenCalled();
 
     await suite.db
-      .insert(tenants)
+      .insert(taxpayer)
       .values({ id: 1, country: "ES", taxId: "80000001K", legalName: "Incumbent SL" });
     await seedVenue(suite.db, {
       name: "Existing venue",
@@ -670,19 +670,19 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(await readDeploymentEnvironment(suite.db)).toBeNull();
   });
 
-  it("refuses a FOREIGN tenant before any mutation (§5, one tenant per database)", async () => {
-    // Through the table definition: a raw insert reaches no `$defaultFn` (`tenants.created_at`).
+  it("refuses a FOREIGN taxpayer before any mutation (§5, one taxpayer per database)", async () => {
+    // Through the table definition: a raw insert reaches no `$defaultFn` (`taxpayer.created_at`).
     await suite.db
-      .insert(tenants)
+      .insert(taxpayer)
       .values({ id: 1, country: "ES", taxId: "99999999R", legalName: "Incumbent SL" });
     const error = await adoptFromPrimary(deps(), REQ, NO_HOOKS).catch((e: unknown) => e);
-    expect(isAppError(error) && error.code).toBe("provisioning.foreign_tenant");
+    expect(isAppError(error) && error.code).toBe("provisioning.foreign_taxpayer");
     expect(await readDeploymentEnvironment(suite.db)).toBeNull();
   });
 
-  it("refuses a same-tenant venue before any mutation", async () => {
+  it("refuses a same-taxpayer venue before any mutation", async () => {
     await suite.db
-      .insert(tenants)
+      .insert(taxpayer)
       .values({ id: 1, country: "ES", taxId: "80000001K", legalName: "Incumbent SL" });
     await seedVenue(suite.db, {
       name: "Existing venue",
@@ -959,7 +959,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
 
   it("refuses mirror.vault_not_empty, writing nothing", async () => {
     await suite.db
-      .insert(tenants)
+      .insert(taxpayer)
       .values({ id: 1, country: "ES", taxId: "80000001K", legalName: "Same taxpayer SL" });
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING, {

@@ -7,7 +7,7 @@ import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
-  readTenant,
+  readTaxpayer,
   stampDeployment,
   writeNodeMembership,
   type NodeDatabase,
@@ -106,11 +106,11 @@ beforeEach(async () => {
     ],
   };
   await writeNodeMembership(suite.db, held);
-  const tenant = await readTenant(suite.db);
+  const taxpayer = await readTaxpayer(suite.db);
   binding = {
     operationId: OP,
     scenario: "controlled",
-    venue: { country: tenant!.country, taxId: tenant!.taxId, environment: "preproduction" },
+    venue: { country: taxpayer!.country, taxId: taxpayer!.taxId, environment: "preproduction" },
     sourceNodeId: SOURCE.nodeId,
     destinationNodeId: self,
     membership: {

@@ -1,6 +1,6 @@
 import { strFromU8, unzipSync } from "fflate";
 import { beforeEach, describe, expect, it } from "vitest";
-import { invoiceSeries, tenants, withTransaction } from "@waitron/db";
+import { invoiceSeries, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -25,7 +25,7 @@ const suite = useVenueDb({
 });
 beforeEach(async () => {
   v = await provisionBillVenue(suite.db);
-  await v.db.update(tenants).set({ taxpayerDomicile: "1 Registered Street" });
+  await v.db.update(taxpayer).set({ taxpayerDomicile: "1 Registered Street" });
 });
 
 async function fullInvoiceAcrossMidnight() {

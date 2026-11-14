@@ -16,7 +16,7 @@ export function applyWithFirstSetup(stateDir: string): typeof applyMinuteVenue {
   return async (actions, deps) => {
     // Leave room for selection's minute wait before the real-time sales.
     const clock = createHourTestClock(Date.now() - 10 * 60_000);
-    const taxpayer = actions.find((action) => action.kind === "ensure-tenant")!;
+    const taxpayer = actions.find((action) => action.kind === "ensure-taxpayer")!;
     const initialNodeId = randomUUID();
     const initialAdministratorId = randomUUID();
     const binding = {

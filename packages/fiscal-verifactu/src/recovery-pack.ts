@@ -1,4 +1,4 @@
-import { readTenant, deployment } from "@waitron/db";
+import { readTaxpayer, deployment } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import type { ModuleBackupContribution } from "@waitron/module";
 import { AppError } from "@waitron/shared";
@@ -25,14 +25,14 @@ export const FISCAL_RECOVERY_PACK: NonNullable<ModuleBackupContribution["recover
   )
     return refuse("malformed");
   const supplied = input as { block: unknown; custodian: unknown };
-  const tenant = await readTenant(tx);
+  const taxpayer = await readTaxpayer(tx);
   const [stamp] = await tx.select().from(deployment).where(eq(deployment.id, 1));
   const environment = stamp?.environment;
   const sif = await currentSif(tx, node.nodeId);
-  if (tenant === null || environment === undefined || sif.nif !== tenant.taxId)
+  if (taxpayer === null || environment === undefined || sif.nif !== taxpayer.taxId)
     return refuse("scope_mismatch");
   const snapshot = verifyPaperBlockSnapshot(supplied.block, supplied.custodian, {
-    taxpayerNif: tenant.taxId,
+    taxpayerNif: taxpayer.taxId,
     softwareId: sif.idSistemaInformatico,
     environment,
     requiredBases: await liveSeriesBases(tx, node),

@@ -58,7 +58,7 @@ describe("resolveEmailDelivery", () => {
     });
   });
 
-  it("prefers the tenant's SMTP gateway over Mailpit", async () => {
+  it("prefers the taxpayer's SMTP gateway over Mailpit", async () => {
     await seedVenue(suite.db, { name: "Bar & Kitchen" });
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {

@@ -41,7 +41,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
     return this.opts.client.createConnectionToken();
   }
 
-  /** Guard: `tenant-scoping.test.ts` refuses a bare `.transaction(` in this package's sources. */
+  /** Guard: `no-bare-transaction.test.ts` refuses a bare `.transaction(` in this package's sources. */
   private inTransaction<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
     return withTransaction(this.opts.db, fn);
   }

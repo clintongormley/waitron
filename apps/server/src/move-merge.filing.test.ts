@@ -19,7 +19,7 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { tenants, withTransaction } from "@waitron/db";
+import { taxpayer, withTransaction } from "@waitron/db";
 import { nodeId as brandNodeId, rawCentsToDecimal } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
@@ -343,7 +343,7 @@ describe("a full-invoice bill merged away", () => {
   async function fullInvoiceVenue() {
     const venue = await setupVenue();
     // A full invoice names the issuer's domicile; this file's venue plan sets none.
-    await suite.db.update(tenants).set({ taxpayerDomicile: "Calle Mayor 1, 28013 Madrid" });
+    await suite.db.update(taxpayer).set({ taxpayerDomicile: "Calle Mayor 1, 28013 Madrid" });
     const tInto = await seedTable(venue.cfg, "FI-into");
     const tFrom = await seedTable(venue.cfg, "FI-from");
     const intoTab = await openTabOn(venue.cfg, tInto, [

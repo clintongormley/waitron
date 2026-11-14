@@ -5,7 +5,7 @@ import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { invoiceDeliveries, invoicePdfDownloads, invoiceSeries, sales, tenants } from "@waitron/db";
+import { invoiceDeliveries, invoicePdfDownloads, invoiceSeries, sales, taxpayer } from "@waitron/db";
 import { recordSale } from "@waitron/core";
 import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -30,7 +30,7 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionOrderVenue(db);
     await inTx(venue, async (tx) => {
-      await tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
+      await tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
       const [manager] = await seedPersons(tx, {
         displayName: "Martha",
         pinHash: hashPin("4444"),

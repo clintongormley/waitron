@@ -72,7 +72,7 @@ let stateDir: string;
 let caPem: string;
 let caKeyPem: string;
 let db: Database;
-// Provisioned once: the suite does not reset between tests, and a database holds one tenant.
+// Provisioned once: the suite does not reset between tests, and a database holds one taxpayer.
 let designated: AdoptResult;
 
 async function setupVenue(): Promise<AdoptResult> {
@@ -156,7 +156,7 @@ describe("assembleMirrorBundle (primary side)", () => {
     expect(bundle.designated.nodeId).toBe(designated.nodeId);
   });
 
-  it("assembles a bundle carrying tenant + node identity and the box's connection details", async () => {
+  it("assembles a bundle carrying taxpayer + node identity and the box's connection details", async () => {
     const standby = { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB };
 
     const { bundle, fixture } = await allocatedBundle(standby);
@@ -168,8 +168,8 @@ describe("assembleMirrorBundle (primary side)", () => {
     expect("rows" in bundle).toBe(false);
     expect("syncToken" in bundle).toBe(false);
 
-    expect(bundle.tenant.country).toBe("ES");
-    expect(bundle.tenant.taxId).toMatch(/^\d{8}K$/);
+    expect(bundle.taxpayer.country).toBe("ES");
+    expect(bundle.taxpayer.taxId).toMatch(/^\d{8}K$/);
     expect(bundle.primaryNode.name).toBe("Sala principal");
     expect(bundle.primaryNode.filingModule).toBe("verifactu");
 
@@ -177,7 +177,7 @@ describe("assembleMirrorBundle (primary side)", () => {
     const fiscal = r.modules["fiscal-verifactu"] as typeof fixture.state;
     const allocation = fiscal.evidence.block.payload.allocations[0]!;
     expect(allocation.installationIdentity).toBe("P000042");
-    expect(allocation.taxpayerNif).toBe(bundle.tenant.taxId);
+    expect(allocation.taxpayerNif).toBe(bundle.taxpayer.taxId);
     expect(allocation.softwareId).toBe("W1");
     expect(fiscal).toEqual(fixture.state);
     expect(r.series).toEqual([]);

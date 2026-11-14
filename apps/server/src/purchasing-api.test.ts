@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
 import type { Logger } from "./logger.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
@@ -22,7 +22,7 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    await seedTenant(db);
+    await seedTaxpayer(db);
     // A MANAGER (holds `purchase.manage`) and a STAFF person (holds no `purchase.manage`), each
     // with a live management session. Through the table definition, not raw SQL: `persons.id` is a
     // `$defaultFn` generator, which a raw insert never reaches.

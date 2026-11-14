@@ -5,7 +5,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { useVenueDb } from "../testing/venue-db.js";
 
-import { tenants } from "./tenants.js";
+import { taxpayer } from "./taxpayer.js";
 
 // Column shape and nullability only.
 
@@ -13,14 +13,14 @@ describe("device_profiles.inactivity_timeout_seconds", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
   let admin: Database;
 
-  // Drizzle rather than a raw insert: `tenants.created_at` is a JavaScript `$defaultFn`, not a SQL
+  // Drizzle rather than a raw insert: `taxpayer.created_at` is a JavaScript `$defaultFn`, not a SQL
   // DEFAULT.
   beforeAll(async () => {
     admin = suite.db;
     await admin
-      .insert(tenants)
-      .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant" })
-      .onConflictDoNothing({ target: tenants.id });
+      .insert(taxpayer)
+      .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Taxpayer" })
+      .onConflictDoNothing({ target: taxpayer.id });
   });
 
   it("exists as a nullable integer column (pragma_table_info)", async () => {

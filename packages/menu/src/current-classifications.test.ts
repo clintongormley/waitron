@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { withTransaction, type Transaction } from "@waitron/db";
-import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { createCategory, setMainReportingCategory, updateCategory } from "./categories.js";
@@ -14,7 +14,7 @@ const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, f
 
 /** Drinks > Softs, and a top-level Spirits. */
 async function fixture() {
-  await seedTenant(fx.db);
+  await seedTaxpayer(fx.db);
   await seedLegacySellingUnits(fx.db);
   return app(async (tx) => {
     const menu = await createCatalogue(tx, { name: "Bar" });

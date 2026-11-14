@@ -5,7 +5,7 @@ import { Hono } from "hono";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { loadKeyRing } from "@waitron/credentials";
-import { invoiceSeries, tenants } from "@waitron/db";
+import { invoiceSeries, taxpayer } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { parseModuleConfig } from "@waitron/module";
@@ -116,7 +116,7 @@ it.each([false, true])(
       status: 403,
       body: { error: { code: "setup.owner_required", params: {} } },
     });
-    expect(await venue.db.select().from(tenants)).toEqual([]);
+    expect(await venue.db.select().from(taxpayer)).toEqual([]);
     expect(await venue.db.select().from(invoiceSeries)).toEqual([]);
   },
 );
@@ -134,7 +134,7 @@ it.each(["demo", "prepare"])(
       status: 200,
       body: { provisioned: true, restarting: true },
     });
-    expect((await venue.db.select().from(tenants)).map(({ taxId }) => taxId)).toEqual([
+    expect((await venue.db.select().from(taxpayer)).map(({ taxId }) => taxId)).toEqual([
       "50000000R",
     ]);
     expect(

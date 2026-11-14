@@ -1,6 +1,6 @@
 import { AppError } from "@waitron/shared";
 import "./errors.js";
-import { readTenant, withTransaction, type Database } from "@waitron/db";
+import { readTaxpayer, withTransaction, type Database } from "@waitron/db";
 import { usableVenueName } from "../../../scripts/box/name-tag.mjs";
 import type { BoxHostRequests, NameTag } from "./box-host-client.js";
 import type { Logger } from "./logger.js";
@@ -25,8 +25,8 @@ export function boxNameTagJob(deps: {
       stop();
     },
     async pass({ now }) {
-      const tenant = await withTransaction(deps.db, readTenant);
-      const name = tenant === null ? null : usableVenueName(tenant.legalName);
+      const taxpayer = await withTransaction(deps.db, readTaxpayer);
+      const name = taxpayer === null ? null : usableVenueName(taxpayer.legalName);
       const tag = name === null ? null : { name, live: deps.live() };
       const nextDueAt = new Date(now.getTime() + 60_000);
       if (

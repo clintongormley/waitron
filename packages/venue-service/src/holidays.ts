@@ -6,7 +6,7 @@ import {
 } from "@waitron/country";
 import { getCountryPack } from "@waitron/country-packs";
 import {
-  readTenant,
+  readTaxpayer,
   readVenueSettings,
   saveVenueFields,
   type VenueSettings,
@@ -90,11 +90,11 @@ function matches(row: GeographyRow, address: Address): boolean {
  */
 export function createHolidayStore(findPack: PackLookup = getCountryPack) {
   async function readAddress(tx: Transaction, place?: VenuePlace): Promise<Address> {
-    const tenant = await readTenant(tx);
+    const taxpayer = await readTaxpayer(tx);
     const doc = place?.holidayArea === undefined ? (await readVenueSettings(tx)).doc : place;
     const venue = place ?? doc;
-    const pack = tenant === null ? undefined : findPack(tenant.country);
-    const country = pack?.countryCode ?? tenant?.country.trim().toUpperCase() ?? "";
+    const pack = taxpayer === null ? undefined : findPack(taxpayer.country);
+    const country = pack?.countryCode ?? taxpayer?.country.trim().toUpperCase() ?? "";
     const province = venue.province;
     const provinceCode =
       pack === undefined || province === null

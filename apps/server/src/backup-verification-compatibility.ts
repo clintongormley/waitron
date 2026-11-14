@@ -252,8 +252,8 @@ async function reconcileModules(
   const { manifest } = input;
   const source = manifest.modules;
   const purposes = new Set<string>();
-  if (tables.has("tenant_credentials")) {
-    for await (const row of before.rows("select purpose from tenant_credentials")) {
+  if (tables.has("venue_credentials")) {
+    for await (const row of before.rows("select purpose from venue_credentials")) {
       if (typeof row.purpose !== "string") refuse("invalid");
       purposes.add("vault:" + row.purpose);
     }

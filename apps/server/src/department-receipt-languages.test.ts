@@ -1,7 +1,7 @@
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, tenants, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {} from "@waitron/menu";
 import { departmentReceiptLanguages } from "./department-receipt-languages.js";
@@ -11,7 +11,7 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 async function read(receiptLanguage: string, languages?: string[], country: string | null = "ES") {
   if (country !== null)
     await suite.db
-      .insert(tenants)
+      .insert(taxpayer)
       .values({ id: 1, country, taxId: "B12345678", legalName: "Venue SL" });
   await seedVenueSettings(suite.db, {
     name: randomUUID(),

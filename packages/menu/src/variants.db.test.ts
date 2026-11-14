@@ -13,7 +13,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { racePair } from "../test/fixtures.js";
 import { createCatalogue, createProduct, addProductToMenu } from "./operations.js";
 import { readProductEditor, saveProductEditor } from "./product-editor.js";
@@ -56,7 +56,7 @@ const wine = (
 });
 
 async function fixture() {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   return app(async (tx) => {
     const menu = await createCatalogue(tx, { name: "Bar" });
     const terrace = await createCatalogue(tx, { name: "Terrace" });

@@ -387,7 +387,7 @@ it("includes a corrective sale's parent from another node and its payment facts"
 async function copyBase() {
   await withTransaction(receiver.db, async (tx) => {
     for (const table of [
-      "tenants",
+      "taxpayer",
       "settings",
       "device_profiles",
       "nodes",

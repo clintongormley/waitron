@@ -159,7 +159,7 @@ describe("reconcilePayments", () => {
     ]);
   });
 
-  it("answers all-empty for a tenant with nothing to check", async () => {
+  it("answers all-empty for a taxpayer with nothing to check", async () => {
     const result = await reconcilePayments(deps(new FakeSettlementReport([])), PERIOD, NOW);
     expect(result).toMatchObject({
       checked: 0,

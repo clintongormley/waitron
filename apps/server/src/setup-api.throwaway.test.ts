@@ -337,7 +337,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
 
   function facts() {
     return {
-      tenants: venueDb.db.all(sql`select tax_id from tenants`),
+      taxpayer: venueDb.db.all(sql`select tax_id from taxpayer`),
       deployment: venueDb.db.all(sql`select environment from deployment`),
       allocations: venueDb.db.all(sql`select taxpayer_nif, environment from fiscal_allocations`),
       sif: venueDb.db.all(sql`select numero_instalacion from registro_sif`),
@@ -367,7 +367,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
   }
 
   function emptyVenue() {
-    expect(facts()).toEqual({ tenants: [], deployment: [], allocations: [], sif: [], series: [] });
+    expect(facts()).toEqual({ taxpayer: [], deployment: [], allocations: [], sif: [], series: [] });
   }
 
   const provisionDeps = () => ({
@@ -485,7 +485,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
       });
       // provisionVenue stamps before applyVenue's transaction opens (its doc comment).
       expect(facts()).toEqual({
-        tenants: [],
+        taxpayer: [],
         deployment: [{ environment: "production" }],
         allocations: [],
         sif: [],

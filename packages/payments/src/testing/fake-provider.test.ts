@@ -33,7 +33,7 @@ beforeEach(async () => {
   );
 });
 
-async function seedTenant(): Promise<Seeded> {
+async function seedTaxpayer(): Promise<Seeded> {
   return seedWorkingOrder(suite.db, freshNif());
 }
 
@@ -48,8 +48,8 @@ async function collect(provider: FakePaymentProvider, s: Seeded, amount = "10.00
 
 describe("FakePaymentProvider.collect", () => {
   it("returns a captured result with a settledAt and persists it", async () => {
-    const s = await seedTenant();
-    await seedTenant();
+    const s = await seedTaxpayer();
+    await seedTaxpayer();
     const provider = new FakePaymentProvider(suite.db);
     const r = await collect(provider, s);
     expect(r.state).toBe("captured");
@@ -61,8 +61,8 @@ describe("FakePaymentProvider.collect", () => {
   });
 
   it("returns a failed result with a null settledAt after failNextCollect, then recovers on the next call", async () => {
-    const s = await seedTenant();
-    await seedTenant();
+    const s = await seedTaxpayer();
+    await seedTaxpayer();
     const provider = new FakePaymentProvider(suite.db);
     provider.failNextCollect();
     const failed = await collect(provider, s);
@@ -79,7 +79,7 @@ describe("FakePaymentProvider.collect", () => {
 
 describe("FakePaymentProvider.collect with a card reader", () => {
   it("names the reader on every row it writes: captured, failed and attempting", async () => {
-    const s = await seedTenant();
+    const s = await seedTaxpayer();
 
     const readerId = await seedHeldReader(suite.db, s.deviceId);
     const provider = new FakePaymentProvider(suite.db);
@@ -123,7 +123,7 @@ describe("FakePaymentProvider.collect with a card reader", () => {
   it.each(scripts)(
     "a collect scripted %s on a reader the device does not hold is refused reader.not_held, writing no row",
     async (script) => {
-      const s = await seedTenant();
+      const s = await seedTaxpayer();
 
       const { deviceId: other } = await seedDevice(suite.db, {});
       const readerId = await seedHeldReader(suite.db, other);
@@ -150,7 +150,7 @@ describe("FakePaymentProvider.collect with a card reader", () => {
   it.each(scripts)(
     "a collect scripted %s on a held reader another device has a payment in progress on is refused reader.payment_in_progress, writing no row",
     async (script) => {
-      const s = await seedTenant();
+      const s = await seedTaxpayer();
 
       const { deviceId: other } = await seedDevice(suite.db, {});
       const readerId = await seedHeldReader(suite.db, other);
@@ -191,8 +191,8 @@ describe("FakePaymentProvider.collect with a card reader", () => {
 
 describe("FakePaymentProvider.void", () => {
   it("reverses a captured payment to voided", async () => {
-    const s = await seedTenant();
-    await seedTenant();
+    const s = await seedTaxpayer();
+    await seedTaxpayer();
     const provider = new FakePaymentProvider(suite.db);
     const paid = await collect(provider, s);
     const voided = await provider.void(paid.paymentRef);
@@ -209,8 +209,8 @@ describe("FakePaymentProvider.void", () => {
 
 describe("FakePaymentProvider.refund", () => {
   it("refund of the full amount marks the payment refunded", async () => {
-    const s = await seedTenant();
-    await seedTenant();
+    const s = await seedTaxpayer();
+    await seedTaxpayer();
     const provider = new FakePaymentProvider(suite.db);
     const paid = await collect(provider, s);
     const refunded = await provider.refund(paid.paymentRef);
@@ -227,8 +227,8 @@ describe("FakePaymentProvider.refund", () => {
 
 describe("FakePaymentProvider.partialRefund", () => {
   it("refunding part of the captured amount marks the payment partially_refunded", async () => {
-    const s = await seedTenant();
-    await seedTenant();
+    const s = await seedTaxpayer();
+    await seedTaxpayer();
     const provider = new FakePaymentProvider(suite.db);
     const paid = await collect(provider, s, "20.00");
     const partial = await provider.partialRefund(paid.paymentRef, decimal("12.00"));
@@ -236,7 +236,7 @@ describe("FakePaymentProvider.partialRefund", () => {
   });
 
   it("partialRefund reports the refunded amount, not the captured total", async () => {
-    const seeded = await seedTenant();
+    const seeded = await seedTaxpayer();
     const provider = new FakePaymentProvider(suite.db);
     const paid = await provider.collect({
       origin: deviceOrigin(seeded.deviceId),
@@ -268,7 +268,7 @@ describe("FakePaymentProvider.collect for a bill payment", () => {
   }
 
   it("names the bill payment on a captured row and on a failed one", async () => {
-    const s = await seedTenant();
+    const s = await seedTaxpayer();
     const provider = new FakePaymentProvider(suite.db);
     const first = await seedBillPayment(suite.db, s);
     const second = await seedBillPayment(suite.db, s);
@@ -282,7 +282,7 @@ describe("FakePaymentProvider.collect for a bill payment", () => {
   });
 
   it("records every collect it is asked for, with its parameters", async () => {
-    const s = await seedTenant();
+    const s = await seedTaxpayer();
     const provider = new FakePaymentProvider(suite.db);
     const billPaymentId = await seedBillPayment(suite.db, s);
 
@@ -294,7 +294,7 @@ describe("FakePaymentProvider.collect for a bill payment", () => {
   });
 
   it("stallNextCollect leaves an attempting row and answers attempting, once", async () => {
-    const s = await seedTenant();
+    const s = await seedTaxpayer();
     const provider = new FakePaymentProvider(suite.db);
     const billPaymentId = await seedBillPayment(suite.db, s);
     provider.stallNextCollect();
@@ -314,7 +314,7 @@ describe("FakePaymentProvider.collect for a bill payment", () => {
   it.each(["captured", "attempting"] as const)(
     "crashNextCollect writes a %s row and then throws, as a process dying after the provider wrote",
     async (state) => {
-      const s = await seedTenant();
+      const s = await seedTaxpayer();
       const provider = new FakePaymentProvider(suite.db);
       const billPaymentId = await seedBillPayment(suite.db, s);
       provider.crashNextCollect(state);
@@ -331,7 +331,7 @@ describe("FakePaymentProvider.collect for a bill payment", () => {
   );
 
   it("holdNextCollect waits, having recorded the call, until released", async () => {
-    const s = await seedTenant();
+    const s = await seedTaxpayer();
     const provider = new FakePaymentProvider(suite.db);
     const billPaymentId = await seedBillPayment(suite.db, s);
     const release = provider.holdNextCollect();
@@ -351,8 +351,8 @@ describe("FakePaymentProvider.collect for a bill payment", () => {
 
 describe("FakePaymentProvider.collect offline", () => {
   it("returns network_unavailable and writes nothing", async () => {
-    const s = await seedTenant();
-    await seedTenant();
+    const s = await seedTaxpayer();
+    await seedTaxpayer();
 
     const provider = new FakePaymentProvider(suite.db);
     provider.offlineNextCollect();
@@ -364,8 +364,8 @@ describe("FakePaymentProvider.collect offline", () => {
   });
 
   it("offlineNextCollect is one-shot — the next collect is a normal online capture", async () => {
-    const s = await seedTenant();
-    await seedTenant();
+    const s = await seedTaxpayer();
+    await seedTaxpayer();
 
     const provider = new FakePaymentProvider(suite.db);
     provider.offlineNextCollect();
@@ -377,7 +377,7 @@ describe("FakePaymentProvider.collect offline", () => {
 
 describe("FakePaymentProvider.resolvePending", () => {
   it("resolvePending is all-zeros (the fake's collect resolves in one transaction)", async () => {
-    await seedTenant();
+    await seedTaxpayer();
     const provider = new FakePaymentProvider(suite.db);
     await expect(provider.resolvePending(new Date())).resolves.toEqual({
       nextDueAt: null,
@@ -394,7 +394,7 @@ describe("FakePaymentProvider.resolveAbandonedAttempt", () => {
   const AUDIT = { personId: MANAGER };
 
   async function abandoned(paymentRef: string): Promise<void> {
-    const s = await seedTenant();
+    const s = await seedTaxpayer();
     await suite.db.transaction((tx) =>
       insertAttempting(tx, {
         origin: deviceOrigin(s.deviceId),

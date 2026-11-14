@@ -3,7 +3,7 @@ import { beforeEach, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, type Transaction, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedTaxpayer } from "@waitron/db/testing/seed.js";
 
 import { deviceOrigin, jobOrigin } from "@waitron/shared";
 import { seedFixtureVenue, seedEmployment } from "../test/fixtures.js";
@@ -24,7 +24,7 @@ const origin = jobOrigin("dashboard");
 let personId: string, manager: string, nodeId: string;
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
 beforeEach(async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await seedFixtureVenue(suite.db);
   nodeId = await seedNode(suite.db);
   const rows = await seedPersons(suite.db, [

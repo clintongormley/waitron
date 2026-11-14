@@ -29,12 +29,12 @@ import type { RecordCorrectionInput } from "./record-correction.js";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
 import { recordVoid } from "./record-void.js";
-import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
+import { seedBareSale, seedRectificativeSeries, seedTaxpayer } from "../test/fixtures.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
 let deviceId: DeviceId;
 let nodeId: NodeId;
-let seriesId: SeriesId; // the ordinary (purpose='standard') series seedTenant creates
+let seriesId: SeriesId; // the ordinary (purpose='standard') series seedTaxpayer creates
 let rectSeriesId: SeriesId; // a purpose='rectificative' series on the same node
 // `supervisorId` holds `sale.rectify`, so `supervisorSessionId` authorizes every green-path
 // correction; `staffId` holds no `sale.rectify`; `managerId` is the second person whose PIN unlocks
@@ -54,7 +54,7 @@ const suite = useVenueDb({
 });
 
 beforeEach(async () => {
-  ({ deviceId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ deviceId, nodeId, seriesId } = await seedTaxpayer(suite.db));
   rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
   supervisorId = await seedPerson("supervisor");
   managerId = await seedPerson("manager");
@@ -74,7 +74,7 @@ async function seedPerson(role: "staff" | "supervisor" | "manager" | "admin"): P
   return row!.id;
 }
 
-/** Opens a shift session for `personId` at this tenant's till and returns its id. */
+/** Opens a shift session for `personId` at this taxpayer's till and returns its id. */
 async function openSession(personId: string): Promise<string> {
   const deviceId = (await seedDevice(suite.db, {})).deviceId;
   const session = await withTransaction(suite.db, (tx) =>
@@ -356,7 +356,7 @@ describe("recordCorrection — series purpose guard (§5)", () => {
   it("rejects a rectificative series belonging to another node", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
-    const other = await seedTenant(suite.db);
+    const other = await seedTaxpayer(suite.db);
     const otherRect = await seedRectificativeSeries(suite.db, other.nodeId, "R2");
     await expect(correct(backend, saleId, { seriesId: otherRect })).rejects.toMatchObject({
       code: "sale.series_wrong_node",
@@ -669,7 +669,7 @@ describe("recordCorrection — a whole-invoice credit copies the invoice's own V
       .values({ nodeId, code: "F", purpose: "full" })
       .returning({ id: invoiceSeries.id });
     suite.db.run(
-      sql`update tenants set taxpayer_domicile = 'Calle Fiscal 8, 28001 Madrid' where id = 1`,
+      sql`update taxpayer set taxpayer_domicile = 'Calle Fiscal 8, 28001 Madrid' where id = 1`,
     );
     const { saleId: originalId } = await sell(backend, {
       seriesId: brandSeriesId(fullSeries!.id),

@@ -7,11 +7,11 @@ import { describe, expect, it } from "vitest";
 import * as schema from "@waitron/db/schema/credentials.js";
 
 /** Exactly the tables this package owns. Adding a table means editing this line, deliberately. */
-const OWNED = ["tenant_credentials"];
+const OWNED = ["venue_credentials"];
 
-/** Core tables this package reads (`credentialProvisioned` reads `tenants`). The core set, which
+/** Core tables this package reads (`credentialProvisioned` reads `taxpayer`). The core set, which
  * now holds this package's tables, must create each of these exactly once. */
-const CORE = ["tenants"];
+const CORE = ["taxpayer"];
 
 const drizzleDir = fileURLToPath(new URL("../../db/drizzle", import.meta.url));
 

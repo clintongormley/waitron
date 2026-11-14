@@ -20,7 +20,7 @@ import {
   loadKeyRing,
   putCredential,
   readCredentialMeta,
-  tenantCredentials,
+  venueCredentials,
   type KeyRing,
 } from "@waitron/credentials";
 import { hashPassword, hashPin } from "@waitron/identity";
@@ -176,7 +176,7 @@ function buildApp(sup: BackupSupervisor, sc: Scenario, extra: Partial<BackupApiD
   return app;
 }
 
-async function setupTenant(): Promise<void> {
+async function setupVenue(): Promise<void> {
   await applyVenue(
     planVenue(
       {
@@ -251,9 +251,9 @@ async function storeRaw(plaintext: string): Promise<void> {
   const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   await withTransaction(suite.db, (tx) =>
     tx
-      .update(tenantCredentials)
+      .update(venueCredentials)
       .set({ ciphertext, iv, authTag: cipher.getAuthTag() })
-      .where(eq(tenantCredentials.purpose, ARCHIVE_PURPOSE)),
+      .where(eq(venueCredentials.purpose, ARCHIVE_PURPOSE)),
   );
 }
 
@@ -269,7 +269,7 @@ afterEach(async () => {
 
 describe("GET /api/backup/settings-evidence", () => {
   beforeAll(async () => {
-    await setupTenant();
+    await setupVenue();
   }, 180_000);
 
   it("a record locked with a key number this box no longer holds: both numbers, no destinations", async () => {

@@ -20,7 +20,7 @@ import {
   stampDeployment,
   withTransaction,
 } from "@waitron/db";
-import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   beginOwnPasskeyCheck,
@@ -102,7 +102,7 @@ beforeEach(async () => {
     WAITRON_BACKUP_KEY_ROTATED_AT: "2026-09-20T08:00:00.000Z",
   };
   loadedKey = KEY;
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await stampDeployment(suite.db, "preproduction");
   await seedVenue(suite.db, {
     name: "Sala",

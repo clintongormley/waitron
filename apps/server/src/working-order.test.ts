@@ -880,7 +880,7 @@ describe("parkOrder", () => {
         { productId: waterId, quantity: "3" },
       ],
     });
-    // A fresh tenant/node, so this park's own first allocation is 1.
+    // A fresh taxpayer/node, so this park's own first allocation is 1.
     expect(orderNumber).toBe(1);
 
     const [wo] = await db.select().from(workingOrders).where(eq(workingOrders.id, id));
@@ -1509,7 +1509,7 @@ describe("listHeldOrders", () => {
     expect(held.map((o) => o.id)).toEqual([openId]);
   });
 
-  it("lists an open order from ANOTHER node of the same tenant — reads are venue-wide under warm standby", async () => {
+  it("lists an open order from ANOTHER node of the same taxpayer — reads are venue-wide under warm standby", async () => {
     const { cfg, coffeeId } = await setupVenue();
     const mine = randomUUID();
     await parkProducts(cfg, { id: mine, lines: [{ productId: coffeeId, quantity: "1" }] });
@@ -2133,7 +2133,7 @@ describe("getHeldOrder", () => {
     });
   });
 
-  it("retrieves an open order from ANOTHER node of the same tenant — reads are venue-wide", async () => {
+  it("retrieves an open order from ANOTHER node of the same taxpayer — reads are venue-wide", async () => {
     const { cfg } = await setupVenue();
     const foreign = await seedForeignNodeOrder(cfg);
 
@@ -3141,7 +3141,7 @@ describe("updateHeldOrder", () => {
     expect((await getHeldOrder({ db }, id)).revision).toBe(copy.revision + 1);
   });
 
-  it("edits an open order from ANOTHER node of the same tenant — reads are venue-wide", async () => {
+  it("edits an open order from ANOTHER node of the same taxpayer — reads are venue-wide", async () => {
     const { cfg, coffeeId, zoneId } = await setupVenue();
     const foreign = await seedForeignNodeOrder(cfg);
     // An edit prices from the order's own zone, which a raw order row does not carry.
@@ -3219,7 +3219,7 @@ describe("abandonHeldOrder", () => {
     });
   });
 
-  it("abandons an open order from ANOTHER node of the same tenant — reads are venue-wide", async () => {
+  it("abandons an open order from ANOTHER node of the same taxpayer — reads are venue-wide", async () => {
     const { cfg } = await setupVenue();
     const foreign = await seedForeignNodeOrder(cfg);
 

@@ -10,7 +10,7 @@ import { loadKeyRing, nodeSigningPublicKey, type KeyRing } from "@waitron/creden
 import {
   CORE_MIGRATIONS,
   nodes,
-  readTenant,
+  readTaxpayer,
   stampDeployment,
   withNodeTransaction,
   writeNodeMembership,
@@ -684,11 +684,11 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
       status: "active",
     });
 
-    const tenant = (await readTenant(mainBox.db))!;
+    const taxpayer = (await readTaxpayer(mainBox.db))!;
     const binding: HandoverBinding = {
       operationId: OP,
       scenario: "controlled",
-      venue: { country: tenant.country, taxId: tenant.taxId, environment: "preproduction" },
+      venue: { country: taxpayer.country, taxId: taxpayer.taxId, environment: "preproduction" },
       sourceNodeId: mainId,
       destinationNodeId: spareId,
       membership: {

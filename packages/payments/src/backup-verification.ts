@@ -164,7 +164,7 @@ async function providerCredential(
 ): Promise<{ present: boolean; status: BackupModuleStatus }> {
   let payload: Readonly<Record<string, string>> | null = null;
   try {
-    if (await hasTable(query, "tenant_credentials"))
+    if (await hasTable(query, "venue_credentials"))
       payload = await readBackupCredential(query, keys, provider.credentialPurpose);
   } catch (error) {
     if (!(error instanceof BackupCredentialReadError)) throw error;

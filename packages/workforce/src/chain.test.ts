@@ -11,7 +11,7 @@ import {
   refusalOn,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { deviceOrigin, jobOrigin } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
@@ -37,7 +37,7 @@ let personId: string;
 let nodeId: string;
 
 beforeEach(async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   personId = await seedPerson(suite.db);
   await seedFixtureVenue(suite.db);
   nodeId = await seedNode(suite.db);

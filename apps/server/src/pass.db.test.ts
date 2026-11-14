@@ -12,7 +12,7 @@ import { createLogger } from "./logger.js";
 import { reconcilerAsDuty } from "./reconcile-duty.js";
 import { runPass, RECONCILE_DUTY } from "./pass.js";
 import { stripeAccountResolver } from "./stripe-account.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 
 /**
  * One composed scheduler pass, with the real drain and reconcile duties, against a real migrated
@@ -45,7 +45,7 @@ const emptyStripe = {
 
 describe("one composed pass against a migrated database", () => {
   it("reads credentials, sweeps reconcile and writes the ledger", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
         purpose: "payments.stripe",
@@ -118,8 +118,8 @@ describe("one composed pass against a migrated database", () => {
     expect(report.nextDueAt!.getTime()).toBeGreaterThan(NOW.getTime());
   });
 
-  it("does not enumerate a tenant provisioned for a different purpose", async () => {
-    await seedTenant(suite.db);
+  it("does not enumerate a taxpayer provisioned for a different purpose", async () => {
+    await seedTaxpayer(suite.db);
     // Provisioned for `fiscal.aeat`, not `payments.stripe`: with no credential at all this would pass
     // even without `credentialProvisioned`'s `purpose` filter.
     await withTransaction(suite.db, (tx) =>

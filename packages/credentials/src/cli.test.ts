@@ -35,7 +35,7 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
 // Listing reads the whole vault, and rotation refuses under a pair link, so each case starts with
 // an empty credential table and no pair link.
 beforeEach(async () => {
-  await suite.db.execute(sql`delete from tenant_credentials`);
+  await suite.db.execute(sql`delete from venue_credentials`);
   suite.node.run(sql`delete from node_pair_link`);
 });
 
@@ -75,7 +75,7 @@ describe("waitron-credentials set", () => {
     const code = await runCli(["set", "--purpose", "payments.stripe"], h.deps);
     expect(code).toBe(0);
     const rows = await suite.db.execute<{ n: number }>(sql`
-      select count(*) as n from tenant_credentials`);
+      select count(*) as n from venue_credentials`);
     expect(rows.rows[0]!.n).toBe(1);
   });
 
@@ -117,7 +117,7 @@ describe("waitron-credentials set", () => {
   });
 
   it("rejects a --tenant flag with usage", async () => {
-    // An operator script written for the per-tenant CLI must fail loudly, not have its tenant
+    // An operator script written for the per-taxpayer CLI must fail loudly, not have its taxpayer
     // silently ignored.
     const h = harness(STRIPE_JSON);
     const code = await runCli(
@@ -280,7 +280,7 @@ describe("waitron-credentials delete", () => {
     const h = harness();
     expect(await runCli(["delete", "--purpose", "payments.stripe"], h.deps)).toBe(0);
     const rows = await suite.db.execute<{ n: number }>(sql`
-      select count(*) as n from tenant_credentials`);
+      select count(*) as n from venue_credentials`);
     expect(rows.rows[0]!.n).toBe(0);
   });
 
@@ -361,7 +361,7 @@ describe("waitron-credentials rotate", () => {
 
     function keyVersions(): unknown[] {
       return [
-        ...suite.db.all(sql`select key_version from tenant_credentials`),
+        ...suite.db.all(sql`select key_version from venue_credentials`),
         ...suite.node.all(sql`select key_version from node_signing_key`),
         ...suite.node.all(sql`select key_version from node_pair_link`),
       ];

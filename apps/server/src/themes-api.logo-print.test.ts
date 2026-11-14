@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { startManagementSession, withPassiveManagementRead } from "@waitron/identity";
 import * as layouts from "@waitron/layouts";
 import * as media from "@waitron/media";
@@ -69,7 +69,7 @@ const images = [await splitPicture(), await whiteCircle(), await blackSpeck()];
 // Every row is emptied after each case, so each one starts from these images unframed.
 beforeEach(async () => {
   forgetVenueTheme();
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   [managerCookie, supervisorCookie, staffCookie, A, CIRCLE, SPECK] = await withTransaction(
     suite.db,
     async (tx) => {

@@ -137,7 +137,7 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
     "state",
     "each row is one box's high-water mark of the venue-wide order-number sequence; copied to a standby, never drained back",
   ),
-  classify("tenants", "state", STATE),
+  classify("taxpayer", "state", STATE),
   classify("day_cutover_changes", "state", STATE),
   classify("nodes", "state", STATE),
   classify("devices", "state", STATE),
@@ -454,7 +454,7 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
   // credentials: a stored secret is sealed under the box's key ring, so a box holding a different
   // ring fails to read it (`credentials.decrypt_failed`, or `credentials.key_version_unknown` when
   // its ring holds no key of the row's version), never a wrong value.
-  classify("tenant_credentials", "local", SEALED),
+  classify("venue_credentials", "local", SEALED),
 
   // adjustments
   classify(

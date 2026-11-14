@@ -9,11 +9,11 @@ import {
   printAgents,
   printJobs,
   printers,
-  tenants,
+  taxpayer,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   createPrinter,
   endDeletedPrinterJobs,
@@ -75,8 +75,8 @@ type Medium = "receipt" | "a4" | "email";
 type Status = "queued" | "sending" | "sent" | "failed" | "unknown";
 
 async function venue() {
-  await seedTenant(suite.db);
-  await suite.db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
+  await seedTaxpayer(suite.db);
+  await suite.db.update(taxpayer).set({ taxpayerDomicile: "Saved domicile" });
   await seedNamedVenue("Bar");
   const nodeId = await seedNode(suite.db);
   const [agent] = await suite.db

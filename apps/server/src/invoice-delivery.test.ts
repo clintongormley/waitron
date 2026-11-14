@@ -16,11 +16,11 @@ import {
   printJobs,
   printAgents,
   printers,
-  tenants,
+  taxpayer,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   createPrinter,
   enqueuePrintJob,
@@ -77,8 +77,8 @@ const email = () => ({
 });
 
 async function issue(full = true) {
-  await seedTenant(suite.db);
-  await suite.db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
+  await seedTaxpayer(suite.db);
+  await suite.db.update(taxpayer).set({ taxpayerDomicile: "Saved domicile" });
   const saved = await readSettings(suite.db, VENUE_SETTINGS);
   if (saved.revision === 0) {
     await seedVenue(suite.db, {
@@ -2601,7 +2601,7 @@ it("does not join the write queue while invoice email has no due work", async ()
     release = resolve;
   });
   const writer = withTransaction(suite.db, async (tx) => {
-    await tx.update(tenants).set({ legalName: "Writing beside idle email" });
+    await tx.update(taxpayer).set({ legalName: "Writing beside idle email" });
     entered();
     await gate;
   });

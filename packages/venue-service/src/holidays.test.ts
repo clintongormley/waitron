@@ -12,7 +12,7 @@ import {
   saveVenueFields,
   specialDayDates,
   specialDays,
-  tenants,
+  taxpayer,
   withTransaction,
   type Database,
   type Transaction,
@@ -150,9 +150,9 @@ interface Address {
 
 async function setCountry(tx: Transaction, country: string) {
   await tx
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country, taxId: "X0000000", legalName: "Invented SL" })
-    .onConflictDoUpdate({ target: tenants.id, set: { country } });
+    .onConflictDoUpdate({ target: taxpayer.id, set: { country } });
 }
 
 async function venue(address: Address = {}): Promise<void> {
@@ -459,7 +459,7 @@ describe("an address that does not resolve", () => {
 
   it("guesses nothing when the database has no taxpayer row", async () => {
     await venue();
-    await run((tx) => tx.delete(tenants));
+    await run((tx) => tx.delete(taxpayer));
     const read = await run((tx) => store.readHolidays(tx, ...year));
     expect(read).toEqual({
       facts: [],

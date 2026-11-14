@@ -34,7 +34,7 @@ import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
 import { recordReplacement } from "./record-replacement.js";
 import { recordVoid } from "./record-void.js";
-import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
+import { seedBareSale, seedRectificativeSeries, seedTaxpayer } from "../test/fixtures.js";
 
 let deviceId: DeviceId;
 let nodeId: NodeId;
@@ -51,7 +51,7 @@ const suite = useVenueDb({
 });
 
 beforeEach(async () => {
-  ({ deviceId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ deviceId, nodeId, seriesId } = await seedTaxpayer(suite.db));
   const [fullSeries] = await suite.db
     .insert(invoiceSeries)
     .values({ nodeId, code: "FF", purpose: "full" })
@@ -424,7 +424,7 @@ describe("recordSubstitution — the series (node-ownership guards)", () => {
   it("rejects a series belonging to another node", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sellTicket(backend);
-    const other = await seedTenant(suite.db);
+    const other = await seedTaxpayer(suite.db);
     await expect(substitute(backend, [saleId], { seriesId: other.seriesId })).rejects.toMatchObject(
       {
         code: "sale.series_wrong_node",

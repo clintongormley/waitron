@@ -28,5 +28,5 @@ export {
   IssuanceRefusal,
   withIssuanceTransaction,
 } from "./incidents.js";
-export type { TenantIncident } from "./incidents.js";
+export type { VenueIncident } from "./incidents.js";
 export type { Incident, IncidentSeverity, RecordIncidentInput } from "./incidents.js";

@@ -3,7 +3,7 @@ import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { kitchenCourses, products, withTransaction } from "@waitron/db";
-import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { createCatalogue, listProducts, updateProduct } from "./operations.js";
 import { readProductEditor, saveProductEditor, type ProductEditorInput } from "./product-editor.js";
 import { createUnit } from "./units.js";
@@ -25,7 +25,7 @@ beforeEach(() => seedLibraryImages(fx.db, "coffee.webp"));
 let catalogueId: string;
 let input: ProductEditorInput;
 beforeEach(async () => {
-  await seedTenant(fx.db);
+  await seedTaxpayer(fx.db);
   const setup = await withTransaction(fx.db, async (tx) => ({
     catalogue: await createCatalogue(tx, { name: "Menu" }),
     unit: await createUnit(

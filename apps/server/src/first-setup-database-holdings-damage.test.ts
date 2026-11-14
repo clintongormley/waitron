@@ -36,9 +36,9 @@ it("reports damage in one table with errcode 11, keeping every other table's cou
   expect(seen).toMatchObject({ kept: 0, records: 0, accepted: 0 });
 });
 
-it("reports damage in tenants beside an invoice, still counting the kept rows and the invoice record", async () => {
+it("reports damage in taxpayer beside an invoice, still counting the kept rows and the invoice record", async () => {
   const held = await heldSetup({ invoices: 1 });
-  damagePages(venueDb(held), "tenants");
+  damagePages(venueDb(held), "taxpayer");
   const answer = await readDatabase(held);
   expect(answer).toMatchObject({ kind: "damaged", code: "errcode 11" });
   const { seen } = answer as Extract<typeof answer, { kind: "damaged" }>;

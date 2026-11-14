@@ -3,7 +3,7 @@ import type { SectionInput, MemberRef, SectionMember } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { withTransaction, type Transaction } from "@waitron/db";
-import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
 import { createCatalogue, createCategory, createProduct, listMenuOffers } from "./operations.js";
 import { addShortcut, readMenuHome } from "./menu-home.js";
@@ -48,7 +48,7 @@ interface Fixture {
 }
 
 async function fixture(): Promise<Fixture> {
-  await seedTenant(fx.db);
+  await seedTaxpayer(fx.db);
   await seedLegacySellingUnits(fx.db);
   return app(async (tx) => {
     const lunch = await createCatalogue(tx, { name: "Lunch menu" });

@@ -333,7 +333,7 @@ it.each(["payments.stripe", "payments.sumup"] as const)(
   async (purpose) => {
     await credential(purpose, purpose === "payments.stripe" ? stripe : sumup);
     expect(await run()).toEqual(passed);
-    restored.db.run(sql`delete from tenant_credentials where purpose=${purpose}`);
+    restored.db.run(sql`delete from venue_credentials where purpose=${purpose}`);
     expect(await run()).toMatchObject({
       status: "invalid",
       checks: expect.arrayContaining([{ code: "secret", status: "invalid" }]),
@@ -353,7 +353,7 @@ it.each(["secretKey", "webhookSecret", "successUrl", "cancelUrl"])(
     );
     for (const db of [original.db, restored.db])
       db.run(
-        sql`update tenant_credentials set ciphertext=${encrypted.ciphertext},iv=${encrypted.iv},auth_tag=${encrypted.authTag} where purpose='payments.stripe'`,
+        sql`update venue_credentials set ciphertext=${encrypted.ciphertext},iv=${encrypted.iv},auth_tag=${encrypted.authTag} where purpose='payments.stripe'`,
       );
     expect(await run()).toMatchObject({ status: "invalid" });
   },

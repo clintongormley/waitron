@@ -648,7 +648,7 @@ it.each([
   "sif-retired",
 ])("refuses a committed allocation after its %s changed", async (field) => {
   await activateForRead();
-  if (field === "taxpayer") await suite.db.execute(sql`update tenants set tax_id = '89890002M'`);
+  if (field === "taxpayer") await suite.db.execute(sql`update taxpayer set tax_id = '89890002M'`);
   if (field === "environment") await suite.db.update(deployment).set({ environment: "production" });
   if (field === "identity")
     await suite.db.execute(sql`update registro_sif set numero_instalacion = 'P000043'`);

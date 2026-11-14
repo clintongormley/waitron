@@ -18,7 +18,7 @@ export const CREDENTIALS_BACKUP_VERIFICATION: BackupVerificationContribution = {
     const data = (await compareBackupTables({
       before: context.before,
       after: context.after,
-      policies: [{ table: "tenant_credentials", immutable: false, addedColumns: {} }],
+      policies: [{ table: "venue_credentials", immutable: false, addedColumns: {} }],
     }))
       ? "passed"
       : "invalid";

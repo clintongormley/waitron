@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { tenants } from "@waitron/db";
+import { taxpayer } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
@@ -31,7 +31,7 @@ function nextNif(): string {
 
 async function seedTestVenue(): Promise<void> {
   await suite.db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: nextNif(), legalName: "Deli Test SL" });
   await seedVenue(suite.db, {
     name: "Main room",

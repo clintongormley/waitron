@@ -295,7 +295,7 @@ const REBUILT_COLUMN_ORDER: Record<string, readonly (readonly string[])[]> = {
       "taxpayer_domicile",
     ],
   ],
-  tenants: [["created_at", "taxpayer_domicile", "privacy_notice_url", "privacy_email"]],
+  taxpayer: [["created_at", "taxpayer_domicile", "privacy_notice_url", "privacy_email"]],
   ticket_items: [
     ["note", "requested_at", "pass_controlled", "station_chosen_at", "station_retained_at_release"],
   ],

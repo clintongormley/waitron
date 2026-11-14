@@ -99,11 +99,11 @@ export interface ServerConfig {
   googleOidc?: { clientId: string; clientSecret: string; redirectUri: string };
   /**
    * The device cookie's `Domain` when the request host is under it, so one credential reaches
-   * every one of the venue's servers after a promotion. From `WAITRON_TENANT_DOMAIN`, lower-cased;
+   * every one of the venue's servers after a promotion. From `WAITRON_VENUE_DOMAIN`, lower-cased;
    * unset OR empty → undefined (host-only cookies); a value carrying `/`, `:` or whitespace is
    * refused.
    */
-  tenantDomain?: string;
+  venueDomain?: string;
   /**
    * The built `till` SPA served at "/", mounted after every API route so it shadows none. From
    * `WAITRON_TILL_APP_DIR`; absent OR empty → undefined (not served), never `""`. Stored
@@ -269,12 +269,12 @@ function secureManagementOrigin(value: string): string {
   return origin;
 }
 
-function loadTenantDomain(env: Env): string | undefined {
-  const raw = env.WAITRON_TENANT_DOMAIN;
+function loadVenueDomain(env: Env): string | undefined {
+  const raw = env.WAITRON_VENUE_DOMAIN;
   if (isUnset(raw)) return undefined;
   if (/[/:\s]/.test(raw)) {
     throw new AppError("server.config_invalid", {
-      variable: "WAITRON_TENANT_DOMAIN",
+      variable: "WAITRON_VENUE_DOMAIN",
       reason: "not_a_domain",
     });
   }
@@ -318,7 +318,7 @@ function boundedPort(env: Env, variable: string, fallback: number): number {
 
 /**
  * Which environment this whole deployment belongs to — AEAT's endpoints, and the Stripe key mode
- * a tenant's credential must match. ONE setting, not one per provider: AEAT pre-production with a
+ * a taxpayer's credential must match. ONE setting, not one per provider: AEAT pre-production with a
  * live Stripe key takes real money without filing it; AEAT production with a test key files
  * invoices for money never taken.
  */
@@ -524,7 +524,7 @@ export function loadConfig(
           },
         }
       : {}),
-    tenantDomain: loadTenantDomain(env),
+    venueDomain: loadVenueDomain(env),
     tillAppDir: isUnset(env.WAITRON_TILL_APP_DIR) ? undefined : env.WAITRON_TILL_APP_DIR,
     dashboardAppDir: isUnset(env.WAITRON_DASHBOARD_APP_DIR)
       ? undefined

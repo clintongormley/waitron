@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getTableName, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
-import { openVenueDatabase, runMigrations, tenants, withTransaction } from "./index.js";
+import { openVenueDatabase, runMigrations, taxpayer, withTransaction } from "./index.js";
 
 const FOLDER_A = join(import.meta.dirname, "..", "test", "migrations-a");
 
@@ -40,10 +40,10 @@ describe("package public surface (./index.js)", () => {
     ]);
   });
 
-  // `tenancy.test.ts` imports its subjects from the deep paths (`./schema/tenants.js`,
+  // `tenancy.test.ts` imports its subjects from the deep paths (`./schema/taxpayer.js`,
   // `./tenancy.js`), never from `./index.js`, so it cannot catch a re-export deleted from the root.
   it("re-exports withTransaction and the tenancy tables from the package root", () => {
     expect(withTransaction).toBeTypeOf("function");
-    expect(getTableName(tenants)).toBe("tenants");
+    expect(getTableName(taxpayer)).toBe("taxpayer");
   });
 });

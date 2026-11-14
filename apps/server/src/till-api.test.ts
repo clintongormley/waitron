@@ -34,7 +34,7 @@ import {
   seedDevice,
   seedKitchenStation,
   seedNode,
-  seedTenant,
+  seedTaxpayer,
   seedVenue,
 } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -134,7 +134,7 @@ let anna: { id: string };
 // The pre-login roster fixtures: `abel` is a second ACTIVE person whose name sorts BEFORE "Anna" but
 // is inserted AFTER it, so `[abel, anna]` proves `listActiveStaff` sorts by name rather than by
 // insertion order; `zoe` is SUSPENDED, so its absence proves the `status = 'active'` filter. The
-// tenant's tax_id is generated (a fresh NIF each run), so `GET /api/till`'s `nif` is asserted against
+// taxpayer's tax_id is generated (a fresh NIF each run), so `GET /api/till`'s `nif` is asserted against
 // the value read back here, not a hardcoded one.
 let abel: { id: string };
 let venueTaxId: string;
@@ -162,14 +162,14 @@ const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
-    await seedTenant(db);
+    await seedTaxpayer(db);
     await seedLegacySellingUnits(db);
-    // `seedTenant` sets legal_name = 'Test SL' and a generated tax_id; read the tax_id back so the
+    // `seedTaxpayer` sets legal_name = 'Test SL' and a generated tax_id; read the tax_id back so the
     // `GET /api/till` assertion can pin the exact NIF the route must echo.
-    const tenant = await db.execute<{ tax_id: string }>(
-      sql`select tax_id from tenants where id = 1`,
+    const taxpayer = await db.execute<{ tax_id: string }>(
+      sql`select tax_id from taxpayer where id = 1`,
     );
-    venueTaxId = tenant.rows[0]!.tax_id;
+    venueTaxId = taxpayer.rows[0]!.tax_id;
     // The products are authored under the BARE `es` key; `priceOrderLines` re-keys their
     // descriptions to the venue's `es-ES` before the working-order-line insert fires
     // `check_locales`, which demands the keys match EXACTLY.

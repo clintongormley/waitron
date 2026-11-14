@@ -13,7 +13,7 @@ import {
   nodes,
   printJobs,
   stampDeployment,
-  tenants,
+  taxpayer,
   withTransaction,
   workingOrders,
 } from "@waitron/db";
@@ -24,7 +24,7 @@ import { departmentReceipts, departments } from "@waitron/venue-service";
 import {
   seedDevice,
   seedNode,
-  seedTenant,
+  seedTaxpayer,
   seedVenue,
   seedWorkingOrder,
 } from "@waitron/db/testing/seed.js";
@@ -97,9 +97,9 @@ afterAll(async () => {
 
 async function fixture(environment: "preproduction" | "production" = "preproduction") {
   beforeServerStarts();
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await stampDeployment(suite.db, environment);
-  await suite.db.update(tenants).set({ taxpayerDomicile: "Saved issuer address" });
+  await suite.db.update(taxpayer).set({ taxpayerDomicile: "Saved issuer address" });
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: ["es-ES"],
@@ -538,7 +538,7 @@ describe("invoice email worker at trading boot", () => {
         privacyEmail: "privacy@example.com",
       });
     });
-    const [taxpayer] = await suite.db.select({ legalName: tenants.legalName }).from(tenants);
+    const [taxpayer] = await suite.db.select({ legalName: taxpayer.legalName }).from(taxpayer);
     const smtp = await smtpFixture();
     let server: StartedServer | undefined;
     try {

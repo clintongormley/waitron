@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { catalogues, CORE_MIGRATIONS, products, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { createExtraList, productUnits } from "@waitron/menu";
 import { hashPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -28,7 +28,7 @@ beforeEach(async () => {
   await suite.db.execute(sql`delete from catalogues`);
   await suite.db.execute(sql`delete from management_sessions`);
   await suite.db.execute(sql`delete from persons`);
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await withTransaction(suite.db, async (tx) => {
     // Every fixture insert goes through the table definition so each column's `$defaultFn` runs.
     const [person] = await seedPersons(tx, {

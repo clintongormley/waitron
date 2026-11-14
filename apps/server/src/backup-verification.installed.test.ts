@@ -186,7 +186,7 @@ it("immutable equality refuses a changed migrated invoice line", async () => {
 });
 it("fiscal secret usability refuses a missing encrypted certificate", async () => {
   const f = await suite.create();
-  await f.corrupt((db) => db.exec("delete from tenant_credentials where purpose='fiscal.aeat'"));
+  await f.corrupt((db) => db.exec("delete from venue_credentials where purpose='fiscal.aeat'"));
   expect(await verify(f)).toMatchObject({
     status: "unavailable",
     reason: "secret_unavailable",

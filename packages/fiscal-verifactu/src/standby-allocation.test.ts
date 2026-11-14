@@ -2,7 +2,7 @@ import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
 import { generateKeyPairSync } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { deployment, invoiceSeries, tenants, withTransaction } from "@waitron/db";
+import { deployment, invoiceSeries, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenants, TENANT_A, TENANT_B } from "../test/fixtures.js";
@@ -185,7 +185,7 @@ describe("a dormant standby allocation checked against stored venue facts", () =
   });
 
   it("refuses a missing taxpayer", async () => {
-    await suite.db.delete(tenants);
+    await suite.db.delete(taxpayer);
     expect(await check()).toEqual({ ok: false, reason: "taxpayer_missing" });
   });
 

@@ -10,7 +10,7 @@ import { serve } from "@hono/node-server";
 import { once } from "node:events";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, settings, tenants, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, settings, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { persons, managementSessions, startManagementSession } from "@waitron/identity";
@@ -444,15 +444,15 @@ describe("time-zone repair management boundary", () => {
     },
   );
   it("answers 409 venue.not_found with no taxpayer row", async () => {
-    const [taxpayer] = await suite.db.select().from(tenants);
+    const [taxpayer] = await suite.db.select().from(taxpayer);
     await suite.db.execute(sql`pragma foreign_keys = off`);
     try {
-      await suite.db.execute(sql`delete from tenants`);
+      await suite.db.execute(sql`delete from taxpayer`);
       const response = await request("GET");
       expect(response.status).toBe(409);
       expect(await response.json()).toEqual({ error: { code: "venue.not_found", params: {} } });
     } finally {
-      await suite.db.insert(tenants).values(taxpayer!);
+      await suite.db.insert(taxpayer).values(taxpayer!);
       await suite.db.execute(sql`pragma foreign_keys = on`);
     }
   });

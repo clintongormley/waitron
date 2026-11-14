@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, settings, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { getCountryPack } from "@waitron/country-packs";
 import {
   saleLanguageFor,
@@ -20,7 +20,7 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    // `seedVenue` writes the taxpayer row through `seedTenant`: country 'ES' (and legal_name
+    // `seedVenue` writes the taxpayer row through `seedTaxpayer`: country 'ES' (and legal_name
     // 'Test SL', a generated tax_id).
     // Barcelona prefers Catalan in the Spain pack. This server build ships no Catalan UI catalogue,
     // so locale resolution falls through to the country default.
@@ -54,12 +54,12 @@ describe("readVenueLocale", () => {
     // With the taxpayer row deleted `country` and `province` are null and the resolver reaches its
     // `en-GB` floor. Not a production shape, but the `?? null` path exists rather than a throw.
     // Restored afterwards so the suite stays order-independent.
-    await suite.db.execute(sql`delete from tenants`);
+    await suite.db.execute(sql`delete from taxpayer`);
     try {
       const got = await readVenueLocale(suite.db);
       expect(got).toBe("en-GB");
     } finally {
-      await seedTenant(suite.db);
+      await seedTaxpayer(suite.db);
     }
   });
 });
@@ -106,14 +106,14 @@ describe("readVenueContentLanguageRules", () => {
   });
 
   it("requires nothing when there is no taxpayer row to read a country from", async () => {
-    await suite.db.execute(sql`delete from tenants`);
+    await suite.db.execute(sql`delete from taxpayer`);
     try {
       expect(await readVenueContentLanguageRules(suite.db)).toStrictEqual({
         required: [],
         official: [],
       });
     } finally {
-      await seedTenant(suite.db);
+      await seedTaxpayer(suite.db);
     }
   });
 });
@@ -143,13 +143,13 @@ describe("readVenueReceiptLanguageRules", () => {
   });
 
   it("offers nothing when there is no taxpayer row to read a country from", async () => {
-    await suite.db.execute(sql`delete from tenants`);
+    await suite.db.execute(sql`delete from taxpayer`);
     try {
       expect(
         await withTransaction(suite.db, (tx) => readVenueReceiptLanguageRules(tx)),
       ).toStrictEqual({ choices: [], defaultLocale: "es-ES" });
     } finally {
-      await seedTenant(suite.db);
+      await seedTaxpayer(suite.db);
     }
   });
 });

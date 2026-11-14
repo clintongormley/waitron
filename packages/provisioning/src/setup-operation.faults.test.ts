@@ -89,12 +89,12 @@ describe("setup operation store under filesystem faults", () => {
           when: "before",
           run: () => Promise.reject(failure("EIO")),
         });
-        await operation.advance("venue_committed", { tenantId: "tenant-1" });
+        await operation.advance("venue_committed", { tenantId: "taxpayer-1" });
       }),
     ).rejects.toMatchObject({ code: "EIO" });
     expect(await store.read()).toMatchObject({
       phase: "venue_committed",
-      data: { tenantId: "tenant-1" },
+      data: { tenantId: "taxpayer-1" },
     });
     await expect(store.run("adopt", "request-b", async () => {})).rejects.toMatchObject({
       code: "setup.operation_conflict",

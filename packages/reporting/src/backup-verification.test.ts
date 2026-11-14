@@ -14,7 +14,7 @@ const after = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 beforeEach(() => {
   for (const db of [before.db, after.db]) {
-    db.run(sql`insert into tenants (id, country, tax_id, legal_name, created_at)
+    db.run(sql`insert into taxpayer (id, country, tax_id, legal_name, created_at)
       values (1, 'GB', 'fixture-id', 'Fixture company', '2026-10-20T00:00:00Z')`);
     db.run(
       sql`insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"name":"Fixture venue","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null,"invoiceLocales":["en"],"contentLanguages":null,"defaultContentLanguage":null,"holidayArea":null,"fiscalTerritory":"ES-common","operationDescription":"Restaurant"}', '2026-10-20T00:00:00Z'), ('business_day', 1, 1, '{"timeZone":"UTC"}', '2026-10-20T00:00:00Z') on conflict (module) do nothing`,

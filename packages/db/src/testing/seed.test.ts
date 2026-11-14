@@ -9,7 +9,7 @@ import { deviceProfiles } from "../schema/device-profiles.js";
 import { devices } from "../schema/devices.js";
 import { kitchenStations } from "../schema/kitchen-stations.js";
 import { nodes } from "../schema/nodes.js";
-import { readTenant } from "../read-tenant.js";
+import { readTaxpayer } from "../read-taxpayer.js";
 import { readVenue } from "../venue.js";
 import { withTransaction } from "../tenancy.js";
 import {
@@ -18,7 +18,7 @@ import {
   seedDeviceProfiles,
   seedKitchenStation,
   seedNode,
-  seedTenant,
+  seedTaxpayer,
   seedVenue,
   seedWorkingOrder,
   seedZone,
@@ -37,12 +37,12 @@ afterEach(async () => {
   await suite.db.execute(sql`delete from kitchen_stations`);
   await suite.db.execute(sql`delete from nodes`);
   await suite.db.execute(sql`delete from catalogues`);
-  await suite.db.execute(sql`delete from tenants`);
+  await suite.db.execute(sql`delete from taxpayer`);
 });
 
 describe("freshNif", () => {
   // Deliberately asserts the SHAPE and the base, never a specific counter value: the counter is
-  // module-global and any other test in this file that seeds a tenant advances it, so pinning a
+  // module-global and any other test in this file that seeds a taxpayer advances it, so pinning a
   // value here would make the file order-dependent.
   it("returns an 8-digit NIF on the 40-million base no other generator in this repo uses", () => {
     expect(freshNif()).toMatch(/^4\d{7}K$/);
@@ -54,7 +54,7 @@ describe("freshNif", () => {
   });
 });
 
-describe("seedTenant", () => {
+describe("seedTaxpayer", () => {
   let db: Database;
 
   beforeEach(async () => {
@@ -62,18 +62,18 @@ describe("seedTenant", () => {
   });
 
   it("inserts the one taxpayer row, keyed 1", async () => {
-    await seedTenant(db);
+    await seedTaxpayer(db);
     const result = await db.execute<{ n: number }>(
-      sql`select count(*) as n from tenants where id = 1`,
+      sql`select count(*) as n from taxpayer where id = 1`,
     );
     expect((result.rows[0] as { n: number }).n).toBe(1);
   });
 
   it("is a no-op when the row is already there, so a suite may call it repeatedly", async () => {
-    await seedTenant(db);
-    await seedTenant(db);
-    await seedTenant(db);
-    const result = await db.execute<{ n: number }>(sql`select count(*) as n from tenants`);
+    await seedTaxpayer(db);
+    await seedTaxpayer(db);
+    await seedTaxpayer(db);
+    const result = await db.execute<{ n: number }>(sql`select count(*) as n from taxpayer`);
     expect((result.rows[0] as { n: number }).n).toBe(1);
   });
 });
@@ -87,7 +87,7 @@ describe("seedVenue", () => {
 
   it("seedVenue writes the taxpayer and the one venue", async () => {
     await seedVenue(db, { name: "House", timeZone: "Atlantic/Canary" });
-    expect(await readTenant(db)).not.toBeNull();
+    expect(await readTaxpayer(db)).not.toBeNull();
     expect(await readVenue(db)).toEqual({
       name: "House",
       invoiceLocales: ["es"],
@@ -145,14 +145,14 @@ describe("seedKitchenStation", () => {
     db = suite.db;
   });
 
-  async function seedTenantAndVenue() {
-    await seedTenant(db);
+  async function seedTaxpayerAndVenue() {
+    await seedTaxpayer(db);
     await seedVenueSettings(db, { operationDescription: "Restaurant" });
     await seedBusinessDay(db, {});
   }
 
   it("defaults to a DEFAULT station named 'Cocina' and returns its id", async () => {
-    await seedTenantAndVenue();
+    await seedTaxpayerAndVenue();
     const id = await seedKitchenStation(db, {});
     // Read through the table rather than as raw SQL: SQLite stores a flag as 0/1 and only the
     // column's own mapping turns it back into a boolean.
@@ -164,7 +164,7 @@ describe("seedKitchenStation", () => {
   });
 
   it("honours an overridden name and is_default", async () => {
-    await seedTenantAndVenue();
+    await seedTaxpayerAndVenue();
     const id = await seedKitchenStation(db, {
       name: "Barra",
       isDefault: false,
@@ -190,7 +190,7 @@ describe("seedDevice", () => {
   }
 
   it("seedDevice pairs an active device on a new till profile at the venue", async () => {
-    await seedTenant(db);
+    await seedTaxpayer(db);
     await seedVenueFixture(db);
     const { deviceId, profileId } = await seedDevice(db, { label: "Barra" });
     const [row] = await db
@@ -213,7 +213,7 @@ describe("seedDevice", () => {
   });
 
   it("seedDevice reuses a given profile and takes the form factor and capabilities asked for", async () => {
-    await seedTenant(db);
+    await seedTaxpayer(db);
     await seedVenueFixture(db);
     const first = await seedDevice(db, {
       formFactor: "phone-portrait",
@@ -263,7 +263,7 @@ describe("seedWorkingOrder", () => {
 describe("the helpers inside a transaction", () => {
   it("take the transaction handle withTransaction gives its body", async () => {
     const order = await withTransaction(suite.db, async (tx) => {
-      await seedTenant(tx);
+      await seedTaxpayer(tx);
       await seedVenue(tx, { name: "In a transaction" });
       const node = await seedNode(tx);
       await seedDevice(tx);

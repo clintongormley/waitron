@@ -54,7 +54,7 @@ export const convenioConfig = table(
      * `rate` stores as its count of whole basis points, so 25% is the number 2500. Null until the
      * convenio's figure is known. */
     nightPremiumPct: rate("night_premium_pct"),
-    /** plus de turno partido, per-day amount in tenant currency; null until known. */
+    /** plus de turno partido, per-day amount in taxpayer currency; null until known. */
     splitShiftPremium: money("split_shift_premium"),
     /** Whether turno-partido breaks count as worked time (convenio/interpretive). Conservative
      * default. */

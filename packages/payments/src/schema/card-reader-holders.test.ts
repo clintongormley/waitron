@@ -3,7 +3,7 @@ import {
   CORE_MIGRATIONS,
   captureError,
   isUniqueViolation,
-  tenants,
+  taxpayer,
   withTransaction,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -18,9 +18,9 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] })
 
 async function seed(db: Database) {
   await db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: freshNif(), legalName: "Test SL" })
-    .onConflictDoNothing({ target: tenants.id });
+    .onConflictDoNothing({ target: taxpayer.id });
   await seedVenue(db, {
     name: "Counter",
     invoiceLocales: ["es"],

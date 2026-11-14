@@ -8,7 +8,7 @@ import {
   CORE_MIGRATIONS,
   kitchenStations,
   dayCutoverChanges,
-  tenants,
+  taxpayer,
   type Database,
   type Transaction,
 } from "@waitron/db";
@@ -473,14 +473,14 @@ describe("station status across clock changes", () => {
 
 describe("station times on a public holiday", () => {
   // The file shares one taxpayer row; put back whatever it held before a case placed it in Spain.
-  let tenantBefore: (typeof tenants.$inferSelect)[] = [];
+  let taxpayerBefore: (typeof taxpayer.$inferSelect)[] = [];
   beforeAll(async () => {
-    tenantBefore = await db.transaction((tx) => tx.select().from(tenants));
+    taxpayerBefore = await db.transaction((tx) => tx.select().from(taxpayer));
   });
   afterEach(async () => {
     await db.transaction(async (tx) => {
-      await tx.delete(tenants);
-      if (tenantBefore.length > 0) await tx.insert(tenants).values(tenantBefore);
+      await tx.delete(taxpayer);
+      if (taxpayerBefore.length > 0) await tx.insert(taxpayer).values(taxpayerBefore);
     });
   });
 
@@ -488,9 +488,9 @@ describe("station times on a public holiday", () => {
   async function sevilleVenue(tx: Transaction) {
     const f = await fixture(tx);
     await tx
-      .insert(tenants)
+      .insert(taxpayer)
       .values({ id: 1, country: "ES", taxId: "X0000000", legalName: "Invented SL" })
-      .onConflictDoUpdate({ target: tenants.id, set: { country: "ES" } });
+      .onConflictDoUpdate({ target: taxpayer.id, set: { country: "ES" } });
     await seedVenueSettings(tx, { province: "Sevilla", city: "Sevilla" });
     return f;
   }

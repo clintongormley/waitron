@@ -1,4 +1,4 @@
-import { readDeploymentEnvironment, readTenant, withTransaction } from "@waitron/db";
+import { readDeploymentEnvironment, readTaxpayer, withTransaction } from "@waitron/db";
 import type { ModuleOperationPreparation } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { readHourHistory } from "./hour-history-reader.js";
@@ -43,16 +43,16 @@ export const readHourRecoveryState: NonNullable<
   )
     return refuse();
   return withTransaction(db, async (tx) => {
-    const tenant = await readTenant(tx);
+    const taxpayer = await readTaxpayer(tx);
     const environment = await readDeploymentEnvironment(db);
-    if (tenant === null || environment === null) return refuse();
+    if (taxpayer === null || environment === null) return refuse();
     const dormant =
       binding.action === "promote"
         ? readRetainedHourDormant(preparationHistory, binding)
         : undefined;
     if (
       dormant !== undefined &&
-      (dormant.scope.taxpayerNif !== tenant.taxId || dormant.scope.environment !== environment)
+      (dormant.scope.taxpayerNif !== taxpayer.taxId || dormant.scope.environment !== environment)
     )
       return refuse();
     const bases = dormant?.bases ?? (await liveSeriesBases(tx, node));
@@ -91,8 +91,8 @@ export const readHourRecoveryState: NonNullable<
       }
     }
     return {
-      country: tenant.country,
-      taxId: tenant.taxId,
+      country: taxpayer.country,
+      taxId: taxpayer.taxId,
       environment,
       bases,
       history: [history],

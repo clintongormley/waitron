@@ -8,7 +8,7 @@ import {
   newId,
   nodes,
   now,
-  readTenant,
+  readTaxpayer,
   type Transaction,
 } from "@waitron/db";
 import { readOperationAuthority, type ProvisionedNode } from "@waitron/module";
@@ -65,8 +65,8 @@ async function validateForActivation(
     .where(eq(nodes.id, node.nodeId));
   if (storedNode === undefined || context.targetNodeId !== node.nodeId)
     return { ok: false, reason: "node_mismatch" };
-  const tenant = await readTenant(tx);
-  if (tenant === null) return { ok: false, reason: "taxpayer_mismatch" };
+  const taxpayer = await readTaxpayer(tx);
+  if (taxpayer === null) return { ok: false, reason: "taxpayer_mismatch" };
   const [stamp] = await tx
     .select({ environment: deployment.environment })
     .from(deployment)
@@ -83,7 +83,7 @@ async function validateForActivation(
     return { ok: false, reason: "series_mismatch" };
   const validated = validateAllocationEnvelope(allocation, approval, {
     ...context,
-    taxpayerNif: tenant.taxId,
+    taxpayerNif: taxpayer.taxId,
     environment,
     softwareId: liveSif?.softwareId ?? WAITRON_ID_SISTEMA,
     requiredBases: storedBases.length > 0 ? storedBases : context.requiredBases,
@@ -367,7 +367,7 @@ async function activate(
           ? "uncertain_prior_activation"
           : "outside_confirmation_missing",
       );
-    const tenant = await readTenant(tx);
+    const taxpayer = await readTaxpayer(tx);
     const [stamp] = await tx.select().from(deployment).where(eq(deployment.id, 1));
     const [storedNode] = await tx
       .select({ id: nodes.id })
@@ -379,7 +379,7 @@ async function activate(
       context.targetNodeId !== node.nodeId
     )
       return refuse("node_mismatch");
-    if (tenant?.taxId !== prior.taxpayerNif) return refuse("taxpayer_mismatch");
+    if (taxpayer?.taxId !== prior.taxpayerNif) return refuse("taxpayer_mismatch");
     if (stamp?.environment !== "production" && stamp?.environment !== "preproduction")
       return refuse("environment_unstamped");
     if (stamp.environment !== prior.environment) return refuse("environment_mismatch");

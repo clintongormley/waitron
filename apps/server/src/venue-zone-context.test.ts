@@ -113,7 +113,7 @@ describe("raw saved zone context", () => {
     });
   });
   it("refuses a context with no taxpayer identity", async () => {
-    await suite.db.execute(sql`delete from tenants`);
+    await suite.db.execute(sql`delete from taxpayer`);
     const error: unknown = await read().catch((caught: unknown) => caught);
     expect(error).toMatchObject({ code: "venue.not_found" });
     expect((error as { params: unknown }).params).toEqual({});

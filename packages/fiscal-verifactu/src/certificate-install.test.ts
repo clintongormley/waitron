@@ -263,7 +263,7 @@ describe("installCertificate's local refusals", () => {
       installCertificate(depsFor(v, server), bodyFor(v, candidate), NOW),
     );
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toMatch(/tenants is empty/);
+    expect((error as Error).message).toMatch(/taxpayer is empty/);
     expect(server.requests()).toBe(0);
   });
 });

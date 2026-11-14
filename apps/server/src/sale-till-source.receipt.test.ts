@@ -284,7 +284,7 @@ interface Registro {
   numSerieFactura: string;
 }
 
-/** Every fiscal record filed for the tenant, oldest first — one per sale, this tenant's alone. */
+/** Every fiscal record filed for the taxpayer, oldest first — one per sale, this taxpayer's alone. */
 async function registrosFor(): Promise<Registro[]> {
   return withTransaction(suite.db, async (tx) => {
     const rows = await tx
@@ -347,7 +347,7 @@ describe("H2 receipt: a sale's device resolves from the request, the chain does 
       product.menuItemId,
     );
 
-    // Sale 2 via device Y — same tenant, same node, same operator, same basket.
+    // Sale 2 via device Y — same taxpayer, same node, same operator, same basket.
     const deviceY = await enrolTillCookie(cfg, "Caja 2");
     await ringSale(
       app,

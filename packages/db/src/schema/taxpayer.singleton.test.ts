@@ -6,20 +6,20 @@ import { CHECK_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
-import { seedTenant } from "../testing/seed.js";
+import { seedTaxpayer } from "../testing/seed.js";
 
-describe("tenants is one row, keyed 1", () => {
+describe("taxpayer is one row, keyed 1", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
   let db: Database;
 
   beforeAll(async () => {
     db = suite.db;
-    await seedTenant(db);
+    await seedTaxpayer(db);
   });
 
   it("holds exactly one row, and its id is 1", () => {
     const rows = db.all<{ n: number; id: number }>(
-      sql`select cast(count(*) as int) as n, cast(min(id) as int) as id from tenants`,
+      sql`select cast(count(*) as int) as n, cast(min(id) as int) as id from taxpayer`,
     );
     expect(rows[0]).toEqual({ n: 1, id: 1 });
   });
@@ -32,7 +32,7 @@ describe("tenants is one row, keyed 1", () => {
     const second = await captureError(() =>
       Promise.resolve(
         db.run(
-          sql`insert into tenants (id, country, tax_id, legal_name, created_at)
+          sql`insert into taxpayer (id, country, tax_id, legal_name, created_at)
               values (1, 'ES', 'B99999999', 'Second SL', ${at})`,
         ),
       ),
@@ -42,14 +42,14 @@ describe("tenants is one row, keyed 1", () => {
     const otherId = await captureError(() =>
       Promise.resolve(
         db.run(
-          sql`insert into tenants (id, country, tax_id, legal_name, created_at)
+          sql`insert into taxpayer (id, country, tax_id, legal_name, created_at)
               values (2, 'ES', 'B99999999', 'Second SL', ${at})`,
         ),
       ),
     );
-    expect(isRefusal(otherId, CHECK_VIOLATION)).toBe(true); // tenants_singleton_ck
+    expect(isRefusal(otherId, CHECK_VIOLATION)).toBe(true); // taxpayer_singleton_ck
 
-    const still = db.all<{ n: number }>(sql`select cast(count(*) as int) as n from tenants`);
+    const still = db.all<{ n: number }>(sql`select cast(count(*) as int) as n from taxpayer`);
     expect(still[0]!.n).toBe(1);
   });
 
@@ -60,15 +60,15 @@ describe("tenants is one row, keyed 1", () => {
     const omitted = await captureError(() =>
       Promise.resolve(
         db.run(
-          sql`insert into tenants (country, tax_id, legal_name, created_at)
+          sql`insert into taxpayer (country, tax_id, legal_name, created_at)
               values ('ES', 'B77777777', 'Third SL', ${new Date().toISOString()})`,
         ),
       ),
     );
     expect(isRefusal(omitted, CHECK_VIOLATION)).toBe(true);
-    expect(engineErrorMessage(omitted)).toMatch(/tenants_singleton_ck/);
+    expect(engineErrorMessage(omitted)).toMatch(/taxpayer_singleton_ck/);
 
-    const still = db.all<{ n: number }>(sql`select cast(count(*) as int) as n from tenants`);
+    const still = db.all<{ n: number }>(sql`select cast(count(*) as int) as n from taxpayer`);
     expect(still[0]!.n).toBe(1);
   });
 });

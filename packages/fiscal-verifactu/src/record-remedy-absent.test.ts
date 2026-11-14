@@ -2,7 +2,7 @@ import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/perso
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { sales, tenants, withTransaction } from "@waitron/db";
+import { sales, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -472,7 +472,7 @@ it("refuses an absent server generation context", async () => {
 });
 
 it("refuses when the venue row is missing without changing any fiscal facts", async () => {
-  await suite.db.delete(tenants);
+  await suite.db.delete(taxpayer);
   const before = await snapshot();
   const response = await send();
   expect(response.status).toBe(400);

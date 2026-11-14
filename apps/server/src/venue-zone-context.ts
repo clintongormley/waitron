@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import {
   nodes,
   readBusinessDayRevision,
-  readTenant,
+  readTaxpayer,
   readVenueClockAndPlace,
   type Transaction,
 } from "@waitron/db";
@@ -31,14 +31,14 @@ export interface ZoneContext {
 export async function readZoneContext(tx: Transaction, scope: IssueScope): Promise<ZoneContext> {
   const [node] = await tx.select({ id: nodes.id }).from(nodes).where(eq(nodes.id, scope.nodeId));
   if (node === undefined) throw new AppError("venue.time_zone_target_invalid", { reason: "node" });
-  const tenant = await readTenant(tx);
-  if (tenant === null) throw new AppError("venue.not_found", {});
+  const taxpayer = await readTaxpayer(tx);
+  if (taxpayer === null) throw new AppError("venue.not_found", {});
   const { clock, place } = await readVenueClockAndPlace(tx);
   const clockRevision = await readBusinessDayRevision(tx);
   return {
     nodeId: scope.nodeId,
-    legalName: tenant.legalName,
-    country: tenant.country,
+    legalName: taxpayer.legalName,
+    country: taxpayer.country,
     province: place.province,
     savedZone: classifySavedTimeZone(clock.timeZone),
     clock,

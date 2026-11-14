@@ -52,7 +52,7 @@ async function check(
   context: BackupVerificationContext,
   inputs: Readonly<Record<string, string>>,
 ): Promise<BackupModuleStatus> {
-  const credential = (await exists(query, "tenant_credentials"))
+  const credential = (await exists(query, "venue_credentials"))
     ? await readBackupCredential(query, inputs, "fiscal.aeat")
     : null;
   if (credential === null) {
@@ -84,10 +84,10 @@ async function check(
     return opened.reason === "old_encryption" ? "unsupported" : "invalid";
   }
   const node = await first(query, "select id from nodes where id=?", [context.source.nodeId]);
-  const tenant = await first(query, "select tax_id from tenants where id=1");
-  if (node === undefined || typeof tenant?.tax_id !== "string") return "invalid";
+  const taxpayer = await first(query, "select tax_id from taxpayer where id=1");
+  if (node === undefined || typeof taxpayer?.tax_id !== "string") return "invalid";
   const { details } = opened;
-  if (details.taxId !== null && details.taxId !== normaliseTaxId(tenant.tax_id)) return "invalid";
+  if (details.taxId !== null && details.taxId !== normaliseTaxId(taxpayer.tax_id)) return "invalid";
   if (!(await exists(query, "fiscal_certificate_installs"))) return "invalid";
   let latest: Awaited<ReturnType<typeof first>>;
   let ambiguous = false;

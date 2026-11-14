@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { persons } from "@waitron/identity";
 import { jobOrigin } from "@waitron/shared";
 import { seedFixtureVenue } from "../test/fixtures.js";
@@ -48,7 +48,7 @@ async function retire(tx: Transaction) {
 }
 const own = () => run((tx) => listPendingAttendanceQuestions(tx, personId));
 beforeEach(async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await seedFixtureVenue(suite.db);
   nodeId = await seedNode(suite.db);
   const workers = await seedPersons(suite.db, [

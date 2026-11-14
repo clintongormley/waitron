@@ -21,7 +21,7 @@ import {
   assertOtherFirstSetupAllowed,
   assertNoStartAgainDeletion,
   readPrivacyContact,
-  readTenantIdentities,
+  readTaxpayerIdentities,
 } from "@waitron/provisioning";
 import {
   APPEND_ONLY_CHECK_MS,
@@ -110,7 +110,7 @@ import {
   loadKeyRing,
   readNodeSigningKey,
   readPairSecret,
-  tenantCredentials,
+  venueCredentials,
   type KeyRing,
 } from "@waitron/credentials";
 import { registerModulePermissions, withPassiveManagementRead } from "@waitron/identity";
@@ -792,7 +792,7 @@ export function withPendingBillPayments(
 
 /**
  * The per-pass enumerator `withPendingSweep` calls: the demo/prepare simulator (if one was built),
- * plus every pooled card provider this tenant has a sealed credential for. A provider with no sealed
+ * plus every pooled card provider this taxpayer has a sealed credential for. A provider with no sealed
  * credential is not swept: its `resolvePending` would only fail on the missing credential.
  *
  * Exported for a direct test (`boot-pending-sweep.test.ts`). */
@@ -809,9 +809,9 @@ export function connectedCardProviderSweep(deps: {
     if (purposes.length > 0) {
       const held = await withTransaction(deps.db, async (tx) => {
         const rows = await tx
-          .select({ purpose: tenantCredentials.purpose })
-          .from(tenantCredentials)
-          .where(inArray(tenantCredentials.purpose, purposes));
+          .select({ purpose: venueCredentials.purpose })
+          .from(venueCredentials)
+          .where(inArray(venueCredentials.purpose, purposes));
         return new Set(rows.map((r) => r.purpose));
       });
       for (const c of deps.contributions) {
@@ -1224,7 +1224,7 @@ async function bootServer(
       return { digest: createHash("sha256").update(staged.artifact).digest("hex"), newTaxpayer };
     },
     assertClaimAllowed: async () => {
-      if ((await readTenantIdentities(db)).length > 0 || (await hasOperationalVenue(db)))
+      if ((await readTaxpayerIdentities(db)).length > 0 || (await hasOperationalVenue(db)))
         throw new AppError("setup.attempt_conflict", {});
     },
   });
@@ -1544,7 +1544,7 @@ async function bootServer(
         accountKey: cfg.accountKey ?? accountKey.toString("base64"),
       });
     };
-    // What `provisioning.foreign_tenant` names: operator-typed configuration rather than a secret,
+    // What `provisioning.foreign_taxpayer` names: operator-typed configuration rather than a secret,
     // which is why it may be echoed.
     const ownerDatabaseName = config.venueDir;
     const openBoundedBucket = (bucket: BucketConfig) =>
@@ -3055,7 +3055,7 @@ async function bootServer(
         secureCookies,
         pairingMode,
         devMode: config.devMode,
-        tenantDomain: config.tenantDomain,
+        venueDomain: config.venueDomain,
         disk: diskFull,
         notices: {
           sources: deviceNoticeSources(

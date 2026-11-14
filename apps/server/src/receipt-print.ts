@@ -6,7 +6,7 @@ import {
   invoiceDeliveries,
   printers,
   printJobs,
-  readTenant,
+  readTaxpayer,
   sales,
   tenderRefunds,
 } from "@waitron/db";
@@ -174,7 +174,7 @@ async function buildReceiptBytes(
   printer: EscSetting,
   language?: string,
 ): Promise<Uint8Array | undefined> {
-  const taxpayer = await readTenant(tx);
+  const taxpayer = await readTaxpayer(tx);
   /* v8 ignore start */
   if (taxpayer === null) {
     return undefined;

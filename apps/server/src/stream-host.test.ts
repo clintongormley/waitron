@@ -249,7 +249,7 @@ describe("the live copy's wiring", () => {
       if (kind === "malformed") await bucket.put(pointerKey(), new TextEncoder().encode("{}"));
       if (kind === "unavailable") bucket.down = true;
       if (kind === "unconfigured")
-        await withTransaction(db, (tx) => tx.run(sql`delete from tenant_credentials`));
+        await withTransaction(db, (tx) => tx.run(sql`delete from venue_credentials`));
       expect(await readNewerBucketMain(deps(bucket))).toBeNull();
     });
     it("retries a failed stop instead of leaving the old main trading", async () => {

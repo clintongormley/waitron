@@ -32,7 +32,7 @@ export async function clearProvisionFixture(db: Database): Promise<void> {
       "kitchen_courses",
       "floor_zones",
       "departments",
-      "tenant_credentials",
+      "venue_credentials",
       "management_sessions",
       "device_profiles",
       "persons",
@@ -50,7 +50,7 @@ export async function clearProvisionFixture(db: Database): Promise<void> {
       "product_units",
       "units",
       "settings",
-      "tenants",
+      "taxpayer",
       "deployment",
     ]) {
       await tx.execute(sql`delete from ${sql.identifier(table)}`);

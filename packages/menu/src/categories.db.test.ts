@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, products, withTransaction, type Transaction } from "@waitron/db";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   createCategory,
@@ -22,7 +22,7 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const app = <T>(action: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, action);
 
 async function fixture() {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await seedLegacySellingUnits(suite.db);
   const a = await app((tx) => createCategory(tx, { name: "A" }));
   const b = await app((tx) => createCategory(tx, { name: "B" }));
@@ -79,7 +79,7 @@ it.each(["attach", "delete"] as const)(
 );
 
 it("stores a category's name as one trimmed string", async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   const created = await app((tx) => createCategory(tx, { name: "  Drinks  " }));
   expect(created.name).toBe("Drinks");
   expect((await app((tx) => readCategory(tx, created.id))).name).toBe("Drinks");
@@ -96,7 +96,7 @@ it("a name-only update keeps a nested category's parent", async () => {
   });
 });
 it("refuses a blank category name", async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await expect(app((tx) => createCategory(tx, { name: "   " }))).rejects.toMatchObject({
     code: "category.invalid",
     params: { field: "name" },
@@ -191,7 +191,7 @@ it("deleting a category moves its products to its parent, and clears a variant's
   expect(await mainCategoryOf(product2)).toBe(b.id);
 });
 it("deleting a category reparents its children to its parent", async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await app(async (tx) => {
     const food = await createCategory(tx, { name: "Food" });
     const breakfast = await createCategory(tx, {
@@ -207,7 +207,7 @@ it("deleting a category reparents its children to its parent", async () => {
   });
 });
 it("deleting a top-level category makes its children top-level", async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await app(async (tx) => {
     const breakfast = await createCategory(tx, { name: "Breakfast" });
     const eggs = await createCategory(tx, {

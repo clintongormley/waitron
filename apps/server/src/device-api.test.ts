@@ -74,7 +74,7 @@ import { BASIC_ACTIONS, deviceRequestCfg } from "./testing/session-device.js";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { leaveSessionAlone } from "./testing/tab-person.js";
 
-// Every test provisions its OWN tenant, and `tenants` is a singleton (id = 1), so the per-test reset
+// Every test provisions its OWN taxpayer, and `taxpayer` is a singleton (id = 1), so the per-test reset
 // is what makes that legal twice in one file: `useVenueDb` empties every data table after each `it`.
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -520,7 +520,7 @@ describe("POST /api/device/join", () => {
     expect(rows[0]!.n).toBe(0);
   });
 
-  it("scopes the cookie Domain to the tenant host, host-only otherwise", async () => {
+  it("scopes the cookie Domain to the taxpayer host, host-only otherwise", async () => {
     const venue = await setupVenue(suite.db);
     const app = new Hono();
     const mode = createPairingMode();
@@ -532,7 +532,7 @@ describe("POST /api/device/join", () => {
         cfg: venue.cfg,
         secureCookies: false,
         pairingMode: mode,
-        tenantDomain: "deli.waitron.app",
+        venueDomain: "deli.waitron.app",
       },
       noopLog,
     );
@@ -1807,7 +1807,7 @@ describe("Device management routes (hardware.manage)", () => {
     );
   });
 
-  it("GET /management-api/devices lists this tenant's devices, kind derived from the profile", async () => {
+  it("GET /management-api/devices lists this taxpayer's devices, kind derived from the profile", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { deviceId, profileId } = await enrolKds(app, venue, venue.defaultStationId);

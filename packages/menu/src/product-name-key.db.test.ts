@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { products, withTransaction, type Transaction } from "@waitron/db";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
 import { BATCH_SIZE } from "./batches.js";
 import { createCatalogue, createProduct, updateProduct } from "./operations.js";
@@ -15,7 +15,7 @@ const app = <T>(action: (tx: Transaction) => Promise<T>) => withTransaction(suit
 
 let menu: string;
 beforeEach(async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await seedLegacySellingUnits(suite.db);
   menu = (await app((tx) => createCatalogue(tx, { name: "Lunch" }))).id;
 });

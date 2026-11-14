@@ -143,7 +143,7 @@ describe("runPass", () => {
     expect(report.duties[0]?.errorCode).toBe("unknown");
   });
 
-  it("logs drain's skipped tenants at warn, because an unsubmittable tenant is never silent", async () => {
+  it("logs drain's skipped taxpayer at warn, because an unsubmittable taxpayer is never silent", async () => {
     const d = deps({
       drain: () =>
         Promise.resolve(

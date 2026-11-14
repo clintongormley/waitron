@@ -1,7 +1,7 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
-import { tenants, withTransaction, type Database } from "@waitron/db";
+import { taxpayer, withTransaction, type Database } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin } from "@waitron/identity";
@@ -158,7 +158,7 @@ async function targetVenue(taxId = "123456789") {
 }
 
 async function taxpayerRows(db: Database) {
-  return db.select().from(tenants);
+  return db.select().from(taxpayer);
 }
 
 it.each(["123456789", "987654321"])(
@@ -242,10 +242,10 @@ it("an import with no taxpayer row finishes and creates none", async () => {
   });
   await withTransaction(suite.db, async (tx) => {
     await seedVenue(tx);
-    await tx.delete(tenants);
+    await tx.delete(taxpayer);
   });
   await withTransaction(suite.db, (tx) =>
     importConfigurationTables(tx, configurationBundle(), [], {}),
   );
-  expect((await suite.db.execute(sql`select count(*) as n from tenants`)).rows).toEqual([{ n: 0 }]);
+  expect((await suite.db.execute(sql`select count(*) as n from taxpayer`)).rows).toEqual([{ n: 0 }]);
 });

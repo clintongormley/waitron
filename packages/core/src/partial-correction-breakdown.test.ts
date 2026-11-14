@@ -20,7 +20,7 @@ import { recordCorrection } from "./record-correction.js";
 import { recordReplacement } from "./record-replacement.js";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleLine } from "./record-sale.js";
-import { seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
+import { seedRectificativeSeries, seedTaxpayer } from "../test/fixtures.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
@@ -67,7 +67,7 @@ let staffSessionId: string;
 let invoice: Invoice;
 
 beforeEach(async () => {
-  ({ deviceId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ deviceId, nodeId, seriesId } = await seedTaxpayer(suite.db));
   rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
   const till = (await seedDevice(suite.db, {})).deviceId;
   const openSession = async (role: "staff" | "supervisor") => {

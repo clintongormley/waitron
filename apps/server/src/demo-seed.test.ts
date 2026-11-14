@@ -153,7 +153,7 @@ describe("seedInstalledDemo", () => {
   it("refuses, seeding nothing, a venue whose country has no demo identity", async () => {
     seedDemoRestaurant.mockReset();
 
-    await suite.db.execute(sql`update tenants set country='GB'`);
+    await suite.db.execute(sql`update taxpayer set country='GB'`);
     await expect(
       seedInstalledDemo(suite.db, RESULT, venueWithLocales(["en-GB"], "GB")),
     ).rejects.toThrow(/GB/);
@@ -164,7 +164,7 @@ describe("seedInstalledDemo", () => {
     seedDemoRestaurant.mockReset();
     seedDemoRestaurant.mockResolvedValue(undefined);
 
-    await suite.db.execute(sql`update tenants set country='XX'`);
+    await suite.db.execute(sql`update taxpayer set country='XX'`);
     await seedInstalledDemo(suite.db, RESULT, venueWithLocales(["es-ES"], "XX"));
 
     expect(seedDemoRestaurant).toHaveBeenCalledTimes(1);

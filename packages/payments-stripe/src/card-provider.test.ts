@@ -8,7 +8,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import type { IncidentSink } from "@waitron/payments";
 import { AppError } from "@waitron/shared";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import {
   STRIPE_CARD_PROVIDER,
   createStripeCardProvider,
@@ -97,7 +97,7 @@ function fakeMakeStripe(
 }
 
 async function seedStripe(value: Record<string, string>): Promise<void> {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await withTransaction(suite.db, (tx) =>
     putCredential(tx, ring, { purpose: "payments.stripe", value }),
   );

@@ -14,7 +14,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 import { addProductToMenu, createCatalogue, createProduct, updateProduct } from "./operations.js";
 import {
@@ -52,7 +52,7 @@ const breads: { sourdough: string; focaccia: string; rye: string } = {
 const unitPrices = { sourdough: "2.50", focaccia: "4.00", rye: "3.25" };
 
 beforeEach(async () => {
-  await seedTenant(fx.db);
+  await seedTaxpayer(fx.db);
   await run(async (tx) => {
     const catalogue = await createCatalogue(tx, { name: "Deli" });
     for (const [key, unitPrice] of Object.entries(unitPrices)) {

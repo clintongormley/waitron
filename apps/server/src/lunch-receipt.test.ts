@@ -6,7 +6,7 @@ import {
   products,
   sales,
   saleLines,
-  tenants,
+  taxpayer,
   workingOrders,
   withTransaction,
 } from "@waitron/db";
@@ -102,7 +102,7 @@ describe("recorded lunch receipts", () => {
         return lunch.id;
       });
       if (invoiceType === "F1") {
-        await suite.db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
+        await suite.db.update(taxpayer).set({ taxpayerDomicile: "Saved domicile" });
         const [order] = await suite.db
           .select()
           .from(workingOrders)

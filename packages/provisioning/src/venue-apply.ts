@@ -23,7 +23,7 @@ import {
   VENUE_SETTINGS,
   nextStationColour,
   nodes,
-  tenants,
+  taxpayer,
   withTransaction,
   type Database,
   type Transaction,
@@ -85,17 +85,17 @@ export interface VenueResult {
 }
 
 async function assertActionOrder(actions: readonly VenueAction[], db: Database): Promise<void> {
-  let tenant = false;
+  let taxpayer = false;
   let venue = false;
   let node = false;
   let administrator = false;
   for (const action of actions) {
     switch (action.kind) {
-      case "ensure-tenant":
-        tenant = true;
+      case "ensure-taxpayer":
+        taxpayer = true;
         break;
       case "create-venue":
-        if (!tenant) throw new Error("applyVenue: create-venue before ensure-tenant");
+        if (!taxpayer) throw new Error("applyVenue: create-venue before ensure-taxpayer");
         venue = true;
         break;
       case "create-node":
@@ -130,9 +130,9 @@ export async function applyVenue(
   const actions = structuredClone(suppliedActions);
   const modules = [...deps.modules];
   registerModulePermissions(modules.flatMap((module) => module.permissions ?? []));
-  const ensure = actions.find((a) => a.kind === "ensure-tenant");
-  if (ensure === undefined || ensure.kind !== "ensure-tenant") {
-    throw new Error("applyVenue: plan is missing ensure-tenant");
+  const ensure = actions.find((a) => a.kind === "ensure-taxpayer");
+  if (ensure === undefined || ensure.kind !== "ensure-taxpayer") {
+    throw new Error("applyVenue: plan is missing ensure-taxpayer");
   }
   for (const action of actions) {
     if (action.kind === "create-venue") {
@@ -197,13 +197,13 @@ export async function applyVenue(
 
     for (const action of actions) {
       switch (action.kind) {
-        case "ensure-tenant": {
+        case "ensure-taxpayer": {
           // The database holds ONE taxpayer, the row keyed `id = 1`. The untargeted
           // `on conflict do nothing` absorbs any re-run, same identity or not, so the read-back is
           // what tells the two apart. It compares with the same trim-and-upper-case `planVenue`
           // applies, so `es`/`ES` are the same taxpayer.
           await tx
-            .insert(tenants)
+            .insert(taxpayer)
             .values({
               id: 1,
               country: action.country,
@@ -213,15 +213,15 @@ export async function applyVenue(
             })
             .onConflictDoNothing();
           const stored = await tx
-            .select({ country: tenants.country, taxId: tenants.taxId })
-            .from(tenants)
-            .where(eq(tenants.id, 1));
+            .select({ country: taxpayer.country, taxId: taxpayer.taxId })
+            .from(taxpayer)
+            .where(eq(taxpayer.id, 1));
           const row = stored[0]!;
           const sameIdentity =
             row.country.trim().toUpperCase() === action.country.trim().toUpperCase() &&
             row.taxId.trim().toUpperCase() === action.taxId.trim().toUpperCase();
           if (!sameIdentity) {
-            throw new AppError("provisioning.tenant_identity_mismatch", {});
+            throw new AppError("provisioning.taxpayer_identity_mismatch", {});
           }
           break;
         }

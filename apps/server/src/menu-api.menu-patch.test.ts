@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
 import type { LiveMenu, MenuPatchResult, MenuPreview } from "@waitron/menu";
 import { mediaImages } from "@waitron/media";
@@ -24,7 +24,7 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    await seedTenant(db);
+    await seedTaxpayer(db);
     await seedLegacySellingUnits(db);
     await db.insert(mediaImages).values({ filename: PHOTO, names: { es: "Sopa" } });
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {

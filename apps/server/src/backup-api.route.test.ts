@@ -32,7 +32,7 @@ import {
   deleteCredential,
   loadKeyRing,
   putCredential,
-  tenantCredentials,
+  venueCredentials,
   tryGetCredential,
   type KeyRing,
 } from "@waitron/credentials";
@@ -261,7 +261,7 @@ function buildApp(
   return app;
 }
 
-async function setupTenant(): Promise<void> {
+async function setupVenue(): Promise<void> {
   await applyVenue(
     planVenue(
       {
@@ -365,7 +365,7 @@ describe("backup admin routes", () => {
   });
 
   beforeAll(async () => {
-    await setupTenant();
+    await setupVenue();
   }, 180_000);
 
   it("refuses an unproved staff session by permission before asking for proof", async () => {
@@ -2118,9 +2118,9 @@ describe("backup admin routes", () => {
       const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
       await withTransaction(suite.db, (tx) =>
         tx
-          .update(tenantCredentials)
+          .update(venueCredentials)
           .set({ ciphertext, iv, authTag: cipher.getAuthTag() })
-          .where(eq(tenantCredentials.purpose, ARCHIVE_PURPOSE)),
+          .where(eq(venueCredentials.purpose, ARCHIVE_PURPOSE)),
       );
     }
 
@@ -2218,9 +2218,9 @@ describe("backup admin routes", () => {
       await storeStream();
       await withTransaction(suite.db, (tx) =>
         tx
-          .update(tenantCredentials)
+          .update(venueCredentials)
           .set({ authTag: randomBytes(16) })
-          .where(eq(tenantCredentials.purpose, "backup.stream")),
+          .where(eq(venueCredentials.purpose, "backup.stream")),
       );
       await expect(readStreamSettings(suite.db, RING)).rejects.toMatchObject({
         code: "credentials.decrypt_failed",
@@ -2558,9 +2558,9 @@ describe("backup admin routes", () => {
           const ciphertext = Buffer.concat([cipher.update("not json", "utf8"), cipher.final()]);
           await withTransaction(suite.db, (tx) =>
             tx
-              .update(tenantCredentials)
+              .update(venueCredentials)
               .set({ ciphertext, iv, authTag: cipher.getAuthTag() })
-              .where(eq(tenantCredentials.purpose, "backup.stream")),
+              .where(eq(venueCredentials.purpose, "backup.stream")),
           );
         },
       ],
@@ -2698,7 +2698,7 @@ describe("backup admin routes", () => {
       const { sc, sup, post, status } = await primaryApp({ sealedState });
       stateDir = sc.stateDir;
       suite.db.run(
-        sql.raw(`create trigger refuse_archive_settings before insert on tenant_credentials
+        sql.raw(`create trigger refuse_archive_settings before insert on venue_credentials
           when new.purpose = '${ARCHIVE_PURPOSE}' begin select raise(abort, 'refused'); end`),
       );
       try {
@@ -2770,7 +2770,7 @@ describe("backup admin routes", () => {
       expect(loaded).toEqual([KEY_1, KEY_2]);
       suite.db.run(
         sql.raw(
-          `create trigger refuse_rotation before insert on tenant_credentials when new.purpose = '${ARCHIVE_PURPOSE}' begin select raise(abort, 'refused'); end`,
+          `create trigger refuse_rotation before insert on venue_credentials when new.purpose = '${ARCHIVE_PURPOSE}' begin select raise(abort, 'refused'); end`,
         ),
       );
       try {
@@ -2804,7 +2804,7 @@ describe("backup admin routes", () => {
       function refuseArchiveWrites(): () => void {
         for (const on of triggers) {
           suite.db.run(
-            sql.raw(`create trigger refuse_archive_${on} before ${on} on tenant_credentials
+            sql.raw(`create trigger refuse_archive_${on} before ${on} on venue_credentials
               when new.purpose = '${ARCHIVE_PURPOSE}' begin select raise(abort, 'refused'); end`),
           );
         }

@@ -9,7 +9,7 @@ import { dirname, join } from "node:path";
 import { sql } from "drizzle-orm";
 import type { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { invoiceSeries, nodes, stampDeployment, tenants, withNodeTransaction } from "@waitron/db";
+import { invoiceSeries, nodes, stampDeployment, taxpayer, withNodeTransaction } from "@waitron/db";
 import { loadKeyRing, sealNodeSigningKeyTx } from "@waitron/credentials";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -102,7 +102,7 @@ const LATCH: PendingAdoption = {
 
 async function seedVenue(): Promise<void> {
   await suite.db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "90222222J", legalName: "Surface SL" });
   await seedVenueSettings(suite.db, {
     name: "Venue",

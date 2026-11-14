@@ -534,7 +534,7 @@ describe("computeTopSellers", () => {
     ]);
   });
 
-  it("scopes to nodeId: a line under another node in the same tenant is excluded", async () => {
+  it("scopes to nodeId: a line under another node in the same taxpayer is excluded", async () => {
     await seedSale(suite.db, venue, {
       invoiceNumber: 1,
       issuedAt: noonUtc,

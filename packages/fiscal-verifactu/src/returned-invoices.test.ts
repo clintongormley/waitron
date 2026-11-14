@@ -24,7 +24,7 @@ async function fixture() {
   const node = await seedNode(source.db, "Returning");
   await withTransaction(receiver.db, async (tx) => {
     for (const table of [
-      "tenants",
+      "taxpayer",
       "settings",
       "device_profiles",
       "nodes",

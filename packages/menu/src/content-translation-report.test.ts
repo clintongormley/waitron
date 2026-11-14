@@ -14,7 +14,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import type { ContentLanguages } from "@waitron/shared";
 import {
   listContentTranslationGaps,
@@ -95,7 +95,7 @@ async function lunchIncludingDrinks(tx: Transaction, lunchId: string) {
 
 describe("the missing-translations report", () => {
   it("lists a product with a Spanish customer name under Catalan and English, by its staff name, and not under Spanish", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const menu = await venue(tx);
       const product = await bread(tx, menu.id);
@@ -108,7 +108,7 @@ describe("the missing-translations report", () => {
   });
 
   it("drops the product from Catalan alone once a Catalan name is saved", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const menu = await venue(tx);
       const product = await bread(tx, menu.id);
@@ -123,7 +123,7 @@ describe("the missing-translations report", () => {
   });
 
   it("lists something with no customer-facing name under every enabled language", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const menu = await venue(tx);
       const product = await bread(tx, menu.id, null);
@@ -140,7 +140,7 @@ describe("the missing-translations report", () => {
   });
 
   it("lists a customer name with no text in the default language under the default", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const menu = await venue(tx);
       // No save path writes this, so it is written directly, as a receipt would then print nothing.
@@ -154,7 +154,7 @@ describe("the missing-translations report", () => {
   });
 
   it("lists each kind with what holds it, including an unnamed extras list, and leaves out a removed variant", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const menu = await venue(tx);
       const parent = await bread(tx, menu.id, null);
@@ -276,7 +276,7 @@ describe("the missing-translations report", () => {
   });
 
   it("lists a folder's fixed names missing a language as an included menu, under the including menu", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const lunch = await venue(tx);
       const { member, lunchRoot } = await lunchIncludingDrinks(tx, lunch.id);
@@ -335,7 +335,7 @@ describe("the missing-translations report", () => {
   });
 
   it("lists an include placed under a sub-section under the including menu, not the included one", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const lunch = await venue(tx);
       const { lunchRoot, drinksRoot } = await lunchIncludingDrinks(tx, lunch.id);
@@ -408,7 +408,7 @@ describe("the missing-translations report", () => {
   });
 
   it("orders two things with the same staff name by id", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const menu = await venue(tx);
       // Two Active products share a staff name only as data written before the unique-name rule,
@@ -423,7 +423,7 @@ describe("the missing-translations report", () => {
   });
 
   it("answers every enabled language in the configuration's order, a complete one with no gaps", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await venue(tx);
       expect(await listTranslationGapReport(tx, SPANISH_DEFAULT)).toEqual([
@@ -435,7 +435,7 @@ describe("the missing-translations report", () => {
   });
 
   it("keeps the shared gap read aligned with the report for an absent name", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const menu = await venue(tx);
       const product = await bread(tx, menu.id, null);
@@ -448,7 +448,7 @@ describe("the missing-translations report", () => {
 
   describe("leaves out what nobody can order", () => {
     it("a deleted product in both the report and the default-change check", async () => {
-      await seedTenant(suite.db);
+      await seedTaxpayer(suite.db);
       await withTransaction(suite.db, async (tx) => {
         const menu = await venue(tx);
         const product = await bread(tx, menu.id);
@@ -462,7 +462,7 @@ describe("the missing-translations report", () => {
     });
 
     it("the variants of a deleted product", async () => {
-      await seedTenant(suite.db);
+      await seedTaxpayer(suite.db);
       await withTransaction(suite.db, async (tx) => {
         const menu = await venue(tx);
         const product = await bread(tx, menu.id);
@@ -491,7 +491,7 @@ describe("the missing-translations report", () => {
     });
 
     it("an active variant retained under an archived product", async () => {
-      await seedTenant(suite.db);
+      await seedTaxpayer(suite.db);
       await withTransaction(suite.db, async (tx) => {
         const menu = await venue(tx);
         const product = await bread(tx, menu.id, null);
@@ -564,7 +564,7 @@ describe("the missing-translations report", () => {
     });
 
     it("the folder an include of a switched-off menu fixes", async () => {
-      await seedTenant(suite.db);
+      await seedTaxpayer(suite.db);
       await withTransaction(suite.db, async (tx) => {
         const lunch = await venue(tx);
         const { member, lunchRoot } = await lunchIncludingDrinks(tx, lunch.id);
@@ -586,7 +586,7 @@ describe("the missing-translations report", () => {
     });
 
     it("the sections and customer names of a switched-off menu", async () => {
-      await seedTenant(suite.db);
+      await seedTaxpayer(suite.db);
       await withTransaction(suite.db, async (tx) => {
         const menu = await venue(tx);
         await tx.insert(sections).values({

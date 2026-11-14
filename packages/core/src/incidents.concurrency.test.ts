@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, deviceOrigin } from "@waitron/shared";
-import { seedTenant } from "../test/fixtures.js";
+import { seedTaxpayer } from "../test/fixtures.js";
 import {
   findIncident,
   listOpenIncidents,
@@ -22,7 +22,7 @@ const BASE = new Date("2026-03-01T12:05:00.000Z");
 
 describe("markIncidentHandled — two managers at once", () => {
   it("keeps the first committed handler and time, and both calls succeed", async () => {
-    const seed = await seedTenant(suite.db);
+    const seed = await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await recordIncident(tx, {
         origin: deviceOrigin(seed.deviceId),

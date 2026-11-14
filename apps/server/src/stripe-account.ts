@@ -70,7 +70,7 @@ export function stripeSecretKeyFrom(
 
 /**
  * The shared `readCredential` → `stripeSecretKeyFrom` sequence every resolver below runs: read this
- * tenant's `payments.stripe` credential from the vault and validate/decrypt it into a usable secret
+ * taxpayer's `payments.stripe` credential from the vault and validate/decrypt it into a usable secret
  * key. The environment-prefix guard lives inside `stripeSecretKeyFrom`.
  */
 async function resolveStripeSecretKey(deps: StripeAccountDeps): Promise<string> {
@@ -80,7 +80,7 @@ async function resolveStripeSecretKey(deps: StripeAccountDeps): Promise<string> 
 
 /**
  * `StripeReconcilerOptions.resolveAccount`, wired to the vault. One reconciler is built for the
- * whole settlement identity and swept across tenants, so the resolved ACCOUNT is what scopes each
+ * whole settlement identity and swept across taxpayer, so the resolved ACCOUNT is what scopes each
  * sweep — the accounts are standalone, one per merchant, with no Connect layer to carry the scope.
  *
  * `report` and `refund` are two views of one SDK client: the audit lists balance transactions, and

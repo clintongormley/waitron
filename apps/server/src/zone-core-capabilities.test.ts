@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { invoiceSeries, sales, tenants, withTransaction, type Transaction } from "@waitron/db";
+import { invoiceSeries, sales, taxpayer, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -28,7 +28,7 @@ const suite = useVenueDb({
 });
 beforeEach(async () => {
   v = await provisionBillVenue(suite.db);
-  await v.db.update(tenants).set({ taxpayerDomicile: "1 Registered Street" });
+  await v.db.update(taxpayer).set({ taxpayerDomicile: "1 Registered Street" });
   sessionId = (
     await withTransaction(v.db, (tx) =>
       loginWithPin(tx, { deviceId: v.deviceId, personId: v.adminId, pin: "1234" }),

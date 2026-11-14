@@ -16,7 +16,7 @@ import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { AppError } from "@waitron/shared";
 import { runCli, type CliDeps } from "./cli.js";
 import { applyVenue } from "./venue-apply.js";
-import { readTenantIdentities } from "./tenant-guard.js";
+import { readTaxpayerIdentities } from "./taxpayer-guard.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const NODE = "d1000000-0000-4000-8000-000000000001";
@@ -114,7 +114,7 @@ it("carries host-selected identities and opaque input into the real initial CLI 
     readEnvironment: readDeploymentEnvironment,
     readDeploymentTable: deploymentTableExists,
     stampEnvironment: stampDeployment,
-    readTenants: readTenantIdentities,
+    readTaxpayers: readTaxpayerIdentities,
     initialVenue: {
       initialNodeId: NODE,
       initialAdministratorId: ADMIN,
@@ -170,7 +170,7 @@ it("keeps the host's target database and selected modules when it supplies initi
     readEnvironment: readDeploymentEnvironment,
     readDeploymentTable: deploymentTableExists,
     stampEnvironment: stampDeployment,
-    readTenants: readTenantIdentities,
+    readTaxpayers: readTaxpayerIdentities,
     initialVenue: Object.assign(
       { initialNodeId: NODE, initialAdministratorId: ADMIN, moduleInputs: new Map() },
       { db: null, modules: [] },

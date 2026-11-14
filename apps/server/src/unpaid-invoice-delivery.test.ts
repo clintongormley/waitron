@@ -12,7 +12,7 @@ import {
   saleLines,
   sales,
   saleSettlements,
-  tenants,
+  taxpayer,
   workingOrderLines,
   workingOrders,
   withTransaction,
@@ -35,7 +35,7 @@ const suite = useVenueDb({
 beforeEach(async () => {
   venue = await provisionBillVenue(suite.db);
   await withTransaction(suite.db, async (tx) => {
-    await tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
+    await tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
     const receipt = { operationDescription: "Restaurante", email: "dining@example.test" };
     const rows = await tx.select({ id: departments.id }).from(departments);
     for (const { id } of rows) {

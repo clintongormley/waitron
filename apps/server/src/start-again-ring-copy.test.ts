@@ -54,7 +54,7 @@ const SUMUP = {
 };
 const BUNDLE: Omit<MirrorBundle, "reservedIdentity"> = {
   designated: { nodeId: PRIMARY_NODE_ID },
-  tenant: { country: "ES", taxId: "80000001K" },
+  taxpayer: { country: "ES", taxId: "80000001K" },
   primaryNode: { name: "Caja 1", filingModule: "fiscal-verifactu", taxModule: null },
   environment: "preproduction",
   boxHostname: "waitron.local",

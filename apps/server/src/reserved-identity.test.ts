@@ -41,8 +41,8 @@ describe("establishReservedStandbyIdentity", () => {
 
   let NIF: string;
 
-  // A fresh tenant per test: the idempotency case starts from an unsealed vault, so it cannot share a
-  // tenant with the establish case (which seals one).
+  // A fresh taxpayer per test: the idempotency case starts from an unsealed vault, so it cannot share a
+  // taxpayer with the establish case (which seals one).
   beforeEach(async () => {
     await seedVenue(suite.db, {
       name: "Main room",
@@ -50,7 +50,7 @@ describe("establishReservedStandbyIdentity", () => {
       operationDescription: "Venta en establecimiento",
     });
     const t = await suite.db.execute<{ tax_id: string }>(
-      sql`select tax_id from tenants where id = 1`,
+      sql`select tax_id from taxpayer where id = 1`,
     );
     NIF = t.rows[0]!.tax_id;
   });

@@ -5,7 +5,7 @@ import sharp from "sharp";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, tenants, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 
@@ -46,7 +46,7 @@ afterEach(() => {
 });
 async function fixture(role: "manager" | "staff" = "manager", withFiscal = true) {
   await suite.db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "B12345678", legalName: "Venue SL" });
   await seedVenue(suite.db, {
     name: randomUUID(),

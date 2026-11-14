@@ -1,5 +1,5 @@
 import { dirname } from "node:path";
-import { openVenueDatabase, readTenant, readVenue, readSettings } from "@waitron/db";
+import { openVenueDatabase, readTaxpayer, readVenue, readSettings } from "@waitron/db";
 import { readRecoveryKeyName } from "@waitron/node-db";
 import { AppError, isAppError } from "@waitron/shared";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
@@ -57,8 +57,8 @@ export async function readRecoveryCopyPreview(
   );
   const store = await openVenueDatabase(directory);
   try {
-    const tenant = await readTenant(store.venue);
-    if (tenant === null) throw new AppError("restore.identity_unknown", { nodeId: node.nodeId });
+    const taxpayer = await readTaxpayer(store.venue);
+    if (taxpayer === null) throw new AppError("restore.identity_unknown", { nodeId: node.nodeId });
     let venue;
     try {
       venue = await readVenue(store.venue);
@@ -73,7 +73,7 @@ export async function readRecoveryCopyPreview(
     }
     const fiscalSelection = recoveryFiscalSelection(
       {
-        country: tenant.country,
+        country: taxpayer.country,
         fiscalTerritory: venue.fiscalTerritory,
         timeZone: venue.timeZone,
       },
@@ -95,7 +95,7 @@ export async function readRecoveryCopyPreview(
       environment: copy.manifest.environment,
       nodeId: node.nodeId,
       nodeRecoveryKeyName: await readRecoveryKeyName(store.node, node.nodeId),
-      taxpayer: { legalName: tenant.legalName, taxId: tenant.taxId },
+      taxpayer: { legalName: taxpayer.legalName, taxId: taxpayer.taxId },
       venueName: venue.name,
     };
   } finally {

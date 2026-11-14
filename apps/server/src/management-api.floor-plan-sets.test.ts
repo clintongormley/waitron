@@ -30,7 +30,7 @@ const suite = useVenueDb({
 
 const noopLog: Logger = () => {};
 
-async function provisionTenant(): Promise<TradingContext> {
+async function provisionVenue(): Promise<TradingContext> {
   const venue = await applyVenue(
     planVenue(
       {
@@ -116,7 +116,7 @@ async function login(email: string): Promise<string> {
 }
 
 beforeAll(async () => {
-  cfg = await provisionTenant();
+  cfg = await provisionVenue();
   app = new Hono();
   mountManagementApi(
     app,

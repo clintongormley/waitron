@@ -7,7 +7,7 @@ import { copyFile, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { nodes, stampDeployment, tenants } from "@waitron/db";
+import { nodes, stampDeployment, taxpayer } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { generateNodeKeyPair } from "@waitron/membership";
@@ -41,7 +41,7 @@ beforeEach(async () => {
   scratch = await mkdtemp(join(tmpdir(), "hour-recovery-"));
   await stampDeployment(suite.db, "preproduction");
   await suite.db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Selected business" });
   await seedVenueSettings(suite.db, {
     name: "Selected venue",
@@ -197,7 +197,7 @@ it.each([
 ] as const)(
   "selects the recovery module only for a supported recorded jurisdiction: %s",
   async (_name, country, fiscalTerritory, timeZone) => {
-    await suite.db.update(tenants).set({ country });
+    await suite.db.update(taxpayer).set({ country });
     await (async () => {
       await suite.db.run(
         sql`update settings set doc = json_set(doc, '$.fiscalTerritory', ${fiscalTerritory}) where module = 'venue'`,
@@ -220,7 +220,7 @@ it.each([
 );
 
 it("uses the recorded non-filing module for a supported non-fiscal territory", async () => {
-  await suite.db.update(tenants).set({ country: "GB" });
+  await suite.db.update(taxpayer).set({ country: "GB" });
   await (async () => {
     await suite.db.run(
       sql`update settings set doc = json_set(doc, '$.fiscalTerritory', ${"GB-vat"}) where module = 'venue'`,

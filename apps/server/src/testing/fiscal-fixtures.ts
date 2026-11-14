@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { invoiceSeries, sales, tenants, type Database, type Transaction } from "@waitron/db";
+import { invoiceSeries, sales, taxpayer, type Database, type Transaction } from "@waitron/db";
 import { cadenas, envios, registroSif, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
@@ -55,7 +55,7 @@ export interface SeedParentsOptions {
   numeroInstalacion?: number;
   /** Skip the `sales` insert, leaving the rest of the closure; {@link insertFiscalSale} plants it later. */
   skipSale?: boolean;
-  /** The supplied ids already name a tenant, venue, node and series in this database. */
+  /** The supplied ids already name a taxpayer, venue, node and series in this database. */
   reuseExistingParents?: boolean;
 }
 
@@ -92,9 +92,9 @@ export async function seedFiscalParents(
 
   if (opts.reuseExistingParents !== true) {
     await db
-      .insert(tenants)
+      .insert(taxpayer)
       .values({ id: 1, country: "ES", taxId, legalName: "Waitron SL" })
-      .onConflictDoNothing({ target: tenants.id });
+      .onConflictDoNothing({ target: taxpayer.id });
     await seedVenue(db, {
       name: "Local principal",
       invoiceLocales: ["es"],

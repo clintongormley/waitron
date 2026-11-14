@@ -21,7 +21,7 @@ import { useVenueDb } from "../../testing/venue-db.js";
 import {
   seedDevice,
   seedDeviceProfiles,
-  seedTenant,
+  seedTaxpayer,
   seedVenue,
   seedZone,
 } from "../../testing/seed.js";
@@ -186,7 +186,7 @@ describe("the late-send storage", () => {
   });
 });
 
-describe("the venue-service tables carry no tenant column", () => {
+describe("the venue-service tables carry no taxpayer column", () => {
   it("has no tenant_id column on any table in the set", async () => {
     const carrying: string[] = [];
     for (const table of TABLES) {
@@ -406,11 +406,11 @@ describe("the venue-service tables carry no tenant column", () => {
     });
   });
 
-  it("rebuilds every index without the tenant", async () => {
+  it("rebuilds every index without the taxpayer", async () => {
     const defs: Record<string, { columns: string[]; sql: string; unique: boolean }> = {};
     for (const table of TABLES) Object.assign(defs, await indexesOf(table));
-    expect(Object.keys(defs).filter((name) => name.includes("tenant"))).toEqual([]);
-    expect(Object.values(defs).filter((def) => def.sql.includes("tenant"))).toEqual([]);
+    expect(Object.keys(defs).filter((name) => name.includes("taxpayer"))).toEqual([]);
+    expect(Object.values(defs).filter((def) => def.sql.includes("taxpayer"))).toEqual([]);
     const columns = (name: string) => defs[name]?.columns;
     // No PRAGMA reports a partial index's `WHERE`, so it is read off the stored statement.
     const predicate = (name: string) => / WHERE (.*)$/.exec(defs[name]?.sql ?? "")?.[1];
@@ -444,7 +444,7 @@ async function insertMenu(name: string): Promise<{ id: string }> {
 
 describe("the venue-service foreign keys refuse a missing target", () => {
   async function venue() {
-    await seedTenant(db);
+    await seedTaxpayer(db);
     const fixtureId = randomUUID();
     await seedVenueSettings(db, {
       name: "Venue",

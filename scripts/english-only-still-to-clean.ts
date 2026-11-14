@@ -1033,7 +1033,7 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "packages/provisioning/src/fiscal-readiness-runner.test.ts",
   "packages/provisioning/src/fiscal-readiness.test.ts",
   "packages/provisioning/src/module-preparation-state.test.ts",
-  "packages/provisioning/src/tenant-guard.db.test.ts",
+  "packages/provisioning/src/taxpayer-guard.db.test.ts",
   "packages/provisioning/src/throwaway-allocation.test.ts",
   "packages/provisioning/src/venue-apply.e2e.test.ts",
   "packages/provisioning/src/venue-apply.test.ts",

@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { withTransaction, type Transaction } from "@waitron/db";
-import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
 import { createCatalogue, createProduct, listProducts } from "./operations.js";
 import {
@@ -22,7 +22,7 @@ const byId = <T extends { id: string }>(rows: readonly T[]): T[] =>
   [...rows].sort((a, b) => a.id.localeCompare(b.id));
 
 async function fixture() {
-  await seedTenant(fx.db);
+  await seedTaxpayer(fx.db);
   await seedLegacySellingUnits(fx.db);
   const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
   await app((tx) => writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] }));

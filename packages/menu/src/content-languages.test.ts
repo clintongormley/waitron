@@ -17,7 +17,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import {
   readContentLanguages,
   writeContentLanguages,
@@ -58,7 +58,7 @@ describe("site content languages", () => {
   });
 
   it("reports a variant's missing customer name without copying the product's staff name", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
       const catalogue = await createCatalogue(tx, {
@@ -118,7 +118,7 @@ describe("site content languages", () => {
     });
   });
   it("reports only the Active variant while allowing an incomplete new default", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const { productId, kept } = await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
       const catalogue = await createCatalogue(tx, {
@@ -177,7 +177,7 @@ describe("site content languages", () => {
     });
   });
   it("counts partial and absent customer names as gaps without copying fallback", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const catalogue = await createCatalogue(tx, { name: "Bar" });
       const unit = await createUnit(
@@ -494,7 +494,7 @@ describe("site content languages", () => {
   );
 
   it("recognizes regional translation keys consistently when changing the default", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
       const [menu] = await tx
@@ -551,7 +551,7 @@ describe("site content languages", () => {
   });
 
   it("changes the default while keeping a product's missing translation missing", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
       const [menu] = await tx

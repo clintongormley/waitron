@@ -690,7 +690,7 @@
   "src/manager-email-recipients.test.ts": 0.9,
   "src/mdns.test.ts": 0.2,
   "src/me-api.cross-person.test.ts": 3.1,
-  "src/me-api.no-tenant.test.ts": 2,
+  "src/me-api.no-taxpayer.test.ts": 2,
   "src/me-api.personal-data-export.test.ts": 2.3,
   "src/me-api.test.ts": 6,
   "src/membership-fence.test.ts": 0.1,

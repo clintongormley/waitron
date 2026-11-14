@@ -7,7 +7,7 @@ import {
   deviceProfileServiceAccess,
   floorZones,
   kitchenCourses,
-  readTenant,
+  readTaxpayer,
   readVenue,
 } from "@waitron/db";
 import type { ModuleProvisioning } from "@waitron/module";
@@ -60,9 +60,9 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
             .returning({ id: departments.id });
           departmentId = inserted!.id;
           await addStarterServiceSteps(tx, departmentId, staffLanguage);
-          const tenant = await readTenant(tx);
+          const taxpayer = await readTaxpayer(tx);
           const courses =
-            tenant === null ? [] : (getCountryPack(tenant.country)?.starterCourses ?? []);
+            taxpayer === null ? [] : (getCountryPack(taxpayer.country)?.starterCourses ?? []);
           if (courses.length > 0) {
             await tx.insert(kitchenCourses).values(
               courses.map(({ name, heldUntilFired }, displayOrder) => ({

@@ -15,7 +15,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import type { ContentLanguages } from "@waitron/shared";
 import { createCategory } from "./categories.js";
 import {
@@ -68,7 +68,7 @@ async function rootOf(tx: Transaction, menuId: string): Promise<string> {
 
 /** Seeds the taxpayer (country "ES"), saves ca, es and en, and makes Lunch with complete names. */
 async function inVenue<T>(body: (tx: Transaction, lunch: Lunch) => Promise<T>): Promise<T> {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   return withTransaction(suite.db, async (tx) => {
     await writeContentLanguages(tx, THREE);
     const menu = await createCatalogue(tx, { name: "STAFF Lunch", names: LUNCH_NAMES });

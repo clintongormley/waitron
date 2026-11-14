@@ -15,7 +15,7 @@ import { attendanceQuestions } from "./schema/attendance.js";
 import { attendanceResponseCommands } from "./schema/attendance-responses.js";
 import { hashPin } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   insertAbsence,
@@ -34,7 +34,7 @@ const suite = useVenueDb({
   // Core supplies the settings, nodes and persons that these fixtures write.
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
-    await seedTenant(db);
+    await seedTaxpayer(db);
   },
 });
 
@@ -475,7 +475,7 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
   });
 });
 
-describe("the workforce set carries no tenant column", () => {
+describe("the workforce set carries no taxpayer column", () => {
   const TABLES = [
     "employments",
     "time_entries",
@@ -558,14 +558,14 @@ describe("the workforce set carries no tenant column", () => {
     expect(indexes["shifts_person_starts_idx"]!.columns).toBe("person_id, starts_at");
     expect(indexes["shift_swaps_from_shift_idx"]!.columns).toBe("from_shift_id");
     expect(indexes["time_entries_person_event_idx"]!.columns).toBe("person_id, event_at");
-    expect(Object.keys(indexes).filter((name) => name.includes("tenant"))).toEqual([]);
+    expect(Object.keys(indexes).filter((name) => name.includes("taxpayer"))).toEqual([]);
   });
 });
 
 describe("question ownership", () => {
   const single = useVenueDb({ migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS] });
   it("a command's question belongs to its person", async () => {
-    await seedTenant(single.db);
+    await seedTaxpayer(single.db);
     await seedFixtureVenue(single.db);
     const personId = await seedPerson(single.db, "Worker");
     const other = await seedPerson(single.db, "Other");

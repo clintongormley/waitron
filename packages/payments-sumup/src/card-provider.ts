@@ -46,7 +46,7 @@ const CLIENT_METHODS = [
  * The read happens on each call so provisioning and rotation take effect without a restart (the
  * `readCredential` convention). `fetch` is threaded through for tests and for a host that injects
  * its own. */
-export async function sumupClientForTenant(deps: {
+export async function sumupClientForVenue(deps: {
   db: Database;
   ring: KeyRing;
   fetch?: typeof fetch;
@@ -81,7 +81,7 @@ export function deferredClient(deps: {
 }): SumUpClient {
   let cached: Promise<SumUpClient> | undefined;
   const client = (): Promise<SumUpClient> =>
-    (cached ??= sumupClientForTenant(deps).catch((error: unknown) => {
+    (cached ??= sumupClientForVenue(deps).catch((error: unknown) => {
       cached = undefined;
       throw error;
     }));
@@ -179,13 +179,13 @@ export const SUMUP_CARD_PROVIDER: CardProviderContribution = {
   },
 
   createReconciler(deps) {
-    return new SumUpReconciler({ ...deps, resolveClient: () => sumupClientForTenant(deps) });
+    return new SumUpReconciler({ ...deps, resolveClient: () => sumupClientForVenue(deps) });
   },
 
   readers: {
     canUnpair: true,
     async list(deps) {
-      const client = await sumupClientForTenant(deps);
+      const client = await sumupClientForVenue(deps);
       return (await client.listReaders())
         .filter((reader) => reader.status === "paired")
         .map((reader) => ({
@@ -200,7 +200,7 @@ export const SUMUP_CARD_PROVIDER: CardProviderContribution = {
       // SumUp's reader-add mode is `pairing-poll`, so the route always supplies a pairing `code`;
       // its absence is a caller-contract violation, not a runtime condition an operator can act on.
       if (input.code === undefined) throw new Error("sumup readers.add requires a pairing code");
-      const client = await sumupClientForTenant(deps);
+      const client = await sumupClientForVenue(deps);
       let reader: { id: string; status: string };
       try {
         reader = await client.pairReader({ pairingCode: input.code, name: input.name });
@@ -217,7 +217,7 @@ export const SUMUP_CARD_PROVIDER: CardProviderContribution = {
     },
 
     async status(deps: CardProviderRuntimeDeps, providerRef: string): Promise<ReaderStatus> {
-      const client = await sumupClientForTenant(deps);
+      const client = await sumupClientForVenue(deps);
       let base: ReaderStatus;
       try {
         base = await client.readerStatus(providerRef);
@@ -248,7 +248,7 @@ export const SUMUP_CARD_PROVIDER: CardProviderContribution = {
     },
 
     async remove(deps: CardProviderRuntimeDeps, providerRef: string): Promise<void> {
-      const client = await sumupClientForTenant(deps);
+      const client = await sumupClientForVenue(deps);
       await client.deleteReader(providerRef);
     },
   },

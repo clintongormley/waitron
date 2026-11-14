@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { createUnit } from "./units.js";
 import {
   addProductToMenu,
@@ -17,7 +17,7 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 it.each(["products", "available", "offers"] as const)(
   "%s carries the staff pair separately from customer translations",
   async (surface) => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const menu = await createCatalogue(tx, { name: "Deli" });
       const unit = await createUnit(

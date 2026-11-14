@@ -12,7 +12,7 @@ import {
   openVenueDatabase,
   runMigrations,
   withNodeTransaction,
-  tenantCredentials,
+  venueCredentials,
 } from "@waitron/db";
 import { NODE_MIGRATIONS, nodeSigningKey } from "@waitron/node-db";
 import { runBin } from "./bin.js";
@@ -77,8 +77,8 @@ describe("waitron-credentials against a real venue directory", () => {
     const store = await openVenueDatabase(venueDir);
     try {
       const rows = await store.venue
-        .select({ purpose: tenantCredentials.purpose })
-        .from(tenantCredentials);
+        .select({ purpose: venueCredentials.purpose })
+        .from(venueCredentials);
       return rows.map((r) => r.purpose).sort();
     } finally {
       await store.close();
@@ -188,7 +188,7 @@ setInterval(() => db, 1000);`;
       const store = await openVenueDatabase(venueDir, { exclusive: false });
       try {
         return [
-          ...store.venue.all(sql`select key_version from tenant_credentials`),
+          ...store.venue.all(sql`select key_version from venue_credentials`),
           ...store.node.all(sql`select key_version from node_signing_key`),
         ];
       } finally {

@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { tenants, withTransaction } from "@waitron/db";
+import { taxpayer, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { readPrivacyContact, savePrivacyContact, type PrivacyContact } from "./index.js";
@@ -10,12 +10,12 @@ const suite = useVenueDb({
 });
 
 async function stored() {
-  const [row] = await suite.db.select().from(tenants).where(eq(tenants.id, 1));
+  const [row] = await suite.db.select().from(taxpayer).where(eq(taxpayer.id, 1));
   return row;
 }
 
 async function insertTaxpayer() {
-  await suite.db.insert(tenants).values({
+  await suite.db.insert(taxpayer).values({
     id: 1,
     country: "ES",
     taxId: "B12345678",
@@ -89,7 +89,7 @@ describe("readPrivacyContact and savePrivacyContact", () => {
 
     expect(result).toEqual({ privacyNoticeUrl: null, privacyEmail: null });
     expect(await stored()).toEqual({ ...before, privacyEmail: null });
-    expect(suite.db.all(sql`select privacy_email is null as unset from tenants`)).toEqual([
+    expect(suite.db.all(sql`select privacy_email is null as unset from taxpayer`)).toEqual([
       { unset: 1 },
     ]);
   });
@@ -116,7 +116,7 @@ describe("readPrivacyContact and savePrivacyContact", () => {
 
     expect(read).toBeNull();
     expect(saved).toBeNull();
-    expect(suite.db.all(sql`select count(*) as n from tenants`)).toEqual([{ n: 0 }]);
+    expect(suite.db.all(sql`select count(*) as n from taxpayer`)).toEqual([{ n: 0 }]);
   });
 
   it.each([

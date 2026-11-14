@@ -8,7 +8,7 @@ import {
   invoiceSeries,
   nodes,
   sales,
-  tenants,
+  taxpayer,
   tenders,
   withTransaction,
 } from "@waitron/db";
@@ -43,14 +43,14 @@ export function freshNif(): string {
 }
 
 /**
- * Seeds the tenant, the venue (on first use), a node, a till device and an open working order,
+ * Seeds the taxpayer, the venue (on first use), a node, a till device and an open working order,
  * and returns their ids.
  */
 export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise<Seeded> {
   await db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: nif, legalName: "Test SL" })
-    .onConflictDoNothing({ target: tenants.id });
+    .onConflictDoNothing({ target: taxpayer.id });
   const venue = await readSettings(db, VENUE_SETTINGS);
   if (venue.revision === 0)
     await seedVenue(db, {

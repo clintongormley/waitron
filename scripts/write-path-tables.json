@@ -15,7 +15,7 @@
     "packages/provisioning/src/venue-apply.ts"
   ],
   "settings": ["packages/db/src/settings.ts"],
-  "tenants": [
+  "taxpayer": [
     "packages/provisioning/src/privacy-contact.ts",
     "packages/provisioning/src/taxpayer-name.ts",
     "packages/provisioning/src/venue-apply.ts"

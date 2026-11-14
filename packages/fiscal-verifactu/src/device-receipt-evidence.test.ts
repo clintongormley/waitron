@@ -5,7 +5,7 @@ import { buildAltaRecord } from "@waitron/verifactu";
 import { pointerTo, toRegistroRow } from "./registro-row.js";
 import { seedNode, seedSale, TEST_NIF, TEST_SISTEMA } from "./testing/seed.js";
 import { recordSale } from "@waitron/core";
-import { invoiceSeries, tenants, withTransaction } from "@waitron/db";
+import { invoiceSeries, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
@@ -32,7 +32,7 @@ describe("device receipt evidence", () => {
         .select()
         .from(registrosFacturacion)
         .where(eq(registrosFacturacion.saleId, result.saleId));
-      await suite.db.update(tenants).set({ taxId: "changed-taxpayer" });
+      await suite.db.update(taxpayer).set({ taxId: "changed-taxpayer" });
       await suite.db
         .update(invoiceSeries)
         .set({ retiredAt: new Date("2026-03-02T00:00:00.000Z") })

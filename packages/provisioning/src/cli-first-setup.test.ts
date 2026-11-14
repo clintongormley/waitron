@@ -21,7 +21,7 @@ import { planVenue } from "./venue-plan.js";
 import { venueFiscalSelection } from "./venue-fiscal.js";
 import { enabledModules, modulesWithSets } from "@waitron/module";
 import { initialVenueApplyInput } from "./initial-venue-input.js";
-import { readTenantIdentities } from "./tenant-guard.js";
+import { readTaxpayerIdentities } from "./taxpayer-guard.js";
 import { createFirstSetupRuntime } from "./first-setup-runtime.js";
 import { MODULE, PASSWORD, request } from "../test/first-setup-request.js";
 import { moveFakeClock, STOPPED_DURING_WAIT, stopDuringWait } from "../test/settle-wait.js";
@@ -138,7 +138,7 @@ async function fixture(answer = "yes") {
     readEnvironment: readDeploymentEnvironment,
     readDeploymentTable: deploymentTableExists,
     stampEnvironment: stampDeployment,
-    readTenants: readTenantIdentities,
+    readTaxpayers: readTaxpayerIdentities,
     sleep: stopDuringWait,
   };
   return { root, args, deps, runtime, output, prompts };
@@ -175,7 +175,7 @@ it("the venue command claims ownership, waits out its settle wait saying why and
     );
     outputAtWait = [...f.output];
     writesAtWait = [
-      await readTenantIdentities(venue.db),
+      await readTaxpayerIdentities(venue.db),
       await readDeploymentEnvironment(venue.db),
     ];
     await moveFakeClock(ms);
@@ -201,7 +201,7 @@ it("the venue command claims ownership, waits out its settle wait saying why and
   expect(f.prompts).toEqual(promptsAtWait);
   expect(f.output.join("\n")).not.toContain("run the command again");
   expect(f.output.join("\n")).not.toContain(PASSWORD);
-  expect(await readTenantIdentities(venue.db)).toEqual([]);
+  expect(await readTaxpayerIdentities(venue.db)).toEqual([]);
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
 });
 
@@ -213,7 +213,7 @@ it("a command whose time is still not confirmed after its wait is refused rather
   expect(sleep).toHaveBeenCalledTimes(1);
   expect(f.output).toContain('sif.allocation_invalid {"reason":"clock_unconfirmed"}');
   expect((await f.runtime.store.read())!.inputs).toEqual({});
-  expect(await readTenantIdentities(venue.db)).toEqual([]);
+  expect(await readTaxpayerIdentities(venue.db)).toEqual([]);
 });
 
 it("a wait that runs over until the kept password confirmation expires says so", async () => {
@@ -226,7 +226,7 @@ it("a wait that runs over until the kept password confirmation expires says so",
     "setup.owner_required {}",
   ]);
   expect(await f.runtime.store.read()).toMatchObject({ status: "claimed", inputs: {} });
-  expect(await readTenantIdentities(venue.db)).toEqual([]);
+  expect(await readTaxpayerIdentities(venue.db)).toEqual([]);
 });
 
 it("a setup stopped just before the overrun selection keeps its own refusal, not the expired-confirmation words", async () => {
@@ -258,7 +258,7 @@ it("the venue command imports selected module input but cannot skip unfinished p
   expect(state).toMatchObject({ status: "consumption-intent", consumptionIntent: true });
   expect(state!.inputs[MODULE]).toMatchObject({ allocation: { installationIdentity: "0CNNY" } });
   expect(f.output, JSON.stringify(f.output)).toContain("setup.not_ready {}");
-  expect(await readTenantIdentities(venue.db)).toEqual([]);
+  expect(await readTaxpayerIdentities(venue.db)).toEqual([]);
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
 });
 
@@ -381,7 +381,7 @@ it.each([
     const before = {
       state: await folderSnapshot(join(f.root, "state")),
       venue: await folderSnapshot(join(f.root, "venue")),
-      tenants: await readTenantIdentities(venue.db),
+      taxpayer: await readTaxpayerIdentities(venue.db),
       environment: await readDeploymentEnvironment(venue.db),
       series: await venue.db.select().from(invoiceSeries),
     };
@@ -410,7 +410,7 @@ it.each([
     expect({
       state: await folderSnapshot(join(f.root, "state")),
       venue: await folderSnapshot(join(f.root, "venue")),
-      tenants: await readTenantIdentities(venue.db),
+      taxpayer: await readTaxpayerIdentities(venue.db),
       environment: await readDeploymentEnvironment(venue.db),
       series: await venue.db.select().from(invoiceSeries),
     }).toEqual(before);
@@ -514,7 +514,7 @@ it("the actual venue command saves its selected recovery PDF and asks for kept d
   const state = (await f.runtime.store.read())!;
   expect(state.status).toBe("consumption-intent");
   expect(f.output).toContain("setup.not_ready {}");
-  expect(await readTenantIdentities(venue.db)).toEqual([]);
+  expect(await readTaxpayerIdentities(venue.db)).toEqual([]);
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
 });
 
@@ -544,7 +544,7 @@ it("declining kept in the actual venue command preserves the saved PDF and leave
   await expect(readFile(path)).resolves.toBeInstanceOf(Buffer);
   expect(f.prompts).toContain("Have you kept this recovery pack? [y/N]: ");
   expect(f.output).not.toContain("setup.not_ready {}");
-  expect(await readTenantIdentities(venue.db)).toEqual([]);
+  expect(await readTaxpayerIdentities(venue.db)).toEqual([]);
   expect((await f.runtime.store.read())!.status).toBe("consumption-intent");
 });
 
@@ -762,7 +762,7 @@ it("a configured deployment cannot activate without a kept recovery document", a
   expect(await runCliPastWait(args, f.deps)).toBe(1);
   expect(f.calls).toEqual([]);
   expect(f.output).toContain("setup.not_ready {}");
-  expect(await readTenantIdentities(venue.db)).toEqual([]);
+  expect(await readTaxpayerIdentities(venue.db)).toEqual([]);
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
 });
 
@@ -779,7 +779,7 @@ it("a deployment readiness refusal leaves the kept attempt unactivated", async (
   expect(f.calls).toEqual([]);
   expect(f.output).toContain("setup.not_ready {}");
   expect((await f.runtime.store.read())!.status).toBe("consumption-intent");
-  expect(await readTenantIdentities(venue.db)).toEqual([]);
+  expect(await readTaxpayerIdentities(venue.db)).toEqual([]);
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
 });
 
@@ -813,7 +813,7 @@ it("the real command deployment refuses production before committing any venue",
   expect(await runCliPastWait(f.args, f.deps)).toBe(1);
   expect(f.output).toContain("setup.not_ready {}");
   expect((await f.runtime.store.read())!.status).toBe("consumption-intent");
-  expect(await readTenantIdentities(venue.db)).toEqual([]);
+  expect(await readTaxpayerIdentities(venue.db)).toEqual([]);
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
 });
 
@@ -881,7 +881,7 @@ it.each([
   const f = await realActivationFixture({ WAITRON_MANAGEMENT_ORIGIN: origin });
   expect(await runCliPastWait(f.args, f.deps)).toBe(1);
   expect(f.output).toContain("setup.not_ready {}");
-  expect(await readTenantIdentities(venue.db)).toEqual([]);
+  expect(await readTaxpayerIdentities(venue.db)).toEqual([]);
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
 });
 
@@ -889,7 +889,7 @@ it("an absent vault key refuses before venue creation", async () => {
   const f = await realActivationFixture({ WAITRON_CREDENTIALS_KEY: "" });
   expect(await runCliPastWait(f.args, f.deps)).toBe(1);
   expect(f.output).toContain('credentials.key_missing {"variable":"WAITRON_CREDENTIALS_KEY"}');
-  expect(await readTenantIdentities(venue.db)).toEqual([]);
+  expect(await readTaxpayerIdentities(venue.db)).toEqual([]);
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
 });
 
@@ -923,7 +923,7 @@ it("a refusal before activation starts leaves no environment stamp and no venue"
   expect(await runCliPastWait(f.args, f.deps)).toBe(1);
   expect(f.output).toContain("setup.not_ready {}");
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
-  expect(await readTenantIdentities(venue.db)).toEqual([]);
+  expect(await readTaxpayerIdentities(venue.db)).toEqual([]);
   expect(await venue.db.select().from(invoiceSeries)).toEqual([]);
   expect((await f.runtime.store.read())!.status).toBe("consumption-intent");
 });
@@ -1059,7 +1059,7 @@ it("the production venue command refuses missing readiness before stamping or ac
   expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(1);
   expect(f.output).toContain('setup.fiscal_test_required {"module":"verifactu"}');
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
-  expect(await readTenantIdentities(venue.db)).toEqual([]);
+  expect(await readTaxpayerIdentities(venue.db)).toEqual([]);
   expect(await venue.db.select().from(invoiceSeries)).toEqual([]);
   expect((await f.runtime.store.read())!.status).toBe("consumption-intent");
 });
@@ -1085,7 +1085,7 @@ it.each(["certificate", "build", "key"] as const)(
     expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(1);
     expect(f.output).toContain('setup.fiscal_test_required {"module":"verifactu"}');
     expect(await readDeploymentEnvironment(venue.db)).toBeNull();
-    expect(await readTenantIdentities(venue.db)).toEqual([]);
+    expect(await readTaxpayerIdentities(venue.db)).toEqual([]);
   },
 );
 
@@ -1178,7 +1178,7 @@ it.each([
     expect(await runCliPastWait(f.args, f.deps)).toBe(1);
     expect(f.output).toContain(message);
     expect(await readDeploymentEnvironment(venue.db)).toBeNull();
-    expect(await readTenantIdentities(venue.db)).toEqual([]);
+    expect(await readTaxpayerIdentities(venue.db)).toEqual([]);
     expect(await venue.db.select().from(invoiceSeries)).toEqual([]);
     expect((await f.runtime.store.read())!.status).toBe("consumption-intent");
     expect(f.output.join("\n")).not.toContain(productionCertificate.passphrase);
@@ -1285,7 +1285,7 @@ it("an unreadable retained vault file refuses before command activation", async 
   const { mkdir } = await import("node:fs/promises");
   await mkdir(join(f.root, "state/secrets.env"), { recursive: true });
   await expect(runCliPastWait(f.args, f.deps)).rejects.toMatchObject({ code: "EISDIR" });
-  expect(await readTenantIdentities(venue.db)).toEqual([]);
+  expect(await readTaxpayerIdentities(venue.db)).toEqual([]);
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
   expect((await f.runtime.store.read())!.status).toBe("consumption-intent");
   await expect(readFile(join(f.root, "state/trading.env"))).rejects.toMatchObject({
@@ -1339,7 +1339,7 @@ it.each([false, true])(
     ).rejects.toMatchObject({ code: published ? "setup.attempt_uncertain" : "setup.not_ready" });
     expect(began).toBe(false);
     expect(await f.runtime.store.read()).toEqual(f.state);
-    expect(await readTenantIdentities(venue.db)).toEqual([]);
+    expect(await readTaxpayerIdentities(venue.db)).toEqual([]);
     expect(await readDeploymentEnvironment(venue.db)).toBeNull();
   },
 );
@@ -1361,7 +1361,7 @@ it("command deployment refuses a changed frozen venue before stamping", async ()
   ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
   expect(began).toBe(false);
   expect(await f.runtime.store.read()).toEqual(f.state);
-  expect(await readTenantIdentities(venue.db)).toEqual([]);
+  expect(await readTaxpayerIdentities(venue.db)).toEqual([]);
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
 });
 
@@ -1371,7 +1371,7 @@ it("production readiness cannot run before publication has loaded its settings",
     code: "setup.not_ready",
   });
   expect(await f.runtime.store.read()).toEqual(f.state);
-  expect(await readTenantIdentities(venue.db)).toEqual([]);
+  expect(await readTaxpayerIdentities(venue.db)).toEqual([]);
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
 });
 
@@ -1380,7 +1380,7 @@ it("command deployment refuses to provision over its already completed venue", a
   expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
   const state = (await f.runtime.store.read())!;
   const before = await venue.db.select().from(invoiceSeries);
-  const tenants = await readTenantIdentities(venue.db);
+  const taxpayer = await readTaxpayerIdentities(venue.db);
   const deployment = f.deps.firstSetupDeployment!({
     runtime: f.runtime,
     db: venue.db,
@@ -1393,7 +1393,7 @@ it("command deployment refuses to provision over its already completed venue", a
       throw new Error("must not enter activation");
     }),
   ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
-  expect(await readTenantIdentities(venue.db)).toEqual(tenants);
+  expect(await readTaxpayerIdentities(venue.db)).toEqual(taxpayer);
   expect(await venue.db.select().from(invoiceSeries)).toEqual(before);
   expect(await f.runtime.store.read()).toEqual(state);
 });
@@ -1405,7 +1405,7 @@ it("--yes does not send a fiscal test when its separate confirmation is declined
     expect(f.prompts).toContain("Send a preproduction fiscal test? [y/N]: ");
     expect(f.drain).not.toHaveBeenCalled();
     expect(await readDeploymentEnvironment(venue.db)).toBeNull();
-    expect(await readTenantIdentities(venue.db)).toEqual([]);
+    expect(await readTaxpayerIdentities(venue.db)).toEqual([]);
     await expect(readFile(join(f.root, "state/flows/setup/readiness.json"))).rejects.toMatchObject({
       code: "ENOENT",
     });
@@ -1430,7 +1430,7 @@ it.each(["rejected", "uncertain"] as const)(
       expect(f.output).toContain(`Fiscal test: ${status}`);
       expect(f.drain).toHaveBeenCalledOnce();
       expect(await readDeploymentEnvironment(venue.db)).toBeNull();
-      expect(await readTenantIdentities(venue.db)).toEqual([]);
+      expect(await readTaxpayerIdentities(venue.db)).toEqual([]);
       await expect(
         readFile(join(f.root, "state/flows/setup/readiness.json")),
       ).rejects.toMatchObject({

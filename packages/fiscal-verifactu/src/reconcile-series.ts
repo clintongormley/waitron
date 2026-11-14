@@ -1,5 +1,5 @@
 import { inArray, sql } from "drizzle-orm";
-import { readTenant, type Transaction } from "@waitron/db";
+import { readTaxpayer, type Transaction } from "@waitron/db";
 import type { Cabecera, RegistroConsultado } from "@waitron/verifactu";
 import type { ReconcileScope } from "./reconcile.js";
 import type { LookupConflictEvidence } from "./conflict-types.js";
@@ -25,10 +25,10 @@ export async function readLiveReconciliationSeries(
   ).rows;
 }
 export async function liveLookupHeader(tx: Transaction, scope: ReconcileScope): Promise<Cabecera> {
-  const tenant = await readTenant(tx);
-  if (tenant === null || tenant.taxId !== scope.taxpayerId)
+  const taxpayer = await readTaxpayer(tx);
+  if (taxpayer === null || taxpayer.taxId !== scope.taxpayerId)
     throw new Error("reconciliation requires the scoped venue taxpayer");
-  return { ObligadoEmision: { NombreRazon: tenant.legalName, NIF: tenant.taxId } };
+  return { ObligadoEmision: { NombreRazon: taxpayer.legalName, NIF: taxpayer.taxId } };
 }
 
 /**

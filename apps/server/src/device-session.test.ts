@@ -303,7 +303,7 @@ describe("device cookie helpers", () => {
     expect(cookie).not.toMatch(/Secure/i);
   });
 
-  it("setDeviceCookie writes Domain only when the host is under the tenant domain", async () => {
+  it("setDeviceCookie writes Domain only when the host is under the taxpayer domain", async () => {
     const app = new Hono();
     app.get("/set", (c) => {
       setDeviceCookie(c, COOKIE_VALUE, true, "deli.waitron.app");
@@ -319,7 +319,7 @@ describe("device cookie helpers", () => {
         "set-cookie",
       ) ?? "";
     expect(hostOnly).not.toMatch(/Domain=/i);
-    // No tenantDomain at all ⇒ host-only regardless of the host.
+    // No venueDomain at all ⇒ host-only regardless of the host.
     const app2 = new Hono();
     app2.get("/set", (c) => {
       setDeviceCookie(c, COOKIE_VALUE, true);
@@ -346,9 +346,9 @@ describe("device cookie helpers", () => {
   });
 
   // The clearing Set-Cookie must carry the SAME `Domain` the set one did — resolved from the same
-  // `tenantDomain` + host inputs — or the browser keeps the domain-scoped cookie alongside the
+  // `venueDomain` + host inputs — or the browser keeps the domain-scoped cookie alongside the
   // host-only expiry (the `Path` reasoning, applied to `Domain`).
-  it("clearDeviceCookie writes Domain only when the host is under the tenant domain", async () => {
+  it("clearDeviceCookie writes Domain only when the host is under the taxpayer domain", async () => {
     const app = new Hono();
     app.get("/clear", (c) => {
       clearDeviceCookie(c, "deli.waitron.app");
@@ -363,14 +363,14 @@ describe("device cookie helpers", () => {
   });
 
   describe("cookieDomainFor", () => {
-    it("scopes to the tenant domain for a host under it (port stripped, case-insensitive)", () => {
+    it("scopes to the taxpayer domain for a host under it (port stripped, case-insensitive)", () => {
       expect(cookieDomainFor("box.deli.waitron.app", "deli.waitron.app")).toBe("deli.waitron.app");
       expect(cookieDomainFor("Box.Deli.Waitron.App:8443", "deli.waitron.app")).toBe(
         "deli.waitron.app",
       );
       expect(cookieDomainFor("deli.waitron.app", "deli.waitron.app")).toBe("deli.waitron.app");
     });
-    it("stays host-only for waitron.local, loopback, a look-alike, or no tenant domain", () => {
+    it("stays host-only for waitron.local, loopback, a look-alike, or no taxpayer domain", () => {
       expect(cookieDomainFor("waitron.local", "deli.waitron.app")).toBeUndefined();
       expect(cookieDomainFor("localhost:8080", "deli.waitron.app")).toBeUndefined();
       expect(cookieDomainFor("notdeli.waitron.app", "deli.waitron.app")).toBeUndefined();
@@ -829,7 +829,7 @@ describe("dev-override header (venue database)", () => {
 describe("tryReadDevice dev override resolves a seeded device (venue database)", () => {
   // Seeded DIRECTLY (not through the enrol path), so the case is self-contained. The dev-override
   // path carries no token and reads the device by id alone.
-  async function seedKdsDeviceUnderNewTenant(): Promise<{ deviceId: string }> {
+  async function seedKdsDeviceUnderNewVenue(): Promise<{ deviceId: string }> {
     const admin = suite.db;
     await seedVenue(admin, {
       name: "Bar",
@@ -841,8 +841,8 @@ describe("tryReadDevice dev override resolves a seeded device (venue database)",
     return { deviceId };
   }
 
-  it("DOES resolve a device scoped to its OWN tenant", async () => {
-    const { deviceId } = await seedKdsDeviceUnderNewTenant();
+  it("DOES resolve a device scoped to its OWN taxpayer", async () => {
+    const { deviceId } = await seedKdsDeviceUnderNewVenue();
     const binding = await readWithHeaders(
       { db: suite.db, devMode: true },
       { [DEV_DEVICE_HEADER]: deviceId },

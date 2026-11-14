@@ -8,7 +8,7 @@ import {
   invoiceDeliveries,
   pagePrinters,
   printAgents,
-  tenants,
+  taxpayer,
   withTransaction,
 } from "@waitron/db";
 import { hashDeviceToken } from "@waitron/identity";
@@ -56,7 +56,7 @@ type Venue = Awaited<ReturnType<typeof setupVenue>>;
 /** A synthetic full invoice in series `FB`, so its number is `FB/1`. */
 async function fullInvoice(venue: Venue): Promise<string> {
   beforeServerStarts();
-  await suite.db.update(tenants).set({ taxpayerDomicile: "Saved issuer address" });
+  await suite.db.update(taxpayer).set({ taxpayerDomicile: "Saved issuer address" });
   return (await recordSyntheticInvoice(suite.db, venue.cfg.nodeId, { seriesCode: "FB" })).saleId;
 }
 

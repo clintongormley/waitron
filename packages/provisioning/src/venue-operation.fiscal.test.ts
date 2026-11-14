@@ -1,7 +1,7 @@
 import { generateKeyPairSync } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { isNull, sql } from "drizzle-orm";
-import { deployment, invoiceSeries, nodes, tenants } from "@waitron/db";
+import { deployment, invoiceSeries, nodes, taxpayer } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
@@ -209,7 +209,7 @@ describe("internal fresh setup with a signed synthetic allocation", () => {
       code: "sif.allocation_invalid",
       params: { reason: "reauthentication_required" },
     });
-    for (const table of [persons, tenants, nodes, invoiceSeries, fiscalAllocations])
+    for (const table of [persons, taxpayer, nodes, invoiceSeries, fiscalAllocations])
       expect(await suite.db.select().from(table)).toEqual([]);
   });
 
@@ -230,7 +230,7 @@ describe("internal fresh setup with a signed synthetic allocation", () => {
       code: "sif.allocation_invalid",
       params: { reason: "outside_confirmation_missing" },
     });
-    for (const table of [persons, tenants, nodes, invoiceSeries, fiscalAllocations])
+    for (const table of [persons, taxpayer, nodes, invoiceSeries, fiscalAllocations])
       expect(await suite.db.select().from(table)).toEqual([]);
   });
 });

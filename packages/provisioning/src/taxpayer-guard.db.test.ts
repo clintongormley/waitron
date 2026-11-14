@@ -5,7 +5,7 @@ import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { planVenue, type VenueRequest } from "./venue-plan.js";
 import { applyAllocatedTestVenue as applyVenue } from "../test/allocated-venue.js";
-import { hasOperationalVenue, readTenantIdentities } from "./tenant-guard.js";
+import { hasOperationalVenue, readTaxpayerIdentities } from "./taxpayer-guard.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -38,15 +38,15 @@ function request(): VenueRequest {
   };
 }
 
-describe("readTenantIdentities", () => {
+describe("readTaxpayerIdentities", () => {
   it("reads nothing from an unprovisioned database", async () => {
-    expect(await readTenantIdentities(suite.db)).toEqual([]);
+    expect(await readTaxpayerIdentities(suite.db)).toEqual([]);
   });
 
   it("reads the stored taxpayer as the canonical pair the guard compares against", async () => {
     await applyVenue(planVenue(request(), ALL_MODULES), { db: suite.db, modules: ALL_MODULES });
 
-    expect(await readTenantIdentities(suite.db)).toEqual([{ country: "ES", taxId: "B12345678" }]);
+    expect(await readTaxpayerIdentities(suite.db)).toEqual([{ country: "ES", taxId: "B12345678" }]);
   });
 });
 

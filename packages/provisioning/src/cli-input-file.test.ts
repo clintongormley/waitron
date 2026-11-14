@@ -19,7 +19,7 @@ import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { AppError } from "@waitron/shared";
 import { runCli, type CliDeps } from "./cli.js";
 import { applyVenue } from "./venue-apply.js";
-import { readTenantIdentities } from "./tenant-guard.js";
+import { readTaxpayerIdentities } from "./taxpayer-guard.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const NODE = "d1000000-0000-4000-8000-000000000001";
@@ -129,7 +129,7 @@ function deps(lines: string[], path: string | undefined): CliDeps {
     readEnvironment: readDeploymentEnvironment,
     readDeploymentTable: deploymentTableExists,
     stampEnvironment: stampDeployment,
-    readTenants: readTenantIdentities,
+    readTaxpayers: readTaxpayerIdentities,
   };
 }
 async function withFile(content: string, run: (path: string) => Promise<void>) {

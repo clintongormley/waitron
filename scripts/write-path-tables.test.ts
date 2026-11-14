@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { blankComments } from "../packages/shared/src/source-comments.js";
 
 /**
- * The tables whose writes live only in the files `write-path-tables.json` names: venue.db's `tenants`, `nodes` and
+ * The tables whose writes live only in the files `write-path-tables.json` names: venue.db's `taxpayer`, `nodes` and
  * `deployment`, `settings`, `activity_log`, `invoice_corrections` and `invoice_correction_refunds`, and node.db's `node_mode`, `node_mirror_link`, `node_pair_link`, `node_primary_key`,
  * `node_recovery_key`, `node_signing_key`, `node_handover_operations`, `node_handover_events` and
  * `node_handover_restriction`.
@@ -35,7 +35,7 @@ import { blankComments } from "../packages/shared/src/source-comments.js";
  * 2. **It judges a FILE, not a call chain.** An allowed file is allowed outright, so a request path
  *    that calls into one of them writes through it unseen.
  * 3. **It reads `<member>/src` under `apps` and `packages` only**, minus `*.test.ts` and everything
- *    under a `testing/` directory, where fixtures seed `tenants` and `nodes` outright. Outside the
+ *    under a `testing/` directory, where fixtures seed `taxpayer` and `nodes` outright. Outside the
  *    walk entirely, and so unseen: a package's `test/` directory, `apps/<app>/scripts`, and
  *    anything at a package root.
  * 4. **It checks whole-table write placement only.** Operation-specific restrictions on other
@@ -213,7 +213,7 @@ describe("no source writes a listed table outside the files the JSON names", () 
       "person_roles",
       "roles",
       "settings",
-      "tenants",
+      "taxpayer",
     ]);
   });
 
@@ -256,29 +256,29 @@ describe("no source writes a listed table outside the files the JSON names", () 
 
 describe("the detector itself", () => {
   it("ignores a multiline block comment that opens after code", () => {
-    const source = "const n = 1; /*\nawait tx.insert(tenants).values(row);\n*/";
-    expect(writes(source, "tenants")).toBe(false);
+    const source = "const n = 1; /*\nawait tx.insert(taxpayer).values(row);\n*/";
+    expect(writes(source, "taxpayer")).toBe(false);
   });
 
   it.each(["/*", "//"])("reads a write after a string containing %s", (marker) => {
-    const source = `const marker = "${marker}"; await tx.insert(tenants).values(row);`;
-    expect(writes(source, "tenants")).toBe(true);
+    const source = `const marker = "${marker}"; await tx.insert(taxpayer).values(row);`;
+    expect(writes(source, "taxpayer")).toBe(true);
   });
 
   it("reads a write after a template line beginning with a block opener", () => {
-    const source = "const marker = `\n/*\n`;\nawait tx.insert(tenants).values(row);";
-    expect(writes(source, "tenants")).toBe(true);
+    const source = "const marker = `\n/*\n`;\nawait tx.insert(taxpayer).values(row);";
+    expect(writes(source, "taxpayer")).toBe(true);
   });
 
   it("reports an insert, an update, a delete and a truncate written as SQL", () => {
-    expect(writes("insert into tenants (id) values (1)", "tenants")).toBe(true);
+    expect(writes("insert into taxpayer (id) values (1)", "taxpayer")).toBe(true);
     expect(writes("update nodes set name = 'x'", "nodes")).toBe(true);
     expect(writes("delete from mirror_config where id = 1", "mirror_config")).toBe(true);
-    expect(writes("truncate table tenants", "tenants")).toBe(true);
+    expect(writes("truncate table taxpayer", "taxpayer")).toBe(true);
   });
 
   it("reports a schema-qualified write and one that aliases the table", () => {
-    expect(writes("delete from public.tenants where id = 1", "tenants")).toBe(true);
+    expect(writes("delete from public.taxpayer where id = 1", "taxpayer")).toBe(true);
     expect(writes("update deployment as d set mode = 'primary' where d.id = 1", "deployment")).toBe(
       true,
     );
@@ -286,15 +286,15 @@ describe("the detector itself", () => {
   });
 
   it("reports the drizzle builder, through a namespace and across a space", () => {
-    expect(writes("await tx.insert(tenants).values(row)", "tenants")).toBe(true);
+    expect(writes("await tx.insert(taxpayer).values(row)", "taxpayer")).toBe(true);
     expect(writes("await tx.update(schema.mirrorConfig).set(row)", "mirror_config")).toBe(true);
     expect(writes("await tx.delete(deployment)", "deployment")).toBe(true);
     expect(writes("await tx.update (deployment).set(row)", "deployment")).toBe(true);
   });
 
   it("says nothing about a read", () => {
-    expect(writes("select legal_name from tenants where id = 1", "tenants")).toBe(false);
-    expect(writes("await tx.select().from(tenants)", "tenants")).toBe(false);
+    expect(writes("select legal_name from taxpayer where id = 1", "taxpayer")).toBe(false);
+    expect(writes("await tx.select().from(taxpayer)", "taxpayer")).toBe(false);
   });
 
   it("says nothing about prose that happens to contain the table's name", () => {
@@ -309,14 +309,14 @@ describe("the detector itself", () => {
     expect(writes("  // ... db.insert(deployment) stamps the row", "deployment")).toBe(false);
     expect(
       writes(
-        "/**\n * `insert into tenants` happens in the provisioner\n */\nconst x = 1;",
-        "tenants",
+        "/**\n * `insert into taxpayer` happens in the provisioner\n */\nconst x = 1;",
+        "taxpayer",
       ),
     ).toBe(false);
   });
 
   it("still reads a line of code that carries a trailing comment", () => {
-    expect(writes("await tx.insert(tenants).values(row); // see the provisioner", "tenants")).toBe(
+    expect(writes("await tx.insert(taxpayer).values(row); // see the provisioner", "taxpayer")).toBe(
       true,
     );
   });
@@ -325,15 +325,15 @@ describe("the detector itself", () => {
   it("does not treat a comment opener inside a string as a comment", () => {
     const source = [
       'const start = "/*";',
-      "await tx.insert(tenants).values(row);",
+      "await tx.insert(taxpayer).values(row);",
       'const end = "*/";',
     ].join("\n");
-    expect(writes(source, "tenants")).toBe(true);
+    expect(writes(source, "taxpayer")).toBe(true);
   });
 
   // A continuation line of an arithmetic expression starts with `*`; it is not inside a comment.
   it("reads a line that begins with an operator", () => {
-    expect(writes("const n = a\n  * b;\nawait tx.insert(tenants).values(row);", "tenants")).toBe(
+    expect(writes("const n = a\n  * b;\nawait tx.insert(taxpayer).values(row);", "taxpayer")).toBe(
       true,
     );
   });
@@ -341,8 +341,8 @@ describe("the detector itself", () => {
   // Each of these would otherwise fail a push that had nothing to do with a database.
   it("says nothing about a comment that follows code on its line", () => {
     expect(writes("const x = 1; // update nodes when set", "nodes")).toBe(false);
-    expect(writes("const x = 1; /* insert into tenants (id) values (1) */", "tenants")).toBe(false);
-    expect(writes("function f(/* insert into tenants */ a) {}", "tenants")).toBe(false);
+    expect(writes("const x = 1; /* insert into taxpayer (id) values (1) */", "taxpayer")).toBe(false);
+    expect(writes("function f(/* insert into taxpayer */ a) {}", "taxpayer")).toBe(false);
   });
 
   // `nodes` and `deployment` are names an ordinary variable carries, so a builder call is only read
@@ -355,18 +355,18 @@ describe("the detector itself", () => {
   });
 
   it("reports a namespaced or cast builder argument", () => {
-    expect(writes("await tx.insert(schema.core.tenants).values(row)", "tenants")).toBe(true);
-    expect(writes("await tx.insert(tenants as never).values(row)", "tenants")).toBe(true);
+    expect(writes("await tx.insert(schema.core.taxpayer).values(row)", "taxpayer")).toBe(true);
+    expect(writes("await tx.insert(taxpayer as never).values(row)", "taxpayer")).toBe(true);
   });
 
   it("reports a write qualified by a schema that is not public", () => {
-    expect(writes("insert into sync.tenants (id) values (1)", "tenants")).toBe(true);
+    expect(writes("insert into sync.taxpayer (id) values (1)", "taxpayer")).toBe(true);
   });
 
   // The reader keeps a URL's `//` rather than cutting the line there: a write can follow it.
   it("does not read a URL inside a string as a comment", () => {
     expect(
-      writes('const url = "https://x/y"; await tx.insert(tenants).values(row);', "tenants"),
+      writes('const url = "https://x/y"; await tx.insert(taxpayer).values(row);', "taxpayer"),
     ).toBe(true);
   });
 });
@@ -387,7 +387,7 @@ describe("the combined table detector", () => {
       "update nodes in the tree before painting",
       "await tx.insert(nodeMembership).values(row)",
       "this.cache.delete(nodes);",
-      "select legal_name from tenants where id = 1",
+      "select legal_name from taxpayer where id = 1",
       "  // ... db.insert(deployment) stamps the row",
     ]) {
       expect(ANY_TABLE.test(blankComments(source)), source).toBe(false);

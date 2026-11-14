@@ -5,7 +5,7 @@ import {
   withNodeTransaction,
   withTransaction,
   type Database,
-  tenantCredentials,
+  venueCredentials,
 } from "@waitron/db";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { hasCode, type AppError } from "@waitron/shared";
@@ -59,7 +59,7 @@ const PAIR_LINK: NewPairLink = {
 
 /** Rotation enumerates the whole vault, so each case starts with an empty credential table. */
 beforeEach(async () => {
-  await suite.db.execute(sql`delete from tenant_credentials`);
+  await suite.db.execute(sql`delete from venue_credentials`);
   suite.node.run(sql`delete from node_signing_key`);
   suite.node.run(sql`delete from node_pair_link`);
 });
@@ -75,7 +75,7 @@ describe("rotateCredentials", () => {
     expect(result.alreadyCurrent).toBe(0);
 
     const versions = await suite.db.execute<{ key_version: number }>(sql`
-      select key_version from tenant_credentials`);
+      select key_version from venue_credentials`);
     expect(versions.rows[0]!.key_version).toBe(2);
 
     // Readable with the new key ALONE — the old key can now be retired.
@@ -119,7 +119,7 @@ describe("rotateCredentials", () => {
     expect(result.alreadyCurrent).toBe(1);
 
     const rows = await suite.db.execute<{ n: number }>(sql`
-      select count(*) as n from tenant_credentials where key_version = 2`);
+      select count(*) as n from venue_credentials where key_version = 2`);
     expect(rows.rows[0]!.n).toBe(2);
   });
 
@@ -139,7 +139,7 @@ describe("rotateCredentials", () => {
     const strangerKey = Buffer.alloc(32, 9);
     const sealed = seal(strangerKey, aadFor("payments.stripe"), JSON.stringify(STRIPE));
     await withTransaction(suite.db, (tx) =>
-      tx.insert(tenantCredentials).values({
+      tx.insert(venueCredentials).values({
         purpose: "payments.stripe",
         ciphertext: sealed.ciphertext,
         iv: sealed.iv,
@@ -153,7 +153,7 @@ describe("rotateCredentials", () => {
 
     // No phantom success, no partial write: the row is exactly as it was sealed.
     const row = await suite.db.execute<{ key_version: number }>(sql`
-      select key_version from tenant_credentials`);
+      select key_version from venue_credentials`);
     expect(row.rows[0]!.key_version).toBe(1);
   });
 
@@ -165,7 +165,7 @@ describe("rotateCredentials", () => {
       putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
     );
     await withTransaction(suite.db, (tx) =>
-      tx.insert(tenantCredentials).values({
+      tx.insert(venueCredentials).values({
         purpose: "legacy.retired-purpose",
         ciphertext: Buffer.from("stale"),
         iv: Buffer.alloc(12, 1),
@@ -178,7 +178,7 @@ describe("rotateCredentials", () => {
     expect(result.rotated).toBe(1);
 
     const rows = await suite.db.execute<{ purpose: string; key_version: number }>(sql`
-      select purpose, key_version from tenant_credentials order by purpose`);
+      select purpose, key_version from venue_credentials order by purpose`);
     const legacy = rows.rows.find((r) => r.purpose === "legacy.retired-purpose");
     // Untouched — still on the old version, because it was never processed at all.
     expect(legacy?.key_version).toBe(1);
@@ -202,7 +202,7 @@ describe("rotateCredentials", () => {
         if (property !== "withWriteLock") return Reflect.get(target, property, receiver) as unknown;
         const withWriteLock: Database["withWriteLock"] = async (body) => {
           transactions += 1;
-          if (transactions === 2) await target.execute(sql`delete from tenant_credentials`);
+          if (transactions === 2) await target.execute(sql`delete from venue_credentials`);
           return target.withWriteLock(body);
         };
         return withWriteLock;
@@ -243,7 +243,7 @@ describe("rotateCredentials", () => {
     expect(hasCode(error, "credentials.rotation_spare_joined")).toBe(true);
     expect((error as AppError).params).toEqual({ role: "streams" });
     expect([
-      ...suite.db.all(sql`select key_version from tenant_credentials`),
+      ...suite.db.all(sql`select key_version from venue_credentials`),
       ...suite.node.all(sql`select key_version from node_signing_key`),
       ...suite.node.all(sql`select key_version from node_pair_link`),
     ]).toEqual([{ key_version: 1 }, { key_version: 1 }, { key_version: 1 }]);

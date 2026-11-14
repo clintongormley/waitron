@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
 import { activateDueMenuPublications } from "@waitron/menu";
 import type { MenuPreview, MenuPublicationsAnswer, MenuStatus } from "@waitron/menu";
@@ -35,7 +35,7 @@ const suite = useVenueDb({
   setup: async (db) => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOW);
-    await seedTenant(db);
+    await seedTaxpayer(db);
     await seedLegacySellingUnits(db);
     await seedVenue(db, {
       name: "Main",

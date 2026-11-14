@@ -5,7 +5,7 @@ import { readDeviceReceiptEvidence } from "./device-receipt-evidence.js";
 // Registers this package's own error codes on the shared registry.
 import "./errors.js";
 import { and, eq, sql } from "drizzle-orm";
-import { readTenant, withTransaction } from "@waitron/db";
+import { readTaxpayer, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { recipientIdentifierResult } from "@waitron/country-packs";
 import { AppError, decimal, readSaleOrigin, sumDecimals } from "@waitron/shared";
@@ -250,7 +250,7 @@ export class VerifactuBackend implements FiscalBackend {
   async recordSale(tx: Transaction, sale: SaleForFiscalRecord): Promise<FiscalRecordRef> {
     const chart = await this.admitIssuance(tx, sale.nodeId);
     const sif = await currentSif(tx, sale.nodeId);
-    const tenant = await this.taxpayer(tx);
+    const taxpayer = await this.taxpayer(tx);
 
     const desglose = sale.vatBreakdown.map(toDetalleDesglose);
     const cuotaTotal = sumDecimals(sale.vatBreakdown.map((line) => line.tax));
@@ -263,7 +263,7 @@ export class VerifactuBackend implements FiscalBackend {
       IDEmisorFactura: sif.nif,
       NumSerieFactura: formatInvoiceNumber(sale.seriesCode, sale.invoiceNumber),
       FechaExpedicionFactura: sale.issuedAt,
-      NombreRazonEmisor: tenant.legalName,
+      NombreRazonEmisor: taxpayer.legalName,
       TipoFactura: sale.counterparty === null ? "F2" : "F1",
       Destinatarios: destinatarios,
       DescripcionOperacion: sale.descriptionOfOperation,
@@ -271,7 +271,7 @@ export class VerifactuBackend implements FiscalBackend {
       CuotaTotal: cuotaTotal,
       ImporteTotal: sale.total,
       SistemaInformatico: this.buildSistemaInformatico(sif, {
-        legalName: tenant.legalName,
+        legalName: taxpayer.legalName,
         nif: sif.nif,
       }),
       generadoEn: sale.issuedAt,
@@ -451,7 +451,7 @@ export class VerifactuBackend implements FiscalBackend {
     const origin = readSaleOrigin(original.source, original.device_id);
     const chart = await this.admitIssuance(tx, issuingNodeId);
     const sif = await currentSif(tx, issuingNodeId);
-    const tenant = await this.taxpayer(tx);
+    const taxpayer = await this.taxpayer(tx);
     const now = this.clock.now();
 
     const input: Omit<AnulacionInput, "Encadenamiento"> = {
@@ -465,7 +465,7 @@ export class VerifactuBackend implements FiscalBackend {
         Date.parse(`${original.fecha_expedicion_factura}T00:00:00Z`) - now.offsetMinutes * 60_000,
       ),
       SistemaInformatico: this.buildSistemaInformatico(sif, {
-        legalName: tenant.legalName,
+        legalName: taxpayer.legalName,
         nif: sif.nif,
       }),
       generadoEn: now.instant,
@@ -480,7 +480,7 @@ export class VerifactuBackend implements FiscalBackend {
         saleId,
         origin,
         entorno: this.deploymentEnvironment,
-        nombreRazonEmisor: tenant.legalName,
+        nombreRazonEmisor: taxpayer.legalName,
         input,
       },
       { sif, chart },
@@ -549,7 +549,7 @@ export class VerifactuBackend implements FiscalBackend {
     }
 
     const sif = await currentSif(tx, sale.nodeId);
-    const tenant = await this.taxpayer(tx);
+    const taxpayer = await this.taxpayer(tx);
 
     const desglose = sale.vatBreakdown.map(toDetalleDesglose);
     const cuotaTotal = sumDecimals(sale.vatBreakdown.map((line) => line.tax));
@@ -566,7 +566,7 @@ export class VerifactuBackend implements FiscalBackend {
       // The corrective's OWN new number and date: a rectificativa is a new invoice.
       NumSerieFactura: formatInvoiceNumber(sale.seriesCode, sale.invoiceNumber),
       FechaExpedicionFactura: sale.issuedAt,
-      NombreRazonEmisor: tenant.legalName,
+      NombreRazonEmisor: taxpayer.legalName,
       TipoFactura: "R5",
       TipoRectificativa: replacesRefusedF2 ? "S" : "I",
       FacturasRectificadas: [
@@ -590,7 +590,7 @@ export class VerifactuBackend implements FiscalBackend {
       CuotaTotal: cuotaTotal,
       ImporteTotal: sale.total,
       SistemaInformatico: this.buildSistemaInformatico(sif, {
-        legalName: tenant.legalName,
+        legalName: taxpayer.legalName,
         nif: sif.nif,
       }),
       generadoEn: sale.issuedAt,
@@ -699,7 +699,7 @@ export class VerifactuBackend implements FiscalBackend {
     }
 
     const sif = await currentSif(tx, sale.nodeId);
-    const tenant = await this.taxpayer(tx);
+    const taxpayer = await this.taxpayer(tx);
 
     const desglose = sale.vatBreakdown.map(toDetalleDesglose);
     const cuotaTotal = sumDecimals(sale.vatBreakdown.map((line) => line.tax));
@@ -709,7 +709,7 @@ export class VerifactuBackend implements FiscalBackend {
       // The F3's OWN new number and date: a canje is a new full invoice.
       NumSerieFactura: formatInvoiceNumber(sale.seriesCode, sale.invoiceNumber),
       FechaExpedicionFactura: sale.issuedAt,
-      NombreRazonEmisor: tenant.legalName,
+      NombreRazonEmisor: taxpayer.legalName,
       TipoFactura: "F3",
       FacturasSustituidas: substituidas,
       Destinatarios: destinatarios,
@@ -718,7 +718,7 @@ export class VerifactuBackend implements FiscalBackend {
       CuotaTotal: cuotaTotal,
       ImporteTotal: sale.total,
       SistemaInformatico: this.buildSistemaInformatico(sif, {
-        legalName: tenant.legalName,
+        legalName: taxpayer.legalName,
         nif: sif.nif,
       }),
       generadoEn: sale.issuedAt,
@@ -837,14 +837,14 @@ export class VerifactuBackend implements FiscalBackend {
    * The one taxpayer row, for the `NombreRazonEmisor` every record carries. Read on each filing
    * rather than cached: a legal-name correction must reach the next record.
    *
-   * An empty `tenants` table means a corrupt or half-provisioned database, so a plain `Error`
+   * An empty `taxpayer` table means a corrupt or half-provisioned database, so a plain `Error`
    * rather than a domain code. It must fail LOUDLY: filing under a blank or guessed issuer name is
    * unrepairable.
    */
   private async taxpayer(tx: Transaction): Promise<{ legalName: string }> {
-    const row = await readTenant(tx);
+    const row = await readTaxpayer(tx);
     if (row === null) {
-      throw new Error("tenants is empty: a venue cannot file a record with no taxpayer to file as");
+      throw new Error("taxpayer is empty: a venue cannot file a record with no taxpayer to file as");
     }
     return row;
   }

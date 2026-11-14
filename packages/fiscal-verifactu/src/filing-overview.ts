@@ -1,5 +1,5 @@
 import { and, asc, count, eq, exists, inArray, isNotNull, or, sql } from "drizzle-orm";
-import { deployment, invoiceSeries, readTenant, type Transaction } from "@waitron/db";
+import { deployment, invoiceSeries, readTaxpayer, type Transaction } from "@waitron/db";
 import { readActiveConflicts } from "./conflict-evidence.js";
 import type {
   ActiveConflictEvidence,
@@ -121,13 +121,13 @@ export async function readFilingOverview(
 }
 
 async function readMissingHistory(tx: Transaction): Promise<MissingHistory> {
-  const tenant = await readTenant(tx);
+  const taxpayer = await readTaxpayer(tx);
   const [stamp] = await tx
     .select({ environment: deployment.environment })
     .from(deployment)
     .where(eq(deployment.id, 1));
   const environment = stamp?.environment;
-  if (tenant === null || environment === undefined)
+  if (taxpayer === null || environment === undefined)
     return { notIssuedHere: [], identityChanges: [] };
   const notIssuedHere = await tx
     .select({
@@ -140,7 +140,7 @@ async function readMissingHistory(tx: Transaction): Promise<MissingHistory> {
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, fiscalSeriesConflicts.seriesId))
     .where(
       and(
-        eq(registroSif.nif, tenant.taxId),
+        eq(registroSif.nif, taxpayer.taxId),
         isNotNull(invoiceSeries.retiredAt),
         or(
           exists(
@@ -175,7 +175,7 @@ async function readMissingHistory(tx: Transaction): Promise<MissingHistory> {
       recordedAt: row.recordedAt.toISOString(),
       ...lookupEvidence(row.evidence),
     })),
-    identityChanges: await readIdentityChanges(tx, tenant.taxId, environment),
+    identityChanges: await readIdentityChanges(tx, taxpayer.taxId, environment),
   };
 }
 

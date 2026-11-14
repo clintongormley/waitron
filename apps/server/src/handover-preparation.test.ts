@@ -15,7 +15,7 @@ import {
   invoiceSeries,
   nodes,
   stampDeployment,
-  tenants,
+  taxpayer,
   withNodeTransaction,
   withTransaction,
 } from "@waitron/db";
@@ -163,7 +163,7 @@ beforeEach(async () => {
     monotonicFinishedMs: performance.now(),
   }));
   await suite.db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Handover SL" });
   await seedVenueSettings(suite.db, {
     name: "Restaurant",

@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   BUSINESS_DAY_SETTINGS,
   saveSettings,
-  readTenant,
+  readTaxpayer,
   readVenue,
   saveVenueFields,
   type Transaction,
@@ -88,9 +88,9 @@ export async function readVenueDetails(
   clockModel?: BusinessDayClockModel,
 ): Promise<VenueDetailsModel> {
   const venue = await readVenue(tx);
-  const tenant = await readTenant(tx);
-  if (tenant === null) throw new AppError("venue.not_found", {});
-  const issuer = { country: tenant.country, legalName: tenant.legalName, taxId: tenant.taxId };
+  const taxpayer = await readTaxpayer(tx);
+  if (taxpayer === null) throw new AppError("venue.not_found", {});
+  const issuer = { country: taxpayer.country, legalName: taxpayer.legalName, taxId: taxpayer.taxId };
   const pack = getCountryPack(issuer.country);
   const { rows } = await tx.execute<{ sales: number; orders: number; closes: number }>(sql`
     select exists(select 1 from sales limit 1) as sales,

@@ -11,7 +11,7 @@ import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import type { WaitronModule } from "@waitron/module";
 import { runCli } from "./cli.js";
 import type { CliDeps } from "./cli.js";
-import { readTenantIdentities } from "./tenant-guard.js";
+import { readTaxpayerIdentities } from "./taxpayer-guard.js";
 import type { VenueResult } from "./venue-apply.js";
 
 /**
@@ -103,7 +103,7 @@ async function run(env: Record<string, string | undefined>): Promise<Run> {
     readEnvironment: readDeploymentEnvironment,
     readDeploymentTable: deploymentTableExists,
     stampEnvironment: stampDeployment,
-    readTenants: readTenantIdentities,
+    readTaxpayers: readTaxpayerIdentities,
   };
   return { code: await runCli(VENUE_ARGS, deps), lines, applyVenue };
 }

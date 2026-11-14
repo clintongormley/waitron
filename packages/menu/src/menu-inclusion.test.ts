@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { products, withTransaction, type Transaction } from "@waitron/db";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { useCatalogueDb, seedLegacySellingUnits } from "../test/fixtures.js";
 import { createCatalogue, createProduct, updateMenuDetails } from "./operations.js";
 import { readMenuStructure, requireMenuRoot } from "./menu-structure.js";
@@ -22,7 +22,7 @@ const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, f
 const section = (sectionId: string) => ({ kind: "section" as const, sectionId });
 const product = (productId: string) => ({ kind: "product" as const, productId });
 async function fixture() {
-  await seedTenant(fx.db);
+  await seedTaxpayer(fx.db);
   await seedLegacySellingUnits(fx.db);
   return app(async (tx) => {
     const a = await createCatalogue(tx, { name: "Evening" });
@@ -184,7 +184,7 @@ describe("menu inclusions and owned sections", () => {
   });
 
   it("reports partial customer names for menu roots and owned sections", async () => {
-    await seedTenant(fx.db);
+    await seedTaxpayer(fx.db);
     await app(async (tx) => {
       const menu = await createCatalogue(tx, { name: "Staff menu", names: { en: "Guest menu" } });
       const root = await requireMenuRoot(tx, menu.id);

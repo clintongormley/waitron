@@ -137,7 +137,7 @@ export interface DeviceApiDeps {
    * Passed to `setDeviceCookie`, which resolves the cookie's `Domain` per request from it and the
    * host; absent, or a host outside it, gives a host-only cookie.
    */
-  tenantDomain?: string;
+  venueDomain?: string;
   /** The battery route's clock; tests inject one to step past the one-minute limit. */
   now?: () => Date;
   /** While the full-disk stop holds (`DiskFullState.full()`), every `/api/` write here but the device's own housekeeping answers 507. */
@@ -328,7 +328,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       // one at each. Until approval it names no active device, so `requireDevice` finds nothing and
       // every other device route answers `device.unauthorized`: the token is inert by construction
       // rather than by a flag. The token itself leaves the process only here.
-      setDeviceCookie(c, `${made.joinId}.${made.token}`, deps.secureCookies, deps.tenantDomain);
+      setDeviceCookie(c, `${made.joinId}.${made.token}`, deps.secureCookies, deps.venueDomain);
       return c.json({ joinId: made.joinId, verificationNumber: made.verificationNumber }, 200);
     }),
   );

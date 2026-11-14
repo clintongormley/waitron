@@ -4,7 +4,7 @@ import sharp from "sharp";
 import { expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { MEDIA_ROUTES } from "./routes.js";
 import { uploadImage } from "./images.js";
 import { saveImage } from "./image-edits.js";
@@ -17,7 +17,7 @@ const suite = useVenueDb({
 const first = await samplePreparedImage({ width: 32, height: 24 });
 const second = await samplePreparedImage({ width: 60, height: 40 });
 async function fixture() {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   const { image } = await withTransaction(suite.db, (tx) =>
     uploadImage(tx, { image: first, names: { en: "Bread" } }, { fallbackLanguage: "en" }),
   );

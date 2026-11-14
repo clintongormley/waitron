@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq } from "drizzle-orm";
 import { getCountryPack } from "@waitron/country-packs";
 import { recordSale } from "@waitron/core";
-import { invoiceDeliveries, invoiceSeries, sales, tenants } from "@waitron/db";
+import { invoiceDeliveries, invoiceSeries, sales, taxpayer } from "@waitron/db";
 import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Database } from "@waitron/db";
@@ -109,7 +109,7 @@ export async function provisionInvoiceCustomerVenue(db: Database): Promise<Invoi
   const venue = await provisionOrderVenue(db);
   const clock = steppingClock();
   const fullSeriesId = await inTx(venue, async (tx) => {
-    await tx.update(tenants).set({ taxpayerDomicile: "8 Fiscal Street, Madrid" });
+    await tx.update(taxpayer).set({ taxpayerDomicile: "8 Fiscal Street, Madrid" });
     const [series] = await tx
       .select({ id: invoiceSeries.id })
       .from(invoiceSeries)

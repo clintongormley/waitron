@@ -94,7 +94,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       "seeds %s courses in %s with their firing defaults",
       async (country, locale, english, held) => {
         await seedVenue(db, { invoiceLocales: [locale] });
-        await db.execute(sql`update tenants set country = ${country}`);
+        await db.execute(sql`update taxpayer set country = ${country}`);
         const node = { nodeId: await seedNode(db) };
         await withTransaction(db, (tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
         const rows = await db.execute(sql`

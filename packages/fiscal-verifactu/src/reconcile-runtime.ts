@@ -1,6 +1,6 @@
 import {
   readHistoryNodes,
-  readTenant,
+  readTaxpayer,
   withTransaction,
   type Database,
   type DeploymentEnvironment,
@@ -44,10 +44,10 @@ export const createRuntimeReconciliation: NonNullable<
   async function run(now: Date, signal?: AbortSignal): Promise<ReconciliationSweepResult> {
     activeSignal = signal;
     try {
-      const tenant = await withTransaction(deps.db, readTenant);
-      if (tenant === null) throw new Error("reconciliation requires the venue taxpayer");
-      if (sweep === undefined || taxpayerId !== tenant.taxId) {
-        taxpayerId = tenant.taxId;
+      const taxpayer = await withTransaction(deps.db, readTaxpayer);
+      if (taxpayer === null) throw new Error("reconciliation requires the venue taxpayer");
+      if (sweep === undefined || taxpayerId !== taxpayer.taxId) {
+        taxpayerId = taxpayer.taxId;
         sweep = createReconciliationSweep({
           db: deps.db,
           clock: deps.clock,

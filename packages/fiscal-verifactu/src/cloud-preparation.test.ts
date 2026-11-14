@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { deployment, invoiceSeries, nodes, tenants, withTransaction } from "@waitron/db";
+import { deployment, invoiceSeries, nodes, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type ModuleOperationPreparation } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -504,12 +504,12 @@ it.each(["shape", "signature", "binding", "allocation"])(
 );
 it("refuses a retained report for a different taxpayer or environment", async () => {
   await activate();
-  await suite.db.update(tenants).set({ taxId: "B12345678" });
+  await suite.db.update(taxpayer).set({ taxId: "B12345678" });
   await expect(collectReport()).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "taxpayer_mismatch" },
   });
-  await suite.db.update(tenants).set({ taxId: "89890001K" });
+  await suite.db.update(taxpayer).set({ taxId: "89890001K" });
   await suite.db.update(deployment).set({ environment: "production" });
   await expect(collectReport()).rejects.toMatchObject({
     code: "sif.allocation_invalid",

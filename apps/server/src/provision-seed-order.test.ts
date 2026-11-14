@@ -13,7 +13,7 @@ const suite = useVenueDb({
 });
 
 describe("first setup module seeds", () => {
-  it("runs every module's seed for the node — fiscal registers it under the tenant's own NIF", async () => {
+  it("runs every module's seed for the node — fiscal registers it under the taxpayer's own NIF", async () => {
     const nif = "50000001K";
     const actions = planVenue(
       {

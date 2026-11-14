@@ -17,7 +17,7 @@ export const CREDENTIALS_BACKUP_POLICY = {
   publicEvidenceDigest: null,
   data: {
     kind: "custom",
-    tables: ["tenant_credentials"],
+    tables: ["venue_credentials"],
     immutableTables: [],
     checks: ["data", "secret"],
   },
@@ -92,7 +92,7 @@ export async function verifyBackupCredentials(
   let status: "passed" | Refusal = "passed";
   const priority = { passed: 0, invalid: 1, unsupported: 2, unavailable: 3 };
   for await (const row of query.rows(
-    "select purpose, ciphertext, iv, auth_tag, key_version from tenant_credentials",
+    "select purpose, ciphertext, iv, auth_tag, key_version from venue_credentials",
   )) {
     try {
       decrypt(row, keyInputs);
@@ -111,7 +111,7 @@ export async function readBackupCredential(
 ): Promise<Readonly<Record<string, string>> | null> {
   let result: Readonly<Record<string, string>> | null = null;
   for await (const row of query.rows(
-    "select purpose, ciphertext, iv, auth_tag, key_version from tenant_credentials where purpose = ?",
+    "select purpose, ciphertext, iv, auth_tag, key_version from venue_credentials where purpose = ?",
     [purpose],
   )) {
     if (result !== null) throw new BackupCredentialReadError("invalid");

@@ -7,7 +7,7 @@
  *
  * Each value must match the index name the migrations create; renaming an index without changing
  * it here would silently stop a translation. `person-constraints.db.test.ts` drives one real
- * collision per index and reads the name back off the refusal. The names still read `tenant`, from
+ * collision per index and reads the name back off the refusal. The names still read `taxpayer`, from
  * the dropped column; renaming them is its own slice (`docs/backlog.md`).
  */
 

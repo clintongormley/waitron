@@ -31,7 +31,7 @@ const clock: TrustedClock = {
 /**
  * A one-line sale written through the core into a new series on `nodeId`, as part 1's delivery
  * suites write theirs: a full invoice to {@link SYNTHETIC_CUSTOMER}, or a simplified one when `full`
- * is false. The tenant needs a taxpayer domicile for a full invoice.
+ * is false. The taxpayer needs a taxpayer domicile for a full invoice.
  */
 export async function recordSyntheticInvoice(
   db: Database,

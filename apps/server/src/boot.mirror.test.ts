@@ -15,7 +15,7 @@ import {
   nodes,
   openVenueDatabase,
   stampDeployment,
-  tenants,
+  taxpayer,
   withNodeTransaction,
   withTransaction,
   type Database,
@@ -252,7 +252,7 @@ async function seedIdentity(admin: Database): Promise<void> {
   await seedModuleSettings(admin, { "fiscal-none": false });
   // `onConflictDoNothing` is untargeted: nothing here reads the result.
   await admin
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "90222222J", legalName: "Mirror SL" })
     .onConflictDoNothing();
   await seedVenueSettings(admin, {

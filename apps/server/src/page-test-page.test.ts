@@ -12,14 +12,14 @@ import {
   invoiceSeries,
   pagePrinters,
   printAgents,
-  tenants,
+  taxpayer,
   withTransaction,
 } from "@waitron/db";
 import { hashPin, hashDeviceToken, persons, startManagementSession } from "@waitron/identity";
 import { createClient } from "@waitron/print-agent";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { recordSale } from "@waitron/core";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { ReceiptQrText, TrustedClock } from "@waitron/fiscal";
@@ -68,8 +68,8 @@ type Render = (
 type Venue = Awaited<ReturnType<typeof venue>>;
 
 async function venue(opts: { render?: Render } = {}) {
-  await seedTenant(suite.db);
-  await suite.db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
+  await seedTaxpayer(suite.db);
+  await suite.db.update(taxpayer).set({ taxpayerDomicile: "Saved domicile" });
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: ["es-ES"],

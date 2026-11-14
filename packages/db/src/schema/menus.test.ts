@@ -18,7 +18,7 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 afterEach(async () => {
   await suite.db.execute(sql`delete from products`);
   await suite.db.execute(sql`delete from catalogues`);
-  await suite.db.execute(sql`delete from tenants`);
+  await suite.db.execute(sql`delete from taxpayer`);
 });
 
 async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]> {

@@ -8,7 +8,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { PAYMENTS_MIGRATIONS, insertInitiated } from "@waitron/payments";
 import { decimal, deviceOrigin, nodeId as brandNodeId } from "@waitron/shared";
-import { seedDevice, seedTenant, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedTaxpayer, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { createHealthState, healthApp } from "./health.js";
 import { hostedWebhookSecretFrom, mountWebhook } from "./webhook.js";
@@ -236,7 +236,7 @@ describe("signature verification", () => {
 
 describe("no-op acknowledgements (2xx)", () => {
   it("acks 2xx and logs unresolved for a verified event with no local initiated row", async () => {
-    // A provisioned tenant (so its secret verifies) but a session id it never minted.
+    // A provisioned taxpayer (so its secret verifies) but a session id it never minted.
     const seeded = await seedInitiated(suite.db, { webhookSecret: "whsec_unres" });
     const app = new Hono();
     const lines: { level: LogLevel; event: string; fields: Record<string, unknown> }[] = [];
@@ -319,10 +319,10 @@ describe("permanent client errors are 400 (a retry can never fix them)", () => {
 });
 
 describe("a transient failure is surfaced 5xx so Stripe retries — the distinction holds", () => {
-  it("answers 500 when the path tenant has no payments.stripe credential at all", async () => {
+  it("answers 500 when the path taxpayer has no payments.stripe credential at all", async () => {
     // No Stripe credential yet can be a provisioning race that resolves on Stripe's retry. The
     // control for the 400 cases above.
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const app = new Hono();
     const lines: { level: LogLevel; event: string; fields: Record<string, unknown> }[] = [];
     mountWebhook(app, deps(suite.db), collect(lines));

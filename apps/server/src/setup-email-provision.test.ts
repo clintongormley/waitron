@@ -5,11 +5,11 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { tenants, withTransaction } from "@waitron/db";
+import { taxpayer, withTransaction } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { loadKeyRing, tenantCredentials } from "@waitron/credentials";
+import { loadKeyRing, venueCredentials } from "@waitron/credentials";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
 import { resolveEmailDelivery } from "./email-delivery.js";
 import { createSetupOperationStore } from "./setup-operation.js";
@@ -22,7 +22,7 @@ const suite = useVenueDb({
   setup: async (db) => {
     await withTransaction(db, async (tx) => {
       await tx
-        .insert(tenants)
+        .insert(taxpayer)
         .values({ id: 1, country: "ES", taxId: "50000000R", legalName: "Email SL" });
     });
   },
@@ -129,7 +129,7 @@ const post = (app: Hono, value: unknown, path = "/setup-api/provision") =>
 beforeEach(async () => {
   await seedVenue(suite.db, { name: "Sala" });
   await withTransaction(suite.db, async (tx) => {
-    await tx.delete(tenantCredentials);
+    await tx.delete(venueCredentials);
   });
 });
 
@@ -152,7 +152,7 @@ describe("setup provision email credential", () => {
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({ provisioned: true, restarting: true });
       expect(JSON.stringify(made.logs)).not.toContain(email.password);
-      const stored = await suite.db.select().from(tenantCredentials);
+      const stored = await suite.db.select().from(venueCredentials);
       expect(stored.map((row) => row.purpose).sort()).toEqual(
         mode === "live" ? ["email.smtp", "fiscal.aeat"] : ["email.smtp"],
       );
@@ -173,7 +173,7 @@ describe("setup provision email credential", () => {
         error: { code: "setup.email_required", params: { field: "email" } },
       });
       expect(made.calls).toEqual([]);
-      expect(await suite.db.select().from(tenantCredentials)).toEqual([]);
+      expect(await suite.db.select().from(venueCredentials)).toEqual([]);
     },
   );
   it("allows development live provisioning without SMTP or a production certificate", async () => {
@@ -182,19 +182,19 @@ describe("setup provision email credential", () => {
     delete value.aeatCert;
     const response = await post(made.app, value);
     expect(response.status).toBe(200);
-    expect(await suite.db.select().from(tenantCredentials)).toEqual([]);
+    expect(await suite.db.select().from(venueCredentials)).toEqual([]);
   });
   it.each(["demo", "prepare"] as const)("allows development %s without SMTP", async (mode) => {
     const made = mount({ devMode: true });
     const response = await post(made.app, body(mode));
     expect(response.status).toBe(200);
-    expect(await suite.db.select().from(tenantCredentials)).toEqual([]);
+    expect(await suite.db.select().from(venueCredentials)).toEqual([]);
   });
   it("allows ordinary Demo without SMTP", async () => {
     const made = mount();
     const response = await post(made.app, body("demo"));
     expect(response.status).toBe(200);
-    expect(await suite.db.select().from(tenantCredentials)).toEqual([]);
+    expect(await suite.db.select().from(venueCredentials)).toEqual([]);
   });
   it.each(["demo"] as const)("refuses %s email settings before provisioning", async (mode) => {
     const made = mount();
@@ -204,7 +204,7 @@ describe("setup provision email credential", () => {
       error: { code: "setup.request_invalid", params: { field: "email" } },
     });
     expect(made.calls).toEqual([]);
-    expect(await suite.db.select().from(tenantCredentials)).toEqual([]);
+    expect(await suite.db.select().from(venueCredentials)).toEqual([]);
   });
   it.each(["live", "prepare"] as const)(
     "rejects malformed %s email without writing credentials",
@@ -228,7 +228,7 @@ describe("setup provision email credential", () => {
             : "email.settings_invalid",
         );
         expect(made.calls).toEqual([]);
-        expect(await suite.db.select().from(tenantCredentials)).toEqual([]);
+        expect(await suite.db.select().from(venueCredentials)).toEqual([]);
         expect(JSON.stringify(made.logs)).not.toContain(email.password);
       }
     },
@@ -271,7 +271,7 @@ describe("setup provision email credential", () => {
   it("resumes both credential seals when SMTP storage fails after the fiscal seal", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-email-seal-failure-"));
     await suite.db
-      .run(sql`create trigger test_email_seal_failure before insert on tenant_credentials
+      .run(sql`create trigger test_email_seal_failure before insert on venue_credentials
       when new.purpose = 'email.smtp' begin select raise(abort, 'fixture storage refusal'); end`);
     try {
       const operations = createSetupOperationStore(dir);
@@ -284,7 +284,7 @@ describe("setup provision email credential", () => {
       });
       expect(first.calls).toEqual(["provision"]);
       expect((await operations.read())?.phase).toBe("membership_seeded");
-      expect((await suite.db.select().from(tenantCredentials)).map((row) => row.purpose)).toEqual([
+      expect((await suite.db.select().from(venueCredentials)).map((row) => row.purpose)).toEqual([
         "fiscal.aeat",
       ]);
       await suite.db.run(sql`drop trigger test_email_seal_failure`);
@@ -292,7 +292,7 @@ describe("setup provision email credential", () => {
       expect((await post(next.app, value)).status).toBe(200);
       expect(next.calls).toEqual(["publish"]);
       expect(
-        (await suite.db.select().from(tenantCredentials)).map((row) => row.purpose).sort(),
+        (await suite.db.select().from(venueCredentials)).map((row) => row.purpose).sort(),
       ).toEqual(["email.smtp", "fiscal.aeat"]);
       expect(await resolveEmailDelivery(suite.db, ring, false)).toEqual({
         mode: "smtp",
@@ -311,6 +311,6 @@ describe("setup provision email credential", () => {
     const response = await post(made.app, body(), "/setup-api/fiscal-test");
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ status: "accepted" });
-    expect(await suite.db.select().from(tenantCredentials)).toEqual([]);
+    expect(await suite.db.select().from(venueCredentials)).toEqual([]);
   });
 });

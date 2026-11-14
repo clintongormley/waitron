@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { invoiceSeries, readTenant, sales, tenderRefunds, type Transaction } from "@waitron/db";
+import { invoiceSeries, readTaxpayer, sales, tenderRefunds, type Transaction } from "@waitron/db";
 import { payments } from "@waitron/payments";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { formatInvoiceNumber } from "@waitron/core";
@@ -35,14 +35,14 @@ export async function readTenderRefundAcknowledgment(
     tx,
     brandSaleId(row.saleId),
   );
-  const tenant = filed.issuer === undefined ? await readTenant(tx) : null;
+  const taxpayer = filed.issuer === undefined ? await readTaxpayer(tx) : null;
   const issuer =
     filed.issuer ??
-    (tenant === null
+    (taxpayer === null
       ? undefined
       : {
-          venueName: tenant.legalName,
-          nif: tenant.taxId,
+          venueName: taxpayer.legalName,
+          nif: taxpayer.taxId,
           ...(sale!.sale.taxpayerDomicile === null
             ? {}
             : { domicile: sale!.sale.taxpayerDomicile }),

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, units, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import {
   readContentLanguages,
   writeContentLanguages,
@@ -15,7 +15,7 @@ const valencian = "ca-ES-valencia";
 
 describe("stored Valencian content", () => {
   it("stores Catalan and Valencian separately without copying either text", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const unit = await tx
         .insert(units)
@@ -46,7 +46,7 @@ describe("stored Valencian content", () => {
     });
   });
   it("reports missing Valencian text even when Catalan exists", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const unit = await withTransaction(suite.db, (tx) =>
       tx
         .insert(units)

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Hono } from "hono";
-import { invoiceSeries, nodes, tenants } from "@waitron/db";
+import { invoiceSeries, nodes, taxpayer } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { persons } from "@waitron/identity";
@@ -200,7 +200,7 @@ function establish(beforeCommit?: (tx: import("@waitron/db").Transaction) => Pro
   });
 }
 async function emptyVenue() {
-  expect(await suite.db.select().from(tenants)).toEqual([]);
+  expect(await suite.db.select().from(taxpayer)).toEqual([]);
   expect(await suite.db.select().from(nodes)).toEqual([]);
   expect(await suite.db.select().from(persons)).toEqual([]);
   expect(await suite.db.select().from(registroSif)).toEqual([]);

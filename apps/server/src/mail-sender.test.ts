@@ -561,7 +561,7 @@ describe("one mail sender", () => {
     );
     const version = async (keyVersion: number) =>
       suite.db.run(
-        sql`update tenant_credentials set key_version=${keyVersion} where purpose='email.smtp'`,
+        sql`update venue_credentials set key_version=${keyVersion} where purpose='email.smtp'`,
       );
     await version(99);
     await queue("expired", { notAfter: new Date(time.getTime() + 1) });

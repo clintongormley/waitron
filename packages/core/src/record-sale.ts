@@ -8,7 +8,7 @@ import {
   allocateInvoiceNumber,
   invoiceSeries,
   saleLines,
-  tenants,
+  taxpayer,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
@@ -261,7 +261,7 @@ export async function recordSale(
   const [taxpayer] =
     counterparty === null
       ? []
-      : await tx.select({ domicile: tenants.taxpayerDomicile }).from(tenants);
+      : await tx.select({ domicile: taxpayer.taxpayerDomicile }).from(taxpayer);
   if (counterparty !== null && !taxpayer?.domicile?.trim()) {
     throw new AppError("fiscal.taxpayer_domicile_missing", {});
   }

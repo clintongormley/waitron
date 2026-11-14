@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { tenants, type Transaction } from "@waitron/db";
+import { taxpayer, type Transaction } from "@waitron/db";
 import {
   AppError,
   privacyContactProblem,
@@ -25,9 +25,9 @@ export function privacyContactChecked(field: PrivacyContactField, raw: string): 
 /** The taxpayer row's privacy contact, or null when there is no taxpayer row. */
 export async function readPrivacyContact(tx: Transaction): Promise<PrivacyContact | null> {
   const [row] = await tx
-    .select({ privacyNoticeUrl: tenants.privacyNoticeUrl, privacyEmail: tenants.privacyEmail })
-    .from(tenants)
-    .where(eq(tenants.id, 1));
+    .select({ privacyNoticeUrl: taxpayer.privacyNoticeUrl, privacyEmail: taxpayer.privacyEmail })
+    .from(taxpayer)
+    .where(eq(taxpayer.id, 1));
   return row ?? null;
 }
 
@@ -47,9 +47,9 @@ export async function savePrivacyContact(
   if (changes.privacyEmail !== undefined) values.privacyEmail = changes.privacyEmail;
   if (Object.keys(values).length === 0) return readPrivacyContact(tx);
   const [row] = await tx
-    .update(tenants)
+    .update(taxpayer)
     .set(values)
-    .where(eq(tenants.id, 1))
-    .returning({ privacyNoticeUrl: tenants.privacyNoticeUrl, privacyEmail: tenants.privacyEmail });
+    .where(eq(taxpayer.id, 1))
+    .returning({ privacyNoticeUrl: taxpayer.privacyNoticeUrl, privacyEmail: taxpayer.privacyEmail });
   return row ?? null;
 }

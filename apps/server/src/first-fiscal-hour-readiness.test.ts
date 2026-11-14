@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { ALL_MODULES } from "@waitron/composition";
 import { loadKeyRing } from "@waitron/credentials";
-import { tenants } from "@waitron/db";
+import { taxpayer } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
@@ -122,7 +122,7 @@ function inspect(directory: string) {
     return {
       deployment: db.prepare("select environment from deployment").all(),
       records: db.prepare("select entorno from registros_facturacion").all(),
-      credentials: db.prepare("select purpose from tenant_credentials").all(),
+      credentials: db.prepare("select purpose from venue_credentials").all(),
       series: db.prepare("select purpose, next_number from invoice_series order by purpose").all(),
     };
   } finally {
@@ -283,7 +283,7 @@ it("owned production Live still refuses activation without accepted authority re
     params: { module: "verifactu" },
   });
   expect(f.published).toEqual([]);
-  expect(await venue.db.select().from(tenants)).toEqual([]);
+  expect(await venue.db.select().from(taxpayer)).toEqual([]);
   expect(await venue.db.select().from(fiscalAllocations)).toEqual([]);
   expect((await f.host.store.read())!.status).toBe("consumption-intent");
 });
@@ -302,7 +302,7 @@ it("refuses an unusable setup certificate before changing the owned attempt or m
     params: { field: "passphrase", reason: "passphrase_wrong" },
   });
   expect(f.published).toEqual([]);
-  expect(await venue.db.select().from(tenants)).toEqual([]);
+  expect(await venue.db.select().from(taxpayer)).toEqual([]);
   expect(await venue.db.select().from(fiscalAllocations)).toEqual([]);
   expect(await f.host.store.read()).toEqual(before);
 });

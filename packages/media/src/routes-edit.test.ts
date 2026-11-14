@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, mediaImageData, mediaImageEdits } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { hashPin, managementSessions, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { ModuleRouteContext } from "@waitron/module";
@@ -30,7 +30,7 @@ async function fixture(
   renderReceiptLogo?: (bytes: Uint8Array) => Promise<ReceiptLogoRasters>,
   role: "manager" | "staff" = "manager",
 ) {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   const [person] = await seedPersons(suite.db, {
     displayName: crypto.randomUUID(),
     pinHash: hashPin("1234"),

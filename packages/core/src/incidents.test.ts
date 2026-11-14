@@ -21,7 +21,7 @@ import {
 import type { RecordIncidentInput } from "./incidents.js";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
-import { seedTenant } from "../test/fixtures.js";
+import { seedTaxpayer } from "../test/fixtures.js";
 
 let deviceId: DeviceId;
 let nodeId: NodeId;
@@ -34,7 +34,7 @@ const suite = useVenueDb({
 });
 
 beforeEach(async () => {
-  ({ deviceId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ deviceId, nodeId, seriesId } = await seedTaxpayer(suite.db));
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -137,7 +137,7 @@ async function incidentsForDevice(device: DeviceId) {
 }
 
 async function seedDeviceForIncidents(): Promise<{ deviceId: DeviceId }> {
-  const seeded = await seedTenant(suite.db);
+  const seeded = await seedTaxpayer(suite.db);
   return { deviceId: seeded.deviceId };
 }
 
@@ -469,7 +469,7 @@ describe("recordIncidentOnce", () => {
   it("does not de-dup the same code and sale raised on two different devices", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
-    const other = await seedTenant(suite.db);
+    const other = await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const base = { saleId, error: chainFailed(), severity: "error" as const, detectedAt: BASE };
       expect(await recordIncidentOnce(tx, { ...base, origin: deviceOrigin(deviceId) })).toBe(true);
@@ -648,7 +648,7 @@ describe("incidents open-dedup invariant (partial unique index)", () => {
   });
 });
 
-describe("tenant incident reads", () => {
+describe("taxpayer incident reads", () => {
   function chainFailed(forDevice: DeviceId): RecordIncidentInput["error"] {
     return new AppError("chain.verification_failed", {
       deviceId: forDevice,
@@ -673,8 +673,8 @@ describe("tenant incident reads", () => {
     });
   }
 
-  it("lists this tenant's open incidents across devices, newest first", async () => {
-    const second = await seedTenant(suite.db);
+  it("lists this taxpayer's open incidents across devices, newest first", async () => {
+    const second = await seedTaxpayer(suite.db);
     await raise(deviceOrigin(deviceId), BASE);
     await raise(deviceOrigin(second.deviceId), new Date(BASE.getTime() + 60_000));
     const rows = await asApp((tx) => listOpenIncidents(tx));
@@ -729,8 +729,8 @@ describe("tenant incident reads", () => {
   });
 
   it("lists handled incidents inside the window, newest handled first", async () => {
-    const second = await seedTenant(suite.db);
-    const third = await seedTenant(suite.db);
+    const second = await seedTaxpayer(suite.db);
+    const third = await seedTaxpayer(suite.db);
     await raise(deviceOrigin(deviceId), BASE);
     await raise(deviceOrigin(second.deviceId), BASE);
     await raise(deviceOrigin(third.deviceId), BASE);
@@ -787,7 +787,7 @@ describe("tenant incident reads", () => {
   it("includes an incident handled exactly at the cut-off and excludes one a millisecond before", async () => {
     const cutOff = new Date("2026-03-10T10:00:00.000Z");
     await raise(deviceOrigin(deviceId), BASE);
-    const second = await seedTenant(suite.db);
+    const second = await seedTaxpayer(suite.db);
     await raise(deviceOrigin(second.deviceId), BASE);
     const open = await asApp((tx) => listOpenIncidents(tx));
     const byDevice = new Map(open.map((r) => [r.deviceId, r.id]));
@@ -833,7 +833,7 @@ describe("tenant incident reads", () => {
   }
 
   it("answers the open incident of a code and the last one handled", async () => {
-    const second = await seedTenant(suite.db);
+    const second = await seedTaxpayer(suite.db);
     await insertIncident({
       code: "test.other",
       detectedAt: "2026-03-05T10:00:00.000Z",

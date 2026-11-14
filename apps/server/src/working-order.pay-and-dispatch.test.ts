@@ -176,7 +176,7 @@ interface SeededVenue {
 
 /**
  * Stand up a fresh chained venue + registered SIF, then seed a catalogue and read back two
- * `each`/general(21%) products. Each test gets its OWN tenant so its sale / fiscal record counts are
+ * `each`/general(21%) products. Each test gets its OWN taxpayer so its sale / fiscal record counts are
  * order-independent (CLAUDE.md §4).
  */
 async function setupVenue(): Promise<SeededVenue> {
@@ -494,7 +494,7 @@ async function ticketItemIdsFor(orderId: string): Promise<string[]> {
   return rows.map((r) => r.id);
 }
 
-async function asTenant<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+async function asVenue<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.db, async (tx) => {
     return fn(tx);
   });
@@ -1210,9 +1210,9 @@ describe("cross-till end-to-end", () => {
     expect(report.checked).toBe(2);
   });
 
-  it("venue-wide reads: a same-tenant register on a DIFFERENT node lists an order parked on node A", async () => {
+  it("venue-wide reads: a same-taxpayer register on a DIFFERENT node lists an order parked on node A", async () => {
     const { cfg: nodeA, coffee, zoneId } = await setupVenue();
-    // A second node under the SAME tenant. Reads are venue-wide, so both nodes see the order — a
+    // A second node under the SAME taxpayer. Reads are venue-wide, so both nodes see the order — a
     // promoted node inherits the venue's open tabs regardless of the `node_id` they carry.
     await addNode(nodeA);
 
@@ -2189,7 +2189,7 @@ describe("prepare & collect — zone payment timing", () => {
       id,
       OPERATOR,
     );
-    expect((await asTenant((tx) => listStationQueue(tx, station))).map((g) => g.orderId)).toEqual([
+    expect((await asVenue((tx) => listStationQueue(tx, station))).map((g) => g.orderId)).toEqual([
       id,
     ]);
     expect(await collectedAtSet(id)).toBe(false);
@@ -2214,7 +2214,7 @@ describe("prepare & collect — zone payment timing", () => {
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
 
     expect(await collectedAtSet(id)).toBe(false);
-    expect((await asTenant((tx) => listStationQueue(tx, station))).map((g) => g.orderId)).toEqual([
+    expect((await asVenue((tx) => listStationQueue(tx, station))).map((g) => g.orderId)).toEqual([
       id,
     ]);
     // Collect does not move the ticket item's kitchen state.
@@ -2237,7 +2237,7 @@ describe("prepare & collect — zone payment timing", () => {
       id,
       OPERATOR,
     );
-    expect((await asTenant((tx) => listStationQueue(tx, station))).map((g) => g.orderId)).toEqual([
+    expect((await asVenue((tx) => listStationQueue(tx, station))).map((g) => g.orderId)).toEqual([
       id,
     ]);
     expect(await collectedAtSet(id)).toBe(false);
@@ -2258,7 +2258,7 @@ describe("prepare & collect — zone payment timing", () => {
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
 
     expect(await collectedAtSet(id)).toBe(false);
-    expect((await asTenant((tx) => listStationQueue(tx, station))).map((g) => g.orderId)).toEqual([
+    expect((await asVenue((tx) => listStationQueue(tx, station))).map((g) => g.orderId)).toEqual([
       id,
     ]);
   });
@@ -2349,30 +2349,30 @@ describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
 
     // Skipping `preparing` (queued → ready) matches no row — `ready`'s only legal predecessor is
     // `preparing` — so the empty `returning` refuses it, naming the offending item.
-    await expect(asTenant((tx) => advanceTicketItem(tx, item!, "ready"))).rejects.toMatchObject({
+    await expect(asVenue((tx) => advanceTicketItem(tx, item!, "ready"))).rejects.toMatchObject({
       code: "ticket.invalid_transition",
       params: { ticketItemId: item },
     });
     expect(await ticketStateOf(id)).toBe("queued"); // the refused skip changed nothing
 
     // The forward walk, one legal step at a time — the timestamps are stamped as it goes.
-    await asTenant((tx) => advanceTicketItem(tx, item!, "preparing"));
+    await asVenue((tx) => advanceTicketItem(tx, item!, "preparing"));
     expect(await ticketStateOf(id)).toBe("preparing");
-    await asTenant((tx) => advanceTicketItem(tx, item!, "ready"));
+    await asVenue((tx) => advanceTicketItem(tx, item!, "ready"));
     expect(await ticketStateOf(id)).toBe("ready");
 
-    await expect(asTenant((tx) => advanceTicketItem(tx, item!, "ready"))).rejects.toMatchObject({
+    await expect(asVenue((tx) => advanceTicketItem(tx, item!, "ready"))).rejects.toMatchObject({
       code: "ticket.invalid_transition",
       params: { ticketItemId: item },
     });
     // No kitchen state advances INTO `queued` — refused before any query (reaching queued is a fire's job).
-    await expect(asTenant((tx) => advanceTicketItem(tx, item!, "queued"))).rejects.toMatchObject({
+    await expect(asVenue((tx) => advanceTicketItem(tx, item!, "queued"))).rejects.toMatchObject({
       code: "management.request_invalid",
       params: { field: "to" },
     });
     expect(await ticketStateOf(id)).toBe("ready"); // every refusal left the item untouched
 
-    await asTenant((tx) => advanceTicketItem(tx, item!, "preparing"));
+    await asVenue((tx) => advanceTicketItem(tx, item!, "preparing"));
     expect(await ticketStateOf(id)).toBe("preparing");
   });
 
@@ -2391,15 +2391,15 @@ describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
       OPERATOR,
     );
     const [collectedItem] = await ticketItemIdsFor(collected);
-    await asTenant((tx) => advanceTicketItem(tx, collectedItem!, "preparing"));
-    await asTenant((tx) => advanceTicketItem(tx, collectedItem!, "ready"));
+    await asVenue((tx) => advanceTicketItem(tx, collectedItem!, "preparing"));
+    await asVenue((tx) => advanceTicketItem(tx, collectedItem!, "ready"));
     const collectedReadyAt = await readyAtOf(collected);
     expect(collectedReadyAt).toEqual(expect.any(String));
     await markCollected({ db: suite.db }, cfg, collected);
     expect(await collectedAtSet(collected)).toBe(true);
 
     await expect(
-      asTenant((tx) => advanceTicketItem(tx, collectedItem!, "preparing")),
+      asVenue((tx) => advanceTicketItem(tx, collectedItem!, "preparing")),
     ).rejects.toMatchObject({
       code: "ticket.invalid_transition",
       params: { ticketItemId: collectedItem },
@@ -2411,7 +2411,7 @@ describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
   it("advanceTicketItem refuses to put a made-here item back to preparing", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("prepay");
     const station = await defaultStationId();
-    const deviceId = await asTenant(async (tx) => {
+    const deviceId = await asVenue(async (tx) => {
       const [profile] = await seedDeviceProfiles(tx, {
         name: "Bar till",
         formFactor: "till",
@@ -2441,7 +2441,7 @@ describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
     const readyAt = await readyAtOf(id);
     expect(readyAt).toEqual(expect.any(String));
 
-    await expect(asTenant((tx) => advanceTicketItem(tx, item!, "preparing"))).rejects.toMatchObject(
+    await expect(asVenue((tx) => advanceTicketItem(tx, item!, "preparing"))).rejects.toMatchObject(
       { code: "ticket.invalid_transition", params: { ticketItemId: item } },
     );
     expect(await ticketStateOf(id)).toBe("ready");
@@ -2463,8 +2463,8 @@ describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
       OPERATOR,
     );
     const [cancelledItem] = await ticketItemIdsFor(cancelled);
-    await asTenant((tx) => advanceTicketItem(tx, cancelledItem!, "preparing"));
-    await asTenant((tx) => advanceTicketItem(tx, cancelledItem!, "ready"));
+    await asVenue((tx) => advanceTicketItem(tx, cancelledItem!, "preparing"));
+    await asVenue((tx) => advanceTicketItem(tx, cancelledItem!, "ready"));
     const cancelledReadyAt = await readyAtOf(cancelled);
     await cancelPlacedOrder(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
@@ -2475,7 +2475,7 @@ describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
     );
 
     await expect(
-      asTenant((tx) => advanceTicketItem(tx, cancelledItem!, "preparing")),
+      asVenue((tx) => advanceTicketItem(tx, cancelledItem!, "preparing")),
     ).rejects.toMatchObject({
       code: "ticket.invalid_transition",
       params: { ticketItemId: cancelledItem },
@@ -2518,7 +2518,7 @@ describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
     );
 
     // Both orders show, oldest first, each one line, at `queued`, carrying the order's label + queued_at.
-    const queue = await asTenant((tx) => listStationQueue(tx, station));
+    const queue = await asVenue((tx) => listStationQueue(tx, station));
     expect(queue.map((g) => g.orderId)).toEqual([id1, id2]);
     expect(queue[0]).toMatchObject({
       orderId: id1,
@@ -2531,9 +2531,9 @@ describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
 
     // Advancing order 1's line keeps it on the queue (a `preparing`/`ready` line stays until collected).
     const [item1] = await ticketItemIdsFor(id1);
-    await asTenant((tx) => advanceTicketItem(tx, item1!, "preparing"));
+    await asVenue((tx) => advanceTicketItem(tx, item1!, "preparing"));
     expect(
-      (await asTenant((tx) => listStationQueue(tx, station))).find((g) => g.orderId === id1)
+      (await asVenue((tx) => listStationQueue(tx, station))).find((g) => g.orderId === id1)
         ?.items[0]?.state,
     ).toBe("preparing");
 
@@ -2543,7 +2543,7 @@ describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
     await suite.db.execute(sql`
       update working_orders set status = 'settled', settled_at = ${settledNow}, collected_at = ${settledNow}
       where id = ${id1}`);
-    expect((await asTenant((tx) => listStationQueue(tx, station))).map((g) => g.orderId)).toEqual([
+    expect((await asVenue((tx) => listStationQueue(tx, station))).map((g) => g.orderId)).toEqual([
       id2,
     ]);
 
@@ -2557,7 +2557,7 @@ describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
       UNUSED_SESSION_OPERATOR,
     );
     expect(await ticketStateOf(id2)).toBe("queued"); // the ticket item itself is untouched by cancel
-    expect(await asTenant((tx) => listStationQueue(tx, station))).toEqual([]);
+    expect(await asVenue((tx) => listStationQueue(tx, station))).toEqual([]);
   });
 
   it("listStationQueue is VENUE-WIDE: each node sees the venue's items, regardless of node", async () => {
@@ -2594,8 +2594,8 @@ describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
       OPERATOR,
     );
 
-    const queueA = await asTenant((tx) => listStationQueue(tx, station));
-    const queueB = await asTenant((tx) => listStationQueue(tx, station));
+    const queueA = await asVenue((tx) => listStationQueue(tx, station));
+    const queueB = await asVenue((tx) => listStationQueue(tx, station));
 
     // Same station on both sides, each holding BOTH orders (oldest-first: A fired before B) — the
     // reads do not separate by node.
@@ -2607,7 +2607,7 @@ describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
 describe("the pass board — venue-wide", () => {
   it("is VENUE-WIDE: each node's pass board shows the venue's orders, regardless of node", async () => {
     const { cfg: nodeA, coffee, zoneId } = await modeVenue("ticket_then_pay");
-    // A second node under the SAME tenant + location. Reads are venue-wide, so
+    // A second node under the SAME taxpayer + location. Reads are venue-wide, so
     // BOTH nodes fire a genuine order and BOTH pass boards show both — a measurement where each side
     // holds two orders, not "one empty, one not" (CLAUDE.md §1).
     const nodeB = await addNode(nodeA);
@@ -2641,7 +2641,7 @@ describe("the pass board — venue-wide", () => {
     );
 
     const orderIdsOn = () =>
-      asTenant(async (tx) =>
+      asVenue(async (tx) =>
         boardCards(await readScopedPassBoard(tx, EVERY)).flatMap((card) =>
           card.orders.map((order) => order.orderId),
         ),
@@ -2712,7 +2712,7 @@ describe("paying a counter order never sent, in a zone that sends before payment
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1);
     expect(await ticketStateOf(id)).toBe("queued");
-    expect((await asTenant((tx) => listStationQueue(tx, station))).map((g) => g.orderId)).toEqual([
+    expect((await asVenue((tx) => listStationQueue(tx, station))).map((g) => g.orderId)).toEqual([
       id,
     ]);
     expect(await kitchenJobCount(printerId)).toBe(1);
@@ -2882,16 +2882,16 @@ describe("markCollected (the counter handover)", () => {
       },
       OPERATOR,
     );
-    expect((await asTenant((tx) => listStationQueue(tx, station))).map((g) => g.orderId)).toEqual([
+    expect((await asVenue((tx) => listStationQueue(tx, station))).map((g) => g.orderId)).toEqual([
       id,
     ]);
 
     // Walk the line all the way to `ready` — a ready line STAYS on the queue until the order collects.
     const [item] = await ticketItemIdsFor(id);
-    await asTenant((tx) => advanceTicketItem(tx, item!, "preparing"));
-    await asTenant((tx) => advanceTicketItem(tx, item!, "ready"));
+    await asVenue((tx) => advanceTicketItem(tx, item!, "preparing"));
+    await asVenue((tx) => advanceTicketItem(tx, item!, "ready"));
     expect(await ticketStateOf(id)).toBe("ready");
-    const readyQueue = await asTenant((tx) => listStationQueue(tx, station));
+    const readyQueue = await asVenue((tx) => listStationQueue(tx, station));
     // Still listed — a ready-but-uncollected order lingers — and
     // the group carries the order's `status`, so the till surfaces the collect action (collectable = settled).
     expect(readyQueue.map((g) => g.orderId)).toEqual([id]);
@@ -2900,7 +2900,7 @@ describe("markCollected (the counter handover)", () => {
     // Hand it over. NON-FISCAL — markCollected writes only collected_at (no sale/fiscal record/tender/huella).
     await markCollected({ db: suite.db }, cfg, id);
     expect(await collectedAtSet(id)).toBe(true);
-    expect(await asTenant((tx) => listStationQueue(tx, station))).toEqual([]);
+    expect(await asVenue((tx) => listStationQueue(tx, station))).toEqual([]);
     // Its fiscal state is untouched — still settled with settled_at intact (only collected_at moved).
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
   });

@@ -11,7 +11,7 @@ import {
   nodes,
   openVenueDatabase,
   stampDeployment,
-  tenants,
+  taxpayer,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -146,7 +146,7 @@ beforeEach(async () => {
   );
   await stampDeployment(suite.db, "preproduction");
   await suite.db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "50000000R", legalName: "Restaurant" });
   await seedVenue(suite.db, {
     name: "Restaurant",

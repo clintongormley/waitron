@@ -102,7 +102,7 @@ describe("loadConfig", () => {
       tillApp: EXPECTED_TILL_APP,
       managementRpId: "localhost",
       managementOrigin: "http://localhost:5191",
-      tenantDomain: undefined,
+      venueDomain: undefined,
       // No SPA is served: dev uses the Vite dev servers.
       tillAppDir: undefined,
       dashboardAppDir: undefined,
@@ -376,15 +376,15 @@ describe("loadConfig", () => {
   });
 
   // Lower-cased for the case-insensitive host comparison `cookieDomainFor` makes.
-  it("reads WAITRON_TENANT_DOMAIN into config.tenantDomain (lower-cased), else undefined", () => {
-    expect(loadConfig(MIN_ENV, ROOT, STATE_ROOT).tenantDomain).toBeUndefined();
+  it("reads WAITRON_VENUE_DOMAIN into config.venueDomain (lower-cased), else undefined", () => {
+    expect(loadConfig(MIN_ENV, ROOT, STATE_ROOT).venueDomain).toBeUndefined();
     expect(
-      loadConfig({ ...MIN_ENV, WAITRON_TENANT_DOMAIN: "Deli.Waitron.App" }, ROOT, STATE_ROOT)
-        .tenantDomain,
+      loadConfig({ ...MIN_ENV, WAITRON_VENUE_DOMAIN: "Deli.Waitron.App" }, ROOT, STATE_ROOT)
+        .venueDomain,
     ).toBe("deli.waitron.app");
     // Empty is unset: host-only, never a blank `Domain` on the Set-Cookie.
     expect(
-      loadConfig({ ...MIN_ENV, WAITRON_TENANT_DOMAIN: "" }, ROOT, STATE_ROOT).tenantDomain,
+      loadConfig({ ...MIN_ENV, WAITRON_VENUE_DOMAIN: "" }, ROOT, STATE_ROOT).venueDomain,
     ).toBeUndefined();
   });
 
@@ -393,13 +393,13 @@ describe("loadConfig", () => {
     "deli.waitron.app:8443",
     "deli.waitron.app/till",
     "deli waitron app",
-  ])("refuses WAITRON_TENANT_DOMAIN=%s, which is not a bare domain", async (bad) => {
+  ])("refuses WAITRON_VENUE_DOMAIN=%s, which is not a bare domain", async (bad) => {
     const error = await captureError(() =>
-      Promise.resolve(loadConfig({ ...MIN_ENV, WAITRON_TENANT_DOMAIN: bad }, ROOT, STATE_ROOT)),
+      Promise.resolve(loadConfig({ ...MIN_ENV, WAITRON_VENUE_DOMAIN: bad }, ROOT, STATE_ROOT)),
     );
     expect(codeOf(error)).toBe("server.config_invalid");
     expect(isAppError(error) && error.params).toEqual({
-      variable: "WAITRON_TENANT_DOMAIN",
+      variable: "WAITRON_VENUE_DOMAIN",
       reason: "not_a_domain",
     });
   });

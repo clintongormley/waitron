@@ -13,7 +13,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, openVenueDatabase, nodes, tenants, stampDeployment } from "@waitron/db";
+import { CORE_MIGRATIONS, openVenueDatabase, nodes, taxpayer, stampDeployment } from "@waitron/db";
 import { NODE_MIGRATIONS, readRecoveryKeyName } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
@@ -75,7 +75,7 @@ beforeEach(async () => {
   await stampDeployment(suite.db, "preproduction");
   scratch = await mkdtemp(join(tmpdir(), "recovery-preview-"));
   await suite.db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Old venue" });
   await seedVenueSettings(suite.db, {
     name: "Old venue",

@@ -7,7 +7,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { serve, type ServerType } from "@hono/node-server";
 import { Hono } from "hono";
-import { deployment, nodes, tenants, withNodeTransaction } from "@waitron/db";
+import { deployment, nodes, taxpayer, withNodeTransaction } from "@waitron/db";
 import { readPairLink } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -63,7 +63,7 @@ afterEach(async () => {
 function bundle(): MirrorBundle {
   return {
     designated: { nodeId: PRIMARY },
-    tenant: { country: "ES", taxId: "89890001K" },
+    taxpayer: { country: "ES", taxId: "89890001K" },
     primaryNode: { name: "Primary", filingModule: "fiscal-verifactu", taxModule: null },
     environment: "preproduction",
     boxHostname: "waitron.local",
@@ -191,7 +191,7 @@ it("adopts when the allocation-dependent module is disabled", async () => {
 });
 it("a pending adoption with the allocation-dependent module enabled finishes without writing to venue.db", async () => {
   await suite.db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Synthetic SL" });
   await seedVenueSettings(suite.db, {
     name: "Venue",

@@ -24,21 +24,21 @@ describe("setup operation store", () => {
 
     await first.run("provision", "request-a", async (operation) => {
       expect(operation.phase).toBe("started");
-      await operation.advance("venue_committed", { tenantId: "tenant-1" });
+      await operation.advance("venue_committed", { tenantId: "taxpayer-1" });
     });
 
     const resumed = createSetupOperationStore(dir);
     await resumed.run("provision", "request-a", async (operation) => {
       expect(operation.phase).toBe("venue_committed");
-      expect(operation.data).toEqual({ tenantId: "tenant-1" });
-      await operation.complete({ tenantId: "tenant-1" });
+      expect(operation.data).toEqual({ tenantId: "taxpayer-1" });
+      await operation.complete({ tenantId: "taxpayer-1" });
     });
 
     await expect(resumed.read()).resolves.toMatchObject({
       kind: "provision",
       requestHash: "request-a",
       phase: "complete",
-      data: { tenantId: "tenant-1" },
+      data: { tenantId: "taxpayer-1" },
     });
   });
 

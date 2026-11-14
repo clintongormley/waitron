@@ -5,7 +5,7 @@ import sharp from "sharp";
 import { Hono } from "hono";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { eq, inArray, sql } from "drizzle-orm";
-import { devices, printers, readTenant, withTransaction, type Database } from "@waitron/db";
+import { devices, printers, readTaxpayer, withTransaction, type Database } from "@waitron/db";
 import { mediaImages, uploadImage, prepareImage, saveImage } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
@@ -47,7 +47,7 @@ beforeAll(async () => {
     defaultContentLanguage: "es",
     contentLanguages: ["es", "ca", "gl", "eu"],
   });
-  taxId = (await withTransaction(suite.db, (tx) => readTenant(tx)))!.taxId;
+  taxId = (await withTransaction(suite.db, (tx) => readTaxpayer(tx)))!.taxId;
 });
 
 function app(cfg: Partial<TradingContext> = {}) {

@@ -6,7 +6,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, nodes, stampDeployment, tenants } from "@waitron/db";
+import { CORE_MIGRATIONS, nodes, stampDeployment, taxpayer } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { encodeRecoveryKit } from "@waitron/stream";
 import { encryptArtifact } from "./artifact-cipher.js";
@@ -41,7 +41,7 @@ beforeEach(async () => {
   });
   await stampDeployment(suite.db, "preproduction");
   await suite.db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Old venue" });
   await seedVenueSettings(suite.db, {
     name: "Old venue",

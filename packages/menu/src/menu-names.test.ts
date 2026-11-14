@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { catalogues, sections, withTransaction, type Transaction } from "@waitron/db";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { createCatalogue, listCatalogues, updateMenuDetails } from "./operations.js";
 import { readMenuStructure } from "./menu-structure.js";
@@ -17,7 +17,7 @@ describe("menu names on creation and rename", () => {
   )(
     "refuses $mode with the held name $name without changing either menu",
     async ({ name, mode }) => {
-      await seedTenant(fx.db);
+      await seedTaxpayer(fx.db);
       const held = await app((tx) => createCatalogue(tx, { name: "Café" }));
       const other = await app((tx) => createCatalogue(tx, { name: "Dinner" }));
       await fx.db.update(catalogues).set({ active: false }).where(eq(catalogues.id, held.id));
@@ -37,7 +37,7 @@ describe("menu names on creation and rename", () => {
   );
 
   it("allows distinct accents and interior spacing, and excludes the renamed menu itself", async () => {
-    await seedTenant(fx.db);
+    await seedTaxpayer(fx.db);
     const menu = await app((tx) => createCatalogue(tx, { name: "Café bar" }));
     await app((tx) => createCatalogue(tx, { name: "Cafe bar" }));
     await app((tx) => createCatalogue(tx, { name: "Café  bar" }));
@@ -48,7 +48,7 @@ describe("menu names on creation and rename", () => {
   });
 
   it("keeps existing duplicate names until renamed while allowing presentation-only saves", async () => {
-    await seedTenant(fx.db);
+    await seedTaxpayer(fx.db);
     const first = await app((tx) => createCatalogue(tx, { name: "Lunch" }));
     const second = await app((tx) => createCatalogue(tx, { name: "Dinner" }));
     const root = (await app((tx) => readMenuStructure(tx, second.id))).rootSectionId;

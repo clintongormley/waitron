@@ -157,7 +157,7 @@ declare module "@waitron/shared" {
      */
     "server.node_config_invalid": { key: string };
     /**
-     * A tenant's credential exists but this host cannot use it — a field the purpose registry
+     * A taxpayer's credential exists but this host cannot use it — a field the purpose registry
      * declares is absent from the sealed row, or its value is not one of the accepted ones. `field`
      * is a name from `PURPOSES`, so it is ours to echo.
      */

@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { credentialRevision, getCredential, loadKeyRing } from "@waitron/credentials";
 import { hasCode, isAppError } from "@waitron/shared";
 import type { TrustedClock } from "@waitron/fiscal";
@@ -255,7 +255,7 @@ describe("FISCAL_SLOT.provisioningSecret", () => {
   });
 
   it("seal writes the cert into the venue's fiscal.aeat vault", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await secret.seal({ db: suite.db, ring, nodeId: "node-a" }, goodCert);
     const readBack = await withTransaction(suite.db, (tx) =>
       getCredential(tx, ring, { purpose: "fiscal.aeat" }),

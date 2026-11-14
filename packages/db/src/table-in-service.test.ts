@@ -1,4 +1,4 @@
-import { tenants } from "@waitron/db";
+import { taxpayer } from "@waitron/db";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "./migrations.js";
@@ -79,7 +79,7 @@ describe("table in service", () => {
   it("keeps the same table correlation when the table is joined", async () => {
     const rows = await suite.db
       .select({ id: diningTables.id, inService: tableInService(diningTables.id) })
-      .from(tenants)
+      .from(taxpayer)
       .innerJoin(diningTables, sql`true`)
       .orderBy(diningTables.id);
     expect(rows).toEqual([

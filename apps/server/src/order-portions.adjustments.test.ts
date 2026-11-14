@@ -19,7 +19,7 @@ import {
   products,
   saleLines,
   sales,
-  tenants,
+  taxpayer,
   tenders,
   workingOrderLines,
   workingOrders,
@@ -507,13 +507,13 @@ describe("A803 portions: a discount or comp on a whole row of identical portions
 
 /** Files the bill as a full invoice to a business, paid by card, and answers the invoice's lines. */
 async function invoiceOf(billId: string) {
-  const [taxpayer] = await inTx(venue, (tx) => tx.select().from(tenants));
+  const [taxpayer] = await inTx(venue, (tx) => tx.select().from(taxpayer));
   try {
     await inTx(venue, (tx) =>
       tx
-        .update(tenants)
+        .update(taxpayer)
         .set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" })
-        .where(eq(tenants.id, 1)),
+        .where(eq(taxpayer.id, 1)),
     );
     const [order] = await inTx(venue, (tx) =>
       tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
@@ -558,9 +558,9 @@ async function invoiceOf(billId: string) {
   } finally {
     await inTx(venue, (tx) =>
       tx
-        .update(tenants)
+        .update(taxpayer)
         .set({ taxpayerDomicile: taxpayer!.taxpayerDomicile })
-        .where(eq(tenants.id, 1)),
+        .where(eq(taxpayer.id, 1)),
     );
   }
 }

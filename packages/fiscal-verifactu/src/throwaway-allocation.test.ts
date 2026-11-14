@@ -2,7 +2,7 @@ import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js"
 import { generateKeyPairSync, randomUUID, type KeyObject } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, afterEach, vi } from "vitest";
-import { deployment, nodes, tenants, withTransaction } from "@waitron/db";
+import { deployment, nodes, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type ThrowawayAllocation } from "@waitron/module";
 import { nodeId as brandNodeId } from "@waitron/shared";
@@ -34,7 +34,7 @@ function seat(): ThrowawayAllocation {
 
 async function seedStampedVenue(stamp: "preproduction" | "production") {
   await suite.db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: TAXPAYER, legalName: "Real Restaurant S.L." });
   await seedVenueSettings(suite.db, {
     name: "Casa Real",

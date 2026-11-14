@@ -1,7 +1,7 @@
 import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { seedFixtureSif as registerSif } from "./sif-fixture.js";
 import { sql } from "drizzle-orm";
-import { invoiceSeries, nodes, sales, tenants, type Database, type Transaction } from "@waitron/db";
+import { invoiceSeries, nodes, sales, taxpayer, type Database, type Transaction } from "@waitron/db";
 import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { DeviceId, NodeId, SeriesId } from "@waitron/shared";
 import { seedDevice, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
@@ -38,9 +38,9 @@ export const TENANT_B = {
  */
 export async function seedTenantNodeSif(db: Database): Promise<void> {
   await db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" })
-    .onConflictDoNothing({ target: tenants.id });
+    .onConflictDoNothing({ target: taxpayer.id });
   const existing = await readSettings(db, VENUE_SETTINGS);
   if (existing.revision === 0) {
     await seedVenueSettings(db, {
@@ -93,9 +93,9 @@ export async function seedTenantNodeSif(db: Database): Promise<void> {
  */
 export async function seedTenants(db: Database): Promise<void> {
   await db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" })
-    .onConflictDoNothing({ target: tenants.id });
+    .onConflictDoNothing({ target: taxpayer.id });
   const existing = await readSettings(db, VENUE_SETTINGS);
   if (existing.revision === 0) {
     await seedVenueSettings(db, {
@@ -113,9 +113,9 @@ export async function seedTenants(db: Database): Promise<void> {
 
 export async function seedVenueNodes(db: Database): Promise<void> {
   await db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" })
-    .onConflictDoNothing({ target: tenants.id });
+    .onConflictDoNothing({ target: taxpayer.id });
   await seedVenueSettings(db, {
     name: "Local principal",
     operationDescription: "Venta en establecimiento",
@@ -264,11 +264,11 @@ async function insertNodeAndSeries(
  * standalone under `20000001K`; pinning the NIF made both positions agree. Pass a value no other
  * test in the same file will mint — the counter starts at `20000001Y` and climbs.
  *
- * WHAT THE OVERRIDE DOES NOT REACH. The `tenants` insert below does nothing when the row already
- * exists, so after an earlier seed the override reaches `registerSif` alone and the `tenants` row
+ * WHAT THE OVERRIDE DOES NOT REACH. The `taxpayer` insert below does nothing when the row already
+ * exists, so after an earlier seed the override reaches `registerSif` alone and the `taxpayer` row
  * keeps the `tax_id` the FIRST seed inserted. That is harmless for a pinned huella because the
  * hashed `IDEmisorFactura` is read from the SIF registration (`currentSif(tx, nodeId).nif`), not
- * from `tenants`. A test that needs `tenants.tax_id` itself to match must seed before anything
+ * from `taxpayer`. A test that needs `taxpayer.tax_id` itself to match must seed before anything
  * else does.
  *
  * A test comparing with `SOFTWARE_IDENTITY.code` passes `idSistemaInformatico: WAITRON_ID_SISTEMA`;
@@ -283,9 +283,9 @@ export async function seedTenantWithSif(
     // The target is named rather than left bare so a `tenants_country_tax_id_key` collision — a
     // DIFFERENT cause — still raises.
     await tx
-      .insert(tenants)
+      .insert(taxpayer)
       .values({ id: 1, country: "ES", taxId: nif, legalName: "Waitron SL" })
-      .onConflictDoNothing({ target: tenants.id });
+      .onConflictDoNothing({ target: taxpayer.id });
     const { nodeId, seriesId } = await insertNodeAndSeries(tx);
     await registerSif(tx, {
       nodeId,

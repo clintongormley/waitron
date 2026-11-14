@@ -1,5 +1,5 @@
 import { isUuid } from "@waitron/shared";
-import { DEFAULT_TIME_ZONE } from "./schema/tenants.js";
+import { DEFAULT_TIME_ZONE } from "./schema/taxpayer.js";
 import { defineSettingsDocument, type SettingsParse } from "./settings.js";
 
 export interface VenueSettings {

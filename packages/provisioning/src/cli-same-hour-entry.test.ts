@@ -6,7 +6,7 @@ import { afterAll, beforeAll, expect, it } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { invoiceSeries, openVenueDatabase, readDeploymentEnvironment } from "@waitron/db";
-import { readTenantIdentities } from "./tenant-guard.js";
+import { readTaxpayerIdentities } from "./taxpayer-guard.js";
 import { childEnvironment } from "../test/child-environment.js";
 
 const venue = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -226,7 +226,7 @@ it("the built command waits and takes its name in the same run, and a run after 
   const pdf = await readFile(pdfPath);
   const empty = await openVenueDatabase(target);
   try {
-    expect(await readTenantIdentities(empty.venue)).toEqual([]);
+    expect(await readTaxpayerIdentities(empty.venue)).toEqual([]);
     expect(await readDeploymentEnvironment(empty.venue)).toBeNull();
     expect(await empty.venue.select().from(invoiceSeries)).toEqual([]);
   } finally {
@@ -252,7 +252,7 @@ it("the built command waits and takes its name in the same run, and a run after 
   expect(await readFile(pdfPath)).toEqual(pdf);
   const stored = await openVenueDatabase(target);
   try {
-    expect(await readTenantIdentities(stored.venue)).toEqual([]);
+    expect(await readTaxpayerIdentities(stored.venue)).toEqual([]);
     expect(await readDeploymentEnvironment(stored.venue)).toBeNull();
     expect(await stored.venue.select().from(invoiceSeries)).toEqual([]);
   } finally {

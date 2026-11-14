@@ -19,7 +19,7 @@ import {
   invoiceSeries,
   invoiceDeliveries,
   receiptReprints,
-  tenants,
+  taxpayer,
   workingOrders,
   products,
   withTransaction,
@@ -775,7 +775,7 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
       const cookie = await login(app, cfg, operatorId);
       const orderId = randomUUID();
       const original = await withTransaction(suite.db, async (tx) => {
-        await tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
+        await tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
         const [series] = await tx
           .select()
           .from(invoiceSeries)
@@ -2594,10 +2594,10 @@ it("duplicates use the filed issuer identity while optional trim follows the cur
   const cookie = await login(app, cfg, operatorId);
   const id = await ringSale(app, cookie, each.menuItemId);
   const originalTaxId = (
-    await suite.db.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`)
+    await suite.db.execute<{ tax_id: string }>(sql`select tax_id from taxpayer where id = 1`)
   ).rows[0]!.tax_id;
   await suite.db.execute(
-    sql`update tenants set legal_name = 'Changed venue identity' where id = 1`,
+    sql`update taxpayer set legal_name = 'Changed venue identity' where id = 1`,
   );
   const [header] = await suite.db
     .select({ departmentId: saleReceiptHeaders.departmentId })
@@ -3130,7 +3130,7 @@ describe("explicit F1 receipt delivery enrollment", () => {
     const cookie = await login(app, cfg, supervisorId);
     const orderId = randomUUID();
     const sale = await withTransaction(suite.db, async (tx) => {
-      await tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
+      await tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
       const [series] = await tx
         .select()
         .from(invoiceSeries)

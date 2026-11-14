@@ -10,7 +10,7 @@ import {
   settings as businessDaySettingsTable,
   dayCutoverChanges,
   specialDayDates,
-  tenants,
+  taxpayer,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
@@ -41,9 +41,9 @@ const AT = new Date("2026-10-09T10:00:00Z");
 /** A second call in one case reuses the venue's row and names its departments apart. */
 async function venue(closedOn: readonly (readonly number[])[] = [[1]]) {
   await suite.db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "House Ltd" })
-    .onConflictDoUpdate({ target: tenants.id, set: { country: "ES" } });
+    .onConflictDoUpdate({ target: taxpayer.id, set: { country: "ES" } });
   const existing = await readSettings(suite.db, VENUE_SETTINGS);
   if (existing.revision === 0)
     await seedVenue(suite.db, {
@@ -730,7 +730,7 @@ describe("the Opening hours month read", () => {
     expect(
       texts.filter((text) => /from "settings" left join "day_cutover_changes"/.test(text)),
     ).toHaveLength(1);
-    expect(tables.filter((table) => table === "tenants")).toHaveLength(1);
+    expect(tables.filter((table) => table === "taxpayer")).toHaveLength(1);
   });
 
   it("sends the same statements for one department as for several, not one per day or department", async () => {

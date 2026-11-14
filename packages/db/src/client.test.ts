@@ -55,14 +55,14 @@ describe("openVenueDatabase", () => {
     // experiment: the relational map is present on both sides, and after migrating the core set to
     // the venue file alone, the same read succeeds on one handle and is refused on the other.
     const { store } = await open();
-    expect(store.venue.query.tenants).toBeDefined();
-    expect(store.node.query.tenants).toBeDefined();
+    expect(store.venue.query.taxpayer).toBeDefined();
+    expect(store.node.query.taxpayer).toBeDefined();
 
     await runMigrations(store.venue, CORE_MIGRATIONS);
 
-    expect(await store.venue.query.tenants.findMany()).toEqual([]);
-    const refusal = await captureError(() => store.node.query.tenants.findMany());
-    expect(engineErrorMessage(refusal)).toBe("no such table: tenants");
+    expect(await store.venue.query.taxpayer.findMany()).toEqual([]);
+    const refusal = await captureError(() => store.node.query.taxpayer.findMany());
+    expect(engineErrorMessage(refusal)).toBe("no such table: taxpayer");
   });
 
   it("closes both files", async () => {

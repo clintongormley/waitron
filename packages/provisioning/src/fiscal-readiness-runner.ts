@@ -15,7 +15,7 @@ import {
   type InitialVenueInput,
 } from "./initial-venue-input.js";
 import { planVenue, type VenueRequest } from "./venue-plan.js";
-import { readTenantIdentities } from "./tenant-guard.js";
+import { readTaxpayerIdentities } from "./taxpayer-guard.js";
 import { throwawayApplyInput } from "./throwaway-allocation.js";
 import {
   fiscalReadinessBinding,
@@ -32,7 +32,7 @@ async function testVenue(
   modules: readonly WaitronModule[],
   initialOperations?: InitialVenueInput,
 ): Promise<VenueResult> {
-  if ((await readTenantIdentities(db)).length === 0) {
+  if ((await readTaxpayerIdentities(db)).length === 0) {
     await stampDeployment(db, "preproduction");
     const plan = planVenue(venue, modules);
     const input =

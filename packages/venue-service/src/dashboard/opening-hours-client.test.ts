@@ -194,7 +194,7 @@ describe("OpeningHoursApi", () => {
       expect(live.interests).toEqual(
         [
           "departments",
-          "tenants",
+          "taxpayer",
           "settings.business_day",
           "settings.venue",
           "day_cutover_changes",
@@ -244,7 +244,7 @@ describe("OpeningHoursApi", () => {
       expect(live.interests).toEqual(
         [
           "departments",
-          "tenants",
+          "taxpayer",
           "settings.business_day",
           "settings.venue",
           "day_cutover_changes",
@@ -510,7 +510,7 @@ it.each(["sections", "section_members", "catalogues"])(
   },
 );
 
-it.each(["settings.venue", "tenants"])(
+it.each(["settings.venue", "taxpayer"])(
   "re-reads station times when %s changes, as the public holidays a date follows come from it",
   async (type) => {
     const live = new LiveData();

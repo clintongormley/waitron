@@ -11,7 +11,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { listTranslationItems } from "./content-translation-pages.js";
@@ -46,7 +46,7 @@ const query = (extra: object = {}): TranslationQuery => ({
 
 describe("multilingual item pages", () => {
   it("finds gaps outside the projection and distinguishes Missing in from All names", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const ids = await fixture(tx);
       await tx
@@ -76,7 +76,7 @@ describe("multilingual item pages", () => {
   });
 
   it("looks ahead at row 51 and binds advancing cursors to normalized filters and settings", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const ids = await fixture(tx);
       await tx.update(products).set({ active: false }).where(eq(products.id, ids.product));
@@ -174,7 +174,7 @@ describe("multilingual item pages", () => {
   });
 
   it("searches staff and projected entered text without searching other language columns", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const ids = await fixture(tx);
       expect(
@@ -226,7 +226,7 @@ describe("multilingual item pages", () => {
   });
 
   it("preserves accent-insensitive multiword search on bounded pages, with trimmed queries and kind/id ordering", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const ids = await fixture(tx);
       await tx.update(products).set({ active: false }).where(eq(products.id, ids.product));
@@ -272,7 +272,7 @@ describe("multilingual item pages", () => {
   });
 
   it("includes complete waiting-fix rows without changing discovery eligibility", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const ids = await fixture(tx);
       const [other] = await tx
@@ -403,7 +403,7 @@ describe("multilingual item pages", () => {
     { targets: [] },
     { targets: [{ kind: "unit", id: "u" }], after: "x" },
   ])("rejects malformed or incompatible page query %#", async (extra) => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, fixture);
     await expect(
       withTransaction(suite.db, (tx) =>
@@ -413,7 +413,7 @@ describe("multilingual item pages", () => {
   });
 
   it("rejects cursor reuse after filter, projection, configuration or cursor-shape changes", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, fixture);
     await withTransaction(suite.db, (tx) =>
       tx.insert(units).values(

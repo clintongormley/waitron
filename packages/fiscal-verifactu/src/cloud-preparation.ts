@@ -4,7 +4,7 @@ import { open, type FileHandle } from "node:fs/promises";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { eq } from "drizzle-orm";
-import { deployment, nodes, readTenant, type Database } from "@waitron/db";
+import { deployment, nodes, readTaxpayer, type Database } from "@waitron/db";
 import type { ProvisionedNode } from "@waitron/module";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { AppError, isUuid } from "@waitron/shared";
@@ -271,10 +271,10 @@ export async function readCloudAllocationReport(
     .select({ id: nodes.id })
     .from(nodes)
     .where(eq(nodes.id, node.nodeId));
-  const tenant = await readTenant(db);
+  const taxpayer = await readTaxpayer(db);
   const [stamp] = await db.select().from(deployment).where(eq(deployment.id, 1));
   if (storedNode === undefined) refuse("node_mismatch");
-  if (tenant?.taxId !== prior.taxpayerNif) refuse("taxpayer_mismatch");
+  if (taxpayer?.taxId !== prior.taxpayerNif) refuse("taxpayer_mismatch");
   if (stamp?.environment !== prior.environment) refuse("environment_mismatch");
   return {
     operationId: record.reportOperationId,

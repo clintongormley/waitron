@@ -14,7 +14,7 @@ import {
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { hashPin } from "./verify-pin.js";
 
 const PIN = hashPin("1234");
@@ -43,7 +43,7 @@ function driverRefusal(error: unknown): object {
 
 describe("persons.email unique index (persons_tenant_email_uq)", () => {
   it("rejects a second person with the same email, case-insensitively", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await insertPerson(suite.db, "A", "Owner@x.com");
 
     const error = await captureError(() => insertPerson(suite.db, "B", "owner@x.com"));
@@ -54,7 +54,7 @@ describe("persons.email unique index (persons_tenant_email_uq)", () => {
   });
 
   it("allows multiple persons with NULL email", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await insertPerson(suite.db, "A", null);
     await expect(insertPerson(suite.db, "B", null)).resolves.toBeDefined();
   });

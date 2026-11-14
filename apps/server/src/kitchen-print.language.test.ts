@@ -17,7 +17,7 @@ import {
   workingOrders,
   workingOrderLines,
   products,
-  tenants,
+  taxpayer,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -528,7 +528,7 @@ it.each([
   "a %s venue's kitchen ticket picks the unit in the venue's display language",
   async (country, unit) => {
     const v = await setupSplitExtrasVenue();
-    await suite.db.update(tenants).set({ country });
+    await suite.db.update(taxpayer).set({ country });
     const cfg = { ...v.cfg, locale: await readVenueLocale(suite.db) };
     await withTransaction(suite.db, async (tx) => {
       const id = crypto.randomUUID();

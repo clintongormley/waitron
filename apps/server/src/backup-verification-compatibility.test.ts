@@ -580,15 +580,15 @@ describe("strict backup compatibility", () => {
     "refuses %s owner vault material even without owner tables",
     async (mode) => {
       execute(
-        "create table tenant_credentials (purpose text); insert into tenant_credentials values ('future.secret');",
+        "create table venue_credentials (purpose text); insert into venue_credentials values ('future.secret');",
       );
       const core = modules[0]!;
-      const tables = [...core.backup!.verification!.data.tables, "tenant_credentials"];
+      const tables = [...core.backup!.verification!.data.tables, "venue_credentials"];
       modules[0] = {
         ...core,
         classification: [
           ...core.classification!,
-          { table: "tenant_credentials", class: "state", reason: "Synthetic vault" },
+          { table: "venue_credentials", class: "state", reason: "Synthetic vault" },
         ],
         backup: { verification: policy(tables) },
       };
@@ -701,15 +701,15 @@ describe("strict backup compatibility", () => {
   });
   it("refuses non-text vault purpose without publishing it", async () => {
     execute(
-      "create table tenant_credentials (purpose text); insert into tenant_credentials values (null);",
+      "create table venue_credentials (purpose text); insert into venue_credentials values (null);",
     );
     const core = modules[0]!;
-    const tables = [...core.backup!.verification!.data.tables, "tenant_credentials"];
+    const tables = [...core.backup!.verification!.data.tables, "venue_credentials"];
     modules[0] = {
       ...core,
       classification: [
         ...core.classification!,
-        { table: "tenant_credentials", class: "state", reason: "Synthetic vault" },
+        { table: "venue_credentials", class: "state", reason: "Synthetic vault" },
       ],
       backup: { verification: policy(tables) },
     };

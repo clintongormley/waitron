@@ -126,7 +126,7 @@ describe("computeVatSummaryForPeriod", () => {
     ).toEqual([{ rate: "21.00", base: "100.00", tax: "21.00" }]);
   });
 
-  it("aggregates all the tenant's nodes when nodeId is omitted, and one when present", async () => {
+  it("aggregates all the taxpayer's nodes when nodeId is omitted, and one when present", async () => {
     await seedSale(suite.db, venue, {
       invoiceNumber: 1,
       issuedAt: noon("2026-08-04"),

@@ -17,7 +17,7 @@ import {
   printJobs,
   ticketItems,
   workingOrderLines,
-  tenants,
+  taxpayer,
   workingOrders,
   type Transaction,
   withTransaction,
@@ -1969,7 +1969,7 @@ describe("the bill and invoice lookups", () => {
   /** A seated party's bill, invoiced in full to `legalName` and paid. */
   async function invoiced(tableId: string, menuItemId: string, legalName: string): Promise<string> {
     await inTx(v, (tx) =>
-      tx.update(tenants).set({ taxpayerDomicile: "Calle Mayor 1, 28013 Madrid" }),
+      tx.update(taxpayer).set({ taxpayerDomicile: "Calle Mayor 1, 28013 Madrid" }),
     );
     const { tabId } = await seatWithRound(tableId, menuItemId);
     const lines = await send(plain, "GET", `/api/working-orders/${tabId}/lines`);

@@ -1,5 +1,5 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { kitchenStations, readVenue, readTenant, type Transaction } from "@waitron/db";
+import { kitchenStations, readVenue, readTaxpayer, type Transaction } from "@waitron/db";
 import { setRoutingCell, STARTER_OPEN_PERIOD_NAMES } from "@waitron/venue-service";
 import {
   addMember,
@@ -97,7 +97,7 @@ export async function seedCatalogues(
   const plain = (text: DemoPlainText) => demoPlainText(text, dataSet, locale);
   const stationIds = await resolveStationIds(tx, dataSet, locale);
   const venue = await readVenue(tx);
-  const taxpayer = await readTenant(tx);
+  const taxpayer = await readTaxpayer(tx);
   const { defaultLanguage, languages, required } = demoLanguagesFor(dataSet, {
     country: taxpayer?.country,
     area: venue.province ?? undefined,

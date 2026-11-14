@@ -14,7 +14,7 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 afterEach(async () => {
   await suite.db.execute(sql`delete from nodes`);
-  await suite.db.execute(sql`delete from tenants`);
+  await suite.db.execute(sql`delete from taxpayer`);
 });
 
 const NODE_A1 = "aaaaaaaa-2222-4000-8000-000000000001";
@@ -47,7 +47,7 @@ describe("nodes schema", () => {
     await seed(db);
   });
 
-  it("inserts a node under its tenant", async () => {
+  it("inserts a node under its taxpayer", async () => {
     await db.insert(nodes).values({ name: "Node A1" });
     const found = await db.select({ name: nodes.name }).from(nodes);
     expect(found.map((r) => r.name)).toEqual(["Node A1"]);
@@ -82,10 +82,10 @@ describe("nodes schema", () => {
     ]);
   });
 
-  describe("tenants fiscal identity is country + tax_id", () => {
+  describe("taxpayer fiscal identity is country + tax_id", () => {
     it("has country and tax_id, not nif, and a (country, tax_id) unique index", async () => {
       const cols = await db.execute<{ name: string }>(
-        sql`select name from pragma_table_info('tenants') order by name`,
+        sql`select name from pragma_table_info('taxpayer') order by name`,
       );
       const names = cols.rows.map((r) => r.name);
       expect(names).toContain("country");
@@ -93,7 +93,7 @@ describe("nodes schema", () => {
       expect(names).not.toContain("nif");
 
       const idx = await db.execute<{ name: string }>(
-        sql`select name from pragma_index_list('tenants')`,
+        sql`select name from pragma_index_list('taxpayer')`,
       );
       const indexes = idx.rows.map((r) => r.name);
       expect(indexes).toContain("tenants_country_tax_id_key");

@@ -42,14 +42,14 @@ describe("tablesForPublication", () => {
   const set: ClassifiedTable[] = [
     classify("sales", "ledger", "r"),
     classify("payments", "ledger", "r"),
-    classify("tenants", "state", "r"),
+    classify("taxpayer", "state", "r"),
     classify("deployment", "local", "r"),
   ];
   it("returns only the ledger tables for the ledger class", () => {
     expect(tablesForPublication(set, "ledger").sort()).toEqual(["payments", "sales"]);
   });
   it("returns only the state tables for the state class", () => {
-    expect(tablesForPublication(set, "state")).toEqual(["tenants"]);
+    expect(tablesForPublication(set, "state")).toEqual(["taxpayer"]);
   });
   it("never returns a local table, for either class", () => {
     expect(tablesForPublication(set, "ledger")).not.toContain("deployment");
@@ -77,6 +77,6 @@ describe("appendOnlyTablesIn", () => {
   });
 
   it("returns nothing for a set that marks nothing", () => {
-    expect(appendOnlyTablesIn([classify("tenants", "state", "r")])).toEqual([]);
+    expect(appendOnlyTablesIn([classify("taxpayer", "state", "r")])).toEqual([]);
   });
 });

@@ -2,7 +2,7 @@ import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { tenants, withTransaction } from "@waitron/db";
+import { taxpayer, withTransaction } from "@waitron/db";
 import type { FiscalContribution } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -32,7 +32,7 @@ function rename(body: unknown, cookie: string | null = venue.managerCookie, app 
   });
 }
 async function taxpayer() {
-  const [row] = await suite.db.select().from(tenants).where(eq(tenants.id, 1));
+  const [row] = await suite.db.select().from(taxpayer).where(eq(taxpayer.id, 1));
   return row!;
 }
 const model = () => withTransaction(suite.db, (tx) => readVenueDetails(tx));
@@ -40,7 +40,7 @@ const model = () => withTransaction(suite.db, (tx) => readVenueDetails(tx));
 beforeEach(async () => {
   venue = await setupVenue(suite.db);
   await suite.db.execute(
-    sql`update tenants set taxpayer_domicile = 'Calle Mayor 1, 28013 Madrid' where id = 1`,
+    sql`update taxpayer set taxpayer_domicile = 'Calle Mayor 1, 28013 Madrid' where id = 1`,
   );
   original = (await taxpayer()).legalName;
   await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, venue.managerCookie));
@@ -140,14 +140,14 @@ describe("changing the taxpayer's legal name", () => {
     ["padded", (stored: string) => `  ${stored}  `],
     ["decomposed", (stored: string) => stored.normalize("NFD")],
   ])("accepts a %s copy of the stored name as the expected name", async (_label, copy) => {
-    await suite.db.execute(sql`update tenants set legal_name = ${"Caf\u00e9 SL"} where id = 1`);
+    await suite.db.execute(sql`update taxpayer set legal_name = ${"Caf\u00e9 SL"} where id = 1`);
     const response = await rename({ legalName: "Deli Nueva SL", expected: copy("Caf\u00e9 SL") });
     expect(response.status).toBe(200);
     expect((await taxpayer()).legalName).toBe("Deli Nueva SL");
   });
 
   it("accepts the composed spelling as the expected name for a name stored decomposed", async () => {
-    await suite.db.execute(sql`update tenants set legal_name = ${"Cafe\u0301 SL"} where id = 1`);
+    await suite.db.execute(sql`update taxpayer set legal_name = ${"Cafe\u0301 SL"} where id = 1`);
     const response = await rename({ legalName: "Deli Nueva SL", expected: "Caf\u00e9 SL" });
     expect(response.status).toBe(200);
     expect((await taxpayer()).legalName).toBe("Deli Nueva SL");

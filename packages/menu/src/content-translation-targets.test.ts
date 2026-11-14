@@ -16,7 +16,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { setProductVariants } from "./variants.js";
@@ -143,7 +143,7 @@ describe("inline translation targets", () => {
     ).rejects.toMatchObject({ code });
   });
   it("nine target identities distinguish each name from its owner and retain folder-off gaps", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const ids = await fixture(tx);
       const counting = countingSettingsReads(tx);
@@ -211,7 +211,7 @@ describe("inline translation targets", () => {
   });
 
   it("activity and ownership keep missing and invalid review targets explicit", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const ids = await fixture(tx);
       await tx.update(products).set({ active: false }).where(eq(products.id, ids.product));
@@ -378,7 +378,7 @@ describe("inline translation targets", () => {
   });
 
   it("either inactive inclusion menu makes the exact membership ineligible", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const ids = await fixture(tx);
       const refs = [{ kind: "included_menu" as const, id: ids.included_menu }];
@@ -401,7 +401,7 @@ describe("inline translation targets", () => {
   });
 
   it("wrong-kind references never manufacture missing owner ids", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const ids = await fixture(tx);
       const member = await addMember(tx, ids.root, { kind: "product", productId: ids.product });
@@ -428,7 +428,7 @@ describe("inline translation targets", () => {
   });
 
   it("a replaced menu root is unavailable while the real root remains savable", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const ids = await fixture(tx);
       await tx
@@ -457,7 +457,7 @@ describe("inline translation targets", () => {
   });
 
   it("tokens exclude unrelated languages and price but change with selected or default cells", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const ids = await fixture(tx);
       const refs = [{ kind: "variant" as const, id: ids.variant }];

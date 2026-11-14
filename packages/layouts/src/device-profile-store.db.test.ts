@@ -18,7 +18,7 @@ import {
   ensureFixtureJobRole,
   seedBusinessDay,
   seedDeviceProfiles,
-  seedTenant,
+  seedTaxpayer,
   seedVenue,
   seedVenueSettings,
 } from "@waitron/db/testing/seed.js";
@@ -113,7 +113,7 @@ describe("device-profile store against a real migrated database", () => {
   let managerSession: string;
 
   beforeAll(async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     managerSession = await seedSession("manager");
   });
 
@@ -154,7 +154,7 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("a new profile ticks every visible job role, and a new role is ticked nowhere", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const session = await seedSession("manager");
     const fixtureRole = await ensureFixtureJobRole(suite.db);
     const [visible] = await suite.db.insert(staffRoles).values({ name: "Waiter" }).returning();
@@ -185,7 +185,7 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("persists clock-in on operator profiles and refuses a shared display", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const clockSession = await seedSession("manager");
     try {
       for (const formFactor of ["till", "phone-portrait", "tablet-landscape"] as const) {
@@ -224,7 +224,7 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("carries the device form factor through create → get → list", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const session = await seedSession("manager");
     const created = await inTx((tx) =>
       createDeviceProfile(tx, {
@@ -258,7 +258,7 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("round-trips a phone-portrait inactivity timeout through create → get, and forces null for kds", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const session = await seedSession("manager");
     const handheld = await inTx((tx) =>
       createDeviceProfile(tx, {
@@ -286,8 +286,8 @@ describe("device-profile store against a real migrated database", () => {
     expect(kds.inactivityTimeoutSeconds).toBeNull();
   });
 
-  it("lists a tenant's device profiles by name", async () => {
-    await seedTenant(suite.db);
+  it("lists a taxpayer's device profiles by name", async () => {
+    await seedTaxpayer(suite.db);
     const session = await seedSession("manager");
     const first = await inTx((tx) =>
       createDeviceProfile(tx, {
@@ -320,7 +320,7 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("updates a profile's name and capabilities in place", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const session = await seedSession("manager");
     const created = await inTx((tx) =>
       createDeviceProfile(tx, {
@@ -363,7 +363,7 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("deletes an unreferenced profile", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const session = await seedSession("manager");
     const created = await inTx((tx) =>
       createDeviceProfile(tx, {
@@ -380,7 +380,7 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("refuses a delete of a profile an active device holds with device_profile.in_use (409), profile survives", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const session = await seedSession("manager");
     const created = await inTx((tx) =>
       createDeviceProfile(tx, {
@@ -402,7 +402,7 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("translates a refusal by a key the device check does not read to device_profile.in_use", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const session = await seedSession("manager");
     const created = await inTx((tx) =>
       createDeviceProfile(tx, {
@@ -433,7 +433,7 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("retires a profile whose only device is disabled: hidden from every read, the device untouched", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const session = await seedSession("manager");
     const created = await inTx((tx) =>
       createDeviceProfile(tx, {
@@ -457,7 +457,7 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("retires a profile whose only device is deleted, exactly as one held by a disabled device, the device untouched", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const session = await seedSession("manager");
     const created = await inTx((tx) =>
       createDeviceProfile(tx, {
@@ -490,7 +490,7 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("frees a retired profile's name for a new profile", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const session = await seedSession("manager");
     const base = {
       managementSessionId: session,
@@ -508,7 +508,7 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("refuses device_profile.in_use for a profile an active device holds, and keeps it listed", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const session = await seedSession("manager");
     const created = await inTx((tx) =>
       createDeviceProfile(tx, {
@@ -528,7 +528,7 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("refuses device_profile.in_use for a profile an active AND a disabled device hold, and keeps it listed", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const session = await seedSession("manager");
     const created = await inTx((tx) =>
       createDeviceProfile(tx, {
@@ -550,7 +550,7 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("answers device_profile.not_found to a delete or an update of a retired profile", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const session = await seedSession("manager");
     const base = {
       managementSessionId: session,
@@ -610,7 +610,7 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("translates a form-factor change on a profile an active device uses to device_profile.in_use", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const session = await seedSession("manager");
     const created = await inTx((tx) =>
       createDeviceProfile(tx, {
@@ -639,7 +639,7 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("passes any other trigger's refusal of an update through untranslated", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const session = await seedSession("manager");
     const created = await inTx((tx) =>
       createDeviceProfile(tx, {
@@ -790,7 +790,7 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("throws device_profile.not_found when updating an absent id", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const session = await seedSession("manager");
     const code = await codeOf(() =>
       inTx((tx) =>
@@ -808,7 +808,7 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("throws device_profile.not_found when deleting an absent id", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const session = await seedSession("manager");
     const code = await codeOf(() =>
       inTx((tx) =>
@@ -822,7 +822,7 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("refuses a create from a staff-role session — the authorizeManager gate (differential)", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const staffSession = await seedSession("staff");
     const code = await codeOf(() =>
       inTx((tx) =>
@@ -840,7 +840,7 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("rejects an unknown capability with device_profile.invalid {bad_capabilities} before any INSERT", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const session = await seedSession("manager");
     // A manager passes the gate, so this refusal is validation's.
     const error = await errorOf(() =>
@@ -861,7 +861,7 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("translates a duplicate name to device_profile.name_taken (clean 409), no second row", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const session = await seedSession("manager");
     await inTx((tx) =>
       createDeviceProfile(tx, {
@@ -888,7 +888,7 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("translates a duplicate name on UPDATE to device_profile.name_taken", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     const session = await seedSession("manager");
     await inTx((tx) =>
       createDeviceProfile(tx, {

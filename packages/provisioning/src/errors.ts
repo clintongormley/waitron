@@ -61,14 +61,14 @@ declare module "@waitron/shared" {
      * configuration and never a secret. */
     "provisioning.venue_conflict": { database: string };
     "provisioning.second_venue": Record<string, never>;
-    /** A DIFFERENT tenant was asked to stand up in a database that already holds one. The same
-     * identity and an empty database both pass (`assertNoForeignTenant`, `./tenant-guard.ts`).
+    /** A DIFFERENT taxpayer was asked to stand up in a database that already holds one. The same
+     * identity and an empty database both pass (`assertNoForeignTaxpayer`, `./taxpayer-guard.ts`).
      * `database` is operator-typed configuration and never a secret. */
-    "provisioning.foreign_tenant": { database: string };
+    "provisioning.foreign_taxpayer": { database: string };
     /** `applyVenue` found the ONE taxpayer row (`id = 1`) naming a DIFFERENT country and tax id,
-     * compared trimmed and upper-cased. `provisioning.foreign_tenant` is the refusal raised before
+     * compared trimmed and upper-cased. `provisioning.foreign_taxpayer` is the refusal raised before
      * `applyVenue` by the callers that read the existing identities first. */
-    "provisioning.tenant_identity_mismatch": Record<string, never>;
+    "provisioning.taxpayer_identity_mismatch": Record<string, never>;
     /** `planVenue` refuses an `invoice_locales` list outside one or two entries, the venue
      * settings document's length check (`packages/db/src/venue-settings.ts`). The CLI, like
      * setup, then refuses anything but one with `setup.request_invalid`. `count` IS echoed:
@@ -77,7 +77,7 @@ declare module "@waitron/shared" {
     /** Each series needs a distinct `(node_id, code)` key or applyVenue drops the later one.
      * The repeated code is operator-typed configuration, never a secret. */
     "provisioning.duplicate_series_code": { code: string; field: string };
-    /** A venue's `fiscal_territory` is not prefixed by the tenant's `country` (`ES-common` requires
+    /** A venue's `fiscal_territory` is not prefixed by the taxpayer's `country` (`ES-common` requires
      * `ES`), case-insensitively. Checked after `resolveFiscalModules`, so an unimplemented
      * territory fails first with `fiscal.regime_not_implemented`. Both params ARE echoed:
      * operator-typed configuration, neither is a secret. */

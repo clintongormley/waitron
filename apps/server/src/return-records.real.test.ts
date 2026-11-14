@@ -365,7 +365,7 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
 async function copyBase() {
   await withTransaction(current.db, async (tx) => {
     for (const table of [
-      "tenants",
+      "taxpayer",
       "settings",
       "day_cutover_changes",
       "device_profiles",

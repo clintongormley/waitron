@@ -20,9 +20,9 @@ import {
   openVenueDatabase,
   readNodeMembership,
   readStandardSeriesId,
-  readTenant,
+  readTaxpayer,
   stampDeployment,
-  tenants,
+  taxpayer,
   withTransaction,
   writeNodeMembership,
   type Database,
@@ -185,7 +185,7 @@ async function seedMirror(
 }> {
   await seedModuleSettings(admin, { "fiscal-none": false });
   await admin
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "90222222F", legalName: "Promote E2E Cloud SL" })
     .onConflictDoNothing();
   await seedVenueSettings(admin, {
@@ -194,7 +194,7 @@ async function seedMirror(
     operationDescription: "Hospitality",
   });
   await seedBusinessDay(admin, {});
-  const t = await admin.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`);
+  const t = await admin.execute<{ tax_id: string }>(sql`select tax_id from taxpayer where id = 1`);
   const nif = t.rows[0]!.tax_id;
 
   const standby = generateStandbyIdentity();
@@ -636,7 +636,7 @@ describe("a real offer beside a real promotion on a real start", () => {
     seed: Awaited<ReturnType<typeof seedMirror>>,
   ): Promise<string> {
     const held = await readNodeMembership(db[venue]);
-    const tenant = await readTenant(db[venue]);
+    const taxpayer = await readTaxpayer(db[venue]);
     return JSON.stringify(
       signEnvelope(
         "stepdown",
@@ -644,7 +644,7 @@ describe("a real offer beside a real promotion on a real start", () => {
           binding: {
             operationId: OPERATION_ID,
             scenario: "controlled",
-            venue: { country: tenant!.country, taxId: tenant!.taxId, environment: "production" },
+            venue: { country: taxpayer!.country, taxId: taxpayer!.taxId, environment: "production" },
             sourceNodeId: MIRROR_ORIGIN_NODE_ID,
             destinationNodeId: seed.nodeId,
             membership: {

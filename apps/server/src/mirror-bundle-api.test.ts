@@ -143,7 +143,7 @@ const spare = useVenueDb({
   timeoutMs: 60_000,
 });
 
-// `tenants_country_tax_id_uq` is unique, so each provisioned venue needs its own NIF.
+// `taxpayer_country_tax_id_uq` is unique, so each provisioned venue needs its own NIF.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -429,11 +429,11 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     });
     expect(res.status).toBe(200);
     const bundle = (await res.json()) as {
-      tenant: { country: string; taxId: string };
+      taxpayer: { country: string; taxId: string };
       primaryNode: { name: string };
       boxHostname: string;
     };
-    expect(bundle.tenant.taxId).toMatch(/^\d{8}K$/);
+    expect(bundle.taxpayer.taxId).toMatch(/^\d{8}K$/);
     expect(bundle.primaryNode.name).toBe("Sala principal");
     expect(bundle.boxHostname).toBe("waitron.local");
     for (const line of lines) {

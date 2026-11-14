@@ -20,7 +20,7 @@ import { DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
 import {
   lockVenueDatabase,
-  readTenant,
+  readTaxpayer,
   stampDeployment,
   withNodeTransaction,
   writeNodeMembership,
@@ -275,11 +275,11 @@ export function placeCopyBoxes(deps: {
     const held = signedChart(body);
     await writeNodeMembership(suite.db, held);
     await stampDeployment(suite.db, "preproduction");
-    const tenant = (await readTenant(suite.db))!;
+    const taxpayer = (await readTaxpayer(suite.db))!;
     const binding: HandoverBinding = {
       operationId: OP,
       scenario: "controlled",
-      venue: { country: tenant.country, taxId: tenant.taxId, environment: "preproduction" },
+      venue: { country: taxpayer.country, taxId: taxpayer.taxId, environment: "preproduction" },
       sourceNodeId: MAIN_BOX.nodeId,
       destinationNodeId: nodeId,
       membership: { term: 3, digest: sha256Hex(canonicalize(held as unknown as CanonicalValue)) },

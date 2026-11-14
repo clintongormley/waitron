@@ -15,7 +15,7 @@ import { afterEach, beforeEach, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { loadKeyRing } from "@waitron/credentials";
 import { recordSale } from "@waitron/core";
-import { deployment, nodes, tenants, withTransaction } from "@waitron/db";
+import { deployment, nodes, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { migrationOptionsFor } from "@waitron/migrations";
 import { orderedMigrationSets, withOperationAuthority } from "@waitron/module";
@@ -180,7 +180,7 @@ export function useBackupVerificationFixture() {
       scratchRoot = join(root, "scratch");
     await mkdir(scratchRoot);
     await suite.db
-      .insert(tenants)
+      .insert(taxpayer)
       .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Fixture restaurant" });
     await seedVenueSettings(suite.db, {
       name: "Fixture venue",

@@ -64,7 +64,7 @@ const recoveryEntries = Object.entries({
 }).map(([name, text]) => ({ name: "secrets/" + name, bytes: Buffer.from(text) }));
 async function seedSource(db: VenueDb["db"]) {
   db.run(
-    `insert into tenants (id, country, tax_id, legal_name, created_at) values (1, 'GB', 'private-tax-sentinel', 'Private company sentinel', '2026-10-20T00:00:00Z')`,
+    `insert into taxpayer (id, country, tax_id, legal_name, created_at) values (1, 'GB', 'private-tax-sentinel', 'Private company sentinel', '2026-10-20T00:00:00Z')`,
   );
   db.run(
     sql`insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"name":"Fixture venue","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null,"invoiceLocales":["en"],"contentLanguages":null,"defaultContentLanguage":null,"holidayArea":null,"fiscalTerritory":"ES-common","operationDescription":"Restaurant"}', '2026-10-20T08:00:00.000Z'), ('business_day', 1, 1, '{"timeZone":"Europe/Madrid"}', '2026-10-20T08:00:00.000Z') on conflict (module) do nothing`,
@@ -547,7 +547,7 @@ describe("complete backup verification", () => {
     const f = await fixture();
     const db = new DatabaseSync(f.databasePath);
     try {
-      db.exec("delete from tenants");
+      db.exec("delete from taxpayer");
     } finally {
       db.close();
     }
@@ -571,7 +571,7 @@ describe("complete backup verification", () => {
     const db = new DatabaseSync(f.databasePath);
     try {
       db.prepare(
-        "insert into tenant_credentials (purpose,ciphertext,iv,auth_tag,key_version,updated_at) values (?,?,?,?,?,?)",
+        "insert into venue_credentials (purpose,ciphertext,iv,auth_tag,key_version,updated_at) values (?,?,?,?,?,?)",
       ).run(
         "payments.sumup",
         Buffer.from("private-encrypted-value"),

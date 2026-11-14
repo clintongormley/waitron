@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { and, eq, isNull } from "drizzle-orm";
-import { invoiceSeries, nodes, tenants, type Transaction } from "@waitron/db";
+import { invoiceSeries, nodes, taxpayer, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -168,7 +168,7 @@ describe("the filing module owns initial invoice series", () => {
     ).rejects.toMatchObject({ code: "provisioning.second_venue" });
     expect(await rows()).toEqual([]);
     expect(await suite.db.select().from(nodes)).toEqual([]);
-    expect(await suite.db.select().from(tenants)).toEqual([]);
+    expect(await suite.db.select().from(taxpayer)).toEqual([]);
   });
 
   it("refuses a returned retired reference and leaves the setup empty", async () => {
@@ -240,7 +240,7 @@ it("refuses a series owner whose activation action is missing before writing", a
   await expect(applyVenue(plan, { db: suite.db, modules: [module] })).rejects.toThrow(
     "series owner is missing its seed action",
   );
-  expect(await suite.db.select().from(tenants)).toEqual([]);
+  expect(await suite.db.select().from(taxpayer)).toEqual([]);
 });
 
 it("refuses two series owners even when they have the same fiscal slot id", async () => {
@@ -249,7 +249,7 @@ it("refuses two series owners even when they have the same fiscal slot id", asyn
   await expect(
     applyVenue(planVenue(request, [first, second]), { db: suite.db, modules: [first, second] }),
   ).rejects.toThrow("only the filing module may own initial series");
-  expect(await suite.db.select().from(tenants)).toEqual([]);
+  expect(await suite.db.select().from(taxpayer)).toEqual([]);
 });
 
 it("refuses a returned reference moved to a different node", async () => {

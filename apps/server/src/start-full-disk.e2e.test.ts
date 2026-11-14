@@ -910,8 +910,8 @@ describe("a start on a real full disk", () => {
       const db = new DatabaseSync(join(f.venueDir, "venue.db"));
       try {
         db.exec("pragma journal_mode = wal");
-        db.exec("create table tenants (country text, tax_id text)");
-        db.exec("insert into tenants values ('ES', 'B00000000')");
+        db.exec("create table taxpayer (country text, tax_id text)");
+        db.exec("insert into taxpayer values ('ES', 'B00000000')");
         db.exec("create table settings (module text primary key)");
         db.exec("insert into settings values ('venue')");
       } finally {

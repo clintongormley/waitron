@@ -6,7 +6,7 @@ import { sql } from "drizzle-orm";
 import { loadKeyRing, sealNodeSigningKeyTx, writePairLinkTx } from "@waitron/credentials";
 import { nodes, withNodeTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readPairLink } from "@waitron/node-db";
@@ -135,7 +135,7 @@ describe("runFinishAdoption — on a migrated venue", () => {
   }
 
   it("keeps the latch and logs the refusal when venue.db holds no row for this box", async () => {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await spareNode();
     const dir = await tempDir();
     await writePendingAdoption(dir, PENDING);

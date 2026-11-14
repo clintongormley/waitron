@@ -5,7 +5,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { isAppError, type AppError } from "@waitron/shared";
 import { defaultMakeStripe, stripeAccountResolver, stripeSecretKeyFrom } from "./stripe-account.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
@@ -19,13 +19,13 @@ const suite = useVenueDb({
 const ring = loadKeyRing(KEY_ENV);
 
 describe("stripeAccountResolver", () => {
-  it("builds the account from the tenant's own secret key", async () => {
-    await seedTenant(suite.db);
+  it("builds the account from the taxpayer's own secret key", async () => {
+    await seedTaxpayer(suite.db);
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
         purpose: "payments.stripe",
         value: {
-          secretKey: "sk_test_tenant_one",
+          secretKey: "sk_test_taxpayer_one",
           webhookSecret: "whsec_x",
           successUrl: "https://example.test/ok",
           cancelUrl: "https://example.test/no",
@@ -47,13 +47,13 @@ describe("stripeAccountResolver", () => {
     const account = await resolve();
     // A Stripe account is standalone (one per merchant, no Connect), so a client built from the wrong
     // key settles real money against the wrong merchant with no error anywhere.
-    expect(keys).toEqual(["sk_test_tenant_one"]);
+    expect(keys).toEqual(["sk_test_taxpayer_one"]);
     expect(typeof account.report.listSettlements).toBe("function");
     expect(typeof account.refund.refund).toBe("function");
   });
 
-  it("surfaces the vault's own code when the tenant has no Stripe credential", async () => {
-    await seedTenant(suite.db);
+  it("surfaces the vault's own code when the taxpayer has no Stripe credential", async () => {
+    await seedTaxpayer(suite.db);
     const resolve = stripeAccountResolver({
       db: suite.db,
       ring,

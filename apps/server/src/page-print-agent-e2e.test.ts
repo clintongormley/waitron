@@ -11,12 +11,12 @@ import {
   invoiceDeliveries,
   invoiceSeries,
   pagePrinters,
-  tenants,
+  taxpayer,
   withTransaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDeviceProfiles, seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { recordSale } from "@waitron/core";
@@ -256,8 +256,8 @@ type Venue = Awaited<ReturnType<typeof venue>>;
 
 async function venue() {
   ipp = await startFakeIppPrinter();
-  await seedTenant(suite.db);
-  await suite.db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
+  await seedTaxpayer(suite.db);
+  await suite.db.update(taxpayer).set({ taxpayerDomicile: "Saved domicile" });
   await seedVenue(suite.db, {
     name: "Bar",
     invoiceLocales: ["es-ES"],

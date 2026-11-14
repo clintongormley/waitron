@@ -187,7 +187,7 @@ describe("the archives part", () => {
     });
     expect(built.file.backupKey).toBeUndefined();
     const [stored] = await suite.db.all<{ purpose: string }>(
-      sql`select purpose from tenant_credentials where purpose = ${ARCHIVE_PURPOSE}`,
+      sql`select purpose from venue_credentials where purpose = ${ARCHIVE_PURPOSE}`,
     );
     expect(stored).toBeDefined();
     expect(built.record).toMatchObject({

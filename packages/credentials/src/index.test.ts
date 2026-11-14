@@ -12,7 +12,7 @@ describe("the public surface", () => {
         "resolveBackupKeyInputs",
         "readBackupCredential",
         "verifyBackupCredentials",
-        "tenantCredentials",
+        "venueCredentials",
         "PURPOSES",
         "isPurpose",
         "validatePayload",
@@ -52,19 +52,19 @@ describe("the public surface", () => {
  * runs it. `getTableConfig` forces it, and the assertions pin the constraint names the migration
  * declares.
  */
-describe("tenant_credentials constraint declarations (forces the lazy extraConfig callback)", () => {
-  it("declares tenant_credentials' primary key on purpose, no foreign key, and its checks", () => {
-    const config = getTableConfig(api.tenantCredentials);
+describe("venue_credentials constraint declarations (forces the lazy extraConfig callback)", () => {
+  it("declares venue_credentials' primary key on purpose, no foreign key, and its checks", () => {
+    const config = getTableConfig(api.venueCredentials);
 
-    expect(config.primaryKeys[0]?.getName()).toBe("tenant_credentials_pk");
+    expect(config.primaryKeys[0]?.getName()).toBe("venue_credentials_pk");
     expect(config.primaryKeys[0]?.columns.map((c) => c.name)).toEqual(["purpose"]);
     expect(config.foreignKeys).toEqual([]);
 
     const checkNames = config.checks.map((c) => c.name);
-    expect(checkNames).toContain("tenant_credentials_key_version_ck");
-    expect(checkNames).toContain("tenant_credentials_iv_len_ck");
-    expect(checkNames).toContain("tenant_credentials_auth_tag_len_ck");
-    expect(checkNames).toContain("tenant_credentials_purpose_ck");
+    expect(checkNames).toContain("venue_credentials_key_version_ck");
+    expect(checkNames).toContain("venue_credentials_iv_len_ck");
+    expect(checkNames).toContain("venue_credentials_auth_tag_len_ck");
+    expect(checkNames).toContain("venue_credentials_purpose_ck");
   });
 });
 
@@ -74,7 +74,7 @@ describe("tenant_credentials constraint declarations (forces the lazy extraConfi
  */
 describe("what a read hands back for the three sealed columns", () => {
   it("types them as Uint8Array, not as a node Buffer", () => {
-    type CredentialRow = typeof api.tenantCredentials.$inferSelect;
+    type CredentialRow = typeof api.venueCredentials.$inferSelect;
     // A `Buffer` is assignable to a `Uint8Array` and not the other way round, so assigning a PLAIN
     // `Uint8Array` is the discriminating direction: this stops compiling the moment one of the
     // three columns goes back to declaring `Buffer`.

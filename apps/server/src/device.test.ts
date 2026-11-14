@@ -32,7 +32,7 @@ interface SeededVenue {
   stationId: string;
 }
 
-/** A fresh tenant + venue + one station. Every test calls it, and `useVenueDb` empties the data
+/** A fresh taxpayer + venue + one station. Every test calls it, and `useVenueDb` empties the data
  * tables between tests, so the counts each case reads are its own. */
 async function setupVenue(): Promise<SeededVenue> {
   const admin = suite.db;

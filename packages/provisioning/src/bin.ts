@@ -19,7 +19,7 @@ import { AppError, isAppError } from "@waitron/shared";
 import { createFirstSetupCommandDeployment } from "./first-setup-command-deployment.js";
 import { createFirstSetupRuntime } from "./first-setup-runtime.js";
 import { formatAppError, runCli } from "./cli.js";
-import { readTenantIdentities } from "./tenant-guard.js";
+import { readTaxpayerIdentities } from "./taxpayer-guard.js";
 import { applyVenue } from "./venue-apply.js";
 
 /** `ESC[3J` clears the scrollback, `ESC[H` homes the cursor, `ESC[2J` clears the screen; `ESC[2J`
@@ -72,7 +72,7 @@ async function main(): Promise<number> {
       readEnvironment: readDeploymentEnvironment,
       readDeploymentTable: deploymentTableExists,
       stampEnvironment: stampDeployment,
-      readTenants: readTenantIdentities,
+      readTaxpayers: readTaxpayerIdentities,
     });
   } catch (error) {
     // Never the message: a query error's message can embed the failed statement. A class name

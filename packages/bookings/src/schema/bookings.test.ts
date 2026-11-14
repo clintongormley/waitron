@@ -13,7 +13,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  seedTenant,
+  seedTaxpayer,
   seedPerson,
   seedVenueSettings,
   seedBusinessDay,
@@ -64,7 +64,7 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
 
   // Each test seeds its own parents: the helper empties every table after each test.
   async function seedParents(): Promise<void> {
-    await seedTenant(suite.db);
+    await seedTaxpayer(suite.db);
     await seedPerson(suite.db, { id: CREATED_BY });
     await seedVenueSettings(suite.db, {
       name: "Loc A",

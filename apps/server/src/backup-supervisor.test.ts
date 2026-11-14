@@ -245,7 +245,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       try {
         const rows = opened
           .prepare(
-            "select count(*) as n from sqlite_master where type = 'table' and name = 'tenants'",
+            "select count(*) as n from sqlite_master where type = 'table' and name = 'taxpayer'",
           )
           .all() as { n: number }[];
         expect(rows[0]!.n).toBe(1);

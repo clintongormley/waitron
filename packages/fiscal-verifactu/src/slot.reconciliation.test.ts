@@ -108,7 +108,7 @@ describe("the module-owned runtime reconciliation seat", () => {
   it("uses the venue taxpayer instead of choosing an issuer from stored monthly rows", async () => {
     const { deps } = await fixture();
     await withTransaction(suite.db, (tx) =>
-      tx.execute(sql`update tenants set tax_id = '89890001K' where id = 1`),
+      tx.execute(sql`update taxpayer set tax_id = '89890001K' where id = 1`),
     );
     expect(FISCAL_SLOT.createReconciliation).toBeTypeOf("function");
     await FISCAL_SLOT.createReconciliation!(deps)(NOW);
@@ -119,7 +119,7 @@ describe("the module-owned runtime reconciliation seat", () => {
 
 it("refuses a missing venue taxpayer without opening an authority transport", async () => {
   const seeded = await seedPendingEnvios(suite.db, { count: 0 });
-  await withTransaction(suite.db, (tx) => tx.execute(sql`delete from tenants`));
+  await withTransaction(suite.db, (tx) => tx.execute(sql`delete from taxpayer`));
   const run = FISCAL_SLOT.createReconciliation!({
     db: suite.db,
     ring,
@@ -229,7 +229,7 @@ it("restarts the scoped schedule if the venue taxpayer changes", async () => {
   const run = FISCAL_SLOT.createReconciliation!(deps);
   await run(NOW);
   await withTransaction(suite.db, (tx) =>
-    tx.execute(sql`update tenants set tax_id = '89890001K' where id = 1`),
+    tx.execute(sql`update taxpayer set tax_id = '89890001K' where id = 1`),
   );
   const result = await run(new Date("2026-07-21T00:01:00Z"));
   expect(result.nextDueAt).toEqual(new Date("2026-07-22T00:01:00Z"));

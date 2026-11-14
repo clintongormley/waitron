@@ -1,4 +1,4 @@
-import { readTenant, readVenue, type Database } from "@waitron/db";
+import { readTaxpayer, readVenue, type Database } from "@waitron/db";
 import { resolveCountryDemoIdentity } from "@waitron/country";
 import type { DietaryLabel, PricingUnit, VatClass } from "@waitron/menu";
 import type { BuiltInRoleKey } from "@waitron/identity";
@@ -152,13 +152,13 @@ export function demoPlainText(
 export async function readDemoSeedSelection(
   db: Database,
 ): Promise<{ identity: CountryDemoIdentity; dataSet: DemoDataSet }> {
-  const tenant = await readTenant(db);
+  const taxpayer = await readTaxpayer(db);
   const { province } = await readVenue(db);
-  const pack = tenant === null ? undefined : getCountryPack(tenant.country);
+  const pack = taxpayer === null ? undefined : getCountryPack(taxpayer.country);
   const identity = pack === undefined ? undefined : resolveCountryDemoIdentity(pack, province);
   if (identity === undefined)
     throw new Error(
-      `readDemoSeedSelection: no demo identity for ${tenant?.country ?? "missing tenant"}`,
+      `readDemoSeedSelection: no demo identity for ${taxpayer?.country ?? "missing taxpayer"}`,
     );
   return { identity, dataSet: demoDataSetFor(identity) };
 }

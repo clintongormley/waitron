@@ -29,7 +29,7 @@ import {
   saleSettlements,
   sales,
   tenders,
-  tenants,
+  taxpayer,
   triggerRaised,
   withTransaction,
 } from "@waitron/db";
@@ -38,7 +38,7 @@ import { seedNode, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { formatInvoiceNumber, recordSale } from "./record-sale.js";
 import type { RecordSaleInput, RecordSaleTender } from "./record-sale.js";
 import { settleSale } from "./settle-sale.js";
-import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
+import { seedBareSale, seedRectificativeSeries, seedTaxpayer } from "../test/fixtures.js";
 
 let deviceId: DeviceId;
 let nodeId: NodeId;
@@ -51,7 +51,7 @@ const suite = useVenueDb({
 });
 
 beforeEach(async () => {
-  ({ deviceId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ deviceId, nodeId, seriesId } = await seedTaxpayer(suite.db));
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -903,8 +903,8 @@ describe("recordSale — series validation", () => {
   });
 
   it("rejects a series belonging to another node", async () => {
-    // `seedTenant` mints a second node, so `other.seriesId` is real but not this node's.
-    const other = await seedTenant(suite.db);
+    // `seedTaxpayer` mints a second node, so `other.seriesId` is real but not this node's.
+    const other = await seedTaxpayer(suite.db);
     await expect(
       run(new FakeFiscalBackend(suite.db), { seriesId: other.seriesId }),
     ).rejects.toMatchObject({ code: "sale.series_wrong_node" });
@@ -1758,7 +1758,7 @@ describe("recordSale — a regime's simplified-invoice limit", () => {
       .values({ nodeId, code: "F", purpose: "full" })
       .returning({ id: invoiceSeries.id });
     suite.db.run(
-      sql`update tenants set taxpayer_domicile = 'Calle Fiscal 8, 28001 Madrid' where id = 1`,
+      sql`update taxpayer set taxpayer_domicile = 'Calle Fiscal 8, 28001 Madrid' where id = 1`,
     );
     const recipient = {
       taxId: "12345678Z",
@@ -1806,7 +1806,7 @@ describe("recordSale — a regime's simplified-invoice limit", () => {
       .values({ nodeId, code: "F", purpose: "full" })
       .returning({ id: invoiceSeries.id });
     suite.db.run(
-      sql`update tenants set taxpayer_domicile = 'Calle Fiscal 8, 28001 Madrid' where id = 1`,
+      sql`update taxpayer set taxpayer_domicile = 'Calle Fiscal 8, 28001 Madrid' where id = 1`,
     );
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await run(backend, {
@@ -1845,7 +1845,7 @@ describe("recordSale — a regime's simplified-invoice limit", () => {
       .values({ nodeId, code: "F", purpose: "full" })
       .returning({ id: invoiceSeries.id });
     suite.db.run(
-      sql`update tenants set taxpayer_domicile = 'Calle Fiscal 8, 28001 Madrid' where id = 1`,
+      sql`update taxpayer set taxpayer_domicile = 'Calle Fiscal 8, 28001 Madrid' where id = 1`,
     );
 
     const result = await run(new FakeFiscalBackend(suite.db), {
@@ -1870,7 +1870,7 @@ describe("recordSale — a regime's simplified-invoice limit", () => {
       .values({ nodeId, code: "F", purpose: "full" })
       .returning({ id: invoiceSeries.id });
     suite.db.run(
-      sql`update tenants set taxpayer_domicile = 'Calle Fiscal 8, 28001 Madrid' where id = 1`,
+      sql`update taxpayer set taxpayer_domicile = 'Calle Fiscal 8, 28001 Madrid' where id = 1`,
     );
 
     const error = await captureError(() =>
@@ -1905,7 +1905,7 @@ describe("recordSale — a regime's simplified-invoice limit", () => {
 
     expect(error).toMatchObject({ code: "fiscal.taxpayer_domicile_missing" });
     expect(await countRows("sales")).toBe(0);
-    suite.db.run(sql`update tenants set taxpayer_domicile = '   ' where id = 1`);
+    suite.db.run(sql`update taxpayer set taxpayer_domicile = '   ' where id = 1`);
     const blankError = await captureError(() =>
       run(new FakeFiscalBackend(suite.db), {
         seriesId: brandSeriesId(fullSeries!.id),
@@ -2000,7 +2000,7 @@ describe("recordSale — a regime's simplified-invoice limit", () => {
 
 describe("accepted document persistence", () => {
   it.each(["fake", "none"])("stores explicit foreign identity with %s backend", async (kind) => {
-    await suite.db.update(tenants).set({ taxpayerDomicile: "8 Fiscal Street" });
+    await suite.db.update(taxpayer).set({ taxpayerDomicile: "8 Fiscal Street" });
     const backend = kind === "none" ? new NoneBackend() : new FakeFiscalBackend(suite.db);
     const [full] = await suite.db
       .insert(invoiceSeries)

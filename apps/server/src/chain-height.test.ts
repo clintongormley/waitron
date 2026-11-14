@@ -19,11 +19,11 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-// One fixed NIF: this suite owns its own venue directory, so nothing else ever writes the `tenants`
+// One fixed NIF: this suite owns its own venue directory, so nothing else ever writes the `taxpayer`
 // row the uniqueness constraint covers.
 const NIF = "72000001K";
 
-/** Provision one venue as the owner; the fixture mirrors `management-api.status.test.ts`'s `setupTenant()`. */
+/** Provision one venue as the owner; the fixture mirrors `management-api.status.test.ts`'s `setupVenue()`. */
 async function setupVenue(): Promise<{ nodeId: string }> {
   const venue = await applyVenue(
     planVenue(

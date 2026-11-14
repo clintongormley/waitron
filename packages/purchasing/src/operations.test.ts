@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { checkFailed, purchaseInvoiceVat, purchaseInvoices, withTransaction } from "@waitron/db";
 import { usePurchasingDb } from "../test/fixtures.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { hasCode, isAppError } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import {
@@ -34,7 +34,7 @@ function baseInput(): CreatePurchaseInvoiceInput {
 
 describe("purchase-invoice operations", () => {
   beforeEach(async () => {
-    await seedTenant(fx.db);
+    await seedTaxpayer(fx.db);
   });
 
   async function asApp<T>(fn: Parameters<typeof withTransaction<T>>[1]): Promise<T> {
@@ -281,7 +281,7 @@ describe("purchase-invoice operations", () => {
     expect(gone).toBeNull();
   });
 
-  it("returns an empty list when the tenant has no invoices", async () => {
+  it("returns an empty list when the taxpayer has no invoices", async () => {
     expect(await asApp((tx) => listPurchaseInvoices(tx))).toEqual([]);
   });
 

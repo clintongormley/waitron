@@ -70,7 +70,7 @@ describe("destination language requirements", () => {
     await withTransaction(suite.db, (tx) =>
       CATALOGUE_CONFIGURATION_TRANSFER.beforeImport(tx, {}, imported(["en", "es", "ca"])),
     );
-    await withTransaction(suite.db, (tx) => tx.execute(sql`update tenants set country = 'GB'`));
+    await withTransaction(suite.db, (tx) => tx.execute(sql`update taxpayer set country = 'GB'`));
     await withTransaction(suite.db, (tx) =>
       CATALOGUE_CONFIGURATION_TRANSFER.beforeImport(tx, {}, imported(["en"])),
     );

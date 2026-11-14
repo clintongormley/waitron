@@ -8,7 +8,7 @@ import {
   nextRecoveryPackNumber,
   readRecoveryPack,
   readRecoveryPacks,
-  readTenant,
+  readTaxpayer,
   readVenue,
   withNodeTransaction,
   withTransaction,
@@ -210,9 +210,9 @@ async function makePack(
   const nodeId = deps.node.nodeId;
   await authorizeManager(tx, { managementSessionId: input.token, permission: "system.manage" });
   await requireFreshManagementSignIn(tx, input.token);
-  const tenant = await readTenant(tx);
+  const taxpayer = await readTaxpayer(tx);
   const venue = await readVenue(tx);
-  if (tenant === null) {
+  if (taxpayer === null) {
     throw new Error("the box has no taxpayer to name on a recovery pack");
   }
   const [person] = await tx
@@ -253,8 +253,8 @@ async function makePack(
     timeZone: venue.timeZone,
     loadFont: deps.loadFont,
     cover: {
-      legalName: tenant.legalName,
-      taxId: tenant.taxId,
+      legalName: taxpayer.legalName,
+      taxId: taxpayer.taxId,
       venueName: venue.name,
       madeAt,
       madeBy: person?.name ?? null,

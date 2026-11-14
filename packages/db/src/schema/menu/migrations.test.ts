@@ -25,7 +25,7 @@ import {
 } from "../../index.js";
 import type { Database } from "../../index.js";
 import { useVenueDb } from "../../testing/venue-db.js";
-import { seedTenant } from "../../testing/seed.js";
+import { seedTaxpayer } from "../../testing/seed.js";
 
 // One SQLite file with the core set applied, which holds the catalogue's tables.
 const suite = useVenueDb({
@@ -101,7 +101,7 @@ it("gives menu_details the six display settings, each required with its default 
   // of the six would add an entry that case refuses.
 });
 
-describe("the catalogue tables carry no tenant column", () => {
+describe("the catalogue tables carry no taxpayer column", () => {
   it("has no tenant_id column on any table in the set", async () => {
     const found: string[] = [];
     for (const table of TABLES)
@@ -255,7 +255,7 @@ describe("the catalogue tables carry no tenant column", () => {
    * `sql is null` is the filter, not a name pattern: SQLite stores no statement for an index it
    * created itself for a `PRIMARY KEY` or a single-column `UNIQUE` declaration.
    */
-  it("rebuilds every lookup index without the tenant", async () => {
+  it("rebuilds every lookup index without the taxpayer", async () => {
     const indexes: Record<string, { unique: boolean; columns: string }> = {};
     for (const table of TABLES) {
       const rows = (
@@ -354,7 +354,7 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
 
   /** Rows seeded per test: the per-test reset empties every table after each case. */
   async function catalogue() {
-    await seedTenant(db);
+    await seedTaxpayer(db);
     const menuId = (
       await db.insert(catalogues).values({ name: "Lunch" }).returning({ id: catalogues.id })
     )[0]!.id;

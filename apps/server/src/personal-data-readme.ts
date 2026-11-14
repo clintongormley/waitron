@@ -7,7 +7,7 @@ import { fillTemplate } from "./fill-template.js";
 
 export interface PersonalDataReadmeInput {
   readonly language: "en" | "es";
-  /** `tenants.legal_name`, or null when there is no tenant row. */
+  /** `taxpayer.legal_name`, or null when there is no taxpayer row. */
   readonly venue: string | null;
   /** The person's display name. */
   readonly person: string;
@@ -56,7 +56,7 @@ function askLine(w: ReadmeWords, venue: string, privacyNoticeUrl: string | undef
 
 export interface InvoiceCustomerReadmeInput {
   readonly language: "en" | "es";
-  /** `tenants.legal_name`, or null when there is no tenant row. */
+  /** `taxpayer.legal_name`, or null when there is no taxpayer row. */
   readonly venue: string | null;
   /** The name on the customer's newest invoice. */
   readonly customer: string;

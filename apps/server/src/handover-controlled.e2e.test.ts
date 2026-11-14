@@ -466,7 +466,7 @@ async function within<T>(promise: Promise<T>, ms: number, what: string): Promise
 function applyWithFirstSetup(stateDir: string): typeof applyVenue {
   return async (actions, deps) => {
     const clock = createHourTestClock(Date.now() - 10 * 60_000);
-    const taxpayer = actions.find((action) => action.kind === "ensure-tenant")!;
+    const taxpayer = actions.find((action) => action.kind === "ensure-taxpayer")!;
     const initialNodeId = randomUUID();
     const initialAdministratorId = randomUUID();
     const binding = {

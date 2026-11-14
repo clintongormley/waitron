@@ -10,7 +10,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { AppError, jobOrigin } from "@waitron/shared";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { WorkforceBackend, type ClockEventInput } from "./clocking.js";
@@ -28,7 +28,7 @@ let otherPersonId: string;
 let nodeId: string;
 
 beforeEach(async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   personId = await seedPerson(suite.db, "Ana");
   otherPersonId = await seedPerson(suite.db, "Ben");
   await seedFixtureVenue(suite.db);

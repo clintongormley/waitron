@@ -42,7 +42,7 @@ function request(changes: Partial<VenueRequest> = {}): VenueRequest {
 
 function facts() {
   return {
-    tenant: suite.db.all(sql`select * from tenants`),
+    taxpayer: suite.db.all(sql`select * from taxpayer`),
     deployment: suite.db.all(sql`select * from deployment`),
     allocations: suite.db.all(sql`select * from fiscal_allocations`),
     sif: suite.db.all(sql`select * from registro_sif`),
@@ -89,7 +89,7 @@ describe("developer allocation boundary", () => {
     "refuses a non-demo identity %j before writing venue facts",
     async (identity) => {
       const actions = planVenue(request(), ALL_MODULES).map((action) =>
-        action.kind === "ensure-tenant" ? { ...action, ...identity } : action,
+        action.kind === "ensure-taxpayer" ? { ...action, ...identity } : action,
       );
       const before = facts();
       await expect(

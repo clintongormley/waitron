@@ -4,7 +4,7 @@ import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { MEDIA_ROUTES } from "./routes.js";
@@ -22,7 +22,7 @@ async function fixture(
   maxUploadBytes: number | null = 1000,
   contentDefaultLanguage: string | null = "fr",
 ) {
-  const id = await seedTenant(suite.db);
+  const id = await seedTaxpayer(suite.db);
   // Through the table definition, not raw SQL: `id` and the timestamps are JavaScript generators
   // (`$defaultFn`), never column DEFAULTs, so a raw insert naming none of them is refused with
   // `NOT NULL constraint failed`.
@@ -329,7 +329,7 @@ it("reads a limited page, and refuses an unknown id and malformed bodies", async
 });
 
 it("requires a name in the shared fallback language when the venue configures no default", async () => {
-  // No stored language settings either (`seedTenant` writes none), so nothing else names one.
+  // No stored language settings either (`seedTaxpayer` writes none), so nothing else names one.
   const { app, headers } = await fixture("manager", 1000, null);
   const french = await app.request("/management-api/images", {
     method: "POST",

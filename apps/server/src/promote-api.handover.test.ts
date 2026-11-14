@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { TLSSocket } from "node:tls";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  readTenant,
+  readTaxpayer,
   stampDeployment,
   withNodeTransaction,
   withTransaction,
@@ -168,11 +168,11 @@ beforeEach(async () => {
     endorsements: [endorseKey(SOURCE.nodeId, SOURCE.publicKey, self, selfKey)],
   };
   await writeNodeMembership(suite.db, held);
-  const tenant = await readTenant(suite.db);
+  const taxpayer = await readTaxpayer(suite.db);
   binding = {
     operationId: OP,
     scenario: "controlled",
-    venue: { country: tenant!.country, taxId: tenant!.taxId, environment: "preproduction" },
+    venue: { country: taxpayer!.country, taxId: taxpayer!.taxId, environment: "preproduction" },
     sourceNodeId: SOURCE.nodeId,
     destinationNodeId: self,
     membership: { term: 3, digest: sha256Hex(canonicalize(held as unknown as CanonicalValue)) },

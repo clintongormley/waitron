@@ -13,7 +13,7 @@ import {
   nodes,
   openVenueDatabase,
   stampDeployment,
-  tenants,
+  taxpayer,
   type Database,
   type VenueDatabase,
 } from "@waitron/db";
@@ -154,9 +154,9 @@ async function seedVenueWithNodesAndTill(db: Database): Promise<void> {
   // Every conflict target is the primary key: each row here is keyed by the id it supplies, and an
   // untargeted form absorbs EVERY unique conflict rather than the one the caller means.
   await db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: "90444444A", legalName: "Reroute E2E SL" })
-    .onConflictDoNothing({ target: tenants.id });
+    .onConflictDoNothing({ target: taxpayer.id });
   await seedVenueSettings(db, {
     name: "Loc",
     invoiceLocales: ["en"],

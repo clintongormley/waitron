@@ -12,7 +12,7 @@ import {
   deleteCredential,
   loadKeyRing,
   putCredential,
-  tenantCredentials,
+  venueCredentials,
   tryGetCredential,
 } from "@waitron/credentials";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -139,7 +139,7 @@ describe("SMTP settings", () => {
       const app = mount();
       expect((await request(app, venue.admin, settings)).status).toBe(200);
       await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, venue.admin, false));
-      const before = await suite.db.select().from(tenantCredentials);
+      const before = await suite.db.select().from(venueCredentials);
       const response = await app.request(path, {
         method,
         headers: { cookie: venue.admin, "content-type": "application/json" },
@@ -151,7 +151,7 @@ describe("SMTP settings", () => {
       expect(await response.json()).toEqual({
         error: { code: "management_session.proof_required", params: {} },
       });
-      expect(await suite.db.select().from(tenantCredentials)).toEqual(before);
+      expect(await suite.db.select().from(venueCredentials)).toEqual(before);
     },
   );
   it("seals an admin's settings and routes invoice mail through them without returning secrets", async () => {
@@ -175,7 +175,7 @@ describe("SMTP settings", () => {
         from: { name: "Sala", address: "venue@example.test" },
       },
     });
-    const rows = await suite.db.select().from(tenantCredentials);
+    const rows = await suite.db.select().from(venueCredentials);
     expect(JSON.stringify(rows)).not.toContain("p@ss:word");
     expect(JSON.stringify(rows)).not.toContain("smtp-user");
     const read = await request(app, venue.admin);
@@ -231,7 +231,7 @@ describe("SMTP settings", () => {
         hasAuthentication: false,
       },
     });
-    expect(await suite.db.select().from(tenantCredentials)).toHaveLength(1);
+    expect(await suite.db.select().from(venueCredentials)).toHaveLength(1);
   });
   it("reports missing live SMTP so the card can ask for settings", async () => {
     const venue = await setupVenue();
@@ -251,7 +251,7 @@ describe("SMTP settings", () => {
       expect(await response.json()).toMatchObject({
         error: { code: "management_session.required" },
       });
-      expect(await suite.db.select().from(tenantCredentials)).toHaveLength(0);
+      expect(await suite.db.select().from(venueCredentials)).toHaveLength(0);
     },
   );
   it.each(["GET", "PUT"])("refuses staff %s without system.manage", async (method) => {
@@ -259,7 +259,7 @@ describe("SMTP settings", () => {
     const response = await request(mount(), venue.staff, method === "PUT" ? settings : undefined);
     expect(response.status).toBe(403);
     expect(await response.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
-    expect(await suite.db.select().from(tenantCredentials)).toHaveLength(0);
+    expect(await suite.db.select().from(venueCredentials)).toHaveLength(0);
   });
   it.each(["demo"] as const)(
     "refuses a change in %s and leaves its configured credential intact",
@@ -329,7 +329,7 @@ describe("SMTP settings", () => {
       expect(await response.json()).toEqual({
         error: { code: "email.settings_invalid", params: { field } },
       });
-      expect(await suite.db.select().from(tenantCredentials)).toHaveLength(0);
+      expect(await suite.db.select().from(venueCredentials)).toHaveLength(0);
     },
   );
 });
@@ -369,7 +369,7 @@ describe("SMTP settings test request", () => {
       expect(rig.messages[0]).toContain("To: manager@example.test");
       expect(rig.messages[0]).toContain("From: Sala <venue@example.test>");
       expect(rig.messages[0]).not.toContain("attacker@example.test");
-      expect(await suite.db.select().from(tenantCredentials)).toHaveLength(0);
+      expect(await suite.db.select().from(venueCredentials)).toHaveLength(0);
       expect(JSON.stringify(logs)).not.toContain("manager@example.test");
     } finally {
       await rig.close();
@@ -391,7 +391,7 @@ describe("SMTP settings test request", () => {
         code: "email.test_starttls_refused",
       });
       expect(rig.messages).toHaveLength(0);
-      expect(await suite.db.select().from(tenantCredentials)).toHaveLength(0);
+      expect(await suite.db.select().from(venueCredentials)).toHaveLength(0);
     } finally {
       await rig.close();
     }
@@ -501,7 +501,7 @@ describe("SMTP settings boundary cases", () => {
     expect(await response.json()).toEqual({
       error: { code: "email.settings_invalid", params: { field } },
     });
-    expect(await suite.db.select().from(tenantCredentials)).toHaveLength(0);
+    expect(await suite.db.select().from(venueCredentials)).toHaveLength(0);
   });
   it("accepts an IPv6 server and trims the server and sender", async () => {
     const venue = await setupVenue();
@@ -536,7 +536,7 @@ describe("SMTP settings boundary cases", () => {
     expect(await response.json()).toEqual({
       error: { code: "email.settings_invalid", params: { field: "recipient" } },
     });
-    expect(await suite.db.select().from(tenantCredentials)).toHaveLength(0);
+    expect(await suite.db.select().from(venueCredentials)).toHaveLength(0);
   });
 });
 
@@ -645,7 +645,7 @@ it("refuses a manager replacing the relay that delivers admin password resets", 
   expect(await response.json()).toMatchObject({
     error: { code: "authorization.not_permitted", params: { permission: "system.box_admin" } },
   });
-  expect(await suite.db.select().from(tenantCredentials)).toEqual([]);
+  expect(await suite.db.select().from(venueCredentials)).toEqual([]);
 });
 
 it("keeps SMTP settings read-only for a manager", async () => {
@@ -689,7 +689,7 @@ it("reads stored settings and delivery mode from the same turn before a queued r
       hasAuthentication: true,
     },
   });
-  expect(await suite.db.select().from(tenantCredentials)).toEqual([]);
+  expect(await suite.db.select().from(venueCredentials)).toEqual([]);
 });
 
 it("lets a Prepare admin save, read and remove a sealed relay while managers only read and test their own proposal", async () => {
@@ -702,7 +702,7 @@ it("lets a Prepare admin save, read and remove a sealed relay while managers onl
       (config, recipient) => sendSmtpTestMessage(config, recipient, { ca: smtpTestTls.caCertPem }),
     );
     expect((await request(app, venue.admin, settings)).status).toBe(200);
-    const before = await suite.db.select().from(tenantCredentials);
+    const before = await suite.db.select().from(venueCredentials);
     expect(JSON.stringify(before)).not.toContain("p@ss:word");
     const redacted = {
       server: "smtp.example.test",
@@ -743,11 +743,11 @@ it("lets a Prepare admin save, read and remove a sealed relay while managers onl
     expect(rig.messages[0]).toContain("To: manager@example.test");
     expect(rig.messages[0]).toContain("From: Sala <proposed@example.test>");
     expect(rig.messages[0]).not.toContain("attacker@example.test");
-    expect(await suite.db.select().from(tenantCredentials)).toEqual(before);
+    expect(await suite.db.select().from(venueCredentials)).toEqual(before);
     const removed = await app.request(path, { method: "DELETE", headers: { cookie: venue.admin } });
     expect(removed.status).toBe(200);
     expect(await removed.json()).toEqual({ removed: true });
-    expect(await suite.db.select().from(tenantCredentials)).toEqual([]);
+    expect(await suite.db.select().from(venueCredentials)).toEqual([]);
     expect(await (await request(app, venue.admin)).json()).toEqual({
       mode: "unconfigured",
       editable: true,
@@ -799,13 +799,13 @@ describe("removing saved SMTP settings", () => {
     );
     const [archive] = await suite.db
       .select()
-      .from(tenantCredentials)
-      .where(eq(tenantCredentials.purpose, "backup.archive"));
+      .from(venueCredentials)
+      .where(eq(venueCredentials.purpose, "backup.archive"));
 
     const response = await remove(app, venue.admin);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ removed: true });
-    expect(await suite.db.select().from(tenantCredentials)).toEqual([archive]);
+    expect(await suite.db.select().from(venueCredentials)).toEqual([archive]);
     expect(await (await request(app, venue.admin)).json()).toEqual({
       mode: "unconfigured",
       editable: true,
@@ -814,7 +814,7 @@ describe("removing saved SMTP settings", () => {
     const repeated = await remove(app, venue.admin);
     expect(repeated.status).toBe(200);
     expect(await repeated.json()).toEqual({ removed: true });
-    expect(await suite.db.select().from(tenantCredentials)).toEqual([archive]);
+    expect(await suite.db.select().from(venueCredentials)).toEqual([archive]);
   });
 
   it.each(["demo", "prepare", "live"] as const)(
@@ -822,9 +822,9 @@ describe("removing saved SMTP settings", () => {
     async (intent) => {
       const venue = await setupVenue();
       expect((await request(mount(), venue.admin, settings)).status).toBe(200);
-      const before = await suite.db.select().from(tenantCredentials);
+      const before = await suite.db.select().from(venueCredentials);
       const response = await remove(mount(intent), venue.manager);
-      expect(await suite.db.select().from(tenantCredentials)).toEqual(before);
+      expect(await suite.db.select().from(venueCredentials)).toEqual(before);
       expect(response.status).toBe(403);
       expect(await response.json()).toEqual({
         error: { code: "authorization.not_permitted", params: { permission: "system.box_admin" } },
@@ -835,13 +835,13 @@ describe("removing saved SMTP settings", () => {
   it("refuses an admin removing the relay in Demo and preserves its sealed contents", async () => {
     const venue = await setupVenue();
     expect((await request(mount(), venue.admin, settings)).status).toBe(200);
-    const before = await suite.db.select().from(tenantCredentials);
+    const before = await suite.db.select().from(venueCredentials);
     const response = await remove(mount("demo"), venue.admin);
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({
       error: { code: "email.settings_not_allowed", params: {} },
     });
-    expect(await suite.db.select().from(tenantCredentials)).toEqual(before);
+    expect(await suite.db.select().from(venueCredentials)).toEqual(before);
   });
 
   it.each(["unsigned", "staff", "supervisor", "suspended"] as const)(
@@ -864,7 +864,7 @@ describe("removing saved SMTP settings", () => {
             .set({ status: "suspended" })
             .where(eq(persons.email, "owner@example.test")),
         );
-      const before = await suite.db.select().from(tenantCredentials);
+      const before = await suite.db.select().from(venueCredentials);
       const response = await remove(
         mount(),
         role === "unsigned" ? undefined : role === "suspended" ? venue.admin : venue.staff,
@@ -882,7 +882,7 @@ describe("removing saved SMTP settings", () => {
               ? { code: "person.suspended", params: { personId: admin!.id } }
               : { code: "authorization.not_permitted", params: { permission: "system.box_admin" } },
       });
-      expect(await suite.db.select().from(tenantCredentials)).toEqual(before);
+      expect(await suite.db.select().from(venueCredentials)).toEqual(before);
     },
   );
 });

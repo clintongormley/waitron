@@ -40,7 +40,7 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
 }));
 vi.mock("@waitron/provisioning/testing/allocated-venue", () => ({
   applyHistoricalTestVenue: async (...[actions, deps]: Parameters<typeof applyVenue>) => {
-    const taxpayer = actions.find((action) => action.kind === "ensure-tenant")!;
+    const taxpayer = actions.find((action) => action.kind === "ensure-taxpayer")!;
     const bases = actions
       .filter((action) => action.kind === "create-series")
       .map(({ code, purpose }) => ({ code, purpose }));

@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { isUniqueViolation, purchaseInvoices, withTransaction } from "@waitron/db";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { decimal } from "@waitron/shared";
 import { usePurchasingDb } from "../test/fixtures.js";
 import { createPurchaseInvoice, getPurchaseInvoice, updatePurchaseInvoice } from "./operations.js";
 
 const suite = usePurchasingDb();
-beforeEach(() => seedTenant(suite.db));
+beforeEach(() => seedTaxpayer(suite.db));
 
 function input(issuedOn: string, receivedOn = "2027-02-01") {
   return {

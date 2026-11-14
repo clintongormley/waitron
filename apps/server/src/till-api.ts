@@ -59,7 +59,7 @@ import {
 } from "@waitron/payments";
 import { resendInvoicePrintJob } from "./invoice-print.js";
 import { expireInvoiceDeliveryClaims } from "./invoice-delivery.js";
-import { tenantCredentials } from "@waitron/credentials";
+import { venueCredentials } from "@waitron/credentials";
 import { routableServers } from "@waitron/membership";
 import { codeOf, createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
@@ -400,9 +400,9 @@ async function resolvePayReader(
     if (deps.providers !== undefined) {
       const purpose = cardProviderById(deps.providers, reader.provider).credentialPurpose;
       const [cred] = await tx
-        .select({ purpose: tenantCredentials.purpose })
-        .from(tenantCredentials)
-        .where(eq(tenantCredentials.purpose, purpose));
+        .select({ purpose: venueCredentials.purpose })
+        .from(venueCredentials)
+        .where(eq(venueCredentials.purpose, purpose));
       if (cred === undefined) {
         throw new AppError("reader.provider_disconnected", { providerId: reader.provider });
       }

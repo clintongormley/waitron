@@ -14,7 +14,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, persons } from "@waitron/identity";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import { decimal, deviceOrigin, type SaleId } from "@waitron/shared";
-import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
+import { seedBareSale, seedRectificativeSeries, seedTaxpayer } from "../test/fixtures.js";
 import { recordCorrection, type RecordCorrectionInput } from "./record-correction.js";
 
 const suite = useVenueDb({
@@ -27,11 +27,11 @@ let otherSaleId: SaleId;
 let nodeId: string;
 let deviceId: string;
 let input: Omit<RecordCorrectionInput, "authz">;
-let seed: Awaited<ReturnType<typeof seedTenant>>;
+let seed: Awaited<ReturnType<typeof seedTaxpayer>>;
 let backend: FakeFiscalBackend;
 beforeEach(async () => {
   backend = new FakeFiscalBackend(suite.db);
-  seed = await seedTenant(suite.db);
+  seed = await seedTaxpayer(suite.db);
   nodeId = seed.nodeId;
   deviceId = seed.deviceId;
   const originalId = await seedBareSale(suite.db, seed);

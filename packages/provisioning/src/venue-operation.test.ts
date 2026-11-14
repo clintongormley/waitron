@@ -1,6 +1,6 @@
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { describe, expect, it } from "vitest";
-import { settings, nodes, tenants } from "@waitron/db";
+import { settings, nodes, taxpayer } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -137,7 +137,7 @@ describe("fresh setup authority carried into a module seed", () => {
       }),
     ).rejects.toMatchObject({ code: "provisioning.initial_operator_required" });
     expect(entered).toBe(false);
-    expect(await suite.db.select().from(tenants)).toEqual([]);
+    expect(await suite.db.select().from(taxpayer)).toEqual([]);
     expect(await suite.db.select().from(nodes)).toEqual([]);
     expect((await suite.db.select().from(persons)).map((row) => row.displayName)).toEqual([
       "Archived owner",
@@ -159,7 +159,7 @@ describe("fresh setup authority carried into a module seed", () => {
     ).rejects.toThrow("module refused");
     expect(retained).toBeDefined();
     expect(readOperationAuthority(retained!.authority, retained!.binding)).toBeUndefined();
-    for (const table of [persons, tenants, settings, nodes])
+    for (const table of [persons, taxpayer, settings, nodes])
       expect(await suite.db.select().from(table)).toEqual([]);
   });
 

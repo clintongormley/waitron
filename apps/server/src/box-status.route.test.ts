@@ -38,13 +38,13 @@ const NIF = "72000001K";
 
 /** The database is not reset between tests, so every group shares the venue provisioned on first use. */
 let provisioned: Promise<{ nodeId: string; managerId: string }> | undefined;
-function setupTenant(): Promise<{ nodeId: string; managerId: string }> {
-  provisioned ??= provisionTenant();
+function setupVenue(): Promise<{ nodeId: string; managerId: string }> {
+  provisioned ??= provisionVenue();
   return provisioned;
 }
 
 /** Provision a venue as owner and seed the people and sessions this route fixture needs. */
-async function provisionTenant(): Promise<{ nodeId: string; managerId: string }> {
+async function provisionVenue(): Promise<{ nodeId: string; managerId: string }> {
   const venue = await applyVenue(
     planVenue(
       {
@@ -153,7 +153,7 @@ describe("GET /api/box/status", () => {
   let managerCookie: string;
 
   beforeAll(async () => {
-    const { nodeId } = await setupTenant();
+    const { nodeId } = await setupVenue();
     app = buildApp(nodeId, {
       now: new Date("2026-08-29T10:00:00Z"),
       tlsCertPath: undefined,
@@ -187,7 +187,7 @@ describe("GET /api/box/status", () => {
       reason: "no_membership",
       stateSince: "2026-08-29T09:00:00.000Z",
     };
-    const { nodeId } = await setupTenant();
+    const { nodeId } = await setupVenue();
     const streamApp = buildApp(nodeId, {
       now: new Date("2026-08-29T10:00:00Z"),
       tlsCertPath: undefined,
@@ -211,7 +211,7 @@ describe("GET /api/box/status", () => {
     utimesSync(artifact, mtime, mtime);
     const backend = buildBackupBackend({ kind: "local-fs", id: "primary", dir });
 
-    const { nodeId } = await setupTenant();
+    const { nodeId } = await setupVenue();
     const backupApp = buildApp(nodeId, {
       now,
       tlsCertPath: undefined,
@@ -244,7 +244,7 @@ describe("GET /api/box/status with a configured TLS cert", () => {
   let managerCookie: string;
 
   beforeAll(async () => {
-    const { nodeId } = await setupTenant();
+    const { nodeId } = await setupVenue();
     // `now` is 30 days before the fixture's notAfter, so `daysRemaining` is a deterministic 30.
     const certPath = join(mkdtempSync(join(tmpdir(), "box-status-cert-")), "server.pem");
     writeFileSync(certPath, FIXTURE_CERT_PEM);

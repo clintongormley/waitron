@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { startManagementSession } from "@waitron/identity";
 import type { BuiltInRoleKey } from "@waitron/identity";
 import { isAppError } from "@waitron/shared";
@@ -87,7 +87,7 @@ async function rawRow(id: string): Promise<unknown> {
 }
 
 async function setup(): Promise<{ manager: string }> {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   return { manager: await seedSession("manager") };
 }
 

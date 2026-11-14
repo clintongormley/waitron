@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { deployment, invoiceSeries, stampDeployment, tenants, withTransaction } from "@waitron/db";
+import { deployment, invoiceSeries, stampDeployment, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type OperationBinding } from "@waitron/module";
 import { recordSale } from "@waitron/core";
@@ -232,7 +232,7 @@ it("does not use another source's committed event as permission to replay", asyn
 describe("recorded country", () => {
   it("returns the database country rather than a Spanish fallback", async () => {
     await seed();
-    await suite.db.update(tenants).set({ country: "GB" });
+    await suite.db.update(taxpayer).set({ country: "GB" });
     expect((await read()).country).toBe("GB");
   });
 });

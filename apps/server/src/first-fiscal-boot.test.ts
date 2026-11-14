@@ -1,5 +1,5 @@
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CORE_MIGRATIONS, tenants } from "@waitron/db";
+import { CORE_MIGRATIONS, taxpayer } from "@waitron/db";
 import * as filesystem from "node:fs/promises";
 import { build } from "esbuild";
 import { spawn } from "node:child_process";
@@ -459,7 +459,7 @@ it("refuses a fresh owner claim when only a taxpayer survives in the database", 
   await mkdir(venueDir);
   await copyMigrationsRoot(migrations);
   await existing.db
-    .insert(tenants)
+    .insert(taxpayer)
     .values({ id: 1, country: "ES", taxId: request.taxId, legalName: request.legalName });
   await existing.db.archiveTo(join(venueDir, "venue.db"));
   let port: number;

@@ -17,7 +17,7 @@ import {
   deleteCredential,
   loadKeyRing,
   putCredential,
-  tenantCredentials,
+  venueCredentials,
   type KeyRing,
 } from "@waitron/credentials";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
@@ -239,7 +239,7 @@ async function tree(dir: string): Promise<Record<string, string>> {
 
 /** Everything a read must leave as it found it, as text compared whole. */
 async function snapshot(sc: Scenario, sup: BackupSupervisor, folders: string[]): Promise<string> {
-  const rows = await withTransaction(suite.db, (tx) => tx.select().from(tenantCredentials));
+  const rows = await withTransaction(suite.db, (tx) => tx.select().from(venueCredentials));
   rows.sort((a, b) => a.purpose.localeCompare(b.purpose));
   return JSON.stringify(
     {
@@ -253,7 +253,7 @@ async function snapshot(sc: Scenario, sup: BackupSupervisor, folders: string[]):
   );
 }
 
-async function setupTenant(): Promise<void> {
+async function setupVenue(): Promise<void> {
   await applyVenue(
     planVenue(
       {
@@ -311,7 +311,7 @@ afterEach(async () => {
 
 describe("GET /api/backup/settings-evidence proofs", () => {
   beforeAll(async () => {
-    await setupTenant();
+    await setupVenue();
   }, 180_000);
 
   describe("changes nothing", () => {

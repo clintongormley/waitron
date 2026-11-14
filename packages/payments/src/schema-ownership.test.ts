@@ -27,7 +27,7 @@ const OWNED = [
 const CORE = [
   "working_orders",
   "sales",
-  "tenants",
+  "taxpayer",
   "tenders",
   "invoice_series",
   "devices",

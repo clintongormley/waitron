@@ -108,7 +108,7 @@ async function removeManagerPersonAdmin(tx: Transaction): Promise<void> {
 
 let venueCfg: TradingContext | undefined;
 
-async function setupTenant(): Promise<{ managerId: string; staffId: string }> {
+async function setupVenue(): Promise<{ managerId: string; staffId: string }> {
   const venue = await applyVenue(
     planVenue(
       {
@@ -275,7 +275,7 @@ function requestReset(app: Hono, email: string): Promise<Response> {
 
 describe("Management API staff + session routes", () => {
   it("lets only one concurrent invitation claim a live display name", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, "owner@example.test", "dashPass123");
     const responses = await Promise.all([
@@ -298,7 +298,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("preserves one active admin when two admins concurrently demote themselves", async () => {
-    const { managerId } = await setupTenant();
+    const { managerId } = await setupVenue();
     await setBuiltInRoleForTest(suite.db, managerId, "admin");
     const app = mountApp();
     const ownerCookie = await login(app, "owner@example.test", "dashPass123");
@@ -329,7 +329,7 @@ describe("Management API staff + session routes", () => {
     expect(remaining.rows[0]!.count).toBe(1);
   });
   it("links and then signs in with a configured Google account", async () => {
-    await setupTenant();
+    await setupVenue();
     const exchange = vi
       .fn<typeof exchangeGoogleCode>()
       .mockResolvedValue({ subject: "google-subject-1" });
@@ -373,7 +373,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("refuses a Google callback that did not start in the same browser", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp(undefined, undefined, {
       exchange: vi.fn<typeof exchangeGoogleCode>().mockResolvedValue({ subject: "google-subject" }),
     });
@@ -387,7 +387,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("backs off identically for wrong passwords and unknown emails, then clears after success", async () => {
-    await setupTenant();
+    await setupVenue();
     let now = 0;
     const app = mountApp(
       undefined,
@@ -415,7 +415,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("does not count the expected authenticator transition as a failed password", async () => {
-    await setupTenant();
+    await setupVenue();
     await withTransaction(suite.db, async (tx) => {
       await seedPersons(tx, {
         displayName: "Factor Manager",
@@ -442,7 +442,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("login → list → create → verify persistence", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
 
     const loginRes = await app.request("/management-api/session", {
@@ -472,7 +472,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("rejects an unauthenticated staff list with 401", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
 
     const res = await app.request("/management-api/staff");
@@ -483,7 +483,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("rejects a wrong password with 401 and sets no cookie", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
 
     const res = await app.request("/management-api/session", {
@@ -499,7 +499,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("refuses staff-role creation with 403", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
 
     // The staff-role person CAN log in (login checks the credential, not the role)…
@@ -518,7 +518,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("logs out — ends the session, clears the cookie, and a reused cookie is refused", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
@@ -536,7 +536,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("logout with no cookie is idempotent (204)", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
 
     const res = await app.request("/management-api/session", { method: "DELETE" });
@@ -544,7 +544,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("serves the unauthenticated pre-login roster", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
 
     const res = await app.request("/management-api/staff-roster");
@@ -559,7 +559,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("requires an email when creating a person", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const res = await app.request("/management-api/staff", {
@@ -576,7 +576,7 @@ describe("Management API staff + session routes", () => {
 
   it("emails a single-use setup link after creating a person", async () => {
     const sent: Parameters<MailSink>[0][] = [];
-    await setupTenant();
+    await setupVenue();
     const app = mountApp(async (message) => {
       sent.push(message);
       return "sent";
@@ -606,7 +606,7 @@ describe("Management API staff + session routes", () => {
 
   it("sends only the invitation to a person invited with two roles", async () => {
     const sent: Parameters<MailSink>[0][] = [];
-    await setupTenant();
+    await setupVenue();
     const app = mountApp(async (message) => {
       sent.push(message);
       return "sent";
@@ -629,7 +629,7 @@ describe("Management API staff + session routes", () => {
 
   it("requests and completes a password reset without revealing unknown emails", async () => {
     const sent: Parameters<MailSink>[0][] = [];
-    const { staffId } = await setupTenant();
+    const { staffId } = await setupVenue();
     const app = mountApp(async (message) => {
       sent.push(message);
       return "sent";
@@ -681,7 +681,7 @@ describe("Management API staff + session routes", () => {
 
   it("uses the same recovery acknowledgement for pending and unknown accounts", async () => {
     const sent: Parameters<MailSink>[0][] = [];
-    const { staffId } = await setupTenant();
+    const { staffId } = await setupVenue();
     await suite.db.execute(
       sql`update persons set status = 'pending', password_hash = null, pin_hash = null where id = ${staffId}`,
     );
@@ -716,7 +716,7 @@ describe("Management API staff + session routes", () => {
 
   it("answers a known address's reset request while another transaction holds the write lock", async () => {
     const sent: Parameters<MailSink>[0][] = [];
-    await setupTenant();
+    await setupVenue();
     const app = mountApp(async (message) => {
       sent.push(message);
       return "sent";
@@ -738,7 +738,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("settles an answered reset only once its mail row is written", async () => {
-    const { staffId } = await setupTenant();
+    const { staffId } = await setupVenue();
     const app = mountApp(async () => "sent");
     const lock = await holdWriteLock();
     let settled = false;
@@ -764,7 +764,7 @@ describe("Management API staff + session routes", () => {
   it("answers 202 and logs when a known address's reset cannot be written", async () => {
     const sent: Parameters<MailSink>[0][] = [];
     const log = vi.fn<Logger>();
-    await setupTenant();
+    await setupVenue();
     await suite.db.execute(sql`
       create trigger refuse_account_action before insert on outgoing_mail
       begin select raise(abort, 'refused for the test'); end
@@ -797,7 +797,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("settles, and settles again, when logging a refused reset write throws", async () => {
-    await setupTenant();
+    await setupVenue();
     const log = vi.fn<Logger>((_level, event) => {
       if (event === "account_action.request_failed") throw new Error("log sink failed");
     });
@@ -820,7 +820,7 @@ describe("Management API staff + session routes", () => {
 
   it("removes public invitation replacement and rejects code-only account actions", async () => {
     const sent: Parameters<MailSink>[0][] = [];
-    await setupTenant();
+    await setupVenue();
     const app = mountApp(async (message) => {
       sent.push(message);
       return "sent";
@@ -861,7 +861,7 @@ describe("Management API staff + session routes", () => {
 
   it("inspects an invitation token without consuming it and allows admin resends for pending accounts", async () => {
     const sent: Parameters<MailSink>[0][] = [];
-    await setupTenant();
+    await setupVenue();
     const app = mountApp(async (message) => {
       sent.push(message);
       return "sent";
@@ -928,7 +928,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("creates a person with an email and lists it back", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, "owner@example.test", "dashPass123");
 
@@ -946,7 +946,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("PUT saves a complete administrative edit atomically", async () => {
-    const { staffId } = await setupTenant();
+    const { staffId } = await setupVenue();
     const app = mountApp();
     const cookie = await login(app, "owner@example.test", "dashPass123");
     const details = {
@@ -973,7 +973,7 @@ describe("Management API staff + session routes", () => {
 
   it("create with a duplicate email → 409 person.email_taken, no row lands", async () => {
     // The seeded manager already holds MANAGER_EMAIL.
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, "owner@example.test", "dashPass123");
 
@@ -990,7 +990,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("create with a malformed email → 400 person.email_invalid, no row lands", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, "owner@example.test", "dashPass123");
 
@@ -1007,7 +1007,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("refuses an invitation with an unknown access role before creating a person", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, "owner@example.test", "dashPass123");
     const unknownRoleId = randomUUID();
@@ -1026,7 +1026,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("create with a non-string email → 400 management.request_invalid (field email)", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
@@ -1043,7 +1043,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("resets a PIN without allowing the administrator to choose its replacement", async () => {
-    const { staffId } = await setupTenant();
+    const { staffId } = await setupVenue();
     const app = mountApp();
     const cookie = await login(app, "owner@example.test", "dashPass123");
 
@@ -1060,7 +1060,7 @@ describe("Management API staff + session routes", () => {
 
   it("reset login clears credentials, moves the user to Pending, and sends a new invitation", async () => {
     const sent: Parameters<MailSink>[0][] = [];
-    const { staffId } = await setupTenant();
+    const { staffId } = await setupVenue();
     const app = mountApp(async (message) => {
       sent.push(message);
       return "sent";
@@ -1092,7 +1092,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("screens malformed bodies and ids on the gated write routes", async () => {
-    const { staffId } = await setupTenant();
+    const { staffId } = await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
@@ -1130,7 +1130,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("refuses a login with an unknown email as password.invalid (leaking no field)", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
 
     // An unknown email gets the same `password.invalid` as a wrong password.
@@ -1150,7 +1150,7 @@ describe("Management API staff + session routes", () => {
   // rather than a 500.
 
   it("login with a null JSON body → 401 password.invalid, no cookie", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
 
     const res = await app.request("/management-api/session", {
@@ -1166,7 +1166,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("login with a non-string totp → 401 password.invalid (screened before loginManager)", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
 
     // The manager is not TOTP-enrolled, so without the route's screen `loginManager` would ignore
@@ -1184,7 +1184,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("create with a null JSON body → 400 management.request_invalid", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
@@ -1200,7 +1200,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("reset-pin accepts no body while the retired password route remains unavailable", async () => {
-    const { staffId } = await setupTenant();
+    const { staffId } = await setupVenue();
     const app = mountApp();
     const cookie = await login(app, "owner@example.test", "dashPass123");
 
@@ -1220,7 +1220,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("maps an unparseable request body to the route's own 4xx (guarded parse, never a 500)", async () => {
-    const { staffId } = await setupTenant();
+    const { staffId } = await setupVenue();
     const app = mountApp();
 
     // `readJsonBody` reads an unparseable body as `{}`, as it does a JSON `null`.
@@ -1328,7 +1328,7 @@ async function queuedInOrder<T>(first: () => Promise<T>, second: () => Promise<u
 
 describe("Management API — receipt routes (Task 7)", () => {
   it("refuses both routes unauthenticated with 401 management_session.required", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const json = { "content-type": "application/json" };
 
@@ -1352,7 +1352,7 @@ describe("Management API — receipt routes (Task 7)", () => {
   });
 
   it("refuses both routes for a STAFF-role session with 403 (the authorizeManager gate — differential)", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     // A staff person can log in but holds no `venue.configure`.
     const cookie = await login(app, STAFF_EMAIL);
@@ -1378,7 +1378,7 @@ describe("Management API — receipt routes (Task 7)", () => {
   });
 
   it("GET returns an empty department receipt before it has been authored", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
@@ -1395,7 +1395,7 @@ describe("Management API — receipt routes (Task 7)", () => {
   });
 
   it("a department receipt round trips through manager PUT and GET", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const receipt = { footerMessage: { "es-ES": "Gracias por su visita" } };
@@ -1420,7 +1420,7 @@ describe("Management API — receipt routes (Task 7)", () => {
   });
 
   it("GET returns the venue's address lines even when the receipt does not print them", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     expect((await putReceiptOverHttp(app, cookie, { printAddress: false })).status).toBe(204);
@@ -1436,7 +1436,7 @@ describe("Management API — receipt routes (Task 7)", () => {
   });
 
   it("PUT with a library logo stores a printable picture for each paper, and GET does not return it", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const logo = await libraryImage(40);
@@ -1482,7 +1482,7 @@ describe("Management API — receipt routes (Task 7)", () => {
   });
 
   it("PUT naming no library image is refused under the logo field, and saves nothing", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const res = await putReceiptOverHttp(app, cookie, { logo: `${"c".repeat(64)}.png` });
@@ -1494,7 +1494,7 @@ describe("Management API — receipt routes (Task 7)", () => {
   });
 
   it("PUT with a library image that will not decode is refused image.invalid_file, and saves nothing", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const logo = await libraryImage(41);
@@ -1506,7 +1506,7 @@ describe("Management API — receipt routes (Task 7)", () => {
   });
 
   it("PUT keeping the saved logo keeps its pictures without decoding the image again", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const logo = await libraryImage(42);
@@ -1527,7 +1527,7 @@ describe("Management API — receipt routes (Task 7)", () => {
   });
 
   it("PUT keeping the saved logo draws it again when a saved picture cannot be printed", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const logo = await libraryImage(43);
@@ -1549,7 +1549,7 @@ describe("Management API — receipt routes (Task 7)", () => {
   });
 
   it("PUT keeping the saved logo still saves it with its pictures when another save drops the logo first", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const logo = await libraryImage(44);
@@ -1577,7 +1577,7 @@ describe("Management API — receipt routes (Task 7)", () => {
   });
 
   it("PUT is refused image_not_found when the image is deleted while its pictures are drawn", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const logo = await libraryImage(45);
@@ -1597,7 +1597,7 @@ describe("Management API — receipt routes (Task 7)", () => {
   });
 
   it("a department receipt with an unknown field is refused receipt.invalid", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
@@ -1613,7 +1613,7 @@ describe("Management API — receipt routes (Task 7)", () => {
   });
 
   it("PUT with a body that is not an object / omits the required key → 400 management.request_invalid", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const json = { "content-type": "application/json" };
@@ -1671,7 +1671,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
   const json = { "content-type": "application/json" };
 
   it("reports whether Google sign-in is configured, with the privacy notice address", async () => {
-    await setupTenant();
+    await setupVenue();
     const off = await mountWith({}).request("/management-api/google/config");
     expect(await off.json()).toEqual({ configured: false });
     await withTransaction(suite.db, (tx) =>
@@ -1697,7 +1697,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
       withTransaction(suite.db, (tx) => savePrivacyContact(tx, { privacyNoticeUrl, privacyEmail }));
 
     expect(await config()).toEqual({ configured: true });
-    await setupTenant();
+    await setupVenue();
     expect(await config()).toEqual({ configured: true });
     await store("https://example.com/privacy", "privacy@example.com");
     expect(await config()).toEqual({
@@ -1714,7 +1714,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
   });
 
   it("refuses every Google route with google.invalid when Google is not configured", async () => {
-    await setupTenant();
+    await setupVenue();
     const exchange = vi.fn<typeof exchangeGoogleCode>();
     const app = mountWith({ googleCodeExchange: exchange });
     const cookie = await login(app, MANAGER_EMAIL);
@@ -1748,7 +1748,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
   });
 
   it("refuses a Google callback missing its state or its code without spending the ceremony", async () => {
-    await setupTenant();
+    await setupVenue();
     const exchange = vi
       .fn<typeof exchangeGoogleCode>()
       .mockResolvedValue({ subject: "google-subject-unlinked" });
@@ -1776,7 +1776,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
   });
 
   it("refuses a Google callback whose code exchange fails, and signs nobody in", async () => {
-    await setupTenant();
+    await setupVenue();
     const exchange = vi
       .fn<typeof exchangeGoogleCode>()
       .mockRejectedValue(new Error("token endpoint unreachable"));
@@ -1794,7 +1794,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
   });
 
   it("refuses a link ceremony whose stored state names no person, linking nobody", async () => {
-    await setupTenant();
+    await setupVenue();
     const exchange = vi
       .fn<typeof exchangeGoogleCode>()
       .mockResolvedValue({ subject: "google-subject-orphan" });
@@ -1823,7 +1823,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
   });
 
   it("requires confirmation before starting a Google link and queues no ceremony", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp(undefined, undefined, { exchange: vi.fn<typeof exchangeGoogleCode>() });
     const cookie = await login(app, MANAGER_EMAIL);
     await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, cookie, false));
@@ -1841,7 +1841,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
   });
 
   it("does not count a credential change that failed for another reason towards the throttle", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp(undefined, undefined, { exchange: vi.fn<typeof exchangeGoogleCode>() });
     const cookie = await login(app, MANAGER_EMAIL);
     const startLink = () =>
@@ -1860,7 +1860,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
   });
 
   it("refuses a login whose recovery code is not a string as password.invalid, with no cookie", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const res = await app.request("/management-api/session", {
       method: "POST",
@@ -1873,7 +1873,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
   });
 
   it("acknowledges a password reset with no usable email and sends nothing", async () => {
-    await setupTenant();
+    await setupVenue();
     const sent: Parameters<MailSink>[0][] = [];
     const app = mountApp(async (message) => {
       sent.push(message);
@@ -1892,7 +1892,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
   });
 
   it("inspects a password-reset token, and refuses an unknown purpose", async () => {
-    await setupTenant();
+    await setupVenue();
     const sent: Parameters<MailSink>[0][] = [];
     const app = mountApp(async (message) => {
       sent.push(message);
@@ -1921,7 +1921,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
   });
 
   it("refuses an invitation whose telephone is neither text nor null, creating nobody", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const res = await app.request("/management-api/staff", {
@@ -1940,7 +1940,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
   });
 
   it("queues an invitation and logs the sender failure without undoing its person", async () => {
-    await setupTenant();
+    await setupVenue();
     const log = vi.fn<Logger>();
     const app = mountApp(
       async () => {
@@ -1974,7 +1974,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
   });
 
   it("does not resend an invitation twice within the cooldown", async () => {
-    await setupTenant();
+    await setupVenue();
     const sent: Parameters<MailSink>[0][] = [];
     const app = mountApp(async (message) => {
       sent.push(message);
@@ -1999,7 +1999,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
   });
 
   it("refuses an administrative edit with a non-text field or telephone, changing nothing", async () => {
-    const { staffId } = await setupTenant();
+    const { staffId } = await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const details = {
@@ -2030,7 +2030,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
   });
 
   it("deactivates a person, then reactivates them as pending with one fresh invitation", async () => {
-    const { staffId } = await setupTenant();
+    const { staffId } = await setupVenue();
     const sent: Parameters<MailSink>[0][] = [];
     const app = mountApp(async (message) => {
       sent.push(message);
@@ -2070,7 +2070,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
   });
 
   it("deletes a deactivated person's PIN and passkey, and leaves their working-time entries as they were", async () => {
-    const { staffId } = await setupTenant();
+    const { staffId } = await setupVenue();
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(webauthnCredentials).values({
         personId: staffId,
@@ -2116,7 +2116,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
   });
 
   it("refuses deactivation and reactivation to a staff session and for a malformed id", async () => {
-    const { managerId } = await setupTenant();
+    const { managerId } = await setupVenue();
     const app = mountApp();
     const staffCookie = await login(app, STAFF_EMAIL);
     const managerCookie = await login(app, MANAGER_EMAIL);
@@ -2153,7 +2153,7 @@ describe("Management API — fresh sign-in for people changes", () => {
   ])(
     "%s refuses before changing people or queuing mail, then accepts fresh proof",
     async (action) => {
-      const { staffId: clerkId } = await setupTenant();
+      const { staffId: clerkId } = await setupVenue();
       await withTransaction(suite.db, removeManagerPersonAdmin);
       const [owner] = await suite.db
         .select()
@@ -2263,7 +2263,7 @@ describe("Management API — fresh sign-in for people changes", () => {
   );
 
   it("keeps names, telephone, unchanged normalized email and PIN reset outside the window", async () => {
-    const { staffId } = await setupTenant();
+    const { staffId } = await setupVenue();
     const app = mountApp();
     const cookie = await login(app, "owner@example.test", "dashPass123");
     await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, cookie, false));
@@ -2333,7 +2333,7 @@ async function putTrim(app: Hono, cookie: string, path: string, body: unknown): 
 
 describe("independent department receipt routes", () => {
   it("the department read reports the saved receipt language rather than the first offered choice", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const id = await departmentFixture();
@@ -2345,7 +2345,7 @@ describe("independent department receipt routes", () => {
     expect(body.languages[0]).toBe("ca-ES");
   });
   it("reads missing department receipt without copying global defaults or contact", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const id = await departmentFixture();
@@ -2371,7 +2371,7 @@ describe("independent department receipt routes", () => {
   it.each([false, true])(
     "department saves preserve one another (department first %s)",
     async (first) => {
-      await setupTenant();
+      await setupVenue();
       const app = mountApp();
       const cookie = await login(app, MANAGER_EMAIL);
       const id = await departmentFixture();
@@ -2426,7 +2426,7 @@ describe("independent department receipt routes", () => {
     [{ printAddress: "false" }, { reason: "not_boolean", field: "printAddress" }],
     [null, { reason: "not_object" }],
   ])("refuses a department invalid value without writes (%j)", async (receipt, params) => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const id = await departmentFixture();
@@ -2444,7 +2444,7 @@ describe("independent department receipt routes", () => {
   it.each([false, true])(
     "round trips department address %s and its authored description",
     async (printAddress) => {
-      await setupTenant();
+      await setupVenue();
       const app = mountApp();
       const cookie = await login(app, MANAGER_EMAIL);
       const id = await departmentFixture();
@@ -2465,7 +2465,7 @@ describe("independent department receipt routes", () => {
   );
 
   it("refuses missing department on GET and PUT", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const id = randomUUID();
@@ -2483,7 +2483,7 @@ describe("independent department receipt routes", () => {
   it.each(["department", "primary department"])(
     "requires venue permission for %s GET and PUT",
     async (kind) => {
-      await setupTenant();
+      await setupVenue();
       const app = mountApp();
       const cookie = await login(app, STAFF_EMAIL);
       const id = await departmentFixture();
@@ -2508,7 +2508,7 @@ describe("independent department receipt routes", () => {
   ])(
     "the retired defaults endpoint refuses every old envelope without writing (%j)",
     async (body) => {
-      await setupTenant();
+      await setupVenue();
       const app = mountApp();
       const cookie = await login(app, MANAGER_EMAIL);
 
@@ -2518,7 +2518,7 @@ describe("independent department receipt routes", () => {
     },
   );
   it("omitting the department address switch clears it without inventing defaults", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     expect(
@@ -2540,7 +2540,7 @@ describe("independent department receipt routes", () => {
 
 describe("department logo ownership and route failure boundaries", () => {
   it("reuses only the department's pair and clearing either department keeps the other", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const id = await departmentFixture();
@@ -2606,7 +2606,7 @@ describe("department logo ownership and route failure boundaries", () => {
   });
 
   it("does not borrow another department pair with the same filename", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const id = await departmentFixture();
@@ -2627,7 +2627,7 @@ describe("department logo ownership and route failure boundaries", () => {
   it.each(["department", "primary department"])(
     "refuses an unknown logo for %s without saving",
     async (kind) => {
-      await setupTenant();
+      await setupVenue();
       const app = mountApp();
       const cookie = await login(app, MANAGER_EMAIL);
       const id = await departmentFixture();
@@ -2653,7 +2653,7 @@ describe("department logo ownership and route failure boundaries", () => {
   );
 
   it("redraws a corrupt explicit pair", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const id = await departmentFixture();
@@ -2684,7 +2684,7 @@ describe("department logo ownership and route failure boundaries", () => {
   it.each(["department", "primary department"])(
     "rechecks image presence before %s writes",
     async (kind) => {
-      await setupTenant();
+      await setupVenue();
       const app = mountApp();
       const cookie = await login(app, MANAGER_EMAIL);
       const id = await departmentFixture();
@@ -2717,7 +2717,7 @@ describe("department logo ownership and route failure boundaries", () => {
   );
 
   it("refuses malformed and absent department bodies", async () => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const id = await departmentFixture();
@@ -2731,7 +2731,7 @@ describe("department logo ownership and route failure boundaries", () => {
   });
 
   it.each(["department", "primary department"])("requires a session for %s", async (kind) => {
-    await setupTenant();
+    await setupVenue();
     const app = mountApp();
     const id = await departmentFixture();
     const path = kind === "department" ? departmentReceiptPath(id) : await receiptPath();
@@ -2751,7 +2751,7 @@ describe("optional receipt source failures within one transaction", () => {
   it.each([[false, true]])(
     "department refusal retains the transaction",
     async (_failGlobal, failDepartment) => {
-      await setupTenant();
+      await setupVenue();
       const id = await departmentFixture();
 
       await suite.db
@@ -2811,7 +2811,7 @@ describe("optional receipt source failures within one transaction", () => {
 
 describe("A998 admin account authority", () => {
   it("blocks the manager email-change and password-reset takeover of an admin", async () => {
-    await setupTenant();
+    await setupVenue();
     const [admin] = (
       await suite.db.execute<{ id: string }>(
         sql`select id from persons where email = 'owner@example.test'`,
@@ -2897,7 +2897,7 @@ describe("A998 staff route authority", () => {
   )(
     "refuses a manager's $action on a $role before any change or email",
     async ({ action, status, role }) => {
-      const { staffId } = await setupTenant();
+      const { staffId } = await setupVenue();
       if (role === "staff") await withTransaction(suite.db, removeManagerPersonAdmin);
       await setBuiltInRoleForTest(suite.db, staffId, role as "admin" | "staff");
       await suite.db
@@ -2928,7 +2928,7 @@ describe("A998 staff route authority", () => {
     },
   );
   it("refuses a manager's invitation creating an admin", async () => {
-    await setupTenant();
+    await setupVenue();
     const sent: Parameters<MailSink>[0][] = [];
     const app = mountApp(async (message) => {
       sent.push(message);
@@ -2953,7 +2953,7 @@ describe("A998 staff route authority", () => {
 });
 
 it("rechecks person.admin authority lost after the invitation preflight", async () => {
-  const { staffId } = await setupTenant();
+  const { staffId } = await setupVenue();
   await suite.db.update(persons).set({ status: "pending" }).where(eq(persons.id, staffId));
   const sent: Parameters<MailSink>[0][] = [];
   const app = mountApp(async (message) => {
@@ -3008,7 +3008,7 @@ it("rechecks person.admin authority lost after the invitation preflight", async 
 });
 
 it("refuses a manager suspending an admin through details with the same email", async () => {
-  const { staffId } = await setupTenant();
+  const { staffId } = await setupVenue();
   await setBuiltInRoleForTest(suite.db, staffId, "admin");
   const before = await suite.db.select().from(persons).where(eq(persons.id, staffId));
   const app = mountApp();
@@ -3026,7 +3026,7 @@ it("refuses a manager suspending an admin through details with the same email", 
 });
 
 it("keeps the original invitation usable after promotion to Supervisor and Admin", async () => {
-  await setupTenant();
+  await setupVenue();
   const sent: Parameters<MailSink>[0][] = [];
   const app = mountApp(async (message) => {
     sent.push(message);
@@ -3079,7 +3079,7 @@ it("keeps the original invitation usable after promotion to Supervisor and Admin
 
 describe("A1000 non-admin account authority", () => {
   it("blocks the manager email-change and password-reset takeover of a non-admin", async () => {
-    await setupTenant();
+    await setupVenue();
     const [admin] = (
       await suite.db.execute<{ id: string }>(
         sql`select id from persons where display_name = 'The Clerk'`,
@@ -3154,7 +3154,7 @@ describe("A1000 non-admin account authority", () => {
 });
 
 it("preserves a manager changing their own email through staff details", async () => {
-  const { managerId } = await setupTenant();
+  const { managerId } = await setupVenue();
   const sent: Parameters<MailSink>[0][] = [];
   const app = mountApp(async (message) => {
     sent.push(message);
@@ -3189,7 +3189,7 @@ it("preserves a manager changing their own email through staff details", async (
 });
 
 it("keeps password backoff and ordinary password login through the remote entrance", async () => {
-  await setupTenant();
+  await setupVenue();
   let now = 0;
   const local = mountApp(
     undefined,
@@ -3216,7 +3216,7 @@ it("keeps password backoff and ordinary password login through the remote entran
 });
 
 it("requires a real session for the staff roster through the remote entrance", async () => {
-  await setupTenant();
+  await setupVenue();
   const local = mountApp(),
     staff = createStaffApp(local, "https://staff.example.test");
   const url = "https://staff.example.test/management-api/staff-roster";
@@ -3235,7 +3235,7 @@ it("requires a real session for the staff roster through the remote entrance", a
 });
 
 it("keeps the remote Google ceremony and its return on the staff origin", async () => {
-  const { managerId } = await setupTenant();
+  const { managerId } = await setupVenue();
   await suite.db
     .update(persons)
     .set({ googleSubject: "remote-google" })
@@ -3269,7 +3269,7 @@ it("keeps the remote Google ceremony and its return on the staff origin", async 
 });
 
 it("sends password-reset links back to the requesting staff origin", async () => {
-  await setupTenant();
+  await setupVenue();
   const sent: Parameters<MailSink>[0][] = [];
   const local = mountApp(async (message) => {
     sent.push(message);
@@ -3296,7 +3296,7 @@ describe("queued invitation answers", () => {
     it.each(["smtp", "local_capture", "unconfigured"] as const)(
       `${action} queues according to %s delivery availability`,
       async (mode) => {
-        const { staffId } = await setupTenant();
+        const { staffId } = await setupVenue();
         if (action === "invitation" || action === "reactivate")
           await suite.db
             .update(persons)
@@ -3358,7 +3358,7 @@ describe("queued invitation answers", () => {
   }
 
   it("keeps public reset empty and immediate while sanitising the eventual delivery failure", async () => {
-    const { staffId } = await setupTenant();
+    const { staffId } = await setupVenue();
     const log = vi.fn<Logger>();
     let sends = 0;
     const app = mountApp(
@@ -3396,7 +3396,7 @@ describe("queued invitation answers", () => {
   });
 
   it("reports the immediate retry as unchanged and preserves a throttled reset's credentials", async () => {
-    const { staffId } = await setupTenant();
+    const { staffId } = await setupVenue();
     let actionUrl = "";
     const app = mountApp(async (message) => {
       actionUrl = message.actionUrl;
@@ -3446,7 +3446,7 @@ describe("queued account requests", () => {
   it.each(["smtp", "unconfigured"] as const)(
     "answers 202 and queues only a known reset when mode is %s",
     async (mode) => {
-      const { managerId } = await setupTenant();
+      const { managerId } = await setupVenue();
       const app = mountApp(undefined, undefined, undefined, noopLog, async () => mode);
       for (const email of [MANAGER_EMAIL, "unknown-queued@example.test"]) {
         const response = await app.request("/management-api/password-reset", {

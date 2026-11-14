@@ -119,7 +119,7 @@ function unique(base: string): string {
   return `${base}-${randomUUID().slice(0, 8)}`;
 }
 
-async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; staffId: string }> {
+async function setupVenue(): Promise<{ venue: VenueResult; managerId: string; staffId: string }> {
   const venue = await applyVenue(
     planVenue(
       {
@@ -243,7 +243,7 @@ let testDepartmentId: string;
 const json = { "content-type": "application/json" };
 
 beforeAll(async () => {
-  const setup = await setupTenant();
+  const setup = await setupVenue();
   venue = setup.venue;
   testDepartmentId = (
     await withTransaction(suite.db, (tx) =>

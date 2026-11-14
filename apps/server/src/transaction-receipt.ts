@@ -2,7 +2,7 @@ import { storedRecipientIdentifier } from "./invoice-selection.js";
 import { eq } from "drizzle-orm";
 import {
   invoiceSeries,
-  readTenant,
+  readTaxpayer,
   saleLines,
   sales,
   workingOrderLines,
@@ -137,7 +137,7 @@ export async function readTransactionReceipt(
   const issuer: Partial<
     Pick<TillSaleResult, "issuer" | "recipient" | "invoiceType" | "issuedOffsetMinutes">
   > = await readReceiptIssuer(backend, tx, brandSaleId(saleId));
-  const taxpayer = issuer.issuer === undefined ? await readTenant(tx) : null;
+  const taxpayer = issuer.issuer === undefined ? await readTaxpayer(tx) : null;
   const groupId =
     sale.workingOrderId ??
     (scope.workingOrderIds.length === 1 ? scope.workingOrderIds[0] : undefined);

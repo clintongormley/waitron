@@ -13,11 +13,11 @@ import {
   printJobs,
   printAgents,
   printers,
-  tenants,
+  taxpayer,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   createPrinter,
   enqueuePrintJob,
@@ -66,8 +66,8 @@ const clock: TrustedClock = {
   currentAnchor: () => null,
 };
 async function issue(full = true) {
-  await seedTenant(suite.db);
-  await suite.db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
+  await seedTaxpayer(suite.db);
+  await suite.db.update(taxpayer).set({ taxpayerDomicile: "Saved domicile" });
   const existing = await readSettings(suite.db, VENUE_SETTINGS);
   if (existing.revision === 0) {
     await seedVenue(suite.db, {

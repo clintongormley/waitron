@@ -194,7 +194,7 @@ import { useTestProducer } from "./testing/test-producer.js";
 useTestProducer();
 
 // TWO databases: a transfer exports from a prepared venue's database and imports into a fresh
-// production database, and each holds one tenant. `suite` holds the source venue, `targetSuite` the
+// production database, and each holds one taxpayer. `suite` holds the source venue, `targetSuite` the
 // target the bundle is imported into.
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const targetSuite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -658,7 +658,7 @@ describe("configuration transfer database path", () => {
       }),
     ).rejects.toMatchObject({ code: "setup.request_invalid" });
     const persisted = await suite.db.execute<{ count: number }>(sql`
-      select count(*) as count from tenants where tax_id = ${targetRequest.taxId}
+      select count(*) as count from taxpayer where tax_id = ${targetRequest.taxId}
     `);
     expect(persisted.rows[0]!.count).toBe(0);
   });
@@ -1366,7 +1366,7 @@ describe("configuration transfer database path", () => {
       }),
     ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field: "products.color" } });
     const persisted = await targetSuite.db.execute<{ count: number }>(sql`
-      select count(*) as count from tenants where tax_id = ${target.taxId}
+      select count(*) as count from taxpayer where tax_id = ${target.taxId}
     `);
     expect(persisted.rows[0]!.count).toBe(0);
   });
@@ -1452,7 +1452,7 @@ describe("configuration transfer database path", () => {
       }),
     ).rejects.toMatchObject(refusal);
     const persisted = await targetSuite.db.execute<{ count: number }>(sql`
-      select count(*) as count from tenants where tax_id = ${target.taxId}
+      select count(*) as count from taxpayer where tax_id = ${target.taxId}
     `);
     expect(persisted.rows[0]!.count).toBe(0);
   });
@@ -2030,7 +2030,7 @@ it("refuses a bundle whose only Void reason asking for a note cannot cancel", as
     params: { field: "adjustment_reasons.actions" },
   });
   const persisted = await targetSuite.db.execute<{ count: number }>(sql`
-    select count(*) as count from tenants where tax_id = ${target.taxId}
+    select count(*) as count from taxpayer where tax_id = ${target.taxId}
   `);
   expect(persisted.rows[0]!.count).toBe(0);
 });
@@ -2564,7 +2564,7 @@ it("refuses an imported ticket grouping outside the two values before writing an
     code: "setup.request_invalid",
     params: { field: "kitchen_stations.ticket_grouping" },
   });
-  expect((await targetSuite.db.execute(sql`select count(*) as n from tenants`)).rows).toEqual([
+  expect((await targetSuite.db.execute(sql`select count(*) as n from taxpayer`)).rows).toEqual([
     { n: 0 },
   ]);
   expect(
@@ -2687,7 +2687,7 @@ it("refuses an imported bump mode outside the two values before writing anything
     code: "setup.request_invalid",
     params: { field: "kitchen_stations.bump_mode" },
   });
-  expect((await targetSuite.db.execute(sql`select count(*) as n from tenants`)).rows).toEqual([
+  expect((await targetSuite.db.execute(sql`select count(*) as n from taxpayer`)).rows).toEqual([
     { n: 0 },
   ]);
   expect(
@@ -2770,7 +2770,7 @@ it("refuses an imported changes after sending outside the three values before wr
     code: "setup.request_invalid",
     params: { field: "kitchen_stations.changes_after_sending" },
   });
-  expect((await targetSuite.db.execute(sql`select count(*) as n from tenants`)).rows).toEqual([
+  expect((await targetSuite.db.execute(sql`select count(*) as n from taxpayer`)).rows).toEqual([
     { n: 0 },
   ]);
   expect(
@@ -2885,7 +2885,7 @@ it("A773 station policy: refuses an imported waits_for_pass outside 0 and 1 befo
     code: "setup.request_invalid",
     params: { field: "kitchen_stations.waits_for_pass" },
   });
-  expect((await targetSuite.db.execute(sql`select count(*) as n from tenants`)).rows).toEqual([
+  expect((await targetSuite.db.execute(sql`select count(*) as n from taxpayer`)).rows).toEqual([
     { n: 0 },
   ]);
   expect(
@@ -2981,7 +2981,7 @@ it.each([null, [], {}, 1, false, "invalid-colour"])(
       code: "setup.request_invalid",
       params: { field: "kitchen_stations.colour" },
     });
-    expect((await targetSuite.db.execute(sql`select count(*) as n from tenants`)).rows).toEqual([
+    expect((await targetSuite.db.execute(sql`select count(*) as n from taxpayer`)).rows).toEqual([
       { n: 0 },
     ]);
     expect(
@@ -3079,7 +3079,7 @@ describe("custom themes in a configuration copy", () => {
   }
 
   async function expectNothingKept(): Promise<void> {
-    expect((await targetSuite.db.execute(sql`select count(*) as n from tenants`)).rows).toEqual([
+    expect((await targetSuite.db.execute(sql`select count(*) as n from taxpayer`)).rows).toEqual([
       { n: 0 },
     ]);
     expect(
@@ -4168,7 +4168,7 @@ it("refuses a bundle holding duplicate names whole, at staging and at import", a
     }),
   ).rejects.toMatchObject({ code: "product.name_taken" });
   const persisted = await targetSuite.db.execute<{ count: number }>(sql`
-    select count(*) as count from tenants where tax_id = ${target.taxId}
+    select count(*) as count from taxpayer where tax_id = ${target.taxId}
   `);
   expect(persisted.rows[0]!.count).toBe(0);
 });
@@ -4249,7 +4249,7 @@ it("refuses an Inactive product in a menu list and a menu price for an Inactive 
     params: { field: "section_members.product_id" },
   });
   const persisted = await targetSuite.db.execute<{ count: number }>(sql`
-    select count(*) as count from tenants where tax_id = ${target.taxId}
+    select count(*) as count from taxpayer where tax_id = ${target.taxId}
   `);
   expect(persisted.rows[0]!.count).toBe(0);
 });
@@ -4326,7 +4326,7 @@ it("counts an exported product with no Active flag as Active, as the column stor
     }),
   ).rejects.toMatchObject({ code: "product.name_taken" });
   const persisted = await targetSuite.db.execute<{ count: number }>(sql`
-    select count(*) as count from tenants where tax_id = ${target.taxId}
+    select count(*) as count from taxpayer where tax_id = ${target.taxId}
   `);
   expect(persisted.rows[0]!.count).toBe(0);
 });
@@ -5110,7 +5110,7 @@ it.each([
   expect(
     (
       await targetSuite.db.execute<{ count: number }>(
-        sql`select count(*) as count from tenants where tax_id = ${target.taxId}`,
+        sql`select count(*) as count from taxpayer where tax_id = ${target.taxId}`,
       )
     ).rows[0]!.count,
   ).toBe(0);
@@ -5153,7 +5153,7 @@ it("refuses an imported ready warning of 0 before writing anything", async () =>
   expect(
     (
       await targetSuite.db.execute<{ count: number }>(
-        sql`select count(*) as count from tenants where tax_id = ${target.taxId}`,
+        sql`select count(*) as count from taxpayer where tax_id = ${target.taxId}`,
       )
     ).rows[0]!.count,
   ).toBe(0);
@@ -5244,7 +5244,7 @@ it("refuses an imported minute that is not a whole number", async () => {
   expect(
     (
       await targetSuite.db.execute<{ count: number }>(
-        sql`select count(*) as count from tenants where tax_id = ${target.taxId}`,
+        sql`select count(*) as count from taxpayer where tax_id = ${target.taxId}`,
       )
     ).rows[0]!.count,
   ).toBe(0);
@@ -6082,9 +6082,9 @@ describe("special days in a configuration transfer", () => {
         beforeCommit: (tx) => importConfigurationTables(tx, edited, ALL_MODULES, versions),
       }),
     ).rejects.toMatchObject(refusal);
-    const persisted = await targetSuite.db.execute<{ tenants: number }>(sql`
-        select cast(count(*) as int) as tenants from tenants where tax_id = ${target.taxId}`);
-    expect(persisted.rows).toEqual([{ tenants: 0 }]);
+    const persisted = await targetSuite.db.execute<{ taxpayer: number }>(sql`
+        select cast(count(*) as int) as taxpayer from taxpayer where tax_id = ${target.taxId}`);
+    expect(persisted.rows).toEqual([{ taxpayer: 0 }]);
   });
 
   it("refuses a reintroduced station-hours table and writes no venue", async () => {
@@ -6105,10 +6105,10 @@ describe("special days in a configuration transfer", () => {
         beforeCommit: (tx) => importConfigurationTables(tx, edited, ALL_MODULES, versions),
       }),
     ).rejects.toMatchObject(refusal);
-    const persisted = await targetSuite.db.execute<{ tenants: number }>(
-      sql`select cast(count(*) as int) as tenants from tenants where tax_id = ${target.taxId}`,
+    const persisted = await targetSuite.db.execute<{ taxpayer: number }>(
+      sql`select cast(count(*) as int) as taxpayer from taxpayer where tax_id = ${target.taxId}`,
     );
-    expect(persisted.rows[0]).toEqual({ tenants: 0 });
+    expect(persisted.rows[0]).toEqual({ taxpayer: 0 });
   });
 });
 
@@ -6269,12 +6269,12 @@ describe("public holidays in a configuration transfer", () => {
     ).rejects.toMatchObject(refusal);
     const persisted = await targetSuite.db.execute<Record<string, number>>(sql`
       select
-        (select cast(count(*) as int) from tenants where tax_id = ${target.taxId}) as tenants,
+        (select cast(count(*) as int) from taxpayer where tax_id = ${target.taxId}) as taxpayer,
         (select cast(count(*) as int) from settings where module = 'venue') as geographies,
         (select cast(count(*) as int) from special_days) as entries,
         (select cast(count(*) as int) from special_day_dates) as special_day_dates`);
     expect(persisted.rows[0]).toEqual({
-      tenants: 0,
+      taxpayer: 0,
       geographies: 0,
       entries: 0,
       special_day_dates: 0,
@@ -6299,10 +6299,10 @@ describe("public holidays in a configuration transfer", () => {
         beforeCommit: (tx) => importConfigurationTables(tx, edited, ALL_MODULES, versions),
       }),
     ).rejects.toMatchObject(refusal);
-    const persisted = await targetSuite.db.execute<{ tenants: number }>(
-      sql`select cast(count(*) as int) as tenants from tenants where tax_id = ${target.taxId}`,
+    const persisted = await targetSuite.db.execute<{ taxpayer: number }>(
+      sql`select cast(count(*) as int) as taxpayer from taxpayer where tax_id = ${target.taxId}`,
     );
-    expect(persisted.rows).toEqual([{ tenants: 0 }]);
+    expect(persisted.rows).toEqual([{ taxpayer: 0 }]);
   });
 
   it("refuses a bundle whose core version is older than this box's as outdated", async () => {
@@ -6952,7 +6952,7 @@ describe("a deleted printer in a configuration transfer", () => {
     const counts = async () =>
       (
         await targetSuite.db.execute<Record<string, number>>(sql`
-          select (select count(*) from tenants) as tenants,
+          select (select count(*) from taxpayer) as taxpayer,
                  (select count(*) from printers) as printers,
                  (select coalesce(sum(json_array_length(printer_ids)), 0) from kitchen_stations) as station_printers,
                  (select count(*) from kitchen_stations) as kitchen_stations
@@ -7079,7 +7079,7 @@ it("round-trips deleted kitchen configuration and preserves archived products an
         beforeCommit: (tx) => importConfigurationTables(tx, forged, ALL_MODULES, versions),
       }),
     ).rejects.toMatchObject(refusal);
-    const rows = await targetSuite.db.execute(sql`select count(*) as count from tenants`);
+    const rows = await targetSuite.db.execute(sql`select count(*) as count from taxpayer`);
     expect(rows.rows).toEqual([{ count: 0 }]);
   }
   await applyVenue(planVenue(venue("B98765431"), ALL_MODULES), {
@@ -7889,7 +7889,7 @@ describe("special days in a configuration transfer", () => {
       }),
     ).rejects.toMatchObject(error);
     expect(
-      (await targetSuite.db.execute<{ n: number }>(sql`select count(*) as n from tenants`)).rows,
+      (await targetSuite.db.execute<{ n: number }>(sql`select count(*) as n from taxpayer`)).rows,
     ).toEqual([{ n: 0 }]);
   });
 
@@ -7909,7 +7909,7 @@ describe("special days in a configuration transfer", () => {
       }),
     ).rejects.toMatchObject(error);
     expect(
-      (await targetSuite.db.execute<{ n: number }>(sql`select count(*) as n from tenants`)).rows,
+      (await targetSuite.db.execute<{ n: number }>(sql`select count(*) as n from taxpayer`)).rows,
     ).toEqual([{ n: 0 }]);
   });
 });

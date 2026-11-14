@@ -17,7 +17,7 @@ import {
   withTransaction,
   type Transaction,
 } from "@waitron/db";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
@@ -41,7 +41,7 @@ const kinds = [
   "unit",
 ] as const;
 async function fixture() {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await seedVenueSettings(suite.db);
   return app(async (tx) => {
     await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en", "ca"] });

@@ -28,17 +28,17 @@ export const DEVICE_CLOCK_HEADER = "x-waitron-device-clock";
 const DEVICE_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
 
 /**
- * The `Domain` a device cookie is scoped to: the tenant domain when the request host is it or a
+ * The `Domain` a device cookie is scoped to: the taxpayer domain when the request host is it or a
  * subdomain of it, and host-only otherwise. The leading-dot check is what stops
  * `notdeli.waitron.app` from matching `deli.waitron.app`.
  */
 export function cookieDomainFor(
   host: string | undefined,
-  tenantDomain: string | undefined,
+  venueDomain: string | undefined,
 ): string | undefined {
-  if (host === undefined || tenantDomain === undefined) return undefined;
+  if (host === undefined || venueDomain === undefined) return undefined;
   const bare = host.replace(/:\d+$/, "").toLowerCase();
-  return bare === tenantDomain || bare.endsWith("." + tenantDomain) ? tenantDomain : undefined;
+  return bare === venueDomain || bare.endsWith("." + venueDomain) ? venueDomain : undefined;
 }
 
 /**
@@ -50,9 +50,9 @@ export function setDeviceCookie(
   c: Context,
   value: string,
   secure: boolean,
-  tenantDomain?: string,
+  venueDomain?: string,
 ): void {
-  const domain = cookieDomainFor(c.req.header("host"), tenantDomain);
+  const domain = cookieDomainFor(c.req.header("host"), venueDomain);
   setCookie(c, DEVICE_COOKIE, value, {
     httpOnly: true,
     secure,
@@ -65,8 +65,8 @@ export function setDeviceCookie(
 
 /** `path` and `Domain` must match what {@link setDeviceCookie} wrote, or the browser keeps the
  * original cookie. */
-export function clearDeviceCookie(c: Context, tenantDomain?: string): void {
-  const domain = cookieDomainFor(c.req.header("host"), tenantDomain);
+export function clearDeviceCookie(c: Context, venueDomain?: string): void {
+  const domain = cookieDomainFor(c.req.header("host"), venueDomain);
   deleteCookie(c, DEVICE_COOKIE, { path: "/", ...(domain === undefined ? {} : { domain }) });
 }
 

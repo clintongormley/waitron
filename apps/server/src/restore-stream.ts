@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { eq } from "drizzle-orm";
 import { loadKeyRing } from "@waitron/credentials";
-import { openVenueDatabase, readVenue, tenants, type VenueDatabase } from "@waitron/db";
+import { openVenueDatabase, readVenue, taxpayer, type VenueDatabase } from "@waitron/db";
 import { manifestSets } from "@waitron/migrations";
 import { assertNotAhead } from "@waitron/provisioning";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
@@ -206,11 +206,11 @@ async function scratchFolder(stateDir: string, prefix: string): Promise<string> 
 }
 
 async function readRestoredVenue(store: VenueDatabase, nodeId: string): Promise<RestoredVenue> {
-  const [tenant] = await store.venue
-    .select({ legalName: tenants.legalName, taxId: tenants.taxId })
-    .from(tenants)
-    .where(eq(tenants.id, 1));
-  if (tenant === undefined) throw new AppError("restore.identity_unknown", { nodeId });
+  const [taxpayer] = await store.venue
+    .select({ legalName: taxpayer.legalName, taxId: taxpayer.taxId })
+    .from(taxpayer)
+    .where(eq(taxpayer.id, 1));
+  if (taxpayer === undefined) throw new AppError("restore.identity_unknown", { nodeId });
   let venue;
   try {
     if (!(await tableExists(store.venue, "settings")))
@@ -228,8 +228,8 @@ async function readRestoredVenue(store: VenueDatabase, nodeId: string): Promise<
     throw error;
   }
   return {
-    legalName: tenant.legalName,
-    taxId: tenant.taxId,
+    legalName: taxpayer.legalName,
+    taxId: taxpayer.taxId,
     venueName: venue.name,
   };
 }

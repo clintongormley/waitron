@@ -1,6 +1,6 @@
 import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { credentialRevision, putCredential } from "@waitron/credentials";
-import { tenants, withTransaction } from "@waitron/db";
+import { taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { managementSessions } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
@@ -41,7 +41,7 @@ describe("certificate diagnosis parent", () => {
 
   it("refuses an unconfigured taxpayer before starting native work", async () => {
     const f = await parentFixture(suite.db);
-    await withTransaction(suite.db, (tx) => tx.delete(tenants));
+    await withTransaction(suite.db, (tx) => tx.delete(taxpayer));
     const runChild = vi.fn(f.deps.runChild);
     const before = await rawState(suite.db);
     await expect(
@@ -128,7 +128,7 @@ describe("certificate diagnosis parent", () => {
     async (failure) => {
       const f = await parentFixture(suite.db);
       await withTransaction(suite.db, async (tx) => {
-        await tx.run(sql`update tenant_credentials set ciphertext = x'00'`);
+        await tx.run(sql`update venue_credentials set ciphertext = x'00'`);
         if (failure === "permission")
           await setBuiltInRoleForTest(tx, f.session.personId, "supervisor");
         if (failure === "session")
@@ -157,7 +157,7 @@ describe("certificate diagnosis parent", () => {
       const f = await parentFixture(suite.db, failure !== "missing");
       await withTransaction(suite.db, async (tx) => {
         if (failure === "undecryptable")
-          await tx.run(sql`update tenant_credentials set ciphertext = x'00'`);
+          await tx.run(sql`update venue_credentials set ciphertext = x'00'`);
         if (failure === "bad-shape" || failure === "bad-base64")
           await putCredential(tx, f.deps.ring, {
             purpose: "fiscal.aeat",
@@ -279,7 +279,7 @@ describe("certificate diagnosis parent", () => {
     const before = await rawState(suite.db);
     await expect(
       suite.db.withWriteLock(async () => {
-        await suite.db.run(sql`update tenants set legal_name = 'Discarded change' where id = 1`);
+        await suite.db.run(sql`update taxpayer set legal_name = 'Discarded change' where id = 1`);
         throw new Error("rollback control");
       }),
     ).rejects.toThrow("rollback control");

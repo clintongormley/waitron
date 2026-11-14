@@ -137,7 +137,7 @@ describe("provisionVenue", () => {
     try {
       await expect(provisionVenue(deps, request)).rejects.toThrow("probe.modules_refused");
       expect(
-        (await db.execute<{ n: number }>(sql`select count(*) as n from tenants`)).rows,
+        (await db.execute<{ n: number }>(sql`select count(*) as n from taxpayer`)).rows,
       ).toEqual([{ n: 0 }]);
       expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 0, nodes: 0, registros: 0 });
     } finally {
@@ -147,13 +147,13 @@ describe("provisionVenue", () => {
       {
         ...deps,
         beforeCommit: async (tx) => {
-          await tx.execute(sql`update tenants set legal_name = 'Hook Restaurant'
+          await tx.execute(sql`update taxpayer set legal_name = 'Hook Restaurant'
             where id = 1`);
         },
       },
       request,
     );
-    expect((await db.execute(sql`select legal_name from tenants`)).rows).toEqual([
+    expect((await db.execute(sql`select legal_name from taxpayer`)).rows).toEqual([
       { legal_name: "Hook Restaurant" },
     ]);
     expect([...(await readModuleConfig(db)).overrides]).toEqual([
@@ -394,29 +394,29 @@ describe("provisionVenue", () => {
     ).rejects.toMatchObject({ code: "setup.already_provisioned" });
   });
 
-  it("refuses a FOREIGN tenant in an occupied database and mints no second tenant (§5)", async () => {
+  it("refuses a FOREIGN taxpayer in an occupied database and mints no second taxpayer (§5)", async () => {
     const db = ownerDb();
     await provisionVenue(
       { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
       { environment: "preproduction", venue: venueRequest(nextNif()) },
     );
     const afterFirst = await fiscalCounts(db);
-    const firstTenants = await db.execute<{ n: number }>(
-      sql`select cast(count(*) as int) as n from tenants`,
+    const firstTaxpayers = await db.execute<{ n: number }>(
+      sql`select cast(count(*) as int) as n from taxpayer`,
     );
-    expect(firstTenants.rows[0]!.n).toBe(1);
+    expect(firstTaxpayers.rows[0]!.n).toBe(1);
 
     const error = await provisionVenue(
       { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
       { environment: "preproduction", venue: venueRequest(nextNif()) },
     ).catch((e: unknown) => e);
     expect(isAppError(error)).toBe(true);
-    expect(isAppError(error) && error.code).toBe("provisioning.foreign_tenant");
+    expect(isAppError(error) && error.code).toBe("provisioning.foreign_taxpayer");
 
-    const tenants = await db.execute<{ n: number }>(
-      sql`select cast(count(*) as int) as n from tenants`,
+    const taxpayer = await db.execute<{ n: number }>(
+      sql`select cast(count(*) as int) as n from taxpayer`,
     );
-    expect(tenants.rows[0]!.n).toBe(1);
+    expect(taxpayer.rows[0]!.n).toBe(1);
     expect(await fiscalCounts(db)).toEqual(afterFirst);
   });
 
@@ -441,10 +441,10 @@ describe("provisionVenue", () => {
     expect(isAppError(error)).toBe(true);
     expect(isAppError(error) && error.code).toBe("setup.already_provisioned");
 
-    const tenants = await db.execute<{ n: number }>(
-      sql`select cast(count(*) as int) as n from tenants`,
+    const taxpayer = await db.execute<{ n: number }>(
+      sql`select cast(count(*) as int) as n from taxpayer`,
     );
-    expect(tenants.rows[0]!.n).toBe(1);
+    expect(taxpayer.rows[0]!.n).toBe(1);
     expect(await fiscalCounts(db)).toEqual(afterFirst);
   });
 

@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import { beforeEach, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import {
@@ -44,7 +44,7 @@ const wake = vi.fn();
 
 beforeEach(async () => {
   wake.mockReset();
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   await seedVenueSettings(suite.db);
   await inTx(async (tx) => {
     for (const role of ["manager", "staff"] as const) {

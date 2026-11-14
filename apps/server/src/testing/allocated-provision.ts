@@ -69,7 +69,7 @@ export async function provisionAllocatedTestVenue(
   )
     return provisionVenue(deps, request);
   const plan = planVenue(request.venue, modules);
-  const taxpayer = plan.find((action) => action.kind === "ensure-tenant")!;
+  const taxpayer = plan.find((action) => action.kind === "ensure-taxpayer")!;
   const targetNodeId = nodeId(randomUUID());
   const administratorId = randomUUID();
   const binding = {

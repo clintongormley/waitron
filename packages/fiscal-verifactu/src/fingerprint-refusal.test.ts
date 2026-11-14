@@ -1,7 +1,7 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { incidents, invoiceSeries, tenants, withTransaction, type Transaction } from "@waitron/db";
+import { incidents, invoiceSeries, taxpayer, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   recordCorrection,
@@ -62,7 +62,7 @@ beforeEach(async () => {
   fault.issues = [];
   resolveClient.mockClear();
   node = await seedTenantWithSif(suite.db);
-  await suite.db.update(tenants).set({ taxpayerDomicile: "1 Market Street" });
+  await suite.db.update(taxpayer).set({ taxpayerDomicile: "1 Market Street" });
   const [full, correction] = await suite.db
     .insert(invoiceSeries)
     .values([

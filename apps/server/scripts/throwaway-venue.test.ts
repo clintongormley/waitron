@@ -41,7 +41,7 @@ function request(identity: { taxId: string; legalName: string }): VenueRequest {
 
 function facts() {
   return {
-    tenant: suite.db.all(sql`select * from tenants`),
+    taxpayer: suite.db.all(sql`select * from taxpayer`),
     deployment: suite.db.all(sql`select * from deployment`),
     allocations: suite.db.all(sql`select * from fiscal_allocations`),
     sif: suite.db.all(sql`select * from registro_sif`),
@@ -70,7 +70,7 @@ describe("applyDevelopmentVenue", () => {
       { code: "FF-0CNNW", purpose: "full" },
       { code: "R-0CNNW", purpose: "rectificative" },
     ]);
-    expect(suite.db.all(sql`select tax_id, legal_name from tenants`)).toEqual([
+    expect(suite.db.all(sql`select tax_id, legal_name from taxpayer`)).toEqual([
       { tax_id: identity.taxId, legal_name: identity.legalName },
     ]);
     expect(suite.db.all(sql`select environment from deployment`)).toEqual([
@@ -128,7 +128,7 @@ describe("applyDevelopmentVenue", () => {
 
   it("refuses a plan with no taxpayer with a named error, before writing anything", async () => {
     const actions = planVenue(request(real), ALL_MODULES).filter(
-      (action) => action.kind !== "ensure-tenant",
+      (action) => action.kind !== "ensure-taxpayer",
     );
     const before = facts();
     await expect(

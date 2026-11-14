@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { CORE_MIGRATIONS, products, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   activateDueMenuPublications,
   addMember,
@@ -34,7 +34,7 @@ const original = await samplePreparedImage({ width: 27 });
 const replacement = await samplePreparedImage({ width: 51 });
 
 it("changes presentation without rewriting product, variant, section, folder, receipt or frozen menu references", async () => {
-  await seedTenant(suite.db);
+  await seedTaxpayer(suite.db);
   const at = new Date("2026-10-17T10:00:00Z");
   const due = new Date("2026-10-17T11:00:00Z");
   const image = await withTransaction(suite.db, async (tx) => {

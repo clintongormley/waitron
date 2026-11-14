@@ -176,14 +176,14 @@ export async function inspectVenues(
   const store = await openVenueDatabase(venueDir);
   try {
     const hasSettings = await tableExists(store.venue, "settings");
-    const hasTenants = await tableExists(store.venue, "tenants");
-    if (!hasSettings || !hasTenants) return { hasExpected: false, hasAny: false };
+    const hasVenues = await tableExists(store.venue, "taxpayer");
+    if (!hasSettings || !hasVenues) return { hasExpected: false, hasAny: false };
 
     // `exists(...)` answers 0 or 1 on this engine, not a boolean, so each is compared rather than
     // returned: handing a caller `0` where it expects `false` would make every `if` read true.
     const { rows } = await store.venue.execute<{ has_expected: number; has_any: number }>(
       sql`select exists(select 1 from nodes n where n.id = ${expectedNodeId}) as has_expected,
-                 exists(select 1 from tenants) as has_any`,
+                 exists(select 1 from taxpayer) as has_any`,
     );
     return { hasExpected: rows[0]?.has_expected === 1, hasAny: rows[0]?.has_any === 1 };
   } finally {

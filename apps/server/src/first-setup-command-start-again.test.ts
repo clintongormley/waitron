@@ -24,7 +24,7 @@ import {
   stageConfigurationImport,
   type FiscalReadinessInput,
   createFirstSetupRuntime,
-  readTenantIdentities,
+  readTaxpayerIdentities,
   runCli,
   type CliDeps,
 } from "@waitron/provisioning";
@@ -185,7 +185,7 @@ function command(
     readEnvironment: readDeploymentEnvironment,
     readDeploymentTable: deploymentTableExists,
     stampEnvironment: stampDeployment,
-    readTenants: readTenantIdentities,
+    readTaxpayers: readTaxpayerIdentities,
     sleep: async (ms) => void vi.advanceTimersByTime(ms),
   };
   return { args, deps, output, refusals: () => refusals };

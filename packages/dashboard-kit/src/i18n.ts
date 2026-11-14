@@ -9,7 +9,7 @@ type Catalogue = Record<string, Record<string, string>>;
 const catalogues: Catalogue = { en: {}, es: {} };
 
 // The active locale for calls that don't pass one explicitly. Module-level on purpose — a
-// single-locale-at-a-time UI, not a multi-tenant server.
+// single-locale-at-a-time UI, not a multi-taxpayer server.
 let locale: string = FALLBACK_LOCALE;
 
 type LocaleListener = () => void;

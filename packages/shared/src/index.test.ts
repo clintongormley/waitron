@@ -183,9 +183,9 @@ describe("package public surface (./index.js)", () => {
 
   it("re-exports the cause-chain readers", () => {
     const wrapped = new Error("Failed query", {
-      cause: Object.assign(new Error("no such table: tenants"), { errcode: 1 }),
+      cause: Object.assign(new Error("no such table: taxpayer"), { errcode: 1 }),
     });
-    expect(sqliteFailureOf(wrapped)).toEqual({ errcode: 1, message: "no such table: tenants" });
+    expect(sqliteFailureOf(wrapped)).toEqual({ errcode: 1, message: "no such table: taxpayer" });
     const coded = new Error("w", { cause: Object.assign(new Error("d"), { code: "ENOENT" }) });
     expect(firstCodeInCauseChain(coded, (code) => code === "ENOENT")).toBe("ENOENT");
     const full = new Error("w", { cause: Object.assign(new Error("d"), { errcode: 13 }) });

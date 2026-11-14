@@ -436,7 +436,7 @@ describe("listPrinters", () => {
     expect(rows[0]).not.toHaveProperty("agentId");
   });
 
-  it("lists this tenant's printers by name (active and deactivated)", async () => {
+  it("lists this taxpayer's printers by name (active and deactivated)", async () => {
     await setup();
     const bId = await seedPrinter("Bravo");
     const aId = await seedPrinter("Alfa");
