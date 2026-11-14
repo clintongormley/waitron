@@ -2658,7 +2658,9 @@ export class DashboardApp extends LitElement {
     return collectSearchDestinations({
       pages,
       declarations: [
-        ...this.#coreSettingDestinations,
+        ...this.#coreSettingDestinations.filter((item) =>
+          pages.some((page) => page.screen === item.screen),
+        ),
         ...DASHBOARD_MODULES.filter((c) => this.#enabledModules.includes(c.module)).flatMap(
           (c) => c.searchDestinations ?? [],
         ),
