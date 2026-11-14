@@ -40,8 +40,14 @@ export function dishKitchenItemsQuery(tx: Transaction, dishLineIds: readonly str
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .where(
       or(
-        inArray(workingOrderLines.id, dishLineIds),
-        inArray(workingOrderLines.parentLineId, dishLineIds),
+        inArray(
+          workingOrderLines.id,
+          sql`(select value from json_each(${JSON.stringify(dishLineIds)}))`,
+        ),
+        inArray(
+          workingOrderLines.parentLineId,
+          sql`(select value from json_each(${JSON.stringify(dishLineIds)}))`,
+        ),
       ),
     )
     .orderBy(workingOrderLines.lineNo);

@@ -1159,7 +1159,12 @@ export async function readLunchLineIds(
       versionId: workingLineContexts.menuVersionId,
     })
     .from(workingLineContexts)
-    .where(inArray(workingLineContexts.workingOrderLineId, [...lineIds]));
+    .where(
+      inArray(
+        workingLineContexts.workingOrderLineId,
+        sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
+      ),
+    );
   const documents = await readRecordedDocuments(
     tx,
     contexts.flatMap((row) => (row.versionId === null ? [] : [row.versionId])),

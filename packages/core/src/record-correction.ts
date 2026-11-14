@@ -3,7 +3,14 @@ import { saleLineRows } from "./sale-line-rows.js";
 import "./errors.js";
 import { operationDescriptionFor } from "./operation-description.js";
 import { eq, sql } from "drizzle-orm";
-import { allocateInvoiceNumber, invoiceSeries, saleLines, saleVoids, sales } from "@waitron/db";
+import {
+  insertInChunks,
+  allocateInvoiceNumber,
+  invoiceSeries,
+  saleLines,
+  saleVoids,
+  sales,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   AppError,
@@ -353,12 +360,12 @@ export async function recordCorrection(
     });
   }
 
-  await tx
-    .insert(saleLines)
-    .values(
-      wholeLineRows?.map((row) => ({ ...row, saleId })) ??
-        saleLineRows(saleId, input.lines, { corrective: true }),
-    );
+  await insertInChunks(
+    tx,
+    saleLines,
+    wholeLineRows?.map((row) => ({ ...row, saleId })) ??
+      saleLineRows(saleId, input.lines, { corrective: true }),
+  );
 
   const descriptionOfOperation = await operationDescriptionFor(tx, input.operationDescription);
 

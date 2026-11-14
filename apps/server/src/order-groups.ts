@@ -851,8 +851,17 @@ async function copyGroups(
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .where(
       and(
-        inArray(workingOrderLines.id, [...new Set(lineIds)]),
-        await serviceDishCondition(tx, inArray(workingOrderLines.id, [...lineIds])),
+        inArray(
+          workingOrderLines.id,
+          sql`(select value from json_each(${JSON.stringify([...new Set(lineIds)])}))`,
+        ),
+        await serviceDishCondition(
+          tx,
+          inArray(
+            workingOrderLines.id,
+            sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
+          ),
+        ),
         eq(orderGroups.partyId, fromPartyId),
         eq(orderGroups.state, state),
       ),
@@ -919,8 +928,14 @@ async function copyGroups(
       .set({ groupId: copyId })
       .where(
         or(
-          inArray(workingOrderLines.id, source.lineIds),
-          inArray(workingOrderLines.parentLineId, source.lineIds),
+          inArray(
+            workingOrderLines.id,
+            sql`(select value from json_each(${JSON.stringify(source.lineIds)}))`,
+          ),
+          inArray(
+            workingOrderLines.parentLineId,
+            sql`(select value from json_each(${JSON.stringify(source.lineIds)}))`,
+          ),
         ),
       );
     await recordGroupEvent(
@@ -2902,7 +2917,15 @@ async function groupArrived(
   await tx
     .update(workingOrderLines)
     .set({ groupId })
-    .where(or(inArray(workingOrderLines.id, ids), inArray(workingOrderLines.parentLineId, ids)));
+    .where(
+      or(
+        inArray(workingOrderLines.id, sql`(select value from json_each(${JSON.stringify(ids)}))`),
+        inArray(
+          workingOrderLines.parentLineId,
+          sql`(select value from json_each(${JSON.stringify(ids)}))`,
+        ),
+      ),
+    );
   await recordGroupEvent(
     tx,
     {

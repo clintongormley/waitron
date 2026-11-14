@@ -3,7 +3,13 @@ import { saleLineRows } from "./sale-line-rows.js";
 import "./errors.js";
 import { operationDescriptionFor } from "./operation-description.js";
 import { eq } from "drizzle-orm";
-import { allocateInvoiceNumber, invoiceSeries, saleLines, tenants } from "@waitron/db";
+import {
+  insertInChunks,
+  allocateInvoiceNumber,
+  invoiceSeries,
+  saleLines,
+  tenants,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   AppError,
@@ -308,7 +314,7 @@ export async function recordSale(
     });
   }
 
-  await tx.insert(saleLines).values(saleLineRows(saleId, input.lines));
+  await insertInChunks(tx, saleLines, saleLineRows(saleId, input.lines));
 
   if (input.settlement.kind === "immediate") {
     // Before `backend.recordSale`: a shortfall or an unsettled tender throws here and the whole

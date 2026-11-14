@@ -168,7 +168,7 @@ export async function recordKitchenNotices(
         eq(workingOrderLines.workingOrderId, orderId),
         inArray(
           workingOrderLines.id,
-          items.map((item) => item.workingOrderLineId),
+          sql`(select value from json_each(${JSON.stringify(items.map((item) => item.workingOrderLineId))}))`,
         ),
       ),
     );
@@ -180,7 +180,7 @@ export async function recordKitchenNotices(
           .where(
             inArray(
               ticketItems.workingOrderLineId,
-              items.map((item) => item.workingOrderLineId),
+              sql`(select value from json_each(${JSON.stringify(items.map((item) => item.workingOrderLineId))}))`,
             ),
           )
       : [];

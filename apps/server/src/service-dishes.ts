@@ -30,7 +30,16 @@ export async function serviceDishCondition(tx: Transaction, scope: SQL): Promise
   return lunches.length === 0
     ? topLevel
     : or(
-        and(topLevel, notInArray(workingOrderLines.id, lunches)),
-        inArray(workingOrderLines.parentLineId, lunches),
+        and(
+          topLevel,
+          notInArray(
+            workingOrderLines.id,
+            sql`(select value from json_each(${JSON.stringify(lunches)}))`,
+          ),
+        ),
+        inArray(
+          workingOrderLines.parentLineId,
+          sql`(select value from json_each(${JSON.stringify(lunches)}))`,
+        ),
       )!;
 }

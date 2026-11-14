@@ -19,6 +19,7 @@ import type {
   VatBreakdownLine,
 } from "@waitron/fiscal";
 import {
+  statementChunks,
   CORE_MIGRATIONS,
   captureError,
   constraintTarget,
@@ -2028,4 +2029,38 @@ describe("accepted document persistence", () => {
     });
     expect(await countRows("fake_fiscal_records")).toBe(kind === "none" ? 0 : 1);
   });
+});
+
+it("records all 2,001 sale lines and the extra's parent across insert chunks", async () => {
+  const lines = Array.from({ length: 2001 }, (_, i) => ({
+    lineNo: i + 1,
+    name: "Dish",
+    descriptions: { "es-ES": "Dish", "ca-ES": "Dish" },
+    quantity: "1",
+    unitPrice: "1.00",
+    vatRate: "0.00",
+    lineTotal: "1.00",
+    parentLineNo: null as number | null,
+  }));
+  const boundary = statementChunks(saleLines, lines)[0]!.length;
+  lines[boundary]!.parentLineNo = boundary;
+  const { saleId } = await run(new FakeFiscalBackend(suite.db), {
+    lines,
+    total: "2001.00",
+    settlement: {
+      kind: "immediate",
+      tenders: [{ method: "card", amount: "2001.00", tipAmount: "0", settledAt: BASE }],
+    },
+  });
+  const stored = await suite.db
+    .select()
+    .from(saleLines)
+    .where(eq(saleLines.saleId, saleId))
+    .orderBy(saleLines.lineNo);
+  expect(stored).toHaveLength(2001);
+  expect(stored.map((row) => row.lineNo)).toEqual(lines.map((row) => row.lineNo));
+  expect(stored[boundary]!.parentLineId).toBe(stored[boundary - 1]!.id);
+  expect(
+    stored.every((row) => row.quantity === 1000 && row.unitPrice === 100 && row.lineTotal === 100),
+  ).toBe(true);
 });

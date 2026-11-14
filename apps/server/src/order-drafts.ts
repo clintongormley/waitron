@@ -2,6 +2,7 @@ import type { TillSaleResult } from "./till-sale.js";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import { and, asc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import {
+  statementChunks,
   kitchenCourses,
   newId,
   nowIso,
@@ -1291,29 +1292,31 @@ async function replaceLines(
     joinGroupId: line.joinGroupId,
     afterGroupId: line.afterGroupId,
   }));
-  await tx
-    .insert(orderDraftLines)
-    .values(rows)
-    .onConflictDoUpdate({
-      target: orderDraftLines.id,
-      set: {
-        draftId: intoDraftId,
-        position: sql`excluded.position`,
-        menuItemId: sql`excluded.menu_item_id`,
-        variantId: sql`excluded.variant_id`,
-        menuVersionId: sql`excluded.menu_version_id`,
-        options: sql`excluded.options`,
-        extras: sql`excluded.extras`,
-        note: sql`excluded.note`,
-        courseId: sql`excluded.course_id`,
-        makeAtStationId: sql`excluded.make_at_station_id`,
-        quantity: sql`excluded.quantity`,
-        noMerge: sql`excluded.no_merge`,
-        slot: sql`excluded.slot`,
-        joinGroupId: sql`excluded.join_group_id`,
-        afterGroupId: sql`excluded.after_group_id`,
-      },
-    });
+  for (const chunk of statementChunks(orderDraftLines, rows)) {
+    await tx
+      .insert(orderDraftLines)
+      .values(chunk)
+      .onConflictDoUpdate({
+        target: orderDraftLines.id,
+        set: {
+          draftId: intoDraftId,
+          position: sql`excluded.position`,
+          menuItemId: sql`excluded.menu_item_id`,
+          variantId: sql`excluded.variant_id`,
+          menuVersionId: sql`excluded.menu_version_id`,
+          options: sql`excluded.options`,
+          extras: sql`excluded.extras`,
+          note: sql`excluded.note`,
+          courseId: sql`excluded.course_id`,
+          makeAtStationId: sql`excluded.make_at_station_id`,
+          quantity: sql`excluded.quantity`,
+          noMerge: sql`excluded.no_merge`,
+          slot: sql`excluded.slot`,
+          joinGroupId: sql`excluded.join_group_id`,
+          afterGroupId: sql`excluded.after_group_id`,
+        },
+      });
+  }
 }
 
 /** One open draft of the party, which the caller knows is there. */

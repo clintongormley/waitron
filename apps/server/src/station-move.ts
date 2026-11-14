@@ -4,6 +4,7 @@ import type { OrderAttendance } from "./working-order.js";
 import { and, eq, inArray, isNull, notInArray } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import {
+  insertInChunks,
   kitchenStations,
   ticketItemMoves,
   ticketItems,
@@ -500,7 +501,9 @@ export async function moveDishesToStation(
         if (started.length !== starting.length)
           throw new Error("station move started an unexpected number of ticket items");
       }
-      await tx.insert(ticketItemMoves).values(
+      await insertInChunks(
+        tx,
+        ticketItemMoves,
         moving.map((row) => ({
           workingOrderLineId: row.id,
           fromStationId: row.stationId!,

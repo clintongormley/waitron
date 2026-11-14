@@ -244,7 +244,12 @@ export async function readPortionBindings(
     })
     .from(workingLinePortions)
     .innerJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
-    .where(inArray(workingLinePortions.workingOrderLineId, [...lineIds]));
+    .where(
+      inArray(
+        workingLinePortions.workingOrderLineId,
+        sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
+      ),
+    );
   return new Map(rows.map((row) => [row.lineId, row]));
 }
 

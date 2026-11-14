@@ -701,9 +701,8 @@ passed while proving nothing.
 - **Server tests send the till's person header through `apps/server/src/testing/tab-person-setup.ts`;
   a test of a request naming nobody leaves its session alone.** Nothing guards it.
   [Detail](docs/developers/testing-guide.md#server-tests-send-the-tills-person-header-through-one-setup-file).
-- **An insert whose rows grow with an order must go through `insertInChunks` or `statementChunks`**;
-  the table round's `insertTabRound` does not yet, and no sweep has read every insert (see the
-  backlog). Cost: a 2,001-dish order passed locally and failed CI. Guard: the bound-value case in
+- **An insert whose rows grow with an order must go through `insertInChunks` or `statementChunks`**.
+  Cost: a 2,001-dish order passed locally and failed CI. Guard: the bound-value case in
   `packages/store/src/index.test.ts`, weaker than the rule. [Runtime limits and
   receipt](docs/developers/testing-guide.md#root-receipts-moved-on-2026-10-31).
 - **Synchronous `node:sqlite` tests need a real timer turn for the venue watchdog; `useVenueDb`

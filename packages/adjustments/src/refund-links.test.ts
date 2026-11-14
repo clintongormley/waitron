@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
+  insertInChunks,
+  adjustments,
+  adjustmentRefunds,
   captureError,
   checkFailed,
   CORE_MIGRATIONS,
@@ -251,4 +254,45 @@ describe("the link from a refund to its cancels", () => {
       "adjustment_refunds.adjustment_id, adjustment_refunds.tender_refund_id",
     );
   });
+});
+
+it("links every one of 12,000 dish cancellations to its refund", async () => {
+  const order = await seedWorkingOrder(db);
+  const reason = await seedVoidReason(db);
+  const first = await cancel(order, reason, "0.01");
+  const [template] = await db.select().from(adjustments).where(eq(adjustments.id, first));
+  const ids = [first, ...Array.from({ length: 11999 }, () => randomUUID())];
+  await withTransaction(db, (tx) =>
+    insertInChunks(
+      tx,
+      adjustments,
+      ids.slice(1).map((id) => ({ ...template!, id, lineId: randomUUID() })),
+    ),
+  );
+  venue = await seedVenueWithSeries(db);
+  const sale = await seedRefundableSale(db, venue, {
+    method: "cash",
+    applied: "120.00",
+    tip: "0",
+    at: AT,
+    invoiceNumber: 1,
+  });
+  const refundId = await seedTenderRefund(db, sale, {
+    applied: "120.00",
+    tip: "0",
+    state: "pending",
+    createdAt: AT,
+    at: null,
+  });
+  await link(
+    refundId,
+    ids.map((adjustmentId) => ({ adjustmentId, amount: "0.01" })),
+  );
+  const stored = await db
+    .select()
+    .from(adjustmentRefunds)
+    .where(eq(adjustmentRefunds.tenderRefundId, refundId));
+  expect(stored).toHaveLength(12000);
+  expect(new Set(stored.map((row) => row.adjustmentId))).toEqual(new Set(ids));
+  expect(stored.every((row) => row.amount === 1)).toBe(true);
 });

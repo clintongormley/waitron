@@ -1,6 +1,7 @@
 import { readLunchLineIds } from "./operations.js";
 import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import {
+  insertInChunks,
   allergyLineTicks,
   newId,
   nowIso,
@@ -304,7 +305,7 @@ export async function setAllergyLineTicks(
   const ticks = checked.flatMap(({ guestId, draftLineId, workingLineId }) =>
     guestId === null ? [] : [{ guestId, draftLineId, workingLineId }],
   );
-  if (ticks.length > 0) await tx.insert(allergyLineTicks).values(ticks);
+  await insertInChunks(tx, allergyLineTicks, ticks);
 }
 
 export async function moveAllergyDraftTicks(

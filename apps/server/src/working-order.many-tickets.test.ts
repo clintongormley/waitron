@@ -1,12 +1,14 @@
 import { and, eq, sql, inArray } from "drizzle-orm";
 import { beforeAll, expect, it } from "vitest";
 import {
+  statementChunks,
   kitchenPrintJobLines,
   printJobs,
   ticketItems,
   withTransaction,
   workingOrderLines,
 } from "@waitron/db";
+import { workingLineContexts } from "@waitron/venue-service";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -98,8 +100,6 @@ it("A1208 a table bill firing 11,880 burgers at once records an allergy snapshot
   const id = await withTransaction(suite.db, async (tx) => {
     const tabId = await createTableKitchenOrder(tx, venue.cfg);
     const offers = await offerProducts(tx, venue.cfg, { zone: "tables" });
-    // One line a dish; a round of more than about 1,100 lines is refused on its own (see the
-    // backlog), so twelve rounds of 990.
     const round = offers.toOfferLines(
       Array.from({ length: 990 }, () => ({ productId: venue.products.burger, quantity: "1" })),
     );
@@ -115,4 +115,69 @@ it("A1208 a table bill firing 11,880 burgers at once records an allergy snapshot
     sql`select count(*) as count from ticket_items t where t.allergy_frozen = 1 and t.working_order_line_id in (select id from working_order_lines where working_order_id = ${id})`,
   );
   expect(snapshots!.count).toBe(11880);
+});
+
+it("a 1,188-water round keeps every line and context and an extra across the insert boundary", async () => {
+  const venue = await setupSplitExtrasVenue();
+  await withTransaction(suite.db, async (tx) => {
+    const tabId = await createTableKitchenOrder(tx, venue.cfg);
+    const offers = await offerProducts(tx, venue.cfg, { zone: "tables" });
+    const water = Array.from({ length: 1188 }, () => ({
+      productId: venue.products.water,
+      quantity: "1",
+    }));
+    const pricedWater = await priceTabRound(
+      tx,
+      venue.cfg,
+      tabId,
+      offers.toOfferLines(water),
+      "checked",
+    );
+    const boundary = statementChunks(workingOrderLines, pricedWater.rows)[0]!.length;
+    const lines: ProductLine[] = [];
+    for (const count of [boundary - 1, 1188 - (boundary - 1)]) {
+      for (let left = count; left > 0; left--)
+        lines.push({ productId: venue.products.water, quantity: "1" });
+      if (lines.some((line) => line.productId === venue.products.burger)) continue;
+      lines.push({
+        productId: venue.products.burger,
+        quantity: "1",
+        extras: [
+          { listId: venue.lists.burger, picks: [{ productId: venue.products.chips, quantity: 1 }] },
+        ],
+      });
+    }
+    const round = await priceTabRound(tx, venue.cfg, tabId, offers.toOfferLines(lines), "checked");
+    expect(round.rows[boundary - 1]!.productId).toBe(venue.products.burger);
+    expect(round.rows[boundary]!.parentLineId).toBe(round.rows[boundary - 1]!.id);
+    const rows = round.rows.map((row) => ({ ...row, groupId: null, creditedTo: null }));
+    expect(tx.insert(workingOrderLines).values(rows).toSQL().params.length).toBeGreaterThan(32766);
+    const inserted = await insertTabRound(tx, venue.cfg, round, rows);
+    expect(inserted.map((row) => row.id)).toEqual(round.rows.map((row) => row.id));
+    const stored = await tx
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId))
+      .orderBy(workingOrderLines.lineNo);
+    expect(stored).toHaveLength(1190);
+    expect(stored[boundary]!.parentLineId).toBe(stored[boundary - 1]!.id);
+    const contexts = await tx
+      .select({ id: workingLineContexts.workingOrderLineId })
+      .from(workingLineContexts)
+      .innerJoin(
+        workingOrderLines,
+        eq(workingOrderLines.id, workingLineContexts.workingOrderLineId),
+      )
+      .where(eq(workingOrderLines.workingOrderId, tabId));
+    expect(new Set(contexts.map((row) => row.id))).toEqual(new Set(stored.map((row) => row.id)));
+    await fireAll(tx, venue.cfg, tabId);
+    const kitchen = await tx
+      .select({ id: ticketItems.workingOrderLineId })
+      .from(ticketItems)
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, tabId));
+    expect(kitchen.map((row) => row.id).sort()).toEqual(
+      [stored[boundary - 1]!.id, stored[boundary]!.id].sort(),
+    );
+  });
 });
