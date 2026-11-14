@@ -24,6 +24,7 @@ import {
   type RecoveryState,
 } from "./recovery-state.js";
 import { BOOKINGS_RECOVERY_TEXT } from "./i18n/recovery-page.js";
+import * as recoveryState from "./recovery-state.js";
 import { MODULES_SETTINGS } from "./modules.js";
 
 import { NODE_MIGRATIONS, nodeMode } from "@waitron/node-db";
@@ -42,7 +43,7 @@ async function fixture(
     level: "recovery",
     lastErrorCode: "server.internal",
   },
-  role: "primary" | "mirror" | "spare" = "primary",
+  role: "sole" | "primary" | "mirror" | "fenced" = "sole",
 ) {
   await seedPersons(suite.db, {
     displayName: "Administrator",
@@ -57,15 +58,14 @@ async function fixture(
   const venueDir = join(stateDir, "venue");
   await mkdir(venueDir);
   await suite.db.archiveTo(join(venueDir, "venue.db"));
-  await withNodeTransaction(suite.node, (tx) =>
-    tx
-      .insert(nodeMode)
-      .values({
+  if (role !== "sole")
+    await withNodeTransaction(suite.node, (tx) =>
+      tx.insert(nodeMode).values({
         nodeId: NODE_ID,
         mode: role === "mirror" ? "mirror" : "primary",
         singletonRole: role === "primary" ? "primary" : "secondary",
       }),
-  );
+    );
   await suite.node.archiveTo(join(venueDir, "node.db"));
   await writeFile(join(stateDir, "trading.env"), `WAITRON_NODE_ID=${NODE_ID}\n`);
   await writeRecoveryState(stateDir, state);
@@ -150,28 +150,31 @@ it.each([false, true])(
     expect(f.restart).not.toHaveBeenCalled();
   },
 );
-it("saves only Bookings Off, clears failed starts, and restarts with Bookings wording", async () => {
-  const f = await fixture({ "fiscal-none": false, payments: false });
-  const response = await f.request("choice=move&password=administrator+password");
-  expect(response.status).toBe(200);
-  const body = await response.text();
-  expect(body).toContain("Bookings is off");
-  expect(body).not.toContain("set aside");
-  const opened = await openVenueDatabase(f.venueDir);
-  try {
-    expect(await readSettings(opened.venue, MODULES_SETTINGS)).toMatchObject({
-      doc: { modules: { "fiscal-none": false, payments: false, bookings: false } },
-      revision: 2,
-    });
-    expect(opened.venue.all(sql`select display_name from persons`)).toEqual([
-      { display_name: "Administrator" },
-    ]);
-  } finally {
-    await opened.close();
-  }
-  expect(await readRecoveryState(f.stateDir)).toMatchObject({ level: "normal", failures: 0 });
-  expect(f.restart).toHaveBeenCalledTimes(1);
-});
+it.each(["sole", "primary"] as const)(
+  "saves only Bookings Off, clears failed starts, and restarts with Bookings wording on a %s primary",
+  async (role) => {
+    const f = await fixture({ "fiscal-none": false, payments: false }, undefined, role);
+    const response = await f.request("choice=move&password=administrator+password");
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    expect(body).toContain("Bookings is off");
+    expect(body).not.toContain("set aside");
+    const opened = await openVenueDatabase(f.venueDir);
+    try {
+      expect(await readSettings(opened.venue, MODULES_SETTINGS)).toMatchObject({
+        doc: { modules: { "fiscal-none": false, payments: false, bookings: false } },
+        revision: 2,
+      });
+      expect(opened.venue.all(sql`select display_name from persons`)).toEqual([
+        { display_name: "Administrator" },
+      ]);
+    } finally {
+      await opened.close();
+    }
+    expect(await readRecoveryState(f.stateDir)).toMatchObject({ level: "normal", failures: 0 });
+    expect(f.restart).toHaveBeenCalledTimes(1);
+  },
+);
 it("hides unreadable settings without hiding recovery or altering the database", async () => {
   const f = await fixture();
   await writeFile(join(f.venueDir, "venue.db"), "not a database");
@@ -205,8 +208,8 @@ it("keeps Bookings recovery unavailable after a full-disk start failure", async 
   expect(f.restart).not.toHaveBeenCalled();
 });
 
-it.each(["mirror", "spare"] as const)(
-  "hides and refuses the recovery write on a %s",
+it.each(["mirror", "fenced"] as const)(
+  "hides and refuses the recovery write on a %s box",
   async (role) => {
     const f = await fixture({}, undefined, role);
     expect(await (await f.request()).text()).not.toContain('action="/recovery-api/bookings/off"');
@@ -219,7 +222,33 @@ it("does not create a missing node database while checking or refusing recovery"
   const f = await fixture();
   await rm(join(f.venueDir, "node.db"));
   expect(await (await f.request()).text()).not.toContain('action="/recovery-api/bookings/off"');
-  expect((await f.request("choice=move&password=administrator+password")).status).toBe(409);
+  const response = await f.request("choice=move&password=administrator+password");
+  expect(response.status).toBe(409);
+  expect(await response.text()).toContain("This recovery action is not available.");
   await expect(stat(join(f.venueDir, "node.db"))).rejects.toMatchObject({ code: "ENOENT" });
   expect(f.restart).not.toHaveBeenCalled();
+});
+
+it("explains an incomplete recovery when Off is saved but the failed-start count cannot clear", async () => {
+  const f = await fixture();
+  const write = vi
+    .spyOn(recoveryState, "writeRecoveryState")
+    .mockRejectedValueOnce(new Error("counter write failed"));
+  try {
+    const response = await f.request("choice=move&password=administrator+password");
+    expect(response.status).toBe(409);
+    expect(await response.text()).toContain(
+      "This action did not finish. Waitron has not restarted.",
+    );
+    const opened = await openVenueDatabase(f.venueDir);
+    try {
+      expect((await readSettings(opened.venue, MODULES_SETTINGS)).doc.modules.bookings).toBe(false);
+    } finally {
+      await opened.close();
+    }
+    expect((await readRecoveryState(f.stateDir)).failures).toBe(3);
+    expect(f.restart).not.toHaveBeenCalled();
+  } finally {
+    write.mockRestore();
+  }
 });

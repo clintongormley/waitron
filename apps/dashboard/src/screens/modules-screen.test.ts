@@ -232,39 +232,42 @@ it("refreshes a stale provider revision so the open confirmation can be retried"
   );
 });
 
-it("confirms a Bookings change and shows its saved state waiting for the separate restart", async () => {
-  history.replaceState(null, "", "/manage/modules/state/all");
-  const api = modulesClient({
-    listModules: vi
-      .fn()
-      .mockResolvedValueOnce([
-        { id: "bookings", category: "module", enabled: true, applied: true, revision: 2 },
-      ])
-      .mockResolvedValue([
-        { id: "bookings", category: "module", enabled: false, applied: true, revision: 3 },
-      ]),
-    setBookingsState: vi.fn().mockResolvedValue({ enabled: false, applied: true, revision: 3 }),
-  });
-  const el = await mount(api);
-  expect(
-    el
-      .shadowRoot!.querySelector("wt-data-table")!
-      .shadowRoot!.querySelector("[data-test=switch-bookings]"),
-  ).toBeNull();
-  el.canManageModules = true;
-  await el.updateComplete;
-  el.shadowRoot!.querySelector("wt-data-table")!
-    .shadowRoot!.querySelector<HTMLElement>("[data-test=switch-bookings]")!
-    .click();
-  await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("wt-dialog")!.textContent).toContain("tills reconnect");
-  expect(el.shadowRoot!.querySelector("wt-dialog")!.textContent).toContain("kitchen");
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-provider-state]")!.click();
-  await vi.waitFor(() => expect(rows(el).join()).toContain("Waiting for restart"));
-  expect(rows(el).join()).toContain("Disabled");
-  expect(api.setBookingsState).toHaveBeenCalledWith(false, 2);
-  expect(el.shadowRoot!.querySelector("wt-dialog")).toBeNull();
-});
+it.each(["/manage/modules/state/all", "/manage/modules"])(
+  "confirms a Bookings change and shows its saved state waiting for the separate restart at %s",
+  async (path) => {
+    history.replaceState(null, "", path);
+    const api = modulesClient({
+      listModules: vi
+        .fn()
+        .mockResolvedValueOnce([
+          { id: "bookings", category: "module", enabled: true, applied: true, revision: 2 },
+        ])
+        .mockResolvedValue([
+          { id: "bookings", category: "module", enabled: false, applied: true, revision: 3 },
+        ]),
+      setBookingsState: vi.fn().mockResolvedValue({ enabled: false, applied: true, revision: 3 }),
+    });
+    const el = await mount(api);
+    expect(
+      el
+        .shadowRoot!.querySelector("wt-data-table")!
+        .shadowRoot!.querySelector("[data-test=switch-bookings]"),
+    ).toBeNull();
+    el.canManageModules = true;
+    await el.updateComplete;
+    el.shadowRoot!.querySelector("wt-data-table")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=switch-bookings]")!
+      .click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("wt-dialog")!.textContent).toContain("tills reconnect");
+    expect(el.shadowRoot!.querySelector("wt-dialog")!.textContent).toContain("kitchen");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-provider-state]")!.click();
+    await vi.waitFor(() => expect(rows(el).join()).toContain("Waiting for restart"));
+    expect(rows(el).join()).toContain("Disabled");
+    expect(api.setBookingsState).toHaveBeenCalledWith(false, 2);
+    expect(el.shadowRoot!.querySelector("wt-dialog")).toBeNull();
+  },
+);
 it("keeps a refused Bookings confirmation available and refreshes a stale revision", async () => {
   const api = modulesClient({
     listModules: vi

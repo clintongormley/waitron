@@ -197,6 +197,7 @@ export class ModulesScreen extends LitElement {
           !row.enabled,
           current?.revision ?? row.revision ?? 0,
         );
+      if (row.category === "module") this.#filters(this.category, "all");
       this.switching = undefined;
       void this.#load();
     } catch (error) {

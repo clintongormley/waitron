@@ -9,7 +9,7 @@ import {
   withTransaction,
   type NodeDatabase,
 } from "@waitron/db";
-import { readNodeModeRow } from "@waitron/node-db";
+import { readNodeMode } from "@waitron/node-db";
 import { loadBoxEnv } from "./box-env.js";
 import { VENUE_FILE, NODE_FILE } from "@waitron/store";
 import { MODULES_SETTINGS } from "./modules.js";
@@ -45,11 +45,11 @@ async function eligible(deps: BookingsRecoveryDeps): Promise<boolean> {
   if (!nodeId) return false;
   const role = await readRecoveryDatabase(
     deps.roots,
-    (db) => readNodeModeRow(db as NodeDatabase, nodeId),
+    (db) => readNodeMode(db as NodeDatabase, nodeId),
     NODE_FILE,
   );
   return (
-    role?.mode === "primary" &&
+    role.mode === "primary" &&
     role.singletonRole === "primary" &&
     (await readRecoveryDatabase(
       deps.roots,
@@ -63,7 +63,10 @@ export async function renderBookingsRecovery(
 ): Promise<string> {
   const text = BOOKINGS_RECOVERY_TEXT[view.locale];
   if (view.stopped) return `<p>${escapeHtml(text.stopped)}</p>`;
-  if (view.message?.kind !== "moved" && !(await eligible(deps).catch(() => false))) return "";
+  if (view.message?.kind !== "moved" && !(await eligible(deps).catch(() => false))) {
+    if (view.message === undefined) return "";
+    return `<p role="alert">${escapeHtml(view.message.kind === "notFinished" ? text.notFinished : text.unavailable)}</p>`;
+  }
   return renderEnvironmentSection({
     ...view,
     path: "/recovery-api/bookings/off",
@@ -95,7 +98,7 @@ export function mountBookingsRecovery(
       choose: async (authorize) => {
         const hold = await lockVenueDatabase(deps.roots.venueDir);
         try {
-          if (!(await eligible(deps))) throw new AppError("setup.not_ready", {});
+          if (!(await eligible(deps).catch(() => false))) throw new AppError("setup.not_ready", {});
           await authorize(await readRestoreAdminVerifiers(join(deps.roots.venueDir, VENUE_FILE)));
           const opened = await openVenueDatabase(deps.roots.venueDir);
           try {
