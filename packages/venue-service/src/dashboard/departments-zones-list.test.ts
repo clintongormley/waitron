@@ -141,7 +141,7 @@ it("each row opens its own editor and department menus offer Edit, Add a zone an
   expect(menu.querySelector('[data-test="receipt-department-d1"]')).toBeNull();
 });
 
-it("names missing department receipt setup and opens that receipt without activating the row", async () => {
+it("names a missing department description and asks for it without activating the row", async () => {
   const { el, table } = await setup();
   el.model!.readiness.push(
     Object.assign(
@@ -158,14 +158,14 @@ it("names missing department receipt setup and opens that receipt without activa
   await table.updateComplete;
   const row = table.shadowRoot!.querySelector('[data-row-key="department:d1"]')!;
   expect(row.textContent).toContain("Set up the tax-agency description");
-  const receipt = vi.fn(),
+  const description = vi.fn(),
     edit = vi.fn();
-  el.addEventListener("edit-receipt", receipt);
+  el.addEventListener("edit-description", description);
   el.addEventListener("open-department", edit);
-  const action = row.querySelector<HTMLElement>("[data-test=receipt-setup-d1]");
-  expect(action, "missing-description setup offers its receipt editor").not.toBeNull();
+  const action = row.querySelector<HTMLElement>("[data-test=description-setup-d1]");
+  expect(action, "missing-description setup offers its description field").not.toBeNull();
   await userEvent.click(action!);
-  expect(receipt.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual([
+  expect(description.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual([
     { departmentId: "d1" },
   ]);
   expect(edit).not.toHaveBeenCalled();
@@ -173,7 +173,7 @@ it("names missing department receipt setup and opens that receipt without activa
   await el.updateComplete;
   await table.updateComplete;
   expect(row.textContent).toContain("Set up the tax-agency description");
-  expect(row.querySelector("[data-test=receipt-setup-d1]")).toBeNull();
+  expect(row.querySelector("[data-test=description-setup-d1]")).toBeNull();
 });
 
 async function withFloorZones(floorZones: FloorZone[]) {
@@ -184,7 +184,7 @@ async function withFloorZones(floorZones: FloorZone[]) {
   return { el, table };
 }
 
-it("a department row has no Receipt link and the description button opens Receipts", async () => {
+it("a department row has no Receipt link and the description button asks for the description", async () => {
   const { el, table } = await setup();
   expect(table.shadowRoot!.querySelector('[data-test^="receipt-department-"]')).toBeNull();
   el.model!.readiness.push({
@@ -195,14 +195,14 @@ it("a department row has no Receipt link and the description button opens Receip
   el.requestUpdate();
   await el.updateComplete;
   await table.updateComplete;
-  const receipt = vi.fn(),
+  const description = vi.fn(),
     opened = vi.fn();
-  el.addEventListener("edit-receipt", receipt);
+  el.addEventListener("edit-description", description);
   el.addEventListener("open-department", opened);
   await userEvent.click(
-    table.shadowRoot!.querySelector<HTMLElement>("[data-test=receipt-setup-d2]")!,
+    table.shadowRoot!.querySelector<HTMLElement>("[data-test=description-setup-d2]")!,
   );
-  expect(receipt.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual([
+  expect(description.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual([
     { departmentId: "d2" },
   ]);
   expect(opened).not.toHaveBeenCalled();

@@ -782,6 +782,8 @@ export const en = {
   "venue_settings.required": "Enter the invoice operation description.",
   "venue_settings.invalid":
     "The description was rejected. Use at most 500 characters and remove hidden control characters.",
+  "venue_settings.fix_on_details":
+    "The invoice operation description is missing or invalid. Correct it on the Details tab, then save again.",
   "venue_settings.retry": "Retry",
 
   "content_languages.title": "Content languages",
@@ -4962,6 +4964,8 @@ export const es: Record<StringKey, string> = {
   "venue_settings.required": "Introduce la descripción de la operación.",
   "venue_settings.invalid":
     "La descripción no es válida. Usa como máximo 500 caracteres y elimina los caracteres de control ocultos.",
+  "venue_settings.fix_on_details":
+    "La descripción de la operación falta o no es válida. Corrígela en la pestaña Datos y vuelve a guardar.",
   "venue_settings.retry": "Reintentar",
 
   "content_languages.title": "Idiomas del contenido",

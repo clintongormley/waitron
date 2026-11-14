@@ -41,16 +41,8 @@ it("draws no description on Details without a receipt editor, or when the editor
   await expect.poll(() => descriptionField(form)).toBeNull();
 });
 it.each([
-  [
-    "en",
-    "Invoice operation description",
-    "Sent to the tax agency with each invoice record; not printed",
-  ],
-  [
-    "es",
-    "Descripción de la operación",
-    "Se envía a la Agencia Tributaria con cada registro de factura; no se imprime",
-  ],
+  ["en", "Invoice operation description", "Sent to the tax agency; not printed"],
+  ["es", "Descripción de la operación", "Se envía a Hacienda; no se imprime"],
 ] as const)(
   "Details draws the required description with its %s label and hint",
   async (locale, label, hint) => {
@@ -240,4 +232,32 @@ it("contains the description field's change event", async () => {
   await editDepartmentField(form, "operationDescription", "Updated");
   expect(descriptionField(form)!.value).toBe("Updated");
   expect(leaked).not.toHaveBeenCalled();
+});
+it("a requested description focus waits for the field and gives way to a click on Details", async () => {
+  const { el, form } = await mount();
+  const editor = await supplyReceiptEditor(el, form);
+  const name = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
+  const nameInput = name.shadowRoot!.querySelector("input")!;
+  form.focusDescription();
+  await form.updateComplete;
+  await userEvent.click(page.elementLocator(nameInput));
+  expect(name.shadowRoot!.activeElement).toBe(nameInput);
+  editor.offerDescription("Dining service");
+  await expect.poll(() => descriptionField(form)?.value).toBe("Dining service");
+  await descriptionField(form)!.updateComplete;
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  expect(descriptionField(form)!.shadowRoot!.activeElement).toBeNull();
+  expect(name.shadowRoot!.activeElement).toBe(nameInput);
+});
+it("a requested description focus lands on the field once the editor offers it", async () => {
+  const { el, form } = await mount();
+  const editor = await supplyReceiptEditor(el, form);
+  form.focusDescription();
+  await form.updateComplete;
+  editor.offerDescription("Dining service");
+  await expect.poll(() => descriptionField(form)?.value).toBe("Dining service");
+  const field = descriptionField(form)!;
+  await expect
+    .poll(() => field.shadowRoot!.activeElement)
+    .toBe(field.shadowRoot!.querySelector("input"));
 });

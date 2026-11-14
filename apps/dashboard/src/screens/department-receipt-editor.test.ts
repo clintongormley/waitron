@@ -28,7 +28,7 @@ it("keeps receipt decoration without an automatic-print switch", async () => {
 });
 it("opens with required description, bare languages and no inherited content or no-op write", async () => {
   const { el, api } = await mountReceiptEditor();
-  expect(el.operationDescription).toEqual({ saved: "Dining service", required: true });
+  expect(el.savedOperationDescription).toBe("Dining service");
   expect(receiptRoot(el).querySelector("[name=operationDescription]")).toBeNull();
   expect(
     [...receiptRoot(el).querySelectorAll("h3[lang]")].map((h) => h.textContent!.trim()),
@@ -378,7 +378,7 @@ it("a replacement subject loads the new department and shows its values in place
   await el.updateComplete;
   await expect.poll(() => api.getDepartmentReceipt.mock.calls.length).toBe(2);
   expect(api.getDepartmentReceipt.mock.lastCall?.[0]).toBe("terrace");
-  await expect.poll(() => el.operationDescription?.saved).toBe("Terrace service");
+  await expect.poll(() => el.savedOperationDescription).toBe("Terrace service");
   expect(receiptField(el, "email").value).toBe("");
   expect(receiptSave(el).disabled).toBe(true);
   expect(app.leave.coordinator.isDirty()).toBe(false);

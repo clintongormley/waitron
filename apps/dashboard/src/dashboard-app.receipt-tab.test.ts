@@ -444,7 +444,7 @@ it("a refused description shows its refusal under the Details field and stays un
   expect(modal.open).toBe(true);
   expect(departmentForm(app)!.tab).toBe("details");
   expect(departmentForm(app)!.hasUnsavedChanges).toBe(true);
-  expect(editor.operationDescription?.saved).toBe("Dining service");
+  expect(editor.savedOperationDescription).toBe("Dining service");
   await editDetails(app, "operationDescription", "Dining service");
   expect(field.error).toBe("");
   expect(departmentForm(app)!.hasUnsavedChanges).toBe(false);

@@ -9,6 +9,7 @@ import "./department-settings.js";
 import {
   selectDepartmentTab,
   departmentSettingsAnswer,
+  type ReceiptEditorStub,
 } from "../testing/department-edit-fixture.js";
 const model: VenueServiceView = {
   departments: [
@@ -823,6 +824,47 @@ it("toggling Needs clearing dirties the form, toggling it back cleans it, and le
   expect(await leaving).toBe(false);
   expect(control.checked).toBe(true);
   expect(el.hasUnsavedChanges).toBe(true);
+});
+it("changing the description dirties the form, typing it back cleans it, and Discard restores it", async () => {
+  const el = await mount();
+  const editor = document.createElement("dashboard-department-receipt-editor") as ReceiptEditorStub;
+  editor.savedOperationDescription = "Dining service";
+  el.receiptEditor = html`${editor}`;
+  const field = () =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      "[slot=details] [name=operationDescription]",
+    );
+  await expect.poll(() => field()?.value).toBe("Dining service");
+  const change = async (value: string) => {
+    field()!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+  };
+  const saveButton = () =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-editor]")!;
+  expect(el.hasUnsavedChanges).toBe(false);
+  expect(unload()).toBe(false);
+  await change("Counter service");
+  expect(el.hasUnsavedChanges).toBe(true);
+  expect(saveButton().disabled).toBe(false);
+  expect(unload()).toBe(true);
+  await change("Dining service");
+  expect(el.hasUnsavedChanges).toBe(false);
+  expect(saveButton().disabled).toBe(true);
+  expect(unload()).toBe(false);
+  expect(await el.requestLeave("navigation")).toBe(true);
+  await change("Counter service");
+  const kept = el.requestLeave("navigation");
+  await choice("keep");
+  expect(await kept).toBe(false);
+  expect(field()!.value).toBe("Counter service");
+  void leave();
+  await choice("discard");
+  await expect.poll(() => field()?.value).toBe("Dining service");
+  expect(el.hasUnsavedChanges).toBe(false);
+  expect(unload()).toBe(false);
+  expect(editor.descriptionSaves).toEqual([]);
 });
 it("toggling only the late-send switch dirties the form and toggling it back cleans it", async () => {
   const el = await mount();

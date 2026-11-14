@@ -205,7 +205,7 @@ it("a failed initial read offers native Retry and uses the localized fallback fo
   expect(app.textContent).not.toContain("internal details");
   await userEvent.click(page.elementLocator(receiptRoot(el).querySelector("wt-button")!));
   await expect.poll(() => receiptRoot(el).querySelector("[name=email]")).toBeTruthy();
-  expect(el.operationDescription?.saved).toBe("Dining service");
+  expect(el.savedOperationDescription).toBe("Dining service");
 });
 it("Enter on an unchanged receipt sends nothing and Enter on an edited email saves exactly once", async () => {
   const { el, api, events } = await mountReceiptEditor();
@@ -545,19 +545,30 @@ it.each(["en-GB", "es-ES"] as const)(
   },
 );
 
-it("a Receipts Save refused for the description, which this tab does not draw, says why under Save", async () => {
-  const { el, api } = await mountReceiptEditor();
-  api.putDepartmentReceipt.mockRejectedValue({
-    code: "management.request_invalid",
-    params: { field: "operationDescription" },
-  });
-  await editReceipt(el, "email", "other@example.test");
-  await clickReceiptSave(el);
-  await expect
-    .poll(() => receiptRoot(el).querySelector("wt-form-actions")!.error)
-    .toBe(t("venue_settings.invalid"));
-  expect(receiptField(el, "email").error).toBe("");
-  expect(receiptField(el, "email").value).toBe("other@example.test");
-  expect(receiptSave(el).disabled).toBe(false);
-  expect(api.putDepartmentReceipt).toHaveBeenCalledTimes(1);
-});
+it.each([
+  [
+    "en-GB",
+    "The invoice operation description is missing or invalid. Correct it on the Details tab, then save again.",
+  ],
+  [
+    "es-ES",
+    "La descripción de la operación falta o no es válida. Corrígela en la pestaña Datos y vuelve a guardar.",
+  ],
+] as const)(
+  "a Receipts Save refused for the description, which this tab does not draw, sends the person to Details in %s",
+  async (locale, sentence) => {
+    setLocale(locale);
+    const { el, api } = await mountReceiptEditor();
+    api.putDepartmentReceipt.mockRejectedValue({
+      code: "management.request_invalid",
+      params: { field: "operationDescription" },
+    });
+    await editReceipt(el, "email", "other@example.test");
+    await clickReceiptSave(el);
+    await expect.poll(() => receiptRoot(el).querySelector("wt-form-actions")!.error).toBe(sentence);
+    expect(receiptField(el, "email").error).toBe("");
+    expect(receiptField(el, "email").value).toBe("other@example.test");
+    expect(receiptSave(el).disabled).toBe(false);
+    expect(api.putDepartmentReceipt).toHaveBeenCalledTimes(1);
+  },
+);

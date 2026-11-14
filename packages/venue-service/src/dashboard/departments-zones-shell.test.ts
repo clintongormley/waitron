@@ -5,7 +5,7 @@ import { applyTokens, NavigationGuard } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { VenueServiceApi } from "./client.js";
 import { zonesModel } from "../testing/department-zones-fixture.js";
-import { selectDepartmentTab } from "../testing/department-edit-fixture.js";
+import { selectDepartmentTab, type ReceiptEditorStub } from "../testing/department-edit-fixture.js";
 import "./venue-departments-shell.js";
 const initial = location.href;
 const shells: HTMLElementTagNameMap["venue-departments-shell"][] = [];
@@ -326,7 +326,49 @@ it("closing from the Service tab returns focus to that row's menu", async () => 
     .poll(() => menu.shadowRoot!.activeElement)
     .toBe(menu.shadowRoot!.querySelector("button"));
 });
-it("the list's tax-agency description button opens the department dialog on Receipts", async () => {
+it("the list's tax-agency description button opens Details and focuses the description once it appears", async () => {
+  const model = structuredClone(zonesModel);
+  model.readiness.push({
+    code: "department.operation_description_required",
+    departmentId: "d2",
+    departmentName: "Deli",
+  } as (typeof model.readiness)[number]);
+  const shell = await mount("/manage/venue-operations", undefined, model);
+  const editors = new Map<string, ReceiptEditorStub>();
+  shell.renderPanel = (_panel, subject) => {
+    let editor = editors.get(subject!.id);
+    if (!editor) {
+      editor = document.createElement("dashboard-department-receipt-editor") as ReceiptEditorStub;
+      editor.departmentId = subject!.id;
+      editors.set(subject!.id, editor);
+    }
+    return html`${editor}`;
+  };
+  shell.requestUpdate();
+  await shell.updateComplete;
+  const list = shell.shadowRoot!.querySelector("departments-list")!;
+  await list.updateComplete;
+  const table = list.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  await userEvent.click(
+    table.shadowRoot!.querySelector<HTMLElement>("[data-test=description-setup-d2]")!,
+  );
+  const form = await departmentSettings(shell);
+  expect(shell.shadowRoot!.querySelector("department-edit-dialog")!.departmentId).toBe("d2");
+  await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d2");
+  expect(form.tab).toBe("details");
+  const field = () =>
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      "[slot=details] [name=operationDescription]",
+    );
+  expect(field()).toBeNull();
+  editors.get("d2")!.offerDescription("");
+  await expect.poll(() => field()?.shadowRoot?.querySelector("input")).toBeTruthy();
+  const input = field()!.shadowRoot!.querySelector("input");
+  await expect.poll(() => field()!.shadowRoot!.activeElement).toBe(input);
+  expect(form.tab).toBe("details");
+});
+it("closing a dialog opened from the description link returns focus to that row's menu", async () => {
   const model = structuredClone(zonesModel);
   model.readiness.push({
     code: "department.operation_description_required",
@@ -339,13 +381,18 @@ it("the list's tax-agency description button opens the department dialog on Rece
   const table = list.shadowRoot!.querySelector("wt-data-table")!;
   await table.updateComplete;
   await userEvent.click(
-    table.shadowRoot!.querySelector<HTMLElement>("[data-test=receipt-setup-d2]")!,
+    table.shadowRoot!.querySelector<HTMLElement>("[data-test=description-setup-d2]")!,
   );
   const form = await departmentSettings(shell);
-  expect(shell.shadowRoot!.querySelector("department-edit-dialog")!.departmentId).toBe("d2");
-  await expect.poll(() => form.tab).toBe("receipt");
-  expect(form.shadowRoot!.querySelector("[data-test=receipt-panel]")!.textContent).toBe("d2");
-  expect(location.pathname).toBe("/manage/venue-operations/department/d2/view/receipt");
+  await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d2");
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
+  await expect.poll(() => shell.shadowRoot!.querySelector("department-edit-dialog")).toBeNull();
+  const menu = table
+    .shadowRoot!.querySelector("[data-test=open-department-d2]")!
+    .closest("wt-row-actions")!;
+  await expect
+    .poll(() => menu.shadowRoot!.activeElement)
+    .toBe(menu.shadowRoot!.querySelector("button"));
 });
 it("/view/receipt opens the department dialog on its Receipts tab", async () => {
   const shell = await mount("/manage/venue-operations/department/d1/view/receipt");

@@ -185,21 +185,18 @@ export class ReceiptEditorStub extends LitElement {
   get invalid(): boolean {
     return !!this.error;
   }
-  description?: { saved: string; required: boolean };
+  savedOperationDescription?: string;
   descriptionRefusal?: string;
   descriptionSaves: string[] = [];
-  get operationDescription() {
-    return this.description;
-  }
   descriptionProblem(value: string) {
     if (!value.trim()) return "Description required";
     return value.length > 500 ? "Description invalid" : "";
   }
   protected override firstUpdated() {
-    if (this.description) this.notify("department-receipt-description");
+    if (this.savedOperationDescription !== undefined) this.notify("department-receipt-description");
   }
   offerDescription(saved: string | undefined) {
-    this.description = saved === undefined ? undefined : { saved, required: true };
+    this.savedOperationDescription = saved;
     this.notify("department-receipt-description");
   }
   async saveOperationDescription(value: string) {
@@ -211,7 +208,7 @@ export class ReceiptEditorStub extends LitElement {
       });
     this.busy = false;
     if (this.descriptionRefusal) return this.descriptionRefusal;
-    this.description = { saved: value, required: true };
+    this.savedOperationDescription = value;
     return undefined;
   }
   async refuse(error = "Refused") {
@@ -271,7 +268,7 @@ export async function supplyReceiptEditor(
   description?: string,
 ) {
   const editor = document.createElement("dashboard-department-receipt-editor") as ReceiptEditorStub;
-  if (description !== undefined) editor.description = { saved: description, required: true };
+  editor.savedOperationDescription = description;
   el.receiptEditor = html`${editor}`;
   await el.updateComplete;
   await form.updateComplete;

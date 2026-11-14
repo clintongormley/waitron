@@ -8,6 +8,7 @@ import {
   editReceipt,
   mountReceiptEditor,
   receiptApi,
+  receiptField,
   receiptModel,
   receiptRoot,
 } from "../testing/department-receipt-editor-fixture.js";
@@ -21,13 +22,13 @@ afterEach(() => {
 it("draws no description field and offers the saved description to the Details tab", async () => {
   const { el } = await mountReceiptEditor();
   expect(receiptRoot(el).querySelector("[name=operationDescription]")).toBeNull();
-  expect(el.operationDescription).toEqual({ saved: "Dining service", required: true });
+  expect(el.savedOperationDescription).toBe("Dining service");
 });
 it("offers no description when the installation does not require one", async () => {
   const { el } = await mountReceiptEditor(
     receiptApi({ ...receiptModel, receipt: {}, operationDescriptionRequired: false }),
   );
-  expect(el.operationDescription).toBeUndefined();
+  expect(el.savedOperationDescription).toBeUndefined();
 });
 it.each([
   ["", "venue_settings.required"],
@@ -59,7 +60,7 @@ it("announces the description when it loads and when a live read brings a new sa
       receipt: { ...receiptModel.receipt, operationDescription: "New elsewhere" },
     });
     api.liveData.invalidate([{ type: "department_receipts" }]);
-    await expect.poll(() => el.operationDescription?.saved).toBe("New elsewhere");
+    await expect.poll(() => el.savedOperationDescription).toBe("New elsewhere");
     await expect.poll(() => seen).toEqual(["bar", "bar"]);
   } finally {
     document.removeEventListener("department-receipt-description", listener);
@@ -79,7 +80,7 @@ it("saves the description with the saved record only, never the Receipts tab's u
     receipt: { ...receiptModel.receipt, operationDescription: "Counter service" },
     policy: receiptModel.policy,
   });
-  expect(el.operationDescription).toEqual({ saved: "Counter service", required: true });
+  expect(el.savedOperationDescription).toBe("Counter service");
   expect(el.hasUnsavedChanges).toBe(true);
   await clickReceiptSave(el);
   await expect.poll(() => api.putDepartmentReceipt.mock.calls.length).toBe(2);
@@ -90,6 +91,49 @@ it("saves the description with the saved record only, never the Receipts tab's u
         ...receiptModel.receipt,
         operationDescription: "Counter service",
         phone: "+34 912 345 678",
+      },
+      policy: receiptModel.policy,
+    },
+  ]);
+});
+it("a description save keeps what another session saved under a field edited here", async () => {
+  const { el, api } = await mountReceiptEditor();
+  await editReceipt(el, "email", "mine@example.com");
+  api.getDepartmentReceipt.mockResolvedValue({
+    ...receiptModel,
+    receipt: {
+      ...receiptModel.receipt,
+      email: "other@example.com",
+      operationDescription: "New elsewhere",
+    },
+  });
+  api.liveData.invalidate([{ type: "department_receipts" }]);
+  await expect.poll(() => el.savedOperationDescription).toBe("New elsewhere");
+  expect(await el.saveOperationDescription("Counter service")).toBeUndefined();
+  expect(api.putDepartmentReceipt).toHaveBeenCalledExactlyOnceWith("bar", {
+    receipt: {
+      ...receiptModel.receipt,
+      email: "other@example.com",
+      operationDescription: "Counter service",
+    },
+    policy: receiptModel.policy,
+  });
+  expect(el.hasUnsavedChanges).toBe(true);
+  expect(receiptField(el, "email").value).toBe("mine@example.com");
+});
+it("a description save after a Receipts save sends what that save wrote", async () => {
+  const { el, api } = await mountReceiptEditor();
+  await editReceipt(el, "phone", "+34 912 345 678");
+  await clickReceiptSave(el);
+  await expect.poll(() => el.hasUnsavedChanges).toBe(false);
+  expect(await el.saveOperationDescription("Counter service")).toBeUndefined();
+  expect(api.putDepartmentReceipt.mock.lastCall).toEqual([
+    "bar",
+    {
+      receipt: {
+        ...receiptModel.receipt,
+        phone: "+34 912 345 678",
+        operationDescription: "Counter service",
       },
       policy: receiptModel.policy,
     },
@@ -113,7 +157,7 @@ it.each([
     api.putDepartmentReceipt.mockRejectedValueOnce(error);
     expect(await el.saveOperationDescription("Rejected service")).toBe(sentence());
     expect(el.saving).toBe(false);
-    expect(el.operationDescription).toEqual({ saved: "Dining service", required: true });
+    expect(el.savedOperationDescription).toBe("Dining service");
     expect(el.hasUnsavedChanges).toBe(false);
     await editReceipt(el, "email", "bar@example.com");
     await clickReceiptSave(el);
@@ -136,7 +180,7 @@ it("a description save while a Receipts save runs sends nothing and says so", as
   held.resolve();
   await expect.poll(() => el.saving).toBe(false);
   expect(api.putDepartmentReceipt).toHaveBeenCalledTimes(1);
-  expect(el.operationDescription?.saved).toBe("Dining service");
+  expect(el.savedOperationDescription).toBe("Dining service");
 });
 it("a description save that lands after the editor closed changes nothing on it", async () => {
   const { el, api } = await mountReceiptEditor();
@@ -147,6 +191,6 @@ it("a description save that lands after the editor closed changes nothing on it"
   await el.updateComplete;
   held.resolve();
   expect(await saving).toBeUndefined();
-  expect(el.operationDescription).toBeUndefined();
+  expect(el.savedOperationDescription).toBeUndefined();
   expect(el.hasUnsavedChanges).toBe(false);
 });

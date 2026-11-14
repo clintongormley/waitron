@@ -129,7 +129,10 @@ export class DepartmentReceiptEditor extends LitElement {
   @state() private previewWidth: PrintPaperWidth | undefined;
   @state() private focusedField = "";
   #scope?: DraftScope<DepartmentReceiptWrite>;
+  /** What the draft is compared with: a field edited here keeps the value it was edited from. */
   #baseline?: DepartmentReceiptWrite;
+  /** The record as last read or written, which a description save sends. */
+  #saved?: DepartmentReceiptWrite;
   #opening = 0;
   #previewGeneration = 0;
   #explicitPreviewLanguage = false;
@@ -140,7 +143,7 @@ export class DepartmentReceiptEditor extends LitElement {
   #paper = new PrintPaper();
   #marked = false;
   #announcedMarked = false;
-  #announcedDescription = "null";
+  #announcedDescription?: string;
   readonly #queries = new QueryController(
     this,
     () => this.api.liveData,
@@ -167,9 +170,9 @@ export class DepartmentReceiptEditor extends LitElement {
     return this.#marked;
   }
   /** The saved description the department's Details tab edits; this editor draws no field for it. */
-  get operationDescription(): { saved: string; required: boolean } | undefined {
-    return this.department && this.model && this.#baseline && this.requiresDescription
-      ? { saved: this.#baseline.receipt.operationDescription ?? "", required: true }
+  get savedOperationDescription(): string | undefined {
+    return this.department && this.model && this.#saved && this.requiresDescription
+      ? (this.#saved.receipt.operationDescription ?? "")
       : undefined;
   }
   descriptionProblem(value: string): string {
@@ -181,13 +184,13 @@ export class DepartmentReceiptEditor extends LitElement {
       ? t("venue_settings.invalid")
       : "";
   }
-  /** Writes the saved record with only the description replaced, so the Receipts tab's unsaved
-   * edits are never sent; answers the refusal's sentence, or undefined once written. */
+  /** Writes the last saved record with only the description replaced, so the Receipts tab's
+   * unsaved edits are never sent; answers the refusal's sentence, or undefined once written. */
   async saveOperationDescription(value: string): Promise<string | undefined> {
     const scope = this.#scope;
-    if (this.busy || !this.department || !this.#baseline || !scope)
+    if (this.busy || !this.department || !this.#baseline || !this.#saved || !scope)
       return codeMessage("server.internal_error");
-    const submitted = structuredClone(this.#baseline);
+    const submitted = structuredClone(this.#saved);
     submitted.receipt.operationDescription = value;
     const opening = this.#opening;
     this.busy = true;
@@ -198,18 +201,21 @@ export class DepartmentReceiptEditor extends LitElement {
       return refusal(error).sentence;
     }
     if (opening !== this.#opening || scope !== this.#scope) return undefined;
-    this.#baseline = submitted;
+    this.#saved = submitted;
+    const baseline = structuredClone(this.#baseline);
+    baseline.receipt.operationDescription = value;
+    this.#baseline = baseline;
     this.draft = {
       ...this.draft,
       receipt: { ...this.draft.receipt, operationDescription: value },
     };
-    scope.commit(submitted);
+    scope.commit(baseline);
     this.busy = false;
     this.#queuePreview();
     return undefined;
   }
   protected override updated(): void {
-    const description = JSON.stringify(this.operationDescription ?? null);
+    const description = this.savedOperationDescription;
     if (description !== this.#announcedDescription) {
       this.#announcedDescription = description;
       this.#notify("department-receipt-description");
@@ -222,7 +228,7 @@ export class DepartmentReceiptEditor extends LitElement {
     this.#opening++;
     this.department = { id };
     this.model = undefined;
-    this.#baseline = undefined;
+    this.#baseline = this.#saved = undefined;
     this.busy = false;
     this.#feedback.reset();
     this.errors = {};
@@ -253,7 +259,7 @@ export class DepartmentReceiptEditor extends LitElement {
     const departmentId = this.department?.id;
     this.#opening++;
     this.#release();
-    this.#baseline = undefined;
+    this.#baseline = this.#saved = undefined;
     this.department = null;
     this.busy = false;
     if (notifyHost && departmentId && this.isConnected)
@@ -348,6 +354,7 @@ export class DepartmentReceiptEditor extends LitElement {
         (model) => {
           if (opening !== this.#opening) return;
           this.readError = "";
+          this.#saved = structuredClone({ receipt: model.receipt, policy: model.policy });
           const first = this.model === undefined;
           if (!first && !this.busy && this.#scope?.isDirty()) this.#adoptUntouched(model);
           this.model = model;
@@ -581,7 +588,7 @@ export class DepartmentReceiptEditor extends LitElement {
     } catch (error) {
       if (opening !== this.#opening) return;
       this.busy = false;
-      const { key, sentence } = refusal(error);
+      const { key, sentence } = refusal(error, "venue_settings.fix_on_details");
       if (
         Array.from(this.shadowRoot!.querySelectorAll("[name]")).some(
           (element) => element.getAttribute("name") === key,
@@ -596,7 +603,7 @@ export class DepartmentReceiptEditor extends LitElement {
     }
     if (opening !== this.#opening || scope !== this.#scope) return;
     scope.commit(submitted);
-    this.#baseline = submitted;
+    this.#baseline = this.#saved = submitted;
     this.draft = structuredClone(submitted);
     this.#feedback.reset();
     this.busy = false;
@@ -832,7 +839,12 @@ export class DepartmentReceiptEditor extends LitElement {
       </wt-form-actions>`;
   }
 }
-function refusal(error: unknown): { key: string; sentence: string } {
+/** `description` words a description refusal; the Receipts tab's own save points to Details. */
+function refusal(
+  error: unknown,
+  description:
+    "venue_settings.invalid" | "venue_settings.fix_on_details" = "venue_settings.invalid",
+): { key: string; sentence: string } {
   const params = (error as { params?: Record<string, unknown> } | null)?.params;
   const field =
     codeOf(error) === "image.invalid_file"
@@ -853,7 +865,7 @@ function refusal(error: unknown): { key: string; sentence: string } {
             : params?.reason === "invalid_logo"
               ? t("receipts.invalid_logo")
               : field === "operationDescription"
-                ? t("venue_settings.invalid")
+                ? t(description)
                 : codeMessage(codeOf(error));
   return { key, sentence };
 }
