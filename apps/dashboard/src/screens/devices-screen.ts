@@ -1,10 +1,12 @@
 import { DashboardQueries } from "../api/query-controller.js";
+import { dashboardPath } from "../navigation.js";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { toDataURL } from "qrcode";
 import {
   baseStyles,
+  UrlStateController,
   pageTitleStyles,
   draftScopeFor,
   leaveCoordinatorFor,
@@ -556,6 +558,38 @@ export class DevicesScreen extends LitElement {
 
   @state() private editing: DeviceRow | null = null;
 
+  #initialRead = false;
+  #linkedDevice: string | null = null;
+  #addressDevice: string | null = null;
+  readonly #url = new UrlStateController(
+    this,
+    () => {
+      if (this.#url.read("dashboard") !== "devices") return;
+      const id = this.#url.read("device");
+      if (id === this.#addressDevice) return;
+      const previous = this.#addressDevice;
+      this.#linkedDevice = this.#addressDevice = id;
+      if (id === null) {
+        if (previous !== null) this.#endEdit(false);
+      } else if (this.#initialRead) this.#openLinkedDevice();
+    },
+    dashboardPath,
+  );
+
+  #clearDeviceAddress(): void {
+    this.#linkedDevice = this.#addressDevice = null;
+    if (this.#url.read("dashboard") === "devices") void this.#url.write({ device: null }, true);
+  }
+
+  #openLinkedDevice(): void {
+    const id = this.#linkedDevice;
+    this.#linkedDevice = null;
+    if (id === null) return;
+    const device = this.devices.find((device) => device.id === id);
+    if (device) this.#openEdit(device);
+    else this.#clearDeviceAddress();
+  }
+
   /** The id of the device the delete dialog is open on. Each opening and close is a new generation,
    * so a delete's answer for an earlier one is never applied; an impact read for an earlier one is
    * dropped by its query slot, which the next `watch` or `release` replaces. */
@@ -769,6 +803,8 @@ export class DevicesScreen extends LitElement {
           this.#applyJoins(value);
         }),
       ]);
+      this.#initialRead = true;
+      this.#openLinkedDevice();
     } catch (error) {
       this.#showReadError(error);
     }
@@ -827,7 +863,7 @@ export class DevicesScreen extends LitElement {
     this.#staleTimer = undefined;
     this.#closeDelete();
     this.#endAdding();
-    this.#endEdit();
+    this.#endEdit(false);
     super.disconnectedCallback();
   }
 
@@ -1210,7 +1246,7 @@ export class DevicesScreen extends LitElement {
   // ── The Edit dialog ──────────────────────────────────────────────────────────────────────────────
 
   #openEdit(device: DeviceRow): void {
-    this.#endEdit();
+    this.#endEdit(false);
     const epoch = ++this.#editEpoch;
     this.editing = device;
     const profileId = device.deviceProfileId ?? "";
@@ -1320,8 +1356,9 @@ export class DevicesScreen extends LitElement {
     }
   }
 
-  #endEdit(): void {
+  #endEdit(clearAddress = true): void {
     if (this.editing === null) return;
+    if (clearAddress) this.#clearDeviceAddress();
     this.#editEpoch++;
     this.#editScope?.dispose();
     this.#editScope = undefined;

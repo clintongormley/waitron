@@ -1177,6 +1177,52 @@ describe("the Edit dialog", () => {
     await flush(el);
   }
 
+  it("opens a linked device after the complete read and clears its address on close", async () => {
+    history.replaceState(null, "", "/manage/devices/device/t1");
+    let answer!: (profiles: DeviceProfile[]) => void;
+    const api = editApi({
+      listDeviceProfiles: vi.fn(() => new Promise((resolve) => (answer = resolve))),
+    });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+      api,
+      panels: PANELS,
+    });
+    await vi.waitFor(() => expect(dq(el.shadowRoot!, "[data-test=edit-device-t1]")).not.toBeNull());
+    expect(q(el, "[data-test=edit-device-modal]")).toBeNull();
+    answer(editProfiles);
+    await vi.waitFor(() => expect(field(el, "edit-name")?.value).toBe("Cash till 1"));
+    expect(field(el, "edit-profile").value).toBe("pa");
+    await clickAndAwaitClose(el, "edit-device-modal", "edit-cancel");
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    expect(location.pathname).toBe("/manage/devices");
+    expect(document.activeElement).toBe(el);
+    expect(el.shadowRoot!.activeElement).not.toBeNull();
+  });
+
+  it("clears an unknown linked device after loading the list", async () => {
+    history.replaceState(null, "", "/manage/devices/device/missing");
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api: editApi() });
+    await vi.waitFor(() => expect(location.pathname).toBe("/manage/devices"));
+    expect(q(el, "[data-test=edit-device-modal]")).toBeNull();
+  });
+
+  it("keeps a linked draft through live reads and clears its address when the device goes", async () => {
+    history.replaceState(null, "", "/manage/devices/device/t1");
+    const liveData = new LiveData();
+    const api = Object.assign(editApi(), { liveData });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await vi.waitFor(() => expect(field(el, "edit-name")?.value).toBe("Cash till 1"));
+    await rename(el, "Front counter");
+    vi.mocked(api.listDevices).mockResolvedValue([{ ...till, label: "Saved name" }, kitchen]);
+    liveData.invalidate([{ type: "devices", id: "t1" }]);
+    await vi.waitFor(() => expect(deepText(el, "[data-test=device-label-t1]")).toBe("Saved name"));
+    expect(field(el, "edit-name").value).toBe("Front counter");
+    vi.mocked(api.listDevices).mockResolvedValue([kitchen]);
+    liveData.invalidate([{ type: "devices", id: "t1" }]);
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    expect(location.pathname).toBe("/manage/devices");
+  });
+
   // At 1280px wide the standard size is not capped by the window: 42rem (672px).
   it("is the standard width on desktop", async () => {
     await page.viewport(1280, 900);
