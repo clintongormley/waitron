@@ -1,24 +1,11 @@
 import "./errors.js";
-import { desc, max } from "drizzle-orm";
+import { max } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { refuseBeforeFirstIssueDate } from "./first-issue-date.js";
 import { registrosFacturacion } from "./schema/registros.js";
 
 /** How far a stored record's time may run ahead of the reading it is compared with. */
 export const CLOCK_BEHIND_MARGIN_MS = 60_000;
-
-/** The latest record in any chain, ties broken by the larger id. */
-export function latestRecordQuery(tx: Transaction) {
-  return tx
-    .select({
-      id: registrosFacturacion.id,
-      at: registrosFacturacion.fechaHoraHusoGenRegistro,
-      offsetMinutes: registrosFacturacion.offsetMinutos,
-    })
-    .from(registrosFacturacion)
-    .orderBy(desc(registrosFacturacion.fechaHoraHusoGenRegistro), desc(registrosFacturacion.id))
-    .limit(1);
-}
 
 /** Every chain's node and the largest `secuencia` it holds now. */
 export async function chainHeads(tx: Transaction): Promise<Record<string, number>> {

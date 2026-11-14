@@ -18,7 +18,6 @@ import { createAdjustmentReason, listAdjustmentReasons } from "@waitron/adjustme
 import { createProduct } from "@waitron/catalogue";
 import { previewCorrectionAmounts, recordSubstitution } from "@waitron/core";
 import type { TrustedClock } from "@waitron/fiscal";
-import { latestRecordQuery } from "@waitron/fiscal-verifactu/src/clock-behind.js";
 import {
   createPinThrottle,
   hashPin,
@@ -313,13 +312,13 @@ const STEAK_HALF = [{ rate: "21.00", base: "5.00", tax: "1.05" }];
 
 const MINUTE = 60_000;
 
-async function behindLatestRecord(): Promise<TrustedClock> {
-  const latest = await inTx(venue, async (tx) => {
-    const [row] = await latestRecordQuery(tx);
-    return row;
-  });
+function behindLatestRecord(): TrustedClock {
+  const [latest] = venue.db.all<{ at: string }>(sql`
+    select fecha_hora_huso_gen_registro as at from registros_facturacion
+    order by fecha_hora_huso_gen_registro desc, id desc limit 1
+  `);
   const base = systemClock();
-  const reading = { ...base.now(), instant: new Date(latest!.at.getTime() - 2 * MINUTE) };
+  const reading = { ...base.now(), instant: new Date(new Date(latest!.at).getTime() - 2 * MINUTE) };
   return { ...base, now: () => reading };
 }
 
@@ -549,7 +548,7 @@ describe("openInvoiceCorrection", () => {
 
   it("opens while the clock reads more than a minute behind the latest record", async () => {
     const saleId = await soldForCash("Rib steak", ["12.10"]);
-    const clock = await behindLatestRecord();
+    const clock = behindLatestRecord();
     await expect(
       open(saleId, { submissionId: randomUUID(), gross: "6.05", clock }),
     ).resolves.toMatchObject({ correction: { state: "open" } });
