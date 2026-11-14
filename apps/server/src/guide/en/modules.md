@@ -39,5 +39,5 @@ If a customer leaves after a SumUp charge, open **Card payments** and check **Ab
 Waitron attempts one full refund when SumUp identifies the payment as yours, the amount matches and no refund exists.
 A payment taken outside Waitron on the reader stays for you to check.
 
-**Refund confirmed** means SumUp lists the full amount returned. For an unconfirmed payment, check its reference in SumUp before refunding there, so you do not return the money twice.
+**Refund confirmed** means SumUp lists the full amount returned. For an unconfirmed payment, use its charge date, reference and amount to check it in SumUp before refunding there, so you do not return the money twice.
 Check this list even if an earlier payment warning is still open in Alerts.

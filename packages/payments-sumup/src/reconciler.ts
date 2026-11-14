@@ -87,26 +87,8 @@ export class SumUpReconciler implements PaymentReconciler {
         const key = { provider: this.provider, paymentRef };
         const row = await getPaymentByRef(tx, key);
         if (row?.state === "refunded") return true;
-        if (row?.state !== "captured" && row?.state !== "partially_refunded") return false;
-        const prior =
-          (await listRefundAuditRows(tx, this.provider, period, [ref])).find(
-            (entry) => entry.paymentRef === paymentRef,
-          )?.refunds ?? [];
-        if (
-          prior.some(
-            (row) =>
-              !row.providerRefundRef ||
-              !proof.refunds.some(
-                (event) =>
-                  event.id === row.providerRefundRef &&
-                  compareDecimal(event.amount, row.amount) === 0,
-              ),
-          )
-        )
-          return false;
-        const recorded = new Set(prior.map((row) => row.providerRefundRef));
+        if (row?.state !== "captured") return false;
         for (const refund of proof.refunds) {
-          if (recorded.has(refund.id)) continue;
           await recordRefund(tx, {
             ...key,
             amount: refund.amount,

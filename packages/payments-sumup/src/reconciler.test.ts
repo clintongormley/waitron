@@ -766,6 +766,9 @@ it.each([
 it.each([
   "missing events",
   "pending refund",
+  "partial refund",
+  "failed refund",
+  "different currency",
   "paused",
   "transaction refused",
   "timeout",
@@ -790,18 +793,23 @@ it.each([
       foreignTransactionId: "marked",
       status: "SUCCESSFUL",
       amount: decimal("10.00"),
-      currency: "EUR",
+      currency: claimed && change === "different currency" ? "USD" : "EUR",
       timestamp: "2026-07-01T12:00:00Z",
       ...(claimed && change === "missing events"
         ? {}
         : {
             refundEvents:
-              claimed && change === "pending refund"
+              claimed && ["pending refund", "partial refund", "failed refund"].includes(change)
                 ? [
                     {
                       id: "r-pending",
-                      status: "PENDING",
-                      amount: decimal("10.00"),
+                      status:
+                        change === "pending refund"
+                          ? "PENDING"
+                          : change === "failed refund"
+                            ? "FAILED"
+                            : "REFUNDED",
+                      amount: decimal("4.00"),
                       timestamp: "2026-07-25T10:00:00Z",
                     },
                   ]
@@ -836,7 +844,11 @@ it.each([
   if (change === "definite refusal" || change === "crash before send")
     expect(result.remediationFailures).toEqual([{ paymentRef: "marked", reason: "unknown" }]);
   else expect(result.remediationUnconfirmed).toEqual(["marked"]);
-  await audit.reconcile(period, now);
+  if (change === "different currency")
+    await expect(audit.reconcile(period, now)).rejects.toMatchObject({
+      code: "payment.audit_incomplete",
+    });
+  else await audit.reconcile(period, now);
   expect(send).toHaveBeenCalledTimes(sends);
   expect(suite.db.all(sql`select state from payments`)).toEqual([{ state: "captured" }]);
 });
@@ -935,6 +947,53 @@ it("records an already completed full refund without sending, and checks admissi
   expect(suite.db.all(sql`select state from payments`)).toEqual([{ state: "refunded" }]);
   expect(suite.db.all(sql`select provider_refund_ref from payment_refunds`)).toEqual([
     { provider_refund_ref: "r-complete" },
+  ]);
+  expect(client.sendRefundCalls).toEqual([]);
+});
+
+it("leaves a captured orphan with an existing partial provider refund unclaimed", async () => {
+  const seeded = await seedWorkingOrder(suite.db, freshNif());
+  await withTransaction(suite.db, (tx) =>
+    insertCapturedPayment(tx, {
+      provider: "sumup",
+      paymentRef: "partial-orphan",
+      externalRef: "partial-charge",
+      amount: decimal("10.00"),
+      settledAt: period.from,
+      workingOrderId: seeded.workingOrderId,
+      nodeId: seeded.nodeId,
+      origin: deviceOrigin(seeded.deviceId),
+    }),
+  );
+  await suite.db.execute(
+    sql`update working_orders set status = 'abandoned' where id = ${seeded.workingOrderId}`,
+  );
+  const client = new FakeSumUp();
+  vi.spyOn(client, "findTransaction").mockResolvedValue({
+    id: "partial-charge",
+    foreignTransactionId: "partial-orphan",
+    amount: decimal("10.00"),
+    status: "SUCCESSFUL",
+    currency: "EUR",
+    timestamp: period.from.toISOString(),
+    refundEvents: [
+      {
+        id: "partial-r",
+        status: "REFUNDED",
+        amount: decimal("4.00"),
+        timestamp: "2026-07-02T12:00:00Z",
+      },
+    ],
+  });
+  const result = await new SumUpReconciler({
+    db: suite.db,
+    resolveClient: async () => client,
+    incidents: captureAlerts.raise,
+    heldAlerts,
+  }).reconcile(period, now);
+  expect(result.orphan.map((row) => row.paymentRef)).toEqual(["partial-orphan"]);
+  expect(suite.db.all(sql`select state, reconcile_remediated_at from payments`)).toEqual([
+    { state: "captured", reconcile_remediated_at: null },
   ]);
   expect(client.sendRefundCalls).toEqual([]);
 });

@@ -2359,6 +2359,7 @@ export interface AbandonedRefundOutcome {
   externalRef: string | null;
   amount: string;
   claimedAt: string;
+  settledAt: string | null;
   outcome: "confirmed" | "unconfirmed";
 }
 

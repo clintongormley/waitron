@@ -1905,6 +1905,7 @@ describe("listAbandonedRefundOutcomes", () => {
         externalRef: null,
         amount: "10.00",
         claimedAt: "2026-11-14T10:00:00.000Z",
+        settledAt: "2026-07-22T10:00:00.000Z",
         outcome: "confirmed",
       },
       {
@@ -1913,6 +1914,7 @@ describe("listAbandonedRefundOutcomes", () => {
         externalRef: null,
         amount: "10.00",
         claimedAt: "2026-11-14T10:00:00.000Z",
+        settledAt: "2026-07-22T10:00:00.000Z",
         outcome: "unconfirmed",
       },
     ]);
@@ -1927,6 +1929,9 @@ describe("listAbandonedRefundOutcomes", () => {
 it.each([
   "failed",
   "captured",
+  "attempting",
+  "initiated",
+  "voided",
   "open",
   "placed",
   "settled",
@@ -1950,7 +1955,8 @@ it.each([
     await tx.execute(
       sql`update working_orders set status = ${["open", "placed", "settled"].includes(state) ? state : "abandoned"}, settled_at = ${state === "settled" ? SETTLED.toISOString() : null} where id = ${seeded.workingOrderId}`,
     );
-    if (state === "captured") await tx.execute(sql`update payments set state = 'captured'`);
+    if (["captured", "attempting", "initiated", "voided"].includes(state))
+      await tx.execute(sql`update payments set state = ${state}`);
     if (state === "marked")
       await tx.execute(sql`update payments set reconcile_remediated_at = ${SETTLED.toISOString()}`);
     if (state === "held")

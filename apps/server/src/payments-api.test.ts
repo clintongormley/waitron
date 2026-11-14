@@ -3426,6 +3426,7 @@ describe("abandoned-refund outcome read", () => {
         externalRef: "sumup-charge",
         amount: "10.50",
         claimedAt: "2026-11-14T10:01:00.000Z",
+        settledAt: "2026-11-14T10:00:00.000Z",
         outcome: "unconfirmed",
       },
     ]);

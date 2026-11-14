@@ -20,7 +20,8 @@ it.each(["en", "es"] as const)(
       workingOrderId: "order-1",
       externalRef: `charge-${outcome}`,
       amount: "10.00",
-      claimedAt: "2026-07-01T12:00:00.000Z",
+      claimedAt: "2026-07-25T12:00:00.000Z",
+      settledAt: "2026-07-01T12:00:00.000Z",
       outcome,
     }));
     const liveData = new LiveData();
@@ -58,6 +59,9 @@ it.each(["en", "es"] as const)(
       locale === "en" ? "Check SumUp before refunding" : "Comprueba SumUp antes de devolver",
     );
     expect(section.querySelectorAll("button, wt-button")).toHaveLength(0);
+    expect(section.querySelector("time")?.getAttribute("datetime")).toBe(
+      "2026-07-01T12:00:00.000Z",
+    );
     read.mockResolvedValue([]);
     liveData.refresh();
     await vi.waitFor(() =>

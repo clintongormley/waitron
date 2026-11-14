@@ -18,7 +18,7 @@ import type {
 import { FakeReconciler } from "@waitron/payments/src/testing/fake-reconciler.js";
 import { FakeSettlementReport } from "@waitron/payments/src/testing/fake-settlement-report.js";
 import { seedWorkingOrder } from "@waitron/payments/test/seed.js";
-import { decimal, deviceOrigin } from "@waitron/shared";
+import { AppError, decimal, deviceOrigin } from "@waitron/shared";
 import {
   NOTHING_TO_RECONCILE,
   reconcilePassFor,
@@ -428,6 +428,12 @@ it("gates reconciliation with the serving node, current role, clock and economic
   expect(await gates.paused()).toBe(true);
   expect(await withTransaction(suite.db, gates.admit)).toBe(false);
   waiting = false;
+  const assertRecordable = backend.assertRecordableAt;
+  backend.assertRecordableAt = () => {
+    throw new AppError("clock.unusable", { clockAt: NOW.toISOString(), offsetMinutes: 0 });
+  };
+  expect(await withTransaction(suite.db, gates.admit)).toBe(false);
+  backend.assertRecordableAt = assertRecordable;
   admission.requireRestart();
   await expect(withTransaction(suite.db, gates.admit)).rejects.toMatchObject({
     code: "venue.time_zone_not_ready",

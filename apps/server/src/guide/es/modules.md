@@ -40,5 +40,5 @@ Si un cliente se marcha después de un cobro de SumUp, abre **Pagos con tarjeta*
 Waitron intenta una devolución completa cuando SumUp identifica el pago como tuyo, el importe coincide y no existe ninguna devolución.
 Un pago cobrado en el lector fuera de Waitron queda para que lo revises.
 
-**Devolución confirmada** significa que SumUp indica que se ha devuelto todo el importe. Si no está confirmada, comprueba su referencia en SumUp antes de devolverlo allí para no devolver el dinero dos veces.
+**Devolución confirmada** significa que SumUp indica que se ha devuelto todo el importe. Si no está confirmada, usa su fecha de cobro, referencia e importe para comprobarlo en SumUp antes de devolverlo allí para no devolver el dinero dos veces.
 Revisa esta lista aunque siga abierta una advertencia anterior en Alertas.

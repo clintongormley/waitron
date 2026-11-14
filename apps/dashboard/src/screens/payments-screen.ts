@@ -2616,6 +2616,7 @@ export class PaymentsScreen extends LitElement {
                 ${this.abandonedRefunds.map(
                   (row) =>
                     html`<li class="stuck">
+                      ${row.settledAt ? html`<time datetime=${row.settledAt}>${formatAlertTime(row.settledAt)}</time>` : nothing}
                       <p>
                         ${row.paymentRef} · ${row.externalRef ?? ""} ·
                         ${formatMoney(row.amount, currentLocale())}

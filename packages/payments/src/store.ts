@@ -736,6 +736,7 @@ export async function listAbandonedRefundOutcomes(tx: Transaction, provider: str
       externalRef: payments.externalRef,
       amount: payments.amount,
       claimedAt: payments.reconcileRemediatedAt,
+      settledAt: payments.settledAt,
       state: payments.state,
     })
     .from(payments)
