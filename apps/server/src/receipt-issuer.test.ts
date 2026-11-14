@@ -15,6 +15,7 @@ import { readTransactionReceipt } from "./transaction-receipt.js";
 import { enqueueReceiptCopy } from "./receipt-print.js";
 import { printedCommands } from "./testing/decode-ticket.js";
 import { previewPrintJob } from "./print-job-preview.js";
+import { insertCorrective } from "./testing/replacement-fixture.js";
 
 const AT = "2026-10-14T23:30:00.000Z";
 let v: BillVenue;
@@ -167,5 +168,30 @@ describe("receipt issue facts independent of recipient and current venue zone", 
     expect(
       await withTransaction(v.db, (tx) => readReceiptIssuer(backend, tx, sale.saleId)),
     ).toEqual({ issuedOffsetMinutes: 120 });
+  });
+});
+
+describe("the invoice a corrective names", () => {
+  it.each([
+    ["a replacement", { replaces: true } as const, { inFull: true }],
+    ["a by-differences corrective", { total: "-2.00" }, {}],
+  ])("reads %s's original, in full only for a replacement", async (_name, change, extra) => {
+    const sale = await issue(false);
+    const [original, ticket] = await withTransaction(v.db, async (tx) => [
+      await readTransactionReceipt(v.backend, tx, v.cfg, sale.saleId),
+      await readTransactionReceipt(
+        v.backend,
+        tx,
+        v.cfg,
+        await insertCorrective(tx, sale.saleId, change),
+      ),
+    ]);
+    expect(ticket.invoiceType).toBe("R5");
+    expect(ticket.corrects).toEqual({
+      invoiceNumber: original.invoiceNumber,
+      issuedAt: AT,
+      issuedOffsetMinutes: 0,
+      ...extra,
+    });
   });
 });

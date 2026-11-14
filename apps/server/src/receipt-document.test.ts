@@ -1587,6 +1587,70 @@ describe("the corrective invoice (R5)", () => {
     },
   );
 
+  // A replacement (TipoRectificativa "S") carries the original's full lines and totals.
+  const REPLACEMENT: ReceiptDocumentInput["result"] = {
+    ...CORRECTIVE,
+    corrects: { ...CORRECTIVE.corrects!, inFull: true },
+    total: "6.00",
+    vatBreakdown: [{ rate: "21.00", base: "4.96", tax: "1.04" }],
+    lines: [{ ...CORRECTIVE.lines[0]!, quantity: "1", gross: "6.00" }],
+  };
+  const printed = (
+    result: ReceiptDocumentInput["result"],
+    paperWidth: "58mm" | "80mm",
+    locale: string,
+  ) =>
+    printedLines(
+      formatReceipt({
+        result,
+        issuer: { venueName: "Charcutería La Buena", nif: "B12345678" },
+        receipt: {},
+        invoiceLocale: locale,
+        namesLocale: locale,
+        printer: { paperWidth, resolution: "180dpi" },
+      }),
+    ).map((line) => line.trim().replace(/\s+/g, " "));
+
+  it.each([
+    ["58mm", "es-ES"],
+    ["80mm", "es-ES"],
+    ["58mm", "en-GB"],
+    ["80mm", "en-GB"],
+  ] as const)(
+    "prints a replacement as replacing the invoice in full, with a zero rectification, on %s in %s",
+    (paperWidth, locale) => {
+      const label = receiptLabelsFor(locale);
+      const date = paperWidth === "58mm" ? receiptDateTimeNumeric : receiptDateTime;
+      const lines = printed(REPLACEMENT, paperWidth, locale);
+      const at = lines.indexOf(label.correctiveInvoice);
+      expect(at, lines.join("\n")).toBeGreaterThan(-1);
+      // Joined by spaces: at 58 mm the Spanish label and the amount's caption wrap.
+      const heading = [
+        label.correctiveInvoice,
+        `R/7 ${date(CORRECTIVE.issuedAt, locale, 60)}`,
+        label.replacesInvoiceInFull,
+        `A/41 ${date(CORRECTIVE.corrects!.issuedAt, locale, 60)}`,
+        `${label.rectificationAmount} ${formatMoney("0.00", locale)}`,
+      ].join(" ");
+      expect(lines.slice(at).join(" ").startsWith(`${heading} ---`), lines.join("\n")).toBe(true);
+      expect(lines).not.toContain(label.correctsInvoice);
+      const dish = CORRECTIVE.lines[0]!.descriptions[locale]!;
+      expect(lines).toContain(`1 ${dish} ${formatAmount("6.00", locale)}`);
+      expect(lines).toContain(`${label.taxableBase} 21% ${formatMoney("4.96", locale)}`);
+      expect(lines).toContain(`${label.vat} 21% ${formatMoney("1.04", locale)}`);
+    },
+  );
+
+  it.each(["es-ES", "en-GB"])(
+    "prints a by-differences corrective without the replacement's words in %s",
+    (locale) => {
+      const label = receiptLabelsFor(locale);
+      const lines = printed(CORRECTIVE, "58mm", locale).join("\n");
+      expect(lines).not.toContain(label.replacesInvoiceInFull);
+      expect(lines).not.toContain(label.rectificationAmount);
+    },
+  );
+
   it("marks a reprint as a copy", () => {
     const input = {
       result: CORRECTIVE,
