@@ -400,7 +400,7 @@ it("tracks the separate machine and source as a draft, ignoring blank machine te
   expect(unload()).toBe(true);
   await fill(form, 'wt-input[name="externalMachine"]', "   ");
   expect(unload()).toBe(false);
-  await click(form, 'input[name="external-provider"][value="sumup"]');
+  await click(form, 'input[name="external-provider"][value="connected_account"]');
   expect(unload()).toBe(true);
   await click(form, 'input[name="external-provider"][value=""]');
   expect(unload()).toBe(false);

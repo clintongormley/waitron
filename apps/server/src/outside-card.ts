@@ -2,7 +2,7 @@ import "./errors.js";
 import { invalid } from "./bill-allocation.js";
 
 export interface OutsideCardDetails {
-  externalProvider?: "sumup" | "other";
+  externalProvider?: "connected_account" | "other";
   externalMachine?: string;
 }
 
@@ -15,7 +15,7 @@ export function readOutsideCardDetails(
     externalProvider !== undefined &&
     (!manual ||
       typeof externalProvider !== "string" ||
-      (externalProvider !== "sumup" && externalProvider !== "other"))
+      (externalProvider !== "connected_account" && externalProvider !== "other"))
   )
     throw invalid("externalProvider");
   if (externalMachine !== undefined && (!manual || typeof externalMachine !== "string"))
@@ -30,7 +30,7 @@ export function readOutsideCardDetails(
 }
 
 export function outsideCardDetails(input: {
-  externalProvider?: "sumup" | "other" | null;
+  externalProvider?: "connected_account" | "other" | null;
   externalMachine?: string | null;
 }): OutsideCardDetails {
   return {

@@ -1026,10 +1026,18 @@ describe("a contribution (design §8 test 2)", () => {
 
   it.each([
     { entry: "manual", extra: { externalProvider: null }, field: "externalProvider" },
-    { entry: "manual", extra: { externalProvider: ["sumup"] }, field: "externalProvider" },
+    {
+      entry: "manual",
+      extra: { externalProvider: ["connected_account"] },
+      field: "externalProvider",
+    },
     { entry: "manual", extra: { externalProvider: "bank" }, field: "externalProvider" },
     { entry: "manual", extra: { externalMachine: 17 }, field: "externalMachine" },
-    { entry: "reader", extra: { externalProvider: "sumup" }, field: "externalProvider" },
+    {
+      entry: "reader",
+      extra: { externalProvider: "connected_account" },
+      field: "externalProvider",
+    },
   ] as const)(
     "refuses outside-card details $extra on $entry entry",
     async ({ entry, extra, field }) => {

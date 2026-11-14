@@ -47,7 +47,7 @@ interface NewPayment {
   paymentRef: string;
   amount: Decimal;
   externalRef?: string;
-  externalProvider?: "sumup" | "other";
+  externalProvider?: "connected_account" | "other";
   externalMachine?: string;
   card?: CardDetails;
   /** The bill payment this attempt charges for; absent for a payment of a whole order. */

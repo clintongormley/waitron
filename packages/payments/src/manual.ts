@@ -25,7 +25,7 @@ export interface ManualCardPaymentParams {
   settledAt: Date;
   /** Optional hand-keyed acquirer / bank-terminal operation number — a human reconciliation hook. */
   externalRef?: string;
-  externalProvider?: "sumup" | "other";
+  externalProvider?: "connected_account" | "other";
   externalMachine?: string;
   /** The bill payment this card payment was taken for; absent for a payment of a whole order. */
   billPaymentId?: string;

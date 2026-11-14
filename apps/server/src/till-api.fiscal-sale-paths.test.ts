@@ -3098,7 +3098,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     body: {
       workingOrderId: string;
       menuItemId: string;
-      outside?: { externalProvider: "sumup"; externalMachine: string };
+      outside?: { externalProvider: "connected_account"; externalMachine: string };
     },
   ): Promise<Response> {
     return await app.request("/api/sales", {
@@ -3126,11 +3126,11 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     const first = await cardSale(app, cookie, {
       workingOrderId,
       menuItemId: each.menuItemId,
-      outside: { externalProvider: "sumup", externalMachine: "Spare Solo" },
+      outside: { externalProvider: "connected_account", externalMachine: "Spare Solo" },
     });
     expect(first.status).toBe(200);
     expect((await first.json()).tender).toMatchObject({
-      externalProvider: "sumup",
+      externalProvider: "connected_account",
       externalMachine: "Spare Solo",
     });
     expect(
@@ -3165,7 +3165,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     });
     expect(replay.status).toBe(200);
     expect((await replay.json()).tender).toMatchObject({
-      externalProvider: "sumup",
+      externalProvider: "connected_account",
       externalMachine: "Spare Solo",
     });
     expect(await drawerOpenRows()).toHaveLength(1);
@@ -3407,7 +3407,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
             tender: {
               method: "card",
               amount: "3.00",
-              externalProvider: "sumup",
+              externalProvider: "connected_account",
               externalMachine: "Spare Solo",
             },
           }),
@@ -3415,7 +3415,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
       const collected = await collect();
       expect(collected.status).toBe(200);
       expect((await collected.json()).tender).toMatchObject({
-        externalProvider: "sumup",
+        externalProvider: "connected_account",
         externalMachine: "Spare Solo",
       });
       expect(
@@ -3423,7 +3423,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
           .select({ source: payments.externalProvider, machine: payments.externalMachine })
           .from(payments)
           .where(eq(payments.workingOrderId, workingOrderId)),
-      ).toEqual([{ source: "sumup", machine: "Spare Solo" }]);
+      ).toEqual([{ source: "connected_account", machine: "Spare Solo" }]);
 
       const saleId = await saleIdOf(workingOrderId);
       expect(await drawerOpenRows()).toEqual([

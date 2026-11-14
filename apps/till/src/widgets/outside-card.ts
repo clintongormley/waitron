@@ -31,7 +31,7 @@ export function outsideCardFields(
     <div role="radiogroup" aria-label=${t("tender.outside_source")}>
       <p>${t("tender.outside_source")}</p>
       <div class="outside-card-options">
-        ${(["", "sumup", "other"] as const).map(
+        ${(["", "connected_account", "other"] as const).map(
           (source) =>
             html`<label>
               <input
@@ -45,7 +45,7 @@ export function outsideCardFields(
                   change({ ...value, externalProvider: source || undefined });
                 }}
               />
-              ${t(source === "" ? "tender.outside_unspecified" : source === "sumup" ? "tender.outside_sumup" : "tender.outside_other")}
+              ${t(source === "" ? "tender.outside_unspecified" : source === "connected_account" ? "tender.outside_sumup" : "tender.outside_other")}
             </label>`,
         )}
       </div>
@@ -67,7 +67,13 @@ export function outsideCardSummary(value: OutsideCardDetails) {
   const parts = [
     ...(value.externalProvider === undefined
       ? []
-      : [t(value.externalProvider === "sumup" ? "tender.outside_sumup" : "tender.outside_other")]),
+      : [
+          t(
+            value.externalProvider === "connected_account"
+              ? "tender.outside_sumup"
+              : "tender.outside_other",
+          ),
+        ]),
     ...(value.externalMachine ? [value.externalMachine] : []),
   ];
   return parts.length === 0 ? nothing : html`<p data-outside-card-details>${parts.join(" · ")}</p>`;

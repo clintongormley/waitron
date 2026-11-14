@@ -303,7 +303,7 @@ it("outside-card details alone protect the draft and normalized reverts are clea
   expect(unload()).toBe(true);
   await fill(form, "externalMachine", "   ");
   expect(unload()).toBe(false);
-  click(form, 'input[name="external-provider"][value="sumup"]');
+  click(form, 'input[name="external-provider"][value="connected_account"]');
   await form.updateComplete;
   expect(unload()).toBe(true);
   click(form, 'input[name="external-provider"][value=""]');

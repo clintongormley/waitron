@@ -83,7 +83,7 @@ describe("manual card tender -> recordSale -> associate (atomic, no provider)", 
         amount: decimal("12.10"),
         settledAt: BASE,
         externalRef: "OP-000123",
-        externalProvider: "sumup",
+        externalProvider: "connected_account",
         externalMachine: "Spare Solo",
       });
       await associatePaymentWithSale(tx, {
@@ -109,7 +109,7 @@ describe("manual card tender -> recordSale -> associate (atomic, no provider)", 
       state: "captured",
       sale_id: saleId,
       external_ref: "OP-000123",
-      external_provider: "sumup",
+      external_provider: "connected_account",
       external_machine: "Spare Solo",
     });
   });

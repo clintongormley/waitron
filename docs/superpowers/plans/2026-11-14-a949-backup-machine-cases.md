@@ -29,3 +29,5 @@
 | 1 | +390/−40 | +280/−15 | +10/−0 | +30/−5 | +45/−6 |
 | 2 | +240/−10 | +220/−5 | 0 | +20/−0 | 0 |
 | 3 | +340/−20 | +310/−10 | +15/−0 | +30/−0 | 0 |
+
+**As built, 14 November 2026:** the same-account stored value is `connected_account`, rather than the draft’s `sumup`, to keep the shared payments package provider-neutral (`src/no-provider-vocabulary.test.ts`). The till choice remains **This SumUp account**; only explicit same-account entries qualify for later matching.

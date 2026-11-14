@@ -1948,7 +1948,7 @@ describe("till-bill-pay-dialog: on a handheld", () => {
     expect(field(el, "externalRef")).not.toBeNull();
     await type(el, "externalRef", " 000123 ");
     const source = root(el).querySelector<HTMLInputElement>(
-      'input[name="external-provider"][value="sumup"]',
+      'input[name="external-provider"][value="connected_account"]',
     );
     expect(source).not.toBeNull();
     source!.click();
@@ -1963,7 +1963,7 @@ describe("till-bill-pay-dialog: on a handheld", () => {
         card: {
           entry: "manual",
           externalRef: "000123",
-          externalProvider: "sumup",
+          externalProvider: "connected_account",
           externalMachine: "Spare Solo",
         },
       },

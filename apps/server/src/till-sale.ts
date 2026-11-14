@@ -314,7 +314,7 @@ export type TenderBlock =
       charged: string;
       tip: string;
       reference: string | null;
-      externalProvider?: "sumup" | "other";
+      externalProvider?: "connected_account" | "other";
       externalMachine?: string;
     };
 

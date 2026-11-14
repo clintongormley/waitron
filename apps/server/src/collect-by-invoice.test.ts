@@ -116,14 +116,14 @@ describe("collecting a presented bill follows its invoice, not its zone (spec §
       tender: {
         method: "card" as const,
         amount: "18.00",
-        externalProvider: "sumup" as const,
+        externalProvider: "connected_account" as const,
         externalMachine: "Spare Solo",
         externalRef: "OP-73",
       },
     };
     const paid = await collectOrder(deps, venue.cfg, request, venue.operatorId);
     expect(paid.tender).toMatchObject({
-      externalProvider: "sumup",
+      externalProvider: "connected_account",
       externalMachine: "Spare Solo",
       reference: "OP-73",
     });
@@ -134,7 +134,7 @@ describe("collecting a presented bill follows its invoice, not its zone (spec §
           .from(payments)
           .where(eq(payments.workingOrderId, id)),
       ),
-    ).toEqual([{ source: "sumup", machine: "Spare Solo" }]);
+    ).toEqual([{ source: "connected_account", machine: "Spare Solo" }]);
     const replay = await collectOrder(deps, venue.cfg, request, venue.operatorId);
     expect(replay.tender).toEqual(paid.tender);
   });

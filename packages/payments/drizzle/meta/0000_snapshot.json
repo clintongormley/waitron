@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "3a735162-926d-471d-82ae-89f3fc498d4b",
+  "id": "50bf3e63-605d-45c6-90a0-d0bf59a8e2a9",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "card_reader_holders": {
@@ -986,7 +986,7 @@
         },
         "payments_external_provider_ck": {
           "name": "payments_external_provider_ck",
-          "value": "\"payments\".\"external_provider\" in ('sumup', 'other')"
+          "value": "\"payments\".\"external_provider\" in ('connected_account', 'other')"
         },
         "payments_source_ck": {
           "name": "payments_source_ck",

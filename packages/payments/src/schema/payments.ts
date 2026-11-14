@@ -34,7 +34,7 @@ export const paymentState = enumType([
   "initiated",
 ]);
 
-const externalProviderType = enumType(["sumup", "other"]);
+const externalProviderType = enumType(["connected_account", "other"]);
 
 /**
  * One row per electronic tender, updated as it moves through its states — unlike core's immutable

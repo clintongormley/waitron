@@ -941,7 +941,7 @@ export interface CashTender {
  * over-tendered, so no change); `externalRef` is the terminal's optional operation number.
  */
 export interface OutsideCardDetails {
-  externalProvider?: "sumup" | "other";
+  externalProvider?: "connected_account" | "other";
   externalMachine?: string;
 }
 
@@ -1009,7 +1009,7 @@ export type TenderBlock =
       charged: string;
       tip: string;
       reference: string | null;
-      externalProvider?: "sumup" | "other";
+      externalProvider?: "connected_account" | "other";
       externalMachine?: string;
     };
 
