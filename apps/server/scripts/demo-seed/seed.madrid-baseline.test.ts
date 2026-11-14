@@ -816,6 +816,11 @@ for (const locale of ["en", "es"] as const) {
         on_delete: "RESTRICT",
         match: "NONE",
       });
+      const incidentTable = expected[phase].tables.incidents!;
+      incidentTable.foreignKeys = [
+        personKey("acknowledged_by", 0),
+        ...incidentTable.foreignKeys.map((key) => ({ ...key, id: key.id + 1 })),
+      ];
       parties.foreignKeys = [
         personKey("allergy_answered_by", 0),
         personKey("closed_by", 1),
