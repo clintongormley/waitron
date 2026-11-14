@@ -469,7 +469,7 @@ even if the list has been disabled on the dashboard but is still on your menu.
 
 ## Check the menu as a guest {#guest-preview}
 
-Open a menu in **Menus** and choose **Guest menu preview**. You see its published dishes,
+Open a menu in **Menus**, go to **Preview** and choose **Guest menu preview**. You see its published dishes,
 prices, sizes, extras and declarations. Choose a guest language to check the names and descriptions;
 missing names use your default language, then the internal name. Publish your changes before
 checking them here. This preview does not share the menu with guests.

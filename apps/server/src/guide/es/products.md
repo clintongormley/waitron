@@ -495,7 +495,7 @@ Esto también se aplica a una lista deshabilitada en el panel que siga en tu car
 
 ## Revisa la carta como cliente {#guest-preview}
 
-Abre una carta en **Cartas** y elige **Vista previa para clientes**. Verás sus platos,
+Abre una carta en **Cartas**, entra en **Vista previa** y elige **Vista previa para clientes**. Verás sus platos,
 precios, tamaños, extras y declaraciones publicados. Elige el idioma del cliente para revisar
 los nombres y las descripciones; los nombres que falten usan el idioma predeterminado y después
 el nombre interno. Publica los cambios antes de revisarlos aquí. Esta vista previa no comparte

@@ -3879,10 +3879,6 @@ export class MenusScreen extends LitElement {
         <div class="title">
           <h1>${name || t("menus.title")}</h1>
           ${this.#renderLiveWords()}
-          <dashboard-guest-menu-preview
-            .api=${this.api}
-            .menuId=${menuId}
-          ></dashboard-guest-menu-preview>
         </div>
       </div>
       ${this.#renderClashes(menuId)} ${this.#renderLoadState()} ${this.#renderMemberError()}
@@ -3910,7 +3906,13 @@ export class MenusScreen extends LitElement {
         <div slot="structure">${this.#renderStructure()}</div>
         <div slot="prices" class="prices">${this.#renderPrices()}</div>
         <div slot="home" class="home">${this.#renderHome()}</div>
-        <div slot="preview">${this.#renderPreview()}</div>
+        <div slot="preview">
+          <dashboard-guest-menu-preview
+            .api=${this.api}
+            .menuId=${menuId}
+          ></dashboard-guest-menu-preview>
+          ${this.#renderPreview()}
+        </div>
       </wt-tabs>
       ${this.#renderNewSection()} ${this.#renderIncludeEdit()} ${this.#renderAddProducts()}
       ${this.#renderShortcutPicker()} ${this.#renderPatchDialog(menuId)}`;
