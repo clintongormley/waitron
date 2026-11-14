@@ -734,8 +734,12 @@ for (const locale of ["en", "es"] as const) {
         salesTable.columns.findIndex((column) => column.name === "corrects_sale_id") + 1,
         0,
         { name: "replaces_original", type: "INTEGER", notnull: 1, dflt_value: "false", pk: 0 },
+        { name: "supply_day", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
       );
-      for (const row of Object.values(salesTable.rows)) row.replaces_original = 0;
+      for (const row of Object.values(salesTable.rows)) {
+        row.replaces_original = 0;
+        row.supply_day = null;
+      }
       records.foreignKeys.push({
         id: 4,
         seq: 0,

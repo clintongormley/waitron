@@ -31,15 +31,18 @@ type Caller = "vatRateOn" | "vatRatesOn";
 
 const CALENDAR_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-function assertCalendarDate(caller: Caller, value: string): void {
+/** Whether `value` is a real calendar day written `YYYY-MM-DD`. */
+export function isCalendarDate(value: string): boolean {
   const parsed = new Date(`${value}T00:00:00.000Z`);
-  if (
-    !CALENDAR_DATE.test(value) ||
-    Number.isNaN(parsed.getTime()) ||
-    parsed.toISOString().slice(0, 10) !== value
-  ) {
-    throw new AppError("vat_rate.date_invalid", { caller, value });
-  }
+  return (
+    CALENDAR_DATE.test(value) &&
+    !Number.isNaN(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+  );
+}
+
+function assertCalendarDate(caller: Caller, value: string): void {
+  if (!isCalendarDate(value)) throw new AppError("vat_rate.date_invalid", { caller, value });
 }
 
 // Only the shipped table skips the check once it has passed, because it is frozen at every level

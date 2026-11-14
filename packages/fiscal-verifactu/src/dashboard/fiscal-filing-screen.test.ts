@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "lit";
+import { userEvent } from "vitest/browser";
 import {
   codeMessage,
   currentLocale,
@@ -10,10 +11,12 @@ import {
 } from "@waitron/dashboard-kit";
 import { VERIFACTU_DASHBOARD } from "./index.js";
 import type { FiscalFilingScreen } from "./fiscal-filing-screen.js";
-import type { FilingCaseView, FilingOverviewAnswer } from "../filing-overview-types.js";
+import type { BoxToday, FilingCaseView, FilingOverviewAnswer } from "../filing-overview-types.js";
 import { REMEDY_REFUSALS, type RemedyRefusal } from "../remedy-refusals.js";
 import { REFUSAL_WORDS } from "./put-right-words.js";
 import { t } from "./strings.js";
+import { formatMoney } from "@waitron/shared";
+import { calendarDay as calendar } from "./dates.js";
 import {
   FLAGGED_WARNING,
   IDENTITY_CHANGE,
@@ -24,6 +27,7 @@ import {
   THEIRS,
   TOTALS_WARNING,
   conflictCase,
+  deviceToday,
   overview,
 } from "../../test/fiscal-filing-browser-fixture.js";
 
@@ -948,21 +952,21 @@ describe("putting a case right", () => {
     expect(remedyCalls(request)).toHaveLength(0);
   });
 
-  it.each([
-    ["another field", 1100, "Valor o tipo incorrecto del campo: NumSerieFactura", "F2"],
-    ["a future date on a simplified invoice", 1112, "Fecha superior a la actual", "F2"],
-  ])("cannot put right a refusal for %s", async (_name, code, message, tipoFactura) => {
-    const { screen } = await mount(
-      server(refusedCase(code, message, tipoFactura)),
-      continuation(["fiscal.remedy"]).value,
-    );
-    const details = await openDetails(screen);
-    expect(flat(details.querySelector("[data-test=put-right-none]"))).toBe(
-      "Waitron cannot put this one right yet. The case stays open.",
-    );
-    expect(details.querySelector("wt-textarea")).toBeNull();
-    expect(action(details)).toBeNull();
-  });
+  it.each([["another field", 1100, "Valor o tipo incorrecto del campo: NumSerieFactura", "F2"]])(
+    "cannot put right a refusal for %s",
+    async (_name, code, message, tipoFactura) => {
+      const { screen } = await mount(
+        server(refusedCase(code, message, tipoFactura)),
+        continuation(["fiscal.remedy"]).value,
+      );
+      const details = await openDetails(screen);
+      expect(flat(details.querySelector("[data-test=put-right-none]"))).toBe(
+        "Waitron cannot put this one right yet. The case stays open.",
+      );
+      expect(details.querySelector("wt-textarea")).toBeNull();
+      expect(action(details)).toBeNull();
+    },
+  );
 
   it("says a full invoice needs a corrective Waitron cannot issue yet", async () => {
     const { screen } = await mount(server(refusedCase(1112, "Fecha superior a la actual", "F1")));
@@ -1238,5 +1242,343 @@ describe("putting a case right", () => {
       expect(spanish, code).toMatch(/\.$/);
       expect(spanish, code).not.toBe(english);
     }
+  });
+});
+
+const FUTURE = "Fecha superior a la actual";
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** This device's calendar day, `YYYY-MM-DD`, `offset` days from now. */
+function deviceDay(offset = 0): string {
+  const date = new Date(Date.now() + offset * DAY_MS);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/** A simplified invoice AEAT refused for a future date, stamped `stamped`. */
+function futureCase(stamped = "2026-11-03"): FilingCaseView {
+  const found = refusedCase(1112, FUTURE);
+  return { ...found, record: { ...found.record, fechaExpedicionFactura: stamped } };
+}
+
+/** As `server`, with the box's own day `today` (by default, a box whose day is this device's). */
+function replacementServer(
+  found: FilingCaseView,
+  remedy: () => Promise<unknown> = async () => ({}),
+  today: BoxToday | null = deviceToday(),
+) {
+  return vi.fn(async (path: string) =>
+    path === REMEDY ? remedy() : overview({ cases: [found], totalCases: 1, today }),
+  );
+}
+
+/** The bottom message when the box's day and the venue's day by this device's clock differ. */
+const differs = (server: string, device: string) =>
+  `The server's date, ${calendar(server)}, and the venue's date by this device's clock, ${calendar(device)}, differ. Choose Stop, then Refresh, and open this case again. If the dates still differ, check the time on the Box status page.`;
+
+/** The element focus is on, looking through shadow roots. */
+function focused(): Element | null {
+  let at: Element | null = document.activeElement;
+  while (at?.shadowRoot?.activeElement) at = at.shadowRoot.activeElement;
+  return at;
+}
+
+function dateField(details: HTMLElement) {
+  return details.querySelector("wt-input[name=operationDate]") as HTMLElement & {
+    value: string;
+    error: string;
+    required: boolean;
+  };
+}
+
+async function pick(screen: FiscalFilingScreen, details: HTMLElement, value: string) {
+  const input = dateField(details).shadowRoot!.querySelector("input")!;
+  input.value = value;
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await screen.updateComplete;
+}
+
+const bottomMessage = (details: HTMLElement) =>
+  (details.querySelector("wt-form-actions") as HTMLElement & { error: string }).error;
+
+describe("replacing a simplified invoice AEAT refused for a future date", () => {
+  it("says on the page, while there are cases, that such an invoice can be put right", async () => {
+    const { screen } = await mount(vi.fn(async () => overview()));
+    expect(text(screen, "[data-test=cases] [data-test=future-date-fix]")).toBe(
+      "Waitron can put right a simplified invoice AEAT refused for a future date: you give the day the sale really happened.",
+    );
+    const { screen: empty } = await mount(
+      vi.fn(async () => overview({ cases: [], totalCases: 0 })),
+    );
+    expect(empty.shadowRoot!.querySelector("[data-test=future-date-fix]")).toBeNull();
+  });
+
+  it("asks for the day the sale really happened, starting empty, with Send disabled", async () => {
+    const { screen } = await mount(
+      replacementServer(futureCase()),
+      continuation(["fiscal.remedy"]).value,
+    );
+    const details = await openDetails(screen);
+    expect(flat(details.querySelector("[data-test=put-right-heading]"))).toBe("Put this right");
+    expect(dateField(details)).not.toBeNull();
+    expect(dateField(details).getAttribute("type")).toBe("date");
+    expect(dateField(details).required).toBe(true);
+    expect(dateField(details).value).toBe("");
+    expect(details.querySelector("wt-textarea")).toBeNull();
+    expect(action(details).disabled).toBe(true);
+    expect(flat(action(details))).toBe("Send the replacement");
+
+    await pick(screen, details, "2026-11-02");
+    expect(dateField(details).error).toBe("");
+    expect(action(details).disabled).toBe(false);
+  });
+
+  it("marks a day after today once Send is chosen, moving focus to it, and sends nothing", async () => {
+    const { screen, request } = await mount(
+      replacementServer(futureCase(deviceDay(3))),
+      continuation(["fiscal.remedy"]).value,
+    );
+    const details = await openDetails(screen);
+    await pick(screen, details, deviceDay(1));
+    expect(dateField(details).error).toBe("");
+    expect(bottomMessage(details)).toBe("");
+    expect(action(details).disabled).toBe(false);
+
+    await userEvent.click(action(details));
+    await screen.updateComplete;
+    expect(dateField(details).error).toBe("Choose a day no later than today.");
+    expect(bottomMessage(details)).toBe("Correct the field marked above.");
+    expect(action(details).disabled).toBe(true);
+    await vi.waitFor(() =>
+      expect(focused()).toBe(dateField(details).shadowRoot!.querySelector("input")),
+    );
+    expect(remedyCalls(request)).toHaveLength(0);
+
+    await pick(screen, details, "2026-11-02");
+    expect(dateField(details).error).toBe("");
+    expect(bottomMessage(details)).toBe("");
+    expect(action(details).disabled).toBe(false);
+  });
+
+  it("marks a day after the refused invoice's date", async () => {
+    const { screen } = await mount(
+      replacementServer(futureCase("2026-11-03")),
+      continuation(["fiscal.remedy"]).value,
+    );
+    const details = await openDetails(screen);
+    await pick(screen, details, "2026-11-04");
+    expect(dateField(details).error).toBe("");
+    await userEvent.click(action(details));
+    await screen.updateComplete;
+    expect(dateField(details).error).toBe(
+      `Choose a day no later than the invoice's date, ${calendar("2026-11-03")}.`,
+    );
+    expect(action(details).disabled).toBe(true);
+  });
+
+  it("names the invoice, its total, the VAT period and the replacement's date before Send", async () => {
+    const { screen } = await mount(
+      replacementServer(futureCase("2026-11-03")),
+      continuation(["fiscal.remedy"]).value,
+    );
+    const details = await openDetails(screen);
+    const confirmation = () => flat(details.querySelector("[data-test=replacement-confirmation]"));
+    expect(confirmation()).toContain(
+      `Waitron will issue a replacement corrective invoice for invoice T1/41 of ${calendar("2026-11-03")}, total ${formatMoney("12.10", "en")}, dated ${calendar(deviceDay())}.`,
+    );
+    expect(confirmation()).toContain(
+      "It goes to AEAT after any earlier invoices Waitron is holding back. The refused invoice stays as it is.",
+    );
+    expect(confirmation()).not.toContain("VAT return");
+    await pick(screen, details, "2026-10-31");
+    expect(confirmation()).toContain("The VAT return counts the sale in October 2026.");
+  });
+
+  it("keeps Send disabled, saying so under the actions, when the server's date and this device's differ", async () => {
+    const { screen, request } = await mount(
+      replacementServer(futureCase("2026-11-03"), async () => ({}), deviceToday(-2)),
+      continuation(["fiscal.remedy"]).value,
+    );
+    const details = await openDetails(screen);
+    await pick(screen, details, "2026-11-02");
+    expect(dateField(details).error).toBe("");
+    expect(action(details).disabled).toBe(true);
+    expect(details.querySelector("[data-test=day-differs]")).toBeNull();
+    expect(bottomMessage(details)).toBe(differs(deviceDay(-2), deviceDay()));
+    action(details).click();
+    await screen.updateComplete;
+    expect(remedyCalls(request)).toHaveLength(0);
+  });
+
+  it("says the dates differ when Send is chosen after this device's day moved on", async () => {
+    const { screen, request } = await mount(
+      replacementServer(futureCase("2026-11-03")),
+      continuation(["fiscal.remedy"]).value,
+    );
+    const details = await openDetails(screen);
+    await pick(screen, details, "2026-11-02");
+    expect(action(details).disabled).toBe(false);
+    const server = deviceDay();
+    vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + DAY_MS });
+    try {
+      await userEvent.click(action(details));
+      await screen.updateComplete;
+      expect(remedyCalls(request)).toHaveLength(0);
+      expect(action(details).disabled).toBe(true);
+      expect(bottomMessage(details)).toBe(differs(server, deviceDay()));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("sends the record and the day, never an amount, and Stop sends nothing", async () => {
+    const request = replacementServer(futureCase("2026-11-03"));
+    const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+    const details = await openDetails(screen);
+    expect(bottomMessage(details)).toBe("");
+    await pick(screen, details, "2026-11-02");
+    action(details).click();
+    await vi.waitFor(() => expect(remedyCalls(request)).toHaveLength(1));
+    const [, method, body] = remedyCalls(request)[0]!;
+    expect(method).toBe("POST");
+    expect(body).toEqual({
+      kind: "replacement-invoice",
+      registroId: "rec-1",
+      actionKey: expect.stringMatching(/.+/),
+      reason: expect.stringContaining("1112"),
+      operationDate: "2026-11-02",
+    });
+    await vi.waitFor(() => expect(details).toHaveProperty("open", false));
+
+    const again = await openDetails(screen);
+    (again.querySelector("[data-test=stop]") as HTMLElement).click();
+    await vi.waitFor(() => expect(again).toHaveProperty("open", false));
+    expect(remedyCalls(request)).toHaveLength(1);
+  });
+
+  it("marks the date field when the server refuses the day, keeping Send", async () => {
+    const request = replacementServer(futureCase("2026-11-03"), async () => {
+      throw refusal("fiscal.operation_date_invalid");
+    });
+    const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+    const details = await openDetails(screen);
+    await pick(screen, details, "2026-11-02");
+    action(details).click();
+    await vi.waitFor(() =>
+      expect(dateField(details).error).toBe(t("fiscal_filing.refused.operation_date")),
+    );
+    expect(bottomMessage(details)).toBe("Correct the field marked above.");
+    expect(action(details).disabled).toBe(false);
+  });
+
+  it("clears the server's refusal of the day once the day is changed", async () => {
+    const request = replacementServer(futureCase("2026-11-03"), async () => {
+      throw refusal("fiscal.operation_date_invalid");
+    });
+    const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+    const details = await openDetails(screen);
+    await pick(screen, details, "2026-11-02");
+    action(details).click();
+    await vi.waitFor(() =>
+      expect(dateField(details).error).toBe(t("fiscal_filing.refused.operation_date")),
+    );
+    await pick(screen, details, "2026-11-01");
+    expect(dateField(details).error).toBe("");
+    expect(dateField(details).hasAttribute("invalid")).toBe(false);
+    expect(bottomMessage(details)).toBe("");
+  });
+
+  it.each([
+    // 23:30 in UTC, 18:30 in New York (this browser's zone), already 1 March in Madrid.
+    ["2026-02-28T23:30:00.000Z", 60, "2026-03-01", "2026-02-28"],
+    ["2026-11-15T00:30:00.000Z", 60, "2026-11-15", "2026-11-14"],
+    // 10:30 in UTC is already 00:30 on 1 March fourteen hours east, an offset no machine running
+    // these tests has, so the device's own zone gives 28 February wherever it runs.
+    ["2026-02-28T10:30:00.000Z", 840, "2026-03-01", "2026-02-28"],
+  ])(
+    "lets the device send when its clock gives the box's venue day, whatever its own zone, at %s",
+    async (instant, offsetMinutes, boxDay, browserDay) => {
+      vi.useFakeTimers({ toFake: ["Date"], now: new Date(instant) });
+      try {
+        const venue = { day: boxDay, offsetMinutes };
+        const request = replacementServer(futureCase("2026-11-20"), async () => ({}), venue);
+        const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+        const details = await openDetails(screen);
+        await pick(screen, details, browserDay);
+        expect(flat(details.querySelector("[data-test=replacement-confirmation]"))).toContain(
+          `, dated ${calendar(boxDay)}.`,
+        );
+        expect(bottomMessage(details)).toBe("");
+        expect(action(details).disabled).toBe(false);
+        action(details).click();
+        await vi.waitFor(() => expect(remedyCalls(request)).toHaveLength(1));
+        expect(remedyCalls(request)[0]![2]).toMatchObject({ operationDate: browserDay });
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it("stops a device in another zone when the box's clock is a day ahead of the venue's", async () => {
+    // 22:30 in UTC is 23:30 on 28 February in Madrid, but the box's clock says 1 March there.
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-02-28T22:30:00.000Z") });
+    try {
+      const ahead = { day: "2026-03-01", offsetMinutes: 60 };
+      const request = replacementServer(futureCase("2026-11-20"), async () => ({}), ahead);
+      const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+      const details = await openDetails(screen);
+      await pick(screen, details, "2026-02-27");
+      expect(bottomMessage(details)).toBe(differs("2026-03-01", "2026-02-28"));
+      expect(action(details).getAttribute("variant")).toBe("secondary");
+      expect(action(details).disabled).toBe(true);
+      action(details).click();
+      await screen.updateComplete;
+      expect(remedyCalls(request)).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("says in the bottom message that the server cannot date a replacement now, with Send quiet and disabled, when the page could not read the box's day", async () => {
+    const request = replacementServer(futureCase("2026-11-03"), async () => ({}), null);
+    const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+    const details = await openDetails(screen);
+    const undated =
+      "The server cannot date a replacement now, so nothing can be sent. Check the venue's time zone in Venue settings, then choose Refresh and open this case again.";
+    expect(bottomMessage(details)).toBe(undated);
+    expect(action(details).getAttribute("variant")).toBe("secondary");
+    await pick(screen, details, "2026-11-02");
+    expect(details.querySelector("[data-test=replacement-confirmation]")).toBeNull();
+    expect(details.querySelector(".put-right")?.textContent).not.toContain("cannot date");
+    expect(bottomMessage(details)).toBe(undated);
+    expect(action(details).getAttribute("variant")).toBe("secondary");
+    expect(action(details).disabled).toBe(true);
+    action(details).click();
+    await screen.updateComplete;
+    expect(remedyCalls(request)).toHaveLength(0);
+  });
+
+  it.each([
+    [
+      "sale.replacement_not_first",
+      "This invoice already has a refund or another corrective invoice, and Waitron cannot replace an invoice that has one, so nothing was sent. Nothing can be done here; the case stays open.",
+    ],
+    [
+      "fiscal.correction_unsupported",
+      "AEAT holds, or may still receive, another record of this invoice, so a replacement could count the sale twice. Nothing was sent, and nothing can be done here; the case stays open.",
+    ],
+    ["series.no_rectificative_for_node", "This server has no corrective invoice series"],
+  ] as const)("says what %s means under the actions, keeping Send", async (code, words) => {
+    const request = replacementServer(futureCase("2026-11-03"), async () => {
+      throw refusal(code);
+    });
+    const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+    const details = await openDetails(screen);
+    await pick(screen, details, "2026-11-02");
+    action(details).click();
+    await vi.waitFor(() => expect(bottomMessage(details)).toContain(words));
+    expect(bottomMessage(details)).toBe(t(REFUSAL_WORDS[code]));
+    expect(dateField(details).error).toBe("");
+    expect(action(details).disabled).toBe(false);
   });
 });

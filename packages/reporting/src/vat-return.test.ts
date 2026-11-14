@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { addDecimal, subtractDecimal } from "@waitron/shared";
+import type { SaleId } from "@waitron/shared";
 import {
   seedNodeAndSeries,
   seedPurchaseInvoice,
@@ -137,6 +138,72 @@ describe("computeVatReturn", () => {
       const q1 = await runPeriod({ kind: "quarter", quarter: 1 }, { year: 2027 });
       expect(q1.byRate).toEqual([]);
       expect(q1).toMatchObject({ baseTotal: "0.00", taxTotal: "0.00" });
+    });
+  });
+
+  describe("a sale replaced with the day it really happened", () => {
+    const ticket = { total: "12.10", lines: [{ vatRate: "10.00", lineTotal: "11.00" }] };
+    const stampedMarch2 = new Date("2026-03-02T10:00:00Z").toISOString();
+
+    async function replace(
+      replacementAt: string,
+      supplyDay?: string,
+    ): Promise<{ replacement: SaleId }> {
+      const original = await seedSale(suite.db, venue, {
+        invoiceNumber: 1,
+        issuedAt: stampedMarch2,
+        ...ticket,
+      });
+      const replacement = await seedSale(suite.db, venue, {
+        invoiceNumber: 2,
+        issuedAt: replacementAt,
+        correctsSaleId: original,
+        replacesOriginal: true,
+        ...(supplyDay === undefined ? {} : { supplyDay }),
+        ...ticket,
+      });
+      return { replacement };
+    }
+
+    it("counts it in the period of its real day, not the stamped one", async () => {
+      await replace(new Date("2026-03-10T10:00:00Z").toISOString(), "2026-02-28");
+
+      const february = await run({ year: 2026, month: 2 });
+      expect(february.byRate).toEqual([{ rate: "10.00", base: "11.00", tax: "1.10" }]);
+      expect(february).toMatchObject({ baseTotal: "11.00", taxTotal: "1.10" });
+      const march = await run({ year: 2026, month: 3 });
+      expect(march.byRate).toEqual([]);
+      expect(march).toMatchObject({ baseTotal: "0.00", taxTotal: "0.00" });
+    });
+
+    it("keeps it in its stamped period when the replacement names no day", async () => {
+      await replace(new Date("2026-04-05T10:00:00Z").toISOString());
+
+      const march = await run({ year: 2026, month: 3 });
+      expect(march.byRate).toEqual([{ rate: "10.00", base: "11.00", tax: "1.10" }]);
+      const february = await run({ year: 2026, month: 2 });
+      expect(february.byRate).toEqual([]);
+      const april = await run({ year: 2026, month: 4 });
+      expect(april.byRate).toEqual([]);
+    });
+
+    it("counts a later refund of the replacement in the refund's own period", async () => {
+      const { replacement } = await replace(
+        new Date("2026-03-10T10:00:00Z").toISOString(),
+        "2026-02-28",
+      );
+      await seedSale(suite.db, venue, {
+        invoiceNumber: 3,
+        issuedAt: new Date("2026-03-20T10:00:00Z").toISOString(),
+        total: "-5.50",
+        correctsSaleId: replacement,
+        lines: [{ vatRate: "10.00", lineTotal: "-5.00" }],
+      });
+
+      const february = await run({ year: 2026, month: 2 });
+      expect(february.byRate).toEqual([{ rate: "10.00", base: "11.00", tax: "1.10" }]);
+      const march = await run({ year: 2026, month: 3 });
+      expect(march.byRate).toEqual([{ rate: "10.00", base: "-5.00", tax: "-0.50" }]);
     });
   });
 

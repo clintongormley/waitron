@@ -424,9 +424,9 @@ the table.
 Correction payload persistence, administrator-only remedy operations, held-case
 resolution and the real AEAT second-correction proof remain part of Task 8 before publication.
 Of the disputed production remedies, the corrective invoice (the replacement) is built to file as
-an R5 "S" (owner's answers A–E, 2026-11-14), and offering it waits on Q37-FIX Task 3c; the others stay
-disabled pending Q35/Q38/Q40 or a case-specific owner decision. Q37-FIX enables the correction
-record for rejected records only.
+an R5 "S" (owner's answers A–E, 2026-11-14) and offered on the case dialog for a simplified invoice
+refused for a future date; the others stay disabled pending Q35/Q38/Q40 or a case-specific owner
+decision. Q37-FIX enables the correction record and the replacement for rejected records only.
 
 **1 November 2026, Task 8 receipt replay check.** The receipt lookup explicitly selects the
 original issued alta by its empty correction link. `record-version-receipt.test.ts` stores
@@ -1136,6 +1136,14 @@ picker answer, 2026-11-13 22:09, "Yes to both", recorded in the campaign's
 AEAT message names `DescripcionOperacion`, and had the server also refuse a changed invoice type,
 recipients, correction type, corrected invoice or replaced invoice with
 `fiscal.remedy_printed_fact_changed` (campaign `questions.md`, 2026-11-14 00:01 and 00:27).
+
+A simplified invoice AEAT refused for a future date is put right by a replacement corrective
+invoice, R5 with `TipoRectificativa` "S", offered on any day (owner's picker, 2026-11-13 22:09, same
+`desk/done` file). Answers A–D (owner, relayed 2026-11-14 09:50): rectified amounts 0.00, the real
+day as its operation date, the printed copy says it replaces the invoice in full with a 0,00 €
+rectification, and a later refund names the replacement. E: the sale counts in its real day's VAT
+period (owner, 2026-11-14 17:20). The replacement is dated today (watcher, 11:54); the real day is
+asked of the administrator and stored as `sales.supply_day` (watcher, 18:22).
 
 ### A1425 part 1: after a takeover (owner, 2026-11-08)
 

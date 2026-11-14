@@ -6,9 +6,10 @@ import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, startManagementSession, type BuiltInRoleKey } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
-import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { AppError, jobOrigin, type ErrorCode, type ErrorParams } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
+import { steadyClock } from "../test/write-path-fixtures.js";
 import { readFilingOverview } from "./filing-overview.js";
 import { readFilingWarnings } from "./filing-warnings.js";
 import { FISCAL_ROUTES } from "./routes.js";
@@ -40,6 +41,7 @@ async function sessionCookie(role: BuiltInRoleKey): Promise<string> {
 function mount(
   drain?: ModuleRouteContext["fiscalDrain"],
   recordGeneration?: ModuleRouteContext["recordGeneration"],
+  log: Logger = () => {},
 ): Hono {
   const ctx: ModuleRouteContext = {
     db: suite.db,
@@ -49,7 +51,7 @@ function mount(
     ...(recordGeneration === undefined ? {} : { recordGeneration }),
   };
   const app = new Hono();
-  FISCAL_ROUTES.mount(app, ctx, () => {});
+  FISCAL_ROUTES.mount(app, ctx, log);
   return app;
 }
 
@@ -77,6 +79,146 @@ it("reads the conflicts of the box that issues records here", async () => {
   const res = await app.request(PATH, { headers: { cookie: await sessionCookie("manager") } });
   expect(res.status).toBe(200);
   expect(readFilingOverview).toHaveBeenCalledWith(expect.anything(), { nodeId, limit: 200 });
+});
+
+it("answers the box's own day and the venue's offset, as a replacement issued now is dated", async () => {
+  const node = await seedNode(suite.db);
+  // 23:30 in UTC on 28 February is already 00:30 on 1 March in Madrid, the venue's zone. The
+  // clock's own offset says UTC, so only the venue's zone can give 1 March.
+  const instant = new Date("2026-02-28T23:30:00Z");
+  const app = mount(undefined, {
+    nodeId: node.nodeId,
+    clock: { ...steadyClock, now: () => ({ ...steadyClock.now(), instant, offsetMinutes: 0 }) },
+  } as unknown as NonNullable<ModuleRouteContext["recordGeneration"]>);
+  const res = await app.request(PATH, { headers: { cookie: await sessionCookie("manager") } });
+  expect(res.status).toBe(200);
+  expect((await res.json()).today).toEqual({ day: "2026-03-01", offsetMinutes: 60 });
+});
+
+it("answers no day on a box that issues no records here, or whose node the venue does not list", async () => {
+  const cookie = await sessionCookie("manager");
+  const none = await mount().request(PATH, { headers: { cookie } });
+  expect(await none.json()).toMatchObject({ today: null });
+  const unknown = mount(undefined, {
+    nodeId: "44444444-4444-4444-8444-444444444444",
+    clock: steadyClock,
+  } as unknown as NonNullable<ModuleRouteContext["recordGeneration"]>);
+  const res = await unknown.request(PATH, { headers: { cookie } });
+  expect(res.status).toBe(200);
+  expect(await res.json()).toMatchObject({ today: null });
+});
+
+it("answers no day, and logs why, when the venue's zone cannot place the box's clock", async () => {
+  const node = await seedNode(suite.db);
+  const log = vi.fn<Logger>();
+  const app = mount(
+    undefined,
+    {
+      nodeId: node.nodeId,
+      clock: { ...steadyClock, now: () => ({ ...steadyClock.now(), instant: new Date(NaN) }) },
+    } as unknown as NonNullable<ModuleRouteContext["recordGeneration"]>,
+    log,
+  );
+  const res = await app.request(PATH, { headers: { cookie: await sessionCookie("manager") } });
+  expect(res.status).toBe(200);
+  expect(await res.json()).toMatchObject({ today: null });
+  expect(log).toHaveBeenCalledWith("warn", "fiscal.filing_day_unread", {
+    errorCode: "venue.time_zone_conversion_failed",
+    reason: "invalid_instant",
+  });
+});
+
+it("logs a day-read failure's own log-only reason as logReason, beside its params", async () => {
+  const node = await seedNode(suite.db);
+  const log = vi.fn<Logger>();
+  const app = mount(
+    undefined,
+    {
+      nodeId: node.nodeId,
+      clock: {
+        ...steadyClock,
+        now: () => {
+          throw new AppError("venue.not_found", {}, { reason: "no business day row" });
+        },
+      },
+    } as unknown as NonNullable<ModuleRouteContext["recordGeneration"]>,
+    log,
+  );
+  const res = await app.request(PATH, { headers: { cookie: await sessionCookie("manager") } });
+  expect(res.status).toBe(200);
+  expect(await res.json()).toMatchObject({ today: null });
+  expect(log).toHaveBeenCalledWith("warn", "fiscal.filing_day_unread", {
+    errorCode: "venue.not_found",
+    logReason: "no business day row",
+  });
+});
+
+it.each([
+  new AppError("venue.time_zone_invalid", { reason: "missing" }),
+  new AppError("venue.time_zone_target_invalid", { reason: "mismatch" }),
+  new AppError("venue.time_zone_conversion_failed", { reason: "unreadable_offset" }),
+  new AppError("venue.not_found", {}),
+  new AppError("settings.invalid", { module: "venue", field: "timeZone" }),
+])("answers no day, rather than fail the page, on %s", async (refusal) => {
+  const node = await seedNode(suite.db);
+  const log = vi.fn<Logger>();
+  const app = mount(
+    undefined,
+    {
+      nodeId: node.nodeId,
+      clock: {
+        ...steadyClock,
+        now: () => {
+          throw refusal;
+        },
+      },
+    } as unknown as NonNullable<ModuleRouteContext["recordGeneration"]>,
+    log,
+  );
+  const res = await app.request(PATH, { headers: { cookie: await sessionCookie("manager") } });
+  expect(res.status).toBe(200);
+  expect(await res.json()).toMatchObject({ today: null });
+  expect(log).toHaveBeenCalledWith("warn", "fiscal.filing_day_unread", {
+    errorCode: refusal.code,
+    ...refusal.params,
+  });
+});
+
+it("fails the read on a Waitron error that is not about the venue's zone, venue or settings", async () => {
+  const node = await seedNode(suite.db);
+  const log = vi.fn<Logger>();
+  const app = mount(
+    undefined,
+    {
+      nodeId: node.nodeId,
+      clock: {
+        ...steadyClock,
+        now: () => {
+          throw new AppError("storage.disk_full", {});
+        },
+      },
+    } as unknown as NonNullable<ModuleRouteContext["recordGeneration"]>,
+    log,
+  );
+  const res = await app.request(PATH, { headers: { cookie: await sessionCookie("manager") } });
+  expect(res.status).toBe(507);
+  expect((await res.json()).error.code).toBe("storage.disk_full");
+  expect(log).not.toHaveBeenCalledWith("warn", "fiscal.filing_day_unread", expect.anything());
+});
+
+it("fails the read, rather than answer a day, when the clock fails with an error that is not Waitron's", async () => {
+  const node = await seedNode(suite.db);
+  const app = mount(undefined, {
+    nodeId: node.nodeId,
+    clock: {
+      ...steadyClock,
+      now: () => {
+        throw new Error("clock broken");
+      },
+    },
+  } as unknown as NonNullable<ModuleRouteContext["recordGeneration"]>);
+  const res = await app.request(PATH, { headers: { cookie: await sessionCookie("manager") } });
+  expect(res.status).toBe(500);
 });
 
 it("reports the submission loop's state beside the overview", async () => {

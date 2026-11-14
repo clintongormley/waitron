@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c7259026-bf50-42f8-bea0-2a3efaebbc95",
+  "id": "6946bc86-ef96-49ed-b7f3-6bfd5251dd16",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -8569,6 +8569,13 @@
           "autoincrement": false,
           "default": false
         },
+        "supply_day": {
+          "name": "supply_day",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "counterparty_tax_id": {
           "name": "counterparty_tax_id",
           "type": "text",
@@ -8759,6 +8766,10 @@
         "sales_replaces_original_ck": {
           "name": "sales_replaces_original_ck",
           "value": "\"sales\".\"replaces_original\" = 0 or \"sales\".\"corrects_sale_id\" is not null"
+        },
+        "sales_supply_day_ck": {
+          "name": "sales_supply_day_ck",
+          "value": "\"sales\".\"supply_day\" is null or \"sales\".\"replaces_original\" = 1"
         },
         "sales_total_ck": {
           "name": "sales_total_ck",

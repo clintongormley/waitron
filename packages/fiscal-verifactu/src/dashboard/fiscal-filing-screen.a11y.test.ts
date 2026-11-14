@@ -12,7 +12,7 @@ import { expectNoA11yViolations, mountThemed, type Theme } from "@waitron/ui/src
 import { VERIFACTU_DASHBOARD } from "./index.js";
 import type { FiscalFilingScreen } from "./fiscal-filing-screen.js";
 import type { FilingOverviewAnswer } from "../filing-overview-types.js";
-import { conflictCase, overview } from "../../test/fiscal-filing-browser-fixture.js";
+import { conflictCase, deviceToday, overview } from "../../test/fiscal-filing-browser-fixture.js";
 
 const size = { width: window.innerWidth, height: window.innerHeight };
 const locale = currentLocale();
@@ -48,6 +48,44 @@ const DESCRIPTION = overview({
   totalCases: 1,
 });
 
+/** A simplified invoice AEAT refused for a future date, on a box whose day is this device's,
+ * which the dialog replaces. */
+const FUTURE_DATE = overview({
+  today: deviceToday(),
+  cases: [
+    {
+      ...base,
+      cause: "fiscal.registro_rechazado",
+      evidence: { codigo: 1112, mensaje: "Fecha superior a la actual", csv: null },
+      submission: {
+        ...base.submission!,
+        codigoError: "1112",
+        mensajeError: "Fecha superior a la actual",
+      },
+      conflicts: [],
+    },
+  ],
+  totalCases: 1,
+});
+
+/** The same case on a box whose day is two days behind this device's, so the dates differ. */
+const DAYS_DIFFER: FilingOverviewAnswer = { ...FUTURE_DATE, today: deviceToday(-2) };
+
+/** Opens the case and chooses a valid day, so the confirmation names the VAT period. */
+async function confirmReplacement(screen: FiscalFilingScreen): Promise<HTMLElement> {
+  const details = await openDetails(screen);
+  const input = details
+    .querySelector("wt-input[name=operationDate]")!
+    .shadowRoot!.querySelector("input") as HTMLInputElement;
+  input.value = "2026-11-02";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await screen.updateComplete;
+  expect(details.querySelector("[data-test=replacement-confirmation]")!.textContent).toContain(
+    "VAT return",
+  );
+  return details;
+}
+
 function continuation(permissions: string[]): DashboardPermissionContinuation {
   return {
     snapshot: () => ({ accountGeneration: 1, authenticated: true, permissions }),
@@ -60,13 +98,14 @@ async function show(
   answer: FilingOverviewAnswer,
   theme: Theme,
   permissions = ["report.export", "fiscal.remedy"],
+  remedyRefusal = "clock.unconfirmed",
 ): Promise<FiscalFilingScreen> {
   setLocale("en");
   await mountThemed("<div></div>", theme);
   const entry = VERIFACTU_DASHBOARD.moreScreens!.find((s) => s.screen.id === "fiscal-filing")!;
   const request = (async (path: string) => {
     if (path.endsWith("/remedy"))
-      throw Object.assign(new Error("clock.unconfirmed"), { code: "clock.unconfirmed" });
+      throw Object.assign(new Error(remedyRefusal), { code: remedyRefusal });
     return answer;
   }) as unknown as DashboardRequest;
   render(
@@ -147,6 +186,57 @@ describe.each(["light", "dark"] as const)("fiscal filing accessibility %s", (the
     expect(details.querySelector("wt-textarea[name=operationDescription]")).not.toBeNull();
   });
 
+  it("draws the replacement's confirmation, then its day marked as after the invoice's", async () => {
+    await page.viewport(1280, 1000);
+    const screen = await show(FUTURE_DATE, theme);
+    const details = await confirmReplacement(screen);
+    await expectNoA11yViolations(host);
+    const input = details
+      .querySelector("wt-input[name=operationDate]")!
+      .shadowRoot!.querySelector("input") as HTMLInputElement;
+    input.value = "2026-11-04";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await screen.updateComplete;
+    (details.querySelector("[data-test=put-right]") as HTMLElement).click();
+    await screen.updateComplete;
+    expect(details.querySelector("wt-input[name=operationDate]")).toHaveProperty("invalid", true);
+    await expectNoA11yViolations(host);
+  });
+
+  it("draws the replacement saying the server's date and this device's differ", async () => {
+    await page.viewport(1280, 1000);
+    const screen = await show(DAYS_DIFFER, theme);
+    const details = await confirmReplacement(screen);
+    const actions = details.querySelector("wt-form-actions") as HTMLElement & { error: string };
+    expect(actions.error).toContain("differ");
+    await expectNoA11yViolations(host);
+  });
+
+  it("draws the replacement saying the server cannot date it now", async () => {
+    await page.viewport(1280, 1000);
+    const screen = await show({ ...FUTURE_DATE, today: null }, theme);
+    const details = await openDetails(screen);
+    const actions = details.querySelector("wt-form-actions") as HTMLElement & { error: string };
+    expect(actions.error).toContain("cannot date a replacement");
+    await expectNoA11yViolations(host);
+  });
+
+  it("draws the replacement's day marked after the server refused it", async () => {
+    await page.viewport(1280, 1000);
+    const screen = await show(
+      FUTURE_DATE,
+      theme,
+      ["report.export", "fiscal.remedy"],
+      "fiscal.operation_date_invalid",
+    );
+    const details = await confirmReplacement(screen);
+    (details.querySelector("[data-test=put-right]") as HTMLElement).click();
+    const field = details.querySelector("wt-input[name=operationDate]")!;
+    await vi.waitFor(() => expect(field).toHaveProperty("invalid", true));
+    await screen.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
   it("draws the administrator's sign-in in place of Send", async () => {
     await page.viewport(1280, 1000);
     const screen = await show(DESCRIPTION, theme, ["report.export"]);
@@ -195,6 +285,14 @@ it("draws the description correction and its refusal at phone width", async () =
   await page.viewport(390, 1000);
   const screen = await show(DESCRIPTION, "light");
   const details = await refuseOnce(screen);
+  await expectNoA11yViolations(host);
+  expect(details.scrollWidth).toBeLessThanOrEqual(details.clientWidth);
+});
+
+it("draws the replacement's confirmation at phone width", async () => {
+  await page.viewport(390, 1000);
+  const screen = await show(FUTURE_DATE, "light");
+  const details = await confirmReplacement(screen);
   await expectNoA11yViolations(host);
   expect(details.scrollWidth).toBeLessThanOrEqual(details.clientWidth);
 });

@@ -12,6 +12,17 @@ export interface DescriptionCorrection {
   facts: { description: string };
 }
 
+/** Replaces a simplified invoice AEAT refused for a future date; the server takes every amount
+ * from its own records. */
+export interface ReplacementInvoice {
+  kind: "replacement-invoice";
+  registroId: string;
+  actionKey: string;
+  reason: string;
+  /** The day the sale really happened, `YYYY-MM-DD`. */
+  operationDate: string;
+}
+
 export class FiscalFilingClient {
   readonly #request: DashboardRequest;
 
@@ -27,7 +38,7 @@ export class FiscalFilingClient {
       : this.#request<FilingOverviewAnswer>(PATH, "GET", undefined, { passive: true });
   }
 
-  putRight(body: DescriptionCorrection): Promise<unknown> {
+  putRight(body: DescriptionCorrection | ReplacementInvoice): Promise<unknown> {
     return this.#request("/management-api/fiscal-records/remedy", "POST", body);
   }
 }

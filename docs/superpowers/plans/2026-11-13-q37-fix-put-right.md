@@ -271,8 +271,8 @@ answers 409, `record-remedy-routes.ts:37`) **(read)**. A clock confirmation on t
 (`POST /api/box/clock-confirm`, tested in `apps/server/src/clock-confirm.route.test.ts`) lifts the
 stop for one step back (CLAUDE.md §5). Task 3c tests that path and the dialog says what to do.
 
-_2026-11-14, found on rebasing PR 2 onto main: main's #2964 (A1420 PR 5) turned the clock-behind stop
-off (`CLOCK_BEHIND_STOP_ON = false`, `packages/fiscal-verifactu/src/clock-behind.ts:14`), so a record
+_2026-11-14, found on rebasing PR 2 onto main: main's #2964 (A1420 PR 5) removed the clock-behind stop
+(`refuseWhileClockBehind` is gone; `packages/fiscal-verifactu/src/clock-behind.ts` keeps only the latest-record readers), so a record
 dated before the newest one is now written and chained after it with its own time (one dated before
 28-10-2024 is still refused as `clock.unusable`). This paragraph, the clock-behind stop's definition
 under "Words used in this plan", Task 2b's `clock.behind_chain` row, and Task 3c's future-dated case, its
@@ -314,7 +314,7 @@ lines, grouped):
 
 | Reader | What it does with correctives | Decision | Task |
 | --- | --- | --- | --- |
-| `packages/reporting/src/vat-return.ts:39` via `activeSalesClause` (`business-day.ts:217-220`) | counts every sale, correctives included | leave out the replacement; the original carries the sale (owner's answer E) | 3b-1 |
+| `packages/reporting/src/vat-return.ts:39` via `activeSalesClause` (`business-day.ts:217-220`) | counts every sale, correctives included | leave out the replacement; the original carries the sale (owner's answer E), in the period of its replacement's `supply_day` when it has one (2026-11-14, Task 3g) | 3b-1, 3g |
 | `issuedSalesClause` / `reversedSalesClause` (`business-day.ts:229-244`): `vat-summary.ts:111,127`, `counts.ts:18-21`, `category-sales.ts:208,216`, `top-sellers.ts:71,78` | count correctives as rows on their day | leave out the replacement | 3b-1 |
 | `top-sellers.ts:105` | nets corrective lines against the invoice line they name | none needed: replacement lines name no line (`correctsLineId` null, Task 3a); a later refund names the replacement's lines, which are counted on the replacement's day — the replacement itself is out, so test that a refund of a replaced sale nets against nothing it should not | 3b-1 |
 | `apps/server/src/accountant-export.ts:194-212`, `:110` | one row per invoice, type "corrective" | replacement row typed `replacement`, whose label says not to add it; the replaced original keeps its own type (M8 below) | 3b-1 |
@@ -602,7 +602,7 @@ Behaviour:
   | `node.read_only`, `fiscal.chain_handed_over` | This server is not the one that files invoices now; open this page on the main server. |
   | `filing_case.already_resolved`, `fiscal.record_already_corrected`, `filing_case.action_mismatch`, `fiscal.remedy_invalid` | The case changed since the page read it; the page reads again (and does). |
   | `fiscal.remedy_disabled` | Waitron cannot put this one right yet; the case stays open. |
-  | `fiscal.remedy_issuer_changed`, `fiscal.remedy_request_invalid` | Waitron could not send this correction; nothing was sent (not reachable from this dialog; a guard against a future one). |
+  | `fiscal.remedy_issuer_changed`, `fiscal.remedy_request_invalid` | Waitron could not accept this request; nothing was sent (not reachable from this dialog; a guard against a future one). |
   | `storage.disk_full` | The server's disk is full; nothing was sent (the alert's own guidance applies). |
   | `sale.replacement_not_first` (3c) | This invoice already has a corrective invoice, so Waitron cannot replace it; the case stays open and is in the export for your tax adviser. |
 
@@ -913,6 +913,150 @@ enabled remedies; A1407 (`docs/backlog.md:1700`) keeps only its full-invoice hal
 again.
 
 Size: about 140 production lines, 300 test lines.
+
+## PR 3, as rewritten for the build (2026-11-14, lane L) — overrides Task 3c where they differ
+
+Branch `feat/q37-put-it-right` from `main` at `96a9775c3b`, after PR 1 (#3208, `be9f964346`) and
+PR 2 (#3128, `12593f7edd`) landed. Three tasks, one implementer each, a fresh review after each. A fresh plan read of this section
+(2026-11-14, no Critical; seven Important, all folded in here) found the accountant-export, stale
+comment, refusal wording, held-chain, clock-still-ahead, future-dated-test and past-day points.
+
+**What changed since Task 3c was written, and who decided it:**
+
+- **The clock-behind stop is gone** (main's #2964 removed it; `attemptAppend`,
+  `packages/fiscal-verifactu/src/chain.ts:150-160`, refuses only a date before 28-10-2024). The watcher, lane L `questions.md`, 2026-11-14
+  11:54: "(a) issue the replacement at once, dated today". So Task 3c's `clock.behind_chain`
+  sentence, its future-dated-chain test beside `clock-behind-stop.records.test.ts` and the guide's
+  "confirm the time on the Box status page" sentence are DROPPED; the future-dated-chain test is
+  KEPT, re-aimed (Task 3c-1). `clock.unconfirmed` (the start's
+  time check) and `clock.unusable` still refuse and keep their Task 2b sentences. The PR cites #2964.
+- **Answer B, where the real day comes from:** the confirmation asks the administrator for the day
+  the sale really happened (the plan's proposal under "Still open" B, answered "as recommended" by
+  the owner, watcher 09:50). **Deviation from B's wording (asked in the DEVIATION entry):** the
+  field starts EMPTY and is required, not prefilled with the stored date — a `1112` stamp is wrong
+  by definition (the clock was ahead), so a prefill is a known-wrong default that could put the sale
+  in the wrong VAT period with one click. Refused if after today or after the refused invoice's own
+  date (a clock that ran ahead stamps a day at or after the real one). The confirmation names the
+  VAT period the sale will count in ("The VAT return counts the sale in February 2026"), so a wrong
+  year or month is seen before Send.
+- **Answer E, the VAT period:** the owner, 2026-11-14 17:20 (watcher entry "OWNER ANSWERS: #3208
+  landing; answer E means the real day"): the VAT return counts a replaced sale in the period of
+  its REAL day, the replacement's `FechaOperacion`, matching AEAT; built in PR 3 with the 28 February
+  / stamped 2 March example. This supersedes the "E: the sale's period" paragraph under "Answers".
+  Waitron stores that day only in `registros_facturacion.fecha_operacion` (fiscal-verifactu's
+  table), which `@waitron/reporting` must not read, so `sales` gains a nullable `supply_day`
+  (Task 3g). Recorded as a DEVIATION for the watcher in lane L `questions.md` (2026-11-14).
+
+### Task 3g — the VAT return counts a replaced sale in its real day's period (PR 3)
+
+Files: `packages/db/src/schema/sales.ts` (column + CHECK), core's starting migration (rebuilt with
+`pnpm --filter @waitron/db db:generate`, never hand-edited), `packages/core/src/record-replacement.ts`
+(stores the day), `packages/reporting/src/vat-return.ts` (the date it buckets by).
+
+- `sales.supply_day`: `day("supply_day")`, nullable; CHECK `sales_supply_day_ck`:
+  `supply_day is null or replaces_original = 1` (named for the day of supply, the watcher 18:22, so
+  it does not revive the `sales.operation_date` A444 removed). Written only by `recordReplacement`, on the
+  replacement's row, when it is given an `operationDate` (exactly the string it hands the backend).
+- `computeVatReturn`'s output side buckets a sale by its replacement's `supply_day` when it
+  has a replacement with one, else by its filed issue date as today. Nothing else changes: the
+  replacement itself stays left out (`activeSalesClause`), a later refund of the replacement (Task
+  3f) is counted in its own issue period, and the day reports keep the original on the day it was
+  taken.
+- The accountant export is unchanged: A444 (#2946, owner 2026-11-12) removed its operation-date column; it lists invoices by issue date, so for a replaced sale whose real day falls in an earlier month it differs from the VAT return — said in the PR.
+- Claims this retires, rewritten in the same task: `vat-return.ts:13-17` and `:24-28`,
+  `business-day.ts:211-214` ("in its own VAT period"), and this plan's "How the sale is counted
+  once" row for the VAT return.
+- Failing tests first: `vat-return.test.ts` — an F2 stamped 2 March 2026, replaced with operation
+  date 28 February 2026: February's return holds its base and VAT, March's is zero (both checked);
+  the same with no operation date stays in March; a refund of the replacement issued in March
+  counts in March. `record-replacement.test.ts` — the day is stored on the replacement's row, and
+  null when not given. A database test that the CHECK refuses `supply_day` on a sale that is not
+  a replacement (assert the refusal by its words, CLAUDE.md §3 / 1811 rule).
+- Guards (run): `pnpm exec vitest run scripts/schema-constraints.test.ts
+  scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts
+  scripts/starting-migrations.test.ts scripts/classification-complete.test.ts
+  scripts/two-file-foreign-keys.test.ts`, `pnpm --filter @waitron/fiscal-verifactu exec vitest run
+  inmutabilidad`, and `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts` (it lists every
+  `sales` column, `:668-674`; the new key is a whole-shape pin gaining a key, owner 2026-09-27).
+- Size: about 45 production lines plus the generated migration, 160 test lines.
+
+### Task 3c-1 — the `replacement-invoice` remedy on the server (PR 3)
+
+As Task 3c's server half, with these differences: the request is exactly
+`{ kind: "replacement-invoice", registroId, actionKey, reason, caseId?, operationDate }`;
+`operationDate` is required, a calendar day `YYYY-MM-DD`, not after today, not after the
+refused invoice's own date and not more than twenty years back (the library's
+`FECHA_OPERACION_BEFORE_MINIMUM` rule, added by the 3c-1 review), and is refused otherwise with a new code `fiscal.operation_date_invalid` (400, `{ field: "operationDate" }`,
+listed in `REMEDY_REFUSALS`, `errors.ts`, the alert/err guards) before any number is used; it is
+handed to `recordReplacement`. "Today" is the replacement's own issue day from the same frozen
+clock reading that dates it (`prepareIssueClock`, compare `backend.ts:556-559`), so the route's check
+and the library's always agree; no new helper. `applyCorrectiveInvoice` is shared through the kind it
+records, the action it saves and a `replace` callback; the replacement path adds its own checks
+(`fiscal.registro_rechazado` with a refused delivery only — never `aceptado_con_errores` — code
+`1112` then and now, an F2). `caseId` follows whatever the `record-correction` path does with it
+since Task 1c. No `clock.behind_chain` test (above). `ENABLED_REMEDIES` gains
+`replacement-invoice`; `put-right.ts`'s `1112` F2 row answers `{ kind: "replacement-invoice" }` in
+the same commit. The saved decision's `action` includes `operationDate`, so a repeat with the same
+`actionKey` and a different day is `filing_case.action_mismatch`.
+
+Every code the replacement path can throw for a real case is listed in `REMEDY_REFUSALS`' refusal
+table with its status, so the dialog can word it: at least `sale.replacement_not_first`,
+`fiscal.correction_unsupported` (AEAT still holds a version), the
+series codes `recordReplacement`/`requireCorrectiveSeries` throw when the node has no live
+rectificative series, and `fiscal.operation_date_invalid`. A code no real case reaches (for
+example `sale.voided`: `recordVoid` has no production caller) is named in the PR thread, not worded.
+
+Failing tests: Task 3c's `record-remedy-replacement.test.ts` list, plus the re-aimed future-dated
+chain case (the refused original stamped tomorrow and the newest record in the chain, the clock at
+today → 200, one R5 "S" chained after it, `FechaOperacion` as sent), plus: `operationDate` missing,
+malformed, or after today → 400 `fiscal.operation_date_invalid`, no number used; a day before the
+record's date → 200 and the R5 "S" carries that `FechaOperacion`; `put-right.test.ts`,
+`record-remedy-routes.test.ts` and `fiscal-remedy.staff-refund.test.ts:554-580` as Task 3c says.
+
+Size: about 130 production lines, 300 test lines.
+
+### Task 3c-2 — **Put this right** on the case dialog, and the guide (PR 3)
+
+As Task 3c's browser half, with the clock sentence dropped and the date field added: a date field
+("Day the sale really happened", from a field primitive, CLAUDE.md §3), starting empty and required as
+above, inline error when after today, shown and holding Send as the Forms contract says (from the
+first Send on). The confirmation names the
+refused invoice's number, date and total, the VAT period the sale will count in, and the
+replacement's date — the box's own day, which the overview answers as `today`
+(`filing-overview-routes.ts`, `boxToday`) with the venue's offset beside it: the remedy route's
+clock read through `prepareIssueClock` in the venue's zone, as the replacement is dated. It is null
+on a box that issues no records here, or when the venue does not list this box or its time zone,
+venue row or settings cannot be read — each of those logged as `fiscal.filing_day_unread`, and
+states in which the route refuses anyway; any other error fails the read. The dialog then shows no
+confirmation, and its bottom message says the server cannot date a replacement now, to check the
+venue's time zone in Venue settings, then choose Refresh and open the case again, with Send
+disabled and drawn quiet. When that day differs from the venue's day by this
+device's clock (this device's time at the venue's offset, so a device in another zone is not
+stopped), Send stays disabled with one sentence in the form's bottom message saying the two dates
+differ and that the time can be checked and confirmed on Box status (a server whose clock is still ahead would file a replacement
+AEAT refuses again for the same reason, using a corrective number). It says the replacement goes to
+AEAT after any earlier invoices Waitron is holding back, not "at once" (`drain.ts:845-855`,
+`:1014-1028`). The browser sends `operationDate` and never an amount. Every code Task 3c-1 lists
+gets a sentence in English and Spanish. `fiscal.operation_date_invalid` marks the date field. The page
+line and the guide's `{#cases}` (EN and ES) say Waitron can put right a simplified invoice AEAT
+refused for a future date, and that the administrator gives the day the sale really happened.
+Browser tests as Task 3c lists (minus `clock.behind_chain`) plus the date field's empty case and
+after-today refusal; a11y of the confirmation in both themes; open it and look, both
+themes and phone width. Docs as Task 3c says (CLAUDE.md, conventions-data.md, A1407's backlog line
+keeps only its full-invoice half, A1089 narrowed, the Q37-FIX backlog entry deleted, and the R5 "S"
+test-service probe's own backlog entry in the go-live area: "run before the first real R5 'S';
+needs the owner's approval for the new live-aeat mode, by A985's precedent" — watcher 2026-11-14
+18:22; the probe mode is not built here).
+
+Size: about 170 production lines, 260 test lines.
+
+**PR 3 totals (estimate):** about 345 production and 720 test lines, plus the generated migration.
+First lines of the PR: fiscal; resets every venue (core's starting migration rebuilt); `sales`
+gains `supply_day`.
+
+**Answered by the watcher, 2026-11-14 18:22 (both defaults cleared):** "Still open" A's preproduction probe of an
+R5 "S" with 0 / 0 after a `1112` refusal. Default: PR 3 does not wait for it (no venue is live and
+a preproduction box files to AEAT's test service), and the probe is done before go-live.
 
 ## Sizes
 

@@ -86,11 +86,11 @@ function civilDateWindow(dateExpr: SQL, year: number, firstMonth: number, months
 
 /**
  * The half-open civil-date bound `[firstDay, upper)` on a date-valued SQL expression for a
- * `LiquidationPeriod` — pure calendar dates, no DST subtlety. The output side passes the filed
- * *fecha de expedición* expression; the input side passes `received_on`. A quarter is the three
- * calendar months of the trimestre; the whole year is Jan 1 → next Jan 1. Because it is a wider
- * range over the SAME rows, a quarter/year total is exactly the sum of its constituent months
- * (decimal addition is associative) — exactness inherited, never re-derived.
+ * `LiquidationPeriod` — pure calendar dates, no DST subtlety. The input side passes
+ * `received_on`. A quarter is the three calendar months of the trimestre; the whole year is Jan 1 →
+ * next Jan 1. Because it is a wider range over the SAME rows, a quarter/year total is exactly the
+ * sum of its constituent months (decimal addition is associative) — exactness inherited, never
+ * re-derived.
  */
 export function periodDateFilter(dateExpr: SQL, year: number, period: LiquidationPeriod): SQL {
   switch (period.kind) {

@@ -139,9 +139,21 @@ export interface FilingOverview {
   missingHistory: MissingHistory;
 }
 
+/** The box's own day, as a replacement corrective issued now is dated. */
+export interface BoxToday {
+  /** `YYYY-MM-DD` in the venue's zone. */
+  day: string;
+  /** The venue's offset east of UTC at the box's reading. */
+  offsetMinutes: number;
+}
+
 /** The answer of `GET /management-api/fiscal-filing`. */
 export interface FilingOverviewAnswer extends FilingOverview {
   warnings: FilingWarnings;
+  /** Null when this box issues no records here, or when the venue does not list this box or its
+   * time zone, venue row or settings cannot be read — each of those logged as
+   * `fiscal.filing_day_unread`. Any other error fails the read. */
+  today: BoxToday | null;
   filing: boolean;
   awaitingCertificate: boolean;
 }

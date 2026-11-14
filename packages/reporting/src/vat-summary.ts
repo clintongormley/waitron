@@ -22,14 +22,15 @@ import type { DailyCloseInput, PeriodVatInput, VatSummary } from "./types.js";
 /**
  * The shared VAT-aggregation core behind every per-rate summary. Reads the filed per-rate desglose
  * from `sales.vat_breakdown` — the cuota as filed, whichever method (direct or difference) computed
- * it — and sums base and tax per rate. `counted` selects the sales added; `reversed`, when given,
- * selects voided sales (`sv` joined to `s`) whose breakdown is subtracted.
+ * it — and sums base and tax per rate. `counted` selects the sales added, from `s` and any tables
+ * `joined` adds; `reversed`, when given, selects voided sales (`sv` joined to `s`) whose breakdown is
+ * subtracted.
  *
  * Exported for `vat-return.ts`'s modelo 303 aggregate; not in the public barrel.
  */
 export async function aggregateVatByRate(
   tx: Transaction,
-  scope: { nodeIds?: readonly NodeId[]; counted: SQL; reversed?: SQL },
+  scope: { nodeIds?: readonly NodeId[]; joined?: SQL; counted: SQL; reversed?: SQL },
 ): Promise<VatSummary> {
   const nodeClause = nodeScopeClause(scope.nodeIds);
   // `sales.vat_breakdown` is a JSON document whose `base` and `tax` are the decimal literals filed
@@ -60,7 +61,7 @@ export async function aggregateVatByRate(
       b.value ->> 'base' as base,
       b.value ->> 'tax' as tax,
       0 as reversal
-    from sales s, json_each(s.vat_breakdown) b
+    from sales s ${scope.joined ?? sql``}, json_each(s.vat_breakdown) b
     where ${scope.counted}
       ${nodeClause}
     ${reversals}

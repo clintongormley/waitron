@@ -3,9 +3,9 @@ import type { AeatCertificateKey } from "./strings.js";
 
 /** The case dialog's sentence for each refusal the remedy route can give. */
 // refused.not_sent and .record_invalid call their codes a fault in Waitron because the dialog sends
-// only a description, after refusing a blank one and any descriptionProblem; .fingerprint checks the
-// record the server just built, and .setup a registration that is only ever replaced in the same
-// transaction (registro-sif.ts, allocation.ts).
+// only a description, after refusing a blank one and any descriptionProblem, or a day it has
+// checked; .fingerprint checks the record the server just built, and .setup a registration that is
+// only ever replaced in the same transaction (registro-sif.ts, allocation.ts).
 export const REFUSAL_WORDS: Record<RemedyRefusal, AeatCertificateKey> = {
   "management_session.required": "fiscal_filing.refused.signed_out",
   "management_session.expired": "fiscal_filing.refused.signed_out",
@@ -35,6 +35,10 @@ export const REFUSAL_WORDS: Record<RemedyRefusal, AeatCertificateKey> = {
   "sif.not_registered": "fiscal_filing.refused.setup",
   "venue.time_zone_invalid": "fiscal_filing.refused.time_zone",
   "venue.time_zone_target_invalid": "fiscal_filing.refused.time_zone",
+  "fiscal.operation_date_invalid": "fiscal_filing.refused.operation_date",
+  "sale.replacement_not_first": "fiscal_filing.refused.replacement_not_first",
+  "fiscal.correction_unsupported": "fiscal_filing.refused.correction_unsupported",
+  "series.no_rectificative_for_node": "fiscal_filing.refused.no_corrective_series",
 };
 
 export function refusalKey(code: string): AeatCertificateKey | undefined {

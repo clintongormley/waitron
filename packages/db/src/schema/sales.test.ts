@@ -833,4 +833,36 @@ describe("sales — a replacement corrective", () => {
       .where(eq(sales.id, originalSaleId));
     expect(row!.replacesOriginal).toBe(false);
   });
+
+  it("refuses a supply day on a sale that is not a replacement", async () => {
+    const ordinary = await captureError(() =>
+      insert({ invoiceNumber: 2, supplyDay: "2026-02-28" }),
+    );
+    expect(isRefusal(ordinary, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(ordinary)).toMatch(/sales_supply_day_ck/);
+
+    const byDifferences = await captureError(() =>
+      insert({
+        invoiceNumber: 3,
+        total: -50,
+        correctsSaleId: originalSaleId,
+        supplyDay: "2026-02-28",
+      }),
+    );
+    expect(isRefusal(byDifferences, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(byDifferences)).toMatch(/sales_supply_day_ck/);
+  });
+
+  it("stores a supply day on a replacement", async () => {
+    const [row] = await insert({
+      invoiceNumber: 2,
+      replacesOriginal: true,
+      correctsSaleId: originalSaleId,
+      supplyDay: "2026-02-28",
+    });
+    const [stored] = suite.db.all<{ supply_day: string | null }>(
+      sql`select supply_day from sales where id = ${row!.id}`,
+    );
+    expect(stored!.supply_day).toBe("2026-02-28");
+  });
 });

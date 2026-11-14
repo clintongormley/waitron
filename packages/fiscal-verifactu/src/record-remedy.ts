@@ -18,6 +18,7 @@ import type { CorrectedRecordFacts } from "./record-remedy-facts.js";
 export const REMEDY_KINDS = [
   "record-correction",
   "corrective-invoice",
+  "replacement-invoice",
   "absent-original-cancellation",
   "release-brake",
   "release-held-cancellation",

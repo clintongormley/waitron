@@ -45,8 +45,8 @@ function refused(
 const DESCRIPTION_MESSAGE = "Valor o tipo incorrecto del campo: DescripcionOperacion";
 
 describe("putRightFor, code 1112 (issue date in the future)", () => {
-  it("offers nothing yet for a simplified invoice", () => {
-    expect(putRightFor(refused(1112))).toEqual({ kind: "none", why: "not-yet" });
+  it("offers the replacement corrective for a simplified invoice", () => {
+    expect(putRightFor(refused(1112))).toEqual({ kind: "replacement-invoice" });
   });
   it.each(["F1", "F3"])("names the full-invoice corrective for %s", (tipoFactura) => {
     expect(putRightFor(refused(1112, { tipoFactura }))).toEqual({

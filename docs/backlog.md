@@ -221,7 +221,7 @@ that bundle's heading in the area's file: take a bundle as one pull request.
   necessarily the latest reply. What remains is a persistent repair or decision route, which needs
   its own owner decision.
 
-- **A1089: fiscal filing-case alerts need a real decision route.** The evidence page exists: **Reporting → Fiscal filing** (W41s-9 slice 1, 2026-11-10), which the bell's filing alerts open. Its one decision: for a sale AEAT refused with code 1100 whose message names the operation description, an administrator may send a correction record with a new description (Q37-FIX). Every other case still waits for the page to offer W41s-8's other remedies; until then keep the missing workflow explicit. Rejections, cancellations, duplicate conflicts and repeated refusals cannot be fixed by an invented retry screen.
+- **A1089: fiscal filing-case alerts need a real decision route.** The evidence page exists: **Reporting → Fiscal filing** (W41s-9 slice 1, 2026-11-10), which the bell's filing alerts open. Its two decisions: for a sale AEAT refused with code 1100 whose message names the operation description, an administrator may send a correction record with a new description; for a simplified invoice AEAT refused for a future date (code 1112), an administrator may issue a replacement corrective invoice carrying the day the sale really happened (Q37-FIX). Every other case still waits for the page to offer W41s-8's other remedies; until then keep the missing workflow explicit. Rejections, cancellations, duplicate conflicts and repeated refusals cannot be fixed by an invented retry screen.
   [Audit](backlog/self-service-refusals.md#fiscal-cases).
 
 - **A1089: fiscal integrity and validation alerts need evidence-preserving next steps.** Replace support-only guidance without editing records or treating every warning as a proven Waitron bug. A substantial missing recovery workflow requires an owner decision.
@@ -317,12 +317,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   backup; [A1420 PR 3b1 and 3b2](superpowers/plans/2026-11-13-a1420-restore-series-check.md)
   remove that, and once they land the end-to-end test drops its internet stand-in. Of Task 8's
   disputed production remedies, the corrective invoice (the replacement) is built to file as an R5
-  "S" (owner's answers A–E, 2026-11-14), and offering it waits on Q37-FIX Task 3c; the others stay disabled
+  "S" (owner's answers A–E, 2026-11-14) and offered on the case dialog for a simplified invoice refused for a future date; the others stay disabled
   pending Q35/Q38/Q40 or a case-specific owner decision. Once its original's
   correction is accepted, on any issuing chain, an administrator may release a held cancellation
   through a remedy, which only a test policy enables today (production's `ENABLED_REMEDIES` holds
-  only `record-correction`, for rejected records only,
-  `packages/fiscal-verifactu/src/record-remedy-routes.ts:31`).
+  only `record-correction` and `replacement-invoice`, for rejected records only,
+  `packages/fiscal-verifactu/src/record-remedy-routes.ts:32`).
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment
@@ -369,6 +369,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   or classification when the customer's gross total stays the same. The owner left this out of
   A802's money-back scope on 2026-10-21; no build is approved.
   [Detail](backlog/fiscal.md#correct-vat-without-returning-money)
+
+- **Probe a replacement R5 "S" on AEAT's test service (go-live; watcher, 2026-11-14 18:22).** Run
+  before the first real R5 'S': a simplified invoice refused for a future date (`1112`), then a
+  replacement R5 "S" naming it with rectified amounts 0.00 / 0.00, sent while the original's date is
+  still in the future and again after it has passed. It needs a new `live-aeat` mode in the
+  `verifactu` repo, which needs the owner's approval, by A985's precedent. Left open by Q37-FIX.
 
 - **"No tax (0%)" is an open fiscal question, and it must be answered before the first live filing.**
   The advisor is asked only to confirm (review item [R3](compliance/asesor-questions.md#the-shortened-list-2026-10-09)).
@@ -1772,8 +1778,7 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 
 - **Qualify clock confirmation through remote access** (bundle of 1, size M). [Detail](backlog/box.md#bundle-qualify-clock-confirmation-through-remote-access)
 
-- **A1407. A wrong date needs a corrective invoice, and Waitron cannot yet issue the right one.** Research found the remedy is R4 on a full invoice and R5 on a simplified one; no corrective writer files an R4 yet. `computeVatReturn` sorts by issue date, so a misdated sale lands in the wrong period in that report. Since A1420 PR 2, refusals for a future date (`1112`) no longer hold the rest of a chain; a record refused for a future date should get its corrective at once, naming the refused invoice, which AEAT's developer FAQ §17 says resolves it (case 2.a) and AEAT's test service accepted for an R1 (verifactu run 37286368370). Clocks running behind are not listed for the owner. The invoices to correct are those AEAT refuses as dated in the future (`1112`), already stored on the filing record; a wrong date AEAT accepts is not corrected (owner, 2026-11-10; A1420 D8). An enabled remedy takes the start gate first (A1420 R7). AEAT's `TimestampPresentacion` is read but not stored: kept with each record, it would prove the real time of most sales, and that part needs a column, so it waits for the A1308 table hold to lift. Read, not run. [Findings](compliance/research/2026-11-06-adviser-clock.md)
-  - 2026-11-14: the Veri\*Factu writer for a replacement corrective (R5 "S") of a simplified invoice AEAT refused is built (Q37-FIX Task 3d): rectified amounts 0.00, and the sale's real day as `FechaOperacion` when it differs from the replacement's own date. No screen offers it yet (Task 3c).
+- **A1407. A full invoice AEAT refused for a future date needs a corrective invoice Waitron cannot yet issue.** Research found the remedy is an R4 for a full invoice, and no corrective writer files one yet; the case dialog says so. A simplified invoice refused for a future date is put right from the case dialog with a replacement R5 (Q37-FIX). `computeVatReturn` counts a full invoice in its issue date's period, so a misdated one lands in the wrong period in that report. Since A1420 PR 2, refusals for a future date (`1112`) no longer hold the rest of a chain; a record refused for a future date should get its corrective at once, naming the refused invoice, which AEAT's developer FAQ §17 says resolves it (case 2.a) and AEAT's test service accepted for an R1 (verifactu run 37286368370). Clocks running behind are not listed for the owner. The invoices to correct are those AEAT refuses as dated in the future (`1112`); a wrong date AEAT accepts is not corrected (owner, 2026-11-10; A1420 D8). An enabled remedy takes the start gate first (A1420 R7). AEAT's `TimestampPresentacion` is read but not stored: kept with each record, it would prove the real time of most sales, and that part needs a column, so it waits for the A1308 table hold to lift. Read, not run. [Findings](compliance/research/2026-11-06-adviser-clock.md)
 
 - **Correct the sales dated wrongly once the tax adviser answers Q60.** What the correction is
   waits on [Q60](compliance/asesor-questions.md#q60-sales-dated-later-than-the-real-time-by-a-clock-that-ran-ahead-added-2026-10-24);

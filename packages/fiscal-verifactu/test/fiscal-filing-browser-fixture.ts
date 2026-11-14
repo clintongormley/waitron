@@ -1,4 +1,6 @@
+import { localCalendarDate } from "@waitron/shared";
 import type {
+  BoxToday,
   FilingCaseView,
   FilingOverviewAnswer,
   IdentityChangeView,
@@ -6,6 +8,13 @@ import type {
   RecordWarningView,
   ReplyMismatchView,
 } from "../src/filing-overview-types.js";
+
+/** A box whose day and offset are this device's, `days` days from now. */
+export function deviceToday(days = 0): BoxToday {
+  const at = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+  const offsetMinutes = -at.getTimezoneOffset();
+  return { day: localCalendarDate(at, offsetMinutes), offsetMinutes };
+}
 
 export const OURS = "a".repeat(64);
 export const PREVIOUS = "b".repeat(64);
@@ -139,6 +148,7 @@ export const FLAGGED_WARNING: RecordWarningView = {
 export function overview(over: Partial<FilingOverviewAnswer> = {}): FilingOverviewAnswer {
   return {
     readAt: "2026-11-10T09:30:00.000Z",
+    today: { day: "2026-11-10", offsetMinutes: 60 },
     progress: {
       counts: {
         pendiente: 4,

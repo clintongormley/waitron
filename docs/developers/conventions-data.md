@@ -4469,7 +4469,7 @@ is `waiting` or a clock set is with the host, each asked at each call, so a box 
 that call. Orders still reach the kitchen (the owner's "Orders still go"): sending one is not among
 the wrapped calls (read, not run). The administrator's record remedies call the chain directly, so their route asks the gate before
 any remedy runs (`packages/fiscal-verifactu/src/record-remedy-routes.ts`, `requireClockConfirmed`;
-`boot.start-clock-gate.test.ts` sends one through boot); production enables only the correction record.
+`boot.start-clock-gate.test.ts` sends one through boot); production enables only the correction record and the replacement corrective.
 
 **"Check the time" on a till while the start waits** (`apps/server/src/till-box-clock-api.ts`,
 `apps/server/src/clock-start-up.ts`). While the start is `waiting` on a box that files records,
@@ -6530,7 +6530,7 @@ rule, guard and pointer.
 > `clock-unconfirmed-gate.test.ts` lists, on a seat wrapped as boot wraps it, and one cash sale
 > through boot; the record remedies, off in production, are outside it.
 
-_2026-11-14 (Q37-FIX): production now enables the correction record, for rejected records only; its route asks the start's
+_2026-11-14 (Q37-FIX): production now enables the correction record and the replacement corrective, for rejected records only; its route asks the start's
 gate, and `boot.start-clock-gate.test.ts` sends one correction-record request through boot._
 
 ## Bound peer requests before parsing them
