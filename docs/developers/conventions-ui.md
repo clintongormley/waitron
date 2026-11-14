@@ -2067,7 +2067,7 @@ revision moved. The venue's values are:
 receipt languages and invoice language, venue name and tax id, onboarding intent,
 courses, card provider, card readers and the default reader, tips, the simplified-invoice
 limit and full invoices. Every read of the setup is numbered when sent, and an answer is skipped
-once a read sent after it has been applied. A draft line keeps the course it was given, name
+once a read sent after it has been applied, or has answered with the revision already applied. A draft line keeps the course it was given, name
 included, after a refresh deletes that course. `themeHash`, the hash `/api/theme` answers for
 the theme in use, is in the answer and moves `setupRevision` when the theme in use changes, is
 saved with new choices, or one of its logo's images is reframed or replaced in the library.
