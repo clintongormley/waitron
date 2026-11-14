@@ -50,7 +50,7 @@ import {
 } from "./testing/group-composition-fixture.js";
 import { printingAlertSource } from "./alert-sources.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { JOBS_WAITING_MS } from "./print-job-trouble.js";
+import { JOBS_WAITING_MS, printersInTrouble } from "./print-job-trouble.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import "./errors.js";
 import { mergeBills as mergeBillsCommand, splitBill } from "./testing/bill-action-fixture.js";
@@ -58,6 +58,7 @@ import { joinTables } from "./testing/table-action-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { cancelLine, ensureOperator } from "./testing/cancel-line.js";
 import { setStationPrinting } from "./testing/station-printing.js";
+import { moveDishesToStation } from "./testing/order-writer-fixture.js";
 import type { TradingContext } from "./trading-context.js";
 
 // Review Focus 6: a kitchen ticket that failed or is stuck shows as a printing problem on the table
@@ -843,6 +844,121 @@ describe("the printer's alert after the till's Reprint (A167)", () => {
     await setJob(jobId, exhausted);
 
     expect(await waitingAt(v.kitchenPrinterId)).toBe(1);
+  });
+});
+
+describe("the printer's alert counts what the table counts", () => {
+  it("drops a failed ticket whose dishes all moved to another bill once that bill's Reprint has printed", async () => {
+    const v = await setupVenue();
+    const table4 = await firedTable(v, "Table 4", ["burger", "beer"]);
+    await setJob(await jobFor(table4.tabId, v.kitchenPrinterId), exhausted);
+    const lineNo = await lineNoOf(table4.tabId, "burger");
+    const { billId: checkId } = await inTx(async (tx) =>
+      splitBill(tx, v.cfg, table4.tabId, [{ lineNo }], {
+        expectedPartyRevision: (await command(table4.partyId)).expectedPartyRevision,
+        operatorId: ALEX,
+      }),
+    );
+    expect(await waitingAt(v.kitchenPrinterId)).toBe(1);
+
+    await reprintPrinted(v, checkId);
+    expect(await problemsOf(table4.partyId)).toEqual([]);
+    expect(await waitingAt(v.kitchenPrinterId)).toBe(0);
+  });
+
+  it("drops a failed ticket from the old station's printer once its dish moves to another station", async () => {
+    const v = await setupVenue();
+    const table4 = await firedTable(v, "Table 4");
+    await setJob(await jobFor(table4.tabId, v.kitchenPrinterId), exhausted);
+    const [item] = await db
+      .select({ lineId: ticketItems.workingOrderLineId })
+      .from(ticketItems)
+      .where(eq(ticketItems.stationId, v.kitchenStationId));
+    expect(await waitingAt(v.kitchenPrinterId)).toBe(1);
+
+    await inTx((tx) =>
+      moveDishesToStation(
+        tx,
+        v.cfg,
+        table4.tabId,
+        { submissionId: randomUUID(), lineIds: [item!.lineId], stationId: v.barStationId },
+        { deviceId: v.cfg.origin.deviceId, personId: ALEX },
+      ),
+    );
+    expect(await problemsOf(table4.partyId)).toEqual([]);
+    expect(await waitingAt(v.kitchenPrinterId)).toBe(0);
+  });
+
+  it("drops a Printers-screen resend of a failed ticket that also ran out once the till's Reprint has printed", async () => {
+    const v = await setupVenue();
+    const table4 = await firedTable(v, "Table 4");
+    const job = await jobFor(table4.tabId, v.kitchenPrinterId);
+    await setJob(job, exhausted);
+    const resend = await inTx((tx) => resendPrintJob(tx, job));
+    await setJob(resend.jobId, exhausted);
+    expect(await waitingAt(v.kitchenPrinterId)).toBe(2);
+
+    await reprintPrinted(v, table4.tabId);
+    expect(await problemsOf(table4.partyId)).toEqual([]);
+    expect(await waitingAt(v.kitchenPrinterId)).toBe(0);
+  });
+
+  it("keeps counting a failed resend of a ticket on a printer its station does not print to, judging a resend back on the ticket's printer as the ticket", async () => {
+    const v = await setupVenue();
+    const table4 = await firedTable(v, "Table 4");
+    const job = await jobFor(table4.tabId, v.kitchenPrinterId);
+    await setJob(job, exhausted);
+    const elsewhere = { printerId: v.receiptPrinter, payload: Uint8Array.from([0x01]) };
+    const resend = await inTx((tx) => resendPrintJob(tx, job, elsewhere));
+    await setJob(resend.jobId, exhausted);
+    expect(await waitingAt(v.receiptPrinter)).toBe(1);
+
+    const again = await inTx((tx) => resendPrintJob(tx, resend.jobId));
+    await setJob(again.jobId, exhausted);
+    expect(await waitingAt(v.receiptPrinter)).toBe(2);
+    const back = { printerId: v.kitchenPrinterId, payload: elsewhere.payload };
+    await setJob((await inTx((tx) => resendPrintJob(tx, again.jobId, back))).jobId, exhausted);
+    expect(await waitingAt(v.kitchenPrinterId)).toBe(2);
+
+    await reprintPrinted(v, table4.tabId);
+    expect(await problemsOf(table4.partyId)).toEqual([]);
+    expect(await waitingAt(v.kitchenPrinterId)).toBe(0);
+    expect(await waitingAt(v.receiptPrinter)).toBe(2);
+  });
+
+  it("takes the count, oldest and stuck-since time over kitchen tickets and other jobs together", async () => {
+    const v = await setupVenue();
+    const now = new Date();
+    const minsAgo = (mins: number) => new Date(now.getTime() - mins * 60_000).toISOString();
+    const enqueued = async (createdAt: string, values: Parameters<typeof setJob>[1]) => {
+      const { jobId } = await inTx((tx) =>
+        enqueuePrintJob(tx, v.kitchenPrinterId, Uint8Array.from([1])),
+      );
+      await setJob(jobId, { createdAt, ...values });
+    };
+    const table4 = await firedTable(v, "Table 4");
+    await setJob(await jobFor(table4.tabId, v.kitchenPrinterId), {
+      createdAt: minsAgo(30),
+      ...exhausted,
+    });
+    await enqueued(minsAgo(29), { status: "done" });
+    const table5 = await firedTable(v, "Table 5");
+    await setJob(await jobFor(table5.tabId, v.kitchenPrinterId), {
+      createdAt: minsAgo(26),
+      ...exhausted,
+    });
+    await enqueued(minsAgo(25), exhausted);
+
+    expect(await inTx((tx) => printersInTrouble(tx, now))).toEqual([
+      {
+        id: v.kitchenPrinterId,
+        name: "Kitchen printer",
+        count: 3,
+        oldest: minsAgo(30),
+        stuckSince: minsAgo(26),
+        kitchen: true,
+      },
+    ]);
   });
 });
 

@@ -1172,7 +1172,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **Since W72c an imported print agent arrives with no node; the importing box's own agent still
   enrols as a new row beside it**, as it did before (read, not run). Left open by W72c (#1237).
 
-- **The printer's stuck alert counts what the table counts** (bundle of 3, size S). [Detail](backlog/printers.md#bundle-the-printers-stuck-alert-counts-what-the-table-counts)
+- **A printer's till notice and its bell agree** (bundle of 1, size S, needs the owner). [Detail](backlog/printers.md#bundle-a-printers-till-notice-and-its-bell-agree)
 
 - **The virtual PDF printer**, and a `print_jobs` retention sweep — nothing deletes a job today.
   Finished jobs are to be kept one month (owner, 2026-10-14). [Detail](backlog/printers.md#the-virtual-pdf-printer)

@@ -1,15 +1,21 @@
+import { randomUUID } from "node:crypto";
+import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
+  insertInChunks,
+  kitchenPrintJobs,
   kitchenStations,
   printJobs,
   printers,
   withTransaction,
+  workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
 import { MAX_DELIVERY_ATTEMPTS, PRINTER_UNPAIRED } from "@waitron/printing";
-import { printersInTrouble } from "./print-job-trouble.js";
+import { SQL_VARIABLE_LIMIT } from "@waitron/store";
+import { printersInTrouble, printersInTroubleQuery } from "./print-job-trouble.js";
 
 const NOW = new Date("2026-09-15T12:00:00Z");
 
@@ -76,6 +82,23 @@ async function read() {
 }
 
 describe("printersInTrouble", () => {
+  it("searches each printer's unprinted jobs, and its later printed ones, through the pull index", async () => {
+    await prepareVenue();
+    const plan = await withTransaction(suite.db, async (tx) => {
+      const rows = await tx.execute<{ detail: string }>(
+        sql`explain query plan ${printersInTroubleQuery(tx, NOW).getSQL()}`,
+      );
+      return rows.rows.map((row) => row.detail);
+    });
+
+    expect(plan).toContain(
+      "SEARCH print_jobs USING INDEX print_jobs_pull_idx (printer_id=? AND status=?)",
+    );
+    expect(plan).toContain(
+      "SEARCH trouble_later_printed USING INDEX print_jobs_pull_idx (printer_id=? AND status=? AND rowid>?)",
+    );
+  });
+
   it("names an active printer whose document has waited past two minutes, with how many and the oldest", async () => {
     await prepareVenue();
     const id = await seedPrinter({ name: "Bar" });
@@ -86,6 +109,14 @@ describe("printersInTrouble", () => {
     expect(await read()).toEqual([
       { id, name: "Bar", count: 2, oldest: minsAgo(5), stuckSince: minsAgo(5), kitchen: false },
     ]);
+  });
+
+  it("counts a document still printing past two minutes", async () => {
+    await prepareVenue();
+    const id = await seedPrinter({ name: "Bar" });
+    await seedJob({ printerId: id, createdAt: minsAgo(3), status: "printing" });
+
+    expect(await read()).toMatchObject([{ id, count: 1, oldest: minsAgo(3) }]);
   });
 
   it("names nothing for a young job, a drawer pulse, a job an Unpair ended, or a switched-off printer", async () => {
@@ -139,6 +170,58 @@ describe("printersInTrouble", () => {
     await seedJob({ printerId: id, createdAt: minsAgo(10) });
 
     expect(await read()).toMatchObject([{ id, kitchen: true }]);
+  });
+
+  it("reads more troubled jobs, and kitchen tickets on more bills, than one statement can bind", async () => {
+    await prepareVenue();
+    const id = await seedPrinter({ name: "Kitchen" });
+    const [station] = await suite.db
+      .insert(kitchenStations)
+      .values({ name: "Kitchen", isDefault: false, active: true })
+      .returning({ id: kitchenStations.id });
+    await attachStationPrinterForTest(suite.db, station!.id, id);
+    const many = SQL_VARIABLE_LIMIT + 1;
+    const job = (createdAt: string) => ({
+      id: randomUUID(),
+      printerId: id,
+      payload: Uint8Array.from([0x01]),
+      kind: "document" as const,
+      createdAt,
+      ...exhausted,
+    });
+    const others = Array.from({ length: many }, () => job(minsAgo(5)));
+    const tickets = Array.from({ length: many }, () => job(minsAgo(10)));
+    const orders = tickets.map(() => ({
+      id: randomUUID(),
+      source: "dashboard" as const,
+      orderNumber: 1,
+    }));
+    await withTransaction(suite.db, async (tx) => {
+      await insertInChunks(tx, printJobs, [...tickets, ...others]);
+      await insertInChunks(tx, workingOrders, orders);
+      await insertInChunks(
+        tx,
+        kitchenPrintJobs,
+        tickets.map((ticket, i) => ({
+          printJobId: ticket.id,
+          workingOrderId: orders[i]!.id,
+          stationId: station!.id,
+          reprint: false,
+        })),
+      );
+    });
+
+    // No bill has a dish a Reprint would print, so every kitchen ticket leaves nothing waiting.
+    expect(await read()).toEqual([
+      {
+        id,
+        name: "Kitchen",
+        count: many,
+        oldest: minsAgo(5),
+        stuckSince: minsAgo(5),
+        kitchen: true,
+      },
+    ]);
   });
 
   it("a printer whose only station is switched off is not a kitchen printer", async () => {

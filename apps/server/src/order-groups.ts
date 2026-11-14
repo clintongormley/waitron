@@ -59,6 +59,7 @@ import {
   enqueueHoldCorrections,
   enqueueKitchenTickets,
   firedQuantity,
+  inIds,
   leftToServe,
   printerMappings,
 } from "./kitchen-print.js";
@@ -2420,7 +2421,7 @@ export async function heldPaperStations(
       stationId: orderGroupHoldStations.stationId,
     })
     .from(orderGroupHoldStations)
-    .where(inArray(orderGroupHoldStations.groupId, [...new Set(groupIds)]));
+    .where(inIds(orderGroupHoldStations.groupId, groupIds));
   const byGroup = new Map<string, Set<string>>();
   for (const row of rows) {
     const stations = byGroup.get(row.groupId) ?? new Set<string>();

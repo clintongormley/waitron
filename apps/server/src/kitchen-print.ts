@@ -1,6 +1,6 @@
 import { and, eq, gt, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
-import { alias } from "drizzle-orm/sqlite-core";
+import { alias, type SQLiteColumn } from "drizzle-orm/sqlite-core";
 import {
   diningTables,
   insertInChunks,
@@ -141,6 +141,14 @@ interface PrinterMapping {
   printerId: string;
   paperWidth: PaperWidth;
   resolution: Resolution;
+}
+
+/**
+ * `column` is one of `ids`, which bind as one JSON value however many there are, where `inArray`
+ * binds one value each and a statement may bind at most `SQL_VARIABLE_LIMIT` (`@waitron/store`).
+ */
+export function inIds(column: SQLiteColumn, ids: readonly string[]): SQL {
+  return sql`${column} in (select value from json_each(${JSON.stringify([...new Set(ids)])}))`;
 }
 
 /**
@@ -1753,7 +1761,10 @@ async function onHeldPaper(
     .select({ id: workingOrderLines.id, groupId: workingOrderLines.groupId })
     .from(workingOrderLines)
     .where(
-      inArray(workingOrderLines.id, [...new Set(items.map((item) => item.workingOrderLineId))]),
+      inIds(
+        workingOrderLines.id,
+        items.map((item) => item.workingOrderLineId),
+      ),
     );
   const groupOf = new Map(lines.map((line) => [line.id, line.groupId]));
   const recorded = await heldPaperStations(
@@ -1789,7 +1800,7 @@ async function readOnHoldTickets(tx: Transaction, orderIds: readonly string[]) {
     .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .where(
       and(
-        inArray(workingOrderLines.workingOrderId, [...orderIds]),
+        inIds(workingOrderLines.workingOrderId, orderIds),
         isNull(ticketItems.firedAt),
         eq(orderGroups.state, "held"),
         isNotNull(orderGroups.holdPrintedAt),
@@ -2432,7 +2443,7 @@ async function readReprintParts(
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .where(
       and(
-        inArray(workingOrderLines.workingOrderId, [...orderIds]),
+        inIds(workingOrderLines.workingOrderId, orderIds),
         isNotNull(ticketItems.firedAt),
         eq(ticketItems.madeHere, false),
       ),
@@ -2672,6 +2683,92 @@ async function readPrintProblems(tx: Transaction, scope: SQL, now: Date): Promis
       compareStationNames(a.stationName, b.stationName) ||
       a.workingOrderId.localeCompare(b.workingOrderId),
   );
+}
+
+/**
+ * Of `jobs`, the ones that leave nothing waiting at `printerId`, each judged by the links of
+ * `sourceId`: every link is covered by a later printed reprint on `printerId`, or a Reprint of its
+ * bill would link nothing on `printerId` to its station. A job whose source has no links is never in
+ * the answer.
+ */
+export async function kitchenJobsNotWaiting(
+  tx: Transaction,
+  jobs: readonly { id: string; printerId: string; sourceId: string }[],
+): Promise<Set<string>> {
+  const settled = new Set<string>();
+  if (jobs.length === 0) return settled;
+  const links = await tx
+    .select({
+      printJobId: kitchenPrintJobs.printJobId,
+      workingOrderId: kitchenPrintJobs.workingOrderId,
+      stationId: kitchenPrintJobs.stationId,
+      queued: sql<number>`${kitchenPrintJobs}.rowid`,
+    })
+    .from(kitchenPrintJobs)
+    .where(
+      inIds(
+        kitchenPrintJobs.printJobId,
+        jobs.map((job) => job.sourceId),
+      ),
+    );
+  if (links.length === 0) return settled;
+  const orderIds = links.map((row) => row.workingOrderId);
+  const reprints = await tx
+    .select({
+      workingOrderId: kitchenPrintJobs.workingOrderId,
+      stationId: kitchenPrintJobs.stationId,
+      printerId: printJobs.printerId,
+      queued: sql<number>`${kitchenPrintJobs}.rowid`,
+    })
+    .from(kitchenPrintJobs)
+    .innerJoin(printJobs, eq(printJobs.id, kitchenPrintJobs.printJobId))
+    .where(
+      and(
+        inIds(kitchenPrintJobs.workingOrderId, orderIds),
+        eq(kitchenPrintJobs.reprint, true),
+        printedOrResent(printJobs),
+      ),
+    );
+  const lastReprinted = new Map<string, number>();
+  for (const row of reprints) {
+    const key = `${row.workingOrderId}|${row.stationId}|${row.printerId}`;
+    lastReprinted.set(key, Math.max(lastReprinted.get(key) ?? 0, row.queued));
+  }
+  const linksBySource = new Map<string, typeof links>();
+  for (const row of links) {
+    const own = linksBySource.get(row.printJobId);
+    if (own === undefined) linksBySource.set(row.printJobId, [row]);
+    else own.push(row);
+  }
+  const uncleared = new Map<string, typeof links>();
+  for (const job of jobs) {
+    const own = linksBySource.get(job.sourceId);
+    if (own === undefined) continue;
+    uncleared.set(
+      job.id,
+      own.filter(
+        (row) =>
+          (lastReprinted.get(`${row.workingOrderId}|${row.stationId}|${job.printerId}`) ?? 0) <=
+          row.queued,
+      ),
+    );
+  }
+  const waitingOrders = [
+    ...new Set([...uncleared.values()].flat().map((row) => row.workingOrderId)),
+  ];
+  const targets =
+    waitingOrders.length === 0
+      ? new Map<string, Set<string>>()
+      : await readReprintTargets(tx, waitingOrders);
+  for (const job of jobs) {
+    const rows = uncleared.get(job.id);
+    if (rows === undefined) continue;
+    const waiting = rows.some((row) =>
+      targets.get(row.workingOrderId)!.has(`${job.printerId}|${row.stationId}`),
+    );
+    if (!waiting) settled.add(job.id);
+  }
+  return settled;
 }
 
 /**
