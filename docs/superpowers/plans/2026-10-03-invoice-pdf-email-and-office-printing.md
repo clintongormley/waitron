@@ -1,5 +1,7 @@
 # A231d implementation plan: full invoices by email as a PDF, and on an office printer
 
+> **2026-11-14:** [A1308 env4](2026-11-08-a1308-env4-unsealed-settings.md) supersedes the SMTP storage shape below: only the URL is sealed; the sender is in `settings.mail`. Use dashboard Email settings for SMTP saves/removals; the generic credentials CLI refuses SMTP set/delete.
+
 > 2026-10-22: A998 supersedes the saved SMTP settings permission in this historical document.
 > Saving a relay now requires `person.admin` because account-reset links use it too. Managers
 > retain redacted settings reads and tests sent to their own address.

@@ -1,3 +1,4 @@
+import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { ensureStreamId } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -3545,12 +3546,9 @@ describe("startServer — what a trading boot wires behind its management routes
     onTestFinished(smtp.close);
     try {
       await liveFixture(httpPort(), (tx) =>
-        putCredential(tx, loadKeyRing(KEY_ENV), {
-          purpose: "email.smtp",
-          value: {
-            url: `smtp://127.0.0.1:${smtp.port}`,
-            from: "Waitron <no-reply@example.test>",
-          },
+        saveSmtpForTest(tx, loadKeyRing(KEY_ENV), {
+          url: `smtp://127.0.0.1:${smtp.port}`,
+          from: "Waitron <no-reply@example.test>",
         }),
       );
       const configured = await fetch(`http://127.0.0.1:${httpPort()}/management-api/email`, {

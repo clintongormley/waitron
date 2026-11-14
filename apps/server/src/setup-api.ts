@@ -1,3 +1,4 @@
+import { saveSmtpSettings } from "./mail-settings.js";
 import {
   mountRecoveryPreparationApi,
   type PrepareRecovery,
@@ -29,7 +30,7 @@ import {
 } from "@waitron/identity";
 import { AppError, FALLBACK_LOCALE, SUPPORTED_LOCALE_CODES, isAppError } from "@waitron/shared";
 import { withTransaction, type Database, type NodeDatabase } from "@waitron/db";
-import { putCredential, type KeyRing } from "@waitron/credentials";
+import type { KeyRing } from "@waitron/credentials";
 import type { DeploymentEnvironment } from "./config.js";
 import type { ProvisionRequest } from "./provision.js";
 import type { AdoptCredential, AdoptHooks, AdoptRequest } from "./adopt.js";
@@ -956,9 +957,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         if (expected) await secret!.seal({ db, ring, nodeId: result.nodeId }, rawSecret);
         // The fiscal seat owns its transaction; resume repeats idempotent seals until both finish.
         if (email !== undefined) {
-          await withTransaction(db, (tx) =>
-            putCredential(tx, ring, { purpose: "email.smtp", value: email }),
-          );
+          await withTransaction(db, (tx) => saveSmtpSettings(tx, ring, email, null));
         }
         await operation?.advance("secret_sealed");
       }

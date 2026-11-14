@@ -2,6 +2,30 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **2026-11-14, watcher-cleared current-base adjustments (H questions.md, 21:56 and 22:10):**
+> `MAIL_SETTINGS` lives in provisioning and is re-exported by the server, so command-line first setup
+> can save the sender too. All four SMTP writers split the URL and sender in one transaction.
+> The backup validator's malformed URL-only input becomes `{}`; the old `{url,from}` becomes a
+> malformed input, and positive backup fixtures become `{url}` with their assertions retained.
+> Missing-sender and missing-URL delivery fixtures now model the two stores, keeping their refusal
+> code and params assertions. Contrary to the parenthetical in Task 1 below, `readSavedSmtp` throws
+> `server.credential_unusable` for a null sender before the resolver's existing catch; that refusal
+> is preserved. No wider catch or compatibility conversion is added.
+> The watcher cleared up to about 650 gross lines at 22:15 for the shared fixture replacements.
+
+> **2026-11-14, watcher 22:36, after both Claude run-it reviews:** one shared `saveSmtpSettings`
+> in provisioning owns the split write; all four writers and the test fixture wrapper call it.
+> The generic credentials CLI refuses SMTP set/delete and points to dashboard Email settings.
+> Its list/rotate and other purposes stay. The existing parser/default suite moves to provisioning.
+> The unused mail live-query dependency, test and server-key plumbing below are omitted until a
+> real reader needs them. No screen used that query through the live controller. One gathered fixes
+> pass and one fresh read are cleared, with up to 725 gross lines and no wider missing-sender catch.
+
+> **2026-11-14, CI receipt, watcher 23:01:** `ACTIVATION_ROWS` is 126 rather than 124: the held
+> setup now has one `settings.mail` row and its `settings.saved` activity entry. A read-only fixture
+> probe checked both rows and the total. The holdings, holdings-ledger and holdings-damage suites
+> keep all their exact count, kept-record, no-copy and fiscal assertions.
+
 **Goal:** The email sender address stops being sealed with the SMTP secret it sits beside. It moves
 to a new `mail` settings document; the sealed SMTP credential keeps only the connection URL.
 Stripe's two return addresses are not moved (owner, 2026-11-09; "What it leaves out").

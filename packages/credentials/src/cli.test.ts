@@ -1,6 +1,13 @@
+import { putCredential } from "./store.js";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withNodeTransaction, type NodeDatabase } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  withNodeTransaction,
+  withTransaction,
+  venueCredentials,
+  type NodeDatabase,
+} from "@waitron/db";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { runCli, type CliDeps } from "./cli.js";
 import { loadKeyRing, type KeyRing } from "./keyring.js";
@@ -503,4 +510,20 @@ describe("unknown commands", () => {
     const h = harness();
     expect(await runCli([], h.deps)).not.toBe(0);
   });
+});
+
+it.each(["set", "delete"])("refuses SMTP %s and keeps the vault unchanged", async (command) => {
+  if (command === "delete")
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, RING, {
+        purpose: "email.smtp",
+        value: { url: "smtp://old.example.test:587" },
+      }),
+    );
+  const before = await suite.db.select().from(venueCredentials);
+  const h = harness(JSON.stringify({ url: "smtp://new.example.test:587" }));
+  expect(await runCli([command, "--purpose", "email.smtp"], h.deps)).toBe(2);
+  expect(h.err).toEqual(["Use the dashboard's Email settings to save or remove SMTP settings."]);
+  expect(h.out).toEqual([]);
+  expect(await suite.db.select().from(venueCredentials)).toEqual(before);
 });

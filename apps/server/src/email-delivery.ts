@@ -1,10 +1,18 @@
-import { readVenue, withTransaction, type Database, type Transaction } from "@waitron/db";
-import { tryGetCredential, type KeyRing } from "@waitron/credentials";
+import {
+  readSettings,
+  readVenue,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
+import { validatePayload, tryGetCredential, type KeyRing } from "@waitron/credentials";
 import { credentialField } from "./credentials.js";
-import { hasCode, isAppError } from "@waitron/shared";
+import { AppError, hasCode, isAppError } from "@waitron/shared";
+import { MAIL_SETTINGS } from "./mail-settings.js";
 import { venueSmtpFrom } from "./email-sender-name.js";
 import type { SmtpConnection } from "./smtp-send.js";
 import type { OnboardingIntent } from "./trading-config.js";
+import "./errors.js";
 
 export type EmailDelivery =
   { mode: "smtp" | "local_capture"; smtp: SmtpConnection } | { mode: "unconfigured" };
@@ -84,12 +92,13 @@ export async function readSavedSmtp(
   ring: KeyRing,
 ): Promise<{ url: string; from: string } | null> {
   const configured = await tryGetCredential(tx, ring, { purpose: "email.smtp" });
-  return configured === null
-    ? null
-    : {
-        url: credentialField(configured, "email.smtp", "url"),
-        from: credentialField(configured, "email.smtp", "from"),
-      };
+  if (configured === null) return null;
+  const url = credentialField(configured, "email.smtp", "url");
+  validatePayload("email.smtp", configured);
+  const { doc } = await readSettings(tx, MAIL_SETTINGS);
+  if (doc.from === null)
+    throw new AppError("server.credential_unusable", { purpose: "email.smtp", field: "from" });
+  return { url, from: doc.from };
 }
 
 export async function resolveInvoiceEmailDelivery(

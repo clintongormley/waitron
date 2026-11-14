@@ -1,5 +1,12 @@
 # A1308 environment, PR 6 of 8: the `backup` settings document — implementation plan
 
+> **2026-11-14, env4 review correction (watcher cleared at 22:36):** env4 omitted its unused
+> live-query wiring. It declares no `SERVER_SETTINGS_KEYS`; env6 creates that constant with
+> `"backup"` in `apps/server/src/mail-settings.ts` and adds its key to the `boot.ts` and
+> `liveResourceTypesForModules` settings lists. The env4 constant named under Needs, What it builds
+> and Files below is superseded by this note. No `"mail"` key is needed without a live reader.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** The Backups screen's archive settings and the bucket copy's settings are stored in one

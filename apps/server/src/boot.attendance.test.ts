@@ -1,3 +1,4 @@
+import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { listAdminHolders } from "@waitron/identity";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -18,7 +19,7 @@ import { setNodeMode, setSingletonRoleTx, writeMirrorLink } from "@waitron/node-
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { loadKeyRing, putCredential } from "@waitron/credentials";
+import { loadKeyRing } from "@waitron/credentials";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { jobOrigin } from "@waitron/shared";
 import {
@@ -145,9 +146,9 @@ describe("attendance boot with permanent workforce", () => {
               offsetMinutes: 60,
               outcome: "qualified",
             });
-          await putCredential(tx, ring, {
-            purpose: "email.smtp",
-            value: { url: "smtp://127.0.0.1:1025", from: "venue@example.test" },
+          await saveSmtpForTest(tx, ring, {
+            url: "smtp://127.0.0.1:1025",
+            from: "venue@example.test",
           });
         });
       }

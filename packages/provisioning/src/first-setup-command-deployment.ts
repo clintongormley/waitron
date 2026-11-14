@@ -1,14 +1,10 @@
+import { saveSmtpSettings } from "./mail-settings.js";
 import { SECRETS_ENV_FILE, TRADING_ENV_FILE } from "@waitron/store";
 import { createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseEnv, isDeepStrictEqual } from "node:util";
-import {
-  establishNodeSigningKey,
-  loadKeyRing,
-  putCredential,
-  readNodeIdentity,
-} from "@waitron/credentials";
+import { establishNodeSigningKey, loadKeyRing, readNodeIdentity } from "@waitron/credentials";
 import {
   applicationVersion,
   readNodeMembershipRow,
@@ -226,9 +222,7 @@ export function createFirstSetupCommandDeployment(options: {
             if (settings.required)
               await settings.secret!.seal({ db, ring, nodeId: result.nodeId }, settings.aeatCert);
             if (settings.email !== undefined)
-              await withTransaction(db, (tx) =>
-                putCredential(tx, ring, { purpose: "email.smtp", value: settings.email! }),
-              );
+              await withTransaction(db, (tx) => saveSmtpSettings(tx, ring, settings.email!, null));
           },
           persistTrading: async (result, current) => {
             const accountKey = createHmac("sha256", ring.current.key)

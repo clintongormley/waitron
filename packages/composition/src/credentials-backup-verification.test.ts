@@ -17,7 +17,7 @@ import { ALL_MODULES } from "./modules.js";
 const before = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const after = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const env = `WAITRON_CREDENTIALS_KEY=${Buffer.alloc(32, 2).toString("base64")}\nWAITRON_CREDENTIALS_KEY_VERSION=2\n`;
-const payload = { url: "smtp://secret-sentinel@example.test", from: "sender@example.test" };
+const payload = { url: "smtp://secret-sentinel@example.test" };
 beforeEach(async () => {
   for (const suite of [before, after]) {
     await withTransaction(suite.db, (tx) =>

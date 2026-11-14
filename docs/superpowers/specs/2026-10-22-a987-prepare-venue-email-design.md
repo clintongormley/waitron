@@ -1,5 +1,8 @@
 # A987: approved venue email amendment
 
+> **2026-11-14:** [A1308 env4](../plans/2026-11-08-a1308-env4-unsealed-settings.md) supersedes the SMTP terminal instructions below: save or remove SMTP through dashboard Email settings; the generic credentials CLI refuses SMTP set/delete.
+
+
 2026-11-08: the watcher released A739 for invoice-envelope naming and narrowed this cut to ordinary SMTP and the Settings test, without setup naming or a preview; see the [sender-naming plan](../plans/2026-11-08-a987-sender-naming.md).
 
 ## Dated amendment: approved delivery routes and build boundary, 2026-10-22

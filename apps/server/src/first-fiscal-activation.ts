@@ -1,3 +1,4 @@
+import { saveSmtpSettings } from "./mail-settings.js";
 import { readNodeMembershipRow, withTransaction } from "@waitron/db";
 import { initialSetupFor } from "@waitron/module";
 import { AppError } from "@waitron/shared";
@@ -22,7 +23,7 @@ import {
   verifyBytes,
   verifyMembershipDocument,
 } from "@waitron/membership";
-import { putCredential, readNodeIdentity } from "@waitron/credentials";
+import { readNodeIdentity } from "@waitron/credentials";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import "./errors.js";
 
@@ -247,9 +248,7 @@ export async function publishCheckedFirstFiscal(
           );
         const email = payload.email;
         if (email !== undefined)
-          await withTransaction(deps.db!, (tx) =>
-            putCredential(tx, deps.ring!, { purpose: "email.smtp", value: email }),
-          );
+          await withTransaction(deps.db!, (tx) => saveSmtpSettings(tx, deps.ring!, email, null));
       },
       persistTrading: (result, current) =>
         deps.persistTrading!({

@@ -1039,8 +1039,11 @@ it("the production venue command checks accepted readiness and seals its exact p
     await withTransaction(venue.db, (tx) => tryGetCredential(tx, ring, { purpose: "email.smtp" })),
   ).toEqual({
     url: "smtp://elena:SYNTHETIC-production-smtp@smtp.example.test:587?requireTLS=true",
-    from: "elena@example.test",
   });
+  const { settings: documents } = await import("@waitron/db");
+  expect(
+    (await venue.db.select().from(documents)).find((row) => row.module === "mail"),
+  ).toMatchObject({ doc: { from: "elena@example.test" }, updatedBy: null });
   const trading = await readFile(join(f.root, "state/trading.env"), "utf8");
   expect(trading).toContain("WAITRON_ENV=production\n");
   for (const secret of [

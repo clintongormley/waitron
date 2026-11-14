@@ -1,3 +1,4 @@
+import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -14,7 +15,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { loadKeyRing, putCredential } from "@waitron/credentials";
+import { loadKeyRing } from "@waitron/credentials";
 import { resolveMailDeliveryIn } from "./email-delivery.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { changeSubscriber, LiveEvents } from "./live-api.js";
@@ -554,10 +555,7 @@ describe("one mail sender", () => {
       WAITRON_CREDENTIALS_KEY_VERSION: "1",
     });
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, ring, {
-        purpose: "email.smtp",
-        value: { url: "smtp://user:secret@mail.test", from: "from@example.test" },
-      }),
+      saveSmtpForTest(tx, ring, { url: "smtp://user:secret@mail.test", from: "from@example.test" }),
     );
     const version = async (keyVersion: number) =>
       suite.db.run(

@@ -20,7 +20,7 @@ const inputs = {
   WAITRON_CREDENTIALS_KEY_PREVIOUS: key1.toString("base64"),
   WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "1",
 };
-const email = { url: "smtp://private-sentinel@example.test", from: "owner@example.test" };
+const email = { url: "smtp://private-sentinel@example.test" };
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 beforeEach(() => {
@@ -129,10 +129,11 @@ describe("read-only backup vault authentication", () => {
     "null",
     "[]",
     '"secret-sentinel"',
-    '{"url":"smtp://x"}',
+    "{}",
+    '{"url":"smtp://x","from":"owner@example.test"}',
     '{"url":"x","from":"y","extra":"secret-sentinel"}',
-    '{"url":1,"from":"y"}',
-    '{"url":"","from":"y"}',
+    '{"url":1}',
+    '{"url":""}',
   ])("authenticated malformed payload refuses: %s", async (plaintext) => {
     await row("email.smtp", plaintext);
     expect(await verify()).toBe("invalid");

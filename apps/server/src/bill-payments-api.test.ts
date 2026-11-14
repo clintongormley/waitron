@@ -1,3 +1,4 @@
+import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { cancelItemHttp, cancelItemRequest } from "./testing/cancel-line.js";
 import { printSaleReceipt } from "./till-sale.js";
@@ -10,7 +11,7 @@ import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { observedWholePaymentBody } from "./testing/whole-payment-fixture.js";
 import { randomUUID } from "node:crypto";
-import { loadKeyRing, putCredential, deleteCredential } from "@waitron/credentials";
+import { loadKeyRing, deleteCredential } from "@waitron/credentials";
 import { resolveInvoiceEmailDelivery } from "./email-delivery.js";
 import { adjustments } from "@waitron/adjustments";
 import { Hono } from "hono";
@@ -2275,9 +2276,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     it("answers email unavailable beside the invoice printer when the mail server's credential cannot be read", async () => {
       const id = await pagePrinter({ name: "Invoices", onTill: true });
       try {
-        await inTx((tx) =>
-          putCredential(tx, unreadableMailRing, { purpose: "email.smtp", value: SMTP }),
-        );
+        await inTx((tx) => saveSmtpForTest(tx, unreadableMailRing, SMTP));
         quiet.mockClear();
         expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
           status: 200,
@@ -2512,9 +2511,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     it("refuses an email choice when the mail server's credential cannot be read", async () => {
       await withContact(async () => {
         try {
-          await inTx((tx) =>
-            putCredential(tx, unreadableMailRing, { purpose: "email.smtp", value: SMTP }),
-          );
+          await inTx((tx) => saveSmtpForTest(tx, unreadableMailRing, SMTP));
           const billId = await tabWith("Steak");
           const [before] = await inTx((tx) =>
             tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
@@ -2549,9 +2546,9 @@ describe("the invoice at full payment (design §8 test 8)", () => {
         await withContact(async () => {
           try {
             await inTx((tx) =>
-              putCredential(tx, invoiceMailRing, {
-                purpose: "email.smtp",
-                value: { url: "smtp://smtp.example.test:2525", from: "Venue <venue@example.test>" },
+              saveSmtpForTest(tx, invoiceMailRing, {
+                url: "smtp://smtp.example.test:2525",
+                from: "Venue <venue@example.test>",
               }),
             );
             const billId = await tabWith("Steak");
