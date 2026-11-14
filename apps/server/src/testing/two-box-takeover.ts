@@ -14,7 +14,6 @@ import {
   type Database,
   type NodeDatabase,
 } from "@waitron/db";
-import { FISCAL_CLASSIFICATION } from "@waitron/fiscal-verifactu";
 import type { WaitronModule } from "@waitron/module";
 import { createFirstSetupCoordinator, createPasswordThrottle } from "@waitron/provisioning";
 import { nodeId as asNodeId } from "@waitron/shared";
@@ -27,6 +26,7 @@ import { mountHandoverPreparationApi } from "../handover-preparation.js";
 import { createNodeOperationPreparation } from "../node-operation-preparation.js";
 import { promoteMirrorToPrimary } from "../promote.js";
 import { TOTP_KEY_RING } from "./authenticator.js";
+import { fiscalRows } from "./fiscal-rows.js";
 
 export interface Store {
   venue: Database;
@@ -35,16 +35,6 @@ export interface Store {
 export interface SignIn {
   email: string;
   password: string;
-}
-
-const FISCAL_TABLES = [...FISCAL_CLASSIFICATION.map(({ table }) => table), "invoice_series"];
-
-/** Every row of the fiscal module's tables and the invoice series in `db`. */
-export async function fiscalRows(db: Database): Promise<Record<string, unknown[]>> {
-  const rows: Record<string, unknown[]> = {};
-  for (const table of FISCAL_TABLES)
-    rows[table] = (await db.execute(sql.raw(`select * from "${table}" order by rowid`))).rows;
-  return rows;
 }
 
 /** A request through `app` over a stand-in TLS socket, as the box's HTTPS listener hands it on. */

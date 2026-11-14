@@ -132,7 +132,7 @@ export function mirrorBundleApp(
 }
 
 /** A box authority and the recovery key in `stateDir`, as a main box's state folder holds them. */
-export async function holdBoxSecrets(stateDir: string): Promise<void> {
+async function holdBoxSecrets(stateDir: string): Promise<void> {
   await mkdir(join(stateDir, "tls"), { recursive: true });
   const authority = mintSelfSignedServerCert({
     hostnames: ["waitron.local"],

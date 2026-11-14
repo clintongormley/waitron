@@ -84,17 +84,13 @@ function isMirrorBundle(value: unknown): value is MirrorBundle {
   return true;
 }
 
-const RELAYED_WITH_PARAMS = ["mirror.clocks_apart"] as const;
-
 type RelayedBare =
-  | "password.invalid"
-  | Exclude<(typeof JOIN_REFUSALS)[number], (typeof RELAYED_WITH_PARAMS)[number]>;
+  "password.invalid" | Exclude<(typeof JOIN_REFUSALS)[number], "mirror.clocks_apart">;
 
 function isRelayedBare(code: unknown): code is RelayedBare {
   return (
     code === "password.invalid" ||
-    ((JOIN_REFUSALS as readonly unknown[]).includes(code) &&
-      !(RELAYED_WITH_PARAMS as readonly unknown[]).includes(code))
+    ((JOIN_REFUSALS as readonly unknown[]).includes(code) && code !== "mirror.clocks_apart")
   );
 }
 

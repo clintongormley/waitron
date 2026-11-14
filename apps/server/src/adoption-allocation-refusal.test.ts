@@ -176,7 +176,7 @@ it("adopts with the allocation-dependent module enabled, writing no fiscal row",
     reserved: { modules: {}, series: [] },
   });
 });
-it("still adopts when the allocation-dependent module is disabled", async () => {
+it("adopts when the allocation-dependent module is disabled", async () => {
   const value = bundle();
   value.moduleOverrides = { "fiscal-verifactu": false };
   const adopted = adoptFromPrimary(deps(value), request, { beforeFirstWrite: async () => {} });

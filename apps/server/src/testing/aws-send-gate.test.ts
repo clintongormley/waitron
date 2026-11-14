@@ -14,6 +14,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { AwsRehearsalRefused } from "./aws-rehearsal-refused.js";
 import { createRequestPlan, type RequestPlan } from "./aws-request-plan.js";
 import {
+  currentRequestScope,
+  exemptBucket,
   installSendGate,
   markRunnerClient,
   openRequestScope,
@@ -526,5 +528,73 @@ describe("the send gate's host check", () => {
     const { client, handled } = recording({ endpoint: LOCAL, forcePathStyle: true });
     await client.send(planned());
     expect(handled()).toBe(1);
+  });
+});
+
+describe("a bucket exempted from the caller's scope", () => {
+  const EXEMPT = "local-spare-store";
+  const toExempt = () => new PutObjectCommand({ Bucket: EXEMPT, Key: "anything", Body: "x" });
+
+  it("lets a request naming the exempt bucket through, across an await", async () => {
+    const { client, handled } = recording();
+    const scope = openRequestScope({ plan: plan(), mode: "enforce", hosts: "any" });
+    await scope.run(() =>
+      exemptBucket(EXEMPT, async () => {
+        await sleep(0);
+        await client.send(toExempt());
+      }),
+    );
+    expect(handled()).toBe(1);
+    expect(scope.refusals()).toEqual({ count: 0, first: undefined });
+  });
+
+  it("checks a request naming any other bucket, counting its refusal on the caller's scope", async () => {
+    const { client, handled } = recording();
+    const scope = openRequestScope({ plan: plan(), mode: "enforce", hosts: "any" });
+    const outcome = await scope.run(() =>
+      exemptBucket(EXEMPT, async () => {
+        await client.send(planned());
+        return client.send(unplanned()).catch((e: unknown) => e);
+      }),
+    );
+    expect(outcome).toBeInstanceOf(AwsRehearsalRefused);
+    expect(handled()).toBe(1);
+    expect(scope.refusals().count).toBe(1);
+  });
+
+  it("returns to the caller's scope afterwards, where the exempt bucket is refused", async () => {
+    const { client, handled } = recording();
+    const scope = openRequestScope({ plan: plan(), mode: "enforce", hosts: "any" });
+    await scope.run(async () => {
+      await exemptBucket(EXEMPT, () => client.send(toExempt()));
+      expect(currentRequestScope()).toBe(scope);
+      await expect(client.send(toExempt())).rejects.toBeInstanceOf(AwsRehearsalRefused);
+    });
+    expect(handled()).toBe(1);
+    expect(scope.refusals().count).toBe(1);
+  });
+
+  it("returns to the caller's scope after its body throws", () => {
+    const scope = openRequestScope({ plan: plan(), mode: "enforce", hosts: "any" });
+    scope.run(() => {
+      expect(() =>
+        exemptBucket(EXEMPT, () => {
+          throw new Error("body failed");
+        }),
+      ).toThrow("body failed");
+      expect(currentRequestScope()).toBe(scope);
+      expect(() =>
+        scope.check("scenario", "PutObject", { Bucket: EXEMPT, Key: "anything" }),
+      ).toThrow(AwsRehearsalRefused);
+    });
+  });
+
+  it("only runs its body when there is no caller's scope", () => {
+    expect(
+      exemptBucket(EXEMPT, () => {
+        expect(currentRequestScope()).toBeUndefined();
+        return "ran";
+      }),
+    ).toBe("ran");
   });
 });

@@ -45,10 +45,10 @@ import { ALL_MODULES } from "./modules.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { fiscalRows } from "./testing/fiscal-rows.js";
 import {
   boxRequest,
   fiscalRowsOf,
-  fiscalRows,
   placeCopy,
   saleOn,
   takeoverRoutes,

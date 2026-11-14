@@ -7,9 +7,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { expect } from "vitest";
-import { FISCAL_CLASSIFICATION } from "@waitron/fiscal-verifactu";
 import { readPairLink } from "@waitron/node-db";
-import { MODULE_PREPARATION_STATE_FILE } from "@waitron/store";
 import { BOX_HOSTNAME, ownContactUrl } from "../box-name.js";
 import type { StreamHostDeps } from "../stream-host.js";
 import {
@@ -20,6 +18,7 @@ import {
   withCapturedStdout,
   type LogLine,
 } from "./boot-harness.js";
+import { FISCAL_TABLES, preparationIn } from "./fiscal-rows.js";
 import { freePorts } from "./free-ports.js";
 import { waitUntil } from "./scenario-stages.js";
 import {
@@ -50,7 +49,7 @@ export const STREAM_LOOP_SPARE_PHASES = [
   "spare-copy",
   "start-check",
 ] as const;
-export type StreamLoopSparePhase = (typeof STREAM_LOOP_SPARE_PHASES)[number];
+type StreamLoopSparePhase = (typeof STREAM_LOOP_SPARE_PHASES)[number];
 
 const STREAM_WAIT_MS = 30_000;
 const HEALTH_MS = POLL_TRIES * POLL_INTERVAL_MS;
@@ -68,9 +67,7 @@ export const STREAM_LOOP_SPARE_MS =
   MIRROR_WAIT_MS +
   SPARE_UNTIMED_MS;
 
-const FISCAL_TABLES = [...FISCAL_CLASSIFICATION.map(({ table }) => table), "invoice_series"];
-
-/** Every row of the fiscal module's tables and the invoice series in `venueDir`'s `venue.db`. */
+/** Every row of `FISCAL_TABLES` in `venueDir`'s `venue.db`, by table, in `rowid` order. */
 function fiscalRowsIn(venueDir: string): Record<string, unknown[]> {
   const db = new DatabaseSync(join(venueDir, "venue.db"), { readOnly: true });
   try {
@@ -82,16 +79,6 @@ function fiscalRowsIn(venueDir: string): Record<string, unknown[]> {
     );
   } finally {
     db.close();
-  }
-}
-
-/** The dormant module setup a box holds in its state folder, or `null` without one. */
-async function preparationIn(stateDir: string): Promise<string | null> {
-  try {
-    return await readFile(join(stateDir, MODULE_PREPARATION_STATE_FILE), "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw error;
   }
 }
 
@@ -205,6 +192,7 @@ async function runCaptured(input: LoopSpareInput, log: readonly string[]): Promi
     const fiscalAtJoin = fiscalRowsIn(dirsB.venue);
     expect(Object.values(fiscalAtJoin).flat()).not.toEqual([]);
     const preparationB = await preparationIn(dirsB.state);
+    const logAtJoin = logSoFar().length;
     const joined = await adoptFrom(urlC, clientC.via, primary);
     expect(joined.status, JSON.stringify(joined.body)).toBe(200);
     expect(joined.body).toMatchObject({ adopted: true, restarting: true });
@@ -221,9 +209,8 @@ async function runCaptured(input: LoopSpareInput, log: readonly string[]): Promi
     expect(await preparationIn(dirsC.state)).toBeNull();
 
     begin("spare-copy");
-    const logAtCopy = logSoFar().length;
     const ready = await wait("C's spare.first_copy_ready", COPY_WAIT_MS, async () =>
-      linesSince(logAtCopy).find((line) => line.event === "spare.first_copy_ready"),
+      linesSince(logAtJoin).find((line) => line.event === "spare.first_copy_ready"),
     );
     console.log(
       `stream loop spare: first copy ${String(ready.bytes)} bytes, ${String(ready.ms)} ms`,

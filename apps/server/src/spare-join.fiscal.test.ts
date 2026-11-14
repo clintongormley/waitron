@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,17 +9,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadKeyRing } from "@waitron/credentials";
 import { invoiceSeries, withTransaction, type Database } from "@waitron/db";
 import { migratedTableNames, useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { ALLOCATED_FISCAL_STANDBY, FISCAL_CLASSIFICATION } from "@waitron/fiscal-verifactu";
+import { ALLOCATED_FISCAL_STANDBY } from "@waitron/fiscal-verifactu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { withPreparedModuleOperations } from "@waitron/module";
 import { readNodeMode } from "@waitron/node-db";
-import { MODULE_PREPARATION_STATE_FILE } from "@waitron/store";
 import { createFirstSetupCoordinator, readModulePreparationHistory } from "@waitron/provisioning";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
 import { promoteMirrorToPrimary } from "./promote.js";
 import { mountPromoteApi } from "./promote-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { fiscalRows, preparationIn } from "./testing/fiscal-rows.js";
 import {
   ADMIN,
   MODULE,
@@ -47,28 +47,10 @@ const RING = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x5).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
-const FISCAL_TABLES = [...FISCAL_CLASSIFICATION.map(({ table }) => table), "invoice_series"];
 
 const migrations = migrationOptionsFor(manifestSets(), null);
 const mainBox = useVenueDb({ migrations, timeoutMs: 60_000 });
 const spareBox = useVenueDb({ migrations, timeoutMs: 60_000 });
-
-function fiscalRows(db: Database): Record<string, unknown[]> {
-  return Object.fromEntries(
-    FISCAL_TABLES.map((table) => [
-      table,
-      db.all(sql.raw(`select * from "${table}" order by rowid`)),
-    ]),
-  );
-}
-async function fileOrNull(path: string): Promise<string | null> {
-  try {
-    return await readFile(path, "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw error;
-  }
-}
 
 describe("a Veri*Factu venue's spare joins", () => {
   let mainState: string;
@@ -86,12 +68,11 @@ describe("a Veri*Factu venue's spare joins", () => {
     const boxes = { mainBox, spareBox, mainState, spareState, ring: RING };
     const main = await veriFactuMainBox(boxes);
     expect(main.modules.map((module) => module.name)).toContain("fiscal-verifactu");
-    const preparation = (dir: string) => fileOrNull(join(dir, MODULE_PREPARATION_STATE_FILE));
     const before = {
-      main: fiscalRows(mainBox.db),
-      spare: fiscalRows(spareBox.db),
-      mainFile: await preparation(mainState),
-      spareFile: await preparation(spareState),
+      main: await fiscalRows(mainBox.db),
+      spare: await fiscalRows(spareBox.db),
+      mainFile: await preparationIn(mainState),
+      spareFile: await preparationIn(spareState),
     };
     expect(before.main.invoice_series).not.toEqual([]);
 
@@ -99,10 +80,10 @@ describe("a Veri*Factu venue's spare joins", () => {
 
     expect((await readNodeMode(spareBox.node, spareId)).mode).toBe("mirror");
     expect(bundle.reservedIdentity.series).toEqual([]);
-    expect(fiscalRows(mainBox.db)).toEqual(before.main);
-    expect(fiscalRows(spareBox.db)).toEqual(before.spare);
-    expect(await preparation(mainState)).toBe(before.mainFile);
-    expect(await preparation(spareState)).toBe(before.spareFile);
+    expect(await fiscalRows(mainBox.db)).toEqual(before.main);
+    expect(await fiscalRows(spareBox.db)).toEqual(before.spare);
+    expect(await preparationIn(mainState)).toBe(before.mainFile);
+    expect(await preparationIn(spareState)).toBe(before.spareFile);
   }, 60_000);
 });
 
