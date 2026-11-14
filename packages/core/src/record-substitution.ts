@@ -4,6 +4,7 @@ import "./errors.js";
 import { operationDescriptionFor } from "./operation-description.js";
 import { eq, inArray } from "drizzle-orm";
 import {
+  insertInChunks,
   allocateInvoiceNumber,
   invoiceSeries,
   isUniqueViolation,
@@ -201,7 +202,7 @@ export async function recordSubstitution(
     });
   }
 
-  await tx.insert(saleLines).values(saleLineRows(saleId, input.lines));
+  await insertInChunks(tx, saleLines, saleLineRows(saleId, input.lines));
 
   // One row per ticket, inserted one at a time so a unique violation names the ticket that
   // collides. Before the fiscal write, so a refused substitution writes no fiscal record.

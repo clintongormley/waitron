@@ -2119,7 +2119,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **Go-live day steps.**
   [Detail](backlog/architecture.md#go-live-day-steps).
 
-- **Read every insert that grows with an order** (bundle of 3, 2 important, size M). Holds A1299. [Detail](backlog/architecture.md#bundle-read-every-insert-that-grows-with-an-order)
 
 - **Full-invoice recipient: comma refusal and country code names** (bundle of 2, 1 important, size S). [Detail](backlog/architecture.md#bundle-full-invoice-recipient-comma-refusal-and-country-code-names)
 

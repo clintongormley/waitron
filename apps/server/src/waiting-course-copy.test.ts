@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  insertInChunks,
   lineServiceCancellations,
   orderDraftLines,
   orderDrafts,
@@ -3108,4 +3109,69 @@ describe("A803 waiting copy: how long a group has been held", () => {
     const copy = (await lineOf(t.bill2, "Tarta")).groupId!;
     expect(await heldOrder([olderGroup, laterGroup, copy])).toEqual([laterGroup, copy, olderGroup]);
   });
+});
+
+it("copies 32,767 held dishes with their extras, HOLD stations, events and both draft references", async () => {
+  const station = await stationWithPrinter("Large copy kitchen", ["Burger"]);
+  const a = await seatWith([
+    { names: ["Burger"], release: "hold" },
+    { names: ["Flan"], release: "hold" },
+  ]);
+  const dish = await lineOf(a.billId, "Burger");
+  const staying = await lineOf(a.billId, "Flan");
+  await addExtra(a.billId, dish.id);
+  const [template] = await v.db
+    .select()
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.id, dish.id));
+  const [ticket] = await v.db
+    .select()
+    .from(ticketItems)
+    .where(eq(ticketItems.workingOrderLineId, dish.id));
+  const ids = [dish.id, ...Array.from({ length: 32766 }, () => randomUUID())];
+  await inTx(v, async (tx) => {
+    await insertInChunks(
+      tx,
+      workingOrderLines,
+      ids.slice(1).flatMap((id, i) => [
+        { ...template!, id, lineNo: 4 + i * 2 },
+        { ...template!, id: randomUUID(), lineNo: 5 + i * 2, parentLineId: id },
+      ]),
+    );
+    await insertInChunks(
+      tx,
+      ticketItems,
+      ids.slice(1).map((id) => ({ ...ticket!, id: randomUUID(), workingOrderLineId: id })),
+    );
+    await tx
+      .insert(orderGroupHoldStations)
+      .values({ groupId: dish.groupId!, stationId: station })
+      .onConflictDoNothing();
+  });
+  const draft = await openDraft(a.partyId, a.billId);
+  await draftLine(draft, 0, { slot: 0, joinGroupId: dish.groupId! });
+  await draftLine(draft, 1, { slot: 1, afterGroupId: dish.groupId! });
+  const before = await draftLineRows(draft);
+  const b = await otherParty();
+  const groupsBefore = await groupsOf(b);
+  const copies = await copy(a.billId, a.partyId, b, ids);
+  const copyId = copies.get(dish.groupId!)!;
+  expect([...copies.keys()]).toEqual([dish.groupId]);
+  const rows = await linesOf(a.billId);
+  expect(rows.filter((row) => row.groupId === copyId)).toHaveLength(65534);
+  expect(
+    rows.filter((row) => row.parentLineId !== null).every((row) => row.groupId === copyId),
+  ).toBe(true);
+  expect((await groupRow(dish.groupId!)).state).toBe("removed");
+  expect((await groupRow(staying.groupId!)).state).toBe("held");
+  expect(await holdStationsOf(copyId)).toEqual([station]);
+  expect((await groupsOf(b)).map((row) => row.id)).toEqual([
+    ...groupsBefore.map((row) => row.id),
+    copyId,
+  ]);
+  expect(await draftLineRows(draft)).toEqual(
+    before.map((row) => pointedAt(row, dish.groupId!, copyId)),
+  );
+  const moved = (await eventsOf(copyId)).find((event) => event.kind === "lines_moved")!;
+  expect(moved.detail).toEqual({ lineIds: ids, from: dish.groupId, arrived: true });
 });

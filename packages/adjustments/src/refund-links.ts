@@ -7,7 +7,7 @@ import {
   type Decimal,
 } from "@waitron/shared";
 import type { AdjustmentAction } from "@waitron/shared";
-import { adjustmentRefunds } from "@waitron/db";
+import { insertInChunks, adjustmentRefunds } from "@waitron/db";
 
 /** Records how much of a refund paid back each named cancel; writes nothing else. */
 export async function linkRefundToCancels(
@@ -15,7 +15,9 @@ export async function linkRefundToCancels(
   input: { tenderRefundId: string; links: readonly { adjustmentId: string; amount: Decimal }[] },
 ): Promise<void> {
   if (input.links.length === 0) return;
-  await tx.insert(adjustmentRefunds).values(
+  await insertInChunks(
+    tx,
+    adjustmentRefunds,
     input.links.map((link) => ({
       adjustmentId: link.adjustmentId,
       tenderRefundId: input.tenderRefundId,

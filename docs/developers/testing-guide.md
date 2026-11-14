@@ -789,15 +789,17 @@ croquetas saved down to one and `carryLineReductions`' 6,554 copies; in
 Homebrew's Node when their inserts were put back to one statement; with the setting deleted as
 well, they passed there.
 
-An insert whose rows grow with an order must go through `insertInChunks`, or `statementChunks`
-where the statement needs more than a plain insert: its rows back (`.returning()`) or a conflict
-clause (`.onConflictDoNothing()`) (`packages/db/src/insert-in-chunks.ts`); both count one bound
-value per column per row. No sweep has read every insert. After A1208's own sweep, PR #2265's
-run-it review found an item payment's lines unchunked, and a test of each further insert it named
-found three more: a discount's lines, a kitchen ticket's line links and a party bill's kitchen
-allergy snapshots. Each test failed "too many SQL variables" before its fix, and again when its fix
-was taken out. The table round's line insert, `insertTabRound`, is still one statement;
-`docs/backlog/architecture.md` tracks it. The guard, "refuses a statement binding one
+When an insert's row count follows the bill's dishes, use `insertInChunks`, or
+`statementChunks` when you need returned rows or a conflict clause. Both size each chunk by the
+table's columns (`packages/db/src/insert-in-chunks.ts`). Keep each dish before its extras so a
+parent written in an earlier chunk exists when you insert its child. Collect all returned chunks
+before recording the round's contexts or checking its total.
+
+For growing ID filters, the JSON-list predicate in `apps/server/src/bill-actions.ts` binds one
+value while retaining the query's ordering. Use it for reads, updates and deletes; insert chunk sizes do
+not budget a predicate repeated twice in an update.
+
+The guard, "refuses a statement binding one
 value more on the reader and the writer of both files" in `packages/store/src/index.test.ts`,
 failed with the setting deleted from the writer alone and from the reader alone. It is weaker
 than the rule: it proves the store's connections refuse, not that every growing insert is
@@ -4152,6 +4154,9 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 `a8ce834d69f298f7e062aaf1cd8b587e62be0171`. They are not new measurements.
 
 ### Bound values and growing inserts
+
+2026-11-14, INSERTS-GROW: the table-round exception and its backlog entry are retired. The excerpt
+below records the earlier state; use the [current rule](#the-store-caps-the-values-one-statement-binds-at-official-nodes-limit).
 
 - **Official Node's SQLite binds at most 32,766 values in one statement; Homebrew's binds 250,000.**
   `openVenueStore`'s connections set the lower limit, so local runs refuse what CI refuses. An

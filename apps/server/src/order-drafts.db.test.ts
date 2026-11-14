@@ -5540,3 +5540,25 @@ it("keeps identical lunches separate through save and group submission", async (
   );
   expect(lines.map((line) => line.quantity)).toEqual([1000, 1000]);
 });
+
+it("saves and updates every line of a 32,767-dish draft", async () => {
+  const v = await setupVenue();
+  const { partyId } = await seated(v);
+  const lines = Array.from({ length: 32767 }, () => item(v, "beer", { noMerge: true }));
+  const first = await save(v, partyId, ALEX, null, 0, lines);
+  expect(first.lines).toHaveLength(32767);
+  expect((await storedLines(first.id)).map((row) => row.id)).toEqual(
+    first.lines.map((row) => row.id),
+  );
+  const updated = await save(
+    v,
+    partyId,
+    ALEX,
+    first.id,
+    first.revision,
+    first.lines.map((line) => ({ ...line, quantity: "2" })),
+  );
+  const stored = await storedLines(updated.id);
+  expect(stored.map((row) => row.id)).toEqual(first.lines.map((row) => row.id));
+  expect(stored.every((row) => row.quantity === 2000)).toBe(true);
+});

@@ -9,6 +9,11 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
+  insertInChunks,
+  orderPortions,
+  workingLinePortions,
+  orderPortionEvents,
+  orderGroups,
   captureError,
   tableMerges,
   kitchenStations,
@@ -90,6 +95,7 @@ import { numbersOf as billNumbersOf } from "./testing/bill-identities.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { mergeBills, moveDishes, splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import { fireGroup } from "./order-groups.js";
+import { insertPartyBill } from "./parties.js";
 import {
   enqueueCorrectionSlips,
   enqueueOrderKitchenNoteChange,
@@ -3061,4 +3067,134 @@ describe("a prep station's own print-MOVED-slips choice", () => {
       formerNumbers: [n28],
     });
   });
+});
+
+it("moves 32,772 lines, preserves sent numbers and portions, then moves the complete bill", async () => {
+  const v = await setupPartyVenue(db);
+  const source = await seat(v, await v.table("Large source"));
+  const target = {
+    partyId: source.partyId,
+    tabId: await inTx(v, (tx) => insertPartyBill(tx, v.cfg, source.partyId)),
+  };
+  await order(v, source.tabId, "Water");
+  await order(v, target.tabId, "Water");
+  const [template] = await db
+    .select()
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, source.tabId));
+  const [originalTicket] = await db
+    .select()
+    .from(ticketItems)
+    .where(eq(ticketItems.workingOrderLineId, template!.id));
+  const unrelated = await ticketItemsWithBill(db).where(
+    eq(workingOrderLines.workingOrderId, target.tabId),
+  );
+  // Leave enough fired items past 32,766 after the held and made-here exclusions.
+  const ids = [template!.id, ...Array.from({ length: 32771 }, () => randomUUID())];
+  const portionIds = ids.map(() => randomUUID());
+  const number = (await billRow(v, source.tabId)).orderNumber;
+  await inTx(v, async (tx) => {
+    const [printed, unprinted] = await tx
+      .insert(orderGroups)
+      .values([
+        {
+          partyId: source.partyId,
+          state: "held",
+          position: 2,
+          submittedBy: OPERATOR,
+          holdPrintedAt: new Date().toISOString(),
+        },
+        { partyId: source.partyId, state: "held", position: 3, submittedBy: OPERATOR },
+      ])
+      .returning();
+    await insertInChunks(
+      tx,
+      workingOrderLines,
+      ids.slice(1).map((id, index) => ({
+        ...template!,
+        id,
+        lineNo: index + 2,
+        groupId: index === 0 ? printed!.id : index === 1 ? unprinted!.id : template!.groupId,
+      })),
+    );
+    const [context] = await tx
+      .select()
+      .from(workingLineContexts)
+      .where(eq(workingLineContexts.workingOrderLineId, template!.id));
+    await insertInChunks(
+      tx,
+      workingLineContexts,
+      ids.slice(1).map((id) => ({ ...context!, workingOrderLineId: id })),
+    );
+    await insertInChunks(
+      tx,
+      ticketItems,
+      ids.slice(1).map((id, index) => ({
+        ...originalTicket!,
+        id: randomUUID(),
+        workingOrderLineId: id,
+        firedAt: index < 2 ? null : originalTicket!.firedAt,
+        madeHere: index === 2,
+        sentOrderNumber: index === 3 ? 456 : null,
+      })),
+    );
+    await insertInChunks(
+      tx,
+      orderPortions,
+      portionIds.map((id, i) => ({ id, cohortId: id, ordinal: i + 1, measured: false })),
+    );
+    await insertInChunks(
+      tx,
+      workingLinePortions,
+      ids.map((id, i) => ({ workingOrderLineId: id, portionId: portionIds[i]! })),
+    );
+  });
+  const moved = await inTx(v, (tx) =>
+    moveOrderLines(tx, v.cfg, source.tabId, target.tabId, undefined),
+  );
+  expect(moved).toEqual(ids);
+  expect(await linesOf(source.tabId)).toEqual([]);
+  const destination = await linesOf(target.tabId);
+  expect(destination.slice(1).map((row) => row.id)).toEqual(ids);
+  const tickets = await ticketItemsWithBill(db).where(
+    eq(workingOrderLines.workingOrderId, target.tabId),
+  );
+  const sent = new Map(tickets.map((row) => [row.workingOrderLineId, row.sentOrderNumber]));
+  expect(ids.slice(0, 6).map((id) => sent.get(id))).toEqual([
+    number,
+    number,
+    null,
+    null,
+    456,
+    number,
+  ]);
+  const movedIds = new Set(ids);
+  expect(tickets.filter((row) => !movedIds.has(row.workingOrderLineId))).toEqual(unrelated);
+  const events = await db
+    .select()
+    .from(orderPortionEvents)
+    .where(eq(orderPortionEvents.fromOrderId, source.tabId));
+  expect(events).toHaveLength(32772);
+  expect(new Set(events.map((row) => row.portionId))).toEqual(new Set(portionIds));
+  expect(events.every((row) => row.kind === "moved" && row.toOrderId === target.tabId)).toBe(true);
+
+  const destinationTable = await v.table("Large destination");
+  const expectedPartyRevision = await revisionOf(v, target.partyId);
+  await inTx(v, (tx) =>
+    moveBill(
+      tx,
+      v.cfg,
+      target.tabId,
+      { tableId: destinationTable },
+      {
+        operatorId: OPERATOR,
+        expectedPartyRevision,
+        otherPartyId: null,
+      },
+    ),
+  );
+  expect((await billRow(v, target.tabId)).partyId).not.toBe(target.partyId);
+  expect((await linesOf(target.tabId)).map((row) => row.id)).toEqual(
+    destination.map((row) => row.id),
+  );
 });

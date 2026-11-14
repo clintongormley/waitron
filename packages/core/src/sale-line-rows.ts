@@ -8,6 +8,7 @@ import type { RecordSaleLine } from "./record-sale.js";
  * (0.005 kg is 5), `vatRate` in basis points (21.00% is 2100). The fiscal breakdown is never built
  * from these rows. A child line's parent is resolved within the new sale. A line's `correctsLineId`
  * is stored only for a corrective invoice (`corrective`); any other sale's line stores null.
+ * Callers must list each dish before its extras so chunked inserts satisfy the parent foreign key.
  */
 export function saleLineRows(
   saleId: string,

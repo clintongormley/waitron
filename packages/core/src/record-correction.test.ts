@@ -12,6 +12,7 @@ import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalBackend, SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
 import {
+  statementChunks,
   CORE_MIGRATIONS,
   captureError,
   incidents,
@@ -1642,4 +1643,53 @@ describe("recordCorrection — a whole-invoice credit reverses each invoice line
       null,
     ]);
   });
+});
+
+it("records all 2,001 correction lines and their parent links", async () => {
+  const backend = new FakeFiscalBackend(suite.db);
+  const lines = Array.from({ length: 2001 }, (_, i) => ({
+    lineNo: i + 1,
+    name: "Dish",
+    descriptions: { "es-ES": "Dish", "ca-ES": "Dish" },
+    quantity: "1",
+    unitPrice: "1.00",
+    vatRate: "0.00",
+    lineTotal: "1.00",
+    parentLineNo: null as number | null,
+  }));
+  const boundary = statementChunks(saleLines, lines)[0]!.length;
+  lines[boundary]!.parentLineNo = boundary;
+  const original = await sell(backend, {
+    lines,
+    total: "2001.00",
+    settlement: {
+      kind: "immediate",
+      tenders: [{ method: "card", amount: "2001.00", tipAmount: "0", settledAt: BASE }],
+    },
+  });
+  const originalLines = await suite.db
+    .select()
+    .from(saleLines)
+    .where(eq(saleLines.saleId, original.saleId))
+    .orderBy(saleLines.lineNo);
+  const result = await correct(backend, original.saleId, {
+    total: "-2001.00",
+    wholeInvoice: true,
+    lines: lines.map((line, i) => ({
+      ...line,
+      quantity: "-1",
+      lineTotal: "-1.00",
+      correctsLineId: originalLines[i]!.id,
+    })),
+  });
+  const stored = await suite.db
+    .select()
+    .from(saleLines)
+    .where(eq(saleLines.saleId, result.saleId))
+    .orderBy(saleLines.lineNo);
+  expect(stored).toHaveLength(2001);
+  expect(stored.map((row) => row.lineNo)).toEqual(lines.map((row) => row.lineNo));
+  expect(stored[boundary]!.parentLineId).toBe(stored[boundary - 1]!.id);
+  expect(stored.map((row) => row.correctsLineId)).toEqual(originalLines.map((row) => row.id));
+  expect(stored.every((row) => row.quantity === -1000 && row.lineTotal === -100)).toBe(true);
 });

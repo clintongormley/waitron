@@ -1159,7 +1159,12 @@ export async function readLunchLineIds(
       versionId: workingLineContexts.menuVersionId,
     })
     .from(workingLineContexts)
-    .where(inArray(workingLineContexts.workingOrderLineId, [...lineIds]));
+    .where(
+      inArray(
+        workingLineContexts.workingOrderLineId,
+        sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
+      ),
+    );
   const documents = await readRecordedDocuments(
     tx,
     contexts.flatMap((row) => (row.versionId === null ? [] : [row.versionId])),
@@ -1279,7 +1284,12 @@ export async function readLinesSoldInEach(
       soldInEach: workingLineContexts.soldInEach,
     })
     .from(workingLineContexts)
-    .where(inArray(workingLineContexts.workingOrderLineId, [...lineIds]));
+    .where(
+      inArray(
+        workingLineContexts.workingOrderLineId,
+        sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
+      ),
+    );
   return new Set(rows.filter((row) => row.soldInEach).map((row) => row.workingOrderLineId));
 }
 

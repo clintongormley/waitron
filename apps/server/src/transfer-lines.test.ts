@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { withTransaction, workingOrderLines } from "@waitron/db";
+import {
+  insertInChunks,
+  orderPortions,
+  orderPortionEvents,
+  workingLinePortions,
+  withTransaction,
+  workingOrderLines,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -472,4 +479,74 @@ describe("transfer — extras children (FIX 2 cascade)", () => {
     expect((await modLinesOf(tabA)).map((l) => l.lineNo)).toEqual([1, 2]);
     expect((await modLinesOf(tabB)).map((l) => l.productId)).toEqual([waterId]);
   });
+});
+
+it("moves 32,767 selected lines in source order, with their prices, parent links and portions", async () => {
+  const { cfg, coffeeOffer, waterOffer, tableAId } = await setupVenue();
+  const from = await openTabWith(cfg, tableAId, [{ menuItemId: coffeeOffer, quantity: "1" }]);
+  const to = await openBeside(cfg, from, [{ menuItemId: waterOffer, quantity: "1" }]);
+  const [template] = await db
+    .select()
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, from));
+  const selected = [template!.id, ...Array.from({ length: 32766 }, () => randomUUID())];
+  const staying = randomUUID();
+  const portion = randomUUID();
+  await asApp(async (tx) => {
+    await insertInChunks(
+      tx,
+      workingOrderLines,
+      [...selected.slice(1), staying].map((id, i) => ({
+        ...template!,
+        id,
+        lineNo: i + 2,
+        parentLineId: i === 0 ? selected[0]! : null,
+      })),
+    );
+    await tx
+      .insert(orderPortions)
+      .values({ id: portion, cohortId: randomUUID(), ordinal: 1, measured: false });
+    await tx
+      .insert(workingLinePortions)
+      .values({ workingOrderLineId: selected[0]!, portionId: portion });
+  });
+  const moved = await asApp((tx) =>
+    moveOrderLines(
+      tx,
+      cfg,
+      from,
+      to,
+      Array.from({ length: 32767 }, (_, i) => 32767 - i),
+    ),
+  );
+  expect(moved).toEqual(selected);
+  const rows = await db
+    .select()
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, to))
+    .orderBy(workingOrderLines.lineNo);
+  expect(rows.slice(1).map((row) => row.id)).toEqual(selected);
+  expect(
+    rows
+      .slice(1)
+      .every(
+        (row, i) =>
+          row.lineNo === i + 2 &&
+          row.unitPriceGross === template!.unitPriceGross &&
+          row.lineTotal === template!.lineTotal,
+      ),
+  ).toBe(true);
+  expect(rows[2]!.parentLineId).toBe(selected[0]);
+  expect(
+    (
+      await db.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, from))
+    ).map((row) => row.id),
+  ).toEqual([staying]);
+  const events = await db
+    .select()
+    .from(orderPortionEvents)
+    .where(eq(orderPortionEvents.fromOrderId, from));
+  expect(
+    events.map((row) => ({ portionId: row.portionId, kind: row.kind, to: row.toOrderId })),
+  ).toEqual([{ portionId: portion, kind: "moved", to }]);
 });

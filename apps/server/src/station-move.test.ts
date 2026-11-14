@@ -12,6 +12,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { markIncidentHandled } from "@waitron/core";
 import {
+  insertInChunks,
   deviceMadeHereStations,
   kitchenStations,
   incidents,
@@ -3331,4 +3332,49 @@ describe("moveDishesToStation", () => {
       });
     });
   });
+});
+
+it("moves 6,000 dishes to a station and records every move", async () => {
+  const { tabId, item } = await burger();
+  const [template] = await venue.db
+    .select()
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.id, item.workingOrderLineId));
+  const [ticket] = await venue.db.select().from(ticketItems).where(eq(ticketItems.id, item.id));
+  const ids = [template!.id, ...Array.from({ length: 5999 }, () => randomUUID())];
+  await inTx(venue, async (tx) => {
+    await insertInChunks(
+      tx,
+      workingOrderLines,
+      ids.slice(1).map((id, i) => ({ ...template!, id, lineNo: i + 2 })),
+    );
+    await insertInChunks(
+      tx,
+      ticketItems,
+      ids.slice(1).map((id) => ({ ...ticket!, id: randomUUID(), workingOrderLineId: id })),
+    );
+  });
+  const result = await inTx(venue, (tx) =>
+    moveDishesToStation(
+      tx,
+      venue.cfg,
+      tabId,
+      { submissionId: randomUUID(), lineIds: ids, stationId: grill },
+      mover(),
+    ),
+  );
+  expect(new Set(result.moved.map((row) => row.workingOrderLineId))).toEqual(new Set(ids));
+  const moves = await movesOf(ids);
+  expect(moves).toHaveLength(6000);
+  expect(
+    moves.every(
+      (row) =>
+        row.fromStationId === bar && row.toStationId === grill && row.movedByPersonId === OPERATOR,
+    ),
+  ).toBe(true);
+  const lines = await venue.db
+    .select()
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, tabId));
+  expect(lines.every((row) => row.makeAtStationId === grill)).toBe(true);
 });

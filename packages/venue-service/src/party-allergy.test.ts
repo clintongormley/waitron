@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { beforeEach, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import {
+  insertInChunks,
   CORE_MIGRATIONS,
   parties,
   orderDrafts,
@@ -822,3 +823,34 @@ it.each(["unanswered", "none", "same party"] as const)(
     expect([await read(), await read(other!.id)]).toEqual(before);
   },
 );
+
+it("records the guest assignment for every dish in a 12,000-dish bill", async () => {
+  await save({ answer: "allergies", guests: [guest] });
+  const guestId = (await read()).guests[0]!.id;
+  const first = await workingLine();
+  const [template] = await suite.db
+    .select()
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.id, first));
+  const ids = [first, ...Array.from({ length: 11999 }, () => randomUUID())];
+  await tx((t) =>
+    insertInChunks(
+      t,
+      workingOrderLines,
+      ids.slice(1).map((id, i) => ({ ...template!, id, lineNo: i + 2 })),
+    ),
+  );
+  await tx((t) =>
+    allergy.setAllergyLineTicks(
+      t,
+      partyId,
+      ids.map((workingLineId) => ({ guestId, workingLineId })),
+    ),
+  );
+  const snapshot = await read();
+  expect(snapshot.ticks).toHaveLength(12000);
+  expect(new Set(snapshot.ticks.map((tick) => tick.workingLineId))).toEqual(new Set(ids));
+  expect(
+    snapshot.ticks.every((tick) => tick.guestId === guestId && tick.draftLineId === null),
+  ).toBe(true);
+});

@@ -1012,7 +1012,8 @@ export async function priceOrderLines(
     }
   }
 
-  // Pre-generated so a CHILD row's `parent_line_id` can name its parent's id in the same insert.
+  // Pre-generated ids let extras name their dish before either row is written.
+  // gross.lines lists each dish before its extras, as chunked inserts need for the parent key.
   const ids = gross.lines.map(() => randomUUID());
   const byLineNo = new Map(gross.lines.map((line, i) => [line.lineNo, ids[i]!]));
   const lineRows = gross.lines.map((line, i) => {
@@ -2927,14 +2928,19 @@ export async function insertTabRound(
   rows: WorkingOrderLineInsert[],
 ): Promise<(FireableLine & { lineNo: number; groupId: string | null })[]> {
   const before = await totalBeforeEdit(tx, cfg, round.tabId);
-  const inserted = await tx
-    .insert(workingOrderLines)
-    .values(rows)
-    .returning({
-      ...fireableLineColumns,
-      lineNo: workingOrderLines.lineNo,
-      groupId: workingOrderLines.groupId,
-    });
+  const inserted: (FireableLine & { lineNo: number; groupId: string | null })[] = [];
+  for (const chunk of statementChunks(workingOrderLines, rows)) {
+    inserted.push(
+      ...(await tx
+        .insert(workingOrderLines)
+        .values(chunk)
+        .returning({
+          ...fireableLineColumns,
+          lineNo: workingOrderLines.lineNo,
+          groupId: workingOrderLines.groupId,
+        })),
+    );
+  }
   await VENUE_SERVICE.recordLineContexts(tx, round.tabId, round.lineContexts, round.offers);
   await refuseOrderOverSimplifiedLimit(tx, cfg, round.tabId, before);
   return inserted;
@@ -4010,7 +4016,10 @@ export async function moveOrderLines(
       ? eq(workingOrderLines.workingOrderId, fromTabId)
       : and(
           eq(workingOrderLines.workingOrderId, fromTabId),
-          inArray(workingOrderLines.lineNo, lineNos),
+          inArray(
+            workingOrderLines.lineNo,
+            sql`(select value from json_each(${JSON.stringify(lineNos)}))`,
+          ),
         );
 
   const source = await tx
@@ -4078,7 +4087,10 @@ async function stampSentOrderNumber(
     .set({ sentOrderNumber: fromNumber })
     .where(
       and(
-        inArray(ticketItems.workingOrderLineId, lineIds),
+        inArray(
+          ticketItems.workingOrderLineId,
+          sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
+        ),
         isNull(ticketItems.sentOrderNumber),
         eq(ticketItems.madeHere, false),
         or(
