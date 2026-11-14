@@ -922,7 +922,11 @@ it("refuses to carry a replacement's operation date into a version corrected by 
     ...body,
     caseId: filingCase.id,
     registroId: filingCase.registroId,
-    facts: { ...body.facts, correctionType: "I", correctionAmounts: null },
+    facts: {
+      description: "Corrected restaurant service",
+      correctionType: "I",
+      correctionAmounts: null,
+    },
   });
 
   expect(await res.json()).toMatchObject({
