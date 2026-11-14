@@ -231,3 +231,72 @@ it("refreshes a stale provider revision so the open confirmation can be retried"
     expect(api.setPaymentProviderState).toHaveBeenLastCalledWith("sumup", false, 1),
   );
 });
+
+it("confirms a Bookings change and shows its saved state waiting for the separate restart", async () => {
+  history.replaceState(null, "", "/manage/modules/state/all");
+  const api = modulesClient({
+    listModules: vi
+      .fn()
+      .mockResolvedValueOnce([
+        { id: "bookings", category: "module", enabled: true, applied: true, revision: 2 },
+      ])
+      .mockResolvedValue([
+        { id: "bookings", category: "module", enabled: false, applied: true, revision: 3 },
+      ]),
+    setBookingsState: vi.fn().mockResolvedValue({ enabled: false, applied: true, revision: 3 }),
+  });
+  const el = await mount(api);
+  expect(
+    el
+      .shadowRoot!.querySelector("wt-data-table")!
+      .shadowRoot!.querySelector("[data-test=switch-bookings]"),
+  ).toBeNull();
+  el.canManageModules = true;
+  await el.updateComplete;
+  el.shadowRoot!.querySelector("wt-data-table")!
+    .shadowRoot!.querySelector<HTMLElement>("[data-test=switch-bookings]")!
+    .click();
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("wt-dialog")!.textContent).toContain("tills reconnect");
+  expect(el.shadowRoot!.querySelector("wt-dialog")!.textContent).toContain("kitchen");
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-provider-state]")!.click();
+  await vi.waitFor(() => expect(rows(el).join()).toContain("Waiting for restart"));
+  expect(rows(el).join()).toContain("Disabled");
+  expect(api.setBookingsState).toHaveBeenCalledWith(false, 2);
+  expect(el.shadowRoot!.querySelector("wt-dialog")).toBeNull();
+});
+it("keeps a refused Bookings confirmation available and refreshes a stale revision", async () => {
+  const api = modulesClient({
+    listModules: vi
+      .fn()
+      .mockResolvedValueOnce([
+        { id: "bookings", category: "module", enabled: true, applied: true, revision: 0 },
+      ])
+      .mockResolvedValue([
+        { id: "bookings", category: "module", enabled: true, applied: true, revision: 1 },
+      ]),
+    setBookingsState: vi
+      .fn()
+      .mockRejectedValueOnce({ code: "settings.out_of_date" })
+      .mockResolvedValue({ enabled: false, applied: true, revision: 2 }),
+  });
+  const el = await mount(api);
+  el.canManageModules = true;
+  await el.updateComplete;
+  el.shadowRoot!.querySelector("wt-data-table")!
+    .shadowRoot!.querySelector<HTMLElement>("[data-test=switch-bookings]")!
+    .click();
+  await el.updateComplete;
+  const confirm = () =>
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-provider-state]")!;
+  confirm().click();
+  await vi.waitFor(() => expect(api.listModules).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() =>
+    expect(confirm().shadowRoot!.querySelector<HTMLButtonElement>("button")!.disabled).toBe(false),
+  );
+  expect(el.shadowRoot!.querySelector("wt-form-actions")!.getAttribute("error")).toContain(
+    "Someone else saved these settings",
+  );
+  confirm().click();
+  await vi.waitFor(() => expect(api.setBookingsState).toHaveBeenLastCalledWith(false, 1));
+});

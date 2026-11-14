@@ -592,6 +592,12 @@ async function runAdmittedEntry(
     const httpPort = httpPortFrom(deps.baseEnv);
     await deps.serveRecovery(
       recoveryApp({
+        bookings: {
+          roots: { stateDir: deps.stateDir, venueDir: deps.venueDir },
+          onFinished: async () => {
+            exit(0);
+          },
+        },
         restore: {
           roots: { stateDir: deps.stateDir, venueDir: deps.venueDir },
           onFinished: async () => {

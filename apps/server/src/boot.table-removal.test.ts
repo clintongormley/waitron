@@ -145,7 +145,7 @@ for (const [mode, status] of [
           });
           const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
           const [port] = await freePorts(1);
-          server = await startServer({
+          const serverEnv = {
             WAITRON_HTTP_LANDING_PORT: "0",
             WAITRON_HTTP_PORT: String(port),
             WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
@@ -155,7 +155,8 @@ for (const [mode, status] of [
             WAITRON_NODE_ID: venue.cfg.nodeId,
             WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
             WAITRON_ENV: "preproduction",
-          });
+          };
+          server = await startServer(serverEnv);
           await awaitListening(httpPort());
           for (let pass = 0; pass < 3; pass += 1) {
             const response = await fetch(`http://127.0.0.1:${httpPort()}/api/tables/state`, {
@@ -218,6 +219,45 @@ for (const [mode, status] of [
                 },
               ],
             });
+            for (const enabled of [true, false, true]) {
+              const headers = {
+                cookie: `${MANAGEMENT_COOKIE}=${fixture.managementToken}`,
+                "Content-Type": "application/json",
+              };
+              const catalogue = await fetch(
+                `http://127.0.0.1:${httpPort()}/management-api/modules`,
+                { headers },
+              );
+              expect(catalogue.status).toBe(200);
+              const row = ((await catalogue.json()) as { id: string; revision: number }[]).find(
+                (row) => row.id === "bookings",
+              )!;
+              const saved = await fetch(
+                `http://127.0.0.1:${httpPort()}/management-api/modules/bookings/state`,
+                {
+                  method: "PUT",
+                  headers,
+                  body: JSON.stringify({ enabled, revision: row.revision }),
+                },
+              );
+              expect(saved.status, await saved.clone().text()).toBe(200);
+              expect(await saved.json()).toMatchObject({ enabled, applied: !enabled });
+              await server.close();
+              beforeServerStarts();
+              server = await startServer(serverEnv);
+              await awaitListening(httpPort());
+              const response = await fetch(
+                `http://127.0.0.1:${httpPort()}/management-api/bookings?date=2099-01-01`,
+                { headers },
+              );
+              expect(response.status, await response.clone().text()).toBe(enabled ? 200 : 404);
+              expect(
+                await suite.db
+                  .select({ id: bookings.id, status: bookings.status })
+                  .from(bookings)
+                  .where(eq(bookings.id, fixture.bookingId!)),
+              ).toEqual([{ id: fixture.bookingId, status: "booked" }]);
+            }
           }
         } finally {
           await server?.close();

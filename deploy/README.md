@@ -487,6 +487,17 @@ not trading-healthy — and `GET /setup-api/status` exists **only** in setup mod
 healthcheck therefore passes when EITHER returns 200. A probe on one alone would restart-loop one of
 the two modes forever, so do not "simplify" it.
 
+## Switching Bookings
+
+On **Modules**, an administrator can turn Bookings on or off, then choose **Restart** separately
+from the administrator menu when service can pause. **Waiting for restart** means the saved change
+has not taken effect yet. Tills reconnect; check and resend any kitchen send interrupted by the restart.
+Bookings stay saved while the module is off. The other optional module switches remain unavailable.
+
+After repeated failed starts, the recovery page offers **Switch Bookings off and start again**
+when Bookings is on. Use the secure address and an active administrator's password, or choose **Stop**
+to leave it unchanged. An administrator without a password cannot use this recovery action.
+
 ## Resetting a box
 
 `reset` wipes a box back to a clean state — the database, the wizard's settings, and the box's local

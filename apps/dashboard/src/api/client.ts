@@ -2233,6 +2233,7 @@ export interface ModuleRow {
   id: string;
   category: "module" | "card-provider";
   enabled: boolean;
+  applied?: boolean;
   revision?: number;
 }
 
@@ -5078,6 +5079,13 @@ export class DashboardApi {
   }
 
   // ── Card payments (providers + readers) ──────────────────────────────────────────────────────────
+
+  setBookingsState(
+    enabled: boolean,
+    revision: number,
+  ): Promise<{ enabled: boolean; applied: boolean; revision: number }> {
+    return this.#request("/management-api/modules/bookings/state", "PUT", { enabled, revision });
+  }
 
   listModules(): Promise<ModuleRow[]> {
     return this.#request<ModuleRow[]>("/management-api/modules", "GET");

@@ -37,6 +37,9 @@ registerCatalogue({
       "Allow readers to be added for this provider. Configure its credentials separately if needed.",
     "modules.remove_readers": "Remove or unpair these readers before turning the provider off:",
     "modules.open_readers": "Open Card payments",
+    "modules.restart_pending": "Waiting for restart",
+    "modules.bookings_explanation":
+      "Save this change, then use Restart in the administrator menu when service can pause. Bookings stay saved. The tills reconnect; a kitchen send during restart may need resending.",
     "modules.switch_unavailable": "Switching this module is not available yet.",
     "modules.configure_providers": "Configure card providers",
     "modules.guide": "How to set up modules",
@@ -72,6 +75,9 @@ registerCatalogue({
     "modules.remove_readers":
       "Elimina o desvincula estos lectores antes de desactivar el proveedor:",
     "modules.open_readers": "Abrir Pagos con tarjeta",
+    "modules.restart_pending": "Pendiente de reinicio",
+    "modules.bookings_explanation":
+      "Guarda el cambio y usa Reiniciar en el menú de administración cuando puedas pausar el servicio. Las reservas se conservan. Las cajas se reconectan; puede que debas repetir un envío a cocina durante el reinicio.",
     "modules.switch_unavailable": "Aún no se puede cambiar el estado de este módulo.",
     "modules.configure_providers": "Configurar proveedores de tarjeta",
     "modules.guide": "Cómo configurar los módulos",

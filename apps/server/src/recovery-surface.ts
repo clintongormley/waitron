@@ -1,3 +1,8 @@
+import {
+  mountBookingsRecovery,
+  renderBookingsRecovery,
+  type BookingsRecoveryDeps,
+} from "./recovery-bookings.js";
 import { renderEnvironmentSection } from "./recovery-administrator.js";
 import {
   mountRestoreDiscard,
@@ -64,6 +69,7 @@ export interface RecoveryDeps {
   log?: Logger;
   environment?: EnvironmentRecoveryDeps;
   restore?: RestoreRecoveryDeps;
+  bookings?: BookingsRecoveryDeps;
   /** Present when the start found files a cut-off Start again did not create. */
   startAgain?: {
     roots: { stateDir: string; venueDir: string };
@@ -340,12 +346,35 @@ export function recoveryApp(deps: RecoveryDeps): Hono {
       view.message?.kind === "moved" ? section : undefined,
     );
   };
-  const draw =
+  const drawBase =
     deps.restore !== undefined
       ? drawRestore
       : deps.environment === undefined
         ? startAgainPage
         : drawEnvironment;
+
+  const bookings =
+    deps.state.refused || deps.uncounted || deps.refusedAtStart ? undefined : deps.bookings;
+  const drawBookings = async (view: EnvironmentView) => {
+    const [log, freeBytes] = await Promise.all([readLog(deps.logDir), readFreeSpace(deps)]);
+    const section = await renderBookingsRecovery(bookings!, view);
+    return renderPage(
+      deps,
+      log,
+      view.locale,
+      freeBytes,
+      deps.state,
+      view.message?.kind === "moved" ? "" : section,
+      view.message?.kind === "moved" ? section : undefined,
+    );
+  };
+  const draw = async (view: EnvironmentView) => {
+    const base = await drawBase(view);
+    if (!bookings) return base;
+    const retry = '<form method="post" action="/recovery-api/retry">';
+    return base.replace(retry, `${await renderBookingsRecovery(bookings, view)}${retry}`);
+  };
+  if (bookings) mountBookingsRecovery(app, bookings, drawBookings, deps.log);
 
   app.get("/", async (c) => {
     const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);

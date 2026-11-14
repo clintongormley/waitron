@@ -1,5 +1,7 @@
 # A1308 file layout fl10: the module list moves from `modules.json` into the `settings` table — OWNER LANDS
 
+**2026-11-14 writer update:** A483 adds a Modules-page writer for Bookings and an administrator-password recovery writer for Bookings Off. Both use `saveSettings` on the current modules document, preserving the other overrides. See the [Bookings plan](2026-11-12-a483-smallest-module-toggle.md). The no-dashboard-writer statement below records fl10’s earlier source read.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Implementers are dispatched as `subagent_type: "implementer"`.
 
 **Goal:** The venue's module on/off list is the `settings` row `modules` inside `venue.db`, so a

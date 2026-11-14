@@ -3101,6 +3101,8 @@ async function bootServer(
     {
       db,
       modules: availableModules,
+      isPrimary: () => holders.singletonRole.current === "primary",
+      migrationsRoot: config.migrationsRoot,
       enabled: setsToMigrate.map((module) => module.name),
       providers: CARD_PROVIDERS,
     },

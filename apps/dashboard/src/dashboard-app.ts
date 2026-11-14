@@ -3157,6 +3157,7 @@ export class DashboardApp extends LitElement {
         ></dashboard-demo-printer-screen>`;
       case "modules":
         return html`<dashboard-modules-screen
+          .canManageModules=${this.#sessionPermissions.includes("person.admin")}
           .canManageProviders=${this.#sessionPermissions.includes("payments.providers.manage")}
           .api=${this.api}
           .request=${this.request}

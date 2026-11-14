@@ -35,7 +35,10 @@ import {
 
 type Roots = { stateDir: string; venueDir: string };
 
-async function readDatabase<T>(roots: Roots, body: (db: Database) => Promise<T>): Promise<T> {
+export async function readRecoveryDatabase<T>(
+  roots: Roots,
+  body: (db: Database) => Promise<T>,
+): Promise<T> {
   const path = join(roots.venueDir, VENUE_FILE);
   const info = await lstat(path);
   if (!info.isFile()) throw new AppError("setup.not_ready", {});
@@ -66,7 +69,7 @@ async function readDatabase<T>(roots: Roots, body: (db: Database) => Promise<T>)
 async function mismatch(roots: Roots, baseEnv: NodeJS.ProcessEnv): Promise<AppError | undefined> {
   const environment = deploymentEnvironment(await loadBoxEnv(baseEnv, roots.stateDir));
   try {
-    await readDatabase(roots, (db) =>
+    await readRecoveryDatabase(roots, (db) =>
       assertDeploymentMatches(
         db,
         environment,

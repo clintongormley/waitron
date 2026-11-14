@@ -1,5 +1,7 @@
 # A646: configure optional modules without stopping service
 
+**2026-11-14 implementation update:** Bookings uses a saved On/Off choice and a separate administrator Restart, with a pending-restart indication. Failed-start recovery can switch Bookings off over HTTPS with an active administrator password. Other optional module switches remain unavailable. See the [Bookings plan](../plans/2026-11-12-a483-smallest-module-toggle.md). This supersedes the automatic-restart behavior below for Bookings.
+
 > 2026-11-11: The watcher-cleared [reduced plan](../plans/2026-11-11-a646-modules-and-card-providers.md) supersedes the build scope below. Rows without settings have no Configure action (watcher 17:15).
 
 > **2026-11-11:** the Google parts of this design are withdrawn (owner: Google sign-in moves to the backlog as A1507, one Waitron-owned setup, not a go-live requirement). See [the A646 entry](../../backlog/architecture.md#a646--a-modules-page-where-the-administrator-switches-optional-modules-on-and-sets-them-up).
