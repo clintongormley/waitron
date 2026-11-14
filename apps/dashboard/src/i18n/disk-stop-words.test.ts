@@ -7,7 +7,7 @@ const STOP_ES = "Disco lleno: las cajas no pueden guardar nada (ventas, pedidos,
 const FREE_EN =
   "Box status can free old logs, old crash reports and what an interrupted backup left.";
 const FREE_ES =
-  "Estado del equipo puede liberar registros de actividad e informes de fallos antiguos, y lo que dejó una copia interrumpida.";
+  "Estado del servidor puede liberar registros de actividad e informes de fallos antiguos, y lo que dejó una copia interrumpida.";
 
 const one: DiskStopDeleted = {
   count: 1,
@@ -34,7 +34,7 @@ describe("the full-disk bar's words for someone who can open Box status", () => 
       `${STOP_EN} The box deleted its oldest backup (28 Oct 2026). ${FREE_EN}`,
     );
     expect(diskStopMessage(one, true, "es")).toBe(
-      `${STOP_ES} El equipo borró su copia de seguridad más antigua (28 oct 2026). ${FREE_ES}`,
+      `${STOP_ES} El servidor borró su copia de seguridad más antigua (28 oct 2026). ${FREE_ES}`,
     );
   });
 
@@ -43,7 +43,7 @@ describe("the full-disk bar's words for someone who can open Box status", () => 
       `${STOP_EN} The box deleted its 3 oldest backups (28 Oct 2026). ${FREE_EN}`,
     );
     expect(diskStopMessage(sameDay, true, "es")).toBe(
-      `${STOP_ES} El equipo borró sus 3 copias más antiguas (28 oct 2026). ${FREE_ES}`,
+      `${STOP_ES} El servidor borró sus 3 copias más antiguas (28 oct 2026). ${FREE_ES}`,
     );
   });
 
@@ -52,7 +52,7 @@ describe("the full-disk bar's words for someone who can open Box status", () => 
       `${STOP_EN} The box deleted its 3 oldest backups (21 Oct 2026 to 24 Oct 2026). ${FREE_EN}`,
     );
     expect(diskStopMessage(severalDays, true, "es")).toBe(
-      `${STOP_ES} El equipo borró sus 3 copias más antiguas (del 21 oct 2026 al 24 oct 2026). ${FREE_ES}`,
+      `${STOP_ES} El servidor borró sus 3 copias más antiguas (del 21 oct 2026 al 24 oct 2026). ${FREE_ES}`,
     );
   });
 
@@ -64,7 +64,7 @@ describe("the full-disk bar's words for someone who can open Box status", () => 
 
 describe("the full-disk bar's words for someone who cannot open Box status", () => {
   const EN = `${STOP_EN} Sign in as a manager to free space on Box status; this signs you out.`;
-  const ES = `${STOP_ES} Inicia sesión como encargado para liberar espacio en Estado del equipo; así se cierra tu sesión.`;
+  const ES = `${STOP_ES} Inicia sesión como encargado para liberar espacio en Estado del servidor; así se cierra tu sesión.`;
 
   it("offers a manager's sign-in and never names a deletion, even when handed one", () => {
     for (const deleted of [null, one, sameDay, severalDays]) {
@@ -84,7 +84,7 @@ describe("the full-disk bar's buttons", () => {
     expect(t("disk_stop.open_box_status")).toBe("Open Box status");
     expect(t("disk_stop.sign_in_as_manager")).toBe("Sign in as a manager");
     setLocale("es-ES");
-    expect(t("disk_stop.open_box_status")).toBe("Abrir Estado del equipo");
+    expect(t("disk_stop.open_box_status")).toBe("Abrir Estado del servidor");
     expect(t("disk_stop.sign_in_as_manager")).toBe("Iniciar sesión como encargado");
   });
 });

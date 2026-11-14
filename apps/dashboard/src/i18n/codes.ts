@@ -18,7 +18,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "node.spare": {
     en: "This box is the spare. Open the main box's address for restaurant screens and data.",
-    es: "Este es el equipo de reserva. Abre la dirección del equipo principal para acceder a las pantallas y los datos del local.",
+    es: "Este es el servidor de reserva. Abre la dirección del servidor principal para acceder a las pantallas y los datos del local.",
   },
   "connection.cancelled": {
     en: "The request was stopped. Its result is unavailable.",
@@ -123,7 +123,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "cloud.replacement_state_invalid": {
     en: "The saved Cloud reconnection request on this box cannot be read. Choose “Get a fresh reconnection request” to set it aside and ask Cloud for a new one; the Cloud owner then approves it as before.",
-    es: "No se puede leer la solicitud guardada de reconexión con Cloud de este equipo. Elige «Obtener una nueva solicitud de reconexión» para apartarla y pedir una nueva a Cloud; después, el propietario de Cloud la aprueba como antes.",
+    es: "No se puede leer la solicitud guardada de reconexión con Cloud de este servidor. Elige «Obtener una nueva solicitud de reconexión» para apartarla y pedir una nueva a Cloud; después, el propietario de Cloud la aprueba como antes.",
   },
   "cloud.replacement_refused": {
     en: "Cloud refused the replacement request. Check the approved recovery and old installation in Cloud, then check reconnection here.",
@@ -406,7 +406,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "node.reset": {
     en: "This box was reset.",
-    es: "Este equipo se ha restablecido.",
+    es: "Este servidor se ha restablecido.",
   },
   "password.invalid": {
     en: "Incorrect password, try again",
@@ -1147,7 +1147,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "backup.recovery_key_missing": {
     en: "This box holds no recovery key.",
-    es: "Esta caja no tiene clave de recuperación.",
+    es: "Este servidor no tiene clave de recuperación.",
   },
   "backup.destinations_invalid": {
     en: "Check the backup destination",
@@ -1163,15 +1163,15 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "backup.recovery_key_exists": {
     en: "This box holds a different recovery key from the one this page sent. Reload the page and try again. To replace the key, use “Change the recovery key”, which appears while backups are on.",
-    es: "Este equipo tiene una clave de recuperación distinta de la que ha enviado esta página. Vuelve a cargar la página e inténtalo de nuevo. Para sustituir la clave, usa «Cambiar la clave de recuperación», que aparece mientras las copias están activadas.",
+    es: "Este servidor tiene una clave de recuperación distinta de la que ha enviado esta página. Vuelve a cargar la página e inténtalo de nuevo. Para sustituir la clave, usa «Cambiar la clave de recuperación», que aparece mientras las copias están activadas.",
   },
   "backup.reload_in_progress": {
     en: "The box is still applying an earlier change. Wait a moment and try again.",
-    es: "El equipo todavía está aplicando un cambio anterior. Espera un momento y vuelve a intentarlo.",
+    es: "El servidor todavía está aplicando un cambio anterior. Espera un momento y vuelve a intentarlo.",
   },
   "backup.stream_held_by_another_box": {
     en: "Another box was found writing this venue's copy to the same bucket, so this box will not copy over it. Two boxes must never sell for one venue: if that box replaced this one, switch this box off.",
-    es: "Se ha visto a otro equipo escribiendo la copia de este local en el mismo bucket, así que este equipo no copiará encima. Nunca deben vender dos equipos para un mismo local: si ese equipo sustituyó a este, apaga este equipo.",
+    es: "Se ha visto a otro servidor escribiendo la copia de este local en el mismo bucket, así que este servidor no copiará encima. Nunca deben vender dos servidores para un mismo local: si ese servidor sustituyó a este, apaga este servidor.",
   },
   "backup.spare_stream_active": {
     en: "This venue has a standby server, listed under Servers, which is set up to receive the venue's copy, or is about to be, and a venue copies its data to one place at a time. Nothing was saved. If the standby is not yet set up to receive the venue's data, choose Remove on its row under Servers; the bucket can then be saved here. A standby that is set up to receive the venue's data cannot be removed in this version, so the copy stays with it until an update lets the standby pass it on to a bucket.",
@@ -1199,7 +1199,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "backup.destination_timed_out": {
     en: "The backup destination took too long to answer, so the box stopped waiting for it.",
-    es: "El destino de las copias ha tardado demasiado en responder, así que la caja ha dejado de esperarlo.",
+    es: "El destino de las copias ha tardado demasiado en responder, así que el servidor ha dejado de esperarlo.",
   },
   "backup.destination_cancelled": {
     en: "The backup was stopped part-way because backups were restarting or switching off.",
@@ -1207,15 +1207,15 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "backup.destination_key_invalid": {
     en: "A file or folder name at the backup destination is not one the box can safely use.",
-    es: "Un nombre de archivo o de carpeta en el destino de las copias no es uno que la caja pueda usar con seguridad.",
+    es: "Un nombre de archivo o de carpeta en el destino de las copias no es uno que el servidor pueda usar con seguridad.",
   },
   "backup.destination_object_too_large": {
     en: "A file sent to or read from the backup destination was larger than the box allows.",
-    es: "Un archivo enviado al destino de las copias o leído de él superaba el tamaño que admite la caja.",
+    es: "Un archivo enviado al destino de las copias o leído de él superaba el tamaño que admite el servidor.",
   },
   "backup.rotation_metadata_failed": {
     en: "The new recovery key is in use, but the box could not record the change in the backup settings.",
-    es: "La nueva clave de recuperación ya está en uso, pero la caja no ha podido anotar el cambio en los ajustes de las copias.",
+    es: "La nueva clave de recuperación ya está en uso, pero el servidor no ha podido anotar el cambio en los ajustes de las copias.",
   },
   "backup.archive_settings_invalid": {
     en: "The saved settings for scheduled backups are not valid. Save them again on the Backups screen.",
@@ -1223,7 +1223,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "backup.archive_settings_unusable": {
     en: "Scheduled backups are off because their saved settings could not be used. What the box recorded shows what the box found. Turn on backups replaces the saved choices; leave without applying to keep them. Sales continue.",
-    es: "Las copias programadas están desactivadas porque no se han podido usar sus ajustes guardados. Lo que ha registrado el equipo muestra lo que encontró el equipo. Activar las copias sustituye los ajustes guardados; sal sin aplicarlos para conservarlos. Las ventas continúan.",
+    es: "Las copias programadas están desactivadas porque no se han podido usar sus ajustes guardados. Lo que ha registrado el servidor muestra lo que encontró el servidor. Activar las copias sustituye los ajustes guardados; sal sin aplicarlos para conservarlos. Las ventas continúan.",
   },
   "backup.archive_settings_unreadable": {
     en: "The saved settings for scheduled backups can't be read. Save them again on the Backups screen to replace them.",
@@ -1237,7 +1237,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   // the received route's answer.
   "recovery.pack_invalid": {
     en: "The box could not read the request to make a recovery pack. This is a fault in Waitron. Reload the page and make the pack again.",
-    es: "La caja no pudo leer la solicitud para hacer un paquete de recuperación. Es un fallo de Waitron. Recarga la página y vuelve a hacer el paquete.",
+    es: "El servidor no pudo leer la solicitud para hacer un paquete de recuperación. Es un fallo de Waitron. Recarga la página y vuelve a hacer el paquete.",
   },
   "management.origin_refused": {
     en: "The box did not make this change because this page's address is not one it trusts. Open the dashboard at the box's own address and make the change again.",
@@ -1457,7 +1457,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "handover.operation_in_progress": {
     en: "Another handover is already in progress. Keep both boxes connected. Do not start another handover until it finishes.",
-    es: "Ya hay otro traspaso en curso. Mantén los dos equipos conectados. No inicies otro traspaso hasta que termine.",
+    es: "Ya hay otro traspaso en curso. Mantén los dos servidores conectados. No inicies otro traspaso hasta que termine.",
   },
   // A fault in Waitron: a box records one restriction, a repeat carries the same values, and nothing
   // rewrites one.
@@ -1471,7 +1471,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "handover.known_handover": {
     en: "This box has already handed over to another box. It cannot carry on as the main box.",
-    es: "Este equipo ya ha pasado el local a otro equipo. No puede seguir como equipo principal.",
+    es: "Este servidor ya ha pasado el local a otro servidor. No puede seguir como servidor principal.",
   },
   "handover.peer_unknown": {
     en: "This server does not accept that request from the server that sent it, so it did not answer. Nothing was changed.",
@@ -1479,95 +1479,95 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "handover.not_stepped_down": {
     en: "The old box has not handed over its work in this handover, so it will not send its final copy of the venue. Nothing was changed.",
-    es: "El equipo antiguo no ha pasado su trabajo en este cambio de servidor, así que no enviará su copia final del local. No se ha cambiado nada.",
+    es: "El servidor antiguo no ha pasado su trabajo en este cambio de servidor, así que no enviará su copia final del local. No se ha cambiado nada.",
   },
   "handover.operation_unknown": {
     en: "That box holds no record of that handover, so it sent nothing. Nothing was changed.",
-    es: "Ese equipo no tiene constancia de ese cambio de servidor, así que no ha enviado nada. No se ha cambiado nada.",
+    es: "Ese servidor no tiene constancia de ese cambio de servidor, así que no ha enviado nada. No se ha cambiado nada.",
   },
   "handover.final_copy_changed": {
     en: "The old box's venue data changed after it made its final copy, so it did not send the copy. Nothing was changed.",
-    es: "Los datos del local en el equipo antiguo cambiaron después de hacer la copia final, así que no ha enviado la copia. No se ha cambiado nada.",
+    es: "Los datos del local en el servidor antiguo cambiaron después de hacer la copia final, así que no ha enviado la copia. No se ha cambiado nada.",
   },
   "handover.source_unreachable": {
     en: "This box can't get an answer it can use from the old box yet. It keeps asking by itself. Nothing was changed.",
-    es: "Este equipo aún no recibe una respuesta válida del equipo antiguo. Sigue preguntando por sí solo. No se ha cambiado nada.",
+    es: "Este servidor aún no recibe una respuesta válida del servidor antiguo. Sigue preguntando por sí solo. No se ha cambiado nada.",
   },
   "handover.not_a_spare": {
     en: "This box is not a spare, so it cannot take over the venue. Nothing was changed.",
-    es: "Este equipo no es un equipo de reserva, así que no puede pasar a llevar el local. No se ha cambiado nada.",
+    es: "Este servidor no es un servidor de reserva, así que no puede pasar a llevar el local. No se ha cambiado nada.",
   },
   "handover.promotion_running": {
     en: "This box is being made the main box right now, so it did not accept this handover. Nothing was changed. If that does not finish, start the handover again.",
-    es: "Este equipo está pasando a ser el equipo principal en este momento, así que no ha aceptado el traspaso. No se ha cambiado nada. Si eso no termina, vuelve a empezar el traspaso.",
+    es: "Este servidor está pasando a ser el servidor principal en este momento, así que no ha aceptado el traspaso. No se ha cambiado nada. Si eso no termina, vuelve a empezar el traspaso.",
   },
   "handover.membership_mismatch": {
     en: "The box offering this handover is not the main box on this box's list of the venue's boxes, or the two boxes hold different venue details or different lists, so this box did not accept the handover. Nothing was changed.",
-    es: "El equipo que ofrece este traspaso no es el equipo principal en la lista de equipos del local de este equipo, o los dos equipos tienen datos del local o listas distintos, así que este equipo no ha aceptado el traspaso. No se ha cambiado nada.",
+    es: "El servidor que ofrece este traspaso no es el servidor principal en la lista de servidores del local de este servidor, o los dos servidores tienen datos del local o listas distintos, así que este servidor no ha aceptado el traspaso. No se ha cambiado nada.",
   },
   "handover.not_main_box": {
     en: "This box is not the main box. Open Servers at the main box’s address to start a handover.",
-    es: "Este equipo no es el principal. Abre Servidores en la dirección del equipo principal para iniciar un traspaso.",
+    es: "Este servidor no es el principal. Abre Servidores en la dirección del servidor principal para iniciar un traspaso.",
   },
   "handover.venue_not_supported": {
     en: "This venue’s way of filing invoices does not support handover yet. Choose Stop and keep using the main box.",
-    es: "La forma de presentar facturas de este local aún no admite el traspaso. Elige Parar y sigue usando el equipo principal.",
+    es: "La forma de presentar facturas de este local aún no admite el traspaso. Elige Parar y sigue usando el servidor principal.",
   },
   "handover.destination_not_spare": {
     en: "That box is not listed as a spare. Choose Stop and check the current Servers list before choosing a spare.",
-    es: "Ese equipo no figura como reserva. Elige Parar y revisa la lista actual de Servidores antes de elegir un equipo de reserva.",
+    es: "Ese servidor no figura como reserva. Elige Parar y revisa la lista actual de Servidores antes de elegir un servidor de reserva.",
   },
   "handover.destination_not_joined": {
     en: "That spare has not finished joining this venue. Choose Stop and finish joining it before handing over.",
-    es: "Ese equipo de reserva no ha terminado de unirse a este local. Elige Parar y termina de incorporarlo antes de traspasar el local.",
+    es: "Ese servidor de reserva no ha terminado de unirse a este local. Elige Parar y termina de incorporarlo antes de traspasar el local.",
   },
   "handover.destination_unaddressable": {
     en: "The spare has no separate address on this box’s list. Choose Stop and finish the spare’s network setup before handing over.",
-    es: "El equipo de reserva no tiene una dirección propia en la lista de este equipo. Elige Parar y termina de configurar su red antes de traspasar el local.",
+    es: "El servidor de reserva no tiene una dirección propia en la lista de este servidor. Elige Parar y termina de configurar su red antes de traspasar el local.",
   },
   "handover.destination_unreachable": {
     en: "The spare did not give a verifiable answer. Check its power and network connection, then try the handover again.",
-    es: "El equipo de reserva no ha dado una respuesta verificable. Comprueba su alimentación y su conexión de red y vuelve a intentar el traspaso.",
+    es: "El servidor de reserva no ha dado una respuesta verificable. Comprueba su alimentación y su conexión de red y vuelve a intentar el traspaso.",
   },
   "handover.restarted_before_stepdown": {
     en: "This handover was cancelled before this box handed over. Check the current Servers list, then start a new handover if the spare is still listed.",
-    es: "Este traspaso se canceló antes de que este equipo cediera el local. Revisa la lista actual de Servidores e inicia otro traspaso si el equipo de reserva sigue en ella.",
+    es: "Este traspaso se canceló antes de que este servidor cediera el local. Revisa la lista actual de Servidores e inicia otro traspaso si el servidor de reserva sigue en ella.",
   },
   "handover.superseded_during_start": {
     en: "Another box took over or the venue’s list of boxes changed. Open the current main box’s address to continue.",
-    es: "Otro equipo ha pasado a llevar el local o ha cambiado la lista de equipos. Abre la dirección del equipo principal actual para continuar.",
+    es: "Otro servidor ha pasado a llevar el local o ha cambiado la lista de servidores. Abre la dirección del servidor principal actual para continuar.",
   },
   "handover.membership_changed": {
     en: "The venue’s details or its list of boxes changed during this handover. Check Servers on the current main box before starting a new handover.",
-    es: "Los datos del local o su lista de equipos han cambiado durante el traspaso. Revisa Servidores en el equipo principal actual antes de iniciar otro.",
+    es: "Los datos del local o su lista de servidores han cambiado durante el traspaso. Revisa Servidores en el servidor principal actual antes de iniciar otro.",
   },
   "handover.backup_settings_differ": {
     en: "The spare does not hold this box's backup settings, so it did not accept the handover. This box keeps selling, and sends the spare its settings by itself. Try again in a minute.",
-    es: "El equipo de reserva no tiene los ajustes de copia de seguridad de este equipo, así que no ha aceptado el traspaso. Este equipo sigue vendiendo y le envía sus ajustes solo. Vuelve a intentarlo dentro de un minuto.",
+    es: "El servidor de reserva no tiene los ajustes de copia de seguridad de este servidor, así que no ha aceptado el traspaso. Este servidor sigue vendiendo y le envía sus ajustes solo. Vuelve a intentarlo dentro de un minuto.",
   },
   "handover.modules_differ": {
     en: "The two boxes have different software or enabled modules. Choose Stop and bring both boxes to the same software and module selection before handing over.",
-    es: "Los dos equipos tienen programas o módulos activados distintos. Elige Parar y pon en ambos los mismos programas y módulos antes de traspasar el local.",
+    es: "Los dos servidores tienen programas o módulos activados distintos. Elige Parar y pon en ambos los mismos programas y módulos antes de traspasar el local.",
   },
   "handover.key_ring_mismatch": {
     en: "The spare lacks an encryption key needed for this venue. Choose Stop and join the spare again before handing over.",
-    es: "Al equipo de reserva le falta una clave de cifrado necesaria para este local. Elige Parar y vuelve a unirlo al local antes de traspasarlo.",
+    es: "Al servidor de reserva le falta una clave de cifrado necesaria para este local. Elige Parar y vuelve a unirlo al local antes de traspasarlo.",
   },
   "handover.settings_unreadable": {
     en: "This box could not read the settings needed for handover. Choose Stop, restart this box and check its start page before trying again.",
-    es: "Este equipo no ha podido leer los ajustes necesarios para el traspaso. Elige Parar, reinícialo y revisa su página de inicio antes de volver a intentarlo.",
+    es: "Este servidor no ha podido leer los ajustes necesarios para el traspaso. Elige Parar, reinícialo y revisa su página de inicio antes de volver a intentarlo.",
   },
   "handover.destination_settings_unreadable": {
     en: "The spare could not read the settings needed for handover. Choose Stop, restart the spare and check its start page before trying again.",
-    es: "El equipo de reserva no ha podido leer los ajustes necesarios para el traspaso. Elige Parar, reinícialo y revisa su página de inicio antes de volver a intentarlo.",
+    es: "El servidor de reserva no ha podido leer los ajustes necesarios para el traspaso. Elige Parar, reinícialo y revisa su página de inicio antes de volver a intentarlo.",
   },
   "handover.settings_changed": {
     en: "This box’s settings changed during the handover. Check Servers on the current main box before starting a new handover.",
-    es: "Los ajustes de este equipo han cambiado durante el traspaso. Revisa Servidores en el equipo principal actual antes de iniciar otro.",
+    es: "Los ajustes de este servidor han cambiado durante el traspaso. Revisa Servidores en el servidor principal actual antes de iniciar otro.",
   },
   "handover.indicator_untrusted": {
     en: "The description of the final copy was not signed by the box handing over, so the spare did not accept it. The old box stays stopped.",
-    es: "La descripción de la copia final no está firmada por el equipo que hace el traspaso, así que el equipo de reserva no la ha aceptado. El equipo antiguo sigue detenido.",
+    es: "La descripción de la copia final no está firmada por el servidor que hace el traspaso, así que el servidor de reserva no la ha aceptado. El servidor antiguo sigue detenido.",
   },
   "handover.copy_mismatch": {
     en: "This copy has not been confirmed for this handover. A controlled handover fetches it again. After an emergency restart, repeat the declaration to check it again; a changed copy cannot activate a saved declaration.",
@@ -1579,79 +1579,79 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "handover.chain_broken": {
     en: "The records in this copy failed their check, so this box has not taken over. Retry when a working copy is available.",
-    es: "Los registros de esta copia no han superado su comprobación, así que este equipo no ha tomado el relevo. Reintenta cuando haya una copia válida disponible.",
+    es: "Los registros de esta copia no han superado su comprobación, así que este servidor no ha tomado el relevo. Reintenta cuando haya una copia válida disponible.",
   },
   "handover.preparation_state_too_large": {
     en: "The two boxes' saved preparations would leave their file with too little room to be sure the spare can take over, so the spare did not accept this handover. The old box stays stopped.",
-    es: "Los preparativos guardados de los dos equipos dejarían su archivo con muy poco espacio para asegurar que el equipo de reserva pueda tomar el relevo, así que no ha aceptado este traspaso. El equipo antiguo sigue detenido.",
+    es: "Los preparativos guardados de los dos servidores dejarían su archivo con muy poco espacio para asegurar que el servidor de reserva pueda tomar el relevo, así que no ha aceptado este traspaso. El servidor antiguo sigue detenido.",
   },
   "handover.summary_mismatch": {
     en: "The copy the spare received does not hold what the old box said it holds, so the spare did not accept it. The old box stays stopped.",
-    es: "La copia que ha recibido el equipo de reserva no contiene lo que el equipo antiguo dijo que contenía, así que no la ha aceptado. El equipo antiguo sigue detenido.",
+    es: "La copia que ha recibido el servidor de reserva no contiene lo que el servidor antiguo dijo que contenía, así que no la ha aceptado. El servidor antiguo sigue detenido.",
   },
   "handover.summary_unreadable": {
     en: "The spare could not read the copy it received to check what it holds, so it did not accept it. The old box stays stopped.",
-    es: "El equipo de reserva no ha podido leer la copia que ha recibido para comprobar su contenido, así que no la ha aceptado. El equipo antiguo sigue detenido.",
+    es: "El servidor de reserva no ha podido leer la copia que ha recibido para comprobar su contenido, así que no la ha aceptado. El servidor antiguo sigue detenido.",
   },
   "handover.copy_lacks_destination": {
     en: "The copy the spare received has no usable record of the spare, so the spare could not start from it and did not accept it. The old box stays stopped.",
-    es: "La copia que ha recibido el equipo de reserva no tiene un registro válido de ese equipo, así que no podría arrancar con ella y no la ha aceptado. El equipo antiguo sigue detenido.",
+    es: "La copia que ha recibido el servidor de reserva no tiene un registro válido de ese servidor, así que no podría arrancar con ella y no la ha aceptado. El servidor antiguo sigue detenido.",
   },
   "handover.authoriser_not_permitted": {
     en: "According to the copy the spare received, the person who authorised this handover may not move the venue to another box, so the spare did not accept it. The old box stays stopped.",
-    es: "Según la copia que ha recibido el equipo de reserva, la persona que autorizó este traspaso no puede pasar el local a otro equipo, así que no la ha aceptado. El equipo antiguo sigue detenido.",
+    es: "Según la copia que ha recibido el servidor de reserva, la persona que autorizó este traspaso no puede pasar el local a otro servidor, así que no la ha aceptado. El servidor antiguo sigue detenido.",
   },
   "handover.preparation_state_unusable": {
     en: "This box's module preparation file is unreadable or too full to take the old box's selections, so this box did not put the accepted copy in place.",
-    es: "El archivo de preparación de módulos de este equipo no se puede leer o está demasiado lleno para añadir las selecciones del equipo antiguo, así que este equipo no ha puesto en su sitio la copia aceptada.",
+    es: "El archivo de preparación de módulos de este servidor no se puede leer o está demasiado lleno para añadir las selecciones del servidor antiguo, así que este servidor no ha puesto en su sitio la copia aceptada.",
   },
   "handover.placement_failed": {
     en: "This box could not put the copy of the venue it accepted in place. The copy is kept, and Retry tries again.",
-    es: "Este equipo no pudo poner en su sitio la copia del local que aceptó. La copia se conserva, y Reintentar lo vuelve a intentar.",
+    es: "Este servidor no pudo poner en su sitio la copia del local que aceptó. La copia se conserva, y Reintentar lo vuelve a intentar.",
   },
   "handover.placement_no_room": {
     en: "This box's disk has no room for the copy of the venue it accepted: it needs room for one more whole copy. The copy is kept, and Retry tries again.",
-    es: "El disco de este equipo no tiene sitio para la copia del local que aceptó: necesita sitio para otra copia entera. La copia se conserva, y Reintentar lo vuelve a intentar.",
+    es: "El disco de este servidor no tiene sitio para la copia del local que aceptó: necesita sitio para otra copia entera. La copia se conserva, y Reintentar lo vuelve a intentar.",
   },
   "handover.no_room_to_place": {
     en: "This box's disk has no room to put the accepted copy of the venue in place. It asks the old box to give up filing once there is room. The old box stays stopped.",
-    es: "El disco de este equipo no tiene sitio para poner en su sitio la copia aceptada del local. Pedirá al equipo antiguo que ceda el envío de registros cuando haya sitio. El equipo antiguo sigue detenido.",
+    es: "El disco de este servidor no tiene sitio para poner en su sitio la copia aceptada del local. Pedirá al servidor antiguo que ceda el envío de registros cuando haya sitio. El servidor antiguo sigue detenido.",
   },
   "handover.accepted_copy_missing": {
     en: "The copy of the venue this box accepted is no longer on its disk, so this box cannot take over the venue.",
-    es: "La copia del local que este equipo aceptó ya no está en su disco, así que este equipo no puede pasar a llevar el local.",
+    es: "La copia del local que este servidor aceptó ya no está en su disco, así que este servidor no puede pasar a llevar el local.",
   },
   "handover.source_no_longer_main": {
     en: "This box's list of servers no longer has the old box as the main box, so this box has not taken over from it. If a newer list names the old box again, a waiting box carries on by itself, and an activation that was refused has to be sent again.",
-    es: "La lista de servidores de este equipo ya no tiene al equipo antiguo como equipo principal, así que este equipo no ha asumido sus funciones. Si una lista más reciente vuelve a nombrar al equipo antiguo, un equipo en espera sigue por sí solo, y una activación rechazada hay que enviarla de nuevo.",
+    es: "La lista de servidores de este servidor ya no tiene al servidor antiguo como servidor principal, así que este servidor no ha asumido sus funciones. Si una lista más reciente vuelve a nombrar al servidor antiguo, un servidor en espera sigue por sí solo, y una activación rechazada hay que enviarla de nuevo.",
   },
   "handover.relinquishment_invalid": {
     en: "The old box's answer did not hand filing to this box for the copy it accepted, so this box has not taken over. It keeps asking the old box.",
-    es: "La respuesta del equipo antiguo no le cede a este equipo el envío de registros de la copia que aceptó, así que este equipo no ha asumido el envío. Sigue preguntando al equipo antiguo.",
+    es: "La respuesta del servidor antiguo no le cede a este servidor el envío de registros de la copia que aceptó, así que este servidor no ha asumido el envío. Sigue preguntando al servidor antiguo.",
   },
   "handover.summary_failed": {
     en: "The old box could not read part of the venue's data from its final copy, so it sent neither the copy nor its description. Its venue data is unchanged. Asking again makes it take a new copy and read that.",
-    es: "El equipo antiguo no ha podido leer parte de los datos del local en su copia final, así que no ha enviado ni la copia ni su descripción. Sus datos del local no han cambiado. Si se vuelve a pedir, hará una copia nueva y la leerá.",
+    es: "El servidor antiguo no ha podido leer parte de los datos del local en su copia final, así que no ha enviado ni la copia ni su descripción. Sus datos del local no han cambiado. Si se vuelve a pedir, hará una copia nueva y la leerá.",
   },
   "handover.indicator_mismatch": {
     en: "The description the old box sent of its final copy is not one this box can read or does not belong to this handover, so this box did not accept the copy. Nothing changed on this box.",
-    es: "La descripción que ha enviado el equipo antiguo de su copia final no se puede leer en este equipo o no corresponde a este traspaso, así que este equipo no ha aceptado la copia. No ha cambiado nada en este equipo.",
+    es: "La descripción que ha enviado el servidor antiguo de su copia final no se puede leer en este servidor o no corresponde a este traspaso, así que este servidor no ha aceptado la copia. No ha cambiado nada en este servidor.",
   },
   "handover.copy_check_failed": {
     en: "This box could not finish checking the copy, so it has not taken over. Try again.",
-    es: "Este equipo no ha podido terminar de comprobar la copia, así que no ha tomado el relevo. Reinténtalo.",
+    es: "Este servidor no ha podido terminar de comprobar la copia, así que no ha tomado el relevo. Reinténtalo.",
   },
   "handover.source_still_answering": {
     en: "The old box still answers. Switch it off before declaring an emergency handover, or use a controlled handover. Before activation, it must be off or confirm that this box replaces it.",
-    es: "El equipo antiguo sigue respondiendo. Apágalo antes de declarar un traspaso de emergencia o usa un traspaso controlado. Antes de activar, debe estar apagado o confirmar que este equipo lo sustituye.",
+    es: "El servidor antiguo sigue respondiendo. Apágalo antes de declarar un traspaso de emergencia o usa un traspaso controlado. Antes de activar, debe estar apagado o confirmar que este servidor lo sustituye.",
   },
   "handover.source_not_established": {
     en: "The old box's status could not be established. Switch it off at the plug, check its address and connection, then try again.",
-    es: "No se ha podido determinar el estado del equipo antiguo. Desenchúfalo, comprueba su dirección y conexión y vuelve a intentarlo.",
+    es: "No se ha podido determinar el estado del servidor antiguo. Desenchúfalo, comprueba su dirección y conexión y vuelve a intentarlo.",
   },
   "handover.controlled_unresolved": {
     en: "This box has an unfinished handover that an emergency declaration cannot replace. Resume that handover before starting another.",
-    es: "Este equipo tiene un traspaso sin terminar que una declaración de emergencia no puede sustituir. Reanuda ese traspaso antes de iniciar otro.",
+    es: "Este servidor tiene un traspaso sin terminar que una declaración de emergencia no puede sustituir. Reanuda ese traspaso antes de iniciar otro.",
   },
   "alert.not_found": {
     en: "This alert no longer exists. Refresh the list.",
@@ -1659,7 +1659,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "alert.already_handled": {
     en: "This alert was already marked handled, so the note was not saved. Add it from Handled lists on the Box status page.",
-    es: "Este aviso ya estaba marcado como resuelto, así que la nota no se ha guardado. Añádela desde Listas resueltas en Estado del equipo.",
+    es: "Este aviso ya estaba marcado como resuelto, así que la nota no se ha guardado. Añádela desde Listas resueltas en Estado del servidor.",
   },
   "alert.note_exists": {
     en: "This alert already has a note, which cannot be changed. Close this window to see it under Handled lists.",
@@ -1671,7 +1671,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "fiscal.not_filing": {
     en: "This box does not send records to the tax agency.",
-    es: "Este equipo no envía registros a Hacienda.",
+    es: "Este servidor no envía registros a Hacienda.",
   },
   "fiscal.awaiting_certificate": {
     en: "No record can be sent until the tax agency's certificate is installed. Install it in Venue settings.",
@@ -1679,23 +1679,23 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "storage.disk_full": {
     en: "Not saved: the box is out of disk space.",
-    es: "No se ha guardado: el equipo no tiene espacio en disco.",
+    es: "No se ha guardado: el servidor no tiene espacio en disco.",
   },
   "clock.unusable": {
     en: "Not recorded: the box's clock is wrong.",
-    es: "No se ha registrado: la hora del equipo es incorrecta.",
+    es: "No se ha registrado: la hora del servidor es incorrecta.",
   },
   "clock.behind_chain": {
     en: "Not recorded: the box's clock reads earlier than its last sale. Sort it out on the Box status page.",
-    es: "No se ha registrado: la hora del equipo es anterior a la última venta. Resuélvelo en Estado del equipo.",
+    es: "No se ha registrado: la hora del servidor es anterior a la última venta. Resuélvelo en Estado del servidor.",
   },
   "clock.unconfirmed": {
     en: "Not recorded: the box is waiting for its time to be confirmed. Use “Check the time” on a till.",
-    es: "No se ha registrado: el equipo espera a que se confirme su hora. Usa «Comprobar la hora» en una caja.",
+    es: "No se ha registrado: el servidor espera a que se confirme su hora. Usa «Comprobar la hora» en una caja.",
   },
   "clock.confirm_refused": {
     en: "The clock could not be confirmed. Look at the Box status page.",
-    es: "No se ha podido confirmar la hora. Mira Estado del equipo.",
+    es: "No se ha podido confirmar la hora. Mira Estado del servidor.",
   },
   "clock.check_expired": {
     en: "The check took too long. Try again.",
@@ -1703,11 +1703,11 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "clock.set_refused": {
     en: "The box's clock was not set. See the Clock row.",
-    es: "No se ha puesto en hora el equipo. Mira la fila Reloj.",
+    es: "No se ha puesto en hora el servidor. Mira la fila Reloj.",
   },
   "clock.set_failed": {
     en: "The box could not set its clock. See the Clock row.",
-    es: "El equipo no ha podido poner su reloj en hora. Mira la fila Reloj.",
+    es: "El servidor no ha podido poner su reloj en hora. Mira la fila Reloj.",
   },
   "theme.name_taken": {
     en: "A theme with this name already exists.",

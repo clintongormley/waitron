@@ -427,7 +427,7 @@ configuración para poner en marcha otro local.
   código de recuperación ni un vínculo con Google.
 - Destinatarios: tu proveedor de almacenamiento de copias de seguridad, y el proveedor de cualquier
   otro bucket al que envíes copias programadas; quien reciba de ti un archivo de exportación de la
-  configuración. Las copias programadas guardadas en **Una carpeta de esta caja** quedan donde esté
+  configuración. Las copias programadas guardadas en **Una carpeta de este servidor** quedan donde esté
   esa carpeta.
 - Plazo de conservación: la copia del bucket guarda una semana de historial. Cada vez que Waitron
   guarda una copia programada en un destino, borra de ese destino las copias que pasen de las 7 más
@@ -576,7 +576,7 @@ autenticación** y lo vuelve a configurar.
 contiene la clave del servidor, que una recuperación necesita junto con el acceso a una copia; para
 sustituirla, mira el final de esta sección. Un paquete hecho en **Copias de seguridad** después de
 configurar la copia del bucket contiene la clave de acceso y el
-secreto de tu bucket y la clave de recuperación (el paquete la llama clave de copia), así que quien lo tenga puede leer toda la copia de la base de datos de tu
+secreto de tu bucket y la clave de recuperación, así que quien lo tenga puede leer toda la copia de la base de datos de tu
 bucket y desbloquear las contraseñas y claves guardadas en ella, incluida la clave que protege los
 secretos de la verificación en dos pasos, así que elige también **Restablecer acceso** para cada
 persona que la use. Waitron no permite **Restablecer acceso** para el único administrador activo que pueda entrar al panel,

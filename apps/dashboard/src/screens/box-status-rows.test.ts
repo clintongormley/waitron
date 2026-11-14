@@ -826,7 +826,7 @@ describe("the Clock row while payments are stopped for the clock", () => {
       clockStop: clockStop({ proof: "none", agreeing: NO_WITNESS, startUp: true }),
     });
     expect(clock.details.at(-1)).toBe(
-      "Esperando una prueba de que la hora es correcta: la de Hacienda (si el equipo le envía registros), «Comprobar la hora» en una caja si Hacienda no responde, o el dispositivo de un administrador. El equipo arrancó con los cobros parados, así que no bastan dos cajas o terminales.",
+      "Esperando una prueba de que la hora es correcta: la de Hacienda (si el servidor le envía registros), «Comprobar la hora» en una caja si Hacienda no responde, o el dispositivo de un administrador. El servidor arrancó con los cobros parados, así que no bastan dos cajas o terminales.",
     );
   });
 

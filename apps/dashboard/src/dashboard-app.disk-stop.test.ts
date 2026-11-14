@@ -161,7 +161,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
 const MANAGER_EN =
   "Disk full: the tills cannot save anything (sales, orders, clock-ins). The box deleted its 2 oldest backups (28 Oct 2026). Box status can free old logs, old crash reports and what an interrupted backup left.";
 const MANAGER_ES =
-  "Disco lleno: las cajas no pueden guardar nada (ventas, pedidos, fichajes). El equipo borró sus 2 copias más antiguas (28 oct 2026). Estado del equipo puede liberar registros de actividad e informes de fallos antiguos, y lo que dejó una copia interrumpida.";
+  "Disco lleno: las cajas no pueden guardar nada (ventas, pedidos, fichajes). El servidor borró sus 2 copias más antiguas (28 oct 2026). Estado del servidor puede liberar registros de actividad e informes de fallos antiguos, y lo que dejó una copia interrumpida.";
 const STAFF_EN =
   "Disk full: the tills cannot save anything (sales, orders, clock-ins). Sign in as a manager to free space on Box status; this signs you out.";
 

@@ -140,12 +140,12 @@ para conservarlos. Elige una carpeta de copias fuera de la carpeta scratch de la
 los ajustes, puede fallar su carga: comprueba el estado antes de confiar en una copia nueva.
 
 Si **Copias de seguridad** indica que no se pueden usar los ajustes guardados, elige **Lo que ha
-registrado el equipo**. El panel enumera las veces que el equipo no ha podido usar sus ajustes de
+registrado el servidor**. El panel enumera las veces que el servidor no ha podido usar sus ajustes de
 copias guardados desde que se inició, de la más reciente a la más antigua y como máximo cinco, cada
 una con lo que falló: por ejemplo, el número de clave con que se cerraron los ajustes y los números
-de clave que tiene este equipo. Después describe el registro guardado tal como está ahora: cuándo se
+de clave que tiene este servidor. Después describe el registro guardado tal como está ahora: cuándo se
 escribió por última vez y, si se puede leer, las carpetas y los buckets que indica y si existe cada
-carpeta. Indica si el equipo tiene una clave de recuperación de copias válida. Muestra el ID de la clave de acceso
+carpeta. Indica si el servidor tiene una clave de recuperación de copias válida. Muestra el ID de la clave de acceso
 de un bucket, pero nunca su secreto, y la clave de recuperación solo por su huella. El panel solo
 lee y no cambia nada: **Leer de nuevo** vuelve a leer los datos y no activa las copias, y **Parar**
 cierra el panel. Tampoco repara nada; para sustituir los ajustes guardados, elige de nuevo los

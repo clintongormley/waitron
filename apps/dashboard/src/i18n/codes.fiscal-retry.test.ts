@@ -18,7 +18,7 @@ it("words the Retry now refusals in English", () => {
 
 it("words the Retry now refusals in Spanish", () => {
   setLocale("es");
-  expect(codeMessage("fiscal.not_filing")).toBe("Este equipo no envía registros a Hacienda.");
+  expect(codeMessage("fiscal.not_filing")).toBe("Este servidor no envía registros a Hacienda.");
   expect(codeMessage("fiscal.awaiting_certificate")).toBe(
     "No se puede enviar ningún registro hasta que se instale el certificado de la AEAT. Instálalo en Ajustes del local.",
   );

@@ -371,7 +371,7 @@ const es: Record<AeatCertificateKey, string> = {
   "aeat_certificate.none_installed":
     "No hay ningún certificado instalado. Los registros fiscales esperan hasta que lo haya.",
   "aeat_certificate.not_filing":
-    "Este equipo no envía registros a la AEAT, así que no necesita certificado.",
+    "Este servidor no envía registros a la AEAT, así que no necesita certificado.",
   "aeat_certificate.warning_sello":
     "Este certificado caduca el {date}. Pide ya el nuevo a la FNMT: un sello electrónico nuevo puede tardar semanas.",
   "aeat_certificate.warning_representante":
@@ -431,31 +431,31 @@ const es: Record<AeatCertificateKey, string> = {
   "nav.fiscal_filing": "Remisión a la AEAT",
   "fiscal_filing.title": "Remisión a la AEAT",
   "fiscal_filing.intro":
-    "Cómo se envían a la AEAT los registros de facturación de este equipo y cuáles necesitan una decisión.",
+    "Cómo se envían a la AEAT los registros de facturación de este servidor y cuáles necesitan una decisión.",
   "fiscal_filing.read_at": "Leído: {time}",
   "fiscal_filing.refresh": "Actualizar",
   "fiscal_filing.export": "Exportar estos casos para tu asesor fiscal",
-  "fiscal_filing.not_filing": "Este equipo no envía registros de facturación a la AEAT.",
+  "fiscal_filing.not_filing": "Este servidor no envía registros de facturación a la AEAT.",
   "fiscal_filing.awaiting_certificate":
     "No se puede enviar nada hasta que se instale el certificado de la AEAT.",
   "fiscal_filing.conflict.stopped":
-    "Este equipo ha dejado de emitir facturas por un conflicto de identidad. Para recuperarlo hace falta la clave de recuperación del equipo.",
+    "Este servidor ha dejado de emitir facturas por un conflicto de identidad. Para recuperarlo hace falta la clave de recuperación del servidor.",
   "fiscal_filing.conflict.open": "Abrir la recuperación del conflicto",
   "fiscal_filing.conflict.reply.fiscal.huella_divergente":
-    "La AEAT ya tiene otro registro para la factura {number}, así que rechazó el de este equipo.",
+    "La AEAT ya tiene otro registro para la factura {number}, así que rechazó el de este servidor.",
   "fiscal_filing.conflict.reply.fiscal.duplicado_anulado":
-    "La AEAT tiene la factura {number} como anulada, así que rechazó el registro de este equipo.",
+    "La AEAT tiene la factura {number} como anulada, así que rechazó el registro de este servidor.",
   "fiscal_filing.conflict.lookup":
-    "La AEAT tiene la factura {number} como {state}, y sus datos no coinciden con el registro de este equipo.",
+    "La AEAT tiene la factura {number} como {state}, y sus datos no coinciden con el registro de este servidor.",
   "fiscal_filing.conflict.lookup_unknown":
-    "La AEAT tiene la factura {number}, y sus datos no coinciden con el registro de este equipo.",
+    "La AEAT tiene la factura {number}, y sus datos no coinciden con el registro de este servidor.",
   "fiscal_filing.conflict.state.Correcto": "aceptada",
   "fiscal_filing.conflict.state.AceptadoConErrores": "aceptada con errores",
   "fiscal_filing.conflict.state.Anulado": "anulada",
   "fiscal_filing.conflict.status": "Estado en la AEAT",
   "fiscal_filing.conflict.reply_words": "Respuesta de la AEAT",
   "fiscal_filing.conflict.fingerprint": "Huella de la AEAT",
-  "fiscal_filing.conflict.series": "La AEAT tiene la factura {number}; este equipo no la emitió.",
+  "fiscal_filing.conflict.series": "La AEAT tiene la factura {number}; este servidor no la emitió.",
   "fiscal_filing.conflict.cancelled": "Factura {number}: la AEAT la tiene como anulada.",
   "fiscal_filing.conflict.no_evidence": "Factura {number}: no se guardó la respuesta de la AEAT.",
   "fiscal_filing.conflict.seen": "Detectado: {time}",
@@ -473,17 +473,17 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.cases": "Casos de remisión",
   "fiscal_filing.held_without_case": "Detenidos sin caso: {count}",
   "fiscal_filing.history": "Historial que puede faltar",
-  "fiscal_filing.history.not_issued": "Facturas que la AEAT tiene y este equipo no emitió",
+  "fiscal_filing.history.not_issued": "Facturas que la AEAT tiene y este servidor no emitió",
   "fiscal_filing.history.not_issued.line":
-    "La AEAT tiene la factura {number} ({date}); este equipo no la emitió.",
+    "La AEAT tiene la factura {number} ({date}); este servidor no la emitió.",
   "fiscal_filing.history.not_issued.series": "Serie {series}",
   "fiscal_filing.history.not_issued.system": "Sistema informático según la AEAT",
   "fiscal_filing.history.not_issued.none": "No se ha encontrado ninguna.",
   "fiscal_filing.history.identity": "Cambios de identidad sin traspaso",
   "fiscal_filing.history.identity.line":
-    "La identidad fiscal cambió de {earlier} a {new} sin un traspaso. La última factura que este equipo tiene bajo {earlier} es la {number}. Puede haber facturas bajo {earlier} que este equipo no tiene.",
+    "La identidad fiscal cambió de {earlier} a {new} sin un traspaso. La última factura que este servidor tiene bajo {earlier} es la {number}. Puede haber facturas bajo {earlier} que este servidor no tiene.",
   "fiscal_filing.history.identity.line_none_held":
-    "La identidad fiscal cambió de {earlier} a {new} sin un traspaso. Este equipo no tiene ninguna factura bajo {earlier}. Puede haber facturas bajo {earlier} que este equipo no tiene.",
+    "La identidad fiscal cambió de {earlier} a {new} sin un traspaso. Este servidor no tiene ninguna factura bajo {earlier}. Puede haber facturas bajo {earlier} que este servidor no tiene.",
   "fiscal_filing.history.identity.invoice": "{number} ({date})",
   "fiscal_filing.history.identity.changed": "Cambio: {time}",
   "fiscal_filing.history.identity.none": "La identidad fiscal no ha cambiado sin un traspaso.",
@@ -518,7 +518,8 @@ const es: Record<AeatCertificateKey, string> = {
     "La AEAT tiene esta factura como anulada, así que este registro está rechazado y no se vuelve a enviar.",
   "fiscal_filing.now.lookup":
     "Se detectó al consultar la factura en la AEAT. La consulta no cambia cómo se envía este registro.",
-  "fiscal_filing.now.stopped": "Mientras el conflicto siga activo, este equipo no emite facturas.",
+  "fiscal_filing.now.stopped":
+    "Mientras el conflicto siga activo, este servidor no emite facturas.",
   "fiscal_filing.detail.invoice": "Factura",
   "fiscal_filing.detail.issuer": "NIF del emisor",
   "fiscal_filing.detail.kind": "Qué es",
@@ -555,7 +556,7 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.detail.observation": "Intento {attempt}, {time}: {state} {code} {description}",
   "fiscal_filing.detail.lookup": "Consulta, {time}: la AEAT la tiene como {state}",
   "fiscal_filing.detail.theirs": "Huella de la AEAT: {fingerprint}",
-  "fiscal_filing.detail.ours": "Huella de este equipo: {fingerprint}",
+  "fiscal_filing.detail.ours": "Huella de este servidor: {fingerprint}",
   "fiscal_filing.detail.now": "Qué pasa ahora",
 };
 

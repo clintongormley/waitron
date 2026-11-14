@@ -113,7 +113,7 @@ export const shellEn = {
   "shell.adopt.spare_already_joined":
     "The primary server already has a standby server set up to receive the restaurant's data, and this version of Waitron keeps one standby per restaurant. A standby set up this way cannot be removed in this version. Nothing was changed on either server. Choose Back to restore another restaurant onto this server or, from there, Back again to set up a new restaurant. You can also leave it switched off.",
   "shell.adopt.recovery_key_missing":
-    "The primary server has no backup key yet. Nothing was changed. Open Backups on the primary server and choose Turn on backups. Then enter a new authenticator code if you use one, and press Connect again.",
+    "The primary server has no recovery key yet. Nothing was changed. Open Backups on the primary server and choose Turn on backups. Then enter a new authenticator code if you use one, and press Connect again.",
   "shell.adopt.clocks_apart":
     "This server's clock and the primary server's are 10 minutes or more apart: this server reads {standbyAt}, the primary reads {primaryAt}. The two servers can work together only while their clocks agree. Nothing was changed on either server. If this server's time is wrong, connect it to the internet for a minute so it sets its clock, then enter a new authenticator code if you use one, and press Connect again.",
   "shell.adopt.incomplete":
@@ -254,9 +254,9 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.first_setup.start_again_incomplete":
     "Borrado interrumpido. Recarga la página para continuar.",
   "shell.first_setup.disk_full":
-    "El disco del equipo está lleno, así que Waitron no puede guardar nada. Reinicia el equipo: al arrancar, quita registros y avisos de fallo antiguos para hacer sitio. Después, vuelve a intentarlo. Si el disco sigue lleno, Waitron no puede liberar más espacio por sí solo. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
+    "El disco del servidor está lleno, así que Waitron no puede guardar nada. Reinicia el servidor: al arrancar, quita registros y avisos de fallo antiguos para hacer sitio. Después, vuelve a intentarlo. Si el disco sigue lleno, Waitron no puede liberar más espacio por sí solo. Si reinstalas Waitron, el servidor empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
   "shell.first_setup.disk_full_restart_unknown":
-    "El disco del equipo está lleno, así que Waitron no puede guardar nada. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
+    "El disco del servidor está lleno, así que Waitron no puede guardar nada. Si reinstalas Waitron, el servidor empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
   "shell.first_setup.series_minute_taken":
     "No se pueden crear las series de facturas: el minuto que eligió esta configuración ya está en los registros de este servidor. Es un fallo de Waitron.",
   "shell.first_setup.clock_step_unsaved":
@@ -337,7 +337,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.adopt.spare_already_joined":
     "El servidor principal ya tiene un servidor en espera preparado para recibir los datos del restaurante, y esta versión de Waitron admite un solo servidor en espera por restaurante. Un servidor en espera preparado así no se puede retirar en esta versión. No se ha cambiado nada en ninguno de los dos servidores. Elige Volver para restaurar otro restaurante en este servidor o, desde ahí, Volver otra vez para configurar un restaurante nuevo. También puedes dejarlo apagado.",
   "shell.adopt.recovery_key_missing":
-    "El servidor principal aún no tiene clave de copia de seguridad. No se ha cambiado nada. Abre Copias de seguridad en el servidor principal y elige «Activar las copias». Después introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar.",
+    "El servidor principal aún no tiene clave de recuperación. No se ha cambiado nada. Abre Copias de seguridad en el servidor principal y elige «Activar las copias». Después introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar.",
   "shell.adopt.clocks_apart":
     "El reloj de este servidor y el del servidor principal se diferencian en 10 minutos o más: este servidor marca {standbyAt} y el principal marca {primaryAt}. Los dos servidores solo pueden trabajar juntos mientras sus relojes coinciden. No se ha cambiado nada en ninguno de los dos servidores. Si la hora de este servidor está mal, conéctalo a internet un minuto para que ajuste su reloj, introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar.",
   "shell.adopt.incomplete":
@@ -423,7 +423,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "El servidor ha rechazado los datos. Revisa lo que has introducido e inténtalo de nuevo.",
 
   "shell.configuration.outdated":
-    "Esta exportación de configuración usa un formato anterior. Vuelve a exportarla desde un equipo actualizado.",
+    "Esta exportación de configuración usa un formato anterior. Vuelve a exportarla desde un servidor actualizado.",
   "shell.configuration.newer":
     "Esta exportación viene de una versión más reciente de Waitron. Actualiza el software de este servidor y vuelve a cargar la exportación.",
   "shell.configuration.passphrase_invalid":
@@ -435,11 +435,11 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.configuration.product_name_taken":
     "La exportación tiene dos productos o variantes activos llamados «{name}». Cambia el nombre de uno en el restaurante de origen, vuelve a exportar y carga la nueva exportación.",
   "shell.configuration.privacy_notice_url_invalid":
-    "La página web del aviso de privacidad de esta exportación no es una dirección que Waitron acepte. En el equipo del que exportaste, corrígela en la tarjeta Privacidad de Ajustes del local, vuelve a exportar y carga la nueva exportación.",
+    "La página web del aviso de privacidad de esta exportación no es una dirección que Waitron acepte. En el servidor del que exportaste, corrígela en la tarjeta Privacidad de Ajustes del local, vuelve a exportar y carga la nueva exportación.",
   "shell.configuration.privacy_notice_url_too_long":
-    "La página web del aviso de privacidad de esta exportación es más larga de lo que Waitron acepta. En el equipo del que exportaste, acórtala en la tarjeta Privacidad de Ajustes del local, vuelve a exportar y carga la nueva exportación.",
+    "La página web del aviso de privacidad de esta exportación es más larga de lo que Waitron acepta. En el servidor del que exportaste, acórtala en la tarjeta Privacidad de Ajustes del local, vuelve a exportar y carga la nueva exportación.",
   "shell.configuration.privacy_email_invalid":
-    "El correo de privacidad de esta exportación no es una dirección que Waitron acepte. En el equipo del que exportaste, corrígelo en la tarjeta Privacidad de Ajustes del local, vuelve a exportar y carga la nueva exportación.",
+    "El correo de privacidad de esta exportación no es una dirección que Waitron acepte. En el servidor del que exportaste, corrígelo en la tarjeta Privacidad de Ajustes del local, vuelve a exportar y carga la nueva exportación.",
   "shell.configuration.privacy_email_too_long":
-    "El correo de privacidad de esta exportación es más largo de lo que Waitron acepta. En el equipo del que exportaste, acórtalo en la tarjeta Privacidad de Ajustes del local, vuelve a exportar y carga la nueva exportación.",
+    "El correo de privacidad de esta exportación es más largo de lo que Waitron acepta. En el servidor del que exportaste, acórtalo en la tarjeta Privacidad de Ajustes del local, vuelve a exportar y carga la nueva exportación.",
 };

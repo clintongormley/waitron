@@ -218,7 +218,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore.preview_failed": "No se ha podido revisar esta copia.",
   "restore.heading": "Restaurar desde una copia de seguridad",
   "restore.replace_warning":
-    "La restauración sustituye la base de datos que ya está en este equipo.",
+    "La restauración sustituye la base de datos que ya está en este servidor.",
   "restore.cloud_restore": "Restaurar desde Waitron Cloud",
   "restore.intro":
     "Usa la recuperación en frío solo cuando no quede ningún otro servidor funcionando con datos más recientes del restaurante.",

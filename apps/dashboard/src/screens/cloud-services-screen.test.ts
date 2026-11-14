@@ -168,7 +168,7 @@ it.each([
   ],
   [
     "es",
-    "No se puede leer la solicitud guardada de reconexión con Cloud de este equipo. Elige «Obtener una nueva solicitud de reconexión» para apartarla y pedir una nueva a Cloud; después, el propietario de Cloud la aprueba como antes.",
+    "No se puede leer la solicitud guardada de reconexión con Cloud de este servidor. Elige «Obtener una nueva solicitud de reconexión» para apartarla y pedir una nueva a Cloud; después, el propietario de Cloud la aprueba como antes.",
   ],
 ])("shows a saved reconnection refusal in %s", async (locale, message) => {
   const previous = currentLocale();

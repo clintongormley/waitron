@@ -3204,7 +3204,7 @@ describe("login-screen: the sign-in card", () => {
       });
       await flush(el);
       expect(card(el).querySelector(".notice")!.textContent!.trim()).toBe(
-        "Este equipo se ha restablecido.",
+        "Este servidor se ha restablecido.",
       );
       expect(card(el).querySelector("[data-test=reload]")!.textContent!.trim()).toBe("Recargar");
     });

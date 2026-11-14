@@ -50,8 +50,8 @@ Usa tu contraseña o passkey y, si tienes
 verificación en dos pasos, un código del autenticador o de recuperación. La confirmación cubre
 estas acciones en este navegador durante 15 minutos o hasta que termine tu sesión.
 Elige **Cancelar** para dejar la acción sin realizar. Si el disco está lleno, abre **Estado del
-equipo** y usa **Liberar** para dejar espacio antes de confirmar. Consulta
-[Liberar espacio en el equipo](box-status.md#free-space).
+servidor** y usa **Liberar** para dejar espacio antes de confirmar. Consulta
+[Liberar espacio en el servidor](box-status.md#free-space).
 
 ## Roles de acceso {#access-roles}
 

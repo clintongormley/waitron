@@ -599,7 +599,7 @@ describe("dashboard-aeat-certificate-dialog", () => {
     await press(dialog);
     await vi.waitFor(() =>
       expect(actions(dialog).error).toBe(
-        "Este equipo no envía registros a la AEAT, así que no necesita certificado.",
+        "Este servidor no envía registros a la AEAT, así que no necesita certificado.",
       ),
     );
     expect(text(save(dialog))).toBe("Guardar");

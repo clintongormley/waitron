@@ -6,7 +6,7 @@ export const BOX_EMAIL_WORDS = {
     },
     es: {
       subject: "{venue}: al equipo le queda poco espacio en disco",
-      text: "Al equipo de {venue} le queda poco espacio en disco: unos 2 GB o menos. Todo sigue funcionando, pero si se llena no se podrá guardar nada. Mira qué ocupa espacio en Estado del equipo: en el panel de gestión, Ajustes → Estado del equipo.",
+      text: "Al equipo de {venue} le queda poco espacio en disco: unos 2 GB o menos. Todo sigue funcionando, pero si se llena no se podrá guardar nada. Mira qué ocupa espacio en Estado del servidor: en el panel de gestión, Ajustes → Estado del servidor.",
     },
   },
   "storage.disk_full": {
@@ -16,7 +16,7 @@ export const BOX_EMAIL_WORDS = {
     },
     es: {
       subject: "{venue}: el equipo no tiene espacio en disco y no puede guardar nada",
-      text: "El equipo de {venue} no tiene espacio en disco, así que no se puede guardar nada: ni pedidos, ni cobros, ni fichajes. Libera espacio en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo): su botón Liberar borra solo archivos que el equipo ya no necesita. Si no basta, Waitron no puede liberar más espacio por sí solo: el resto del disco guarda los datos del local, las copias de seguridad que se guardan en este equipo y archivos que no son de Waitron.",
+      text: "El equipo de {venue} no tiene espacio en disco, así que no se puede guardar nada: ni pedidos, ni cobros, ni fichajes. Libera espacio en Estado del servidor (en el panel de gestión, Ajustes → Estado del servidor): su botón Liberar borra solo archivos que el equipo ya no necesita. Si no basta, Waitron no puede liberar más espacio por sí solo: el resto del disco guarda los datos del local, las copias de seguridad que se guardan en este equipo y archivos que no son de Waitron.",
     },
   },
   "clock.unusable": {
@@ -26,7 +26,7 @@ export const BOX_EMAIL_WORDS = {
     },
     es: {
       subject: "{venue}: no se pueden registrar ventas porque la hora del equipo es incorrecta",
-      text: "El equipo de {venue} tiene la hora puesta antes del 28 de octubre de 2024, así que no se puede registrar ninguna venta en Hacienda hasta que la hora sea correcta. Con internet, el equipo la corrige solo. Si no, un administrador normalmente puede ponerla en hora desde su propio móvil u ordenador en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo); si el equipo arrancó con la hora mal, cualquier empleado puede hacerlo desde una caja con «Comprobar la hora».",
+      text: "El equipo de {venue} tiene la hora puesta antes del 28 de octubre de 2024, así que no se puede registrar ninguna venta en Hacienda hasta que la hora sea correcta. Con internet, el equipo la corrige solo. Si no, un administrador normalmente puede ponerla en hora desde su propio móvil u ordenador en Estado del servidor (en el panel de gestión, Ajustes → Estado del servidor); si el equipo arrancó con la hora mal, cualquier empleado puede hacerlo desde una caja con «Comprobar la hora».",
     },
   },
   "clock.behind_chain": {
@@ -36,7 +36,7 @@ export const BOX_EMAIL_WORDS = {
     },
     es: {
       subject: "No se puede cobrar en {venue}: la hora del equipo es anterior a la última venta",
-      text: "La hora del equipo ({clockAt}) es anterior a la última venta registrada ({lastRecordAt}). Desde entonces ningún dispositivo puede cobrar. Se pueden seguir tomando pedidos y enviándolos a cocina. Qué hacer: • Si la hora del equipo está mal (lo normal tras un corte de luz): con internet, el equipo la corrige solo; si no, un administrador normalmente puede ponerla en hora desde su propio móvil u ordenador en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo), y si el equipo arrancó con los cobros parados y Hacienda no responde (o el equipo no le envía registros), cualquier empleado puede hacerlo desde una caja con «Comprobar la hora». • Si crees que la hora del equipo es correcta: un administrador puede confirmarla en esa misma página; con internet, el equipo lo hace solo, y también dos cajas que coincidan con él, salvo si el equipo arrancó con los cobros parados: entonces no bastan dos cajas y, en ese mismo caso, un empleado la confirma desde una caja con «Comprobar la hora».",
+      text: "La hora del equipo ({clockAt}) es anterior a la última venta registrada ({lastRecordAt}). Desde entonces ningún dispositivo puede cobrar. Se pueden seguir tomando pedidos y enviándolos a cocina. Qué hacer: • Si la hora del equipo está mal (lo normal tras un corte de luz): con internet, el equipo la corrige solo; si no, un administrador normalmente puede ponerla en hora desde su propio móvil u ordenador en Estado del servidor (en el panel de gestión, Ajustes → Estado del servidor), y si el equipo arrancó con los cobros parados y Hacienda no responde (o el equipo no le envía registros), cualquier empleado puede hacerlo desde una caja con «Comprobar la hora». • Si crees que la hora del equipo es correcta: un administrador puede confirmarla en esa misma página; con internet, el equipo lo hace solo, y también dos cajas que coincidan con él, salvo si el equipo arrancó con los cobros parados: entonces no bastan dos cajas y, en ese mismo caso, un empleado la confirma desde una caja con «Comprobar la hora».",
     },
   },
 } as const satisfies Record<string, Record<"en" | "es", { subject: string; text: string }>>;
@@ -72,9 +72,9 @@ export const CLOCK_RESTARTED_EMAIL_WORDS = {
   },
   es: {
     subject: "Se reanudaron los cobros en {venue}",
-    text: "La hora del equipo se confirmó con {confirmedBy} y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo).",
+    text: "La hora del equipo se confirmó con {confirmedBy} y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del servidor (en el panel de gestión, Ajustes → Estado del servidor).",
     byStaff:
-      "La hora del equipo la confirmó {person}, miembro del personal, en {till}, y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo).",
+      "La hora del equipo la confirmó {person}, miembro del personal, en {till}, y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del servidor (en el panel de gestión, Ajustes → Estado del servidor).",
     namedTill: "la caja {device}",
     unnamedTill: "una caja",
   },
@@ -117,7 +117,7 @@ export const CLOCK_CORRECTED_EMAIL_WORDS = {
       "El reloj del equipo se puso con la hora de {till}, confirmada por {person}, miembro del personal: {step}, de {before} a {after}.",
     unverifiedSubject: "{venue}: el equipo no pudo confirmar que puso su reloj",
     unverified:
-      "El equipo intentó poner su reloj, pero no ha podido confirmar que el cambio se aplicara. Su reloj marcaba {before} antes y {after} después ({step}). Comprueba la hora del equipo en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo).",
+      "El equipo intentó poner su reloj, pero no ha podido confirmar que el cambio se aplicara. Su reloj marcaba {before} antes y {after} después ({step}). Comprueba la hora del equipo en Estado del servidor (en el panel de gestión, Ajustes → Estado del servidor).",
     forward: "adelantado {duration}",
     back: "atrasado {duration}",
     moved: "cambiado {duration}",
@@ -141,8 +141,8 @@ export const CLOCK_MISDATED_EMAIL_WORDS = {
   },
   es: {
     subject: "Ventas con fecha incorrecta en {venue}: revísalas con tu asesor",
-    text: "Se registraron {count} ventas con una hora posterior a la real, de {from} a {to}. Quedan como se registraron. La lista está en Estado del equipo; revísala con tu asesor y después marca el aviso como resuelto.",
-    one: "Se registró una venta con una hora posterior a la real, el {from}. Queda como se registró. La lista está en Estado del equipo; revísala con tu asesor y después marca el aviso como resuelto.",
+    text: "Se registraron {count} ventas con una hora posterior a la real, de {from} a {to}. Quedan como se registraron. La lista está en Estado del servidor; revísala con tu asesor y después marca el aviso como resuelto.",
+    one: "Se registró una venta con una hora posterior a la real, el {from}. Queda como se registró. La lista está en Estado del servidor; revísala con tu asesor y después marca el aviso como resuelto.",
     partial: "El equipo se reinició durante la parada, así que puede faltar alguna.",
     unconfirmed: {
       subject: "Puede haber ventas con fecha incorrecta en {venue}: revísalas con tu asesor",

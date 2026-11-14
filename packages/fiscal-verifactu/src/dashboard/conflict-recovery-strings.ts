@@ -55,9 +55,9 @@ export const CONFLICT_RECOVERY_STRINGS = {
     "conflict_recovery.failed":
       "No se ha podido completar la solicitud. Inténtalo de nuevo o elige Detener.",
     "conflict_recovery.connection_refused":
-      "La recuperación necesita una conexión segura directa con este equipo. Abre su dirección HTTPS de recuperación directamente en el navegador y vuelve a intentarlo, o elige Detener.",
+      "La recuperación necesita una conexión segura directa con este servidor. Abre su dirección HTTPS de recuperación directamente en el navegador y vuelve a intentarlo, o elige Detener.",
     "conflict_recovery.not_primary":
-      "Este equipo no puede emitir facturas con su función actual. Elige Detener y abre la recuperación en el equipo principal que usan tus terminales.",
+      "Este servidor no puede emitir facturas con su función actual. Elige Detener y abre la recuperación en el servidor principal que usan tus terminales.",
     "conflict_recovery.no_conflict":
       "Esta caja no tiene ningún conflicto activo de identidad de facturación.",
     "conflict_recovery.explanation":

@@ -1,10 +1,10 @@
-# Estado del equipo
+# Estado del servidor
 
-**Estado del equipo** muestra en una sola página si cada parte del equipo funciona: las ventas,
+**Estado del servidor** muestra en una sola página si cada parte del servidor funciona: las ventas,
 Hacienda, la copia en el bucket, las impresoras, los lectores de tarjetas, el reloj y el espacio en
-disco. También es donde se libera espacio cuando el disco del equipo se llena, y donde un gerente o administrador
-reinicia Waitron en el equipo cuando una alerta lo indica. Para leer el
-registro del equipo, usa **Diagnóstico**.
+disco. También es donde se libera espacio cuando el disco del servidor se llena, y donde un gerente o administrador
+reinicia Waitron en el servidor cuando una alerta lo indica. Para leer el
+registro del servidor, usa **Diagnóstico**.
 
 ## Abre la página {#open}
 
@@ -12,22 +12,22 @@ Para guardar un archivo sobre un problema del panel, elige **Informar de un prob
 superior. También puedes hacerlo antes de iniciar sesión. Abre el panel por HTTPS si no aparece
 el botón.
 Durante la configuración, elige **Informar de un problema** en la cabecera de la página. Puedes
-guardar un informe aunque el equipo no responda o esta página ya abierta pierda la conexión.
+guardar un informe aunque el servidor no responda o esta página ya abierta pierda la conexión.
 Describe qué ha pasado, revisa la vista previa y elige **Descargar informe**. El archivo
-incluye la actividad reciente de este navegador, en lugar del registro del equipo. No se envía
-nada ni se guarda en el equipo. No incluyas contraseñas, datos de pago ni información personal
+incluye la actividad reciente de este navegador, en lugar del registro del servidor. No se envía
+nada ni se guarda en el servidor. No incluyas contraseñas, datos de pago ni información personal
 en tu descripción.
 
 En un móvil, usa el botón con un bocadillo de diálogo y una exclamación.
 
-Abre **Ajustes → Estado del equipo**, justo encima de **Diagnóstico**. Solo la ven las personas
+Abre **Ajustes → Estado del servidor**, justo encima de **Diagnóstico**. Solo la ven las personas
 que pueden gestionar el sistema.
 
-La página vuelve a leer el equipo más o menos cada 15 segundos, así que puedes dejarla abierta.
+La página vuelve a leer el servidor más o menos cada 15 segundos, así que puedes dejarla abierta.
 Estas lecturas automáticas no cuentan como actividad, así que tener la página abierta no mantiene
 tu sesión iniciada.
 
-En un equipo que solo guarda una copia de solo lectura de otro equipo, el botón **Liberar** no se puede
+En un servidor que solo guarda una copia de solo lectura de otro servidor, el botón **Liberar** no se puede
 pulsar, y la página explica por qué bajo **Espacio en disco**.
 
 ## Lee las filas {#rows}
@@ -36,8 +36,8 @@ Cada parte tiene una fila con un punto de color:
 
 - **Verde** significa que la parte está bien.
 - **Ámbar** significa que necesita atención, pero todo sigue funcionando.
-- **Rojo** significa que algo no se puede guardar: el disco está lleno, la hora del equipo es tan
-  incorrecta que no se puede registrar una venta, o no se puede cobrar porque la hora del equipo es
+- **Rojo** significa que algo no se puede guardar: el disco está lleno, la hora del servidor es tan
+  incorrecta que no se puede registrar una venta, o no se puede cobrar porque la hora del servidor es
   anterior a la última venta. Cualquiera de ellos pone también en rojo **Ventas**.
 
 Cada fila muestra los mismos avisos que la campana para esa parte, con las mismas palabras. Las
@@ -49,29 +49,29 @@ se cuentan bajo las filas, junto a **Ver todos los avisos**.
 Cuando no pasa nada, cada fila dice:
 
 - **Ventas**: **Se registran con normalidad**, y cuándo fue la última venta.
-- **Hacienda**: **Se envían con normalidad**, y cuándo aceptó Hacienda registros del equipo por
-  última vez (la hora, según el reloj del equipo, en que el equipo empezó esa ronda de envío). Un
-  equipo que no envía registros a Hacienda lo dice.
+- **Hacienda**: **Se envían con normalidad**, y cuándo aceptó Hacienda registros del servidor por
+  última vez (la hora, según el reloj del servidor, en que el servidor empezó esa ronda de envío). Un
+  servidor que no envía registros a Hacienda lo dice.
 - **Copia en el bucket**: **Al día**, y cuándo se confirmó el último envío. Dice **No
   configurada** cuando no hay ninguna copia configurada, y cuántos minutos de retraso lleva
   cuando se retrasa.
 - **Impresoras**: **Sin problemas**, y los nombres de las impresoras configuradas.
 - **Lectores de tarjetas**: **Sin problemas**, y los nombres de los lectores configurados. Un
   lector que su proveedor de tarjetas da como sin conexión aparece aquí, como **«Barra» está sin
-  conexión.** Mientras la campana o esta página están abiertas, el equipo pregunta al proveedor como
+  conexión.** Mientras la campana o esta página están abiertas, el servidor pregunta al proveedor como
   mucho cada cinco minutos, así que puede aparecer con unos minutos de retraso. Esta fila no aparece
   cuando los pagos con tarjeta están desactivados.
-- **Reloj**: **Correcto**, y cuándo comparó el equipo su hora con la de Hacienda por última vez.
-  Cuando no tiene una comparación válida, por ejemplo justo después de arrancar el equipo, dice
+- **Reloj**: **Correcto**, y cuándo comparó el servidor su hora con la de Hacienda por última vez.
+  Cuando no tiene una comparación válida, por ejemplo justo después de arrancar el servidor, dice
   **Aún no se ha comparado con Hacienda**.
 - **Espacio en disco**: cuánto espacio queda libre del total, y cuánto ocupan la base de datos,
-  las copias guardadas en el equipo, los registros de actividad y el resto del disco. El resto del
-  disco incluye unos 8 MB que el equipo guarda en reserva para poder arrancar y quitar, con el disco
+  las copias guardadas en el servidor, los registros de actividad y el resto del disco. El resto del
+  disco incluye unos 8 MB que el servidor guarda en reserva para poder arrancar y quitar, con el disco
   lleno, lo que ya no necesita. Tras un arranque que usó ese espacio, los terminales siguen parados
-  hasta que quedan libres unos 24 MB y el equipo ha vuelto a apartar los 8 MB.
+  hasta que quedan libres unos 24 MB y el servidor ha vuelto a apartar los 8 MB.
 
 Después de que falle un envío a Hacienda, la fila **Hacienda** dice cuántos registros esperan, y si
-el equipo los reintenta solo o el encargado tiene que resolver alguno.
+el servidor los reintenta solo o el encargado tiene que resolver alguno.
 
 Si no se han podido leer los avisos, la página sigue mostrando todas las filas y avisa de que una
 parte puede parecer bien aunque no lo esté. Si algunas comprobaciones no se han podido hacer, la
@@ -79,65 +79,65 @@ página avisa de que puede no mostrar todos los problemas.
 
 ## Consultar la red {#network}
 
-Cuando tu equipo puede informar de su red, **Red** muestra la conexión por cable y su dirección,
+Cuando tu servidor puede informar de su red, **Red** muestra la conexión por cable y su dirección,
 el nombre de la Wi-Fi actual y el de la Wi-Fi guardada. Úsala para comprobar qué red
-utiliza el equipo. La tarjeta se actualiza aproximadamente cada minuto; no puedes cambiar
+utiliza el servidor. La tarjeta se actualiza aproximadamente cada minuto; no puedes cambiar
 la red desde aquí. Si falla la lectura, espera al siguiente intento automático. Si falta la tarjeta, vuelve a abrir
-**Estado del equipo** para consultar de nuevo al equipo.
+**Estado del servidor** para consultar de nuevo al servidor.
 
 ## Vuelve a intentar los registros que esperan {#retry-now}
 
-En un equipo que envía registros a Hacienda, la fila **Hacienda** tiene un botón **Reintentar
-ahora**. Después de un envío fallido, el equipo hace una pausa antes de volver a intentar los
+En un servidor que envía registros a Hacienda, la fila **Hacienda** tiene un botón **Reintentar
+ahora**. Después de un envío fallido, el servidor hace una pausa antes de volver a intentar los
 registros que esperan. **Reintentar ahora** los vuelve a intentar sin esperar a que acabe esa
 pausa. Solo se puede pulsar mientras la fila dice que hay registros sin enviar.
 
 Después de pulsarlo, la fila dice cuántos registros se volverán a intentar. Puede que no salgan
 enseguida: Hacienda pide una espera entre dos envíos, y los registros se intentan cuando permite el
-siguiente envío, salvo que un lote completo de 1.000 registros puede salir enseguida. Si el equipo
+siguiente envío, salvo que un lote completo de 1.000 registros puede salir enseguida. Si el servidor
 sigue sin poder conectar con Hacienda, vuelven a esperar.
 
-Mientras el equipo no tenga el certificado de la AEAT, no se envía nada, así que **Reintentar
+Mientras el servidor no tenga el certificado de la AEAT, no se envía nada, así que **Reintentar
 ahora** no se puede pulsar y la fila explica por qué. Instala el certificado en **Ajustes del
-local**. El equipo lo vuelve a intentar en cinco minutos como mucho, y después el botón se puede
+local**. El servidor lo vuelve a intentar en cinco minutos como mucho, y después el botón se puede
 pulsar mientras sigan quedando registros sin enviar.
 
 Los registros parados después de que Hacienda rechazara varios seguidos por el mismo motivo no se
-liberan con **Reintentar ahora**. El equipo sigue intentando el primero de ellos cada hora, y el
+liberan con **Reintentar ahora**. El servidor sigue intentando el primero de ellos cada hora, y el
 aviso de la campana explica por qué se pararon.
 
 ## Recupera una identidad de facturación en conflicto {#invoice-conflict}
 
-Si este equipo deja de emitir facturas porque su identidad entra en conflicto con una respuesta
-de envío o una consulta a Hacienda, mantén desconectado cualquier equipo antiguo o copiado. Una identidad nueva no impide
+Si este servidor deja de emitir facturas porque su identidad entra en conflicto con una respuesta
+de envío o una consulta a Hacienda, mantén desconectado cualquier servidor antiguo o copiado. Una identidad nueva no impide
 que otra máquina siga vendiendo.
 
-Abre `/manage/recovery/fiscal-conflict` en este equipo mediante HTTPS. Necesitas su clave de
+Abre `/manage/recovery/fiscal-conflict` en este servidor mediante HTTPS. Necesitas su clave de
 recuperación actual; iniciar sesión en el panel no sustituye esa clave. Escríbela y elige
 **Consultar conflicto** para ver la factura y la identidad afectadas. Confirma que has desconectado
-el equipo antiguo o copiado y que nadie más lo está recuperando, y elige **Comparar relojes**.
+el servidor antiguo o copiado y que nadie más lo está recuperando, y elige **Comparar relojes**.
 
 Si no hay un minuto disponible, espera la cuenta atrás. La página vuelve a comprobarlo cada cinco
 segundos. Cuando termine la espera, compara los relojes otra vez. Comprueba la identidad elegida y
 pulsa **Cambiar identidad**. La cuenta atrás nunca la cambia por ti. Se conservan tus pedidos,
 pagos e historial. Los resultados de envío y las incidencias existentes no cambian. Una factura
-encontrada al consultar Hacienda puede no estar en el historial de este equipo.
+encontrada al consultar Hacienda puede no estar en el historial de este servidor.
 
 Si se pierde la respuesta, la página consulta el resultado del mismo intento. Un resultado sin
 confirmar no significa que la identidad haya cambiado. Usa **Consultar conflicto** para volver a
 comprobarlo con la clave actual. Elige **Iniciar otro intento** solo cuando la página lo ofrezca;
 escribe la clave otra vez y repite la comparación de relojes. **Detener** borra la clave y tus
 confirmaciones y detiene las comprobaciones de esta página. No puede deshacer un cambio ya
-confirmado en el equipo: si detuviste la página mientras lo enviaba, ábrela otra vez para consultar
+confirmado en el servidor: si detuviste la página mientras lo enviaba, ábrela otra vez para consultar
 el resultado.
 
-## Libera espacio en el equipo {#free-space}
+## Libera espacio en el servidor {#free-space}
 
 El botón **Liberar** de la fila **Espacio en disco** muestra cuánto puede liberar antes de que lo
 pulses, por ejemplo **Liberar 120 MB**. Cuando no hay casi nada que liberar, dice **Nada que
 liberar** y no se puede pulsar.
 
-**Liberar** solo borra archivos que el equipo ya no necesita:
+**Liberar** solo borra archivos que el servidor ya no necesita:
 
 - informes de fallos de hace más de una semana
 - registros de actividad anteriores a los dos más recientes
@@ -154,33 +154,33 @@ Los tamaños bajo **Espacio en disco** muestran qué está llenando el disco. En
 seguridad**, puedes elegir cuántas copias conservar. Sal sin cambiar los ajustes para parar.
 Conserva la base de datos, las claves de recuperación y las copias guardadas.
 
-Antes de cada copia de seguridad, si falta espacio en el disco, el equipo puede borrar sus copias
+Antes de cada copia de seguridad, si falta espacio en el disco, el servidor puede borrar sus copias
 más antiguas de ese disco para hacer sitio. Nunca borra la copia más reciente de una carpeta, una
-copia anterior a la última restauración o puesta en marcha desde cero del equipo, ni una copia de un
+copia anterior a la última restauración o puesta en marcha desde cero del servidor, ni una copia de un
 bucket. Si aun así no basta, la copia no se hace y la campana dice cuánto espacio necesita. Mientras
-las copias están activadas, el equipo también borra sus copias más antiguas de ese disco, con los mismos
+las copias están activadas, el servidor también borra sus copias más antiguas de ese disco, con los mismos
 límites, cuando al disco le quedan menos de unos 2 GB libres, hasta tener unos 2,5 GB libres. Si
-el equipo arranca con el disco lleno, puede borrarlas de la misma forma para tener sitio para
+el servidor arranca con el disco lleno, puede borrarlas de la misma forma para tener sitio para
 arrancar y, una vez en marcha, te avisa en la campana y por [correo](box-status.md#emails), igual
 que en los demás casos.
 
-La fecha de una copia de seguridad sale del reloj del equipo cuando se hizo. Por eso, durante un
-tiempo después de que el equipo [ponga su propio reloj en hora](box-status.md#clock-behind), cuando
-el equipo borra copias antiguas conserva las más recientes de las copias hechas antes del cambio,
+La fecha de una copia de seguridad sale del reloj del servidor cuando se hizo. Por eso, durante un
+tiempo después de que el servidor [ponga su propio reloj en hora](box-status.md#clock-behind), cuando
+el servidor borra copias antiguas conserva las más recientes de las copias hechas antes del cambio,
 tantas como conserva de las demás, además de las que conserva como siempre; y cuando hace sitio,
 borra las últimas las copias hechas antes del cambio. Esto dura tantos días como se
-conservan las copias, y solo cubre los cambios que hizo el propio equipo, no uno que hiciera su
+conservan las copias, y solo cubre los cambios que hizo el propio servidor, no uno que hiciera su
 servicio de hora. El arranque con el disco lleno aún no lo hace: sigue borrando por las fechas que
 llevan las copias en su nombre.
 
 Esta página no puede borrar otros archivos ni trasladar tus datos a un disco mayor.
 
-Si la campana dice **Copia no hecha**, abre **Estado del equipo** y revisa **Espacio en disco**.
+Si la campana dice **Copia no hecha**, abre **Estado del servidor** y revisa **Espacio en disco**.
 Pulsa **Liberar** si está disponible, o sal sin pulsarlo para no hacer la limpieza. Liberar espacio
 no inicia una copia. Si no basta, **Liberar** no puede borrar otros archivos por ti; conserva la
 base de datos, las claves de recuperación y las copias guardadas.
 
-## Cuando el equipo no tiene espacio {#out-of-space}
+## Cuando el servidor no tiene espacio {#out-of-space}
 
 Cuando el disco está lleno, no se puede guardar nada: los terminales no pueden guardar pedidos,
 pagos ni otros cambios, y muestran **No se puede guardar nada: el servidor no tiene espacio**. En
@@ -189,7 +189,7 @@ esta página, **Ventas** y **Espacio en disco** se ponen en rojo.
 Mientras el disco está lleno, una barra roja arriba de cada página del panel empieza por **Disco
 lleno: las cajas no pueden guardar nada (ventas, pedidos, fichajes).** A los encargados y
 administradores también les nombra las copias de seguridad del aviso de la campana sobre copias
-borradas, mientras ese aviso tenga menos de un día y no se haya marcado como resuelto. Ellos pulsan **Abrir Estado del equipo** en ella; cualquier otra persona pulsa **Iniciar
+borradas, mientras ese aviso tenga menos de un día y no se haya marcado como resuelto. Ellos pulsan **Abrir Estado del servidor** en ella; cualquier otra persona pulsa **Iniciar
 sesión como encargado**, que antes cierra su sesión. La barra desaparece en medio minuto, más o
 menos, después de que los terminales vuelvan a guardar.
 
@@ -197,42 +197,42 @@ Pulsa **Liberar** para liberar espacio. En cuanto hay espacio suficiente, los te
 poder guardar por sí solos; no hace falta reiniciar nada.
 
 Después de pulsar **Liberar**, esta página y la campana de avisos del mismo panel vuelven a leer
-el equipo en ese momento. Una campana abierta en otro ordenador se pone al día en un minuto, más o
+el servidor en ese momento. Una campana abierta en otro ordenador se pone al día en un minuto, más o
 menos.
 
 Si **Liberar** no libera bastante, sigue la línea del final de la página sobre cómo ganar más
 espacio.
 
-## Reinicia el equipo {#restart}
+## Reinicia el servidor {#restart}
 
-**Reiniciar el equipo** reinicia Waitron en el equipo sin apagarlo. Ninguna caja
+**Reiniciar el servidor** reinicia Waitron en el servidor sin apagarlo. Ninguna caja
 puede vender hasta que Waitron vuelva a arrancar, así que la página lo pregunta antes: elige
 **Reiniciar** para seguir o **Parar** para dejarlo. Úsalo cuando una alerta lo indique. La página
-se pone al día sola cuando vuelve el equipo.
+se pone al día sola cuando vuelve el servidor.
 
-Los gerentes y administradores pueden reiniciar el equipo.
+Los gerentes y administradores pueden reiniciar el servidor.
 
 ## Cuando se paran los cobros por la hora {#clock-behind}
 
-El permiso de administración del equipo, que tiene Admin de forma predeterminada, te permite confirmar o poner la hora desde tu propio dispositivo o aprobarla en una caja. El personal puede seguir confirmándola desde una caja mientras el arranque espera.
+El permiso de administración del servidor, que tiene Admin de forma predeterminada, te permite confirmar o poner la hora desde tu propio dispositivo o aprobarla en una caja. El personal puede seguir confirmándola desde una caja mientras el arranque espera.
 
-Cuando el reloj del equipo marca más de un minuto antes que la última venta registrada en el equipo,
-el equipo deja de cobrar y de devolver dinero. Una venta registrada en ese momento llevaría una hora
+Cuando el reloj del servidor marca más de un minuto antes que la última venta registrada en el servidor,
+el servidor deja de cobrar y de devolver dinero. Una venta registrada en ese momento llevaría una hora
 anterior a esa última. La parada dura hasta que el reloj marca como mucho un minuto antes que esa
-venta, o hasta que algo confirma que la hora del equipo es correcta, como explica esta sección más
+venta, o hasta que algo confirma que la hora del servidor es correcta, como explica esta sección más
 abajo. Tomar pedidos, la cocina y los fichajes siguen funcionando, aunque se rechazan un cambio o un
 envío a cocina que terminaría de pagar una cuenta pagada en parte, y anular un pedido que ya tiene
 factura. La [guía de avisos del terminal](till-notices.md#notices) explica qué puede y qué no puede
 hacer el personal mientras tanto.
 
 Los terminales muestran **No se puede cobrar: la hora del servidor es anterior a la última venta**. La
-campana de avisos también lo dice, con las dos horas: la del reloj del equipo y la de la última
-venta. En esta página, **Ventas** y **Reloj** se ponen en rojo, y la fila **Reloj** añade qué hacer: **Con internet, el equipo corrige la hora solo; si
-no, un administrador puede usar «Comprobar con la hora de este dispositivo».** Cuando el equipo
+campana de avisos también lo dice, con las dos horas: la del reloj del servidor y la de la última
+venta. En esta página, **Ventas** y **Reloj** se ponen en rojo, y la fila **Reloj** añade qué hacer: **Con internet, el servidor corrige la hora solo; si
+no, un administrador puede usar «Comprobar con la hora de este dispositivo».** Cuando el servidor
 puede saberlo, la fila dice también si **Se pone en hora por internet** o **No se pone en hora por
 internet**, como explica [su servicio de hora](box-status.md#clock-service).
 
-Mientras el equipo está en marcha, una parada así es también un aviso en la campana y un
+Mientras el servidor está en marcha, una parada así es también un aviso en la campana y un
 [correo](box-status.md#emails) a todas las personas que pueden gestionar el sistema, también a los
 administradores. La campana te envía a esta página. El correo dice que un administrador puede
 poner la hora desde su propio móvil u ordenador en esta página, y cuándo puede hacerlo cualquier
@@ -240,90 +240,90 @@ empleado desde una caja (durante el [arranque](box-status.md#clock-at-start)).
 
 Hay tres salidas:
 
-- **Poner la hora bien.** En un equipo que se pone en hora por internet, conectarlo a internet le
-  permite corregir la hora por sí solo. Si no, un equipo que envía registros a Hacienda pone su
+- **Poner la hora bien.** En un servidor que se pone en hora por internet, conectarlo a internet le
+  permite corregir la hora por sí solo. Si no, un servidor que envía registros a Hacienda pone su
   reloj con la hora de Hacienda por sí solo cuando puede conectar con ella, un administrador puede ponerlo desde su propio móvil u
-  ordenador, y durante el arranque, si el equipo no puede obtener la hora de Hacienda, un empleado
+  ordenador, y durante el arranque, si el servidor no puede obtener la hora de Hacienda, un empleado
   puede ponerlo desde una caja, como explican
   los párrafos siguientes. Esto termina la parada salvo que la última venta lleve una hora
   equivocada, posterior a la real.
-- **Confirmar la hora del equipo**, cuando la hora del equipo es correcta y fue la última venta la
+- **Confirmar la hora del servidor**, cuando la hora del servidor es correcta y fue la última venta la
   que se registró con una hora equivocada, posterior a la real, por ejemplo mientras el reloj iba
-  adelantado. Normalmente el equipo lo hace solo, como explican los párrafos que siguen a esta
+  adelantado. Normalmente el servidor lo hace solo, como explican los párrafos que siguen a esta
   lista.
-- **Esperar.** En cuanto el reloj del equipo llega a un minuto antes de la hora de la última venta,
-  el equipo vuelve a cobrar.
+- **Esperar.** En cuanto el reloj del servidor llega a un minuto antes de la hora de la última venta,
+  el servidor vuelve a cobrar.
 
-Un equipo no puede saber por sí solo si su reloj está bien, así que durante una parada busca otro
+Un servidor no puede saber por sí solo si su reloj está bien, así que durante una parada busca otro
 reloj que coincida con el suyo. Cualquiera de estos confirma la hora, y entonces los cobros se
 reanudan. Las dos primeras no necesitan que nadie pulse nada:
 
-- **La hora de Hacienda.** Durante una parada, un equipo que envía registros a Hacienda le pide su
-  hora más o menos una vez por minuto. Una respuesta a menos de un minuto del reloj del equipo la
+- **La hora de Hacienda.** Durante una parada, un servidor que envía registros a Hacienda le pide su
+  hora más o menos una vez por minuto. Una respuesta a menos de un minuto del reloj del servidor la
   confirma. La fila **Reloj** lo muestra como **Hacienda: coincide (comprobado 2026-10-23 21:40)**.
 - **Dos cajas o terminales** con direcciones de red distintas, cuya hora está a menos de un minuto
-  de la del equipo y de la del otro. La fila lo muestra como **Dispositivos: 2 marcan 2026-10-23
+  de la del servidor y de la del otro. La fila lo muestra como **Dispositivos: 2 marcan 2026-10-23
   21:40**. La [sección siguiente](box-status.md#clock-witnesses) explica qué dispositivos cuentan.
-  Justo después de que el equipo arranque, dos dispositivos no bastan por sí solos: una persona
+  Justo después de que el servidor arranque, dos dispositivos no bastan por sí solos: una persona
   confirma la hora, como explica [Justo después de un arranque](box-status.md#clock-at-start).
 - **El propio móvil u ordenador de un administrador**, como explican los párrafos siguientes.
 
-Solo cuenta una hora tomada cuando el reloj del equipo ya marcaba más de un minuto por detrás de la
+Solo cuenta una hora tomada cuando el reloj del servidor ya marcaba más de un minuto por detrás de la
 última venta, y solo durante cinco minutos. Tampoco cuenta una hora tomada antes de un cambio en el
-reloj del equipo. No hay límite de cuánto puede ir el reloj del equipo por detrás de la última
+reloj del servidor. No hay límite de cuánto puede ir el reloj del servidor por detrás de la última
 venta.
 
-Mientras el equipo espera, la fila **Reloj** dice **Esperando una prueba de que la hora es correcta:
-la de Hacienda (si el equipo le envía registros), o la de dos cajas o terminales.** Cuando llega la
-prueba, dice **Hay prueba: los cobros se reanudan en unos segundos.**, y el equipo vuelve a cobrar
+Mientras el servidor espera, la fila **Reloj** dice **Esperando una prueba de que la hora es correcta:
+la de Hacienda (si el servidor le envía registros), o la de dos cajas o terminales.** Cuando llega la
+prueba, dice **Hay prueba: los cobros se reanudan en unos segundos.**, y el servidor vuelve a cobrar
 en unos 15 segundos. [Justo después de un arranque](box-status.md#clock-at-start), dos
 dispositivos solos no reanudan los cobros, así que hasta que la hora de Hacienda coincida, y salvo
-que otros relojes digan que la hora del equipo está mal, la fila dice **Esperando una prueba de que
-la hora es correcta: la de Hacienda (si el equipo le envía registros), «Comprobar la hora» en una
-caja si Hacienda no responde, o el dispositivo de un administrador. El equipo arrancó con los cobros
+que otros relojes digan que la hora del servidor está mal, la fila dice **Esperando una prueba de que
+la hora es correcta: la de Hacienda (si el servidor le envía registros), «Comprobar la hora» en una
+caja si Hacienda no responde, o el dispositivo de un administrador. El servidor arrancó con los cobros
 parados, así que no bastan dos cajas o terminales.**
 
 A veces los otros relojes dicen lo contrario: dos o más cajas o terminales coinciden entre sí en que
-el reloj del equipo va desviado más de un minuto, o la hora de Hacienda no coincide con él durante
+el reloj del servidor va desviado más de un minuto, o la hora de Hacienda no coincide con él durante
 la parada. Entonces la fila muestra cada reloj que no coincide, por ejemplo **Hacienda: no coincide
 (comprobado 2026-10-23 21:12)** o **Barra: no coincide (marcó 2026-10-23 21:13)**, y dice **Otros
-relojes dicen que la hora del equipo está mal.** Un reloj que ha respondido de las dos formas
+relojes dicen que la hora del servidor está mal.** Un reloj que ha respondido de las dos formas
 aparece una sola vez, con su última respuesta. Nada puede confirmar la hora, ni siquiera un
 administrador; solo se puede poner en hora. La respuesta de Hacienda cuenta primero: cuando
-coincide con el equipo, los dispositivos que no coinciden no paran los cobros. El equipo solo guarda
+coincide con el servidor, los dispositivos que no coinciden no paran los cobros. El servidor solo guarda
 el desacuerdo de Hacienda en su memoria, así que lo olvida si Waitron se reinicia durante
 la parada; mientras Hacienda siga sin coincidir, vuelve con la siguiente respuesta.
 
-Cuando la hora de Hacienda no coincide con la del equipo durante la parada, el equipo pone su
+Cuando la hora de Hacienda no coincide con la del servidor durante la parada, el servidor pone su
 propio reloj con la hora de Hacienda, sin preguntar a nadie. Poner la hora así, o de cualquiera de
 las formas que siguen, también la confirma: los cobros se reanudan con la hora nueva, aunque siga
-siendo anterior a una última venta que se fechó con un reloj adelantado, y el equipo muestra las
-ventas con fecha incorrecta como en cualquier confirmación. El equipo solo pone su reloj en hora
-mientras **No se pone en hora por internet**: un equipo cuyo servicio de hora lo mantiene en hora
+siendo anterior a una última venta que se fechó con un reloj adelantado, y el servidor muestra las
+ventas con fecha incorrecta como en cualquier confirmación. El servidor solo pone su reloj en hora
+mientras **No se pone en hora por internet**: un servidor cuyo servicio de hora lo mantiene en hora
 deja su reloj a ese servicio. Si un intento falla, lo vuelve a intentar más tarde. Los dispositivos
 que no coinciden nunca ponen la hora: aparecen en la fila y no cambian nada, y un administrador
 sigue pudiendo poner la hora desde su propio dispositivo.
 
-Cuando no llega ninguna prueba, por ejemplo porque el equipo no tiene internet y hay menos de dos
+Cuando no llega ninguna prueba, por ejemplo porque el servidor no tiene internet y hay menos de dos
 cajas en uso, un administrador puede confirmar o poner la hora desde esta página en su propio móvil
 u ordenador. Durante una parada, la fila **Reloj** muestra a los administradores un botón
 **Comprobar con la hora de este dispositivo**. Cualquier otra persona que pueda abrir esta página ve
-**Solo un administrador puede comprobar la hora del equipo con la de este dispositivo. Iniciar
+**Solo un administrador puede comprobar la hora del servidor con la de este dispositivo. Iniciar
 sesión como administrador cierra primero tu sesión aquí.** y un botón **Iniciar sesión como
-administrador**. El botón abre un diálogo que muestra las dos horas: **El reloj del equipo marca …
+administrador**. El botón abre un diálogo que muestra las dos horas: **El reloj del servidor marca …
 Este dispositivo marca …**
 
-- Cuando las dos están a menos de un minuto, contando la mitad del tiempo que tardó el equipo en
-  responder, el diálogo pregunta **Coinciden. ¿Confirmas que la hora del equipo es correcta?** Pulsa
+- Cuando las dos están a menos de un minuto, contando la mitad del tiempo que tardó el servidor en
+  responder, el diálogo pregunta **Coinciden. ¿Confirmas que la hora del servidor es correcta?** Pulsa
   **Confirmar** y los cobros se reanudan.
-- Cuando están más separadas y el equipo puede poner su reloj en hora, el diálogo pregunta **El
-  reloj del equipo marca … Tu dispositivo marca … ¿Usar la hora de tu dispositivo?** Pulsa **Usar
-  esta hora**, y el equipo pone su reloj a la hora de tu dispositivo y los cobros se reanudan. El
-  diálogo dice **El equipo ya está en hora.** El equipo solo puede poner su reloj en hora mientras
+- Cuando están más separadas y el servidor puede poner su reloj en hora, el diálogo pregunta **El
+  reloj del servidor marca … Tu dispositivo marca … ¿Usar la hora de tu dispositivo?** Pulsa **Usar
+  esta hora**, y el servidor pone su reloj a la hora de tu dispositivo y los cobros se reanudan. El
+  diálogo dice **El servidor ya está en hora.** El servidor solo puede poner su reloj en hora mientras
   no se pone en hora por internet, y solo mientras Hacienda no haya respondido durante la parada:
-  cuando ha respondido, el equipo pone o confirma su reloj con la hora de Hacienda por sí mismo.
-- Si no, dice **El equipo no ha podido comprobar que su hora está a menos de un minuto de la de tu
-  dispositivo. Comprueba que tu dispositivo tiene la hora bien; si la tiene, conecta el equipo a
+  cuando ha respondido, el servidor pone o confirma su reloj con la hora de Hacienda por sí mismo.
+- Si no, dice **El servidor no ha podido comprobar que su hora está a menos de un minuto de la de tu
+  dispositivo. Comprueba que tu dispositivo tiene la hora bien; si la tiene, conecta el servidor a
   internet para que corrija la hora.** y solo ofrece **Cerrar**. Por el tiempo que tarda la
   respuesta, dos horas separadas por algo menos de un minuto también pueden recibir este mensaje.
 
@@ -334,171 +334,171 @@ que mide el paso, el tiempo que una sesión del panel puede quedarse sin usar an
 paso menor hacia atrás no termina ninguna sesión. Las cajas y los terminales siguen con su sesión
 iniciada.
 
-Si el equipo se niega a poner su reloj en hora, el diálogo dice por qué encima de sus botones. Por
-ejemplo, cuando la parte del equipo que pone su reloj en hora no responde, dice **Este equipo no
-puede poner su propio reloj en hora: la parte del equipo que lo hace no responde. Si el equipo
+Si el servidor se niega a poner su reloj en hora, el diálogo dice por qué encima de sus botones. Por
+ejemplo, cuando la parte del servidor que pone su reloj en hora no responde, dice **Este servidor no
+puede poner su propio reloj en hora: la parte del servidor que lo hace no responde. Si el servidor
 tiene conexión a internet, puede que su servicio de hora aún corrija el reloj por sí solo. Cuando el
-reloj del equipo esté a menos de un minuto del de tu dispositivo, podrás confirmarlo aquí.** Cuando
-el reloj del equipo ha cambiado mientras lo comprobabas, o el equipo no había terminado de
+reloj del servidor esté a menos de un minuto del de tu dispositivo, podrás confirmarlo aquí.** Cuando
+el reloj del servidor ha cambiado mientras lo comprobabas, o el servidor no había terminado de
 registrar lo que encontró sobre su reloj, cierra el diálogo y vuelve a comprobarlo.
 
-Al pulsar **Confirmar**, el equipo vuelve a leer su hora y vuelve a comparar las dos. Si no puede
+Al pulsar **Confirmar**, el servidor vuelve a leer su hora y vuelve a comparar las dos. Si no puede
 comprobar que coinciden, el diálogo muestra las horas nuevas con el mismo mensaje y solo **Cerrar**.
 Si para entonces los cobros no están parados y no hay ninguna comprobación pendiente, por ejemplo
 porque otra cosa confirmó la hora o porque otros relojes dijeron que está mal, dice **No queda nada
 que confirmar. Mira la fila Reloj.** y solo ofrece **Cerrar**.
 
-El equipo da por buena la hora de tu dispositivo, así que comprueba antes que tu móvil u ordenador
-tiene la hora bien. Por la misma razón, nunca funciona desde la pantalla del propio equipo: ahí la
-hora del dispositivo es la del equipo, y el equipo lo rechaza con **Esta pantalla es el propio
-equipo, así que su hora es la del equipo. Confírmalo desde tu móvil o desde otro ordenador.**
+El servidor da por buena la hora de tu dispositivo, así que comprueba antes que tu móvil u ordenador
+tiene la hora bien. Por la misma razón, nunca funciona desde la pantalla del propio servidor: ahí la
+hora del dispositivo es la del servidor, y el servidor lo rechaza con **Esta pantalla es el propio
+servidor, así que su hora es la del servidor. Confírmalo desde tu móvil o desde otro ordenador.**
 
-Cuando se confirma la hora, el equipo vuelve a cobrar en ese momento. No cambia ninguna venta ya
-registrada. La siguiente venta lleva la hora del reloj del equipo, así que se registra con una hora
+Cuando se confirma la hora, el servidor vuelve a cobrar en ese momento. No cambia ninguna venta ya
+registrada. La siguiente venta lleva la hora del reloj del servidor, así que se registra con una hora
 anterior a la de la última venta. La fila **Reloj** se pone en ámbar y dice qué confirmó la hora,
 por ejemplo **Cobros reanudados el 2026-10-23 21:42, confirmado por dos cajas o terminales.** La
-campana guarda un aviso con las dos horas y lo que confirmó la hora, y el equipo envía un
+campana guarda un aviso con las dos horas y lo que confirmó la hora, y el servidor envía un
 [correo](box-status.md#emails) a las personas que gestionan el sistema.
 
-Una confirmación cubre un paso atrás. Si el reloj del equipo vuelve a retroceder, de modo que marca
+Una confirmación cubre un paso atrás. Si el reloj del servidor vuelve a retroceder, de modo que marca
 más de un minuto más atrás que cuando se confirmó, o más de un minuto antes que una venta hecha
 desde entonces, los cobros se vuelven a parar hasta que la hora se confirme otra vez, de cualquiera
 de las mismas formas. Pasa igual aunque el reloj retroceda poco a poco.
 
-Una parada así suele significar que el reloj del equipo iba adelantado desde hacía un tiempo, así
+Una parada así suele significar que el reloj del servidor iba adelantado desde hacía un tiempo, así
 que algunas ventas se registraron con una hora posterior a la real. Quedan como se registraron: una
-venta registrada para Hacienda no se puede cambiar. Cuando se confirma la hora, el equipo calcula
+venta registrada para Hacienda no se puede cambiar. Cuando se confirma la hora, el servidor calcula
 cuáles son: las ventas registradas antes de la parada con una hora de más de un minuto después del
-momento en que el equipo notó la parada. Las muestra en esta página en **Ventas con fecha
+momento en que el servidor notó la parada. Las muestra en esta página en **Ventas con fecha
 incorrecta**, con la **Factura** y la **Hora registrada** de cada una, y dice **Descarga cada lista
 para tu asesor, revísala con su ayuda y después marca el aviso como resuelto aquí con una nota de
 lo que se hizo.** [Ventas con fecha incorrecta](box-status.md#sales-dated-wrongly) explica la
 descarga y la nota. La campana tiene un aviso con cuántas ventas son y la primera y la última hora,
-y el equipo envía un correo a las personas que gestionan el sistema. Si Waitron se reinició
+y el servidor envía un correo a las personas que gestionan el sistema. Si Waitron se reinició
 durante la parada, no puede estar seguro de cuándo empezó, así que puede faltar alguna venta en la
 lista, y el aviso lo dice. Cuando ninguna venta tiene la fecha mal, no hay lista ni aviso.
 
 La parada también puede terminar sola, porque se puso bien la hora o el reloj llegó a la hora de la
-última venta. El equipo sigue necesitando una confirmación para saber qué ventas tienen la fecha
+última venta. El servidor sigue necesitando una confirmación para saber qué ventas tienen la fecha
 mal, así que hasta que la tiene, la fila **Reloj** sigue en ámbar, su línea dice **Sin confirmar desde
 la parada de cobros**, y dice **La parada de cobros que empezó el 2026-10-23 21:10 ha terminado,
-pero nada ha confirmado aún la hora del equipo. El equipo pregunta la hora a Hacienda cada minuto
+pero nada ha confirmado aún la hora del servidor. El servidor pregunta la hora a Hacienda cada minuto
 cuando le envía registros; también pueden confirmarla dos cajas o terminales, o el dispositivo de un
-administrador.** Mientras tanto se sigue cobrando. Un equipo que envía registros a Hacienda le
+administrador.** Mientras tanto se sigue cobrando. Un servidor que envía registros a Hacienda le
 sigue pidiendo su hora más o menos una vez por minuto, y los administradores ven **Comprobar con la
 hora de este dispositivo** bajo la fila. En cuanto Hacienda, dos cajas o terminales, o el
-dispositivo de un administrador confirman la hora, el equipo muestra las ventas con fecha incorrecta
+dispositivo de un administrador confirman la hora, el servidor muestra las ventas con fecha incorrecta
 como se explica arriba.
 
-Si en cambio Hacienda o dos cajas o terminales dicen que la hora del equipo está mal, o los cobros se
-vuelven a parar por la hora después de registrarse más ventas, el equipo no puede saber qué ventas
+Si en cambio Hacienda o dos cajas o terminales dicen que la hora del servidor está mal, o los cobros se
+vuelven a parar por la hora después de registrarse más ventas, el servidor no puede saber qué ventas
 tienen la fecha mal. La campana, un correo y la sección **Ventas con fecha incorrecta** lo dicen
 entonces: **La parada de cobros que empezó el 2026-10-23 21:10 terminó sola, pero nada confirmó
-la hora del equipo, así que el equipo no puede saber qué ventas tienen la fecha mal. Comprueba la
-hora del equipo y revisa con tu asesor las ventas desde entonces.**
+la hora del servidor, así que el servidor no puede saber qué ventas tienen la fecha mal. Comprueba la
+hora del servidor y revisa con tu asesor las ventas desde entonces.**
 
-Si el equipo descubre más tarde que una hora que confirmó durante una parada estaba mal, porque la
+Si el servidor descubre más tarde que una hora que confirmó durante una parada estaba mal, porque la
 hora de Hacienda no coincide con ella o el reloj salta hacia delante más de un minuto, y se hicieron
 ventas después de la confirmación, la campana lo dice: **Las ventas registradas entre 2026-10-23
 21:42 y 2026-10-23 22:15 se fecharon con un reloj que resultó estar mal. Quedan como se registraron;
 consúltalo con tu asesor.** Las horas de ese aviso se fijan cuando aparece, así que las ventas
 hechas después no se añaden a él.
 
-No hace falta reiniciar el equipo ni los terminales. Cada cobro se comprueba en el momento de
+No hace falta reiniciar el servidor ni los terminales. Cada cobro se comprueba en el momento de
 hacerlo, así que en cuanto el reloj marca como mucho un minuto antes que la última venta, o se
 confirma la hora, el siguiente cobro ya no se rechaza por la hora. El aviso de los terminales y las
 filas en rojo de esta página desaparecen en unos 15 segundos. La campana, y el aviso de la campana
 que aparece bajo la fila **Reloj**, desaparecen en un minuto, más o menos.
 
 Una tarjeta cobrada desde las opciones de pago de una cuenta justo cuando se paran los cobros puede
-aparecer en la campana como un pago con tarjeta que Waitron no ha podido registrar. El equipo
+aparecer en la campana como un pago con tarjeta que Waitron no ha podido registrar. El servidor
 registra ese pago por sí solo cuando se puede volver a cobrar, pero el aviso sigue en la campana
 hasta que un encargado pulsa **Marcar como resuelto** en él.
 
 Si el reloj marca una fecha anterior al 28 de octubre de 2024, los terminales muestran en su lugar
 **No se pueden registrar ventas: la hora del servidor es incorrecta**, y la campana también lo dice,
-con la fecha que marca el reloj del equipo. Entonces nada puede confirmar la hora, y el equipo no
+con la fecha que marca el reloj del servidor. Entonces nada puede confirmar la hora, y el servidor no
 puede pedir la hora a Hacienda, porque con una fecha tan temprana no puede comprobar su certificado.
-La salida es poner la hora bien: en un equipo que se pone en hora por internet, conectándolo a
+La salida es poner la hora bien: en un servidor que se pone en hora por internet, conectándolo a
 internet; si no, un administrador la pone con **Comprobar con la hora de este dispositivo** o,
 durante el [arranque](box-status.md#clock-at-start), un empleado desde una caja.
 
-Cada vez que el equipo pone su reloj en hora, sea quien sea o lo que sea que lo puso, la campana
+Cada vez que el servidor pone su reloj en hora, sea quien sea o lo que sea que lo puso, la campana
 tiene un aviso que lo dice, con la hora de antes y la de después y cuánto se movió el reloj, por
-ejemplo **El reloj del equipo se puso con la hora del dispositivo de Ana: adelantado 2 días y 3
-horas, de 2026-10-21 18:40 a 2026-10-23 21:40.**, y el equipo envía un
-[correo](box-status.md#emails) a las personas que gestionan el sistema. Cuando el equipo puso su
+ejemplo **El reloj del servidor se puso con la hora del dispositivo de Ana: adelantado 2 días y 3
+horas, de 2026-10-21 18:40 a 2026-10-23 21:40.**, y el servidor envía un
+[correo](box-status.md#emails) a las personas que gestionan el sistema. Cuando el servidor puso su
 reloj pero no pudo confirmar que el cambio se aplicara, el aviso lo dice y te pide que compruebes
-la hora del equipo en esta página. Si el equipo no puede anotar el cambio en ese momento (por ejemplo, con el disco lleno) y se
+la hora del servidor en esta página. Si el servidor no puede anotar el cambio en ese momento (por ejemplo, con el disco lleno) y se
 reinicia antes de poder hacerlo, ese cambio no tiene aviso ni correo.
 
 ## Justo después de un arranque {#clock-at-start}
 
-Cuando el equipo arranca con uno de estos problemas de hora y no puede obtener la hora de Hacienda,
+Cuando el servidor arranca con uno de estos problemas de hora y no puede obtener la hora de Hacienda,
 un empleado puede poner o confirmar la hora desde una caja, para que el local no tenga que esperar
-a un administrador. Un reinicio del equipo cuenta como arranque, sea tras un corte de luz, una
-actualización, **Reiniciar el equipo** o a mano.
+a un administrador. Un reinicio del servidor cuenta como arranque, sea tras un corte de luz, una
+actualización, **Reiniciar el servidor** o a mano.
 
-Aquí se llama arranque al tiempo que va desde que el equipo arranca hasta que el reloj deja de
-parar los cobros. En el medio minuto siguiente al arranque, más o menos, cuando el equipo ha
+Aquí se llama arranque al tiempo que va desde que el servidor arranca hasta que el reloj deja de
+parar los cobros. En el medio minuto siguiente al arranque, más o menos, cuando el servidor ha
 visto que no puede confirmar su hora por sí mismo, cada caja y terminal con alguien con la sesión iniciada termina su línea roja de
-la hora con **Comprobar la hora** en lugar de **Avisa al encargado**. En un equipo cuyo reloj marca
+la hora con **Comprobar la hora** en lugar de **Avisa al encargado**. En un servidor cuyo reloj marca
 una fecha anterior al 28 de octubre de 2024, o en uno que no envía registros a Hacienda, lo hace en
 la siguiente consulta de la caja, en unos 15 segundos. Cualquier empleado con la sesión iniciada en la caja puede pulsarlo; no necesita ningún
 permiso. La [guía de avisos del terminal](till-notices.md#notices) explica qué muestra el diálogo
 de la caja y qué hace cada botón.
 
-La caja envía su propia hora. Cuando está a más de un minuto de la del equipo, **Este dispositivo**
-pone el reloj del equipo a esa hora, y **El servidor** mantiene el reloj del equipo sea cual sea la
-hora de la caja mientras el equipo espera a que se confirme su hora tras un arranque y los cobros no
+La caja envía su propia hora. Cuando está a más de un minuto de la del servidor, **Este dispositivo**
+pone el reloj del servidor a esa hora, y **El servidor** mantiene el reloj del servidor sea cual sea la
+hora de la caja mientras el servidor espera a que se confirme su hora tras un arranque y los cobros no
 están parados además porque el reloj marca más de un minuto antes del último registro, o una fecha
 anterior al 28 de octubre de 2024; si no, **El servidor** pide a la persona que corrija la hora de
-la caja. Cuando está a menos de un minuto, **Sí** mantiene el reloj del equipo. Cada uno de ellos
-que el equipo acepta reanuda los cobros, con una excepción: cuando **Este dispositivo** lleva un
+la caja. Cuando está a menos de un minuto, **Sí** mantiene el reloj del servidor. Cada uno de ellos
+que el servidor acepta reanuda los cobros, con una excepción: cuando **Este dispositivo** lleva un
 reloj que marcaba como mucho un minuto antes del último registro a más de un minuto antes, los
 cobros se paran hasta que el reloj se vuelve a confirmar, como explica [Cuando se paran los cobros
 por la hora](box-status.md#clock-behind); una persona puede hacerlo con **Comprobar la hora** y
-**Sí** mientras la caja lo siga ofreciendo. Cuando el equipo pone su reloj en hora, la campana y el
+**Sí** mientras la caja lo siga ofreciendo. Cuando el servidor pone su reloj en hora, la campana y el
 correo nombran al empleado y a la caja. Cuando se usa la hora de la caja, las lecturas de otros
 dispositivos no lo impiden. Cuando la caja coincide con un reloj que marca una hora anterior al
-último registro, dos dispositivos que no coinciden con el equipo impiden la confirmación, y el
+último registro, dos dispositivos que no coinciden con el servidor impiden la confirmación, y el
 diálogo dice por qué.
 
-Dos cajas o terminales que coinciden con el equipo confirman su hora tras un arranque por sí solos.
+Dos cajas o terminales que coinciden con el servidor confirman su hora tras un arranque por sí solos.
 Durante el arranque no terminan una parada por un reloj que marca una hora anterior al último
 registro; la confirma una persona.
 
-El arranque termina en cuanto el equipo ve que el reloj ya no para los cobros. Desde entonces, en cuanto
-internet ha confirmado la hora del equipo, un empleado ya no puede poner la hora desde una caja. Si el reloj vuelve a parar los cobros mientras
-el equipo está en marcha, las cajas no ofrecen nada: un administrador pone la hora desde esta
+El arranque termina en cuanto el servidor ve que el reloj ya no para los cobros. Desde entonces, en cuanto
+internet ha confirmado la hora del servidor, un empleado ya no puede poner la hora desde una caja. Si el reloj vuelve a parar los cobros mientras
+el servidor está en marcha, las cajas no ofrecen nada: un administrador pone la hora desde esta
 página con su propio móvil u ordenador. Si Hacienda responde mientras se ofrece **Comprobar la
-hora**, la oferta termina y el equipo usa la hora de Hacienda por sí mismo.
+hora**, la oferta termina y el servidor usa la hora de Hacienda por sí mismo.
 
-## El servicio de hora del equipo {#clock-service}
+## El servicio de hora del servidor {#clock-service}
 
-El equipo tiene un servicio de hora que mantiene su reloj en hora por internet. Cuando el equipo
+El servidor tiene un servicio de hora que mantiene su reloj en hora por internet. Cuando el servidor
 puede leer ese servicio, la fila **Reloj** dice **Se pone en hora por internet** cuando el servicio
 funciona y ha contactado con un servidor de hora, y **No se pone en hora por internet** en otro
-caso. Cuando el equipo no puede leerlo, por ejemplo en un portátil, la fila no dice ninguna de las
+caso. Cuando el servidor no puede leerlo, por ejemplo en un portátil, la fila no dice ninguna de las
 dos.
 
 Cuando el servicio no mantiene el reloj en hora, la campana avisa a las personas que pueden
 gestionar el sistema. El aviso llega solo por la campana, no por correo, y dice por qué:
 
-- **El servicio de hora del equipo está desactivado, así que nada mantiene su reloj en hora.**
-- **El servicio de hora del equipo está activado pero no funciona, así que nada mantiene su reloj
+- **El servicio de hora del servidor está desactivado, así que nada mantiene su reloj en hora.**
+- **El servicio de hora del servidor está activado pero no funciona, así que nada mantiene su reloj
   en hora.**
-- **El servicio de hora del equipo no ha contactado con ningún servidor de hora, así que su reloj
-  puede desviarse.** Comprueba que el equipo tiene conexión a internet.
-- **Este equipo no puede ver ni controlar su servicio de hora: la parte del equipo que lo hace no
-  responde. Si el equipo tiene conexión a internet, puede que su servicio de hora aún mantenga el
-  reloj en hora por sí solo.** Solo lo dice el equipo de un local en funcionamiento; un portátil o
-  un equipo de pruebas no dice nada.
+- **El servicio de hora del servidor no ha contactado con ningún servidor de hora, así que su reloj
+  puede desviarse.** Comprueba que el servidor tiene conexión a internet.
+- **Este servidor no puede ver ni controlar su servicio de hora: la parte del servidor que lo hace no
+  responde. Si el servidor tiene conexión a internet, puede que su servicio de hora aún mantenga el
+  reloj en hora por sí solo.** Solo lo dice el servidor de un local en funcionamiento; un portátil o
+  un servidor de pruebas no dice nada.
 
-Cada aviso te pide que mires la fecha y la hora del equipo en esta página. Mientras el servicio no
-mantiene el reloj en hora, el equipo sigue pudiendo poner su propio reloj durante una parada, como
+Cada aviso te pide que mires la fecha y la hora del servidor en esta página. Mientras el servicio no
+mantiene el reloj en hora, el servidor sigue pudiendo poner su propio reloj durante una parada, como
 explica [Cuando se paran los cobros por la hora](box-status.md#clock-behind). Mientras la parte
-del equipo que pone su reloj en hora no responde, no puede: entonces el equipo solo puede confirmar
+del servidor que pone su reloj en hora no responde, no puede: entonces el servidor solo puede confirmar
 una hora que ya es correcta.
 
 ## Ventas con fecha incorrecta {#sales-dated-wrongly}
@@ -511,16 +511,16 @@ resuelta.
 
 Debajo de cada lista, **Descargar para tu asesor** guarda un archivo de hoja de cálculo (CSV) con el
 nombre del día de la hora registrada de la primera venta, por ejemplo
-`misdated-sales-2026-10-23.csv`. Una entrada en la que el equipo no puede saber qué ventas tienen la
+`misdated-sales-2026-10-23.csv`. Una entrada en la que el servidor no puede saber qué ventas tienen la
 fecha mal no tiene lista, así que tampoco tiene descarga. El archivo está en el idioma del local,
 español o inglés, no en el idioma que elegiste para el panel de gestión.
 
 Su primera línea dice qué pasó, por ejemplo: **Bar Sol: se registraron 3 ventas con una hora
 posterior a la real, de 23/10/2026 21:12 a 23/10/2026 21:40. Cada una se hizo antes del 23/10/2026
-21:11. La hora del equipo se confirmó con dos cajas o terminales el 23/10/2026 21:42.** La hora de
+21:11. La hora del servidor se confirmó con dos cajas o terminales el 23/10/2026 21:42.** La hora de
 "antes del" es cuándo empezó la parada de cobros según la hora confirmada, más el minuto de margen
-que admite una confirmación, redondeada hacia arriba al minuto entero. Si el equipo se reinició
-durante la parada, la línea termina con **El equipo se reinició durante la parada, así que puede
+que admite una confirmación, redondeada hacia arriba al minuto entero. Si el servidor se reinició
+durante la parada, la línea termina con **El servidor se reinició durante la parada, así que puede
 faltar alguna.**
 
 Después viene una fila por venta, con estas columnas:
@@ -529,10 +529,10 @@ Después viene una fila por venta, con estas columnas:
   dos.
 - **Fecha de factura**: la fecha de la factura, tal como se registró.
 - **Hora registrada**: la hora con la que se registró la venta. Las horas de las ventas se escriben
-  en la zona horaria que el equipo registró con cada venta, como hacen las listas de la sección y el
-  correo del equipo, así que la hora de una venta aquí es la misma que muestra su lista, y la
+  en la zona horaria que el servidor registró con cada venta, como hacen las listas de la sección y el
+  correo del servidor, así que la hora de una venta aquí es la misma que muestra su lista, y la
   primera y la última coinciden con el correo.
-- **Hora real**: **Desconocida** en todas las filas. El equipo no sabe cuándo se hizo de verdad cada
+- **Hora real**: **Desconocida** en todas las filas. El servidor no sabe cuándo se hizo de verdad cada
   venta, solo que se hizo antes de la hora de la primera línea.
 - **Importe (EUR)**: el total de la factura tal como se registró, con dos decimales, la coma decimal
   en un archivo en español y sin símbolo de moneda. Una anulación muestra **Anulación** en su lugar.
@@ -540,57 +540,57 @@ Después viene una fila por venta, con estas columnas:
   de su factura, así que quizá en otro periodo de IVA; consulta estas con tu asesor fiscal. **No se
   sabe** para cualquier otra venta, porque puede que aun así se hiciera en la fecha de su factura.
   **No aplicable** para una anulación, cuya fecha de factura es la de la factura que anula. La
-  columna nunca dice "No", porque el equipo no sabe la hora real de cada venta.
+  columna nunca dice "No", porque el servidor no sabe la hora real de cada venta.
 
 Cuando hayas revisado una lista con tu asesor, pulsa **Marcar como resuelto** debajo de ella. Un
 diálogo pide una **Nota**, por ejemplo lo que dijo tu asesor o lo que se hizo. La nota es opcional y
 puede tener hasta 500 caracteres; **Marcar como resuelto** funciona con ella o sin ella. Una entrada
-en la que el equipo no puede saber qué ventas tienen la fecha mal también tiene **Marcar como
+en la que el servidor no puede saber qué ventas tienen la fecha mal también tiene **Marcar como
 resuelto**. La campana y la página **Avisos** también ofrecen **Marcar como resuelto** en el aviso,
 pero no admiten nota.
 
 Una lista resuelta deja las listas abiertas y pasa a **Listas resueltas**, un desplegable al final
 de la sección cuyo título las cuenta, por ejemplo **Listas resueltas (2)**. Ábrelo para ver todas
 las listas resueltas, de la más reciente a la más antigua. Cada una muestra sus ventas y su
-descarga, salvo si el equipo no pudo saber qué ventas eran, y normalmente dice quién la resolvió y
+descarga, salvo si el servidor no pudo saber qué ventas eran, y normalmente dice quién la resolvió y
 cuándo, por ejemplo **Marcada como resuelta por Ana el 2026-10-24 10:05.**, y su nota, como **Nota:
 …**. La hora en que se marcó como resuelta se muestra en la zona horaria de tu propio dispositivo,
 mientras que las horas de las ventas son las horas con las que se registraron. Cuando una
 comprobación posterior tampoco puede saber qué ventas tienen la fecha mal, y su parada de cobros
 empezó antes que la de una entrada abierta de "no puede saber", la nueva entrada cubre las ventas
-por las que preguntaba la antigua, así que el equipo marca la antigua como resuelta por sí solo. Esa
-entrada dice **Marcada como resuelta por el equipo el …**
+por las que preguntaba la antigua, así que el servidor marca la antigua como resuelta por sí solo. Esa
+entrada dice **Marcada como resuelta por el servidor el …**
 
 Una lista resuelta sin nota, la resolviera quien la resolviera, ofrece **Añadir nota**, para añadir
 la única nota que admite. Su diálogo, **Añadir una nota**, necesita una nota para que **Guardar**
 funcione. Cuando una lista tiene nota, no se puede cambiar ni sustituir. Si la lista se marcó como
 resuelta en otro sitio mientras escribías una nota para ella, **Marcar como resuelto** dice **Este
 aviso ya estaba marcado como resuelto, así que la nota no se ha guardado. Añádela desde Listas
-resueltas en Estado del equipo.**
+resueltas en Estado del servidor.**
 
 ## Dispositivos como testigos de la hora {#clock-witnesses}
 
-Un equipo no puede saber por sí solo que su reloj está mal, así que lo compara con otros relojes.
-Las cajas registradoras y los terminales de camarero envían su propia hora al equipo cada 15
+Un servidor no puede saber por sí solo que su reloj está mal, así que lo compara con otros relojes.
+Las cajas registradoras y los terminales de camarero envían su propia hora al servidor cada 15
 segundos, más o menos, mientras hay alguien con la sesión iniciada en ellos o mientras muestran la
 pantalla de inicio de sesión. Las pantallas de cocina no envían la suya. Una caja o un terminal que
-funciona en el propio equipo no cuenta, y los dispositivos con una misma dirección de red cuentan
+funciona en el propio servidor no cuenta, y los dispositivos con una misma dirección de red cuentan
 como uno.
 
-Cuando dos o más dispositivos coinciden entre sí en que el reloj del equipo va desviado más de un
+Cuando dos o más dispositivos coinciden entre sí en que el reloj del servidor va desviado más de un
 minuto, la campana avisa a las personas que pueden gestionar el sistema, estén parados o no los
-cobros: **2 dispositivos coinciden en que marcan 2026-10-23 21:40, pero el equipo marca 2026-10-23
-21:10. Comprueba la fecha y la hora del equipo en Estado del equipo.** El personal de los terminales
+cobros: **2 dispositivos coinciden en que marcan 2026-10-23 21:40, pero el servidor marca 2026-10-23
+21:10. Comprueba la fecha y la hora del servidor en Estado del servidor.** El personal de los terminales
 no ve nada de esto.
 
-Esas mismas lecturas son la prueba de los dispositivos que confirma la hora del equipo durante una
+Esas mismas lecturas son la prueba de los dispositivos que confirma la hora del servidor durante una
 parada, como explica [Cuando se paran los cobros por la hora](box-status.md#clock-behind), salvo
 [justo después de un arranque](box-status.md#clock-at-start). Los dispositivos nunca ponen la hora
-del equipo por sí solos.
+del servidor por sí solos.
 
-## Correos sobre el equipo {#emails}
+## Correos sobre el servidor {#emails}
 
-El equipo envía un correo a todas las personas que pueden gestionar el sistema y tienen dirección de
+El servidor envía un correo a todas las personas que pueden gestionar el sistema y tienen dirección de
 correo cuando:
 
 - a su disco le quedan unos 2 GB libres o menos, después de borrar las copias antiguas que puede;
@@ -605,31 +605,31 @@ correo cuando:
 - no se hizo una copia de seguridad por falta de espacio.
 
 Cada persona recibe un correo por problema, en su propio idioma, o en el del local si no ha
-elegido ninguno. Si no se puede enviar, porque el equipo no tiene internet o el servidor de
+elegido ninguno. Si no se puede enviar, porque el servidor no tiene internet o el servidor de
 correo lo rechaza (por ejemplo, porque los ajustes del servidor de correo tienen una contraseña
-equivocada), el equipo lo vuelve a intentar al cabo de un minuto y después con esperas cada vez
+equivocada), el servidor lo vuelve a intentar al cabo de un minuto y después con esperas cada vez
 más largas, durante un día como mucho. Así, el correo llega en cuanto se arregla la conexión o
 los ajustes, si es dentro de ese día. Si la conexión se corta después de entregar el correo al
-servidor de correo, el equipo no puede saber si salió y no lo vuelve a enviar.
-Si el problema termina antes, por ejemplo porque se puso bien la hora, el equipo deja de
+servidor de correo, el servidor no puede saber si salió y no lo vuelve a enviar.
+Si el problema termina antes, por ejemplo porque se puso bien la hora, el servidor deja de
 intentarlo y no envía nada. Si se confirmó la hora, si hay ventas con fecha incorrecta o si se
-borraron copias, el equipo lo sigue intentando mientras su aviso esté abierto en la campana,
+borraron copias, el servidor lo sigue intentando mientras su aviso esté abierto en la campana,
 durante un día como mucho. El correo de disco lleno no se puede guardar con el disco lleno, así
-que el equipo lo envía en el acto y lo vuelve a intentar cada minuto mientras el disco siga
+que el servidor lo envía en el acto y lo vuelve a intentar cada minuto mientras el disco siga
 lleno; los demás correos esperan a que vuelva a haber espacio. Un disco lleno al que solo
 se le libera parte del espacio sigue casi sin espacio, así que quien no recibió el correo de
 disco lleno recibe en su lugar el de poco espacio. Un reinicio mientras el disco, una copia o la
 hora siguen con problemas puede enviar el mismo correo otra vez. Mientras no haya ningún
 servidor de correo configurado, no se envía nada.
 
-Cada vez que el equipo pone su reloj en hora envía su propio correo, aunque lo vuelva a poner en
+Cada vez que el servidor pone su reloj en hora envía su propio correo, aunque lo vuelva a poner en
 hora antes de un minuto, lo que marca como resuelto el aviso del primer cambio. Cuando el aviso de
-un cambio está resuelto, el equipo deja de intentar enviar su correo a un encargado cuya dirección
+un cambio está resuelto, el servidor deja de intentar enviar su correo a un encargado cuya dirección
 rechazó del todo después el servidor de correo, y un reinicio en el minuto antes de que el correo
 quede en cola lo pierde. El aviso en sí
 sigue en la página **Avisos**, en **Resueltos**.
 
-Un equipo cuyo reloj marca una fecha anterior al 28 de octubre de 2024 normalmente no puede enviar
+Un servidor cuyo reloj marca una fecha anterior al 28 de octubre de 2024 normalmente no puede enviar
 su correo: con una fecha tan temprana no puede comprobar el certificado del servidor de correo.
 
 ## Cuando no coincide un importe de tarjeta {#card-amount-mismatch}

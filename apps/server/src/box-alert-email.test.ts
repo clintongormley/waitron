@@ -73,7 +73,7 @@ describe("the full-disk email", () => {
     expect(en.text).not.toMatch(/install|support/i);
     expect(es.text).not.toMatch(/instal|soporte/i);
     expect(en.text).toContain("Settings → Box status");
-    expect(es.text).toContain("Ajustes → Estado del equipo");
+    expect(es.text).toContain("Ajustes → Estado del servidor");
   });
 });
 
@@ -87,7 +87,7 @@ describe("the clock stop emails", () => {
       expect(en.text).toContain("an administrator can usually set it");
       expect(es.text).toContain("un administrador normalmente puede ponerla en hora");
       expect(en.text).toContain("Settings → Box status");
-      expect(es.text).toContain("Ajustes → Estado del equipo");
+      expect(es.text).toContain("Ajustes → Estado del servidor");
       expect(en.text).toContain("“Check the time”");
       expect(es.text).toContain("«Comprobar la hora»");
     },
@@ -201,7 +201,7 @@ describe("boxEmailMessage for payments restarted", () => {
     expect(
       boxEmailMessage("clock.behind_chain_restarted", "es", "Corner Bistro", params).text,
     ).toBe(
-      "La hora del equipo la confirmó Anna, miembro del personal, en la caja Bar, y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo).",
+      "La hora del equipo la confirmó Anna, miembro del personal, en la caja Bar, y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del servidor (en el panel de gestión, Ajustes → Estado del servidor).",
     );
   });
 

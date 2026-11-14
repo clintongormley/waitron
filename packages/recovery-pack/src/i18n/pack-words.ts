@@ -17,11 +17,11 @@ type Words = {
   sameChecks: string;
   couldNotBeDrawn: string;
   lockedAway: string;
-  /** For a pack holding a restore code or the backup key, and not the server key. */
+  /** For a pack holding a restore code or the recovery key, and not the server key. */
   anyoneHoldingBackups: string;
-  /** For a pack holding a restore code or the backup key, and the server key. */
+  /** For a pack holding a restore code or the recovery key, and the server key. */
   anyoneHoldingBackupsAndServerKey: string;
-  /** For a pack holding the server key and no restore code or backup key. */
+  /** For a pack holding the server key and no restore code or recovery key. */
   anyoneHoldingServerKey: string;
   whichToKeep: string;
   serverKeyPage: (page: number) => string;
@@ -57,9 +57,9 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
     couldNotBeDrawn: "Could not be drawn",
     lockedAway: "Keep this pack locked away, and off the box.",
     anyoneHoldingBackups:
-      "Anyone holding it can open the backups its restore codes or backup key unlock.",
+      "Anyone holding it can open the backups its restore codes or recovery key unlock.",
     anyoneHoldingBackupsAndServerKey:
-      "Anyone holding it can open the backups its restore codes or backup key unlock, and, with its server key and a matching backup, recover the server.",
+      "Anyone holding it can open the backups its restore codes or recovery key unlock, and, with its server key and a matching backup, recover the server.",
     anyoneHoldingServerKey: "Anyone holding it and its matching backup can recover the server.",
     whichToKeep:
       "When you make a new pack, the dashboard's Backups screen says which older packs to keep and until when.",
@@ -110,9 +110,9 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
     couldNotBeDrawn: "No se pudo generar",
     lockedAway: "Guarda este paquete bajo llave, y fuera de la caja.",
     anyoneHoldingBackups:
-      "Quien lo tenga puede abrir las copias de seguridad que desbloquean sus códigos de restauración o su clave de copia.",
+      "Quien lo tenga puede abrir las copias de seguridad que desbloquean sus códigos de restauración o su clave de recuperación.",
     anyoneHoldingBackupsAndServerKey:
-      "Quien lo tenga puede abrir las copias de seguridad que desbloquean sus códigos de restauración o su clave de copia y, con su clave del servidor y la copia correspondiente, recuperar el servidor.",
+      "Quien lo tenga puede abrir las copias de seguridad que desbloquean sus códigos de restauración o su clave de recuperación y, con su clave del servidor y la copia correspondiente, recuperar el servidor.",
     anyoneHoldingServerKey:
       "Quien lo tenga, junto con su copia correspondiente, puede recuperar el servidor.",
     whichToKeep:
@@ -175,7 +175,7 @@ type PartWords = {
     stepsFolder: string[];
   };
   keyRow: string;
-  /** The cover's check for a part guarded by the backup key. */
+  /** The cover's check for a part guarded by the recovery key. */
   check: (keyDay: string, revision: string | undefined) => string;
   keyChangedOn: (day: string) => string;
   alsoServerKey: (page: number) => string;
@@ -213,9 +213,9 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
       introBucket:
         "The box also keeps dated archives in your bucket. To bring back one archive, the restore command asks for this code and the archive's name.",
       introFolder:
-        "The box also keeps dated archives in a folder. To bring back one archive, setup asks for the archive file and this backup key.",
+        "The box also keeps dated archives in a folder. To bring back one archive, setup asks for the archive file and this recovery key.",
       codeLabel: "Restore code for the archives",
-      keyLabel: "Backup key",
+      keyLabel: "Recovery key",
       folderRow: "Archive folder",
       stepsBucket: [
         "1. Copy this PDF onto the new box.",
@@ -225,10 +225,10 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
       stepsFolder: [
         "1. Install Waitron on the new box and open its setup page.",
         "2. Choose Restore from backup.",
-        "3. Choose the archive file and type this backup key exactly as printed.",
+        "3. Choose the archive file and type this recovery key exactly as printed.",
       ],
     },
-    keyRow: "Backup key",
+    keyRow: "Recovery key",
     check: (keyDay, revision) =>
       revision === undefined
         ? `key of ${keyDay}`
@@ -248,11 +248,11 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
         todo: "Open Backups, check the archive settings and save them again, then make a new pack.",
       },
       "backup.recovery_key_missing": {
-        what: "The box has no backup key.",
+        what: "The box has no recovery key.",
         todo: "Use Backups → Change the recovery key, then make a new pack.",
       },
       "backup.recovery_key_too_short": {
-        what: "The box's backup key is too short to use.",
+        what: "The box's recovery key is too short to use.",
         todo: "Use Backups → Change the recovery key: the new key replaces the short one. Then make a new pack.",
       },
       "backup.stream_signer_missing": {
@@ -295,9 +295,9 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
       introBucket:
         "La caja también guarda archivos fechados en tu bucket. Para recuperar un archivo, la orden de restauración pide este código y el nombre del archivo.",
       introFolder:
-        "La caja también guarda archivos fechados en una carpeta. Para recuperar un archivo, la instalación pide el archivo y esta clave de copia.",
+        "El servidor también guarda archivos fechados en una carpeta. Para recuperar un archivo, la instalación pide el archivo y esta clave de recuperación.",
       codeLabel: "Código de restauración de los archivos",
-      keyLabel: "Clave de copia",
+      keyLabel: "Clave de recuperación",
       folderRow: "Carpeta de archivos",
       stepsBucket: [
         "1. Copia este PDF en la caja nueva.",
@@ -307,10 +307,10 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
       stepsFolder: [
         "1. Instala Waitron en la caja nueva y abre su página de instalación.",
         "2. Elige Restaurar desde una copia de seguridad.",
-        "3. Elige el archivo y escribe esta clave de copia tal como está impresa.",
+        "3. Elige el archivo y escribe esta clave de recuperación tal como está impresa.",
       ],
     },
-    keyRow: "Clave de copia",
+    keyRow: "Clave de recuperación",
     check: (keyDay, revision) =>
       revision === undefined
         ? `clave del ${keyDay}`
@@ -331,11 +331,11 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
         todo: "Abre Copias de seguridad, revisa los ajustes de archivo y vuelve a guardarlos; después haz un paquete nuevo.",
       },
       "backup.recovery_key_missing": {
-        what: "La caja no tiene clave de copia.",
+        what: "El servidor no tiene clave de recuperación.",
         todo: "Usa Copias de seguridad → Cambiar la clave de recuperación y después haz un paquete nuevo.",
       },
       "backup.recovery_key_too_short": {
-        what: "La clave de copia de la caja es demasiado corta para usarla.",
+        what: "La clave de recuperación del servidor es demasiado corta para usarla.",
         todo: "Usa Copias de seguridad → Cambiar la clave de recuperación: la clave nueva sustituye a la corta. Después haz un paquete nuevo.",
       },
       "backup.stream_signer_missing": {

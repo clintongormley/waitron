@@ -1,53 +1,53 @@
 # Servidores
 
-## Cuando abres el equipo de reserva {#spare}
+## Cuando abres el servidor de reserva {#spare}
 
-Si ves **Este es el equipo de reserva**, abre la dirección del equipo principal para usar las
+Si ves **Este es el servidor de reserva**, abre la dirección del servidor principal para usar las
 pantallas y los datos del local. La página de reserva muestra su estado; no acepta ventas ni
 ofrece acceso al panel de gestión.
 
-## Añadir un equipo de reserva {#adding-a-spare}
+## Añadir un servidor de reserva {#adding-a-spare}
 
-Un local configurado en España aún no puede añadir un equipo de reserva.
+Un local configurado en España aún no puede añadir un servidor de reserva.
 
-En esta versión no se puede retirar un equipo de reserva que ha terminado de unirse. No lo añadas
+En esta versión no se puede retirar un servidor de reserva que ha terminado de unirse. No lo añadas
 a un local que esté abierto al público hasta que una actualización permita retirarlo.
 
-Mientras un equipo de reserva que ha terminado de unirse está apagado, el equipo principal espera
+Mientras un servidor de reserva que ha terminado de unirse está apagado, el servidor principal espera
 en cada inicio hasta que un administrador [deje que siga sin él](servers.md#carry-on).
 
-Antes de empezar, comprueba dos cosas en el equipo principal:
+Antes de empezar, comprueba dos cosas en el servidor principal:
 
-- Tiene una clave de recuperación de las copias, que el equipo de reserva necesita. Si nunca se han
+- Tiene una clave de recuperación de las copias, que el servidor de reserva necesita. Si nunca se han
   activado las copias de seguridad, abre **Copias de seguridad** y elige **Activar las copias**.
 - **Copia continua en tu bucket** está desactivada. El local copia sus cambios en un solo sitio a
-  la vez, y el equipo de reserva ocupa ese sitio. Para añadirlo de todos modos, elige
+  la vez, y el servidor de reserva ocupa ese sitio. Para añadirlo de todos modos, elige
   **Desactivar** en ese apartado; tu bucket deja entonces de recibir los cambios del local y, en
-  esta versión, no puede volver a recibirlos mientras el equipo de reserva siga en el local.
+  esta versión, no puede volver a recibirlos mientras el servidor de reserva siga en el local.
 
-También necesitas una cuenta que pueda abrir **Ajustes → Servidores** en el equipo principal, con
+También necesitas una cuenta que pueda abrir **Ajustes → Servidores** en el servidor principal, con
 el correo con el que inicia sesión, su contraseña y el código actual del autenticador, si está
 configurado.
 
-Conecta el equipo nuevo a la red del local y enciéndelo; no necesita conexión a internet. Como
-`waitron.local` lleva al equipo principal, abre la dirección que la pantalla del equipo nuevo
+Conecta el servidor nuevo a la red del local y enciéndelo; no necesita conexión a internet. Como
+`waitron.local` lleva al servidor principal, abre la dirección que la pantalla del servidor nuevo
 muestra después de **Use this box's own address**. Elige **Unirse o recuperar** y después
 **Añadir un nodo réplica**.
 
-Introduce la dirección HTTPS del equipo principal y elige **Continuar**. En un dispositivo que ya
-tenga la sesión iniciada en el panel del equipo principal, abre **Ajustes → Servidores** y compara
-**Huella del certificado público de este servidor** con la que muestra el equipo nuevo. Elige
+Introduce la dirección HTTPS del servidor principal y elige **Continuar**. En un dispositivo que ya
+tenga la sesión iniciada en el panel del servidor principal, abre **Ajustes → Servidores** y compara
+**Huella del certificado público de este servidor** con la que muestra el servidor nuevo. Elige
 **Coincide** solo si son iguales. Después introduce los datos de la cuenta y elige **Conectar**. El
-equipo nuevo recibe su primera copia por la red del local y se reinicia solo como equipo de
+servidor nuevo recibe su primera copia por la red del local y se reinicia solo como servidor de
 reserva.
 
-## Iniciar aquí si ha fallado el equipo principal {#emergency}
+## Iniciar aquí si ha fallado el servidor principal {#emergency}
 
-Usa un equipo de reserva que haya terminado de unirse a este local. Apaga el equipo principal
-anterior y mantenlo apagado, porque dos equipos principales encendidos podrían cobrar y enviar
+Usa un servidor de reserva que haya terminado de unirse a este local. Apaga el servidor principal
+anterior y mantenlo apagado, porque dos servidores principales encendidos podrían cobrar y enviar
 registros por separado. Esta declaración no se puede deshacer.
 
-Abre la dirección HTTPS del equipo de reserva y añade `/handover/emergency`, por ejemplo
+Abre la dirección HTTPS del servidor de reserva y añade `/handover/emergency`, por ejemplo
 `https://spare.example/handover/emergency`. Identifícate con la contraseña de una cuenta de
 administrador y su código actual de autenticador, si está configurado, y elige **Comprobar esta
 copia**. Revisa su última actividad con fecha. Puede faltar la actividad posterior; si no hay
@@ -57,7 +57,7 @@ Lee las advertencias, marca las tres declaraciones y explica el motivo. Elige **
 el servidor principal anterior**. En la comprobación del reloj, marca **Estos datos son correctos.**
 y elige **Continuar**: la página compara los relojes, crea las series de facturas nuevas e inicia
 el local en este servidor sola. Si los relojes no coinciden, la página pregunta qué hora es la correcta: **Este dispositivo** pone la
-hora de este equipo con la del dispositivo que estás usando y la página sigue; después de **El
+hora de este servidor con la del dispositivo que estás usando y la página sigue; después de **El
 servidor** o **Las dos horas están mal**, corrige la hora de este dispositivo y vuelve a conectarte. Mantén la página abierta durante el reinicio. Introduces tu contraseña y código una sola vez; si
 el código caduca, introduce el código actual cuando se te pida y vuelve a intentar el paso. El
 motivo y las declaraciones se conservan.
@@ -68,35 +68,35 @@ declaraciones.
 Si se pierde una respuesta, mantén la página abierta y vuelve a comprobar la copia antes de
 reintentar. Al recargar o abrir la dirección en otro dispositivo se encuentra la declaración
 guardada; identifícate y continúa con la comprobación del reloj. Un traspaso controlado pendiente
-ofrece su página de progreso. Si responde el equipo principal anterior, abre su enlace
+ofrece su página de progreso. Si responde el servidor principal anterior, abre su enlace
 **Servidores** o apágalo y vuelve a comprobarlo. Si no se puede verificar la copia con la
-declaración, para y conserva los datos de ambos equipos.
+declaración, para y conserva los datos de ambos servidores.
 
-## Conservar los datos del equipo averiado {#old-box-returns}
+## Conservar los datos del servidor averiado {#old-box-returns}
 
-Usa el nuevo equipo principal cuando arranque. Conserva el equipo averiado y sus datos para la
+Usa el nuevo servidor principal cuando arranque. Conserva el servidor averiado y sus datos para la
 devolución. Los registros de facturación y sus hechos de pago registrados pueden volver al nuevo
-equipo principal; esto no repite pedidos, cambios de existencias, impresiones ni aperturas de
-cajón. No restablezcas el equipo anterior mientras necesites sus datos.
+servidor principal; esto no repite pedidos, cambios de existencias, impresiones ni aperturas de
+cajón. No restablezcas el servidor anterior mientras necesites sus datos.
 
-## Traspasar el local a un equipo de reserva {#hand-over}
+## Traspasar el local a un servidor de reserva {#hand-over}
 
-Usa este proceso solo con un equipo de reserva que haya terminado de unirse al local.
+Usa este proceso solo con un servidor de reserva que haya terminado de unirse al local.
 
-En el equipo principal, abre **Ajustes → Servidores**. Abre el menú de la fila del equipo de reserva
+En el servidor principal, abre **Ajustes → Servidores**. Abre el menú de la fila del servidor de reserva
 y elige **Traspasar el local**. Lee la explicación. Elige **Parar** para mantener el local en este
-equipo, o **Traspasar el local** para detener las ventas aquí y mover la copia final. Si se te pide,
+servidor, o **Traspasar el local** para detener las ventas aquí y mover la copia final. Si se te pide,
 [confirma tu acceso](staff.md#account-access). Se reutiliza una confirmación reciente; si usaste un código
 de recuperación, debes confirmar con el código actual del autenticador. Necesitas una cuenta con
 contraseña y tener a mano esa contraseña y el código actual del autenticador, si está configurado,
-para acceder en el equipo de reserva. Una llave de acceso no completa ese paso.
+para acceder en el servidor de reserva. Una llave de acceso no completa ese paso.
 
-Mantén los dos equipos conectados. La página de traspaso se abre en el equipo de reserva y sigue la
+Mantén los dos servidores conectados. La página de traspaso se abre en el servidor de reserva y sigue la
 transferencia. Cuando la copia esté lista, introduce la misma cuenta de administrador y elige
 **Continuar a la comprobación del reloj**. Marca **Estos datos son correctos.** y elige
 **Continuar**: la página compara los relojes y crea las series de facturas nuevas sola, también tras
-cualquier espera, y después inicia el local en el equipo de reserva. Si los relojes no coinciden, la página pregunta qué hora es la correcta: **Este dispositivo** pone la
-hora del equipo de reserva con la del dispositivo que estás usando y la página sigue; después de **El
+cualquier espera, y después inicia el local en el servidor de reserva. Si los relojes no coinciden, la página pregunta qué hora es la correcta: **Este dispositivo** pone la
+hora del servidor de reserva con la del dispositivo que estás usando y la página sigue; después de **El
 servidor** o **Las dos horas están mal**, corrige la hora de este dispositivo y vuelve a conectarte. Un código del autenticador dura
 menos de un minuto. Si el tuyo caduca antes de que la página lo use, la página te pide revisar la contraseña y el código: introduce un código nuevo y elige
 **Volver a intentarlo** para seguir. Antes de **Continuar**,
@@ -105,50 +105,50 @@ servidor se está reiniciando, mantenla abierta hasta que aparezca **Continuar e
 Los pagos ya registrados se conservan en la copia transferida.
 
 Si se pierde una respuesta en Servidores, mantén abierto el diálogo y elige **Consultar el
-progreso del traspaso**. En la página de traspaso del equipo de reserva puedes recargar para
+progreso del traspaso**. En la página de traspaso del servidor de reserva puedes recargar para
 consultar el progreso. No inicies otro traspaso. Un mensaje de espera describe el último intento;
-mantén los dos equipos conectados mientras vuelven a intentarlo.
+mantén los dos servidores conectados mientras vuelven a intentarlo.
 
 ## Después del traspaso {#after-hand-over}
 
-Usa la dirección del nuevo equipo. Si la página del equipo anterior ofrece **Progreso**, sigue el
-enlace para continuar el traspaso en el de reserva. Conserva el equipo anterior y sus datos.
+Usa la dirección del nuevo servidor. Si la página del servidor anterior ofrece **Progreso**, sigue el
+enlace para continuar el traspaso en el de reserva. Conserva el servidor anterior y sus datos.
 
-## Cuando el local ya no funciona con un equipo {#handed-over}
+## Cuando el local ya no funciona con un servidor {#handed-over}
 
-Si abres la dirección de un equipo en un navegador y ves una página titulada **El local ya no
-funciona con este equipo**, ese equipo se ha retirado. No hace ventas ni envía nada a Hacienda. La
-página indica, en negrita, el equipo que pasa a llevar el local.
+Si abres la dirección de un servidor en un navegador y ves una página titulada **El local ya no
+funciona con este equipo**, ese servidor se ha retirado. No hace ventas ni envía nada a Hacienda. La
+página indica, en negrita, el servidor que pasa a llevar el local.
 
-Debajo, la página enumera cada paso del traspaso que este equipo ha registrado, en el orden en que
+Debajo, la página enumera cada paso del traspaso que este servidor ha registrado, en el orden en que
 los registró, con la fecha y la hora de cada uno en la zona horaria del local.
 
-Si la página ofrece **Progreso**, úsalo para terminar el traspaso en el equipo de reserva.
+Si la página ofrece **Progreso**, úsalo para terminar el traspaso en el servidor de reserva.
 
-Mantén este equipo encendido mientras devuelve sus registros de facturación al equipo principal.
+Mantén este servidor encendido mientras devuelve sus registros de facturación al servidor principal.
 Actualiza la página para comprobar el progreso. Los reembolsos con tarjeta en curso se devuelven
 con sus pagos originales para que el principal pueda comprobar su resultado. El envío a Hacienda
 continúa en el principal. La confirmación significa que cada dato devuelto se ha recibido o se ha
 cubierto mediante una diferencia de pago aceptada expresamente; para una diferencia aceptada, el
-principal conserva sus propios datos de pago. Restablecer el equipo anterior borra sus datos del
+principal conserva sus propios datos de pago. Restablecer el servidor anterior borra sus datos del
 local, incluidas las líneas de venta y las copias de seguridad locales. Esos datos no se incluyen
-en esta devolución; conserva los datos del equipo anterior si los necesitas.
+en esta devolución; conserva los datos del servidor anterior si los necesitas.
 
 Si la devolución se detiene porque un registro de facturación entra en conflicto con uno del
-equipo principal, sigue usando el principal y conserva los datos del equipo anterior si aún los
-necesitas. La devolución no está confirmada. Puedes restablecer el equipo, pero eso borra sus
+servidor principal, sigue usando el principal y conserva los datos del servidor anterior si aún los
+necesitas. La devolución no está confirmada. Puedes restablecer el servidor, pero eso borra sus
 datos del local, incluidos los registros que sigan pendientes.
 
-Si otros datos devueltos difieren, mantén ambos equipos encendidos y conserva sus datos. Solo se
+Si otros datos devueltos difieren, mantén ambos servidores encendidos y conserva sus datos. Solo se
 pueden aceptar diferencias de pago admisibles mediante la API interna. Una persona administradora
 puede consultarlas con GET `/management-api/return-clashes`
 en el principal y aceptar una con POST `/management-api/return-clashes/:clashId/accept`, indicando
-`actionKey` y `reason`. Todavía no hay una pantalla para ello. Después, apaga y enciende el equipo
+`actionKey` y `reason`. Todavía no hay una pantalla para ello. Después, apaga y enciende el servidor
 detenido para reintentarlo. Cada nuevo lote en conflicto requiere su propia aceptación; solo
 cuenta el grupo exacto aceptado.
 
-Si la página avisa de una diferencia de reloj, comprueba los relojes de ambos equipos y manténlos
-encendidos mientras se vuelve a intentar la devolución. No restablezcas el equipo anterior.
+Si la página avisa de una diferencia de reloj, comprueba los relojes de ambos servidores y manténlos
+encendidos mientras se vuelve a intentar la devolución. No restablezcas el servidor anterior.
 
 La página aparece en español cuando tu navegador prefiere el español, y en inglés en los demás
 casos.
@@ -157,7 +157,7 @@ casos.
 
 Después de un traspaso de emergencia, abre **Informes** y después **Intervalos del traspaso** para
 comprobar el período cuya actividad podría faltar. Necesitas permiso para ver informes. La lista
-muestra los equipos principal anterior y nuevo, la última hora de venta o pedido en la copia, las horas
+muestra los servidores principal anterior y nuevo, la última hora de venta o pedido en la copia, las horas
 de declaración y activación, y el motivo indicado al tomar el relevo. Todas las horas usan la zona
 horaria del local. **Desconocida** significa que la copia no tenía ventas ni pedidos fechados; no significa
 que no falte dinero.
@@ -168,14 +168,14 @@ necesitas. Pulsa **Actualizar el estado del traspaso** para comprobarlo de nuevo
 tras recibir un inventario.
 
 Pulsa **Actualizar intervalos** para comprobar la recepción del inventario. **Recepción del inventario
-confirmada** significa que el nuevo equipo ha contabilizado todos los lotes de un inventario anunciado
+confirmada** significa que el nuevo servidor ha contabilizado todos los lotes de un inventario anunciado
 por el anterior. No confirma la actividad que falte ni los importes, ni reconstruye los arqueos. Una
-recepción sin confirmar necesita una devolución completa; si el equipo anterior ya dejó de enviar,
-reinícialo mientras sigue restringido para que reenvíe los datos. Si vuelve el equipo anterior,
+recepción sin confirmar necesita una devolución completa; si el servidor anterior ya dejó de enviar,
+reinícialo mientras sigue restringido para que reenvíe los datos. Si vuelve el servidor anterior,
 comprueba el estado de la devolución en su página antes de decidir si lo restableces.
 
 Debajo de los intervalos, **Facturas devueltas** muestra cada factura recibida por primera vez
-con el equipo de origen, la instalación que la generó, la fecha de expedición original y los
+con el servidor de origen, la instalación que la generó, la fecha de expedición original y los
 importes registrados. Las filas de facturas muestran un tipo legible junto a su código original.
 Las correcciones y anulaciones aparecen por separado. **No consta** indica que ese importe no
 figura en el registro. Usa **Siguiente** y **Anterior** para seguir leyendo; **Actualizar facturas**
@@ -191,30 +191,30 @@ de las fechas que selecciones. Sigue el enlace **Comprobar los intervalos del tr
 de las facturas. Usa las cifras que muestra cada informe; no añadas los importes de la lista a los
 totales del informe.
 
-## Cuando un equipo espera a otro equipo {#waiting}
+## Cuando un servidor espera a otro servidor {#waiting}
 
-Cuando un equipo se inicia y no consigue contactar con el otro equipo del local, espera en lugar de
+Cuando un servidor se inicia y no consigue contactar con el otro servidor del local, espera en lugar de
 vender, porque el otro quizá ha pasado a llevar el local. Su página, titulada **Este equipo está
-esperando a** y el nombre del otro equipo, lo indica. Mientras espera no hace ventas ni envía nada
-a Hacienda. Vuelve a preguntar cada 15 segundos; cuando el otro equipo responde, este se inicia con
+esperando a** y el nombre del otro servidor, lo indica. Mientras espera no hace ventas ni envía nada
+a Hacienda. Vuelve a preguntar cada 15 segundos; cuando el otro servidor responde, este se inicia con
 normalidad o, si el otro ha pasado a llevar el local, lo indica.
 
 ## Seguir como equipo principal {#carry-on}
 
-Si sabes que el otro equipo está apagado, puedes dejar que este equipo siga sin él. Abre el equipo
+Si sabes que el otro servidor está apagado, puedes dejar que este servidor siga sin él. Abre el servidor
 en su dirección `https://`, inicia sesión como administrador en **Seguir como equipo principal** y
-marca las dos casillas. Este equipo lleva entonces el local hasta que se reinicie, y entonces vuelve
-a preguntar al otro equipo.
+marca las dos casillas. Este servidor lleva entonces el local hasta que se reinicie, y entonces vuelve
+a preguntar al otro servidor.
 
-Si el otro equipo responde antes, manda su respuesta. Un equipo que ya ha pasado el local no puede
+Si el otro servidor responde antes, manda su respuesta. Un servidor que ya ha pasado el local no puede
 seguir; su página lo indica en lugar de mostrar el formulario.
 
-Si la copia de seguridad confirma que otro equipo ha pasado a llevar el local, este equipo se
-niega a seguir como principal. Abre el otro equipo con el enlace. Si esa información aparece después
-de continuar, este equipo deja de aceptar ventas. Usa el nuevo equipo principal. Los equipos antiguos
-pueden compartir dirección: comprueba qué equipo has abierto.
+Si la copia de seguridad confirma que otro servidor ha pasado a llevar el local, este servidor se
+niega a seguir como principal. Abre el otro servidor con el enlace. Si esa información aparece después
+de continuar, este servidor deja de aceptar ventas. Usa el nuevo servidor principal. Los servidores antiguos
+pueden compartir dirección: comprueba qué servidor has abierto.
 
-Mantén este equipo encendido y conserva sus datos mientras devuelve los registros. Puedes
+Mantén este servidor encendido y conserva sus datos mientras devuelve los registros. Puedes
 restablecerlo, pero eso borra sus datos del local aunque la devolución se haya detenido o no haya
 terminado.
 
@@ -224,10 +224,10 @@ Activar el acceso remoto pide la [confirmación de identidad compartida](staff.m
 Desactivarlo no pide una nueva confirmación de identidad.
 
 Para impedir que el personal abra el panel desde fuera del local, abre **Servicios Cloud** en **Ajustes**
-en el equipo principal y elige **Desactivar el acceso remoto**. Si usas la dirección del personal,
-confirma **Desactivar el acceso remoto** para desconectarte también, o elige **Detener** para mantenerlo activado. Ten a mano la dirección local del equipo. La vinculación con
+en el servidor principal y elige **Desactivar el acceso remoto**. Si usas la dirección del personal,
+confirma **Desactivar el acceso remoto** para desconectarte también, o elige **Detener** para mantenerlo activado. Ten a mano la dirección local del servidor. La vinculación con
 Cloud y los demás servicios de Cloud se mantienen. Elige **Activar el acceso remoto** para que el
-equipo vuelva a conectarse.
+servidor vuelva a conectarse.
 
 El estado junto al botón es la opción que has guardado. Abre la dirección del personal para
 comprobar si puedes conectarte; esta página no prueba esa conexión. Si un cambio falla, revisa la opción guardada y elige **Actualizar estado** para volver a intentar la conexión. **Detener el acceso a Cloud** es la opción aparte

@@ -1730,7 +1730,7 @@ describe("dashboard-box-status-screen's restart of the box", () => {
       expect(text(dialog(el).shadowRoot!.querySelector(".footer [data-error]"))).toBe(
         locale === "en"
           ? "This box only keeps a read-only copy of another box, so it can't be restarted from here."
-          : "Este equipo solo guarda una copia de solo lectura de otro equipo, así que no se puede reiniciar desde aquí.",
+          : "Este servidor solo guarda una copia de solo lectura de otro servidor, así que no se puede reiniciar desde aquí.",
       );
       expect(q(el, "[data-test=box-restart-done]")).toBeNull();
     },
