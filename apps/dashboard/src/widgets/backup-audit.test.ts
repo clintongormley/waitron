@@ -55,8 +55,8 @@ const result = {
 };
 
 it("shows matches and exceptions, and reads a changed day passively", async () => {
-  const fetch = vi.fn(
-    async (_path: string, _init: RequestInit) => new Response(JSON.stringify(result)),
+  const fetch = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
+    async () => new Response(JSON.stringify(result)),
   );
   const activity = vi.fn();
   const api = new DashboardApi("", fetch, undefined, activity);
