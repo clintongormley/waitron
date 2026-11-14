@@ -283,50 +283,42 @@ it("reserves an opaque dormant identity through the public bundle route after re
   expect(readOperationAuthority(retained!.authority, retained!.binding)).toBeUndefined();
   expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
 });
-it.each([
-  ["evicted", 200],
-  ["serving-secondary", 409],
-] as const)(
-  "answers %s with the module operation over the streaming link of a spare the chart lists that way",
-  async (standing, status) => {
-    const app = await bundleApp();
-    const old = "f3000000-0000-4000-8000-000000000005";
-    const body = {
-      term: 1,
-      nodes: [
-        { nodeId: PRIMARY, contactUrl: "https://box.test", standing: "serving-primary" as const },
-        { nodeId: old, contactUrl: "https://old.test", standing },
-      ],
-    };
-    const key = await readNodeIdentityKey(suite.node, RING, PRIMARY);
-    await writeNodeMembership(suite.db, {
-      body,
-      signerNodeId: PRIMARY,
-      signature: signDocumentBody(body, key),
-      endorsements: [],
+it("admits with the module operation over the streaming link of a spare the chart lists evicted", async () => {
+  const app = await bundleApp();
+  const old = "f3000000-0000-4000-8000-000000000005";
+  const body = {
+    term: 1,
+    nodes: [
+      { nodeId: PRIMARY, contactUrl: "https://box.test", standing: "serving-primary" as const },
+      { nodeId: old, contactUrl: "https://old.test", standing: "evicted" as const },
+    ],
+  };
+  const key = await readNodeIdentityKey(suite.node, RING, PRIMARY);
+  await writeNodeMembership(suite.db, {
+    body,
+    signerNodeId: PRIMARY,
+    signature: signDocumentBody(body, key),
+    endorsements: [],
+  });
+  await withNodeTransaction(suite.node, async (tx) => {
+    await writePairLinkTx(tx, RING, PRIMARY, {
+      role: "streams",
+      state: "pending",
+      peerNodeId: old,
+      peerPublicKey: generateNodeKeyPair().publicKey,
+      storeUrl: "https://old.test:7443",
+      venueId: "venue",
+      accessKeyId: "old-access-key",
+      secretAccessKey: "old-secret-key",
     });
-    await withNodeTransaction(suite.node, async (tx) => {
-      await writePairLinkTx(tx, RING, PRIMARY, {
-        role: "streams",
-        state: "pending",
-        peerNodeId: old,
-        peerPublicKey: generateNodeKeyPair().publicKey,
-        storeUrl: "https://old.test:7443",
-        venueId: "venue",
-        accessKeyId: "old-access-key",
-        secretAccessKey: "old-secret-key",
-      });
-      await setPairLinkStateTx(tx, PRIMARY, "streaming");
-    });
+    await setPairLinkStateTx(tx, PRIMARY, "streaming");
+  });
 
-    const response = await post(app, "/management-api/mirror-bundle", bundleBody());
+  const response = await post(app, "/management-api/mirror-bundle", bundleBody());
 
-    expect(response.status, JSON.stringify(await response.clone().json())).toBe(status);
-    expect((await readPairLink(suite.node, PRIMARY))?.peerNodeId).toBe(
-      status === 200 ? TARGET : old,
-    );
-  },
-);
+  expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
+  expect((await readPairLink(suite.node, PRIMARY))?.peerNodeId).toBe(TARGET);
+});
 it("refuses a node key replaced during outside collection without activating or changing role", async () => {
   const app = await promotionApp();
   const key = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TARGET);

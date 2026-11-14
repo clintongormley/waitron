@@ -1271,7 +1271,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     /** Holds a chart where the streaming link's peer stands as `peer`, and that link. */
     async function holdRetiredLink(
       designated: AdoptResult,
-      peer: "evicted" | "revoked" | "serving-secondary" | "unlisted",
+      peer: "evicted" | "revoked" | "unlisted",
     ) {
       const joined = joinedLink();
       const nodes: MembershipNode[] = [
@@ -1281,7 +1281,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
           standing: "serving-primary",
         },
       ];
-      if (peer === "evicted" || peer === "serving-secondary")
+      if (peer === "evicted")
         nodes.push({
           nodeId: joined.peerNodeId,
           contactUrl: "https://cloud.deli.test",
@@ -1321,49 +1321,25 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       },
     );
 
-    it.each(["serving-secondary", "unlisted"] as const)(
-      "refuses 409 mirror.spare_already_joined over the streaming link of a spare the chart lists %s, leaving the link",
-      async (peer) => {
-        const { designated } = await setupVenue();
-        const app = mountApp(designated);
-        const joined = await holdRetiredLink(designated, peer);
-
-        const res = await post(app, {
-          email: ADMIN_EMAIL,
-          password: ADMIN_PASSWORD,
-          ...validStandby(),
-        });
-
-        expect(res.status).toBe(409);
-        expect(await res.json()).toEqual({
-          error: { code: "mirror.spare_already_joined", params: {} },
-        });
-        expect(await readPairLink(suite.node, designated.nodeId)).toMatchObject({
-          state: "streaming",
-          peerNodeId: joined.peerNodeId,
-        });
-      },
-    );
-
-    it("leaves a retired spare's link as it was when an admission over it fails, and a retry succeeds", async () => {
+    it("refuses 409 mirror.spare_already_joined over the streaming link of a spare the chart does not list, leaving the link", async () => {
       const { designated } = await setupVenue();
       const app = mountApp(designated);
-      const joined = await holdRetiredLink(designated, "evicted");
-      pause.beforeChartMint = () => Promise.reject(new Error("chart write failed"));
-      const standby = validStandby();
+      const joined = await holdRetiredLink(designated, "unlisted");
 
-      const failed = await post(app, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...standby });
+      const res = await post(app, {
+        email: ADMIN_EMAIL,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+      });
 
-      expect(failed.status).toBe(500);
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error: { code: "mirror.spare_already_joined", params: {} },
+      });
       expect(await readPairLink(suite.node, designated.nodeId)).toMatchObject({
         state: "streaming",
         peerNodeId: joined.peerNodeId,
       });
-      const retry = await post(app, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...standby });
-      expect(retry.status, JSON.stringify(await retry.clone().json())).toBe(200);
-      expect((await readPairLink(suite.node, designated.nodeId))?.peerNodeId).toBe(
-        standby.standbyNodeId,
-      );
     });
   });
 

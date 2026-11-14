@@ -15,6 +15,7 @@ import {
 } from "@waitron/db";
 import {
   refuseUnverifiableChart,
+  standingOf,
   withMember,
   type Endorsement,
   type SignedMembershipDocument,
@@ -187,13 +188,11 @@ export function mountMirrorBundleApi(
         // turns streaming between this check and that write. venue.db commits first: a crash
         // before the link write leaves the chart listing a spare that was never sent its bundle.
         const bundle = await withNodeTransaction(deps.node, async (tx) => {
-          // One pair link per box: a second spare would replace a joined one's. A retired spare's
-          // link, left by an interrupted Remove, is replaced by this admission's link write.
+          // One pair link per box: a second spare would replace a joined one's.
           const link = await readPairLink(tx, deps.designated.nodeId);
           if (
             link?.state === "streaming" &&
-            !held?.body.revoked?.includes(link.peerNodeId) &&
-            !held?.body.nodes.some((n) => n.nodeId === link.peerNodeId && n.standing === "evicted")
+            !(held !== null && standingOf(held, link.peerNodeId) === "evicted")
           )
             throw new AppError("mirror.spare_already_joined", {});
           // Again, under node.db's lock: bucket Save checks for a link and stores its settings
