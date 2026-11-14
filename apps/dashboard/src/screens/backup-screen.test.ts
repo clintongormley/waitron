@@ -9,6 +9,7 @@ import { alertMessage } from "../i18n/alerts.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type {
   BackupStatusView,
+  BackupWriteAnswer,
   DashboardApi,
   RecoveryPackStatus,
   StreamSettingsView,
@@ -2279,6 +2280,83 @@ describe("A1089 unreadable archive settings choices", () => {
         expect(api.applyBackup).not.toHaveBeenCalled();
         expect(api.rotateBackupKey).not.toHaveBeenCalled();
         expect(api.mintBackupKey).not.toHaveBeenCalled();
+      } finally {
+        setLocale(previous);
+      }
+    });
+
+    /** Turns backups on from a box holding a key, answering `answer`; returns the reload line. */
+    async function reloadLineAfterApply(answer: BackupWriteAnswer): Promise<{
+      el: BackupScreen;
+      line: string;
+    }> {
+      const held = { ...OFF, recoveryKeySet: true, keyFingerprint: "ab12cd34" };
+      const api = stubApi({ applyBackup: vi.fn().mockResolvedValue(answer) }, held);
+      const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+      await flush(el);
+      setInput(el, "[data-test=destination]", "/mnt/usb/waitron");
+      await el.updateComplete;
+      q(el, "[data-test=apply]")!.click();
+      await flush(el);
+      expect(api.applyBackup).toHaveBeenCalledOnce();
+      const line = q(el, "[data-test=reload-failed]")!.textContent!.replace(/\s+/g, " ").trim();
+      return { el, line };
+    }
+
+    it(`a save whose reload failed with no words of its own says what retries, not "try again" (${locale})`, async () => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const { el, line } = await reloadLineAfterApply({
+          ...OFF,
+          recoveryKeySet: true,
+          reloadErrorCode: "unknown",
+        });
+        expect(hasCodeMessage("unknown")).toBe(false);
+        expect(line).not.toContain(codeMessage("unknown"));
+        expect(line).toBe(
+          `${t("backup.reload_failed_after_save")} ${t("backup.reload_failed_retry")}`,
+        );
+        expect(line).not.toMatch(/support|soporte|manager|responsable|encargad/i);
+        expect(q(el, "[data-test=status]")!.textContent).toContain(t("backup.status.off"));
+        expect(q(el, "[data-test=load-failed]")).toBeNull();
+      } finally {
+        setLocale(previous);
+      }
+    });
+
+    it(`a save whose reload left settings with no words unusable leaves the explaining to the status line (${locale})`, async () => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const { el, line } = await reloadLineAfterApply({
+          ...OFF,
+          recoveryKeySet: true,
+          loadErrorCode: "credentials.decrypt_failed",
+          backupStatus: { configured: false, loadErrorCode: "credentials.decrypt_failed" },
+          reloadErrorCode: "credentials.decrypt_failed",
+        });
+        expect(line).toBe(t("backup.reload_failed_after_save"));
+        expect(q(el, "[data-test=load-failed]")!.textContent!.trim()).toBe(
+          codeMessage("backup.archive_settings_unusable"),
+        );
+      } finally {
+        setLocale(previous);
+      }
+    });
+
+    it(`a save whose reload failed with words of its own still shows them (${locale})`, async () => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const { line } = await reloadLineAfterApply({
+          ...OFF,
+          recoveryKeySet: true,
+          reloadErrorCode: "backup.reload_in_progress",
+        });
+        expect(line).toBe(
+          `${t("backup.reload_failed_after_save")} ${codeMessage("backup.reload_in_progress")}`,
+        );
       } finally {
         setLocale(previous);
       }

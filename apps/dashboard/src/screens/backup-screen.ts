@@ -1306,7 +1306,8 @@ export class BackupScreen extends LitElement {
           this.reloadErrorCode === null
             ? nothing
             : html`<p class="error" role="status" data-test="reload-failed">
-                ${t("backup.reload_failed_after_save")} ${codeMessage(this.reloadErrorCode)}
+                ${t("backup.reload_failed_after_save")}
+                ${this.#reloadFailedDetail(s, this.reloadErrorCode)}
               </p>`
         }
         ${
@@ -1335,6 +1336,13 @@ export class BackupScreen extends LitElement {
         }
       </div>
     `;
+  }
+
+  // A code with no words of its own gets no generic "try again": the status line's load failure
+  // already explains a settings load that failed, and otherwise the save left backups off.
+  #reloadFailedDetail(s: BackupStatusView, code: string): string {
+    if (hasCodeMessage(code)) return codeMessage(code);
+    return s.loadErrorCode ? "" : t("backup.reload_failed_retry");
   }
 
   #renderStatus(s: BackupStatusView): TemplateResult {
