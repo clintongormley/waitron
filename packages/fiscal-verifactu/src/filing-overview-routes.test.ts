@@ -1,11 +1,13 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { beforeEach, expect, it, vi } from "vitest";
+import { recordIncident } from "@waitron/core";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, startManagementSession, type BuiltInRoleKey } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { AppError, jobOrigin, type ErrorCode, type ErrorParams } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { readFilingOverview } from "./filing-overview.js";
 import { readFilingWarnings } from "./filing-warnings.js";
@@ -148,4 +150,54 @@ it("answers the open warnings beside the overview, and reads every one when aske
     200,
     null,
   ]);
+});
+
+it("still answers the whole page when an open warning's stored details are not in their usual shape", async () => {
+  // Two sources, as an open alert of one code from one source is recorded once.
+  const malformed: ["dashboard" | "fiscal_filing", ErrorCode, Record<string, unknown>][] = [
+    ["fiscal_filing", "fiscal.respuesta_descuadrada", {}],
+    ["dashboard", "fiscal.respuesta_descuadrada", { lineasRespuesta: "none", csv: 7 }],
+    ["fiscal_filing", "fiscal.record_flagged", {}],
+    ["fiscal_filing", "fiscal.record_totals_disagree", { fields: "ImporteTotal", codes: null }],
+  ];
+  await withTransaction(suite.db, async (tx) => {
+    for (const [index, [source, code, params]] of malformed.entries())
+      await recordIncident(tx, {
+        origin: jobOrigin(source),
+        error: new AppError(code, params as ErrorParams[typeof code]),
+        severity: "warning",
+        detectedAt: new Date(Date.UTC(2026, 6, 20, 10, index)),
+      });
+  });
+
+  const res = await mount().request(PATH, {
+    headers: { cookie: await sessionCookie("manager") },
+  });
+
+  expect(res.status).toBe(200);
+  const answer = (await res.json()) as { warnings: unknown; progress: unknown };
+  expect(answer.progress).toBeDefined();
+  expect(answer.warnings).toEqual({
+    replyMismatches: [
+      { detectedAt: "2026-07-20T10:01:00.000Z", csv: null, sent: [], lines: [] },
+      { detectedAt: "2026-07-20T10:00:00.000Z", csv: null, sent: [], lines: [] },
+    ],
+    recordWarnings: [
+      {
+        detectedAt: "2026-07-20T10:03:00.000Z",
+        kind: "totals",
+        fields: [],
+        codes: [],
+        record: null,
+      },
+      {
+        detectedAt: "2026-07-20T10:02:00.000Z",
+        kind: "flagged",
+        fields: [],
+        codes: [],
+        record: null,
+      },
+    ],
+    total: 4,
+  });
 });

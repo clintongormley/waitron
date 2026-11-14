@@ -45,7 +45,8 @@ export async function readFilingWarnings(
   // data. A reply's records come from its `registroIds` in the order sent; a validation warning's
   // candidates are every record of its sale. Each `cross join` keeps the listed alerts as the outer
   // loop, so `registros_facturacion` is searched by its indexes rather than scanned: a box gathers
-  // no planner statistics, and without them SQLite chose to scan it.
+  // no planner statistics, and without them SQLite chose to scan it. The sale lookup also names
+  // its index.
   const candidates = await tx.execute<{
     incident_id: string;
     position: number | null;
@@ -62,7 +63,8 @@ export async function readFilingWarnings(
       where l.code = ${REPLY}
       union all
       select l.id, r.id, null
-      from listed l cross join ${registrosFacturacion} r on r.sale_id = l.sale_id
+      from listed l cross join ${registrosFacturacion} r indexed by registros_sale_idx
+        on r.sale_id = l.sale_id
       where l.code <> ${REPLY}
     )
     select n.incident_id, n.position, r.num_serie_factura, r.fecha_expedicion_factura,
@@ -85,12 +87,12 @@ export async function readFilingWarnings(
     const detectedAt = new Date(incident.detectedAt);
     const records = byIncident.get(incident.id) ?? [];
     if (incident.code === REPLY) {
-      const params = incident.params as ErrorParams[typeof REPLY];
+      const params = incident.params as Partial<ErrorParams[typeof REPLY]>;
       replyMismatches.push({
         detectedAt: detectedAt.toISOString(),
-        csv: params.csv ?? null,
+        csv: typeof params.csv === "string" ? params.csv : null,
         sent: records.map(recordView),
-        lines: params.lineasRespuesta.map((line) => ({
+        lines: listOf(params.lineasRespuesta).map((line) => ({
           numSerieFactura: line.numSerieFactura,
           fechaExpedicionFactura: line.fechaExpedicionFactura,
           tipoOperacion: line.tipoOperacion,
@@ -100,7 +102,7 @@ export async function readFilingWarnings(
         })),
       });
     } else {
-      const params = incident.params as ErrorParams[typeof FLAGGED];
+      const params = incident.params as Partial<ErrorParams[typeof FLAGGED]>;
       // The stored generation time keeps whole seconds; the incident keeps the instant.
       const second = Math.floor(detectedAt.getTime() / 1000);
       const matches = records.filter(
@@ -109,13 +111,19 @@ export async function readFilingWarnings(
       recordWarnings.push({
         detectedAt: detectedAt.toISOString(),
         kind: incident.code === TOTALS ? "totals" : "flagged",
-        fields: [...params.fields],
-        codes: [...params.codes],
+        fields: listOf(params.fields),
+        codes: listOf(params.codes),
         record: matches.length === 1 ? recordView(matches[0]!) : null,
       });
     }
   }
   return { replyMismatches, recordWarnings, total: counted!.n };
+}
+
+/** A stored alert's params are not checked against their type when read back; one in another
+ * shape leaves its list empty rather than failing the whole page. */
+function listOf<T>(value: T[] | undefined): T[] {
+  return Array.isArray(value) ? [...value] : [];
 }
 
 function recordView(row: {
