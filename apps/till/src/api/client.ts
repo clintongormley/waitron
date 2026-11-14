@@ -940,7 +940,12 @@ export interface CashTender {
  * A manual card tender, charged on the standalone bank terminal. `amount` is the sale total (never
  * over-tendered, so no change); `externalRef` is the terminal's optional operation number.
  */
-export interface CardTender {
+export interface OutsideCardDetails {
+  externalProvider?: "connected_account" | "other";
+  externalMachine?: string;
+}
+
+export interface CardTender extends OutsideCardDetails {
   method: "card";
   amount: string;
   externalRef?: string;
@@ -1004,6 +1009,8 @@ export type TenderBlock =
       charged: string;
       tip: string;
       reference: string | null;
+      externalProvider?: "connected_account" | "other";
+      externalMachine?: string;
     };
 
 /** `POST /api/sales` success — the ticket payload the receipt view renders. */
@@ -1054,7 +1061,7 @@ export interface TillSaleResult extends ReceiptPresentation {
  */
 export type BillTenderLine = (
   | { method: "cash"; amount: string; tip: string; tendered: string; change: string }
-  | { method: "card"; amount: string; tip: string; reference: string | null }
+  | ({ method: "card"; amount: string; tip: string; reference: string | null } & OutsideCardDetails)
 ) & { refunds: BillTenderRefund[] };
 
 /** A completed refund of a bill payment before its invoice, oldest first. */
@@ -1088,7 +1095,7 @@ export interface BillPaymentAsk {
  * key. A card is `manual` (charged on a terminal the till does not drive, with its optional operation
  * number) or `reader`.
  */
-export interface BillPaymentRequest extends BillPaymentAsk {
+export interface BillPaymentRequest extends BillPaymentAsk, OutsideCardDetails {
   printCardSlip?: boolean;
   submissionId: string;
   applied: string;
@@ -1129,7 +1136,8 @@ export interface BillRefundView {
   completedAt: string | null;
 }
 
-export interface BillPaymentView {
+export interface BillPaymentView extends OutsideCardDetails {
+  externalRef?: string;
   canCopySlip?: true;
   id: string;
   submissionId: string;

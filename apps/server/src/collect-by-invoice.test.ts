@@ -102,6 +102,43 @@ function collectCash(billId: string) {
 }
 
 describe("collecting a presented bill follows its invoice, not its zone (spec §9)", () => {
+  it("keeps outside-card details when settling an already-issued bill and replaying it", async () => {
+    const id = await placedTarta(ticketThenPayZone, true);
+    const deps = {
+      admission: testTradingAdmission(),
+      db: venue.db,
+      backend: venue.backend,
+      clock: venue.clock,
+    };
+    const request = {
+      id,
+      lines: [],
+      tender: {
+        method: "card" as const,
+        amount: "18.00",
+        externalProvider: "connected_account" as const,
+        externalMachine: "Spare Solo",
+        externalRef: "OP-73",
+      },
+    };
+    const paid = await collectOrder(deps, venue.cfg, request, venue.operatorId);
+    expect(paid.tender).toMatchObject({
+      externalProvider: "connected_account",
+      externalMachine: "Spare Solo",
+      reference: "OP-73",
+    });
+    expect(
+      await inTx(venue, (tx) =>
+        tx
+          .select({ source: payments.externalProvider, machine: payments.externalMachine })
+          .from(payments)
+          .where(eq(payments.workingOrderId, id)),
+      ),
+    ).toEqual([{ source: "connected_account", machine: "Spare Solo" }]);
+    const replay = await collectOrder(deps, venue.cfg, request, venue.operatorId);
+    expect(replay.tender).toEqual(paid.tender);
+  });
+
   it("settles an already-issued invoice, even once the bill's zone says to issue at payment", async () => {
     const id = await placedTarta(ticketThenPayZone, true);
     const issued = await salesOf(id);

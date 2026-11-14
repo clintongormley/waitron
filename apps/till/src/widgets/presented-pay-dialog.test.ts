@@ -442,8 +442,23 @@ describe("till-presented-pay-dialog: in cash and on another machine", () => {
     expect(row(el)).not.toBeNull();
     await take(el);
     await type(el, "externalRef", " 4821 ");
+    const source = root(el).querySelector<HTMLInputElement>(
+      'input[name="external-provider"][value="other"]',
+    );
+    expect(source).not.toBeNull();
+    source!.click();
+    await el.updateComplete;
+    await type(el, "externalMachine", "Bank counter");
     await take(el);
-    expect(paid).toEqual([{ method: "manual" }, { method: "manual", externalRef: "4821" }]);
+    expect(paid).toEqual([
+      { method: "manual" },
+      {
+        method: "manual",
+        externalRef: "4821",
+        externalProvider: "other",
+        externalMachine: "Bank counter",
+      },
+    ]);
   });
 
   it("Other card machine needs no reader", async () => {

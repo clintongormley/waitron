@@ -47,6 +47,8 @@ interface NewPayment {
   paymentRef: string;
   amount: Decimal;
   externalRef?: string;
+  externalProvider?: "connected_account" | "other";
+  externalMachine?: string;
   card?: CardDetails;
   /** The bill payment this attempt charges for; absent for a payment of a whole order. */
   billPaymentId?: string;
@@ -89,6 +91,8 @@ async function insertPayment(
     paymentRef: params.paymentRef,
     amount: decimalToCents(params.amount),
     externalRef: params.externalRef ?? null,
+    externalProvider: params.externalProvider ?? null,
+    externalMachine: params.externalMachine ?? null,
     cardScheme: params.card?.scheme ?? null,
     cardLast4: params.card?.last4 ?? null,
     cardEntryMode: params.card?.entryMode ?? null,
@@ -389,14 +393,23 @@ export async function findCapturedPaymentForWorkingOrderAnyProvider(
   return (await selectCapturedForWorkingOrder(tx, key)) ?? null;
 }
 
+const BILL_PAYMENT_COLUMNS = {
+  ...PAYMENT_WITH_KEY_COLUMNS,
+  externalProvider: payments.externalProvider,
+  externalMachine: payments.externalMachine,
+};
+type BillPaymentProviderRow = PaymentRow &
+  Key &
+  Pick<typeof payments.$inferSelect, "externalProvider" | "externalMachine">;
+
 /** The provider's row for one bill payment, in whatever state it is; at most one exists
  * (`payments_bill_payment_key`). */
 export async function findPaymentByBillPayment(
   tx: Transaction,
   billPaymentId: string,
-): Promise<(PaymentRow & Key) | undefined> {
+): Promise<BillPaymentProviderRow | undefined> {
   const [row] = await tx
-    .select(PAYMENT_WITH_KEY_COLUMNS)
+    .select(BILL_PAYMENT_COLUMNS)
     .from(payments)
     .where(eq(payments.billPaymentId, billPaymentId));
   return row === undefined ? undefined : withDecimalAmount(row);
@@ -406,10 +419,13 @@ export async function findPaymentByBillPayment(
 export async function findPaymentsByBillPayments(
   tx: Transaction,
   billPaymentIds: readonly string[],
-): Promise<Map<string, PaymentRow & Key>> {
+): Promise<Map<string, BillPaymentProviderRow>> {
   if (billPaymentIds.length === 0) return new Map();
   const rows = await tx
-    .select({ ...PAYMENT_WITH_KEY_COLUMNS, billPaymentId: payments.billPaymentId })
+    .select({
+      ...BILL_PAYMENT_COLUMNS,
+      billPaymentId: payments.billPaymentId,
+    })
     .from(payments)
     .where(inArray(payments.billPaymentId, [...billPaymentIds]));
   return new Map(rows.map(({ billPaymentId, ...row }) => [billPaymentId!, withDecimalAmount(row)]));

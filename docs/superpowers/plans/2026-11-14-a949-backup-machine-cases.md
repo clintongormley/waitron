@@ -1,0 +1,33 @@
+# A949: backup card machines and cash
+
+**Watcher clearance, 14 November 2026 02:07, Lane F `questions.md`:** “Slice 1 (about 821 including 51 generated) starts now. Slice 2 (about 495) follows. The stop for each is 1.5 times its estimate.” Separate Sol-high draft, Codex checks, Claude read and sole corrections reread. The watcher cleared the counter/optional-field route below; no owner design approval is claimed.
+
+**Queued ask:** “The backup-machine contract covers a second Solo on the same account (amount/time matching and unmatched payments for a manager), another provider recorded as paid outside Waitron with its operation number/machine, and cash-only service.”
+
+**Baseline.** `packages/payments/src/manual.ts:13–58` stores manual cards and optional operation numbers. Counter Card still uses its configured reader (`tender-pay.ts:645`, `bill-pay-dialog.ts:974`); handhelds have Other card machine. Cash already works independently. Eight focused manual/API/cash-up cases passed in the driver's separate checkout; this does not qualify a real outage or second Solo. Cash-up groups methods; `apps/server/src/accountant-export.ts` has invoice/purchase sheets. SumUp's `reconciler.ts:34–44` audits and counts unlinked charges.
+
+**Finish line:** you can record a backup payment once on a counter till, carry its machine/operation details into reports, and inspect second-Solo matches and exceptions. Implement inline with TDD, one usable slice per branch, each targeting under three hours and roughly 1,000 changed lines.
+
+1. **Record outside payments.** Watcher-cleared choices: offer **Other card machine** on counter tills with `hand-keyed-card-payment`, even with a configured reader; reuse handheld behavior. Add optional `externalProvider: "sumup" | "other"` and `externalMachine` on the existing payment row. Label the choice **This SumUp account / Paid outside Waitron**; machine and existing operation-number `externalRef` stay optional. Only an explicit same-account choice enters matching. No free-text provider name or new required fields. Preserve `provider="manual"`, payment references, refund handling and audited drawer jobs.
+
+   Change `packages/payments/src/{schema/payments.ts,manual.ts,store.ts}`, server `{bill-payments-api,bill-payments,till-sale}.ts`, till `{api/client,state/bill-payment,till-app}.ts` and widgets `{bill-pay-dialog,presented-pay-dialog,tender-pay,find-bill-dialog}.ts`; carry fields through requests and saved displays. Rebuild payments with `pnpm --filter @waitron/server migration-baseline rebuild --set payments`; disclose reset. Widget sibling tests own counter fallback/fields/drafts; `manual.wiring.test.ts` owns storage; `bill-payments-api.test.ts` owns validation/forwarding; `till-api.fiscal-sale-paths.test.ts` owns whole-sale replay.
+
+2. **Show recorded details.** Add server `outside-payments-report.ts`, reused by `report-api.ts` and `accountant-export.ts`: one row per manual payment with order/invoice IDs, amount/time, source choice, machine, operation number, current state and successful-refund total. Aggregate existing `payment_refunds` before joining; no multiplication. Skip payment-table reads when that module is disabled. Day reports use business-day/node bounds; workbook dates follow its civil-date range. Add a payment-detail worksheet; preserve invoice/cash-up totals. Leave deferred-payment CSV invoice-only deliberately.
+
+   Change reporting `src/index.ts` only for existing window helpers, dashboard `{api/client,screens/dashboard-sales-screen}.ts`, server `i18n/accountant-export.ts`. `outside-payments-report.test.ts` owns selection/refund totals; `accountant-export.test.ts` owns cells; `report-api.accountant-export.test.ts` owns permission/download; `report-api.test.ts` owns unmigrated-module exclusion; dashboard sibling tests own display.
+
+3. **Compare without moving money.** Preserve SumUp audit-only mode. Exclude integrated references/hints; match exact gross cents including tips, within ±5 minutes, only when each side is the other's sole candidate. For uniqueness, pad manual reads ±5 minutes and charge reads ±10; report only original-day charges, keeping extra charges out of the existing audit. This lets each side see competing candidates across midnight. Keep ambiguous/unmatched charges visible and remove matches from unlinked counts. Add optional `backupMatches`/`backupUnmatched` results, persisted in existing `scheduled_runs.summary`; never rewrite manual references.
+
+   Change SumUp `{reconciler,report-source}.ts`, payments `{store,index,reconcile}.ts`, server `{reconcile-duty,payments-api}.ts`, dashboard `{api/client,screens/payments-screen}.ts`. Add passive `GET /management-api/payments/backup-audit?day=YYYY-MM-DD`, existing manager gate, latest successful audit; at slice 3 start, measure showing the venue's local day over the existing scheduler. Under about 50 added lines use the venue's day; otherwise ask the watcher with the figure (02:07 decision). `reconciler.test.ts` owns unique/ambiguous/missing matching, including competing charges on adjacent days; existing audit-only tests own no-money behavior. Duty tests own persistence, API tests access/selection, dashboard tests visibility.
+
+**Verification and exclusions.** Reuse `manual.wiring.test.ts`, `bill-payments.cash-up.test.ts` and existing drawer/replay cases. Run changed focused files and schema guards. Update EN/ES strings/accessibility, `apps/server/src/guide/{en,es}/{table-service,till-notices}.md`, and backlog. Guide: use Cash without a backup; record each backup payment as it happens while Waitron accepts payments. After a Waitron refusal, retain its recovery instructions; late entries may remain unmatched. On-box cash-only, second-Solo and other-provider qualification remain open. No live/authenticated/paid request, bank-payout audit, fiscal change, new ledger or refund-plan work. Matching never captures, sells or refunds; unmatched charges never automatically refund.
+
+**Forecast added/removed lines**, including generated baseline SQL/snapshot/journal/epoch:
+
+| Slice | Production | Tests | Support | Prose | Generated |
+| --- | --- | --- | --- | --- | --- |
+| 1 | +390/−40 | +280/−15 | +10/−0 | +30/−5 | +45/−6 |
+| 2 | +240/−10 | +220/−5 | 0 | +20/−0 | 0 |
+| 3 | +340/−20 | +310/−10 | +15/−0 | +30/−0 | 0 |
+
+**As built, 14 November 2026:** the same-account stored value is `connected_account`, rather than the draft’s `sumup`, to keep the shared payments package provider-neutral (`src/no-provider-vocabulary.test.ts`). The till choice remains **This SumUp account**; only explicit same-account entries qualify for later matching.

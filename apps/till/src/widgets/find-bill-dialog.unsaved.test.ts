@@ -23,13 +23,14 @@ const debt: BillLookupRow = {
 class CollectionLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   bill = debt;
+  takesCash = true;
   closes = 0;
   selections = 0;
   submitted: FindBillPayDetail[] = [];
   override render() {
     return html`<till-find-bill-dialog
         .bill=${this.bill}
-        .takesCash=${true}
+        .takesCash=${this.takesCash}
         .takesManualCard=${true}
         @find-bill-close=${() => this.closes++}
         @find-bill-selection=${() => this.selections++}
@@ -41,8 +42,8 @@ class CollectionLeaveApp extends LitElement {
 customElements.define("collection-leave-test-app", CollectionLeaveApp);
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
-async function mount() {
-  const { el: app } = await mountWidget<CollectionLeaveApp>("collection-leave-test-app", {});
+async function mount(props: Partial<CollectionLeaveApp> = {}) {
+  const { el: app } = await mountWidget<CollectionLeaveApp>("collection-leave-test-app", props);
   const form = app.shadowRoot!.querySelector("till-find-bill-dialog")!;
   await form.updateComplete;
   await form.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
@@ -293,4 +294,19 @@ it("an obsolete selection cannot replace the cash draft when the bill changes as
   expect(field(form, "cash-received").value).toBe("30.00");
   expect(app.selections).toBe(1);
   expect(app.submitted).toEqual([]);
+});
+
+it("outside-card details alone protect the draft and normalized reverts are clean", async () => {
+  const { form } = await mount({ takesCash: false });
+  expect(unload()).toBe(false);
+  await fill(form, "externalMachine", " Spare ");
+  expect(unload()).toBe(true);
+  await fill(form, "externalMachine", "   ");
+  expect(unload()).toBe(false);
+  click(form, 'input[name="external-provider"][value="connected_account"]');
+  await form.updateComplete;
+  expect(unload()).toBe(true);
+  click(form, 'input[name="external-provider"][value=""]');
+  await form.updateComplete;
+  expect(unload()).toBe(false);
 });

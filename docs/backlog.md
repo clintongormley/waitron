@@ -1248,7 +1248,11 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   and unpaid cancellation. The first recovery slice supplies Waitron's partner key and records
   identified refunds. Retained-money allocation after a partial refund, bank-payout audit, orphan self-heal,
   durable reversals and backup-machine matching remain to build.
+  Backup payment entry now records optional source, machine and operation details, including
+  Other card machine on a counter with a configured reader; day-report/export details remain open.
   [Detail](backlog/payments.md#the-sumup-reconciler)
+
+- **A payment on another card machine cannot carry a tip in the counter’s direct collection form.** The bill-payment window already accepts a manual-card tip.
 
 - **A SumUp API drift-detection suite** on a Virtual Solo in a sandbox merchant account — would have
   caught the #312 refund-unit bug. Needs a sandbox account and a CI secret.

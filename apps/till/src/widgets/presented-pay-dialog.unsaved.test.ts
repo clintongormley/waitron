@@ -159,3 +159,20 @@ it("a removed sheet holds nothing", async () => {
   form.remove();
   expect(unload()).toBe(false);
 });
+
+it("outside-card details alone protect the draft and normalized reverts are clean", async () => {
+  const { form } = await mount();
+  click(form, 'input[name="method"][value="manual"]');
+  await form.updateComplete;
+  expect(unload()).toBe(false);
+  await fill(form, "externalMachine", " Spare ");
+  expect(unload()).toBe(true);
+  await fill(form, "externalMachine", "   ");
+  expect(unload()).toBe(false);
+  click(form, 'input[name="external-provider"][value="connected_account"]');
+  await form.updateComplete;
+  expect(unload()).toBe(true);
+  click(form, 'input[name="external-provider"][value=""]');
+  await form.updateComplete;
+  expect(unload()).toBe(false);
+});

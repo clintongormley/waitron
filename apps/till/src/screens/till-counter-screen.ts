@@ -264,6 +264,7 @@ export class TillCounterScreen extends LitElement {
   @property() cardProvider: CardProvider = "none";
   /** See the tender card's `takesCash`. */
   @property({ type: Boolean }) takesCash = true;
+  @property({ type: Boolean }) takesManualCard = false;
   /** See the waiting list's `canMoveStation`. */
   @property({ type: Boolean }) canMoveStation = false;
   @property({ type: Boolean }) canEditKitchenNote = false;
@@ -431,6 +432,7 @@ export class TillCounterScreen extends LitElement {
             .stage=${this.stage}
             .cardProvider=${this.cardProvider}
             .takesCash=${this.takesCash}
+            .takesManualCard=${this.takesManualCard}
             .tipsEnabled=${this.tipsEnabled}
             .cardOutcome=${this.cardOutcome}
             .cardRetryDetail=${this.cardRetryDetail}

@@ -25,6 +25,8 @@ export interface ManualCardPaymentParams {
   settledAt: Date;
   /** Optional hand-keyed acquirer / bank-terminal operation number — a human reconciliation hook. */
   externalRef?: string;
+  externalProvider?: "connected_account" | "other";
+  externalMachine?: string;
   /** The bill payment this card payment was taken for; absent for a payment of a whole order. */
   billPaymentId?: string;
 }
@@ -53,6 +55,8 @@ export async function recordManualCardPayment(
     amount: params.amount,
     settledAt: params.settledAt,
     externalRef: params.externalRef,
+    externalProvider: params.externalProvider,
+    externalMachine: params.externalMachine,
     billPaymentId: params.billPaymentId,
   });
   return { provider: MANUAL_PROVIDER, paymentRef, settledAt: params.settledAt };

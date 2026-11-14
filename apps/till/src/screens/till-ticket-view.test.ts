@@ -1064,9 +1064,18 @@ describe("till-ticket-view", () => {
 
     it("shows the operator's manual reference when present", async () => {
       const { el } = await mount({
-        tender: { method: "card", charged: "20.90", tip: "0.00", reference: "4471" },
+        tender: {
+          method: "card",
+          charged: "20.90",
+          tip: "0.00",
+          reference: "4471",
+          externalProvider: "other",
+          externalMachine: "Bank counter",
+        },
       });
       expect(text(el)).toContain("Ref. 4471");
+      expect(text(el)).toContain("Bank counter");
+      expect(text(el)).toContain(uiText("tender.outside_other"));
     });
 
     it("still shows the cash Efectivo/Cambio rows for a cash sale, unchanged", async () => {
@@ -1218,6 +1227,41 @@ describe("till-ticket-view", () => {
   });
 
   describe("a bill paid in parts before its invoice", () => {
+    it("pairs each outside-card detail with its payment and operation number", async () => {
+      const { el } = await mount({
+        total: "30.00",
+        payments: [
+          {
+            method: "card",
+            amount: "10.00",
+            tip: "0.00",
+            reference: "OP-A",
+            externalProvider: "other",
+            externalMachine: "Bank counter",
+            refunds: [],
+          },
+          {
+            method: "card",
+            amount: "20.00",
+            tip: "0.00",
+            reference: "OP-B",
+            externalProvider: "connected_account",
+            externalMachine: "Spare Solo",
+            refunds: [],
+          },
+        ],
+      });
+      const facts = [...el.shadowRoot!.querySelectorAll("[data-outside-payment-fact]")];
+      expect(facts).toHaveLength(2);
+      expect(facts[0]!.textContent).toContain("OP-A");
+      expect(facts[0]!.textContent).toContain("Bank counter");
+      expect(facts[1]!.textContent).toContain("OP-B");
+      expect(facts[1]!.textContent).toContain("Spare Solo");
+      expect(
+        el.shadowRoot!.querySelector("article")!.querySelector("[data-outside-card-details]"),
+      ).toBeNull();
+    });
+
     const tenderRows = (el: TillTicketView): string[] =>
       [...el.shadowRoot!.querySelectorAll(".tender .tender-row")].map((row) =>
         norm(row.textContent ?? "")
@@ -1240,7 +1284,15 @@ describe("till-ticket-view", () => {
             change: "10.00",
             refunds: [],
           },
-          { method: "card", amount: "11.00", tip: "1.00", reference: "OP-9", refunds: [] },
+          {
+            method: "card",
+            amount: "11.00",
+            tip: "1.00",
+            reference: "OP-9",
+            externalProvider: "connected_account",
+            externalMachine: "Spare Solo",
+            refunds: [],
+          },
           {
             method: "cash",
             amount: "10.00",
@@ -1252,6 +1304,7 @@ describe("till-ticket-view", () => {
         ],
       });
 
+      expect(text(el)).toContain("Spare Solo");
       expect(tenderRows(el)).toEqual([
         "Efectivo 20,00 €",
         "Cambio 10,00 €",
@@ -1906,9 +1959,22 @@ describe("till-ticket-view: the sale's own language", () => {
   it("names a card, its reference, tip and charge in the sale's language", async () => {
     const { el } = await mount({
       locale: "eu-ES",
-      tender: { method: "card", charged: "9.90", tip: "0.50", reference: "4471" },
+      tender: {
+        method: "card",
+        charged: "9.90",
+        tip: "0.50",
+        reference: "4471",
+        externalProvider: "other",
+        externalMachine: "Bank counter",
+      },
     });
 
+    expect(
+      el.shadowRoot!.querySelector("article")!.querySelector("[data-outside-card-details]"),
+    ).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-outside-payment-facts]")?.textContent).toContain(
+      "Bank counter",
+    );
     expect(rows(el, ".meta-row")[1]).toBe(`Data ${spanishDate}`);
     expect(el.shadowRoot!.querySelector("article")!.getAttribute("lang")).toBe("eu-ES");
     expect(rows(el, ".tender .tender-row")).toEqual([

@@ -1,3 +1,4 @@
+import { outsideCardDetails, type OutsideCardDetails } from "./outside-card.js";
 import type { RecipientIdentifierType } from "@waitron/country-packs";
 import { prepareIssueClock } from "@waitron/fiscal";
 import { requireEconomicWrite } from "./trading-admission.js";
@@ -196,7 +197,7 @@ export function payWorkingOrderIntegrated(
  * A `cash` or manual `card` tender. `externalRef` is the optional hand-keyed acquirer / terminal
  * operation number, meaningful only for `card`.
  */
-export interface TillTender {
+export interface TillTender extends OutsideCardDetails {
   method: "cash" | "card";
   amount: string;
   externalRef?: string;
@@ -313,6 +314,8 @@ export type TenderBlock =
       charged: string;
       tip: string;
       reference: string | null;
+      externalProvider?: "connected_account" | "other";
+      externalMachine?: string;
     };
 
 /**
@@ -322,7 +325,7 @@ export type TenderBlock =
  */
 export type BillTenderLine = (
   | { method: "cash"; amount: string; tip: string; tendered: string; change: string }
-  | { method: "card"; amount: string; tip: string; reference: string | null }
+  | ({ method: "card"; amount: string; tip: string; reference: string | null } & OutsideCardDetails)
 ) & { refunds: BillTenderRefund[] };
 
 /** Money given back from a bill payment before the invoice: a `completed` refund, oldest first. */
@@ -423,7 +426,11 @@ export async function readTenderBlock(
     };
   }
   const [payment] = await tx
-    .select({ externalRef: payments.externalRef })
+    .select({
+      externalRef: payments.externalRef,
+      externalProvider: payments.externalProvider,
+      externalMachine: payments.externalMachine,
+    })
     .from(payments)
     .where(
       and(
@@ -440,6 +447,7 @@ export async function readTenderBlock(
     charged: tender.amount,
     tip: tender.tip,
     reference: payment?.externalRef ?? null,
+    ...outsideCardDetails(payment ?? {}),
   };
 }
 
@@ -458,6 +466,8 @@ export async function readBillTenderLines(
       paymentTip: billPayments.tip,
       tendered: billPayments.tendered,
       reference: payments.externalRef,
+      externalProvider: payments.externalProvider,
+      externalMachine: payments.externalMachine,
     })
     .from(tenders)
     .innerJoin(billPayments, eq(billPayments.id, tenders.billPaymentId))
@@ -509,7 +519,14 @@ export async function readBillTenderLines(
         refunds,
       };
     }
-    return { method: "card", amount, tip, reference: row.reference ?? null, refunds };
+    return {
+      method: "card",
+      amount,
+      tip,
+      reference: row.reference ?? null,
+      ...outsideCardDetails(row),
+      refunds,
+    };
   });
 }
 
@@ -1057,6 +1074,7 @@ async function fileImmediateSale(
       amount: decimal(priced.total),
       settledAt,
       externalRef: taken.externalRef,
+      ...outsideCardDetails(taken),
     });
     await associatePaymentWithSale(tx, { provider, paymentRef, saleId });
   }
@@ -2333,6 +2351,7 @@ async function runCollectOrder(
             amount: outstanding.amountDue,
             settledAt,
             externalRef: req.tender.externalRef,
+            ...outsideCardDetails(req.tender),
           });
           await associatePaymentWithSale(tx, {
             provider,

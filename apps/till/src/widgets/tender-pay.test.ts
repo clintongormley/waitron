@@ -1269,7 +1269,7 @@ describe("till-tender-pay", () => {
       click(el, ".pay-card");
       await el.updateComplete;
       expect(query(el, ".collecting")).toBeNull();
-      expect(query(el, ".ref-input")).not.toBeNull(); // the manual screen, unchanged
+      expect(query(el, ".ref-input")).not.toBeNull();
       click(el, ".confirm");
       expect(confirmSpy).toHaveBeenCalledWith({ method: "card", amount: "1.50" });
       expect(collectSpy).not.toHaveBeenCalled();
@@ -2580,3 +2580,64 @@ it("offers an unticked whole-card slip and clears it when the order changes", as
   await el.updateComplete;
   expect(box()!.checked).toBe(false);
 });
+
+it("records a separate-machine card with its details while an integrated reader is configured", async () => {
+  const store = new WorkingOrderStore();
+  store.addProduct(coffee, "1");
+  const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+    store,
+    cardProvider: "sumup_cloud",
+    takesManualCard: true,
+  });
+  const sent: unknown[] = [];
+  el.addEventListener("confirm-payment", (e) => sent.push((e as CustomEvent).detail));
+  const other = query(el, ".pay-manual-card") as HTMLElement | null;
+  expect(other).not.toBeNull();
+  other!.click();
+  await el.updateComplete;
+  const source = query(el, 'input[name="external-provider"][value="other"]') as HTMLInputElement;
+  expect(source).not.toBeNull();
+  source.click();
+  await el.updateComplete;
+  await typeInput(el, 'wt-input[name="externalMachine"]', "Bank counter");
+  await typeRef(el, " OP-73 ");
+  click(el, ".confirm");
+  expect(sent).toEqual([
+    {
+      method: "card",
+      amount: "1.50",
+      externalRef: "OP-73",
+      externalProvider: "other",
+      externalMachine: "Bank counter",
+    },
+  ]);
+});
+
+it.each(["2.00", "bad"])(
+  "does not silently discard reader tip %s when choosing another machine",
+  async (tip) => {
+    const previous = currentLocale();
+    setLocale("en");
+    onTestFinished(() => setLocale(previous));
+    const store = new WorkingOrderStore();
+    store.addProduct(coffee, "1");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store,
+      cardProvider: "sumup_cloud",
+      takesManualCard: true,
+      tipsEnabled: true,
+    });
+    await typeTip(el, tip);
+    click(el, ".pay-manual-card");
+    await el.updateComplete;
+    if (tip === "bad") {
+      expect(query(el, ".ref-input")).toBeNull();
+      expect((query(el, ".tip-input") as HTMLElement & { error: string }).error).not.toBe("");
+    } else {
+      expect(query(el, "[data-reader-tip-cleared]")?.textContent).toContain("not included");
+      click(el, ".cancel");
+      await el.updateComplete;
+      expect((query(el, ".tip-input") as HTMLElement & { value: string }).value).toBe("");
+    }
+  },
+);

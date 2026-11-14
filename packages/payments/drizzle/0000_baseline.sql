@@ -105,6 +105,8 @@ CREATE TABLE `payments` (
 	`provider` text NOT NULL,
 	`payment_ref` text NOT NULL,
 	`external_ref` text,
+	`external_provider` text,
+	`external_machine` text,
 	`card_scheme` text,
 	`card_last4` text,
 	`card_entry_mode` text,
@@ -127,6 +129,7 @@ CREATE TABLE `payments` (
 	CONSTRAINT "payments_card_last4_ck" CHECK("payments"."card_last4" is null or length("payments"."card_last4") = 4),
 	CONSTRAINT "payments_card_entry_mode_ck" CHECK("payments"."card_entry_mode" is null or "payments"."card_entry_mode" in ('contactless','chip','swipe','unknown')),
 	CONSTRAINT "payments_state_ck" CHECK("payments"."state" in ('attempting', 'captured', 'voided', 'refunded', 'partially_refunded', 'failed', 'initiated')),
+	CONSTRAINT "payments_external_provider_ck" CHECK("payments"."external_provider" in ('connected_account', 'other')),
 	CONSTRAINT "payments_source_ck" CHECK("payments"."source" in ('device', 'demo_seed', 'readiness_test', 'operator_script')),
 	CONSTRAINT "payments_source_device_ck" CHECK(("payments"."source" = 'device') = ("payments"."device_id" is not null))
 );

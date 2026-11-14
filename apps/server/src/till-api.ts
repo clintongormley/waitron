@@ -1,3 +1,4 @@
+import { readOutsideCardDetails } from "./outside-card.js";
 import { setOptionLabelAvailability, updateProduct } from "@waitron/catalogue";
 import type { ModuleTimeRecordExport } from "@waitron/module";
 import type { RecipientIdentifierType } from "@waitron/country-packs";
@@ -1801,6 +1802,10 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       // The tender first, so a refused cash payment answers `device.cash_not_allowed` whatever else
       // the profile lacks; both before the zone, so a profile that cannot sell is told so.
       assertTakesTender(session.device, tillTenderKind(body.tender));
+      Object.assign(
+        body.tender ?? {},
+        readOutsideCardDetails(body.tender ?? {}, body.tender?.method === "card"),
+      );
       assertProfileAction(session.device, "take-orders");
       await assertRequestDevice(deps, c, session);
       const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
@@ -2695,6 +2700,10 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       }
       const guestCount = readGuestCountChoice(body.guestCount);
       assertTakesTender(session.device, tillTenderKind(body.tender));
+      Object.assign(
+        body.tender ?? {},
+        readOutsideCardDetails(body.tender ?? {}, body.tender?.method === "card"),
+      );
       await assertRequestDevice(deps, c, session);
       const result = await collectOrder(
         {

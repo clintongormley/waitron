@@ -1,3 +1,10 @@
+import {
+  outsideCardFields,
+  outsideCardValues,
+  outsideCardStyles,
+  outsideCardSummary,
+} from "./outside-card.js";
+import type { OutsideCardDetails } from "../api/client.js";
 import { recoveryLink } from "./recovery-refusal.js";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -46,12 +53,13 @@ type Field = "tendered" | "externalRef" | "guests";
 export type PresentedPayDetail =
   | { method: "card"; readerId?: string; guestCount?: number | null; printCardSlip?: boolean }
   | { method: "cash"; tendered: string; guestCount?: number | null }
-  | { method: "manual"; externalRef?: string; guestCount?: number | null };
+  | ({ method: "manual"; externalRef?: string; guestCount?: number | null } & OutsideCardDetails);
 
 /** What the waiter has typed: the cash handed over and the operation number. */
 interface EntryDraft {
   tendered: string;
   externalRef: string;
+  outside: OutsideCardDetails;
 }
 
 /** Two cash entries that are the same amount however spelled; anything else as typed. */
@@ -68,6 +76,7 @@ function cashKey(value: string): string {
 export class TillPresentedPayDialog extends LitElement {
   static override styles = [
     baseStyles,
+    outsideCardStyles,
     guestsStepperStyles,
     payNoticeStyles,
     css`
@@ -195,6 +204,7 @@ export class TillPresentedPayDialog extends LitElement {
   @state() private method: Method = "card";
   @state() private tendered = "";
   @state() private externalRef = "";
+  @state() private outside: OutsideCardDetails = {};
   @state() private attempted = false;
   /** The waiter's own guests value; undefined follows {@link receiptGuests}. */
   @state() private guestsEntry?: string;
@@ -208,7 +218,7 @@ export class TillPresentedPayDialog extends LitElement {
   #sent: SentCard | null = null;
   #leave?: LeaveCoordinator;
   #entry?: DraftScope<EntryDraft>;
-  readonly #baseline: EntryDraft = { tendered: "", externalRef: "" };
+  readonly #baseline: EntryDraft = { tendered: "", externalRef: "", outside: {} };
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
     this.isConnected &&
     !this.busy &&
@@ -240,14 +250,21 @@ export class TillPresentedPayDialog extends LitElement {
     this.#leave ??= leaveCoordinatorFor(this);
     this.#entry = this.#leave?.register<EntryDraft>({
       id: this,
-      current: () => ({ tendered: this.tendered, externalRef: this.externalRef }),
+      current: () => ({
+        tendered: this.tendered,
+        externalRef: this.externalRef,
+        outside: this.outside,
+      }),
       snapshot: (value) => ({ ...value }),
       equal: (a, b) =>
         cashKey(a.tendered) === cashKey(b.tendered) &&
-        a.externalRef.trim() === b.externalRef.trim(),
+        a.externalRef.trim() === b.externalRef.trim() &&
+        a.outside.externalProvider === b.outside.externalProvider &&
+        (a.outside.externalMachine ?? "").trim() === (b.outside.externalMachine ?? "").trim(),
       restore: (value) => {
         this.tendered = value.tendered;
         this.externalRef = value.externalRef;
+        this.outside = value.outside;
         this.attempted = false;
       },
     });
@@ -260,6 +277,7 @@ export class TillPresentedPayDialog extends LitElement {
       this.method = this.#methods()[0] ?? "card";
       this.tendered = "";
       this.externalRef = "";
+      this.outside = {};
       this.attempted = false;
       this.guestsEntry = undefined;
       this.rowOpen = false;
@@ -409,7 +427,12 @@ export class TillPresentedPayDialog extends LitElement {
           }
         : this.method === "cash"
           ? { method: "cash", tendered: typedAmount(this.tendered)!, ...guests }
-          : { method: "manual", ...(ref === "" ? {} : { externalRef: ref }), ...guests };
+          : {
+              method: "manual",
+              ...(ref === "" ? {} : { externalRef: ref }),
+              ...outsideCardValues(this.outside),
+              ...guests,
+            };
     this.#emit("presented-pay", detail);
   }
 
@@ -539,6 +562,7 @@ export class TillPresentedPayDialog extends LitElement {
               .value=${tender.externalRef ?? ""}
             ></wt-input>`
       }
+      ${outsideCardSummary(tender.method === "card" ? tender : {})}
       ${
         guestCount === undefined
           ? nothing
@@ -618,9 +642,16 @@ export class TillPresentedPayDialog extends LitElement {
                     error: errors.get("tendered"),
                   })
                 : this.method === "manual"
-                  ? this.#input("externalRef", t("tender.card_ref"), this.externalRef, {
+                  ? html`${this.#input("externalRef", t("tender.card_ref"), this.externalRef, {
                       error: errors.get("externalRef"),
-                    })
+                    })}${outsideCardFields(
+                      this.outside,
+                      (value) => {
+                        this.outside = value;
+                        this.#entry?.changed();
+                      },
+                      this.busy,
+                    )}`
                   : nothing
             }
             ${this.#equipmentRow()}

@@ -110,11 +110,24 @@ describe("Find a bill", () => {
     expect(input(el, "cash-received").error).toContain("30.00");
     await click(el, "[data-card]");
     await type(el, "terminal-reference", "123456");
+    const source = el.shadowRoot!.querySelector<HTMLInputElement>(
+      'input[name="external-provider"][value="other"]',
+    );
+    expect(source).not.toBeNull();
+    source!.click();
+    await el.updateComplete;
+    await type(el, "externalMachine", "Bank counter");
     await click(el, "[data-collect]");
     expect(paid).toEqual([
       {
         workingOrderId: "wo-1",
-        tender: { method: "card", amount: "30.00", externalRef: "123456" },
+        tender: {
+          method: "card",
+          amount: "30.00",
+          externalRef: "123456",
+          externalProvider: "other",
+          externalMachine: "Bank counter",
+        },
         invoiced: true,
       },
     ]);

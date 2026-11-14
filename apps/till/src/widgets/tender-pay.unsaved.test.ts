@@ -392,3 +392,16 @@ it("reverted extras are exempt, and page Discard restores extras without chargin
   expect(app.collects).toEqual([]);
   expect(unload()).toBe(false);
 });
+
+it("tracks the separate machine and source as a draft, ignoring blank machine text", async () => {
+  const { form } = await mount();
+  await click(form, ".pay-card");
+  await fill(form, 'wt-input[name="externalMachine"]', " Spare Solo ");
+  expect(unload()).toBe(true);
+  await fill(form, 'wt-input[name="externalMachine"]', "   ");
+  expect(unload()).toBe(false);
+  await click(form, 'input[name="external-provider"][value="connected_account"]');
+  expect(unload()).toBe(true);
+  await click(form, 'input[name="external-provider"][value=""]');
+  expect(unload()).toBe(false);
+});

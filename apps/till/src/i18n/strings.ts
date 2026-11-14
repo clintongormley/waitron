@@ -480,6 +480,13 @@ export const en = {
   "invoice.delivery_printer_changed":
     "That printer is no longer the invoice printer. Check Delivery and save again.",
   "tender.card_ref": "Operation number (optional)",
+  "tender.operation_number": "Operation number",
+  "tender.reader_tip_cleared": "The reader tip was cleared and is not included in this payment.",
+  "tender.outside_source": "Card taken on (optional)",
+  "tender.outside_unspecified": "Not specified",
+  "tender.outside_sumup": "This SumUp account",
+  "tender.outside_other": "Paid outside Waitron",
+  "tender.outside_machine": "Card machine (optional)",
   "card.simulation_result": "Test payment result",
   "card.instant_simulator": "Instant simulator",
   "card.simulation_help": "No card will be charged. Choose the result for this test payment.",
@@ -2496,6 +2503,14 @@ export const es: Record<StringKey, string> = {
   "invoice.delivery_printer_changed":
     "Esa impresora ya no es la de facturas. Revisa la entrega y vuelve a guardar.",
   "tender.card_ref": "Número de operación (opcional)",
+  "tender.operation_number": "Número de operación",
+  "tender.reader_tip_cleared":
+    "Se ha borrado la propina del datáfono y no se incluye en este cobro.",
+  "tender.outside_source": "Tarjeta cobrada en (opcional)",
+  "tender.outside_unspecified": "Sin especificar",
+  "tender.outside_sumup": "Esta cuenta de SumUp",
+  "tender.outside_other": "Cobrado fuera de Waitron",
+  "tender.outside_machine": "Datáfono (opcional)",
   "card.simulation_result": "Resultado del pago de prueba",
   "card.instant_simulator": "Simulador inmediato",
   "card.simulation_help":

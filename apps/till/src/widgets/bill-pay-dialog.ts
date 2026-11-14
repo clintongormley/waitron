@@ -1,3 +1,10 @@
+import {
+  outsideCardFields,
+  outsideCardValues,
+  outsideCardStyles,
+  outsideCardSummary,
+} from "./outside-card.js";
+import type { OutsideCardDetails } from "../api/client.js";
 import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 import { recoveryLink } from "./recovery-refusal.js";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
@@ -147,6 +154,7 @@ interface PaymentDraft {
   tendered: string;
   cardTip: string;
   externalRef: string;
+  outside: OutsideCardDetails;
   readerId: string | undefined;
   simulationOutcome: "captured" | "declined" | "attempting";
 }
@@ -195,6 +203,7 @@ const PEOPLE = /^[1-9]\d{0,2}$/;
 export class TillBillPayDialog extends LitElement {
   static override styles = [
     baseStyles,
+    outsideCardStyles,
     helpAnchorStyles,
     guestsStepperStyles,
     payNoticeStyles,
@@ -551,6 +560,7 @@ export class TillBillPayDialog extends LitElement {
   @state() private tendered = "";
   @state() private cardTip = "";
   @state() private externalRef = "";
+  @state() private outside: OutsideCardDetails = {};
   @state() private tipMode: TipMode = "none";
   @state() private tipAmount = "";
   @state() private attempted = false;
@@ -621,6 +631,7 @@ export class TillBillPayDialog extends LitElement {
       tendered: this.tendered,
       cardTip: this.cardTip,
       externalRef: this.externalRef,
+      outside: this.outside,
       readerId: this.chosenReaderId,
       simulationOutcome: this.simulationOutcome,
     };
@@ -643,7 +654,7 @@ export class TillBillPayDialog extends LitElement {
         : {
             tip: this.tipsEnabled ? amountKey(value.cardTip) : null,
             card: this.#keyed(value.method)
-              ? value.externalRef.trim()
+              ? { reference: value.externalRef.trim(), ...outsideCardValues(value.outside) }
               : {
                   readerId: value.readerId,
                   simulation:
@@ -664,6 +675,7 @@ export class TillBillPayDialog extends LitElement {
     this.tendered = value.tendered;
     this.cardTip = value.cardTip;
     this.externalRef = value.externalRef;
+    this.outside = value.outside;
     this.chosenReaderId = value.readerId;
     this.simulationOutcome = value.simulationOutcome;
     this.attempted = false;
@@ -887,6 +899,7 @@ export class TillBillPayDialog extends LitElement {
     this.tendered = "";
     this.cardTip = "";
     this.externalRef = "";
+    this.outside = {};
     this.attempted = false;
     this.guestsEntry = undefined;
     this.guestsAttempted = false;
@@ -965,7 +978,11 @@ export class TillBillPayDialog extends LitElement {
     return {
       choice,
       pay,
-      card: ref === "" ? { entry: "manual" } : { entry: "manual", externalRef: ref },
+      card: {
+        entry: "manual",
+        ...(ref === "" ? {} : { externalRef: ref }),
+        ...outsideCardValues(this.outside),
+      },
     };
   }
 
@@ -1353,6 +1370,8 @@ export class TillBillPayDialog extends LitElement {
     const leftTotal = moneyPlus(left.applied, left.tip);
     return html`<li class="payment" data-payment=${payment.id}>
       <div class="payment-text">
+        ${outsideCardSummary(payment)}
+        ${payment.externalRef ? html`<p>${t("tender.operation_number")} ${payment.externalRef}</p>` : nothing}
         <span class="payment-head">
           ${t("bill_pay.payment")
             .replace("{n}", String(n))
@@ -1784,6 +1803,7 @@ export class TillBillPayDialog extends LitElement {
     }
     return html`<div class="options">
         ${this.takesCash ? this.#methodRadio("cash") : nothing} ${this.#methodRadio("card")}
+        ${this.takesManualCard && this.cardReader !== "none" ? this.#methodRadio("manual") : nothing}
       </div>
       ${this.takesCash ? nothing : html`<p class="muted cash-at-till">${t("tender.cash_at_till")}</p>`}`;
   }
@@ -1847,13 +1867,20 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #manualCardFields(): TemplateResult {
-    return this.#input(
+    return html`${this.#input(
       "externalRef",
       t("tender.card_ref"),
       this.externalRef,
       (value) => (this.externalRef = value),
       { submit: "[data-pay-continue]" },
-    );
+    )}${outsideCardFields(
+      this.outside,
+      (value) => {
+        this.outside = value;
+        this.#changedDraft();
+      },
+      this.busy || this.confirmationLocked,
+    )}`;
   }
 
   /** The practice simulator's result, or the reader when the venue has more than one. */
@@ -2046,7 +2073,8 @@ export class TillBillPayDialog extends LitElement {
     const onReader = asked.card?.entry === "reader";
     const reader = this.handheld && onReader ? this.#readyReader() : null;
     const amount = (value: string) => html`<dd>${this.#money(value)}</dd>`;
-    const body = html`<p class="scope" data-pay-scope>${this.#scope()}</p>
+    const body = html`${outsideCardSummary(asked.card?.entry === "manual" ? asked.card : {})}
+      <p class="scope" data-pay-scope>${this.#scope()}</p>
       <dl class="allocation">
         <div class=${cash === null ? "headline" : ""} data-pay-applied>
           <dt>${t("bill_pay.applied")}</dt>

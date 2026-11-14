@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "84de36fc-ab4f-462a-aa0b-1e00e61dff82",
+  "id": "50bf3e63-605d-45c6-90a0-d0bf59a8e2a9",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "card_reader_holders": {
@@ -730,6 +730,20 @@
           "notNull": false,
           "autoincrement": false
         },
+        "external_provider": {
+          "name": "external_provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "external_machine": {
+          "name": "external_machine",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "card_scheme": {
           "name": "card_scheme",
           "type": "text",
@@ -969,6 +983,10 @@
         "payments_state_ck": {
           "name": "payments_state_ck",
           "value": "\"payments\".\"state\" in ('attempting', 'captured', 'voided', 'refunded', 'partially_refunded', 'failed', 'initiated')"
+        },
+        "payments_external_provider_ck": {
+          "name": "payments_external_provider_ck",
+          "value": "\"payments\".\"external_provider\" in ('connected_account', 'other')"
         },
         "payments_source_ck": {
           "name": "payments_source_ck",
