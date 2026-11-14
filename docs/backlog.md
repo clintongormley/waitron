@@ -308,16 +308,20 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   The precise H2 writer approval, released clock/Pay contracts and separate F1/delivery/physical gates remain.
   [Design](superpowers/specs/2026-10-22-a275-final-transfer-close-design.md), [detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--design-now-2026-10-17).
 
-- **W41s. Fiscal prevention and offline recovery.** The complete old-backup/new-hardware exercise
-  (W41s-11) remains; it reads the possibly-missing-history lists on **Reporting → Fiscal filing**
-  (W41s-9).
+- **W41s. Fiscal prevention and offline recovery.**
   Importing, matching or reconciling recovered history, and any missing-history remedy, wait for
   the adviser's answer to Q41. Signed witnesses and fencing (W41s-10b)
-  were retired on 9 November 2026: A1342 (#2654) and A1418 with A1425 cover them. Qualify live AEAT reconciliation, production TLS, a till payment through a booted
-  restored server, and history before the oldest known month. Of Task 8's disputed production
-  remedies, the corrective invoice (the replacement) waits on Q37-FIX Task 3, which waits on the
-  owner's answers to questions A–E (lane L, 2026-11-14); the others stay disabled pending
-  Q35/Q38/Q40 or a case-specific owner decision. Once its original's
+  were retired on 9 November 2026: A1342 (#2654) stops a returning old main box once a spare it
+  vouched for has taken over. A box restored from backup keeps the old box's id, so nothing stops
+  the old box after a restore; A1418 part 1, still a plan, adds a check for a venue of one box.
+  Qualify live AEAT
+  reconciliation, production TLS and a till payment through a booted restored server. A restore
+  through the restore page still needs the box's internet time at the start that places the
+  backup; [A1420 PR 3b1 and 3b2](superpowers/plans/2026-11-13-a1420-restore-series-check.md)
+  remove that, and once they land the end-to-end test drops its internet stand-in. Of Task 8's
+  disputed production remedies, the corrective invoice (the replacement) waits on Q37-FIX Task 3,
+  which waits on the owner's answers to questions A–E (lane L, 2026-11-14); the others stay disabled
+  pending Q35/Q38/Q40 or a case-specific owner decision. Once its original's
   correction is accepted, on any issuing chain, an administrator may release a held cancellation
   through a remedy, which only a test policy enables today (production's `ENABLED_REMEDIES` holds
   only `record-correction`, for rejected records only,

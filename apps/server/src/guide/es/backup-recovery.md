@@ -95,8 +95,8 @@ propio bucket de almacenamiento. Para una copia de Waitron Cloud, elige **Restau
 de seguridad** y después **Restaurar desde Waitron Cloud**.
 
 **Añadir un nodo réplica**: este servidor se une al principal y guarda una copia de los datos del
-restaurante. Cuando termina de unirse, puede sustituirlo: consulta [Traspasar el local a un equipo
-de reserva](servers.md#hand-over) e [Iniciar aquí si ha fallado el equipo principal](servers.md#emergency).
+restaurante. Cuando termina de unirse, puede sustituirlo: consulta [Traspasar el local a un servidor
+de reserva](servers.md#hand-over) e [Iniciar aquí si ha fallado el servidor principal](servers.md#emergency).
 Un servidor nuevo no puede unirse a un principal que ya no está: en ese caso, elige una opción de
 restauración.
 
@@ -225,6 +225,21 @@ Cuando eliges el botón de restaurar, la página dice «Configurando este servid
 mantengas abierta. El servidor guarda la solicitud y se reinicia. Si se detiene después de guardar la
 solicitud, el siguiente arranque la ejecuta; si se detiene mientras escribe la copia en su sitio,
 cada arranque siguiente la vuelve a ejecutar.
+
+## Después de una recuperación {#after-recovery}
+
+Mantén el servidor antiguo apagado y desconectado de la red. Si se vuelve a encender, puede
+seguir vendiendo y emitiendo facturas con sus series antiguas.
+
+Abre **Informes → Remisión a la AEAT** y mira
+[Historial que puede faltar](fiscal-filing.md#missing-history). En **Cambios de identidad sin
+traspaso** aparece la restauración con la última factura que tiene la copia, si tiene alguna. El
+servidor antiguo puede haber emitido facturas posteriores que la copia no tiene.
+
+Cuando el servidor tenga conexión, comprobará los registros de la AEAT. Las facturas que la AEAT
+tiene con las series antiguas y que este servidor no emitió aparecerán entonces en **Facturas que la
+AEAT tiene y este servidor no emitió**. Elige **Exportar estos casos para tu asesor fiscal** y
+entrégale el archivo. No vuelvas a registrar esas ventas: la AEAT ya las tiene.
 
 ## Un conflicto de facturación en un servidor en marcha {#invoice-conflict}
 

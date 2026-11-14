@@ -236,6 +236,9 @@ restart and the three-start count are read, not run here).
 
 ## Keep the resulting evidence
 
+After the restore, follow the guide's
+[After a recovery](../../apps/server/src/guide/en/backup-recovery.md#after-recovery).
+
 Ordinary reboot and exact completion keep the current activation.
 They do not take another name. Keep the recovery pack, or older recovery sheet, that holds the
 key each retained backup needs, and check the restored server's outcome before using the till. The

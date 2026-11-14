@@ -205,6 +205,21 @@ Once you choose the restore button, the page says "Provisioning this server" and
 open. The box saves the request and restarts. If it stops after saving the request, the next start
 runs it; if it stops while writing the backup into place, every later start runs it again.
 
+## After a recovery {#after-recovery}
+
+Keep the old box switched off and disconnected from the network. If it is switched on again,
+it can go on selling and issuing invoices under its old series.
+
+Open **Reporting → Fiscal filing** and look at
+[Possibly missing history](fiscal-filing.md#missing-history). Under **Identity changes without a
+handover**, the restore is listed with the last invoice the backup holds, if it holds any. The old
+box may have issued later invoices that the backup does not have.
+
+Once the box is online, it checks AEAT's records. Invoices AEAT holds under the old series that this
+box did not issue then appear under **Invoices AEAT holds that this box did not issue**. Choose
+**Export these cases for your tax adviser** and give them the file. Do not enter those sales again:
+AEAT already has them.
+
 ## An invoice conflict on a running box {#invoice-conflict}
 
 If the box still has your orders and payments but stops issuing invoices after an identity

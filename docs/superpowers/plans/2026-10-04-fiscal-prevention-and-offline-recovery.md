@@ -624,6 +624,9 @@ not built here. A1342 (#2654) stops a returning old main box on signed newer evi
 backup bucket; A1418 part 1 and A1425 cover a one-box venue restored from its backup. The
 history-before-the-oldest-month point moves to Task 11. Receipt: the lane L re-map of 9 November.
 
+**14 November 2026:** the note above overstates fencing. A box restored from backup keeps the old
+box's id, so the old box is not fenced after a restore: A1418 part 1 is a plan only (W41s-11).
+
 **4 November 2026, W41s-10a landed:** #2449 (`1b0d8c7655854dbb5959432964ebafa92080dbd3`)
 completes the first two implementation bullets below. Keep the
 [remaining qualification work](../../backlog/fiscal.md#qualify-reconciliation-against-live-aeat)
@@ -676,6 +679,14 @@ and §6](../specs/2026-10-19-a798-degraded-trading-design.md).
   need checking against your tax registration. Witness work remains separately queued.
 
 ## Task 11: full offline exercise and operator instructions
+
+**14 November 2026, re-mapped and built as W41s-11:** the bullets below are historical. What was
+built, kept or dropped, and why, is in
+[the W41s-11 plan](2026-11-14-w41s-11-offline-exercise.md). The procedure is the in-app guide's
+[After a recovery](../../../apps/server/src/guide/en/backup-recovery.md#after-recovery) section,
+not `docs/operations/fiscal-recovery.md`. The missing-history half of the test below is
+`apps/server/src/restore-missing-history.e2e.test.ts`; it stands in for the start's internet time
+check until [A1420 PR 3b1 and 3b2](2026-11-13-a1420-restore-series-check.md) land.
 
 **Create:** `apps/server/src/fiscal-offline-recovery.e2e.test.ts`;
 `docs/operations/fiscal-recovery.md`. **Modify:** compliance findings with dated receipts,
