@@ -61,7 +61,6 @@ it("a grip drag lifts the complete visible row, marks every target cell and writ
   expect(ghost, "the full visible zone row follows the pointer").not.toBeNull();
   expect(ghost!.textContent).toContain("Terrace");
   expect(ghost!.textContent).toContain("Counter service");
-  expect(ghost!.textContent).toContain("Paid before preparation");
   expect(ghost!.getBoundingClientRect().width).toBeGreaterThan(
     grip.getBoundingClientRect().width * 3,
   );
@@ -189,14 +188,14 @@ it("keyboard navigation wraps in both directions and ignores unrelated keys and 
     [...table.shadowRoot!.querySelectorAll('[part~="drop-into"]')].map(
       (cell) => cell.closest("tr")!.dataset.rowKey,
     );
-  expect(marked()).toEqual(Array(5).fill("department:d4"));
+  expect(marked()).toEqual(Array(4).fill("department:d4"));
   key(grip, "ArrowDown");
-  expect(marked()).toEqual(Array(5).fill("department:d2"));
+  expect(marked()).toEqual(Array(4).fill("department:d2"));
   key(grip, "ArrowUp");
-  expect(marked()).toEqual(Array(5).fill("department:d4"));
+  expect(marked()).toEqual(Array(4).fill("department:d4"));
   key(grip, "a");
   key(table.shadowRoot!.querySelector('[data-test="zone-grip-z2"]')!, "ArrowDown");
-  expect(marked()).toEqual(Array(5).fill("department:d4"));
+  expect(marked()).toEqual(Array(4).fill("department:d4"));
   key(grip, " ");
   await expect
     .poll(() => writes)

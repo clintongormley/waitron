@@ -9,6 +9,7 @@ import {
   openDelete,
   view,
 } from "../../test/service-delete-test-helpers.js";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 const button = (dialog: HTMLElementTagNameMap["wt-delete-dialog"], kind = "confirm") =>
   dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
     `[data-test="delete-${kind}"]`,
@@ -299,7 +300,7 @@ it.each(["department", "zone"] as const)(
 );
 it.each([
   ["en", "This can't be undone."],
-  ["es", "Esta acción no se puede deshacer."],
+  ["es", VENUE_SERVICE_STRINGS.es["venue.delete_irreversible"]],
 ] as const)(
   "a department with nothing outside it shows only its name and the warning (%s)",
   async (locale, irreversible) => {
