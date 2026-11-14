@@ -438,10 +438,10 @@ it("a keyboard user can turn help on with the account menu open, and the menu st
 });
 
 /** Runs `body` at a real viewport size inside the real page's outer margin (`index.html` pads the
- * body by 24px), then restores the size. */
+ * body by 24px, and by nothing at 48rem or narrower), then restores the size. */
 async function atViewport(host: HTMLElement, width: number, body: () => Promise<void>) {
   const before = { width: window.innerWidth, height: window.innerHeight };
-  host.style.padding = "24px";
+  host.style.padding = width > 768 ? "24px" : "0";
   try {
     await page.viewport(width, 800);
     await vi.waitFor(() => expect(window.innerWidth).toBe(width));
@@ -501,9 +501,7 @@ it.each(
       }
       expect(banner.scrollWidth).toBeLessThanOrEqual(banner.clientWidth);
       const logo = items[1]!.box;
-      expect(logo.width, "the lockup keeps a readable width").toBeGreaterThanOrEqual(
-        width === 320 ? 31 : 60,
-      );
+      expect(logo.width, "the lockup keeps a readable width").toBeGreaterThanOrEqual(60);
       for (const { selector, box } of items.slice(3))
         expect(box.top, `${selector} shares the lockup's row`).toBeLessThan(logo.bottom);
       expect(logo.height, "the logo is no taller than the menu toggle").toBeLessThanOrEqual(

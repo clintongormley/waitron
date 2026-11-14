@@ -12,6 +12,7 @@ import {
   screenTargetOf,
   severityLabel,
   sourceLabel,
+  wholeTimesText,
 } from "./alert-format.js";
 
 afterEach(() => setLocale("es-ES"));
@@ -170,4 +171,10 @@ it("formats a time, and nothing for no time", () => {
   expect(formatAlertTime(iso)).toBe("14/09/2026, 12:00");
   setLocale("es-ES");
   expect(formatAlertTime(iso)).toBe("14/9/26, 12:00");
+});
+
+it("joins every written time with no-break characters and leaves the rest of the text alone", () => {
+  expect(wholeTimesText("From 2026-11-14 08:05 to 2026-11-14 09:40 - done 12-3")).toBe(
+    "From 2026\u201111\u201114\u00a008:05 to 2026\u201111\u201114\u00a009:40 - done 12-3",
+  );
 });

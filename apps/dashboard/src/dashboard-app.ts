@@ -120,7 +120,7 @@ import "./widgets/alerts-bell.js";
 import type { AlertsBell } from "./widgets/alerts-bell.js";
 import { alertMessage } from "./i18n/alerts.js";
 import { AlertArrivals } from "./state/alert-arrivals.js";
-import { markAlertHandled } from "./widgets/alert-format.js";
+import { markAlertHandled, wholeTimesText } from "./widgets/alert-format.js";
 import type {
   AlertView,
   AlertsResponse,
@@ -2064,7 +2064,9 @@ export class DashboardApp extends LitElement {
           this.alertToast === null
             ? ""
             : this.alertToast.alerts.length === 1
-              ? alertMessage(this.alertToast.alerts[0]!.code, this.alertToast.alerts[0]!.params)
+              ? wholeTimesText(
+                  alertMessage(this.alertToast.alerts[0]!.code, this.alertToast.alerts[0]!.params),
+                )
               : t("alerts.toast_many").replace("{count}", String(this.alertToast.alerts.length))
         }
         tone=${this.alertToast?.tone ?? "info"}

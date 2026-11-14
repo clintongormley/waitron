@@ -1192,7 +1192,7 @@ export class BoxStatusScreen extends LitElement {
     const { rows, other, checksUnavailable } = boxStatusRows(health, alerts ?? []);
     return html`
       <p class="legend" data-test="legend">
-        ${fill("box_status.legend", { time: formatIsoMinute(health.at) })}
+        ${wholeTimes(fill("box_status.legend", { time: formatIsoMinute(health.at) }))}
       </p>
       ${
         this.freedBytes === null
