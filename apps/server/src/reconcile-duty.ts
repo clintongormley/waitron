@@ -1,5 +1,9 @@
+import { refundsPaused, refundRefused, type BillRefundDeps } from "./bill-refunds.js";
+import { requireEconomicWrite } from "./trading-admission.js";
+import { clockUnusableAt } from "./clock-unusable.js";
 import type { Purpose } from "@waitron/credentials";
 import type {
+  ReconcileMoneyGates,
   DutyOutcome,
   PaymentReconcileResult,
   PaymentReconciler,
@@ -62,6 +66,9 @@ function summaryOf(result: PaymentReconcileResult): Record<string, unknown> {
     incidentsRaised: result.incidentsRaised,
     remediated: result.remediated,
     remediationFailures: result.remediationFailures,
+    ...(result.remediationUnconfirmed === undefined
+      ? {}
+      : { remediationUnconfirmed: result.remediationUnconfirmed }),
   };
 }
 
@@ -93,5 +100,23 @@ export function reconcilePassFor(deps: ReconcilePassDeps): (now: Date) => Promis
       if (await deps.credentialProvisioned(entry.credentialPurpose)) duties.push(entry.duty);
     }
     return duties.length === 0 ? NOTHING_TO_RECONCILE : deps.runDue(now, duties);
+  };
+}
+
+export function reconciliationMoneyGates(
+  deps: BillRefundDeps & { isPrimary(): boolean; isReadOnly(): boolean },
+): ReconcileMoneyGates {
+  const barred = () =>
+    !deps.isPrimary() ||
+    deps.isReadOnly() ||
+    deps.clockUnconfirmed?.() === true ||
+    clockUnusableAt(deps.backend, deps.clock.now());
+  return {
+    paused: async () => barred() || (await refundsPaused(deps, deps.clock.now())),
+    admit: async (tx) => {
+      if (barred()) return false;
+      await requireEconomicWrite(tx, deps.cfg, deps.admission);
+      return !(await refundRefused(tx, deps));
+    },
   };
 }

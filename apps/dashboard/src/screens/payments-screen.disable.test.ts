@@ -33,6 +33,7 @@ function client(rows = [reader], canUnpair = true, overrides: Partial<DashboardA
     listStuckBillPayments: vi.fn().mockResolvedValue([]),
     listStuckTenderRefunds: vi.fn().mockResolvedValue([]),
     listStuckBillRefunds: vi.fn().mockResolvedValue([]),
+    listAbandonedRefunds: vi.fn().mockResolvedValue([]),
     listHeldPayments: vi.fn().mockResolvedValue([]),
     unpairReader: vi.fn().mockResolvedValue(undefined),
     liveData: new LiveData(),

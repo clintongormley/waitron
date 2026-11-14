@@ -68,6 +68,7 @@ async function mount(overrides: Partial<DashboardApi> = {}, discovery = false) {
       listStuckBillPayments: async () => [],
       listStuckTenderRefunds: async () => [],
       listStuckBillRefunds: async () => [],
+      listAbandonedRefunds: vi.fn().mockResolvedValue([]),
       listHeldPayments: async () => [],
       saveReader: async () => {},
       unpairReader: async () => {},

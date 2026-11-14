@@ -2353,6 +2353,15 @@ export interface ReaderStatusView {
   pairingStatus?: "processing" | "paired";
 }
 
+export interface AbandonedRefundOutcome {
+  paymentRef: string;
+  workingOrderId: string;
+  externalRef: string | null;
+  amount: string;
+  claimedAt: string;
+  outcome: "confirmed" | "unconfirmed";
+}
+
 export interface PartialRefundView {
   paymentId: string;
   captured: string;
@@ -5225,6 +5234,10 @@ export class DashboardApi {
 
   listStuckPayments(): Promise<StuckPaymentRow[]> {
     return this.#request<StuckPaymentRow[]>("/management-api/payments/stuck", "GET");
+  }
+
+  listAbandonedRefunds(): Promise<AbandonedRefundOutcome[]> {
+    return this.#request("/management-api/payments/abandoned-refunds", "GET");
   }
 
   releasePartialRefund(paymentId: string): Promise<{ outcome: "released" }> {

@@ -231,7 +231,7 @@ import { roleMembershipMail } from "./role-membership-mail.js";
 import { accountActionMail } from "./account-mail.js";
 import { runLoop } from "./loop.js";
 import { createLoopWaker } from "./loop-wake.js";
-import { reconcilePassFor, reconcilerAsDuty } from "./reconcile-duty.js";
+import { reconcilePassFor, reconcilerAsDuty, reconciliationMoneyGates } from "./reconcile-duty.js";
 import { runPass, type PassReport } from "./pass.js";
 import { singletonPass } from "./singleton-pass.js";
 import { stripeAccountResolver, defaultMakeStripe } from "./stripe-account.js";
@@ -2657,6 +2657,16 @@ async function bootServer(
                   environment: config.environment,
                   incidents: recordIncidentOnce,
                   captureAlerts: { raise: recordIncidentOnce, handle: markIncidentHandled },
+                  reconcileMoney: reconciliationMoneyGates({
+                    db,
+                    backend: nodeBackend,
+                    admission: tradingAdmission,
+                    cfg: tradingContext,
+                    clock: systemClock(),
+                    clockUnconfirmed: startClockHolds,
+                    isPrimary: () => holders.singletonRole.current === "primary",
+                    isReadOnly,
+                  }),
                   heldAlerts: {
                     raise: recordIncidentOnce,
                     current: currentIncidentsOf,

@@ -33,3 +33,12 @@ Las reservas guardadas permanecen en este equipo cuando Reservas está desactiva
 Si el servidor principal falla repetidamente al arrancar, su página de recuperación ofrece **Desactivar Reservas y volver a arrancar**.
 Abre la dirección segura e introduce la contraseña de un administrador activo, o elige **Parar** para dejarlo sin cambios.
 Un administrador sin contraseña no puede usar esa acción de recuperación.
+
+## Revisar devoluciones de pedidos abandonados {#abandoned-refunds}
+
+Si un cliente se marcha después de un cobro de SumUp, abre **Pagos con tarjeta** y revisa **Devoluciones de pedidos abandonados**.
+Waitron intenta una devolución completa cuando SumUp identifica el pago como tuyo, el importe coincide y no existe ninguna devolución.
+Un pago cobrado en el lector fuera de Waitron queda para que lo revises.
+
+**Devolución confirmada** significa que SumUp indica que se ha devuelto todo el importe. Si no está confirmada, comprueba su referencia en SumUp antes de devolverlo allí para no devolver el dinero dos veces.
+Revisa esta lista aunque siga abierta una advertencia anterior en Alertas.

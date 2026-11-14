@@ -7608,6 +7608,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
       listStuckBillPayments: pending(),
       listStuckTenderRefunds: async () => [],
       listStuckBillRefunds: pending(),
+      listAbandonedRefunds: vi.fn().mockResolvedValue([]),
       listHeldPayments: pending(),
       getBoxHealth: pending(),
       liveData: new LiveData(),

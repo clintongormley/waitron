@@ -22,6 +22,7 @@ import {
   assertReversible,
   associatePaymentWithSale,
   captureAttempting,
+  claimAbandonedCapture,
   existingReferences,
   expireInitiated,
   failAttempting,
@@ -1920,5 +1921,74 @@ describe("listAbandonedRefundOutcomes", () => {
       recordRefund(tx, { ...unconfirmed, amount: decimal("4.00"), providerRefundRef: "partial" }),
     );
     expect((await read("fake"))[1]?.outcome).toBe("unconfirmed");
+  });
+});
+
+it.each([
+  "failed",
+  "captured",
+  "open",
+  "placed",
+  "settled",
+  "marked",
+  "held",
+  "refunded",
+  "failed refund",
+  "wrong amount",
+  "bill",
+])("claims only an eligible abandoned capture: %s", async (state) => {
+  const seeded = await seedTenant();
+  await withTransaction(suite.db, async (tx) => {
+    await insertFailedPayment(tx, {
+      provider: "sumup",
+      paymentRef: "claim",
+      amount: decimal("10.00"),
+      origin: deviceOrigin(seeded.deviceId),
+      nodeId: seeded.nodeId,
+      workingOrderId: seeded.workingOrderId,
+    });
+    await tx.execute(
+      sql`update working_orders set status = ${["open", "placed", "settled"].includes(state) ? state : "abandoned"}, settled_at = ${state === "settled" ? SETTLED.toISOString() : null} where id = ${seeded.workingOrderId}`,
+    );
+    if (state === "captured") await tx.execute(sql`update payments set state = 'captured'`);
+    if (state === "marked")
+      await tx.execute(sql`update payments set reconcile_remediated_at = ${SETTLED.toISOString()}`);
+    if (state === "held")
+      await recordHold(tx, {
+        paymentId: (await getPaymentByRef(tx, { provider: "sumup", paymentRef: "claim" }))!.id,
+        providerAmount: decimal("11.00"),
+        foundAt: SETTLED,
+      });
+    if (state === "refunded" || state === "failed refund")
+      await tx.execute(
+        sql`insert into payment_refunds (id, payment_id, provider, payment_ref, amount, state, created_at) select 'existing', id, provider, payment_ref, 100, ${state === "refunded" ? "succeeded" : "failed"}, ${SETTLED.toISOString()} from payments`,
+      );
+    if (state === "bill") {
+      await tx.insert(billPayments).values({
+        id: "claim-bill",
+        workingOrderId: seeded.workingOrderId,
+        method: "card",
+        applied: 1000,
+        state: "pending",
+        requestedBy: "11111111-1111-1111-1111-111111111111",
+        source: "device",
+        deviceId: seeded.deviceId,
+        submissionId: "claim-bill",
+        fingerprint: "claim-bill",
+        kind: "contribution",
+      });
+      await tx.execute(sql`update payments set bill_payment_id = 'claim-bill'`);
+    }
+    const params = {
+      provider: "sumup",
+      paymentRef: "claim",
+      amount: decimal(state === "wrong amount" ? "9.00" : "10.00"),
+      externalRef: "transaction",
+      settledAt: SETTLED,
+      at: SETTLED,
+    };
+    const row = await claimAbandonedCapture(tx, params);
+    expect(row?.paymentRef).toBe(state === "failed" || state === "captured" ? "claim" : undefined);
+    expect(await claimAbandonedCapture(tx, params)).toBeUndefined();
   });
 });

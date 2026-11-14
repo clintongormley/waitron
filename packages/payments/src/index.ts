@@ -50,6 +50,7 @@ export {
   listPaymentAuditRuns,
   listAuditCandidates,
   listBackupPayments,
+  claimAbandonedCapture,
   markReconcileRemediated,
   recordFailedRefund,
   recordRefund,
@@ -133,6 +134,7 @@ export { paymentsBackupVerification } from "./backup-verification.js";
 export { PAYMENTS_CHANGE_SOURCES } from "./classification.js";
 export type {
   AddReaderResult,
+  ReconcileMoneyGates,
   CardProviderBuildDeps,
   CardProviderContribution,
   CardProviderRuntimeDeps,

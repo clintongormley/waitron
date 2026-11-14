@@ -29,6 +29,10 @@ afterAll(async () => {
 describe("boot payment audits", () => {
   it("schedules a SumUp-only account and persists its gross charge summary", async () => {
     expect(SUMUP_CARD_PROVIDER.createReconciler).toBeTypeOf("function");
+    const make = SUMUP_CARD_PROVIDER.createReconciler!;
+    const build = vi
+      .spyOn(SUMUP_CARD_PROVIDER, "createReconciler")
+      .mockImplementation((deps) => make(deps));
     fixture.beforeServerStarts();
     await seedSharedVenue(suite.db);
     await withTransaction(suite.db, (tx) =>
@@ -69,6 +73,10 @@ describe("boot payment audits", () => {
       await server.close();
       server = undefined;
       expect(requests.length).toBeGreaterThan(0);
+      expect(build.mock.calls[0]![0].reconcileMoney).toMatchObject({
+        paused: expect.any(Function),
+        admit: expect.any(Function),
+      });
       const run = suite.db.all<{ summary: string }>(
         sql`select summary from scheduled_runs where state = 'succeeded' limit 1`,
       )[0]!;
@@ -76,6 +84,7 @@ describe("boot payment audits", () => {
       expect(suite.db.all(sql`select * from payment_refunds`)).toEqual([]);
     } finally {
       await server?.close();
+      build.mockRestore();
       vi.unstubAllGlobals();
       await rm(scratch, { recursive: true, force: true });
     }

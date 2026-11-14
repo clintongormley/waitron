@@ -2924,6 +2924,9 @@ export const en = {
     "A kitchen display can only take, prepare and hand over orders. Switch the other actions off.",
   "device_profiles.err_starting_screen":
     "Choose a screen this profile shows, or the layout's first tab.",
+  "payments.abandoned.title": "Abandoned-order refunds",
+  "payments.abandoned.confirmed": "Refund confirmed",
+  "payments.abandoned.unconfirmed": "Unconfirmed. Check SumUp before refunding.",
   "payments.title": "Card payments",
   "payments.refunds.title": "Refund comparison",
   "payments.refunds.matches": "Confirmed refund matches",
@@ -7166,6 +7169,9 @@ export const es: Record<StringKey, string> = {
     "Una pantalla de cocina solo puede tomar, preparar y entregar pedidos. Desactiva las demás acciones.",
   "device_profiles.err_starting_screen":
     "Elige una pantalla que muestre este perfil, o la primera pestaña del diseño.",
+  "payments.abandoned.title": "Devoluciones de pedidos abandonados",
+  "payments.abandoned.confirmed": "Devolución confirmada",
+  "payments.abandoned.unconfirmed": "Sin confirmar. Comprueba SumUp antes de devolver.",
   "payments.title": "Pagos con tarjeta",
   "payments.refunds.title": "Comparación de devoluciones",
   "payments.refunds.matches": "Devoluciones con coincidencia confirmada",
