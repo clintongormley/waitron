@@ -22,13 +22,14 @@ import { applyCorrectedRecordFacts } from "./record-remedy-http.js";
 import { applyAbsentOriginalCancellation } from "./record-remedy-absent.js";
 import { releaseHeldCancellation } from "./record-remedy-held.js";
 import { applyCorrectiveInvoiceRequest } from "./record-remedy-corrective-http.js";
+import { applyReplacementInvoiceRequest } from "./record-remedy-replacement.js";
 import { releaseRecordBrake } from "./record-remedy-brake.js";
 import { REMEDY_REFUSALS } from "./remedy-refusals.js";
 
 // Legal enablement belongs to server policy; a client request cannot grant it. Without
 // ACCEPTED_WITH_ERRORS_CORRECTION a correction record for a case AEAT accepted with errors is
 // refused; the returned-record allowance below adds it for a former main's records.
-const ENABLED_REMEDIES: RemedyPolicy = new Set(["record-correction"]);
+const ENABLED_REMEDIES: RemedyPolicy = new Set(["record-correction", "replacement-invoice"]);
 
 const run = createErrorBoundary(REMEDY_REFUSALS, "fiscal-remedy.failed");
 
@@ -89,6 +90,15 @@ export function mountRecordRemedies(
           );
         if (kind === "corrective-invoice")
           return applyCorrectiveInvoiceRequest(
+            tx,
+            ctx,
+            ctx.recordGeneration,
+            token,
+            enabledRemedies,
+            body,
+          );
+        if (kind === "replacement-invoice")
+          return applyReplacementInvoiceRequest(
             tx,
             ctx,
             ctx.recordGeneration,

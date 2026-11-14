@@ -78,7 +78,7 @@ it.each(["corrective-invoice", "absent-original-cancellation", "release-brake"])
   },
 );
 
-it("the default policy enables exactly record-correction", async () => {
+it("the default policy enables exactly record-correction and replacement-invoice", async () => {
   await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, token));
   const sendDefault = (kind: string) => {
     const app = new Hono();
@@ -104,7 +104,7 @@ it("the default policy enables exactly record-correction", async () => {
   };
   for (const kind of REMEDY_KINDS) {
     const res = await sendDefault(kind);
-    if (kind === "record-correction") {
+    if (kind === "record-correction" || kind === "replacement-invoice") {
       expect(res.status).toBe(400);
       expect(await res.json()).toEqual({
         error: { code: "fiscal.remedy_request_invalid", params: {} },

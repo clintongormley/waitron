@@ -553,7 +553,7 @@ it.each([3000, 1100, null])(
 );
 
 it.each(["production", "preproduction"] as const)(
-  "enables only record-correction by default, and refuses a request's claimed enablement, with a complete %s host context",
+  "enables only record-correction and replacement-invoice by default, and refuses a request's claimed enablement, with a complete %s host context",
   async (environment) => {
     const before = await fiscalFacts();
     for (const kind of REMEDY_KINDS) {
@@ -570,7 +570,7 @@ it.each(["production", "preproduction"] as const)(
         environment,
       );
       expect(response).toMatchObject(
-        kind === "record-correction"
+        kind === "record-correction" || kind === "replacement-invoice"
           ? { status: 400, json: { code: "fiscal.remedy_request_invalid", params: {} } }
           : { status: 409, json: { code: "fiscal.remedy_disabled", params: { kind } } },
       );

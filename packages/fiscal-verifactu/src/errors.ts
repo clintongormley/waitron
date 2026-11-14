@@ -112,6 +112,9 @@ declare module "@waitron/shared" {
     /** `priorOutcome` is set when the kind is on but its reach to that outcome is not. */
     "fiscal.remedy_disabled": { kind: string; priorOutcome?: "accepted-with-errors" };
     "fiscal.remedy_request_invalid": Record<string, never>;
+    /** A replacement's day of the sale must be a calendar day no later than the replacement's own
+     * issue day or the refused invoice's date. */
+    "fiscal.operation_date_invalid": { field: "operationDate" };
     /** A fix re-files the same invoice, so its rates, bases, VAT, total and a corrective's
      * `ImporteRectificacion` stay as filed; an amount error takes a corrective invoice. */
     "fiscal.remedy_amount_changed": {

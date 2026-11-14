@@ -3,7 +3,9 @@
 import type { FilingCaseView } from "./filing-overview-types.js";
 
 export type PutRight =
-  { kind: "record-correction" } | { kind: "none"; why: "full-invoice" | "not-yet" };
+  | { kind: "record-correction" }
+  | { kind: "replacement-invoice" }
+  | { kind: "none"; why: "full-invoice" | "not-yet" };
 
 const NOT_YET: PutRight = { kind: "none", why: "not-yet" };
 
@@ -23,9 +25,11 @@ export function putRightFor(view: FilingCaseView): PutRight {
   )
     return NOT_YET;
   if (code === 1112)
-    return view.record.tipoFactura === "F1" || view.record.tipoFactura === "F3"
-      ? { kind: "none", why: "full-invoice" }
-      : NOT_YET;
+    return view.record.tipoFactura === "F2"
+      ? { kind: "replacement-invoice" }
+      : view.record.tipoFactura === "F1" || view.record.tipoFactura === "F3"
+        ? { kind: "none", why: "full-invoice" }
+        : NOT_YET;
   if (code === 1100) {
     // A description fix is refused again when AEAT objected to some other field.
     const message = view.submission.mensajeError ?? view.evidence.mensaje ?? "";

@@ -30,6 +30,11 @@ export const REMEDY_REFUSALS = {
   "sif.not_registered": 400,
   "venue.time_zone_invalid": 400,
   "venue.time_zone_target_invalid": 400,
+  "fiscal.operation_date_invalid": 400,
+  "sale.replacement_not_first": 400,
+  "fiscal.correction_unsupported": 409,
+  "fiscal.sale_not_recorded": 400,
+  "series.no_rectificative_for_node": 400,
 } as const;
 
 export type RemedyRefusal = keyof typeof REMEDY_REFUSALS;
