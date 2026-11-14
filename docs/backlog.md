@@ -482,9 +482,12 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A885. Say that lines already on an open order keep their VAT class after a republish.**
   [Detail](backlog/catalogue.md#a885-say-that-lines-already-on-an-open-order-keep-their-vat-class-after-a-republish)
 
-- **A670 — guest-menu mock-ups first; printing/build stopped (owner, 2026-11-12).** A printed menu carries each
-  dish's allergen icons after its name and a key on the page naming every icon.
-  The owner brought its basic guest-menu design forward on 11 November through A1517.
+- **A670 — read-only online menu, then fixed A4 presets (owner decisions, 2026-11-13).**
+  Serve read-only guests from Cloud’s last delivered published copy; live forwarding stays with ordering.
+  Customer names fall back through guest language, venue default, then internal name; never kitchen.
+  Managers can preview a published menu in guest languages. The watcher cleared the
+  [build plan](superpowers/plans/2026-11-13-a670-guest-menu-build.md), including browser Print / Save as PDF.
+  Public opt-in, Cloud delivery and fixed A4 presets remain; no ordering.
   [Detail](backlog/catalogue.md#a670--printed-menus-owner-2026-10-14-open-not-designed)
 
 - **wt-data-table: heading wrap, long names, odds and ends** (bundle of 10, size M). Holds A1318, A543. [Detail](backlog/catalogue.md#bundle-wt-data-table-heading-wrap-long-names-odds-and-ends)

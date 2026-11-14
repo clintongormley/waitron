@@ -13,7 +13,7 @@ So a product carries up to three names, and so does each of its variants.
 | Name | Stored as | Who reads it |
 | --- | --- | --- |
 | **Name** | `products.name` — plain text, `not null` | Staff. The dashboard, the till's product buttons and basket, a table tab's line list, the sales reports, the image library's "what uses this photo" list |
-| **Customer-facing name** | `products.customer_name` — a language map (JSON), nullable | Diners. The printed receipt and invoice |
+| **Customer-facing name** | `products.customer_name` — a language map (JSON), nullable | Diners. The printed receipt, invoice and published guest-menu preview |
 | **Kitchen name** | `products.kitchen_name` — plain text, nullable | Cooks. The kitchen ticket and the kitchen display |
 
 A variant is itself a `products` row whose `parent_id` names its parent, so it carries the same
@@ -966,3 +966,10 @@ An edit keeps the name through later region changes and Review/Back, including
 an edit back to an earlier default. Discard restores that ownership with the
 name. The server repeats automatic-name derivation from validated geography;
 this temporary draft marker is never a venue-table field.
+
+## Guest menu preview
+
+`publicGuestMenu` resolves guest names through the requested enabled content language, the venue
+default, then each identity’s own staff name. Product, variant and extra halves resolve separately;
+kitchen names do not enter the projection. The server’s `guest-menu-page.ts` renders that
+allowlisted publication as text-safe HTML; working changes reach the preview only after publication.

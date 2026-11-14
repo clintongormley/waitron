@@ -519,3 +519,12 @@ export type {
 } from "./document-delivery.js";
 
 export type { LegalAbout } from "./legal-about.js";
+
+export {
+  publicGuestMenu,
+  type PublicGuestMenu,
+  type GuestMember,
+  type GuestChoice,
+  type GuestDeclarations,
+} from "./menu-document/guest-menu.js";
+export { guestMenuWords } from "./i18n/guest-menu.js";

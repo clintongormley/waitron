@@ -3133,6 +3133,17 @@ export class DashboardApi {
     });
   }
 
+  getGuestMenuPreview(
+    menuId: string,
+    language?: string,
+  ): Promise<{ html: string; language: string; languages: string[] } | null> {
+    const query = language === undefined ? "" : `?language=${encodeURIComponent(language)}`;
+    return this.#request(
+      `/management-api/catalogues/${encodeURIComponent(menuId)}/guest-preview${query}`,
+      "GET",
+    );
+  }
+
   /** `null` when the menu has never been published. */
   getLiveMenu(menuId: string): Promise<LiveMenu | null> {
     return this.#request<LiveMenu | null>(`/management-api/catalogues/${menuId}/live`, "GET");

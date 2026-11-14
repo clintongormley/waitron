@@ -161,6 +161,12 @@ export async function verifyPackage(
         );
       }
     }
+    if (packageNameSuffix === "ui-core")
+      for (const notice of ["Erudus-LICENSE.txt", "Pictogrammers-LICENSE.txt", "README.md"])
+        assert(
+          files.includes(`package/dist/third-party/nutrition-icons/${notice}`),
+          `missing nutrition notice: ${notice}`,
+        );
     await cp(join(root, "test/consumer"), dir, { recursive: true });
     if (variant === "registry") {
       for (const file of node ? ["main.ts"] : ["main.ts", "input-only.ts"]) {
@@ -365,6 +371,11 @@ test(
         await cp(join(uiRoot, "src"), join(destination, "src"), { recursive: true });
         for (const file of ["tsconfig.base.json", "LICENSE", "LICENSE-GRANTS.md"])
           await cp(join(uiRoot, "../..", file), join(checkout, file));
+        await cp(
+          join(uiRoot, "../../deploy/third-party/nutrition-icons"),
+          join(checkout, "deploy/third-party/nutrition-icons"),
+          { recursive: true },
+        );
         await symlink(join(uiRoot, "node_modules"), join(destination, "node_modules"), "dir");
         await run(process.execPath, ["scripts/build.mjs"], {
           cwd: destination,

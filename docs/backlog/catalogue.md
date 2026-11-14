@@ -679,15 +679,25 @@ was the separate A434 ruling.
 
 ## A670 — printed menus (owner, 2026-10-14; open, not designed)
 
-Waitron prints no menu today.
-A printed menu carries each dish's allergen icons after its name and a key on the page naming
-every icon (the regulation wants words, with symbols only in addition — A668's _Sources_). With the
-online menu (A509) it is the written allergen record a customer or inspector is shown, now that the
-till no longer offers a separate Allergens screen.
+The manager’s guest preview reads the published menu, with guest/default/internal name fallback,
+separately priced sizes/extras and declarations. It adds no public link or printing.
 
-The owner accepted bringing forward a basic printable guest menu through
-[A1517](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md#owner-decisions-2026-11-11)
-on 11 November 2026. The owner stopped the build on 12 November at 02:43 pending a menu design and asked for mock-ups first. The [earlier proposal](../superpowers/plans/2026-11-12-a670-printable-guest-menu.md) is reference only; whether to print and the language/key choices wait for the owner's design review.
+Remaining work follows the watcher-cleared [build plan](../superpowers/plans/2026-11-13-a670-guest-menu-build.md):
+sharing of the existing default menu; delivery/confirmation of Cloud’s hosted copy under lane G’s
+A670-CLOUD contract; then fixed A4 presets with browser Print / Save as PDF. The watcher cleared paper
+work before the Cloud integration if its contract is still waiting. Cloud readiness remains
+unverified; ordering is separate.
+
+The owner’s 13 November 22:31 answers, relayed by the watcher in Lane D `questions.md`, choose
+forwarding to the box with a hosted published read-only copy when unreachable, fixed presets
+before blocks/uploads, and name fallback through guest language, venue default, then internal
+name, never kitchen. The watcher’s 23:28 clearance chooses default-menu-only sharing, box-local
+non-transferring preferences, browser printing and a written key with inline words as an alternative.
+The watcher’s 14 November 00:22 amendment narrows read-only Cloud work to the hosted copy,
+with live forwarding reserved for ordering (A509); slices 1, 2 and 4 stay unchanged.
+These are watcher-cleared plan decisions, not owner approval of the plan. The
+[online](../superpowers/specs/2026-11-13-a670-online-go-live-study.md) and
+[paper](../superpowers/specs/2026-11-13-a670-printed-template-study.md) studies retain their dated proposals.
 
 ## The products' made-at read has no screen since A655
 

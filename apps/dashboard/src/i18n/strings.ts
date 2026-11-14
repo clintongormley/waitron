@@ -3137,6 +3137,9 @@ export const en = {
   "menus.schedule_not_saved":
     "The schedule change for {name} was not confirmed. Open its Preview tab and check Scheduled versions before trying again.",
   "menus.change_not_saved": "Your change to {name} was not saved. {reason}",
+  "menus.guest_preview": "Guest menu preview",
+  "menus.guest_language": "Guest language",
+  "menus.guest_unpublished": "Publish this menu to preview what guests will read.",
   "menus.tab_preview": "Preview",
   "menus.tab_preview_unpublished": "unpublished changes",
   "menus.tab_home": "Home page",
@@ -7130,6 +7133,9 @@ export const es: Record<StringKey, string> = {
   "menus.schedule_not_saved":
     "No se ha confirmado el cambio de programación de {name}. Abre su pestaña Vista previa y comprueba las Versiones programadas antes de volver a intentarlo.",
   "menus.change_not_saved": "No se ha guardado tu cambio en {name}. {reason}",
+  "menus.guest_preview": "Vista previa para clientes",
+  "menus.guest_language": "Idioma del cliente",
+  "menus.guest_unpublished": "Publica esta carta para ver lo que leerán los clientes.",
   "menus.tab_preview": "Vista previa",
   "menus.tab_preview_unpublished": "cambios sin publicar",
   "menus.tab_home": "Página de inicio",
