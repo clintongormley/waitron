@@ -270,7 +270,9 @@ describe("Orders routes", () => {
 
   it("identifies filed full and simplified invoices in order details", async () => {
     const simplified = await billlessSale(venue);
-    const [taxpayer] = await venue.db.select({ domicile: taxpayer.taxpayerDomicile }).from(taxpayer);
+    const [taxpayerRow] = await venue.db
+      .select({ domicile: taxpayer.taxpayerDomicile })
+      .from(taxpayer);
     await withTransaction(venue.db, (tx) =>
       tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 1, Madrid" }),
     );
@@ -316,7 +318,7 @@ describe("Orders routes", () => {
       });
     } finally {
       await withTransaction(venue.db, (tx) =>
-        tx.update(taxpayer).set({ taxpayerDomicile: taxpayer!.domicile }),
+        tx.update(taxpayer).set({ taxpayerDomicile: taxpayerRow!.domicile }),
       );
     }
 

@@ -223,7 +223,7 @@ describe("stored invoice document projection", () => {
   it("keeps the filed issuer, customer and issue-day facts after taxpayer and trim changes", async () => {
     const sale = await issue(venue.backend);
     const before = await read(venue.backend, sale.saleId);
-    const [taxpayer] = await suite.db.select().from(taxpayer);
+    const [taxpayerRow] = await suite.db.select().from(taxpayer);
     try {
       await suite.db.update(taxpayer).set({
         legalName: "Changed issuer",
@@ -250,9 +250,9 @@ describe("stored invoice document projection", () => {
       });
     } finally {
       await suite.db.update(taxpayer).set({
-        legalName: taxpayer!.legalName,
-        taxId: taxpayer!.taxId,
-        taxpayerDomicile: taxpayer!.taxpayerDomicile,
+        legalName: taxpayerRow!.legalName,
+        taxId: taxpayerRow!.taxId,
+        taxpayerDomicile: taxpayerRow!.taxpayerDomicile,
       });
     }
   });

@@ -83,7 +83,7 @@ describe("nodes schema", () => {
   });
 
   describe("taxpayer fiscal identity is country + tax_id", () => {
-    it("has country and tax_id, not nif, and a (country, tax_id) unique index", async () => {
+    it("has country and tax_id, not nif, without a redundant identity index", async () => {
       const cols = await db.execute<{ name: string }>(
         sql`select name from pragma_table_info('taxpayer') order by name`,
       );
@@ -96,7 +96,7 @@ describe("nodes schema", () => {
         sql`select name from pragma_index_list('taxpayer')`,
       );
       const indexes = idx.rows.map((r) => r.name);
-      expect(indexes).toContain("tenants_country_tax_id_key");
+      expect(indexes).not.toContain("tenants_country_tax_id_key");
       expect(indexes).not.toContain("tenants_nif_key");
     });
   });

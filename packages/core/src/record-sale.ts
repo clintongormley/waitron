@@ -258,11 +258,11 @@ export async function recordSale(
 
   if (counterparty !== null) requireRecipientAddress(input.recipientAddress);
 
-  const [taxpayer] =
+  const [taxpayerRow] =
     counterparty === null
       ? []
       : await tx.select({ domicile: taxpayer.taxpayerDomicile }).from(taxpayer);
-  if (counterparty !== null && !taxpayer?.domicile?.trim()) {
+  if (counterparty !== null && !taxpayerRow?.domicile?.trim()) {
     throw new AppError("fiscal.taxpayer_domicile_missing", {});
   }
 
@@ -300,7 +300,7 @@ export async function recordSale(
     counterpartyIdentifierType: counterparty?.identifierType ?? null,
     counterpartyIdentifierCountryCode: counterparty?.identifierCountryCode ?? null,
     counterpartyAddress: counterparty === null ? null : (input.recipientAddress ?? null),
-    taxpayerDomicile: taxpayer?.domicile ?? null,
+    taxpayerDomicile: taxpayerRow?.domicile ?? null,
     operatorId: input.operatorId ?? null,
   });
 

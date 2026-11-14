@@ -538,7 +538,7 @@ describe("invoice email worker at trading boot", () => {
         privacyEmail: "privacy@example.com",
       });
     });
-    const [taxpayer] = await suite.db.select({ legalName: taxpayer.legalName }).from(taxpayer);
+    const [taxpayerRow] = await suite.db.select({ legalName: taxpayer.legalName }).from(taxpayer);
     const smtp = await smtpFixture();
     let server: StartedServer | undefined;
     try {
@@ -552,7 +552,7 @@ describe("invoice email worker at trading boot", () => {
       const words = INVOICE_EMAIL_NOTICE_WORDS.es;
       expect(textPart(smtp.messages[0]!).split("\n\n").slice(1)).toEqual([
         [
-          words.purpose.replace("{venue}", () => taxpayer!.legalName),
+          words.purpose.replace("{venue}", () => taxpayerRow!.legalName),
           words.contact.replace(
             "{contacts}",
             () => "privacy@example.com, https://example.com/privacy",

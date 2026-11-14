@@ -477,7 +477,6 @@ const EXPECTED_UNIQUE_INDEXES = [
   "section_members_product_uq",
   "service_commands_scope_submission_key",
   "sessions_token_hash_uq",
-  "tenants_country_tax_id_key",
   "tenders_bill_payment_key",
   "ticket_items_working_order_line_id_key",
   "time_entries_chain_position_uq",

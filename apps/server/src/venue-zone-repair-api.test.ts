@@ -444,7 +444,7 @@ describe("time-zone repair management boundary", () => {
     },
   );
   it("answers 409 venue.not_found with no taxpayer row", async () => {
-    const [taxpayer] = await suite.db.select().from(taxpayer);
+    const [taxpayerRow] = await suite.db.select().from(taxpayer);
     await suite.db.execute(sql`pragma foreign_keys = off`);
     try {
       await suite.db.execute(sql`delete from taxpayer`);
@@ -452,7 +452,7 @@ describe("time-zone repair management boundary", () => {
       expect(response.status).toBe(409);
       expect(await response.json()).toEqual({ error: { code: "venue.not_found", params: {} } });
     } finally {
-      await suite.db.insert(taxpayer).values(taxpayer!);
+      await suite.db.insert(taxpayer).values(taxpayerRow!);
       await suite.db.execute(sql`pragma foreign_keys = on`);
     }
   });

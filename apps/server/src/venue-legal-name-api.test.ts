@@ -31,7 +31,7 @@ function rename(body: unknown, cookie: string | null = venue.managerCookie, app 
     body: JSON.stringify(body),
   });
 }
-async function taxpayer() {
+async function taxpayerRow() {
   const [row] = await suite.db.select().from(taxpayer).where(eq(taxpayer.id, 1));
   return row!;
 }
@@ -42,7 +42,7 @@ beforeEach(async () => {
   await suite.db.execute(
     sql`update taxpayer set taxpayer_domicile = 'Calle Mayor 1, 28013 Madrid' where id = 1`,
   );
-  original = (await taxpayer()).legalName;
+  original = (await taxpayerRow()).legalName;
   await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, venue.managerCookie));
 });
 
@@ -51,17 +51,17 @@ describe("changing the taxpayer's legal name", () => {
     await withTransaction(suite.db, (tx) =>
       setFreshManagementSignIn(tx, venue.managerCookie, false),
     );
-    const before = await taxpayer();
+    const before = await taxpayerRow();
     const response = await rename({ legalName: "New Restaurant Ltd", expected: original });
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
       error: { code: "management_session.proof_required", params: {} },
     });
-    expect(await taxpayer()).toEqual(before);
+    expect(await taxpayerRow()).toEqual(before);
   });
 
   it("saves the trimmed name, answers the re-read model and the next read shows it", async () => {
-    const before = await taxpayer();
+    const before = await taxpayerRow();
     const response = await rename({ legalName: "  Deli Nueva SL  ", expected: original });
     expect(response.status).toBe(200);
     const read = await model();
@@ -71,7 +71,7 @@ describe("changing the taxpayer's legal name", () => {
       headers: { cookie: venue.managerCookie },
     });
     expect((await get.json()).issuer.legalName).toBe("Deli Nueva SL");
-    expect(await taxpayer()).toEqual({ ...before, legalName: "Deli Nueva SL" });
+    expect(await taxpayerRow()).toEqual({ ...before, legalName: "Deli Nueva SL" });
   });
 
   it("refuses a stale expected name and writes nothing", async () => {
@@ -80,7 +80,7 @@ describe("changing the taxpayer's legal name", () => {
     expect(await response.json()).toEqual({
       error: { code: "venue.detail_changed", params: { field: "legalName" } },
     });
-    expect((await taxpayer()).legalName).toBe(original);
+    expect((await taxpayerRow()).legalName).toBe(original);
   });
 
   it("calls a name typed over a stale view changed, not unchanged", async () => {
@@ -103,7 +103,7 @@ describe("changing the taxpayer's legal name", () => {
     expect(await response.json()).toEqual({
       error: { code: "venue.detail_invalid", params: { field: "legalName", reason } },
     });
-    expect((await taxpayer()).legalName).toBe(original);
+    expect((await taxpayerRow()).legalName).toBe(original);
   });
 
   it.each([
@@ -117,7 +117,7 @@ describe("changing the taxpayer's legal name", () => {
     expect(await response.json()).toEqual({
       error: { code: "venue.detail_invalid", params: { field, reason } },
     });
-    expect((await taxpayer()).legalName).toBe(original);
+    expect((await taxpayerRow()).legalName).toBe(original);
   });
 
   it.each(["taxId", "country", "fiscalTerritory"])(
@@ -132,7 +132,7 @@ describe("changing the taxpayer's legal name", () => {
       expect(await response.json()).toEqual({
         error: { code: "venue.detail_read_only", params: { field } },
       });
-      expect((await taxpayer()).legalName).toBe(original);
+      expect((await taxpayerRow()).legalName).toBe(original);
     },
   );
 
@@ -143,14 +143,14 @@ describe("changing the taxpayer's legal name", () => {
     await suite.db.execute(sql`update taxpayer set legal_name = ${"Caf\u00e9 SL"} where id = 1`);
     const response = await rename({ legalName: "Deli Nueva SL", expected: copy("Caf\u00e9 SL") });
     expect(response.status).toBe(200);
-    expect((await taxpayer()).legalName).toBe("Deli Nueva SL");
+    expect((await taxpayerRow()).legalName).toBe("Deli Nueva SL");
   });
 
   it("accepts the composed spelling as the expected name for a name stored decomposed", async () => {
     await suite.db.execute(sql`update taxpayer set legal_name = ${"Cafe\u0301 SL"} where id = 1`);
     const response = await rename({ legalName: "Deli Nueva SL", expected: "Caf\u00e9 SL" });
     expect(response.status).toBe(200);
-    expect((await taxpayer()).legalName).toBe("Deli Nueva SL");
+    expect((await taxpayerRow()).legalName).toBe("Deli Nueva SL");
   });
 
   it("requires a session and the venue configuration permission", async () => {
@@ -179,7 +179,7 @@ describe("changing the taxpayer's legal name", () => {
     expect(await supervisor.json()).toEqual({
       error: { code: "authorization.not_permitted", params: { permission: "venue.configure" } },
     });
-    expect((await taxpayer()).legalName).toBe(original);
+    expect((await taxpayerRow()).legalName).toBe(original);
   });
 
   it("accepts a long name when the fiscal regime declares no venue-field rules", async () => {
@@ -189,14 +189,14 @@ describe("changing the taxpayer's legal name", () => {
       appWith({ ...realFiscal(), venueFields: undefined }),
     );
     expect(response.status).toBe(200);
-    expect((await taxpayer()).legalName).toBe("a".repeat(121));
+    expect((await taxpayerRow()).legalName).toBe("a".repeat(121));
   });
 
   it("stores the composed spelling and calls a decomposed spelling of the same name unchanged", async () => {
     const composed = "Caf\u00e9 SL";
     const decomposed = "Cafe\u0301 SL";
     expect((await rename({ legalName: decomposed, expected: original })).status).toBe(200);
-    expect((await taxpayer()).legalName).toBe(composed);
+    expect((await taxpayerRow()).legalName).toBe(composed);
     const response = await rename({ legalName: decomposed, expected: composed });
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
@@ -224,7 +224,7 @@ describe("changing the taxpayer's legal name", () => {
       code: "setup.request_invalid",
       params: { field: "taxId" },
     });
-    expect((await taxpayer()).legalName).toBe(original);
+    expect((await taxpayerRow()).legalName).toBe(original);
   });
 
   it("passes on a validator refusal that is not a field refusal instead of blaming the name", async () => {
@@ -246,6 +246,6 @@ describe("changing the taxpayer's legal name", () => {
     expect(await response.json()).toEqual({
       error: { code: "authorization.not_permitted", params: { permission: "venue.configure" } },
     });
-    expect((await taxpayer()).legalName).toBe(original);
+    expect((await taxpayerRow()).legalName).toBe(original);
   });
 });

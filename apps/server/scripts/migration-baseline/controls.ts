@@ -436,17 +436,17 @@ export const CONTROLS: readonly Control[] = [
     label: "unique index columns changed",
     change: {
       rewrite: {
-        name: "tenants_country_tax_id_key",
-        from: "(`country`,`tax_id`)",
-        to: "(`tax_id`)",
+        name: "menu_periods_department_key",
+        from: "(`id`,`department_id`)",
+        to: "(`department_id`)",
       },
     },
     expect: [
-      "changed index tenants_country_tax_id_key.columns[0].column",
+      "changed index menu_periods_department_key.columns[0].column",
       // The engine's rowid column moves up into the second place.
-      "changed index tenants_country_tax_id_key.columns[1].column",
-      "changed index tenants_country_tax_id_key.columns[1].key",
-      "missing index tenants_country_tax_id_key.columns[2]",
+      "changed index menu_periods_department_key.columns[1].column",
+      "changed index menu_periods_department_key.columns[1].key",
+      "missing index menu_periods_department_key.columns[2]",
     ],
   },
   {

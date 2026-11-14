@@ -206,11 +206,11 @@ async function scratchFolder(stateDir: string, prefix: string): Promise<string> 
 }
 
 async function readRestoredVenue(store: VenueDatabase, nodeId: string): Promise<RestoredVenue> {
-  const [taxpayer] = await store.venue
+  const [taxpayerRow] = await store.venue
     .select({ legalName: taxpayer.legalName, taxId: taxpayer.taxId })
     .from(taxpayer)
     .where(eq(taxpayer.id, 1));
-  if (taxpayer === undefined) throw new AppError("restore.identity_unknown", { nodeId });
+  if (taxpayerRow === undefined) throw new AppError("restore.identity_unknown", { nodeId });
   let venue;
   try {
     if (!(await tableExists(store.venue, "settings")))
@@ -228,8 +228,8 @@ async function readRestoredVenue(store: VenueDatabase, nodeId: string): Promise<
     throw error;
   }
   return {
-    legalName: taxpayer.legalName,
-    taxId: taxpayer.taxId,
+    legalName: taxpayerRow.legalName,
+    taxId: taxpayerRow.taxId,
     venueName: venue.name,
   };
 }

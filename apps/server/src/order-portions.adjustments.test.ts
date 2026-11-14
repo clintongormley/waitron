@@ -507,7 +507,7 @@ describe("A803 portions: a discount or comp on a whole row of identical portions
 
 /** Files the bill as a full invoice to a business, paid by card, and answers the invoice's lines. */
 async function invoiceOf(billId: string) {
-  const [taxpayer] = await inTx(venue, (tx) => tx.select().from(taxpayer));
+  const [taxpayerRow] = await inTx(venue, (tx) => tx.select().from(taxpayer));
   try {
     await inTx(venue, (tx) =>
       tx
@@ -559,7 +559,7 @@ async function invoiceOf(billId: string) {
     await inTx(venue, (tx) =>
       tx
         .update(taxpayer)
-        .set({ taxpayerDomicile: taxpayer!.taxpayerDomicile })
+        .set({ taxpayerDomicile: taxpayerRow!.taxpayerDomicile })
         .where(eq(taxpayer.id, 1)),
     );
   }

@@ -109,7 +109,7 @@ describe("stored invoice document projection", () => {
     const backend = none();
     const noRecord = await issue(backend);
     const filed = await issue(venue.backend);
-    const [taxpayer] = await suite.db.select().from(taxpayer);
+    const [taxpayerRow] = await suite.db.select().from(taxpayer);
     try {
       await suite.db.delete(taxpayer);
       await expect(read(backend, noRecord.saleId)).rejects.toThrow("Invoice has no taxpayer");
@@ -120,7 +120,7 @@ describe("stored invoice document projection", () => {
         domicile: "Saved domicile",
       });
     } finally {
-      await suite.db.insert(taxpayer).values(taxpayer!);
+      await suite.db.insert(taxpayer).values(taxpayerRow!);
     }
   });
 });

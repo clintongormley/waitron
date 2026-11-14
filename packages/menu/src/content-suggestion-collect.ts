@@ -350,14 +350,14 @@ export async function buildSuggestionJob(
   const items = await collectSuggestionItems(tx, context, exclude, gaps);
   if (items.length === 0) return null;
   const { config } = gaps.settings;
-  const [taxpayer] = await tx
+  const [taxpayerRow] = await tx
     .select({ country: taxpayer.country })
     .from(taxpayer)
     .where(eq(taxpayer.id, 1));
   const heads = await readContextHeads(tx, gaps, items);
   const job = {
     version: 1,
-    country: taxpayer!.country,
+    country: taxpayerRow!.country,
     languages: { default: config.defaultLanguage, enabled: config.languages },
     items: [] as SuggestionItem[],
     houseStyle: fitHouseStyle(await readHouseStyle(tx, config.languages)),

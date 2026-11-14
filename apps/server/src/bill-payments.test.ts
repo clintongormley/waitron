@@ -2173,7 +2173,7 @@ describe("the invoice at full payment", () => {
     const before = await inTx((tx) =>
       tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
     );
-    const [taxpayer] = await inTx((tx) => tx.select().from(taxpayer).where(eq(taxpayer.id, 1)));
+    const [taxpayerRow] = await inTx((tx) => tx.select().from(taxpayer).where(eq(taxpayer.id, 1)));
     try {
       await inTx((tx) =>
         tx
@@ -2207,7 +2207,7 @@ describe("the invoice at full payment", () => {
       await inTx((tx) =>
         tx
           .update(taxpayer)
-          .set({ taxpayerDomicile: taxpayer!.taxpayerDomicile })
+          .set({ taxpayerDomicile: taxpayerRow!.taxpayerDomicile })
           .where(eq(taxpayer.id, 1)),
       );
     }

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check } from "drizzle-orm/sqlite-core";
 import { count, label, now, table, ts } from "./columns.js";
 
 /** The venue time-zone default, shared with runtime fallbacks. */
@@ -22,8 +22,5 @@ export const taxpayer = table(
     privacyEmail: label("privacy_email"),
     createdAt: ts("created_at").notNull().$defaultFn(now),
   },
-  (t) => [
-    check("taxpayer_singleton_ck", sql`${t.id} = 1`),
-    uniqueIndex("tenants_country_tax_id_key").on(t.country, t.taxId),
-  ],
+  (t) => [check("taxpayer_singleton_ck", sql`${t.id} = 1`)],
 );
