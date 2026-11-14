@@ -173,11 +173,11 @@ that fallback is not live-qualified. A lost fallback reply has no supplied refer
 Recovery records the gross capture and identified completed refunds together. Uncertain refund
 evidence stays attempting for another check; a failed refund alone leaves the charge. A partly
 refunded unfiled charge keeps the order held. Retaining and allocating the remaining charge after
-a partial refund is still unavailable. Bank-payout audit, Stripe durable reversal attempts
-and backup-machine hardware qualification remain open, along with signature handling.
+a partial refund is still unavailable. Stripe durable reversal attempts and backup-machine
+hardware qualification remain open, along with signature handling.
 
 The daily gross-charge audit and read-only refund comparison do not establish bank arrival.
-Bank-payout audit remains to build. The original transaction can stay
+The original transaction can stay
 `SUCCESSFUL` while identified `REFUND` events in `events` and `transaction_events` show money
 returned; its status alone cannot establish what remains collected.
 
@@ -413,6 +413,11 @@ Remaining Stripe qualification and maintenance.
   [Detail](payments.md#the-w48-test-does-not-measure-a-real-silent-provider-or-the-boxs-http11-connection-limit)
 
 ## Decisions and deliberate limits
+
+- **Bank-payout reconciliation stays outside Waitron.** The owner asked on 21 October 2026 (A275),
+  “Wouldn't this reconciliation be done by the accountant outside of waitron”. The watcher withdrew
+  the bank-payout audit from A949 on 14 November at 16:33: no viewer or audit is to be built, and no
+  payout evidence is requested. The gross-charge audit and refund comparison do not prove bank arrival.
 
 - **SumUp abandoned-order refunds** (owner, 2026-11-14 09:52, relayed in Lane F questions.md):
   send one full refund only with an exact saved Waitron reference, matching amount and no prior refund.
