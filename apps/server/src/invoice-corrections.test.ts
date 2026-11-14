@@ -328,12 +328,7 @@ describe("openInvoiceCorrection", () => {
   it("previews correcting a retained receipt using its net refundable money", async () => {
     const id = randomUUID();
     await parkOrder(
-      {
-        db: venue.db,
-        backend: venue.backend,
-        clock: venue.clock,
-        admission: testTradingAdmission(),
-      },
+      { db: venue.db },
       venue.cfg,
       {
         id,

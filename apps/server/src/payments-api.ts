@@ -1468,6 +1468,22 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     return { partialRefund, ...(await listedRetention(tx, paymentId, partialRefund.remaining)) };
   };
 
+  const allocationChanged = (
+    workingOrderId: string,
+    allocation: Awaited<ReturnType<typeof retentionPreview>>,
+  ) =>
+    new AppError("bill.allocation_changed", {
+      workingOrderId,
+      preview: {
+        kind: "allocated",
+        choice: null,
+        applied: allocation.applied,
+        tip: allocation.tip,
+        charged: allocation.remaining,
+        change: null,
+      },
+    });
+
   app.post("/management-api/payments/partial-refunds/:id/retain", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1527,9 +1543,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const allocation = await retentionPreview(tx, payment, facts.partialRefund.remaining);
         for (const field of ["remaining", "applied", "tip"] as const)
           if (compareDecimal(decimal(seen[field]), allocation[field]) !== 0)
-            throw new AppError("bill.allocation_changed", {
-              workingOrderId: payment.workingOrderId,
-            });
+            throw allocationChanged(payment.workingOrderId, allocation);
         return { ...row, replay: false as const, allocation, refunds: facts.refunds };
       };
       const before = await gated(sessionId, read);
@@ -1544,7 +1558,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         before.payment.externalRef === null
           ? { kind: "unknown" as const }
           : await provider.lookupCompletedRefunds(before.payment.externalRef);
-      let evidenceChanged = false;
+      let changedEvidence: AppError | undefined;
       const answer = await gated(sessionId, async (tx, personId) => {
         const current = await read(tx);
         if (current.replay) return current.allocation;
@@ -1553,12 +1567,15 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const nowFacts = await refundFacts(tx, paymentId, payment.amount);
         if (compareDecimal(nowFacts.partialRefund.remaining, allocation.remaining) !== 0) {
           // Keep identified provider refunds visible on refresh; the bill stays held for a new confirmation.
-          evidenceChanged = true;
+          changedEvidence = allocationChanged(
+            payment.workingOrderId,
+            await retentionPreview(tx, payment, nowFacts.partialRefund.remaining),
+          );
           return allocation;
         }
         const attestation = { attestedBy: personId, note: "Retained confirmed remaining money" };
         const receivedAt = new Date(payment.settledAt!);
-        if (bill)
+        if (bill) {
           await completeBillPayment(
             tx,
             fiscal,
@@ -1569,7 +1586,9 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             undefined,
             { applied: allocation.applied, tip: allocation.tip },
           );
-        else {
+          if (order.paymentAttemptAt !== null)
+            await clearPaymentAttemptMark(tx, payment.workingOrderId, order.paymentAttemptAt);
+        } else {
           const attendanceKey = await pendingIntegratedAttendanceKey(
             tx,
             deps.attendance,
@@ -1611,14 +1630,9 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             { moneyMoved: true },
           );
         }
-        if (order.paymentAttemptAt !== null)
-          await clearPaymentAttemptMark(tx, payment.workingOrderId, order.paymentAttemptAt);
         return allocation;
       });
-      if (evidenceChanged)
-        throw new AppError("bill.allocation_changed", {
-          workingOrderId: before.payment.workingOrderId,
-        });
+      if (changedEvidence) throw changedEvidence;
       return c.json({ outcome: "retained", ...answer });
     }),
   );

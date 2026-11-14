@@ -1355,6 +1355,26 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The card provider could not say what happened to this payment; the order stays locked. Try again in a minute.",
     es: "El proveedor de pagos no pudo confirmar qué pasó con este cobro; el pedido sigue bloqueado. Vuelve a intentarlo en un minuto.",
   },
+  "bill.allocation_changed": {
+    en: "The amounts changed. Check the refreshed amounts and confirm again.",
+    es: "Los importes han cambiado. Revisa los importes actualizados y confirma de nuevo.",
+  },
+  "bill.tip_not_allowed": {
+    en: "Tips are off. Refund the excess at the card provider, then check the remaining money again.",
+    es: "Las propinas están desactivadas. Devuelve el exceso en el proveedor de tarjetas y vuelve a comprobar el dinero restante.",
+  },
+  "bill.nothing_outstanding": {
+    en: "This bill has nothing left to pay. Refund the remaining money at the card provider, then confirm the full refund.",
+    es: "Esta cuenta no tiene nada pendiente de pago. Devuelve el dinero restante en el proveedor de tarjetas y confirma la devolución completa.",
+  },
+  "order.payment_in_flight": {
+    en: "Another card payment is still unresolved. Check its outcome before trying again.",
+    es: "Otro pago con tarjeta sigue sin resolverse. Comprueba su resultado antes de intentarlo de nuevo.",
+  },
+  "bill.refund_in_progress": {
+    en: "A refund is still unresolved. Check its outcome before trying again.",
+    es: "Una devolución sigue sin resolverse. Comprueba su resultado antes de intentarlo de nuevo.",
+  },
   "bill.payment_not_found": {
     en: "That payment towards a bill no longer exists. Refresh the list.",
     es: "Ese pago a cuenta de una cuenta ya no existe. Actualiza la lista.",

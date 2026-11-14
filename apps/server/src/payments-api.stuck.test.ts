@@ -3061,7 +3061,8 @@ describe("provider-confirmed partial-refund release", () => {
         return evidence;
       });
       const result = await post(v, retainPath(payment.id), allocation);
-      expect((await errorOf(result)).code).toBe(
+      const refusal = await errorOf(result);
+      expect(refusal.code).toBe(
         problem === "evidence changed"
           ? "bill.allocation_changed"
           : problem === "another box"
@@ -3076,6 +3077,9 @@ describe("provider-confirmed partial-refund release", () => {
       ).toHaveLength(problem === "evidence changed" ? 2 : 1);
       expect((await orderOf(payment.workingOrderId)).mark).toBe(MARK);
       if (problem === "evidence changed") {
+        expect(refusal.params).toMatchObject({
+          preview: { kind: "allocated", applied: "1.00", charged: "1.00", tip: "0.00" },
+        });
         expect(await (await send(v, "GET", "/management-api/payments/stuck")).json()).toMatchObject(
           [{ partialRefund: { remaining: "1.00" } }],
         );

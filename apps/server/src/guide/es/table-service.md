@@ -477,12 +477,12 @@ En **Pagos con tarjeta**, comprueba los importes cobrados, devueltos y aún rete
 **Conservar en esta cuenta** para aplicar el dinero restante a la cuenta. Antes de confirmar,
 comprueba el importe aplicado, el exceso conservado como propina y lo que aún tienes que cobrar.
 Por ejemplo, de 100 € cobrados y 40 € devueltos, puedes conservar 60 € en la cuenta y cobrar solo
-lo que falte. Solo puedes conservar un exceso si las propinas están activadas. El cobro cuenta
-en el día del cargo original.
+lo que falte. Solo puedes conservar un exceso si las propinas están activadas.
 
 Para devolver todo el dinero, devuelve el resto en SumUp y elige **Confirmar devolución completa**
 en Waitron. Usa también esta opción si el pago de la cuenta ya figura como fallido. Si SumUp no
-puede confirmar los importes, comprueba sus devoluciones e inténtalo de nuevo. Revisa los demás
+puede confirmar los importes, comprueba sus devoluciones e inténtalo de nuevo. Una vez liberado,
+vuelve a abrir el pedido para continuar. Revisa los demás
 pagos del aviso de devolución compartido antes de marcarlo como atendido; puede que los pagos
 posteriores no aparezcan en él.
 

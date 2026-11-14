@@ -957,3 +957,18 @@ it("the backup-settings refusal says this box keeps selling and to try again in 
     "El servidor de reserva no tiene los ajustes de copia de seguridad de este servidor, así que no ha aceptado el traspaso. Este servidor sigue vendiendo y le envía sus ajustes solo. Vuelve a intentarlo dentro de un minuto.",
   );
 });
+
+it.each(["en", "es"] as const)(
+  "explains the next step for retained-money refusals (%s)",
+  (locale) => {
+    for (const code of [
+      "bill.allocation_changed",
+      "bill.tip_not_allowed",
+      "bill.nothing_outstanding",
+      "order.payment_in_flight",
+      "bill.refund_in_progress",
+    ]) {
+      expect(codeMessage(code, locale)).not.toBe(codeMessage("unknown.code", locale));
+    }
+  },
+);
