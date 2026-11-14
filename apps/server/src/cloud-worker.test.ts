@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, onTestFinished } from "vitest";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
 import { runCloudConnectionForTest } from "./testing/cloud-connection-job.js";
 it("refreshes a real installation without a manager session, waits between ticks and stops on abort", async () => {
@@ -68,4 +68,62 @@ it("a secondary does not refresh and an outage is retried on the next scheduled 
     controller.abort();
     await f.close();
   }
+});
+
+it.each(["guest", "certificate"] as const)(
+  "tries both Cloud services even when %s fails",
+  async (failed) => {
+    const f = await installationFixture();
+    onTestFinished(() => f.close());
+    const controller = new AbortController();
+    const failure = new Error("service unavailable");
+    const seen: string[] = [],
+      guestErrors: unknown[] = [],
+      refreshErrors: unknown[] = [];
+    await runCloudConnectionForTest({
+      connection: {
+        ...f.client,
+        staffCertificate: async () => {
+          if (failed === "certificate") throw failure;
+          return true;
+        },
+      },
+      signal: controller.signal,
+      isPrimary: () => true,
+      staffHostname: "staff.example.test",
+      onGuestMenu: async () => {
+        seen.push("guest");
+        if (failed === "guest") throw failure;
+      },
+      onGuestMenuError: (error) => guestErrors.push(error),
+      onStaffCertificate: () => seen.push("staff ready"),
+      onError: (error) => refreshErrors.push(error),
+      sleep: async () => controller.abort(),
+    });
+    expect(seen).toEqual(failed === "guest" ? ["guest", "staff ready"] : ["guest"]);
+    expect(guestErrors).toEqual(failed === "guest" ? [failure] : []);
+    expect(refreshErrors).toEqual(failed === "certificate" ? [failure] : []);
+    expect((await f.client.status()).installation?.state).toBe("active");
+  },
+);
+
+it("skips guest delivery when the box steps down during connection refresh", async () => {
+  const f = await installationFixture();
+  onTestFinished(() => f.close());
+  const controller = new AbortController();
+  let primary = true,
+    deliveries = 0;
+  f.delay(async () => {
+    primary = false;
+  });
+  await runCloudConnectionForTest({
+    connection: f.client,
+    signal: controller.signal,
+    isPrimary: () => primary,
+    onGuestMenu: async () => {
+      deliveries++;
+    },
+    sleep: async () => controller.abort(),
+  });
+  expect(deliveries).toBe(0);
 });

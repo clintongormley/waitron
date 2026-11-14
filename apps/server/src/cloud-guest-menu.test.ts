@@ -2,7 +2,7 @@ import { expect, it, onTestFinished } from "vitest";
 import { createHash } from "node:crypto";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
 
-async function fixture() {
+async function fixture(wait: () => Promise<void> = async () => {}) {
   const calls: object[] = [];
   const reply: Record<string, unknown> = {
     version: 1,
@@ -20,6 +20,7 @@ async function fixture() {
         currentLease: values[6] === JSON.stringify((saved.lifecycle as { lease: unknown }).lease),
         ...(typeof sent.body === "string" ? { text: sent.body } : {}),
       });
+      await wait();
       res.end(JSON.stringify(reply));
     },
   });
@@ -122,3 +123,27 @@ it("refuses malformed or differently addressed hosted-menu confirmations", async
     });
   }
 });
+
+it("ends an in-flight status read when its caller aborts", async () => {
+  let entered = () => {},
+    release = () => {};
+  const reached = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const f = await fixture(async () => {
+    entered();
+    await held;
+  });
+  const controller = new AbortController();
+  try {
+    const outcome = f.client.guestMenuStatus(controller.signal);
+    await reached;
+    controller.abort();
+    await expect(outcome).rejects.toMatchObject({ code: "cloud.unavailable" });
+  } finally {
+    release();
+  }
+}, 3000);
