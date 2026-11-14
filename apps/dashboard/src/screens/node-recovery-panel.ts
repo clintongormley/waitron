@@ -4,9 +4,10 @@ import { baseStyles, draftScopeFor, type DraftScope } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-file-input.js";
 import type { DashboardApi } from "../api/client.js";
 import { codeOf } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { renderNodeRecoveryPack } from "./node-recovery-print.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 
@@ -27,21 +28,12 @@ export class NodeRecoveryPanel extends LitElement {
         font-size: var(--wt-font-size-lg);
         margin-block: 0 var(--wt-space-3);
       }
-      p,
-      label {
+      p {
         margin-block: var(--wt-space-3);
       }
-      wt-input {
+      wt-input,
+      wt-file-input {
         margin-block: var(--wt-space-4);
-      }
-      label {
-        display: block;
-      }
-      input[type="file"] {
-        max-width: 100%;
-      }
-      .error {
-        color: var(--wt-color-danger);
       }
       .downloads {
         display: flex;
@@ -86,7 +78,6 @@ export class NodeRecoveryPanel extends LitElement {
         this.key = value.key;
         this.file = value.file;
         this.#resetOutput();
-        this.#resetFileInput();
       },
     }).scope;
     this.#scope.commit({ key: "", file: undefined });
@@ -98,20 +89,10 @@ export class NodeRecoveryPanel extends LitElement {
     this.busy = false;
     this.key = "";
     this.file = undefined;
-    this.#resetFileInput();
     this.#resetOutput();
     this.#scope?.dispose();
     this.#scope = undefined;
     super.disconnectedCallback();
-  }
-
-  #resetFileInput(): void {
-    const input = this.shadowRoot?.querySelector<HTMLInputElement>("input[type=file]");
-    if (input) {
-      const transfer = new DataTransfer();
-      if (this.file) transfer.items.add(this.file);
-      input.files = transfer.files;
-    }
   }
 
   #resetOutput(): void {
@@ -170,7 +151,6 @@ export class NodeRecoveryPanel extends LitElement {
       };
       this.key = "";
       this.file = undefined;
-      this.#resetFileInput();
       this.#scope?.commit({ key: "", file: undefined });
     } catch (error) {
       if (generation !== this.#generation) return;
@@ -202,25 +182,28 @@ export class NodeRecoveryPanel extends LitElement {
           this.#edited();
         }}
       ></wt-input>
-      <label for="node-register">${t("node_pack.file")} <span aria-hidden="true">*</span></label>
-      <input
-        id="node-register"
+      <wt-file-input
         data-test="register-file"
         name="signed-allocation-register"
-        type="file"
         accept="application/json,.json"
         required
+        label=${t("node_pack.file")}
+        locale=${currentLocale()}
+        .copy=${{
+          drop: t("file_input.drop"),
+          choose: t("file_input.choose"),
+          replace: t("file_input.replace"),
+          previewAlt: t("file_input.preview"),
+        }}
+        .files=${this.file ? [this.file] : []}
         ?disabled=${this.busy}
-        aria-invalid=${this.fileError ? "true" : "false"}
-        aria-describedby="node-register-error"
-        @change=${(event: Event) => {
-          this.file = (event.currentTarget as HTMLInputElement).files?.[0];
+        error=${this.fileError ? t("node_pack.file_error") : ""}
+        @wt-change=${(event: CustomEvent<{ files: File[] }>) => {
+          event.stopPropagation();
+          this.file = event.detail.files[0];
           this.#edited();
         }}
-      />
-      <p id="node-register-error" class="error" data-test="file-error">
-        ${this.fileError ? t("node_pack.file_error") : nothing}
-      </p>
+      ></wt-file-input>
       <wt-form-actions
         .error=${this.failed ? t("node_pack.failed") : this.keyError || this.fileError ? t("form.fix_fields") : ""}
       >

@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { cdp, commands, page } from "vitest/browser";
 import type { WtButton, WtInput } from "@waitron/ui";
 import { DashboardApi } from "../api/client.js";
+import { chooseFiles, fileError } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { NodeRecoveryPanel } from "./node-recovery-panel.js";
@@ -48,9 +49,10 @@ for (const locale of ["en-GB", "es-ES"] as const)
           host.style.padding = "var(--wt-space-4)";
           await expectNoA11yViolations(el);
           const root = el.shadowRoot!;
-          const label = root.querySelector<HTMLLabelElement>("label")!;
+          const picker = root.querySelector("wt-file-input")!;
+          const label = picker.shadowRoot!.querySelector<HTMLLabelElement>("label")!;
           expect(
-            label.querySelector("span")!.getBoundingClientRect().top -
+            label.querySelector("[data-required]")!.getBoundingClientRect().top -
               label.getBoundingClientRect().top,
           ).toBeLessThan(10);
           root.querySelector<WtInput>("wt-input")!.dispatchEvent(
@@ -58,21 +60,14 @@ for (const locale of ["en-GB", "es-ES"] as const)
               detail: { value: "synthetic-node-recovery-key-7c1d-4321" },
             }),
           );
-          const picker = root.querySelector<HTMLInputElement>("input[type=file]")!;
-          const select = (content: string) => {
-            const files = new DataTransfer();
-            files.items.add(new File([content], "register.json"));
-            picker.files = files.files;
-            picker.dispatchEvent(new Event("change"));
-          };
+          const select = (content: string) =>
+            chooseFiles(picker, new File([content], "register.json"));
           select("not-json");
           await el.updateComplete;
           root.querySelector<WtButton>("wt-button")!.click();
           expect(read).toHaveBeenCalledTimes(1);
           await read.mock.results[0]!.value;
-          await vi.waitFor(() =>
-            expect(root.querySelector("[data-test=file-error]")?.textContent?.trim()).toBeTruthy(),
-          );
+          await vi.waitFor(() => expect(fileError(picker)?.textContent?.trim()).toBeTruthy());
           await expectNoA11yViolations(el);
           select('{"test-regime": {"register": "public"}}');
           await el.updateComplete;

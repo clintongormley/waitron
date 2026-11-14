@@ -8,6 +8,8 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-textarea.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-file-input.js";
+import { fileInputCopy } from "../file-input-copy.js";
 import { CustodySession } from "./custody-state.js";
 import type { CustodyCheckReceipt } from "./challenge.js";
 import {
@@ -95,18 +97,9 @@ export class OfflineCustodyApp extends LitElement {
     .hint {
       color: var(--wt-color-text-muted);
     }
-    label.file {
-      display: grid;
-      gap: var(--wt-space-2);
-    }
-    input[type="file"] {
-      font: inherit;
-      color: inherit;
-      max-width: 100%;
-      min-height: var(--wt-tap-min);
-    }
     wt-input,
-    wt-textarea {
+    wt-textarea,
+    wt-file-input {
       max-width: 100%;
     }
     .rows {
@@ -296,21 +289,22 @@ export class OfflineCustodyApp extends LitElement {
     ></wt-switch>`;
   }
   private file(name: string, label: string) {
-    return html`<label class="file"
-      ><span>${label}<span aria-hidden="true"> *</span></span
-      ><input
-        type="file"
-        name=${name}
-        aria-label=${label}
-        required
-        accept=".json,application/json"
-        @change=${(event: Event) => {
-          const input = event.target as HTMLInputElement;
-          this.#files.delete(name);
-          if (input.files?.[0]) this.#files.set(name, input.files[0]);
-          this.revision++;
-        }}
-    /></label>`;
+    const file = this.#files.get(name);
+    return html`<wt-file-input
+      name=${name}
+      label=${label}
+      required
+      accept=".json,application/json"
+      locale=${this.locale}
+      .copy=${fileInputCopy[this.locale]}
+      .files=${file ? [file] : []}
+      @wt-change=${(event: CustomEvent<{ files: File[] }>) => {
+        event.stopPropagation();
+        this.#files.delete(name);
+        if (event.detail.files[0]) this.#files.set(name, event.detail.files[0]);
+        this.revision++;
+      }}
+    ></wt-file-input>`;
   }
   private button(
     name: string,
@@ -608,10 +602,7 @@ export class OfflineCustodyApp extends LitElement {
                                 } finally {
                                   this.clearFields(["passphrase"]);
                                   this.#files.delete("saved-file");
-                                  const input = this.shadowRoot?.querySelector<HTMLInputElement>(
-                                    'input[name="saved-file"]',
-                                  );
-                                  if (input) input.value = "";
+                                  this.revision++;
                                 }
                               },
                               this.#files.has("saved-file"),

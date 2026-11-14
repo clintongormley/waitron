@@ -7,6 +7,8 @@ import { restoreSecretPaper } from "./paper-codec.js";
 import { checkCustodyChallenge } from "./challenge.js";
 import type { KitCheckRequest } from "./custody-state.js";
 import axe from "axe-core";
+import { chooseFiles, drawnFileName, fileControl } from "@waitron/ui/src/test-helpers.js";
+import { custodyStrings } from "./strings.js";
 
 let app: OfflineCustodyApp | undefined;
 afterEach(() => {
@@ -21,19 +23,18 @@ async function mount() {
   await app.updateComplete;
   return app;
 }
-async function upload(el: Element, name: string, value: unknown) {
-  const input = el.shadowRoot!.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
-  const files = new DataTransfer();
-  files.items.add(new File([JSON.stringify(value)], `${name}.json`, { type: "application/json" }));
-  input.files = files.files;
-  input.dispatchEvent(new Event("change", { bubbles: true }));
+const picker = (el: Element, name: string) =>
+  el.shadowRoot!.querySelector(`wt-file-input[name="${name}"]`)!;
+async function upload(el: Element, name: string, value: unknown, length = 0) {
+  chooseFiles(
+    picker(el, name),
+    new File([JSON.stringify(value).padEnd(length, " ")], `${name}.json`, {
+      type: "application/json",
+    }),
+  );
 }
 async function uploadRaw(el: Element, name: string, value: string) {
-  const input = el.shadowRoot!.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
-  const files = new DataTransfer();
-  files.items.add(new File([value], `${name}.json`));
-  input.files = files.files;
-  input.dispatchEvent(new Event("change", { bubbles: true }));
+  chooseFiles(picker(el, name), new File([value], `${name}.json`));
 }
 async function fill(el: Element, name: string, value: string) {
   const field = el.shadowRoot!.querySelector(
@@ -51,9 +52,7 @@ it("uses actual file selection, asks about an existing master first and offers n
   expect(
     el.shadowRoot!.querySelector('[role="status"]')!.textContent!.replace(/\s+/g, " ").trim(),
   ).toBe("Progress: Not checked");
-  expect(
-    el.shadowRoot!.querySelector<HTMLInputElement>('input[name="host-request"]')!.required,
-  ).toBe(true);
+  expect(fileControl(picker(el, "host-request")).required).toBe(true);
   await upload(el, "host-request", await custodyRequest());
   await userEvent.click(page.getByRole("button", { name: "Load setup request", exact: true }));
   await expect
@@ -456,3 +455,20 @@ it.each(["required", "invalid", "refused", "unsupported"] as const)(
     }
   },
 );
+
+it("draws the request picker in Spanish and loads the chosen request", async () => {
+  const el = await mount();
+  const es = custodyStrings("es");
+  await userEvent.click(page.getByRole("button", { name: "ES", exact: true }));
+  await userEvent.click(page.getByRole("button", { name: "Primer kit", exact: true }));
+  const request = picker(el, "host-request");
+  expect(request.shadowRoot!.textContent).toContain("Elegir archivo");
+  expect(request.shadowRoot!.textContent).not.toContain("Choose");
+  await upload(el, "host-request", await custodyRequest(), 15_500);
+  await el.updateComplete;
+  expect(drawnFileName(request)).toBe("host-request.json");
+  expect(request.shadowRoot!.querySelector(".size")!.textContent).toBe("15,5 kB");
+  expect(request.shadowRoot!.textContent).toContain("Elegir otro archivo");
+  await userEvent.click(page.getByRole("button", { name: es.loadRequest, exact: true }));
+  await expect.element(page.getByText(es.existingQuestion, { exact: true })).toBeVisible();
+});

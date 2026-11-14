@@ -2,6 +2,7 @@ import axe from "axe-core";
 import { afterEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
+import { chooseFiles } from "@waitron/ui/src/test-helpers.js";
 import type { LitElement } from "lit";
 import "./recovery-key.js";
 import { renderRecoveryPdf } from "../recovery-pdf.js";
@@ -82,12 +83,11 @@ for (const theme of ["light", "dark"] as const)
                 locale,
                 "Europe/Madrid",
               );
-              const picker = el.shadowRoot!.querySelector<HTMLInputElement>('input[type="file"]')!;
-              const transfer = new DataTransfer();
-              transfer.items.add(new File([bytes], "recovery.pdf"));
-              picker.files = transfer.files;
               const reading = vi.spyOn(el, "importFile");
-              picker.dispatchEvent(new Event("change"));
+              chooseFiles(
+                el.shadowRoot!.querySelector("wt-file-input")!,
+                new File([bytes], "recovery.pdf"),
+              );
               await reading.mock.results[0]!.value;
               await el.updateComplete;
             }

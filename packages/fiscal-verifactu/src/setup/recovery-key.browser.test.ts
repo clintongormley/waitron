@@ -2,6 +2,8 @@ import { PDFDocument } from "pdf-lib";
 import { afterEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { applyTokens, LeaveController } from "@waitron/ui";
+import { chooseFiles, drawnFileName, fileControl } from "@waitron/ui/src/test-helpers.js";
+import type { WtFileInput } from "@waitron/ui/src/components/wt-file-input.js";
 import { LitElement, html } from "lit";
 import "./first-fiscal-screen.js";
 import { renderRecoveryPdf } from "../recovery-pdf.js";
@@ -79,14 +81,11 @@ it("decodes rendered grouped, lowercase and look-alike fields without changing t
   expect(el.shadowRoot!.textContent).not.toContain(saved.nodeKey.secret);
 });
 async function upload(el: LitElement, bytes: Uint8Array<ArrayBuffer>) {
-  const picker = el.shadowRoot!.querySelector<HTMLInputElement>('input[type="file"]');
+  const picker = el.shadowRoot!.querySelector("wt-file-input");
   expect(picker, "recovery offers the saved-PDF picker").not.toBeNull();
-  const transfer = new DataTransfer();
-  transfer.items.add(new File([bytes], "recovery.pdf", { type: "application/pdf" }));
-  picker!.files = transfer.files;
   const read = vi.spyOn(el as RecoveryKeyEntry, "importFile");
   try {
-    picker!.dispatchEvent(new Event("change"));
+    chooseFiles(picker!, new File([bytes], "recovery.pdf", { type: "application/pdf" }));
     const pending = read.mock.results.at(-1)?.value;
     if (pending === undefined) throw new Error("The picker did not start reading its PDF");
     await pending;
@@ -186,12 +185,8 @@ it.each(["selection", "remove", "edit"])("ignores an old PDF read after %s", asy
   Object.defineProperty(file, "arrayBuffer", { value: () => held });
   const events: Array<{ secret?: string }> = [];
   el.addEventListener("recovery-key-change", (event) => events.push((event as CustomEvent).detail));
-  const picker = el.shadowRoot!.querySelector<HTMLInputElement>('input[type="file"]')!;
-  const transfer = new DataTransfer();
-  transfer.items.add(file);
-  picker.files = transfer.files;
   const loading = vi.spyOn(el, "importFile");
-  picker.dispatchEvent(new Event("change"));
+  chooseFiles(el.shadowRoot!.querySelector("wt-file-input")!, file);
   const imported = loading.mock.results[0]!.value;
   if (fault === "selection") el.selection = { ...selection, keyName: "Earlier key" };
   if (fault === "remove") el.remove();
@@ -215,15 +210,37 @@ it("refuses an oversized PDF before reading its bytes", async () => {
   );
   expect(reading).not.toHaveBeenCalled();
 });
-it("clears the native PDF picker when its backup selection changes", async () => {
+it("clears the PDF picker when its backup selection changes", async () => {
   const el = await mount();
-  const picker = el.shadowRoot!.querySelector<HTMLInputElement>('input[type="file"]')!;
+  const picker = el.shadowRoot!.querySelector<WtFileInput>("wt-file-input")!;
   await upload(el, await renderRecoveryPdf(saved, "en", "Europe/Madrid"));
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Key loaded"));
   expect(picker.files).toHaveLength(1);
+  expect(drawnFileName(picker)).toBe("recovery.pdf");
   el.selection = { ...selection, keyName: "Earlier key" };
   await el.updateComplete;
   expect(picker.files).toHaveLength(0);
+  expect(drawnFileName(picker)).toBeNull();
+});
+it("draws the PDF picker in Spanish and reads the chosen file", async () => {
+  const el = await mount();
+  el.locale = "es";
+  await el.updateComplete;
+  const picker = el.shadowRoot!.querySelector<WtFileInput>("wt-file-input")!;
+  expect(picker.shadowRoot!.textContent).toContain("Elegir archivo");
+  expect(picker.shadowRoot!.textContent).not.toContain("Choose");
+  expect(fileControl(picker).accept).toBe("application/pdf,.pdf");
+  const read = vi.spyOn(el, "importFile");
+  chooseFiles(picker, new File(["X".repeat(1_500)], "notes.pdf"));
+  await read.mock.results[0]!.value;
+  await el.updateComplete;
+  expect(drawnFileName(picker)).toBe("notes.pdf");
+  expect(picker.shadowRoot!.querySelector(".size")!.textContent).toBe("1,5 kB");
+  expect(picker.shadowRoot!.textContent).toContain("Elegir otro archivo");
+  expect(el.shadowRoot!.querySelector("#pdf-error")!.textContent).toBe(
+    "Elige un PDF de recuperación válido, o introduce la clave abajo.",
+  );
+  expect(picker.invalid).toBe(true);
 });
 
 class KeyShell extends LitElement {
@@ -322,9 +339,7 @@ it.each(["en", "es"] as const)(
     );
     await upload(el, await renderRecoveryPdf(saved, locale, "Europe/Madrid"));
     expect(secrets.at(-1)).toBe("AbCdEfGhIjKlMnOpQrStUvWxYz012345");
-    expect(
-      el.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!.files!.item(0)!.name,
-    ).toBe("recovery.pdf");
+    expect(drawnFileName(el.shadowRoot!.querySelector("wt-file-input")!)).toBe("recovery.pdf");
     expect(
       el
         .shadowRoot!.querySelector("wt-input")!

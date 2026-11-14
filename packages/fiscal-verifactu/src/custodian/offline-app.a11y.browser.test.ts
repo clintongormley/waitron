@@ -2,6 +2,7 @@ import axe from "axe-core";
 import { afterEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { OfflineCustodyApp } from "./offline-app.js";
+import { chooseFiles } from "@waitron/ui/src/test-helpers.js";
 import { custodyRequest } from "../testing/custodian-fixture.js";
 
 let app: OfflineCustodyApp | undefined;
@@ -57,11 +58,10 @@ for (const theme of ["light", "dark"] as const)
       await userEvent.click(
         page.getByRole("button", { name: locale === "en" ? "New kit" : "Primer kit", exact: true }),
       );
-      const input = app.shadowRoot!.querySelector<HTMLInputElement>('input[name="host-request"]')!;
-      const files = new DataTransfer();
-      files.items.add(new File([JSON.stringify(await custodyRequest())], "public-request.json"));
-      input.files = files.files;
-      input.dispatchEvent(new Event("change", { bubbles: true }));
+      chooseFiles(
+        app.shadowRoot!.querySelector('wt-file-input[name="host-request"]')!,
+        new File([JSON.stringify(await custodyRequest())], "public-request.json"),
+      );
       await userEvent.click(
         page.getByRole("button", {
           name: locale === "en" ? "Load setup request" : "Cargar configuración",
