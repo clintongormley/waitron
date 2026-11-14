@@ -431,14 +431,20 @@ describe("units-screen", () => {
     });
   });
 
-  it("left-aligns the row-action buttons", async () => {
+  it("centres the shared row-action buttons", async () => {
     const el = await mount();
     const menu = el
       .shadowRoot!.querySelector("wt-data-table")!
       .shadowRoot!.querySelector("wt-row-actions")!;
     const buttons = [...menu.querySelectorAll("wt-button")];
     expect(buttons.length).toBeGreaterThan(0);
-    for (const button of buttons) expect(button.getAttribute("align")).toBe("start");
+    for (const button of buttons) {
+      await button.updateComplete;
+      expect(button.variant).toBe("secondary");
+      expect(getComputedStyle(button.shadowRoot!.querySelector("button")!).justifyContent).toBe(
+        "center",
+      );
+    }
   });
 
   it("blocks duplicate submissions and closes after a successful create", async () => {

@@ -2858,8 +2858,6 @@ export class TillTableOrderScreen extends LitElement {
     const shown = this.#shownBills().find((bill) => bill.workingOrderId === this.orderId);
     const name = shown === undefined ? t("adjust.whole_bill") : this.#billName(shown);
     return html`<wt-button
-      variant="ghost"
-      align="start"
       data-discount-bill
       @click=${() =>
         this.#adjust("discount", {
@@ -3840,10 +3838,10 @@ export class TillTableOrderScreen extends LitElement {
     const disabled = this.busy || this.groupCommandBusy;
     return html`<wt-row-actions label=${t("shell.more")}>
       ${fire ? html`<wt-button variant=${disabled ? "secondary" : "primary"} data-sent-line-fire ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "fire")}>${t("table.destination_fire_now")}</wt-button>` : nothing}
-      ${station ? html`<wt-button variant="secondary" data-sent-line-station ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "station")}>${t("table.move_station")}</wt-button>` : nothing}
-      ${comp ? html`<wt-button variant="secondary" data-sent-line-comp ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "comp")}>${t("comp.title")}</wt-button>` : nothing}
+      ${station ? html`<wt-button data-sent-line-station ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "station")}>${t("table.move_station")}</wt-button>` : nothing}
+      ${comp ? html`<wt-button data-sent-line-comp ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "comp")}>${t("comp.title")}</wt-button>` : nothing}
       ${canVoid ? html`<wt-button variant=${disabled ? "secondary" : "danger"} data-sent-line-void ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "void")}>${t("table.void_line")}</wt-button>` : nothing}
-      ${unserve ? html`<wt-button variant="secondary" data-sent-line-unserve aria-label=${`${t("table.unserve")} · ${slice.row.name}`} ?disabled=${disabled} @click=${() => this.#serveFromSentLine(pending, true)}>${t("table.unserve")}</wt-button>` : nothing}
+      ${unserve ? html`<wt-button data-sent-line-unserve aria-label=${`${t("table.unserve")} · ${slice.row.name}`} ?disabled=${disabled} @click=${() => this.#serveFromSentLine(pending, true)}>${t("table.unserve")}</wt-button>` : nothing}
     </wt-row-actions>`;
   }
 
@@ -4566,7 +4564,6 @@ export class TillTableOrderScreen extends LitElement {
             ? nothing
             : html`<wt-button
                 data-draft-earlier
-                variant="secondary"
                 ?disabled=${!this.#canDragDraft(store)}
                 @click=${() => move(-1)}
                 >${t("table.group_earlier")}</wt-button
@@ -4577,7 +4574,6 @@ export class TillTableOrderScreen extends LitElement {
             ? nothing
             : html`<wt-button
                 data-draft-later
-                variant="secondary"
                 ?disabled=${!this.#canDragDraft(store)}
                 @click=${() => move(1)}
                 >${t("table.group_later")}</wt-button
@@ -6805,8 +6801,6 @@ export class TillTableOrderScreen extends LitElement {
       html`<wt-button
         data-action=${name}
         data-record-departure=${name === "left-unpaid" ? "" : nothing}
-        variant="ghost"
-        align="start"
         @click=${(event: Event) => this.#fromMenu(event, choose)}
       >
         ${t(key)}
@@ -6864,12 +6858,7 @@ export class TillTableOrderScreen extends LitElement {
             })
           : nothing,
         ...tableMoves,
-        html`<wt-button
-          variant="ghost"
-          align="start"
-          data-finish-table
-          @click=${() => this.#dispatch("finish-table", {})}
-        >
+        html`<wt-button data-finish-table @click=${() => this.#dispatch("finish-table", {})}>
           ${t("table.finish")}
         </wt-button>`,
       ],
@@ -6887,8 +6876,6 @@ export class TillTableOrderScreen extends LitElement {
       bill.invoiceNumber === undefined &&
       this.paymentConfirmation === undefined
         ? html`<wt-button
-            variant="ghost"
-            align="start"
             data-choose-bill-invoice
             .disabled=${this.busy}
             @click=${() =>
@@ -6898,19 +6885,12 @@ export class TillTableOrderScreen extends LitElement {
           </wt-button>`
         : nothing,
       bill.status === "settled" && bill.receiptAvailable
-        ? html`<wt-button
-            variant="ghost"
-            align="start"
-            data-bill-receipt
-            @click=${() => this.#dispatch("reprint-bill", target)}
-          >
+        ? html`<wt-button data-bill-receipt @click=${() => this.#dispatch("reprint-bill", target)}>
             ${t("table.bill_receipt")}
           </wt-button>`
         : nothing,
       bill.status === "placed" && bill.receiptAvailable && !bill.hasPayments
         ? html`<wt-button
-            variant="ghost"
-            align="start"
             data-cancel-credit
             @click=${() => this.#dispatch("cancel-credit-bill", target)}
           >
@@ -6924,8 +6904,6 @@ export class TillTableOrderScreen extends LitElement {
     const requested = billRequestOf(this.tables, party.id) !== undefined;
     const key = requested ? "table.cancel_bill_request" : "table.request_bill";
     return html`<wt-button
-      variant="ghost"
-      align="start"
       data-request-bill=${requested ? nothing : ""}
       data-cancel-bill-request=${requested ? "" : nothing}
       .disabled=${this.groupCommandBusy}

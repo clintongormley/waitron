@@ -1231,21 +1231,16 @@ export class ProductList extends LitElement {
             >${
               rowActive(row)
                 ? html`<wt-button
-                      align="start"
-                      variant="secondary"
                       data-test=${`edit-${id}`}
                       @click=${() => this.#send("edit-product", { productId: id })}
                       >${t("action.edit")}</wt-button
                     ><wt-button
-                      align="start"
                       variant="danger"
                       data-test=${`delete-${id}`}
                       @click=${() => this.#send("delete-product", { productId: id })}
                       >${t("product.archive")}</wt-button
                     >`
                 : html`<wt-button
-                    align="start"
-                    variant="secondary"
                     data-test=${`view-${id}`}
                     @click=${() => this.#send("view-product", { productId: id })}
                     >${t("product.view")}</wt-button
@@ -1260,8 +1255,6 @@ export class ProductList extends LitElement {
   #addItems(categoryId: string | null) {
     const test = categoryId ?? ROOT_KEY;
     return html`<wt-button
-        align="start"
-        variant="secondary"
         data-test=${`add-product-${test}`}
         ?disabled=${!this.canAddProduct}
         @click=${() => {
@@ -1269,8 +1262,6 @@ export class ProductList extends LitElement {
         }}
         >${t("catalogue.add_product")}</wt-button
       ><wt-button
-        align="start"
-        variant="secondary"
         data-test=${`add-category-${test}`}
         @click=${() => this.#send("add-category", { parentId: categoryId })}
         >${t("folders.add_category")}</wt-button
@@ -1415,19 +1406,14 @@ export class ProductList extends LitElement {
             >${this.#addItems(folder.id)}
             <hr part="menu-divider" />
             <wt-button
-              align="start"
-              variant="secondary"
               data-test=${`rename-${folder.id}`}
               @click=${() => this.#send("rename-folder", { folderId: folder.id })}
               >${t("folders.rename")}</wt-button
             ><wt-button
-              align="start"
-              variant="secondary"
               data-test=${`move-${folder.id}`}
               @click=${() => this.#send("move-folder", { folderId: folder.id })}
               >${t("folders.move")}</wt-button
             ><wt-button
-              align="start"
               variant="danger"
               data-test=${`delete-folder-${folder.id}`}
               @click=${() => this.#send("delete-folder", { folderId: folder.id })}

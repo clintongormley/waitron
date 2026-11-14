@@ -1103,8 +1103,6 @@ export class AdjustmentReasonsScreen extends LitElement {
   #rowMenu(reason: AdjustmentReason) {
     const item = (test: string, label: string, run: (opener: HTMLElement) => void) =>
       html`<wt-button
-        variant="ghost"
-        align="start"
         data-test=${test}
         ?disabled=${this.busy}
         @click=${(event: Event) => {

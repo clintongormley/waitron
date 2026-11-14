@@ -268,9 +268,8 @@ export class ThemesCard extends LitElement {
     onClick: (menu: HTMLElement | null) => void,
   ): TemplateResult {
     return html`<wt-button
-      align="start"
       data-test=${`${kind}-${row.key}`}
-      variant=${kind === "delete" ? "danger" : "ghost"}
+      variant=${kind === "delete" ? "danger" : "secondary"}
       ?disabled=${this.submitting}
       @click=${(event: Event) =>
         onClick(

@@ -250,7 +250,6 @@ export class ModulesScreen extends LitElement {
             ? html`<wt-row-actions label=${this.#name(row)}
                 ><wt-button
                   data-test=${`switch-${row.id}`}
-                  variant="secondary"
                   @click=${() => {
                     this.switching = row;
                     this.switchError = "";
@@ -263,7 +262,6 @@ export class ModulesScreen extends LitElement {
               ? html`<wt-row-actions label=${this.#name(row)}
                   ><wt-button
                     data-test=${`configure-${row.id}`}
-                    variant="secondary"
                     @click=${(event: Event) => this.#configure(row, event)}
                     >${text("modules.configure")}</wt-button
                   >${
@@ -273,7 +271,6 @@ export class ModulesScreen extends LitElement {
                     )?.enabled !== false
                       ? html`<wt-button
                           data-test=${`switch-${row.id}`}
-                          variant="secondary"
                           @click=${() => {
                             this.switching = row;
                             this.switchError = "";

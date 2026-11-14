@@ -151,31 +151,16 @@ export class TillFloorZoneMenu extends LitElement {
             </p>`
           : nothing
       }
-      <wt-button
-        data-menu-item="spares"
-        variant="secondary"
-        align="start"
-        @click=${() => (this.open = "spares")}
-      >
+      <wt-button data-menu-item="spares" @click=${() => (this.open = "spares")}>
         ${t("floor.add_spare")}
       </wt-button>
-      <wt-button
-        data-menu-item="taken-off"
-        variant="secondary"
-        align="start"
-        @click=${() => (this.open = "taken-off")}
-      >
+      <wt-button data-menu-item="taken-off" @click=${() => (this.open = "taken-off")}>
         ${t("floor.taken_off")}
       </wt-button>
       ${
         setName === null
           ? nothing
-          : html`<wt-button
-              data-menu-item="reset"
-              variant="secondary"
-              align="start"
-              @click=${() => (this.open = "reset")}
-            >
+          : html`<wt-button data-menu-item="reset" @click=${() => (this.open = "reset")}>
               ${t("floor.reset_plan").replace("{set}", () => setName)}
             </wt-button>`
       }`;
@@ -193,8 +178,6 @@ export class TillFloorZoneMenu extends LitElement {
           this.phone
             ? html`<wt-button
                 data-menu-item="view"
-                variant="secondary"
-                align="start"
                 @click=${() => this.#emit("zone-toggle-view", {})}
               >
                 ${this.view === "map" ? t("floor.view_list") : t("floor.view_map")}

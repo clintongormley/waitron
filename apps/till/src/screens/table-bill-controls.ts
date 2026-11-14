@@ -1,5 +1,6 @@
 import { type TemplateResult, css, html, nothing } from "lit";
 import "@waitron/ui/src/components/wt-icon.js";
+import { menuOptionStyles } from "@waitron/ui/src/menu-popover.js";
 import { decimal, formatMoney } from "@waitron/shared";
 import type { PartyBill, TableParty } from "../api/client.js";
 import { countText, currentLocale, fill, named, t } from "../i18n/t.js";
@@ -136,7 +137,7 @@ export function billSwitcher(options: BillSwitcherOptions): TemplateResult | typ
           html`<button
             type="button"
             role="menuitemradio"
-            class="bill-switcher-item"
+            class="option bill-switcher-item"
             data-switch-bill=${bill.workingOrderId}
             aria-checked=${bill.workingOrderId === billId ? "true" : "false"}
             @click=${() => {
@@ -149,7 +150,7 @@ export function billSwitcher(options: BillSwitcherOptions): TemplateResult | typ
       <button
         type="button"
         role="menuitem"
-        class="bill-switcher-item"
+        class="option bill-switcher-item"
         data-new-bill
         aria-disabled=${options.newBillBusy ? "true" : nothing}
         @click=${() => {
@@ -207,6 +208,7 @@ export function tableMenu(options: TableMenuOptions): TemplateResult {
 }
 
 export const billControlStyles = css`
+  ${menuOptionStyles}
   .bill-switcher::part(trigger) {
     min-height: var(--wt-tap-min);
     padding: var(--wt-space-2) var(--wt-space-3);
@@ -224,33 +226,6 @@ export const billControlStyles = css`
     flex-direction: column;
     align-items: stretch;
     gap: var(--wt-space-1);
-    min-height: var(--wt-tap-min);
-    padding: var(--wt-space-2) var(--wt-space-3);
-    border: 1px solid transparent;
-    border-radius: var(--wt-radius-md);
-    background: transparent;
-    color: var(--wt-color-text);
-    font: inherit;
-    cursor: pointer;
-    text-align: start;
-  }
-  /* The open list is painted --wt-color-surface, which --wt-color-surface-raised equals in the
-     light theme. */
-  .bill-switcher-item:hover {
-    background: var(--wt-color-bg);
-  }
-  .bill-switcher-item[aria-checked="true"] {
-    border-color: var(--wt-color-border);
-    background: var(--wt-color-surface-lifted);
-  }
-  .bill-switcher-item[aria-disabled="true"] {
-    color: var(--wt-color-text-muted);
-    background: transparent;
-    cursor: not-allowed;
-  }
-  .bill-switcher-item:focus-visible {
-    outline: var(--wt-focus-ring);
-    outline-offset: var(--wt-focus-offset);
   }
   .bill-row-head {
     display: flex;

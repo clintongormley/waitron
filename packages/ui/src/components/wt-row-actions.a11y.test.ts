@@ -70,8 +70,8 @@ describe.each(["light", "dark"] as const)("wt-row-actions a11y (%s theme)", (the
     const el = await mountThemed(
       `<wt-row-actions label="Actions for Wine">
         <a href="#wine">Open Wine</a>
-        <wt-button variant="secondary" align="start">Edit</wt-button>
-        <wt-button variant="secondary" align="start">Remove</wt-button>
+        <wt-button variant="secondary">Edit</wt-button>
+        <wt-button variant="secondary">Remove</wt-button>
       </wt-row-actions>`,
       theme,
     );
@@ -83,7 +83,7 @@ describe.each(["light", "dark"] as const)("wt-row-actions a11y (%s theme)", (the
   test("an open menu taller than the room under its trigger, which opens below and scrolls", async () => {
     const actions = Array.from(
       { length: 30 },
-      (_, index) => `<wt-button variant="ghost" align="start">Action ${index + 1}</wt-button>`,
+      (_, index) => `<wt-button variant="secondary">Action ${index + 1}</wt-button>`,
     ).join("");
     const el = await mountThemed(
       `<wt-row-actions label="Table actions" opens-below>${actions}</wt-row-actions>`,

@@ -273,7 +273,6 @@ export class OrdersScreen extends LitElement {
             align="end"
             label=${`${t("orders.col.actions")}: ${row.invoiceNumber ?? row.label ?? row.id}`}
             ><wt-button
-              variant="secondary"
               @click=${(event: Event) => {
                 event.stopPropagation();
                 this.openId = row.id;
@@ -282,7 +281,6 @@ export class OrdersScreen extends LitElement {
             >${
               this.#mayReprint(row) || this.#mayPrintInvoice(row)
                 ? html`<wt-button
-                    variant="secondary"
                     @click=${(event: Event) => {
                       event.stopPropagation();
                       this.#openPrint(row);

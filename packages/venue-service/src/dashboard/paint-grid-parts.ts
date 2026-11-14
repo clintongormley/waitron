@@ -86,15 +86,9 @@ export function columnMenu(
     icon="kebab"
     align="end"
     label=${t("paint.day_options").replace("{day}", label)}
-    ><wt-button variant="secondary" align="start" @click=${actions.copy}
-      >${t("paint.copy_to")}</wt-button
-    ><wt-button variant="secondary" align="start" @click=${actions.clear}
-      >${t("paint.clear")}</wt-button
-    >${extra.map(
-      (item) =>
-        html`<wt-button variant="secondary" align="start" @click=${item.select}
-          >${item.label}</wt-button
-        >`,
+    ><wt-button @click=${actions.copy}>${t("paint.copy_to")}</wt-button
+    ><wt-button @click=${actions.clear}>${t("paint.clear")}</wt-button>${extra.map(
+      (item) => html`<wt-button @click=${item.select}>${item.label}</wt-button>`,
     )}</wt-row-actions
   >`;
 }

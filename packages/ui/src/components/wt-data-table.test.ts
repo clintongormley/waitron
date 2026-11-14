@@ -6260,7 +6260,7 @@ test("lines a multi-line cell's first line up with the buttons beside it, at the
         pinned: "end",
         cell: () =>
           html`<wt-row-actions label="More" icon="baseline-kebab" align="end"
-            ><wt-button align="start">Edit</wt-button></wt-row-actions
+            ><wt-button>Edit</wt-button></wt-row-actions
           >`,
       },
     ],

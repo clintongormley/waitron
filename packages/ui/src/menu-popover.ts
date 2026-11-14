@@ -6,6 +6,42 @@ export interface MenuPopoverParts {
   close: () => void;
 }
 
+export const menuOptionStyles = css`
+  .option {
+    display: block;
+    width: 100%;
+    min-height: var(--wt-tap-min);
+    padding: var(--wt-space-2) var(--wt-space-4);
+    border: 1px solid transparent;
+    border-radius: var(--wt-radius-md);
+    background: transparent;
+    color: var(--wt-color-text);
+    font: inherit;
+    font-weight: var(--wt-font-weight-bold);
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .option:hover {
+    background: var(--wt-color-bg);
+  }
+
+  .option[aria-checked="true"] {
+    border-color: var(--wt-color-border);
+    background: var(--wt-color-surface-lifted);
+  }
+
+  .option:focus-visible {
+    outline: var(--wt-focus-ring);
+    outline-offset: var(--wt-focus-offset);
+  }
+  .option[aria-disabled="true"] {
+    color: var(--wt-color-text-muted);
+    background: transparent;
+    cursor: not-allowed;
+  }
+`;
+
 /**
  * The rules for a `role="menu"` popover of `.option` buttons. In the top layer, so no positioned
  * content later in the page can paint over it. A manual popover, because the host's own
@@ -31,28 +67,7 @@ export const menuPopoverStyles = css`
     display: flex;
   }
 
-  .option {
-    display: block;
-    width: 100%;
-    min-height: var(--wt-tap-min);
-    padding: var(--wt-space-2) var(--wt-space-4);
-    border: 1px solid transparent;
-    border-radius: var(--wt-radius-md);
-    background: transparent;
-    color: var(--wt-color-text);
-    font: inherit;
-    font-weight: var(--wt-font-weight-bold);
-    text-align: start;
-    cursor: pointer;
-  }
-
-  .option:hover {
-    background: var(--wt-color-surface-raised);
-  }
-
-  .option[aria-checked="true"] {
-    border-color: var(--wt-color-border);
-  }
+  ${menuOptionStyles}
 `;
 
 /**

@@ -720,14 +720,10 @@ export class MenuPublicationsPanel extends LitElement {
             : html`<wt-row-actions
                 label=${`${t("menu_publications.actions")}: ${versionWords(edition)}`}
                 ><wt-button
-                  align="start"
-                  variant="ghost"
                   data-test=${`move-${edition.versionId}`}
                   @click=${(event: Event) => this.#openMove(edition, event)}
                   >${t("menu_publications.move")}</wt-button
                 ><wt-button
-                  align="start"
-                  variant="ghost"
                   data-test=${`cancel-${edition.versionId}`}
                   @click=${(event: Event) => this.#openCancel(edition, event)}
                   >${t("menu_publications.cancel")}</wt-button

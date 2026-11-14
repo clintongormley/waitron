@@ -395,6 +395,20 @@ describe("wt-language-chooser", () => {
     expect(codeTextOf(el)).toBe("EU");
   });
 
+  it.each(["light", "dark"] as const)(
+    "keeps a hovered choice visible against the %s popup",
+    async (theme) => {
+      const el = await mountChooser({ active: "es-ES", loadLocales: twoLocales });
+      host.setAttribute("data-theme", theme);
+      await open(el);
+      const option = optionOf(el, "en-GB")!;
+      await userEvent.hover(option);
+      expect(getComputedStyle(option).backgroundColor).not.toBe(
+        getComputedStyle(menuOf(el)!).backgroundColor,
+      );
+    },
+  );
+
   it("paints its menu from the surface and border tokens", async () => {
     const el = await mountChooser({ active: "es-ES", loadLocales: twoLocales });
     host.style.setProperty("--wt-color-surface", "rgb(1, 2, 3)");

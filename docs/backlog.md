@@ -1418,26 +1418,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
     charges and lists those that do not match (`apps/dashboard/src/widgets/backup-audit.ts`); it
     is a check, not a setting.
 
-- **A1540. One look for every action menu and every grouped dropdown (owner, 2026-11-14).** "We're
-  clearly not reusing the same styles. Fix this everywhere." No migration. Not started.
-  - **Every "⋮" action menu draws its items the same way, with the text centred.** The menus share
-    `wt-row-actions` (`packages/ui/src/components/wt-row-actions.ts`), but each screen styles the
-    buttons it slots in: of the 36 screens using it, 24 pass `align="start"` and the rest do not,
-    and the component draws a slotted link to match the left-aligned button. The component takes
-    over its items' look (alignment, size and spacing, buttons and links alike), every screen drops
-    its own, and a guard stops a screen setting it again. The till's three menus of its own
-    (`apps/till/src/screens/table-bill-controls.ts`, `apps/till/src/widgets/till-shell.ts`,
-    `apps/till/src/widgets/reader-picker.ts`) move onto the same look. The language and theme
-    choosers, lists with a tick beside the current choice, stay left-aligned. The rule goes in
-    [design-system.md](developers/design-system.md). The owner's example: the day menu of a season's
-    standard-week editor (`paint-grid-parts.ts`).
-  - **A grouped dropdown indents the options under each heading, and the gaps between options are
-    even.** `wt-combobox` draws a group's heading but not its options indented, and options inside
-    a group sit further apart than the rest (seen in the Calendar's "Show"). The change is in the
-    shared component, so routing, the staffing painter, the till's order and ticket screens, the
-    VAT return and the add-language widget change too: screenshot a few of them, both themes and
-    phone width.
-
 - **A1530. Every form's Save bar stays on screen, and every long table can be searched and
   filtered (owner, 2026-11-14).** Both so that every screen works the same way. No migration.
   Not started.

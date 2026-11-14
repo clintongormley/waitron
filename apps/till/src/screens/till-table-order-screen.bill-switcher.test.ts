@@ -203,6 +203,18 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     expect(seen).toEqual([]);
   });
 
+  it("uses shared choice spacing without losing the bill's two columns", async () => {
+    const el = await mountScreen(three, "wo-1");
+    el.style.setProperty("--wt-space-4", "23px");
+    await userEvent.click(switcher(el)!.shadowRoot!.querySelector("button")!);
+    const item = switcher(el)!.querySelector<HTMLElement>("[data-switch-bill]")!;
+    expect(getComputedStyle(item).paddingInlineStart).toBe("23px");
+    const label = item.querySelector(".bill-row-label")!.getBoundingClientRect();
+    const owes = item.querySelector(".bill-row-owes")!.getBoundingClientRect();
+    expect(label.right).toBeLessThan(owes.left);
+    expect(label.top).toBeLessThan(owes.bottom);
+  });
+
   it("the closed switcher is drawn with a border, as a secondary button is", async () => {
     const el = await mountScreen(one, "wo-1");
     const trigger = switcher(el)!.shadowRoot!.querySelector<HTMLElement>('[part="trigger"]')!;

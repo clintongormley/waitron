@@ -746,7 +746,6 @@ export class PrepStationsScreen extends LitElement {
       label=${format("prep.row_actions", { name: station.name })}
     >
       <wt-button
-        align="start"
         data-test=${`edit-${station.id}`}
         ?disabled=${this.busy}
         @click=${() => {
@@ -759,7 +758,6 @@ export class PrepStationsScreen extends LitElement {
       ${
         station.active && !station.isDefault
           ? html`<wt-button
-              align="start"
               data-test=${`make-default-${station.id}`}
               ?disabled=${this.busy}
               @click=${() => void this.#act(() => this.api.setDefaultStation(station.id))}
@@ -768,7 +766,6 @@ export class PrepStationsScreen extends LitElement {
           : nothing
       }
       <wt-button
-        align="start"
         data-test=${`delete-${station.id}`}
         ?disabled=${this.busy}
         @click=${() => void this.#openStationAction(station.id)}

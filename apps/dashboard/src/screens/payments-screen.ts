@@ -2345,16 +2345,12 @@ export class PaymentsScreen extends LitElement {
         cell: (reader) =>
           html`<wt-row-actions label=${`${t("payments.reader_col_actions")}: ${reader.name}`}>
             <wt-button
-              variant="secondary"
-              align="start"
               data-test=${`edit-${reader.id}`}
               ?disabled=${this.busy}
               @click=${(event: Event) => this.#openEditor(reader, "edit", event)}
               >${t("action.edit")}</wt-button
             >
             <wt-button
-              variant="secondary"
-              align="start"
               data-test=${`label-${reader.id}`}
               @click=${(event: Event) => {
                 this.#labelOpener = event.currentTarget as HTMLElement;
@@ -2363,8 +2359,6 @@ export class PaymentsScreen extends LitElement {
               >${t("equipment.label")}</wt-button
             >
             <wt-button
-              variant="secondary"
-              align="start"
               data-test=${`details-${reader.id}`}
               ?disabled=${this.busy}
               @click=${(event: Event) => this.#openEditor(reader, "details", event)}
@@ -2374,8 +2368,6 @@ export class PaymentsScreen extends LitElement {
               reader.canEnable &&
               this.providers?.find((p) => p.providerId === reader.provider)?.canUnpair
                 ? html` <wt-button
-                    variant="secondary"
-                    align="start"
                     data-test=${`unpair-${reader.id}`}
                     ?disabled=${this.busy}
                     @click=${(event: Event) => this.#openEditor(reader, "unpair", event)}
@@ -2386,7 +2378,6 @@ export class PaymentsScreen extends LitElement {
             }
             <wt-button
               variant=${this.busy ? "secondary" : "danger"}
-              align="start"
               data-test=${`delete-${reader.id}`}
               ?disabled=${this.busy}
               @click=${(event: Event) => this.#openDelete(reader, event)}

@@ -53,6 +53,24 @@ describe("till-reader-picker", () => {
     expect(spy).toHaveBeenCalledWith({ readerId: "r1" });
   });
 
+  it("uses the shared choice border and spacing, keeping Offline beside its reader", async () => {
+    const { el, host } = await mountWidget<TillReaderPicker>("till-reader-picker", {
+      readers,
+      selectedReaderId: "r2",
+    });
+    host.style.setProperty("--wt-space-4", "23px");
+    host.style.setProperty("--wt-color-border", "rgb(17, 31, 47)");
+    const plain = query(el, "[data-test=reader-r1]")!;
+    const selected = query(el, "[data-test=reader-r2]")!;
+    expect(getComputedStyle(plain).borderTopColor).toBe("rgba(0, 0, 0, 0)");
+    expect(getComputedStyle(selected).borderTopColor).toBe("rgb(17, 31, 47)");
+    expect(getComputedStyle(selected).paddingInlineStart).toBe("23px");
+    const name = selected.querySelector(".name")!.getBoundingClientRect();
+    const status = selected.querySelector(".status")!.getBoundingClientRect();
+    expect(name.right).toBeLessThan(status.left);
+    expect(name.top).toBeLessThan(status.bottom);
+  });
+
   it("marks the currently-selected reader via aria-checked", async () => {
     const { el } = await mountWidget<TillReaderPicker>("till-reader-picker", {
       readers,

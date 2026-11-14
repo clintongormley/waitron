@@ -626,7 +626,6 @@ export class TillSentOrders extends LitElement {
                     index > 0
                       ? html`<wt-button
                           data-group-earlier
-                          variant="secondary"
                           ?disabled=${this.busy}
                           @click=${() => this.#reorder(expected, entry.group.id, index - 1)}
                           >${t("table.group_earlier")}</wt-button
@@ -637,7 +636,6 @@ export class TillSentOrders extends LitElement {
                     index < expected.ids.length - 1
                       ? html`<wt-button
                           data-group-later
-                          variant="secondary"
                           ?disabled=${this.busy}
                           @click=${() => this.#reorder(expected, entry.group.id, index + 1)}
                           >${t("table.group_later")}</wt-button

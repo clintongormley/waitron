@@ -1566,8 +1566,11 @@ describe("till-shell at phone width", () => {
         t("department_transfer.open").replace("{count}", "2"),
       );
       for (const button of menu.querySelectorAll("wt-button")) {
-        expect(button.getAttribute("variant")).toBe("ghost");
-        expect(button.getAttribute("align")).toBe("start");
+        await button.updateComplete;
+        expect(button.variant).toBe("secondary");
+        expect(getComputedStyle(button.shadowRoot!.querySelector("button")!).justifyContent).toBe(
+          "center",
+        );
       }
 
       const fired: string[] = [];
@@ -2165,8 +2168,11 @@ describe("till-shell above phone width", () => {
         expect(el.shadowRoot!.querySelectorAll(`header ${selector}`), key).toHaveLength(1);
       }
       for (const button of menu.querySelectorAll("wt-button")) {
-        expect(button.getAttribute("variant")).toBe("ghost");
-        expect(button.getAttribute("align")).toBe("start");
+        await button.updateComplete;
+        expect(button.variant).toBe("secondary");
+        expect(getComputedStyle(button.shadowRoot!.querySelector("button")!).justifyContent).toBe(
+          "center",
+        );
       }
       const session = el.shadowRoot!.querySelector("header .session")!;
       expect(session.querySelector(":scope > wt-button")).toBeNull();

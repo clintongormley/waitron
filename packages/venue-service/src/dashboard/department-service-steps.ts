@@ -249,8 +249,6 @@ export class DepartmentServiceSteps extends LitElement {
           : html`<td class="actions-cell">
               <wt-row-actions align="end" label=${format("prep.row_actions", { name: step.name })}>
                 <wt-button
-                  align="start"
-                  variant="ghost"
                   data-action="delete"
                   aria-label=${`${t("venue.delete")}: ${step.name}`}
                   data-test=${`remove-${step.key}`}

@@ -356,11 +356,8 @@ export class AccessRolesScreen extends LitElement {
         pinned: "end",
         cell: (role) =>
           html` <wt-row-actions label=${`${t("access_roles.actions")}: ${accessRoleName(role)}`}>
-            <wt-button variant="secondary" @click=${() => this.#open(role)}
-              >${t("action.edit")}</wt-button
-            >
+            <wt-button @click=${() => this.#open(role)}>${t("action.edit")}</wt-button>
             <wt-button
-              variant="secondary"
               ?disabled=${!this.#canChange(role)}
               @click=${() => {
                 this.#open(role);

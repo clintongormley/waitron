@@ -213,8 +213,11 @@ describe("dashboard-themes-card actions", () => {
     expect(Object.keys(xmasItems)).toEqual(["use", "edit", "rename", "copy", "delete"]);
     expect(xmasItems.use!.textContent!.trim()).toBe("Use on every screen");
     for (const [kind, item] of Object.entries(xmasItems)) {
-      expect(item.getAttribute("variant")).toBe(kind === "delete" ? "danger" : "ghost");
-      expect(item.getAttribute("align")).toBe("start");
+      await item.updateComplete;
+      expect(item.variant).toBe(kind === "delete" ? "danger" : "secondary");
+      expect(getComputedStyle(item.shadowRoot!.querySelector("button")!).justifyContent).toBe(
+        "center",
+      );
     }
     expect(Object.keys(itemsOf(await openMenu(el, "waitron"), "waitron"))).toEqual(["use", "copy"]);
 

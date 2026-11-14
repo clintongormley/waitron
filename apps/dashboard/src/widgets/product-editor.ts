@@ -1761,7 +1761,6 @@ export class ProductEditor extends LitElement {
           align="end"
           label=${`${t("editor.modifier_actions")}: ${name}${SUMMARY_SEPARATOR}${kind}`}
           ><wt-button
-            variant="secondary"
             data-test=${`edit-modifier-${key}`}
             .disabled=${this.suspended}
             @click=${(event: Event) => {

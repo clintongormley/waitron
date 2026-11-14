@@ -464,14 +464,9 @@ export class ModifiersScreen extends LitElement {
         pinned: "end",
         cell: (list) =>
           html`<wt-row-actions label=${`${t("modifiers.actions")}: ${list.name}`}
-            ><wt-button
-              align="start"
-              variant="ghost"
-              data-test=${`edit-${row}-${list.id}`}
-              @click=${() => this.#edit(kind, list)}
+            ><wt-button data-test=${`edit-${row}-${list.id}`} @click=${() => this.#edit(kind, list)}
               >${t("action.edit")}</wt-button
             ><wt-button
-              align="start"
               variant=${kind === "options" ? "danger" : "ghost"}
               data-test=${`delete-${row}-${list.id}`}
               @click=${() => this.#openModal("delete", kind, list)}
