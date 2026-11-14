@@ -311,19 +311,22 @@ it("keeps a refused candidate proposal editable without accepting a public reque
   );
   expect(el.shadowRoot!.querySelector("[data-test=allocation-file]")).toBeNull();
 });
-it("refuses a missing or oversized public file before reading or uploading it", async () => {
+it("refuses a public file over 64 KiB before reading or uploading it", async () => {
+  const { vi } = await import("vitest");
   const { el, calls } = await mount();
   await candidates(el);
-  chooseFiles(
-    el.shadowRoot!.querySelector("[data-test=allocation-file]")!,
-    new File(["X".repeat(65537)], "large.json"),
-  );
-  await el.updateComplete;
-  await click(el, "import");
-  await expect
-    .poll(() => el.shadowRoot!.querySelector("[data-test=allocation-error]")?.textContent)
-    .toContain("Check");
-  expect(calls.map((call) => call.action)).toEqual(["candidates"]);
+  await file(el, "allocation-file", input, 65_537);
+  const read = vi.spyOn(File.prototype, "text");
+  try {
+    await click(el, "import");
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=allocation-error]")?.textContent)
+      .toContain("Check");
+    expect(read).not.toHaveBeenCalled();
+    expect(calls.map((call) => call.action)).toEqual(["candidates"]);
+  } finally {
+    read.mockRestore();
+  }
 });
 it("draws both public file pickers in Spanish and passes the chosen files on", async () => {
   const { el, calls } = await mount();

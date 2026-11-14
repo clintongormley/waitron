@@ -111,6 +111,26 @@ it.each(["not-json", "null", "[]", '"wrong"', '{"secret":"-----BEGIN PRIVATE KEY
   },
 );
 
+it("refuses a register over 128 KiB without reading it or sending the node credential", async () => {
+  const { el, fetcher } = await mount();
+  await key(el);
+  const register = JSON.stringify({ "test-regime": { signed: "public-register" } });
+  await file(el, register.padEnd(131_073, " "));
+  const read = vi.spyOn(File.prototype, "text");
+  try {
+    await create(el);
+    await vi.waitFor(() =>
+      expect(fileError(q(el, "register-file"))?.textContent?.trim()).toBe(
+        t("node_pack.file_error"),
+      ),
+    );
+    expect(read).not.toHaveBeenCalled();
+    expect(fetcher).not.toHaveBeenCalled();
+  } finally {
+    read.mockRestore();
+  }
+});
+
 it("keeps failed input retryable and puts a bad node key beside its field", async () => {
   const fetcher = vi
     .fn()
