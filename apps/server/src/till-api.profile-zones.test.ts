@@ -232,7 +232,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * Where the check runs: first inside the route's own transaction, except where the route's work
  * runs in a helper that opens its own transaction — `/api/sales`, `/api/pay`, POST
  * `/api/working-orders`, GET, PUT and DELETE `/api/working-orders/:id`, `/placed`,
- * `/invoice-choice`, `/receipt-language`, `/place`, `/prep`, `/collect`, `/cancel`, `/api/sales/:id/receipt`,
+ * `/invoice-choice`, `/receipt-language`, `/place`, `/collect`, `/cancel`, `/api/sales/:id/receipt`,
  * `/payment-slip`, `/reprint` and the four bill-payment routes — where it reads just before, outside
  * any transaction.
  *
