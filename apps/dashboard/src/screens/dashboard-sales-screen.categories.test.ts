@@ -19,6 +19,8 @@ import "./dashboard-sales-screen.js";
 useLocale("es-ES");
 
 const close: DailyCloseDto = {
+  timeZone: "Europe/Madrid",
+  outsidePayments: [],
   businessDay: "2026-08-29",
   vat: { byRate: [], baseTotal: "0.00", taxTotal: "0.00", grossTotal: "0.00" },
   cash: { byOrigin: [], tenderTotal: "0.00", tipTotal: "0.00" },

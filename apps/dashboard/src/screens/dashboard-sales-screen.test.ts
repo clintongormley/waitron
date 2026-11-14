@@ -13,6 +13,8 @@ import type { WtButton, WtInput } from "@waitron/ui";
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const close: DailyCloseDto = {
+  outsidePayments: [],
+  timeZone: "Europe/Madrid",
   businessDay: "2026-08-29",
   vat: {
     byRate: [
@@ -125,6 +127,59 @@ afterEach(() => {
 });
 
 describe("dashboard-sales-screen", () => {
+  it.each(["en-GB", "es-ES"])(
+    "shows recorded outside payment details without changing totals (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", {
+        api: stubApi({
+          getDailyClose: vi.fn().mockResolvedValue({
+            ...close,
+            outsidePayments: [
+              {
+                id: "p1",
+                workingOrderId: "bill-1",
+                orderNumber: 77,
+                saleId: "sale-1",
+                invoiceNumber: "A/1",
+                nodeId: "box-1",
+                amount: "12.34",
+                refunded: "3.03",
+                settledAt: "2026-11-03T12:00:00.000Z",
+                externalProvider: "other",
+                externalMachine: "Backup 001",
+                externalRef: "00042",
+                state: "partially_refunded",
+              },
+            ],
+          }),
+        }),
+      });
+      await flush(el);
+      const root = el.shadowRoot!;
+      const details = root.querySelector('[data-test="outside-payments"]');
+      expect(details).not.toBeNull();
+      const text = details!.textContent!;
+      for (const value of ["#77", "A/1", "Backup 001", "00042", "12.34", "3.03"]) {
+        expect(text.replaceAll(",", ".")).toContain(value);
+      }
+      expect(text).toContain("13:00");
+      expect(details!.querySelector("thead th:last-child")!.textContent).toBe(
+        locale === "en-GB" ? "Successful refunds" : "Reembolsos completados",
+      );
+      expect(details!.querySelector("th[scope=row]")!.getAttribute("title")).toBe("bill-1");
+      expect(text).toContain(
+        locale === "en-GB" ? "Paid outside Waitron" : "Cobrado fuera de Waitron",
+      );
+      expect(text).toContain(
+        locale === "en-GB" ? "Partially refunded" : "Reembolsado parcialmente",
+      );
+      expect(
+        root.querySelector('[data-test="tender-total"]')!.textContent!.replaceAll(",", "."),
+      ).toContain("176.00");
+    },
+  );
+
   it("shows department subtotals beside the retained till breakdown", async () => {
     setLocale("en-GB");
     const api = stubApi({

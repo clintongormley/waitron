@@ -1,3 +1,6 @@
+import { listOutsidePayments, type OutsidePayment } from "./outside-payments-report.js";
+import { validatedRangeWindow } from "@waitron/reporting";
+import { readVenueClock } from "@waitron/db";
 import { and, asc, between, eq, isNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { invoiceSeries, sales, saleSubstitutions, saleVoids, type Transaction } from "@waitron/db";
@@ -42,6 +45,7 @@ export interface AccountantInvoice {
 export interface AccountantExport {
   invoices: readonly AccountantInvoice[];
   purchases: readonly PurchaseInvoice[];
+  outsidePayments: readonly OutsidePayment[];
 }
 
 type Cell = string | null | { number: Decimal };
@@ -142,6 +146,20 @@ export async function renderAccountantWorkbook(
       ]);
     }
   }
+  const outsideRows: Cell[][] = data.outsidePayments.map((payment) => [
+    payment.id,
+    payment.workingOrderId,
+    payment.saleId,
+    payment.invoiceNumber,
+    payment.nodeId,
+    payment.settledAt,
+    numeric(payment.amount),
+    payment.externalProvider === null ? null : words.outsideSources[payment.externalProvider],
+    payment.externalMachine,
+    payment.externalRef,
+    words.paymentStates[payment.state],
+    numeric(payment.refunded),
+  ]);
   const parts = {
     "[Content_Types].xml": `${XML}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
       <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
@@ -149,13 +167,15 @@ export async function renderAccountantWorkbook(
       <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
       <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
       <Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+      <Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
       <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
     </Types>`,
     "_rels/.rels": `${XML}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
-    "xl/workbook.xml": `${XML}<workbook xmlns="${SHEET}" xmlns:r="${REL}"><sheets><sheet name="${words.invoiceSheet}" sheetId="1" r:id="rId1"/><sheet name="${words.purchaseSheet}" sheetId="2" r:id="rId2"/></sheets></workbook>`,
-    "xl/_rels/workbook.xml.rels": `${XML}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="${REL}/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="${REL}/styles" Target="styles.xml"/></Relationships>`,
+    "xl/workbook.xml": `${XML}<workbook xmlns="${SHEET}" xmlns:r="${REL}"><sheets><sheet name="${words.invoiceSheet}" sheetId="1" r:id="rId1"/><sheet name="${words.purchaseSheet}" sheetId="2" r:id="rId2"/><sheet name="${words.outsideSheet}" sheetId="3" r:id="rId4"/></sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": `${XML}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="${REL}/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId4" Type="${REL}/worksheet" Target="worksheets/sheet3.xml"/><Relationship Id="rId3" Type="${REL}/styles" Target="styles.xml"/></Relationships>`,
     "xl/styles.xml": `${XML}<styleSheet xmlns="${SHEET}"><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="2" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`,
     "xl/worksheets/sheet1.xml": await worksheet([words.invoiceColumns, ...invoiceRows]),
+    "xl/worksheets/sheet3.xml": await worksheet([words.outsideColumns, ...outsideRows]),
     "xl/worksheets/sheet2.xml": await worksheet([words.purchaseColumns, ...purchaseRows]),
   };
   const entries = Object.fromEntries(
@@ -223,5 +243,16 @@ export async function listAccountantExport(
     from: range.from,
     to: nextDay.toISOString().slice(0, 10),
   });
-  return { invoices, purchases };
+  const clock = await readVenueClock(tx);
+  const outsidePayments = await listOutsidePayments(
+    tx,
+    validatedRangeWindow({
+      fromBusinessDay: range.from,
+      toBusinessDay: range.to,
+      timeZone: clock.timeZone,
+      dayCutover: "00:00",
+      cutoverChanges: [],
+    }),
+  );
+  return { invoices, purchases, outsidePayments };
 }

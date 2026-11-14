@@ -54,3 +54,12 @@ it("every shipped dashboard query subscribes only to a declared server resource"
   );
   expect(unknown).toEqual([]);
 });
+
+it("keeps the daily report's live interests admitted when payments is off", () => {
+  const modules = enabledModules(
+    ALL_MODULES,
+    parseModuleConfig({ modules: { payments: false } }, ALL_MODULES),
+  );
+  const allowed = new Set(liveResourceTypesForModules(modules));
+  expect(QUERY_DEPENDENCIES.getDailyClose.filter((type) => !allowed.has(type))).toEqual([]);
+});

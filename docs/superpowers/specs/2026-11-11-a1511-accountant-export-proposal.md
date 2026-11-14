@@ -63,3 +63,5 @@ All accessed **2026-11-11**. Quotations precede their English reading. Import su
 [P6]: https://sage50c.sage.es/help50c/Guia_Importacion_y_Exportacion_asientos.pdf
 [P7]: https://ayuda.teamsystem.es/hc/es/articles/47639493701905-C2919-Asistente-de-importaci%C3%B3n-del-fichero-diario-de-movimientos-en-contabilidad-general
 [P8]: https://sede.agenciatributaria.gob.es/static_files/Sede/Tema/IVA/Fact_registro/Libros_registro/Formato_Electronico_Comun_Libros_Registro_IVA_IRPF.pdf
+
+**14 November 2026:** A949 backup-machine reporting adds a separate manual-card payment detail sheet; invoice and purchase sheets retain their recorded-data scope. See [the backup-machine plan](../plans/2026-11-14-a949-backup-machine-cases.md).

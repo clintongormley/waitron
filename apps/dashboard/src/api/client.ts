@@ -1561,7 +1561,32 @@ export interface OverdueOrder {
   band: TimingBand;
 }
 
+export interface OutsidePaymentDto {
+  id: string;
+  workingOrderId: string;
+  orderNumber: number;
+  saleId: string | null;
+  invoiceNumber: string | null;
+  nodeId: string | null;
+  settledAt: string;
+  amount: string;
+  externalProvider: "connected_account" | "other" | null;
+  externalMachine: string | null;
+  externalRef: string | null;
+  state:
+    | "attempting"
+    | "initiated"
+    | "captured"
+    | "voided"
+    | "refunded"
+    | "partially_refunded"
+    | "failed";
+  refunded: string;
+}
+
 export interface DailyCloseDto {
+  timeZone: string;
+  outsidePayments: OutsidePaymentDto[];
   businessDay: string;
   vat: VatSummaryDto;
   cash: CashUpDto;

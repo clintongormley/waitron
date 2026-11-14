@@ -201,6 +201,16 @@ async function send(
   return app.request(path, { method, headers });
 }
 
+it("serves a daily report without the unmigrated payments module", async () => {
+  const response = await send(
+    mountApp(),
+    "GET",
+    "/management-api/reports/daily-close?businessDay=2026-08-10",
+  );
+  expect(response.status).toBe(200);
+  expect((await response.json()).outsidePayments).toEqual([]);
+});
+
 describe("mountReportApi — modelo 303 DR303 export", () => {
   it("GET …/reports/modelo-303?year&period=08 → 200 ISO-8859-1 attachment of 2944 bytes", async () => {
     const res = await send(

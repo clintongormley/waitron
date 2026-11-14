@@ -95,6 +95,7 @@ describe("accountant export download", () => {
     expect(strFromU8(files["xl/worksheets/sheet2.xml"]!)).toContain(
       'xml:space="preserve">S-42</t>',
     );
+    expect(strFromU8(files["xl/worksheets/sheet3.xml"]!).match(/<row /g)).toHaveLength(1);
     expect(await downloads()).toEqual([
       {
         personId: manager.id,

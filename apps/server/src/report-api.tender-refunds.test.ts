@@ -180,6 +180,8 @@ it("publishes a named negative cash-up once despite the provider evidence, prese
   const day = await get("daily-close?businessDay=2026-08-05");
   expect(day).toEqual({
     businessDay: "2026-08-05",
+    timeZone: "Europe/Madrid",
+    outsidePayments: [],
     vat: { byRate: [], baseTotal: "0.00", taxTotal: "0.00", grossTotal: "0.00" },
     cash: {
       byOrigin: [

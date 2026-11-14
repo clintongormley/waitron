@@ -1,9 +1,12 @@
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
+  CORE_CHANGE_SOURCES,
+  installChangeFeed,
+  subscribeToChanges,
   billPayments,
   billPaymentRefunds,
   incidents,
@@ -34,7 +37,7 @@ import {
 } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { payments } from "@waitron/payments";
-import { deviceOrigin } from "@waitron/shared";
+import { deviceOrigin, type ResourceIdentity } from "@waitron/shared";
 import { attendanceOperationFacts } from "@waitron/workforce";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
@@ -560,6 +563,9 @@ describe("settled-tender refund command local transaction", () => {
   );
   it("manual partial returns count local evidence and the refund ledger only once", async () => {
     const t = await target("card");
+    await installChangeFeed(store.db, CORE_CHANGE_SOURCES);
+    const changes: ResourceIdentity[] = [];
+    onTestFinished(subscribeToChanges((change) => changes.push(...change.resources)));
     const local = (appliedAmount: string) =>
       run(t, request(t, { appliedAmount, manualConfirmed: true, override: override() }));
     expect((await local("2.00")).state).toBe("completed");
@@ -571,6 +577,9 @@ describe("settled-tender refund command local transaction", () => {
       { amount: 500 },
     ]);
     expect(await store.db.select().from(tenderRefunds)).toHaveLength(3);
+    for (const refund of await store.db.select().from(tenderRefunds)) {
+      expect(changes).toContainEqual({ type: "tender_refunds", id: refund.id });
+    }
     await expect(local("0.01")).rejects.toMatchObject({ code: "tender.refund_unavailable" });
     expect(await store.db.select().from(printJobs)).toEqual([]);
   });

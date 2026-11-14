@@ -56,6 +56,11 @@ Record each payment as you take it while Waitron accepts payments. If Waitron re
 follow the message before recording it again; do not charge the customer twice. If you have no
 backup card machine, choose **Cash**.
 
+You can check these details in **Sales & takings** when you select a single day. **Other card
+machines** shows the current payment state and successful refunds, even if they changed later.
+**Download for accountant (XLSX)** includes a separate sheet of these payments, selected by
+calendar date rather than business-day cutover.
+
 ## Choose documents after paying {#settlement-document}
 
 After the final payment, choose **Receipt**, **Full invoice** or **None**. An edit that finishes
