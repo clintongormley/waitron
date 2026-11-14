@@ -58,6 +58,8 @@ function host({
   profiles = ["normal", "other"],
   addresses = ["192.0.2.8"],
   noIp4 = false,
+  disabledProfiles = [],
+  interfaceNames = {},
 } = {}) {
   const values = {
     [`${root}/Devices/eth1`]: [
@@ -106,7 +108,15 @@ function host({
       return JSON.stringify(
         typed("a{sa{sv}}", [
           {
-            connection: { type: typed("s", "802-11-wireless") },
+            connection: {
+              type: typed("s", "802-11-wireless"),
+              ...(disabledProfiles.includes(path.split("/").at(-1))
+                ? { autoconnect: typed("b", false) }
+                : {}),
+              ...(interfaceNames[path.split("/").at(-1)]
+                ? { "interface-name": typed("s", interfaceNames[path.split("/").at(-1)]) }
+                : {}),
+            },
             "802-11-wireless": {
               mode: typed("s", path.endsWith("hotspot") ? "ap" : "infrastructure"),
               ssid: typed("ay", path.endsWith("normal") ? [0, 255, 195, 40, 92] : [65]),
@@ -482,4 +492,41 @@ it("the read entry refuses malformed input without starting a host command", asy
     reason: "request_invalid",
   });
   expect(run).not.toHaveBeenCalled();
+});
+
+it.each([
+  [
+    "active profile even with autoconnect off",
+    { disabledProfiles: ["normal"] },
+    { active: true, connection: `${root}/Active/1`, name: "wlan0" },
+  ],
+  [
+    "unique eligible disconnected profile",
+    { disabledProfiles: ["other"] },
+    { active: false, name: "wlan0" },
+  ],
+  [
+    "interface-compatible profile",
+    { interfaceNames: { other: "wlan1" } },
+    { active: false, name: "wlan0" },
+  ],
+  ["saved profile with no radio", { profiles: ["normal"] }, null],
+])("shares selection for %s", async (_name, config, radio) => {
+  const { networkBus, networkProfile } = await import("./network-manager.mjs");
+  const selected = await networkProfile(networkBus(host(config)), radio);
+  expect(selected.path).toBe(`${root}/Settings/normal`);
+  expect(selected.settings["802-11-wireless"].ssid.data).toEqual([0, 255, 195, 40, 92]);
+});
+
+it("distinguishes no eligible saved profile from ambiguous saved profiles without a radio", async () => {
+  const { networkBus, networkProfile } = await import("./network-manager.mjs");
+  expect(
+    await networkProfile(
+      networkBus(host({ profiles: ["normal"], disabledProfiles: ["normal"] })),
+      null,
+    ),
+  ).toBeNull();
+  await expect(networkProfile(networkBus(host()), null)).rejects.toThrow(
+    "ambiguous saved profiles",
+  );
 });

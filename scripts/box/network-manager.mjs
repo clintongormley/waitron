@@ -64,3 +64,31 @@ export async function networkRadio(bus) {
   if (choices.length > 1) throw new Error("ambiguous radio");
   return choices[0] ?? null;
 }
+
+export async function networkProfile(bus, radio) {
+  const infrastructure = (settings) =>
+    settings.connection?.type?.data === "802-11-wireless" &&
+    (settings["802-11-wireless"]?.mode?.data ?? "infrastructure") === "infrastructure";
+  if (radio?.active && radio.connection !== "/") {
+    const [path] = await bus.get(radio.connection, `${NM}.Connection.Active`, "Connection");
+    const settings = await bus.call(path, `${NM}.Settings.Connection`, "GetSettings");
+    if (!infrastructure(settings)) throw new Error("invalid active profile");
+    return { path, settings };
+  }
+  const choices = [];
+  for (const path of await bus.call(`${ROOT}/Settings`, `${NM}.Settings`, "ListConnections")) {
+    const settings = await bus.call(path, `${NM}.Settings.Connection`, "GetSettings");
+    const connection = settings.connection;
+    if (
+      !infrastructure(settings) ||
+      connection.autoconnect?.data === false ||
+      (radio &&
+        connection["interface-name"]?.data &&
+        connection["interface-name"].data !== radio.name)
+    )
+      continue;
+    choices.push({ path, settings });
+  }
+  if (choices.length > 1) throw new Error("ambiguous saved profiles");
+  return choices[0] ?? null;
+}
