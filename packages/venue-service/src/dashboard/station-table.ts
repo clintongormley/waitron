@@ -32,11 +32,11 @@ export class StationTable extends LitElement {
       }
       wt-data-table::part(station-name-content) {
         display: grid;
-        grid-template-columns: max-content minmax(0, 1fr);
+        grid-template-columns: max-content minmax(min-content, 1fr);
         align-items: center;
       }
       wt-data-table::part(station-name-details) {
-        min-width: 0;
+        min-width: min-content;
       }
       wt-data-table::part(station-colour) {
         display: inline-block;
@@ -120,6 +120,7 @@ export class StationTable extends LitElement {
   override render() {
     const rows = activeStationsInOrder(this.stations);
     return html`<wt-data-table
+      wrap-to-fit
       aria-label=${t("prep.title")}
       data-test="station-table"
       .columns=${this.#columns()}

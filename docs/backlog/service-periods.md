@@ -307,13 +307,6 @@ readers show the trading name off; PATCH of `orderStart` inserts a row with it o
 align `setDepartmentSalePolicyField` repair defaults with the existing readers, with a failing
 authenticated route case first. The combined department editor preserves the off fallback.
 
-## At 390 px the Seasons window's month picker runs off the right edge.
-
-Seen on the demo venue
-on 2026-10-18 by A783's look: each row's month select, and the required star on "Starts on", fall
-past the right edge (`seasons-window-{light,dark}-390[-es].png` in
-`~/waitron-campaign-b/a783-shots/`; `packages/venue-service/src/dashboard/seasons-window.ts`).
-
 ## At phone width the Seasons window cuts longer colour names
 
 **At phone width the Seasons window cuts longer colour names** ("Oran…", "Turq…"; at 390 px on
@@ -470,8 +463,6 @@ The owner decided the rule on 2026-11-06: a closure outside its department's hou
   [Detail](service-periods.md#a-season-reads-two-shades-of-its-colour)
 - **At phone width the Seasons window cuts longer colour names**
   [Detail](service-periods.md#at-phone-width-the-seasons-window-cuts-longer-colour-names)
-- **At 390 px the Seasons window's month picker runs off the right edge.**
-  [Detail](service-periods.md#at-390-px-the-seasons-windows-month-picker-runs-off-the-right-edge)
 
 ## Bundle: Period dialogs
 

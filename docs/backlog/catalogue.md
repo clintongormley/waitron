@@ -421,14 +421,6 @@ names; folding them into the one helper was not part of W77a.
   and delivers the preview in that gap, then route a refusal whose bullet is not drawn after the
   redraw to the error line.
 
-## A1376 — The menu Preview's change list at 390 px: the last row runs under the box's edge
-
-- **A1376 — The menu Preview's change list at 390 px: the last row runs under its scrolling box's
-  bottom edge** (seen in A353 PR 1's look, 2026-11-06; whether it predates #2510 was not checked).
-  A refusal or the success line makes the list longer, so it shows more often now. Next step:
-  screenshot `main` before #2510 at 390 px to place it, then fix the box's height or padding in
-  `apps/dashboard/src/widgets/menu-preview.ts`.
-
 ## A1377 — A353's Undo: two wordings for the owner
 
 - **A1377 — A353's Undo: two wordings for the owner** (from #2510). (1) If a menu is deleted while
@@ -894,10 +886,6 @@ tests. Media still validates required image names and translates its refusal to
   product, #1408).** At a 320px window only "12.50 – 15.00" was measured in a menu's Price overrides
   tab.
   [Detail](catalogue.md#loose-ends-left-by-a346--a348-a-price-this-menu-sets-stands-out-an-available-column-and-edit-product-1408)
-- **A1318. `wt-data-table` has no per-column heading wrap, and the Prep stations table scrolls
-  sideways at 390 px.** With two stations that have printers and screens it scrolls 343 px in
-  English and 342 px in Spanish; the "Waits for the pass" heading alone takes about 130 px and does
-  not wrap. `wrap-to-fit` narrows every column and still scrolled at 320 px. Left open by A773-2 PR C.
 - **In the Customise dialog, a released column row jumps into its slot instead of sliding.** The
   house rule for a dragged row (design-system.md, the `--wt-color-surface-lifted` paragraph) has it
   slide into its slot over `--wt-duration-move`; here every row lands at once (`#endColumnDrag`,
@@ -1083,6 +1071,8 @@ The proposal distinguishes the narrower measured cases from these original obser
    venues to put a notice "on the menu or allergen sheet".
 
 ## Decisions and deliberate limits
+
+- **Prep stations at phone width (watcher, 2026-11-13 23:51).** Use the existing whole-table wrapping; no per-column heading API. The EN/ES two-station fixture measures 388/476 px in a 388 px box at 390 px. The remaining 88 px Spanish scroll is accepted; names and read-outs stay within their cells. Receipt: `station-table.test.ts`, the 390 px read-outs cases; this is a fixture measurement, not a promise for arbitrary names.
 
 - **Sent declarations (A1517 decision 6, owner 2026-11-11, “As recommended”).** Sent till dishes and
   Orders history detail use declarations captured at the first send, including each extra's own

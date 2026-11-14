@@ -391,7 +391,7 @@ it.each(["en", "es"] as const)(
 );
 
 it.each(["en", "es"] as const)(
-  "at 390 every row's bin and Day box are on screen on opening, and the bin stays put while the table scrolls (%s)",
+  "at 390 every row's bin and date controls are on screen on opening, and the bin stays put while the table scrolls (%s)",
   async (locale) => {
     const old = [window.innerWidth, window.innerHeight] as const;
     try {
@@ -431,6 +431,17 @@ it.each(["en", "es"] as const)(
         const day = row.querySelector("wt-combobox[name$=-day]")!.getBoundingClientRect();
         within(day, `row ${index}'s Day box`);
         expect(day.right, `row ${index}'s Day box clears the bin column`).toBeLessThanOrEqual(
+          binCell.getBoundingClientRect().left,
+        );
+        const monthField = row.querySelector("wt-combobox[name$=-month]")!;
+        const month = monthField.getBoundingClientRect();
+        const value = monthField.shadowRoot!.querySelector<HTMLElement>(".value")!;
+        expect(
+          value.scrollWidth,
+          `row ${index} shows its selected month whole`,
+        ).toBeLessThanOrEqual(value.clientWidth);
+        within(month, `row ${index}'s Month box`);
+        expect(month.right, `row ${index}'s Month box clears the bin column`).toBeLessThanOrEqual(
           binCell.getBoundingClientRect().left,
         );
       });

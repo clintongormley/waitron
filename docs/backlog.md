@@ -490,7 +490,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   Public opt-in, Cloud delivery and fixed A4 presets remain; no ordering.
   [Detail](backlog/catalogue.md#a670--guest-menu-sharing-and-fixed-a4-presets)
 
-- **wt-data-table: heading wrap, long names, odds and ends** (bundle of 10, size M). Holds A1318, A543. [Detail](backlog/catalogue.md#bundle-wt-data-table-heading-wrap-long-names-odds-and-ends)
+- **wt-data-table: heading wrap, long names, odds and ends** (size M). Holds A543. [Detail](backlog/catalogue.md#bundle-wt-data-table-heading-wrap-long-names-odds-and-ends)
 
 - **One language fallback rule** (bundle of 5, 1 important, size M). [Detail](backlog/catalogue.md#bundle-one-language-fallback-rule)
 
@@ -553,10 +553,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A1375 — A353's Undo: two rare ways a refusal is never shown** — a preview arriving between
   placing a refusal and the redraw, or a language switched off and on within one reload.
   [Detail](backlog/catalogue.md#a1375--a353s-undo-two-rare-ways-a-refusal-is-never-shown)
-
-- **A1376 — The menu Preview's change list at 390 px: the last row runs under the box's edge** —
-  not yet placed before or after #2510.
-  [Detail](backlog/catalogue.md#a1376--the-menu-previews-change-list-at-390-px-the-last-row-runs-under-the-boxs-edge)
 
 - **A1377 — A353's Undo: two wordings for the owner** — a deleted menu's price Undo, and a
   success line with two colons.
