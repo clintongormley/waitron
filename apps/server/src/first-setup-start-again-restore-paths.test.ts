@@ -135,6 +135,11 @@ it("control: the same bucket restore beside a held setup database that was not w
   await expectRefusedPlacingNothing(f, await stageBucket(f));
 }, 180_000);
 
+it("control: the same bucket restore beside a missing setup database that was not wiped is refused, and places nothing", async () => {
+  const f = await missingHeldDatabase();
+  await expectRefusedPlacingNothing(f, await stageBucket(f));
+}, 180_000);
+
 it("a held setup database, wiped, then the Waitron Cloud restore writes into the usual folders", async () => {
   const f = await heldSetup();
   await withResolutionRecord(f);
@@ -151,5 +156,10 @@ it("a missing setup database, wiped, then the Waitron Cloud restore writes into 
 
 it("control: the same Waitron Cloud restore beside a held setup database that was not wiped is refused, and places nothing", async () => {
   const f = await heldSetup();
+  await expectRefusedPlacingNothing(f, await stageCloud(f));
+}, 180_000);
+
+it("control: the same Waitron Cloud restore beside a missing setup database that was not wiped is refused, and places nothing", async () => {
+  const f = await missingHeldDatabase();
   await expectRefusedPlacingNothing(f, await stageCloud(f));
 }, 180_000);
