@@ -12,7 +12,7 @@ The watcher requested this on 14 November 2026 at 10:46 in Lane D’s questions.
 **Files:** `apps/dashboard/src/dashboard-app.test.ts`; add one sentence to the existing observer-completion lesson in `docs/developers/testing-guide.md`. No backlog entry names this incident, so no open work is retired.
 
 - [x] Replay the held-restoration red/green control and retain both outcomes; then remove the diagnostic hold. In a disposable candidate also remove Back handling and confirm the corrected test fails waiting for the modal to close (watcher 10:54).
-- [ ] Change only the completion wait in the existing two-case test. Run `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts`, including both close paths and its neighboring Back/Forward cases. Run a bounded repeated sample of the named Back case with a separate log per attempt.
+- [x] Change only the completion wait in the existing two-case test. Run `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts`, including both close paths and its neighboring Back/Forward cases. Run a bounded repeated sample of the named Back case with a separate log per attempt.
 - [ ] Finish through the normal hook, Claude build review and current-head scoped CI; land under the campaign’s existing authorisation.
 
 **Expected size:** production +0/−0; tests +1/−2; support +0/−0; documentation one sentence beyond this plan. This plan is written by Codex; no owner design approval is claimed.

@@ -2566,9 +2566,9 @@ late report is inferred from these runs; the failing runs logged nothing that sh
 So: when the outcome hangs on an observer's report, poll for the outcome. Two frames guarantee only
 the frames.
 
-**Guards that read the whole tree**
-
 For a guarded Back or Forward traversal, poll for the resulting screen state: Your profile’s device-editor retention test reproduced an intermediate address with the modal still open when the guard’s restoring `history.go(1)` was held for 200 ms.
+
+**Guards that read the whole tree**
 
 ## Source scanners check filesystem type as well as the filename suffix — select files, not just paths ending in `.ts`.
 
