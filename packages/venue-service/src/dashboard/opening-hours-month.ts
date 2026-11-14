@@ -7,7 +7,7 @@ import type { CalendarColour, LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import type { ClosedRange, ServiceRange } from "../service-day.js";
-import { placeOnDay, zoneOwnHours, type Placed } from "../zone-own-hours.js";
+import { joinPlacedRanges, placeOnDay, zoneOwnHours, type Placed } from "../zone-own-hours.js";
 import { FIRST_MONTH, LAST_MONTH } from "./calendar-grid.js";
 import {
   chosenDepartment,
@@ -25,7 +25,7 @@ import {
 import "./season-chips.js";
 import { DayPicker } from "./day-picking.js";
 import { calendarSelection, calendarSelectionStyles } from "./calendar-selection.js";
-import { closedHatch, periodColourStyles } from "./period-colour-styles.js";
+import { periodColourStyles } from "./period-colour-styles.js";
 import { dayNameWords, dayNameWordStyles } from "./day-name-words.js";
 import { fixedTitle, fixedTitleStyles } from "./fixed-title.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
@@ -66,10 +66,7 @@ function stepMonth(month: string, by: number): string {
 interface Row {
   key: string;
   name: string;
-  ranges: readonly (ServiceRange & Placed)[];
-  /** A zone's closed times, cut to where its department is open; none when they cover all of it,
-   *  so the bar is empty. */
-  gaps: readonly (ClosedRange & Placed)[];
+  ranges: readonly (ClosedRange & Placed & { periodId?: string })[];
 }
 
 /** One month of the venue's days in whole Monday-to-Sunday weeks, each date drawing its hours as a bar
@@ -270,16 +267,12 @@ export class OpeningHoursMonthView extends LitElement {
         background: var(--wt-color-track);
         overflow: hidden;
       }
-      .segment,
-      .gap {
+      .segment {
         position: absolute;
         inset-block: 0;
       }
-      .gap {
-        background: ${closedHatch};
-      }
       .segment {
-        background: var(--period-fill);
+        background: var(--period-fill, var(--wt-color-primary));
       }
       /* A phone's width: too narrow for the word "Today" in a date, so the number is marked and the
          word kept for a screen reader; a station's date closed all day drops "No orders" there, its
@@ -362,25 +355,25 @@ export class OpeningHoursMonthView extends LitElement {
 
   #rows(day: Day, chosen: string, { name }: MonthNames): Row[] {
     const place = placeOnDay(day);
-    const placed = (ranges: readonly ServiceRange[]) =>
-      ranges.map((range) => ({ ...range, ...place(range) }));
+    const placed = (ranges: readonly ServiceRange[]) => {
+      const pieces = ranges.map((range) => ({ ...range, ...place(range) }));
+      return this.#orders ? pieces : joinPlacedRanges(pieces);
+    };
     if (!chosen)
       return day.departments.map((d) => ({
         key: d.departmentId,
         name: name(d.departmentId),
         ranges: placed(d.ranges),
-        gaps: [],
       }));
     const department = day.departments.find((d) => d.departmentId === chosen)!;
     return [
-      { key: chosen, name: name(chosen), ranges: placed(department.ranges), gaps: [] },
+      { key: chosen, name: name(chosen), ranges: placed(department.ranges) },
       ...department.zones.map((zone) => {
         const own = zoneOwnHours(department.ranges, zone.closed, day);
         return {
           key: zone.zoneId,
           name: name(zone.zoneId),
-          ranges: own.ranges,
-          gaps: own.ranges.length ? own.closed : [],
+          ranges: joinPlacedRanges(own.ranges),
         };
       }),
     ];
@@ -416,17 +409,16 @@ export class OpeningHoursMonthView extends LitElement {
     return rows.map((row) => {
       if (this.#orders && !row.ranges.length) return `${row.name}: ${t("month.no_orders")}`;
       if (!row.ranges.length) return format("month.department_closed", { name: row.name });
+      if (!this.#orders)
+        return `${row.name}: ${row.ranges.map(({ startsAt, endsAt }) => format("day.open_range", { start: startsAt, end: endsAt })).join(", ")}`;
       const parts = row.ranges.map((range) =>
         format("month.range", {
-          name: names.period(range.periodId).name,
+          name: names.period(range.periodId ?? "").name,
           start: range.startsAt,
           end: range.endsAt,
         }),
       );
-      const gaps = row.gaps.map((gap) =>
-        format("month.zone_closed", { name: row.name, start: gap.startsAt, end: gap.endsAt }),
-      );
-      return `${row.name}: ${[...parts, ...gaps].join(", ")}`;
+      return `${row.name}: ${parts.join(", ")}`;
     });
   }
 
@@ -499,27 +491,14 @@ export class OpeningHoursMonthView extends LitElement {
         (row) =>
           html`<span class="track" data-row=${row.key} aria-hidden="true">
             ${row.ranges.map((range) => {
-              const period = names.period(range.periodId);
+              const period = names.period(range.periodId ?? "");
               return html`<span
                 class="segment"
                 data-colour=${period.colour ?? nothing}
-                title=${this.#title(period.name, row, rows, range)}
+                title=${this.#orders ? this.#title(period.name, row, rows, range) : format("day.open_range", { start: range.startsAt, end: range.endsAt })}
                 style=${place(range)}
               ></span>`;
             })}
-            ${row.gaps.map(
-              (gap) =>
-                html`<span
-                  class="gap"
-                  data-test="gap"
-                  title=${format("month.zone_closed", {
-                    name: row.name,
-                    start: gap.startsAt,
-                    end: gap.endsAt,
-                  })}
-                  style=${place(gap)}
-                ></span>`,
-            )}
           </span>`,
       )}
       ${

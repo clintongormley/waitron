@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, onTestFinished, test } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { page } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
@@ -13,29 +13,6 @@ afterEach(() => {
   cleanup();
   setLocale("en");
 });
-
-/** December's model with the Restaurant's Lunch on 2 December a one-hour sliver. */
-function sliverModel() {
-  const model = monthModel();
-  model.days = model.days.map((d) =>
-    d.date === "2026-12-02"
-      ? {
-          ...d,
-          departments: d.departments.map((dep) =>
-            dep.departmentId === "rest"
-              ? {
-                  ...dep,
-                  ranges: dep.ranges.map((r) =>
-                    r.periodId === "lunch" ? { ...r, startsAt: "16:00", endsAt: "17:00" } : r,
-                  ),
-                }
-              : dep,
-          ),
-        }
-      : d,
-  );
-  return model;
-}
 
 /** The Grill's month: both departments send it orders, neither on 3 December. */
 function grill(): StationShow {
@@ -98,17 +75,12 @@ const states: Record<
   "All departments": { props: { date: "2026-12-02" }, shown: [".block"] },
   "a department and its zones with a closure": {
     props: { date: "2026-12-02", departmentId: "rest" },
-    shown: [".block[data-faded]", '.block[data-kind="closed"]'],
+    shown: [".block[data-faded]", '.row[data-row="terrace"] .spoken'],
   },
   "a day closed all day": { props: { date: "2026-12-25" }, shown: [".name.holiday", ".track"] },
   "a week across two years, with its four links": {
     props: { date: "2027-01-02" },
     shown: ['[data-test="week-month"]', '[data-test="week-year"]'],
-  },
-  "the tip shown over a sliver": {
-    props: { date: "2026-12-02", model: sliverModel() },
-    hover: 'section[data-date="2026-12-02"] .row[data-row="rest"] .block:nth-child(2)',
-    shown: ['[data-test="block-tip"]:popover-open'],
   },
   Spanish: { props: { date: "2026-12-08", departmentId: "rest" }, shown: [".name.holiday"] },
   "a station's Week": {
@@ -143,24 +115,10 @@ describe.each(["light", "dark"] as const)("Opening hours week accessibility (%s)
     ).toBeGreaterThanOrEqual(1.4);
   });
 
-  // axe leaves text over a gradient unscored, so a closed block's words are read against each of
-  // its hatch's colours.
-  test("writes a closed block's words apart from both colours of its hatch", async () => {
-    const el = await mountWeek(theme, { date: "2026-12-02", departmentId: "rest" });
-    const block = el.shadowRoot!.querySelector<HTMLElement>('.block[data-kind="closed"]')!;
-    const hatch = new Set(getComputedStyle(block).backgroundImage.match(/rgba?\([^)]*\)/g));
-    expect(hatch.size).toBe(2);
-    const words = getComputedStyle(block.querySelector(".text")!).color;
-    for (const colour of hatch)
-      expect(contrastRatio(words, colour), colour).toBeGreaterThanOrEqual(4.5);
-  });
-
   test.each(Object.keys(states))("%s", async (state) => {
     if (state === "Spanish") setLocale("es");
     try {
       const el = await mountWeek(theme, states[state]!.props);
-      const hover = states[state]!.hover;
-      if (hover) await userEvent.hover(el.shadowRoot!.querySelector<HTMLElement>(hover)!);
       for (const shown of states[state]!.shown)
         expect(el.shadowRoot!.querySelector(shown), shown).not.toBeNull();
       await expectNoA11yViolations(host);
@@ -182,7 +140,7 @@ const phoneStates: Record<
     props: { date: "2026-12-01", departmentId: "rest" },
     shown: [
       '[data-test="day-card"] .block[data-faded]',
-      '[data-test="day-card"] .block[data-kind="closed"]',
+      '[data-test="day-card"] .row[data-row="terrace"] .words',
     ],
   },
   "a day on a phone with a zone that follows its department": {

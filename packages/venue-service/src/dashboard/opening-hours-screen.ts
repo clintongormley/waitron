@@ -1199,6 +1199,7 @@ export class OpeningHoursScreen extends LitElement {
           ? html`<wt-button
               variant="secondary"
               data-test="edit-week"
+              slot="season-action"
               @click=${act(() => this.openPainter(season.id))}
               >${format(this.readOnly ? "day.show_week" : "day.edit_week", {
                 season: season.name,

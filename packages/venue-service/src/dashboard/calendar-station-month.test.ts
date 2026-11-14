@@ -447,7 +447,7 @@ describe("A725 Calendar station month, migrated from Times", () => {
     await expect.poll(() => picker(el)!.value).toBe("all");
     expect(picker(el)!.options.map(({ value }) => value)).not.toContain("station:pass");
     expect(month(el)!.station).toBeUndefined();
-    expect(titles(el, "2026-12-01")).toContain("Lunch 13:00–16:00");
+    expect(titles(el, "2026-12-01")).toContain("13:00–16:00");
     expect(titles(el, "2026-12-01")).not.toContain("Dinner (Restaurant) 19:00–01:00");
   });
 

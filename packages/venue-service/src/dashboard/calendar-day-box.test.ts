@@ -433,3 +433,27 @@ describe("calendar-day-box", () => {
     insideViewport(popup().getBoundingClientRect());
   });
 });
+
+it.each(["Winter standard hours", ""])(
+  "places season actions with line %s and names inherited hours",
+  async (line) => {
+    box.line = line;
+    const action = document.createElement("button");
+    action.slot = "season-action";
+    action.textContent = "Edit Winter's standard week";
+    box.append(action);
+    box.rows = [{ name: "Terrace", text: "09:00–00:00", inheritedFrom: "Restaurant" }];
+    await box.updateComplete;
+    box.show(anchor);
+    await expect.poll(() => action.checkVisibility()).toBe(true);
+    const slot = action.assignedSlot!;
+    expect(slot).not.toBeNull();
+    expect(slot.getRootNode()).toBe(box.shadowRoot);
+    const detail = box.shadowRoot!.querySelector("dd")!;
+    expect(getComputedStyle(detail).fontStyle).toBe("italic");
+    expect(detail.textContent).toContain("as Restaurant");
+    expect(action.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      detail.getBoundingClientRect().top,
+    );
+  },
+);

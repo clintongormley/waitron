@@ -1,16 +1,17 @@
 import type { LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
+import type { ServiceRange } from "../service-day.js";
+import type { DayBoxRow } from "./calendar-day-box.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
-import { placeOnDay, zoneOwnHours } from "../zone-own-hours.js";
+import {
+  joinPlacedRanges,
+  placeOnDay,
+  zoneOwnHours,
+  type ZoneOwnHours,
+} from "../zone-own-hours.js";
 import { FIRST_MONTH, LAST_MONTH, mondayOf } from "./calendar-grid.js";
 import { format } from "./hours-view.js";
-import {
-  chosenDepartment,
-  departmentRow,
-  serviceRangeText,
-  zoneRow,
-  type MonthNames,
-} from "./opening-hours-day.js";
+import { chosenDepartment, type MonthNames } from "./opening-hours-day.js";
 import { t } from "./strings.js";
 
 type Day = OpeningHoursMonth["days"][number];
@@ -45,9 +46,7 @@ export function weekDays(model: OpeningHoursMonth, date: LocalDate): Day[] | und
 }
 
 export interface WeekBlock {
-  kind: "open" | "closed";
-  /** null for a closed piece. */
-  periodId: string | null;
+  periodId: string;
   /** Minutes after the day's changeover, as `placeOnDay` gives. */
   start: number;
   end: number;
@@ -55,8 +54,6 @@ export interface WeekBlock {
   endsAt: string;
   /** The words inside the block; "" when faded. */
   text: string;
-  /** The tooltip's words, "Terrace · Dinner 22:00–23:00". */
-  label: string;
   /** A zone piece that only follows its department. */
   faded: boolean;
 }
@@ -70,25 +67,22 @@ export interface WeekRow {
   blocks: WeekBlock[];
   /** The words inside an empty track: "Closed all day" or "". */
   empty: string;
-  /** The day box's words for the same row. */
+  /** Period detail for the phone layout and spoken row. */
   words: string;
 }
 
-/** `read`'s ranges as open blocks, each tooltip naming `name`. */
+/** Each period keeps its name, colour and times in the detailed Week. */
 function departmentBlocks(
   read: Day["departments"][number],
-  name: string,
   place: ReturnType<typeof placeOnDay>,
   names: MonthNames,
 ): WeekBlock[] {
   return read.ranges.map((range) => {
     const text = serviceRangeText(range, names);
     return {
-      kind: "open",
       periodId: range.periodId,
       ...place(range),
       text,
-      label: format("week.block_label", { name, text }),
       faded: false,
     };
   });
@@ -99,7 +93,6 @@ function departmentBlocks(
 export function weekRows(day: Day, chosen: string, names: MonthNames): WeekRow[] {
   const one = chosenDepartment(day, chosen);
   const place = placeOnDay(day);
-  const label = (name: string, text: string) => format("week.block_label", { name, text });
   return day.departments
     .filter((read) => !one || read.departmentId === one)
     .flatMap((read): WeekRow[] => {
@@ -109,9 +102,9 @@ export function weekRows(day: Day, chosen: string, names: MonthNames): WeekRow[]
         name,
         zone: false,
         strong: true,
-        blocks: departmentBlocks(read, name, place, names),
+        blocks: departmentBlocks(read, place, names),
         empty: !read.ranges.length && day.closedAllDay ? t("week.closed_all_day") : "",
-        words: departmentRow(read, names).text,
+        words: detailedDepartmentRow(read, names).text,
       };
       if (!one) return [department];
       const zones = read.zones.map((zone): WeekRow => {
@@ -126,44 +119,24 @@ export function weekRows(day: Day, chosen: string, names: MonthNames): WeekRow[]
               range.endsAt === piece.endsAt,
           );
           return {
-            kind: "open",
             periodId: piece.periodId,
             start: piece.start,
             end: piece.end,
             startsAt: piece.startsAt,
             endsAt: piece.endsAt,
             text: faded ? "" : text,
-            label: label(zoneName, text),
             faded,
           };
         });
-        const closed = own.ranges.length
-          ? own.closed.map((piece): WeekBlock => {
-              const text = format("week.closed_range", {
-                start: piece.startsAt,
-                end: piece.endsAt,
-              });
-              return {
-                kind: "closed",
-                periodId: null,
-                start: piece.start,
-                end: piece.end,
-                startsAt: piece.startsAt,
-                endsAt: piece.endsAt,
-                text,
-                label: label(zoneName, text),
-                faded: false,
-              };
-            })
-          : [];
+
         return {
           key: zone.zoneId,
           name: zoneName,
           zone: true,
           strong: own.closed.length > 0,
-          blocks: [...open, ...closed].sort((a, b) => a.start - b.start),
+          blocks: open.sort((a, b) => a.start - b.start),
           empty: "",
-          words: zoneRow(own, zoneName, name, names).text,
+          words: detailedZoneRow(own, zoneName, name, names).text,
         };
       });
       return [department, ...zones];
@@ -176,7 +149,7 @@ export function weekStationRows(day: Day, names: MonthNames): WeekRow[] {
   const place = placeOnDay(day);
   return day.departments.map((read) => {
     const name = names.name(read.departmentId);
-    const blocks = departmentBlocks(read, name, place, names);
+    const blocks = departmentBlocks(read, place, names);
     return {
       key: read.departmentId,
       name,
@@ -187,4 +160,40 @@ export function weekStationRows(day: Day, names: MonthNames): WeekRow[] {
       words: blocks.length ? blocks.map((block) => block.text).join(" · ") : t("month.no_orders"),
     };
   });
+}
+
+function detailedDepartmentRow(read: Day["departments"][number], names: MonthNames): DayBoxRow {
+  return {
+    name: names.name(read.departmentId),
+    text: read.ranges.length
+      ? read.ranges.map((range) => serviceRangeText(range, names)).join(" · ")
+      : t("hours.closed"),
+    strong: true,
+  };
+}
+
+function detailedZoneRow(
+  own: ZoneOwnHours,
+  name: string,
+  department: string,
+  names: MonthNames,
+): DayBoxRow {
+  if (!own.closed.length) return { name, text: format("day.as_department", { name: department }) };
+  const text = own.ranges.length
+    ? [
+        ...own.ranges.map((range) => serviceRangeText(range, names)),
+        ...joinPlacedRanges(own.closed).map(({ startsAt, endsAt }) =>
+          format("day.closed_range", { start: startsAt, end: endsAt }),
+        ),
+      ].join(" · ")
+    : t("hours.closed");
+  return { name, text, strong: true };
+}
+
+function serviceRangeText(range: ServiceRange, names: MonthNames): string {
+  return format("month.range", {
+    name: names.period(range.periodId).name,
+    start: range.startsAt,
+    end: range.endsAt,
+  }).trim();
 }

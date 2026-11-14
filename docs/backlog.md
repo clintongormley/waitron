@@ -649,33 +649,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   where a group heading sits, and 48 px rows, the same before and after. The owner still needs
   to identify the spacing they saw. Watcher retained this point on 14 November at 21:43.
 
-- **A1537. Calendar: show opening hours plainly, keep the period detail in the Week, and make the
-  Week's days open (owner, 2026-11-14).** No migration. [Plan](superpowers/plans/2026-11-14-a1537-calendar-hours.md) cleared by the watcher on 2026-11-14; implementation not started.
-  - **The day pop-up and the Month view show only the times each department and zone is open, with
-    its periods merged.** Today the pop-up lists every period and closure in turn ("Open
-    09:00–12:30 · Lunch 12:30–16:00 · … · closed 23:00–23:15 · closed 23:15–00:00"); it becomes
-    "09:00–00:00", or "09:00–23:00" for a Terrace closed from 23:00. A zone closed in the middle
-    of the day shows two ranges ("09:00–15:00, 17:00–00:00"). Something closed all day still says
-    "Closed". A zone that today reads "as Restaurant and bar" shows its department's times in grey
-    italics instead. Strings in `packages/venue-service/src/dashboard/strings.ts` (`day.*`,
-    `month.*`), English and Spanish; drawn by `opening-hours-day.ts` and `opening-hours-month.ts`.
-  - **The Week view keeps the detail:** its bars stay coloured and labelled by period ("Lunch
-    12:30–16:00"), and the pop-up's "Open this week" leads there. A zone closure in the Week shows
-    as a gap with no bar, not a "Closed …" block.
-  - **In the "Make a special day" editor, two Closed stretches that touch show as one.** Today a
-    period boundary splits one closure in two ("closed 23:00–23:15 · closed 23:15–00:00").
-  - **Each day in the Week view opens the day pop-up**, its heading or any of its bars, as the Year
-    view's days do; the pop-up there leaves out "Open this week". The bars' hover and click label
-    (`#showTip` in `opening-hours-week.ts`) goes: it repeats the bar and, drawn above the bar
-    pointed at, covers the row above it, so it reads as naming the wrong row.
-  - **In the day pop-up, "Edit Winter's standard week" moves to the top, beside "Winter standard
-    hours"** (or beside "Special day — replaces Winter's standard hours"). "Make a special day"
-    and "Open this week" stay at the bottom.
-
 - **A1539. Calendar: prep stations, all at once, and said to be stations (owner, 2026-11-14).**
   Reads only, no migration. Build not started. The watcher cleared the
   [build plan](superpowers/plans/2026-11-14-a1539-calendar-stations.md) on 2026-11-14;
-  build after A1537, which changes the same views. The Periods link wants A1536.
+  uses A1537's Calendar changes. The Periods link wants A1536.
   - **The "Show" dropdown (`calendar-show.ts`) reads "Show all", "All departments" with each
     department indented beneath, then "All prep stations" with each station beneath.** "All
     departments" is today's separate first entry, and the "Departments" and "Prep stations"

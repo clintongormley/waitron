@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, onTestFinished } from "vitest";
 import { userEvent } from "vitest/browser";
 import { applyTokens, setHelpMode } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
@@ -20,6 +20,8 @@ import {
   type Write,
 } from "../testing/special-day-painter-fixture.js";
 import "./special-day-painter.js";
+import "./opening-hours-screen.js";
+import { monthModel } from "../testing/opening-hours-month-fixture.js";
 
 let painter: SpecialDayPainter | undefined;
 beforeEach(() => setLocale("en"));
@@ -1090,3 +1092,83 @@ describe("a zone's Closed inside its department's hours", () => {
     expect(frame(painter).refusal).toBe("A zone can only close while its department is open.");
   });
 });
+
+it.each(["season", "stored special day"])(
+  "joins touching Closed stretches loaded from %s",
+  async (source) => {
+    const closures = [
+      { startsAt: "23:00", endsAt: "23:15" },
+      { startsAt: "23:15", endsAt: "00:00" },
+    ];
+    const answers: SpecialDayAnswers = {
+      season: () => ({
+        ranges: [lunch("09:00", "23:15"), dinner("23:15", "00:00")],
+        zones: { z2: closures },
+      }),
+      days: {
+        sd1: storedDay({
+          zonePaint:
+            source === "season"
+              ? []
+              : [
+                  {
+                    zoneId: "z2",
+                    date: DEC_14,
+                    ranges: closures.map((r) => ({ ...r, kind: "closed" as const })),
+                  },
+                ],
+        }),
+      },
+    };
+    const address = location.href;
+    history.replaceState(null, "", "/manage/opening-hours/view/month/month/2026-12");
+    const screen = document.createElement("dashboard-opening-hours-screen");
+    const api = specialDayApi([], answers);
+    const month = monthModel();
+    month.days = month.days.map((day) => ({
+      ...day,
+      specialDay: source === "season" ? null : { id: "sd1", name: "Christmas dinners" },
+    }));
+    api.watchMonth = (_month, apply) => {
+      queueMicrotask(() => apply(month));
+      return () => {};
+    };
+    api.watchStations = () => () => {};
+    screen.api = api;
+    applyTokens(screen);
+    document.body.append(screen);
+    onTestFinished(() => {
+      screen.remove();
+      history.replaceState(null, "", address);
+    });
+    await expect
+      .poll(() => screen.shadowRoot?.querySelector("opening-hours-month")?.model)
+      .toBeTruthy();
+    const view = screen.shadowRoot!.querySelector("opening-hours-month")!;
+    await view.updateComplete;
+    view.shadowRoot!.querySelector<HTMLElement>(`[data-date="${DEC_14}"] button`)!.click();
+    await expect.poll(() => screen.shadowRoot?.querySelector("calendar-day-box")).not.toBeNull();
+    const box = screen.shadowRoot!.querySelector("calendar-day-box")!;
+    await box.updateComplete;
+    await userEvent.click(
+      box.querySelector<HTMLElement>(
+        source === "season" ? "[data-test=special-add]" : "[data-test=special-edit]",
+      )!,
+    );
+    await expect.poll(() => screen.shadowRoot?.querySelector("special-day-painter")).not.toBeNull();
+    painter = screen.shadowRoot!.querySelector("special-day-painter")!;
+    await loaded(painter);
+    await pick(painter, "zone:z2");
+    const column = grid(painter).shadowRoot!.querySelector(`.day[data-column="${DEC_14}"]`)!;
+    const labels = (selector: string) =>
+      [...column.querySelectorAll(selector)].filter((b) => b.classList.contains("closed"));
+    expect(labels(".block.underlay")).toHaveLength(1);
+    expect(labels(".block.underlay")[0]!.textContent).toContain("23:00–00:00");
+    if (source !== "season") {
+      expect(labels(".block:not(.underlay)")).toHaveLength(1);
+      expect(labels(".block:not(.underlay)")[0]!.getAttribute("aria-label")).toContain(
+        "23:00–00:00",
+      );
+    }
+  },
+);

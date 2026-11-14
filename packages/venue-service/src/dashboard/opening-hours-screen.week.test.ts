@@ -562,6 +562,9 @@ describe("from the Week to the Month, the Year and the day box", () => {
     await week(el)!.updateComplete;
     await userEvent.click(dayName(el, "2026-12-09"));
     await expect.poll(() => boxOpen(el)).toBe(true);
+    expect(dayBox(el)!.querySelector<HTMLElement>("[data-test=edit-week]")!.slot).toBe(
+      "season-action",
+    );
     await userEvent.click(dayBox(el)!.querySelector<HTMLElement>("[data-test=edit-week]")!);
     await expect.poll(() => painter(el)).not.toBeNull();
     const shown = painter(el)!;

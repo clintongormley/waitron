@@ -227,7 +227,10 @@ describe.each(["light", "dark"] as const)("Opening hours month accessibility (%s
       ".track:not(:has(.segment))",
     ])
       expect(root.querySelector(shown), shown).not.toBeNull();
-    if (states[state]!.departmentId) expect(root.querySelector('[data-test="gap"]')).not.toBeNull();
+    if (states[state]!.departmentId) {
+      expect(root.querySelector('[data-row="terrace"] .segment')).not.toBeNull();
+      expect(root.querySelector('[data-test="gap"]')).toBeNull();
+    }
     await expectNoA11yViolations(host);
   });
 });
