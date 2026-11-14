@@ -84,7 +84,7 @@ const suite = useVenueDb({
     });
     anna = { id: person!.id };
     const [supervisor] = await seedPersons(db, {
-      displayName: "Sara",
+      displayName: "Sarah",
       pinHash: hashPin("6666"),
       role: "supervisor",
     });
@@ -225,7 +225,7 @@ async function request(path: string, init: RequestInit = {}): Promise<Response> 
   });
 }
 
-/** Cancels `quantity` of line `lineNo`, all of it when absent, through Cancel item, as Sara. */
+/** Cancels `quantity` of line `lineNo`, all of it when absent, through Cancel item, as Sarah. */
 async function cancel(tabId: string, lineNo: number, quantity?: string): Promise<Response> {
   const { path, body } = await cancelItemRequest(suite.db, tabId, lineNo, quantity);
   return request(path, {

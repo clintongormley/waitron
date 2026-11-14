@@ -152,7 +152,7 @@ useVenueDb({
         })
       ).id;
       const [supervisor] = await seedPersons(tx, {
-        displayName: "Sara",
+        displayName: "Sarah",
         pinHash: hashPin("6666"),
         role: "supervisor",
       });

@@ -2189,7 +2189,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Local `issuance-pass.test.ts`, `till-sale-tender-block.test.ts`, `sale-till-source.receipt.test.ts`,
   `served.test.ts`, `report-api.categories-reconcile.test.ts` and `demo-seed.db.test.ts` use English staff display names.
   The recovery-page personal-data suite uses Martha Lewis and George Hill as staff samples. Its Spanish venue legal-name, location and table-name samples remain.
-  Spanish staff-name samples remain in the logger and other local and shared `testing/` fixtures.
+  Other local and shared `testing/` staff samples remain; logger personal-name samples and the
+  made-here and till-table supervisor display samples use English names.
   Location and dish samples remain in the issuance-pass and list-unit-price fiscal-identity,
   served-at-huella, split-bill fiscal and tabs filing suites.
   Remaining local venue seeds, including email and the other sale suites, and the boot helper's raw
