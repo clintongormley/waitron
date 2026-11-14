@@ -3265,12 +3265,9 @@ would have been reported as `canvas.in_use` or `device_profile.in_use`.
 keeps the named form-factor trigger refusal and incoming RESTRICT refusal; it rethrows other
 foreign-key errors without attributing them to a canvas.
 
-2026-11-14: the watcher cleared two explicit exceptions in `bill-request.ts` and
-`dish-not-sent-alert.ts`: both catch every trigger refusal so a refused housekeeping write does not
-undo payment settlement. The existing refused-clearing cases in `table-signals.test.ts` and
-`till-sale-integrated.db.test.ts`, and refused-alert cases in `till-api.unroutable-dish.test.ts`,
-exercise that recovery. `isRefusal` itself declines 1811, including mixed lists; the exceptions read
-`refusalCode` explicitly.
+2026-11-14: the watcher cleared two exceptions, stated at `bill-request.ts` and
+`dish-not-sent-alert.ts`, to tolerate every trigger refusal so payments settle. Both read
+`refusalCode` explicitly; `isRefusal` itself declines 1811, including mixed lists.
 
 ## One process per venue folder
 

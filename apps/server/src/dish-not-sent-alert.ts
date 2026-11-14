@@ -40,6 +40,7 @@ export async function raiseDishesNotSent(
     await recordDishesNotSent(tx, cfg, saleId, workingOrderId, notSent, now);
   } catch (error) {
     // Deliberately catch every trigger refusal so the payment settles.
+    // Statement-only refusals are required, as in clearBillRequestIfPaid.
     if (!isRefusal(error, ALERT_REFUSALS) && refusalCode(error) !== 1811) throw error;
     // The alert's code: scripts/alert-codes.test.ts reads any dotted name here as an alert code.
     log?.("error", "route.dish_not_sent", {

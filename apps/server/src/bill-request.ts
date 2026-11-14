@@ -79,6 +79,7 @@ export async function clearBillRequestIfPaid(
     await tx.update(parties).set({ billRequestedAt: null }).where(eq(parties.id, survivor.id));
   } catch (error) {
     // Deliberately catch every trigger refusal so the payment settles.
+    // Refusals must leave the transaction open; RAISE(ROLLBACK) would end it.
     if (!isRefusal(error, CLEARING_REFUSALS) && refusalCode(error) !== 1811) throw error;
     log?.("warn", "bill_request.clear_failed", {
       billId,
