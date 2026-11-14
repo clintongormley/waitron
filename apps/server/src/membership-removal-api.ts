@@ -4,12 +4,12 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { withTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
 import type { KeyRing } from "@waitron/credentials";
-import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
+import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import {
   clearRemovedMachine,
   listServers,
-  removeUnjoinedStandby,
-  unlinkRemovedStandby,
+  reloadAfterRemoval,
+  removeStandby,
 } from "./membership-removal.js";
 import { CHART_MINT_REFUSALS } from "./membership-mint.js";
 import type { Logger } from "./logger.js";
@@ -35,6 +35,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "membership.node_has_served": 409,
   "membership.standby_joined": 409,
   "membership.node_not_removed": 409,
+  "handover.operation_in_progress": 409,
   ...CHART_MINT_REFUSALS,
   "membership.write_contended": 503,
 };
@@ -76,14 +77,19 @@ export function mountMembershipRemovalApi(
       // about which ids the chart lists.
       const personId = await authorize(requireManagementSession(c), true);
       const targetNodeId = c.req.param("nodeId");
-      const result = await removeUnjoinedStandby(
+      const body = await readJsonBody<{
+        spareSwitchedOff?: unknown;
+        noParallelRecovery?: unknown;
+      }>(c);
+      const result = await removeStandby(
         { db: deps.db, node: deps.node, ring: deps.ring, nodeId: deps.nodeId, log },
-        { targetNodeId, personId },
+        {
+          targetNodeId,
+          personId,
+          declared: body.spareSwitchedOff === true && body.noParallelRecovery === true,
+        },
       );
-      await unlinkRemovedStandby(
-        { node: deps.node, nodeId: deps.nodeId, log, reloadStream: deps.reloadStream },
-        targetNodeId,
-      );
+      await reloadAfterRemoval({ log, reloadStream: deps.reloadStream }, targetNodeId);
       return c.json(result);
     }),
   );
@@ -91,10 +97,12 @@ export function mountMembershipRemovalApi(
   app.post("/management-api/servers/:nodeId/clear", (c) =>
     runClear(c, log, async () => {
       const personId = await authorize(requireManagementSession(c), true);
+      const targetNodeId = c.req.param("nodeId");
       const result = await clearRemovedMachine(
         { db: deps.db, node: deps.node, ring: deps.ring, nodeId: deps.nodeId, log },
-        { targetNodeId: c.req.param("nodeId"), personId },
+        { targetNodeId, personId },
       );
+      await reloadAfterRemoval({ log, reloadStream: deps.reloadStream }, targetNodeId);
       return c.json(result);
     }),
   );

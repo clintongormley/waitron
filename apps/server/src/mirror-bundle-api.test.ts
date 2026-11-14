@@ -64,7 +64,7 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { streamSettingsPayload } from "./stream-host.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
-import { clearRemovedMachine, removeUnjoinedStandby } from "./membership-removal.js";
+import { clearRemovedMachine, removeStandby } from "./membership-removal.js";
 import { enrolAuthenticator, wrongTotpCode, TOTP_KEY_RING } from "./testing/authenticator.js";
 import { writerBesideRequest } from "./testing/watched-scrypt.js";
 import { boxHostnameFor } from "./box-name.js";
@@ -1267,6 +1267,80 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         peerNodeId: joined.peerNodeId,
       });
     });
+
+    /** Holds a chart where the streaming link's peer stands as `peer`, and that link. */
+    async function holdRetiredLink(
+      designated: AdoptResult,
+      peer: "evicted" | "revoked" | "unlisted",
+    ) {
+      const joined = joinedLink();
+      const nodes: MembershipNode[] = [
+        {
+          nodeId: designated.nodeId,
+          contactUrl: "https://box.deli.test",
+          standing: "serving-primary",
+        },
+      ];
+      if (peer === "evicted")
+        nodes.push({
+          nodeId: joined.peerNodeId,
+          contactUrl: "https://cloud.deli.test",
+          standing: peer,
+        });
+      await writeNodeMembership(
+        db,
+        signedMembershipDoc(((await readNodeMembership(db))?.body.term ?? -1) + 1, {
+          signerNodeId: designated.nodeId,
+          keyPair: primaryKeyPair,
+          nodes,
+          ...(peer === "revoked" ? { revoked: [joined.peerNodeId] } : {}),
+        }),
+      );
+      await withNodeTransaction(suite.node, async (tx) => {
+        await writePairLinkTx(tx, RING, designated.nodeId, joined);
+        await setPairLinkStateTx(tx, designated.nodeId, "streaming");
+      });
+      return joined;
+    }
+
+    it.each(["evicted", "revoked"] as const)(
+      "admits a replacement over the streaming link of a spare the chart lists %s, writing the new spare's link",
+      async (peer) => {
+        const { designated } = await setupVenue();
+        const app = mountApp(designated);
+        await holdRetiredLink(designated, peer);
+        const standby = validStandby();
+
+        const res = await post(app, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...standby });
+
+        expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+        expect(await readPairLink(suite.node, designated.nodeId)).toMatchObject({
+          state: "pending",
+          peerNodeId: standby.standbyNodeId,
+        });
+      },
+    );
+
+    it("refuses 409 mirror.spare_already_joined over the streaming link of a spare the chart does not list, leaving the link", async () => {
+      const { designated } = await setupVenue();
+      const app = mountApp(designated);
+      const joined = await holdRetiredLink(designated, "unlisted");
+
+      const res = await post(app, {
+        email: ADMIN_EMAIL,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+      });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error: { code: "mirror.spare_already_joined", params: {} },
+      });
+      expect(await readPairLink(suite.node, designated.nodeId)).toMatchObject({
+        state: "streaming",
+        peerNodeId: joined.peerNodeId,
+      });
+    });
   });
 
   it("returns a signed dormant allocation and a valid endorsement, activating every purpose at takeover", async () => {
@@ -2386,7 +2460,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const removeDuringRequest =
       (designated: AdoptResult, adminPersonId: string, standbyNodeId: string) =>
       async (): Promise<void> => {
-        await removeUnjoinedStandby(
+        await removeStandby(
           { db, node: suite.node, ring: RING, nodeId: designated.nodeId, log: () => {} },
           { targetNodeId: standbyNodeId, personId: adminPersonId },
         );
@@ -2417,13 +2491,30 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       expect(await removalRows()).toEqual([{ removed_node_id: standbyNodeId, term: seedTerm + 1 }]);
     });
 
-    it("refuses 409 mirror.standby_removed when the removal commits between a chart round's read and its write", async () => {
-      const { designated, adminPersonId } = await setupVenue();
+    // A Remove takes node.db's lock, so it waits for this request and cannot commit inside its
+    // round; the evicting chart is written directly, as a chart another writer signs would land.
+    it("refuses 409 mirror.standby_removed when a chart evicting the standby lands between a chart round's read and its write", async () => {
+      const { designated } = await setupVenue();
       const app = mountApp(designated);
       const standbyNodeId = crypto.randomUUID();
       const seedTerm = await holdChartWithStandby(designated, standbyNodeId);
       const counterBefore = await allocationSnapshot();
-      pause.beforeChartMint = removeDuringRequest(designated, adminPersonId, standbyNodeId);
+      pause.beforeChartMint = () =>
+        writeNodeMembership(
+          db,
+          signedMembershipDoc(seedTerm + 1, {
+            signerNodeId: designated.nodeId,
+            keyPair: primaryKeyPair,
+            nodes: [
+              {
+                nodeId: designated.nodeId,
+                contactUrl: "https://box.deli.test",
+                standing: "serving-primary",
+              },
+              { nodeId: standbyNodeId, contactUrl: "https://cloud.deli.test", standing: "evicted" },
+            ],
+          }),
+        );
 
       const res = await post(app, {
         email: ADMIN_EMAIL,

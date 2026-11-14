@@ -7,11 +7,9 @@ and data. The spare’s page shows its status; it takes no sales and offers no d
 
 ## Add a spare box {#adding-a-spare}
 
-A spare that has finished joining cannot be removed in this version. Do not add one to a venue
-that is open for business until an update lets you remove it.
-
 While a joined spare is switched off, the main box waits at each start until an administrator
-[lets it carry on without the spare](servers.md#carry-on).
+[lets it carry on without the spare](servers.md#carry-on) or
+[removes it](servers.md#remove-a-spare).
 
 Before you start, check two things on the main box:
 
@@ -34,6 +32,14 @@ main box's dashboard, open **Settings → Servers** and compare **This server's 
 fingerprint** with the one the new box shows. Choose **It matches** only if they are the same.
 Then enter the account's details and choose **Connect**. The new box takes its first copy over the
 venue's network and restarts by itself as the spare.
+
+## Remove a spare box {#remove-a-spare}
+
+On the main box, open **Settings → Servers**, open the spare's row menu and choose **Remove**. For a
+spare that has finished joining, first switch it off and make sure no other recovery is in
+progress, then turn on both statements. Once it is removed, the main box stops waiting for it at
+each start, and you can save your bucket or add another spare. To use that machine again, reset
+it and add it as a new spare.
 
 ## Start here when the main box has failed {#emergency}
 
@@ -187,7 +193,8 @@ other box has taken over, says so.
 If you know the other box is switched off, you can let this box carry on without it. Open the box
 at its `https://` address, sign in as an administrator under **Carry on as the main box**, and
 tick both statements. This box then runs the venue until it next restarts, when it asks the other
-box again.
+box again. If the other box is a spare you no longer need, [remove it](servers.md#remove-a-spare)
+once this box is running, so it stops waiting for that spare at each start.
 
 If the other box answers first, its answer wins. A box that has already handed over cannot carry
 on; its page says so instead of showing the form.

@@ -1830,13 +1830,6 @@ Not in any track until the standalone primary is done.
 **The on-prem mirror.** Read this section as requirements slices 3–5 must meet, not as work
 outstanding on code that exists.
 
-- **A1321. Retire a dead or reset spare from Servers.** The
-  [reduced design](superpowers/specs/2026-11-08-a1321-retire-spare-design.md) was owner-approved on 8 November; the
-  [one-page plan](superpowers/plans/2026-11-08-a1321-retire-spare.md) has watcher approval (2026-11-09 10:27);
-  reduced scope extends Remove with server-checked declarations and the existing audit.
-  Build waits for A947 3b-6; no new start check or returning-key trust path.
-  [Detail](backlog/replication-cloud.md#a1321-retire-a-dead-or-reset-spare-from-servers)
-
 - **A947. Go-live on two local boxes.** The owner approved the revised design. Slice 3b's build
   plan is written (eleven pull requests, all landed); 3b-1, 3b-2 ([#2742](https://github.com/clintongormley/waitron/pull/2742)),
   3b-3 ([#2761](https://github.com/clintongormley/waitron/pull/2761)), 3b-4 ([#2779](https://github.com/clintongormley/waitron/pull/2779))

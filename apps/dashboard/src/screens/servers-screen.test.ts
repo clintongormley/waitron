@@ -34,6 +34,7 @@ const listing: ServerListing = {
       isSelf: true,
       removable: false,
       canClear: false,
+      requiresRetirementConfirmation: false,
     },
     {
       nodeId: STANDBY,
@@ -42,6 +43,7 @@ const listing: ServerListing = {
       isSelf: false,
       removable: true,
       canClear: false,
+      requiresRetirementConfirmation: false,
     },
     {
       nodeId: FORMER,
@@ -50,6 +52,7 @@ const listing: ServerListing = {
       isSelf: false,
       removable: false,
       canClear: false,
+      requiresRetirementConfirmation: false,
     },
     {
       nodeId: REMOVED,
@@ -58,6 +61,7 @@ const listing: ServerListing = {
       isSelf: false,
       removable: false,
       canClear: true,
+      requiresRetirementConfirmation: false,
     },
   ],
 };
@@ -358,6 +362,7 @@ describe("servers screen list", () => {
           isSelf: false,
           removable: true,
           canClear: false,
+          requiresRetirementConfirmation: false,
         },
       ],
     };
@@ -380,6 +385,7 @@ describe("servers screen list", () => {
         isSelf: n.nodeId === STANDBY,
         removable: false,
         canClear: false,
+        requiresRetirementConfirmation: false,
       })),
     };
     const el = await mount(stubApi({ listServers: vi.fn().mockResolvedValue(onStandby) }));
@@ -630,6 +636,111 @@ describe("servers screen removal", () => {
   });
 });
 
+describe("servers screen retiring a joined spare", () => {
+  const joined: ServerListing = {
+    ...listing,
+    nodes: listing.nodes.map((n) =>
+      n.nodeId === STANDBY ? { ...n, requiresRetirementConfirmation: true } : n,
+    ),
+  };
+  const DECLARED = { spareSwitchedOff: true, noParallelRecovery: true };
+  const DECLARATIONS = ["declare-switched-off", "declare-no-recovery"] as const;
+
+  function declaration(el: ServersScreen, name: string): HTMLElementTagNameMap["wt-switch"] | null {
+    return dialog(el).querySelector(`wt-switch[data-test=${name}]`);
+  }
+
+  async function declare(el: ServersScreen, name: string): Promise<void> {
+    declaration(el, name)!.shadowRoot!.querySelector("input")!.click();
+    await flush(el);
+  }
+
+  function confirmButton(el: ServersScreen): HTMLElementTagNameMap["wt-button"] {
+    return dialog(el).querySelector("wt-button[data-test=confirm-remove]")!;
+  }
+
+  it.each([
+    [listing, []],
+    [joined, ["This spare is switched off *", "No other recovery is in progress *"]],
+  ])("asks for the declarations only on a row the server flags", async (rows, labels) => {
+    const el = await mount(stubApi({ listServers: vi.fn().mockResolvedValue(rows) }));
+    await openRemove(el);
+    expect(DECLARATIONS.map((name) => declaration(el, name)?.label).filter(Boolean)).toEqual(
+      labels,
+    );
+    expect(dialog(el).querySelector("[data-test=declare-explanation]")?.textContent?.trim()).toBe(
+      labels.length > 0
+        ? "Confirm that this spare is switched off and no other recovery is in progress."
+        : undefined,
+    );
+  });
+
+  it("keeps Remove quiet and disabled until both are ticked, then sends them", async () => {
+    const api = stubApi({ listServers: vi.fn().mockResolvedValue(joined) });
+    const el = await mount(api);
+    await openRemove(el);
+    for (const name of DECLARATIONS) {
+      expect(confirmButton(el).disabled).toBe(true);
+      expect(confirmButton(el).variant).toBe("secondary");
+      await declare(el, name);
+    }
+    expect(confirmButton(el).disabled).toBe(false);
+    expect(confirmButton(el).variant).toBe("danger");
+    vi.mocked(api.listServers).mockResolvedValue(afterRemoval);
+    await confirmRemove(el);
+    expect(api.removeServer).toHaveBeenCalledExactlyOnceWith(STANDBY, DECLARED);
+    expect(dialog(el).open).toBe(false);
+  });
+
+  it("asks for them when the spare finished joining after the list was read", async () => {
+    const api = stubApi({
+      removeServer: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "membership.standby_joined", status: 409 })
+        .mockResolvedValueOnce({ removed: true, term: 4 }),
+    });
+    const el = await mount(api);
+    await openRemove(el);
+    await confirmRemove(el);
+    expect(await messageIn(dialog(el))).toBe(codeMessage("membership.standby_joined"));
+    expect(DECLARATIONS.map((name) => declaration(el, name)?.checked)).toEqual([false, false]);
+    expect(confirmButton(el).disabled).toBe(true);
+    for (const name of DECLARATIONS) await declare(el, name);
+    await confirmRemove(el);
+    expect(vi.mocked(api.removeServer).mock.calls).toEqual([[STANDBY], [STANDBY, DECLARED]]);
+    expect(dialog(el).open).toBe(false);
+  });
+
+  it("Cancel forgets the ticks, so the next confirmation starts unticked", async () => {
+    const api = stubApi({ listServers: vi.fn().mockResolvedValue(joined) });
+    const el = await mount(api);
+    await openRemove(el);
+    for (const name of DECLARATIONS) await declare(el, name);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-remove]")!.click();
+    await flush(el);
+    await openRemove(el);
+    expect(DECLARATIONS.map((name) => declaration(el, name)?.checked)).toEqual([false, false]);
+    expect(confirmButton(el).disabled).toBe(true);
+    expect(api.removeServer).not.toHaveBeenCalled();
+  });
+
+  it("words the declarations in Spanish", () => {
+    expect(
+      [
+        "servers.declare_switched_off",
+        "servers.declare_no_recovery",
+        "servers.declare_explanation",
+      ].map((key) => es[key as keyof typeof es]),
+    ).toEqual([
+      "Este servidor en espera está apagado",
+      "No hay otra recuperación en curso",
+      "Confirma que este servidor en espera está apagado y no hay otra recuperación en curso.",
+    ]);
+    expect(codeMessage("membership.standby_joined", "es")).toBe(es["servers.declare_explanation"]);
+    expect(codeMessage("membership.standby_joined", "en")).toBe(en["servers.declare_explanation"]);
+  });
+});
+
 describe("servers screen clearing", () => {
   // The server marks `canClear` only on a removed row, and only while this server is the primary.
   const clearable: ServerListing = {
@@ -716,12 +827,22 @@ describe("servers screen clearing", () => {
     expect(en["servers.clear_explanation"]).toContain(
       "If it tries to come back under its old identity, this primary refuses it",
     );
-    expect(en["servers.clear_explanation"]).toContain("join from scratch");
+    for (const key of [
+      "servers.intro",
+      "servers.remove_explanation",
+      "servers.clear_explanation",
+    ] as const) {
+      expect(en[key]).toContain("To use that machine again, reset it and add it as a new spare.");
+      expect(es[key]).toContain(
+        "Para volver a usar esa máquina, restablécela y añádela como un nuevo servidor en espera.",
+      );
+      expect(en[key]).not.toContain("join from scratch");
+      expect(es[key]).not.toContain("unirse de nuevo desde el principio");
+    }
     expect(es["servers.clear_explanation"]).toContain("libera el sitio");
     expect(es["servers.clear_explanation"]).toContain(
       "Si intenta volver con su identidad anterior, este servidor principal la rechaza",
     );
-    expect(es["servers.clear_explanation"]).toContain("unirse de nuevo desde el principio");
   });
 
   it.each(["en", "es-ES"] as const)(

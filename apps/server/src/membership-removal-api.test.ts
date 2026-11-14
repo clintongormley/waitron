@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
@@ -13,8 +14,14 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
-import { loadKeyRing, tryGetCredential, writePairLinkTx, type KeyRing } from "@waitron/credentials";
-import { readPairLink } from "@waitron/node-db";
+import {
+  loadKeyRing,
+  setPairLinkStateTx,
+  tryGetCredential,
+  writePairLinkTx,
+  type KeyRing,
+} from "@waitron/credentials";
+import { beginHandoverOperationTx, readPairLink } from "@waitron/node-db";
 import { startManagementSession } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import {
@@ -33,6 +40,23 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
+
+const pause = { beforeChartMint: undefined as (() => Promise<void>) | undefined };
+
+vi.mock("./membership-mint.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./membership-mint.js")>();
+  return {
+    ...actual,
+    mintNextMembershipDocument: async (
+      ...args: Parameters<typeof actual.mintNextMembershipDocument>
+    ) => {
+      const hook = pause.beforeChartMint;
+      pause.beforeChartMint = undefined;
+      await hook?.();
+      return actual.mintNextMembershipDocument(...args);
+    },
+  };
+});
 
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
@@ -121,10 +145,26 @@ function standby(nodeId: string = randomUUID(), contactUrl = CLOUD_URL): Members
   return { nodeId, contactUrl, standing: "serving-secondary" };
 }
 
-async function remove(p: Primary, nodeId: string, cookie?: string): Promise<Response> {
+const DECLARED = { spareSwitchedOff: true, noParallelRecovery: true };
+
+/** `body` is sent as JSON; a string is sent as it is, so a malformed body can be tried. */
+async function remove(
+  p: Primary,
+  nodeId: string,
+  cookie?: string,
+  body?: unknown,
+): Promise<Response> {
   const headers: Record<string, string> = {};
   if (cookie !== undefined) headers["cookie"] = cookie;
-  return p.app.request(`/management-api/servers/${nodeId}/remove`, { method: "POST", headers });
+  if (body === undefined) {
+    return p.app.request(`/management-api/servers/${nodeId}/remove`, { method: "POST", headers });
+  }
+  headers["content-type"] = "application/json";
+  return p.app.request(`/management-api/servers/${nodeId}/remove`, {
+    method: "POST",
+    headers,
+    body: typeof body === "string" ? body : JSON.stringify(body),
+  });
 }
 
 async function clear(p: Primary, nodeId: string, cookie?: string): Promise<Response> {
@@ -181,6 +221,21 @@ async function holdChartRevoking(
 
 async function heldTerm(db: Database): Promise<number | undefined> {
   return (await readNodeMembership(db))?.body.term;
+}
+
+async function linkTo(p: Primary, peerNodeId: string): Promise<void> {
+  await withNodeTransaction(suite.node, (tx) =>
+    writePairLinkTx(tx, RING, p.nodeId, {
+      role: "streams",
+      state: "pending",
+      peerNodeId,
+      peerPublicKey: "pub",
+      storeUrl: "https://box-7777.waitron.local:7443",
+      venueId: "venue",
+      accessKeyId: "spare-access-key",
+      secretAccessKey: "spare-secret-key",
+    }),
+  );
 }
 
 it.each(["remove", "clear"] as const)(
@@ -503,21 +558,6 @@ describe("POST /management-api/servers/:nodeId/remove", () => {
 });
 
 describe("removing the standby this box's pair link names", () => {
-  async function linkTo(p: Primary, peerNodeId: string): Promise<void> {
-    await withNodeTransaction(suite.node, (tx) =>
-      writePairLinkTx(tx, RING, p.nodeId, {
-        role: "streams",
-        state: "pending",
-        peerNodeId,
-        peerPublicKey: "pub",
-        storeUrl: "https://box-7777.waitron.local:7443",
-        venueId: "venue",
-        accessKeyId: "spare-access-key",
-        secretAccessKey: "spare-secret-key",
-      }),
-    );
-  }
-
   function mountBucketCopy(p: Primary): void {
     mountStreamApi(
       p.app,
@@ -579,6 +619,31 @@ describe("removing the standby this box's pair link names", () => {
     ).not.toBeNull();
   });
 
+  it.each([
+    ["the cleared spare's", 200],
+    ["an active spare's", 409],
+  ] as const)(
+    "after Clear of a retired joined spare, bucket Save answers %s streaming link with %i",
+    async (whose, status) => {
+      const p = await primary();
+      mountBucketCopy(p);
+      const retired = evicted(await seedNode(p.db));
+      const active = standby();
+      await holdChart(p, [self(p), retired, active]);
+      const linked = whose === "the cleared spare's" ? retired : active;
+      await linkTo(p, linked.nodeId);
+      await withNodeTransaction(suite.node, (tx) => setPairLinkStateTx(tx, p.nodeId, "streaming"));
+      expect((await saveBucket(p)).status).toBe(409);
+
+      expect((await clear(p, retired.nodeId, p.adminCookie)).status).toBe(200);
+
+      const save = await saveBucket(p);
+      expect(save.status).toBe(status);
+      if (status === 409)
+        expect(await errorOf(save)).toMatchObject({ code: "backup.spare_stream_active" });
+    },
+  );
+
   it("a standby with a nodes row is still refused removal, and its pair link stays", async () => {
     const p = await primary();
     const joinedId = await seedNode(p.db);
@@ -603,7 +668,8 @@ describe("removing the standby this box's pair link names", () => {
     expect((await remove(p, other.nodeId, p.adminCookie)).status).toBe(200);
 
     expect((await readPairLink(suite.node, p.nodeId))?.peerNodeId).toBe(linked.nodeId);
-    expect(p.reloadStream).not.toHaveBeenCalled();
+    expect(p.reloadStream).toHaveBeenCalledOnce();
+    expect(p.lines.map((l) => l.event)).not.toContain("membership.pair_link_deleted");
   });
 
   it("a second removal deletes a pair link the first left behind", async () => {
@@ -637,6 +703,285 @@ describe("removing the standby this box's pair link names", () => {
       event: "membership.stream_reload_failed",
       fields: { nodeId: gone.nodeId, errorCode: "backup.reload_in_progress" },
     });
+  });
+});
+
+describe("retiring a spare that finished joining", () => {
+  async function hasNodeRow(db: Database, nodeId: string): Promise<boolean> {
+    const { rows } = await db.execute(sql`select id from nodes where id = ${nodeId}`);
+    return rows.length === 1;
+  }
+
+  async function openHandover(p: Primary, sourceNodeId: string, destinationNodeId: string) {
+    await withNodeTransaction(suite.node, (tx) =>
+      beginHandoverOperationTx(tx, {
+        nodeId: p.nodeId,
+        operationId: randomUUID(),
+        role: "source",
+        scenario: "controlled",
+        sourceNodeId,
+        destinationNodeId,
+        binding: {},
+        fingerprint: "f",
+        state: "prepared",
+        waitingReason: null,
+      }),
+    );
+  }
+
+  it("removes a joined spare once both declarations are true, keeping its node row", async () => {
+    const p = await primary();
+    const joinedId = await seedNode(p.db);
+    const joined = standby(joinedId);
+    await holdChart(p, [self(p), joined]);
+    const term = (await heldTerm(p.db))! + 1;
+
+    const res = await remove(p, joinedId, p.adminCookie, DECLARED);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ removed: true, term });
+    expect((await readNodeMembership(p.db))!.body.nodes).toEqual([
+      self(p),
+      { ...joined, standing: "evicted" },
+    ]);
+    expect(await removals(p.db)).toEqual([
+      { removed_node_id: joinedId, contact_url: CLOUD_URL, person_id: p.adminPersonId, term },
+    ]);
+    expect(await hasNodeRow(p.db, joinedId)).toBe(true);
+    expect(p.reloadStream).toHaveBeenCalledOnce();
+  });
+
+  it("removes a former primary that now serves as a spare the same way", async () => {
+    const p = await primary();
+    const formerId = await seedNode(p.db);
+    const oldUrl = "https://old.deli.test";
+    await holdChart(p, [
+      { nodeId: formerId, contactUrl: oldUrl, standing: "serving-primary" },
+      { ...self(p), standing: "serving-secondary" },
+    ]);
+    await holdChart(p, [self(p), standby(formerId, oldUrl)]);
+
+    const res = await remove(p, formerId, p.adminCookie, DECLARED);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ removed: true });
+    expect((await readNodeMembership(p.db))!.body.nodes).toEqual([
+      self(p),
+      { nodeId: formerId, contactUrl: oldUrl, standing: "evicted" },
+    ]);
+    expect(await removals(p.db)).toHaveLength(1);
+    expect(await hasNodeRow(p.db, formerId)).toBe(true);
+  });
+
+  it.each([
+    ["no body", undefined],
+    ["an empty object", {}],
+    ["an unparsable body", "{not json"],
+    ["false", { spareSwitchedOff: false, noParallelRecovery: false }],
+    ["null", { spareSwitchedOff: null, noParallelRecovery: null }],
+    ['"true"', { spareSwitchedOff: "true", noParallelRecovery: "true" }],
+    ["[true]", { spareSwitchedOff: [true], noParallelRecovery: [true] }],
+    ["only spareSwitchedOff", { spareSwitchedOff: true, noParallelRecovery: false }],
+    ["only noParallelRecovery", { spareSwitchedOff: false, noParallelRecovery: true }],
+    ["only spareSwitchedOff, other missing", { spareSwitchedOff: true }],
+    ["only noParallelRecovery, other missing", { noParallelRecovery: true }],
+  ])("refuses a joined spare as membership.standby_joined (409) with %s", async (_, body) => {
+    const p = await primary();
+    const joinedId = await seedNode(p.db);
+    await holdChart(p, [self(p), standby(joinedId)]);
+    await linkTo(p, joinedId);
+    const before = await readNodeMembership(p.db);
+
+    const res = await remove(p, joinedId, p.adminCookie, body);
+
+    expect(res.status).toBe(409);
+    expect(await errorOf(res)).toEqual({ code: "membership.standby_joined", params: {} });
+    expect(await readNodeMembership(p.db)).toEqual(before);
+    expect(await removals(p.db)).toEqual([]);
+    expect((await readPairLink(suite.node, p.nodeId))?.peerNodeId).toBe(joinedId);
+    expect(p.reloadStream).not.toHaveBeenCalled();
+  });
+
+  it("accepts the declarations for a spare that never joined, which needs none", async () => {
+    const p = await primary();
+    const gone = standby();
+    await holdChart(p, [self(p), gone]);
+
+    expect((await remove(p, gone.nodeId, p.adminCookie, DECLARED)).status).toBe(200);
+    expect(await removals(p.db)).toHaveLength(1);
+  });
+
+  it.each(["source", "destination"] as const)(
+    "refuses as handover.operation_in_progress (409) while an open handover names the spare as its %s, writing nothing",
+    async (side) => {
+      const p = await primary();
+      const joinedId = await seedNode(p.db);
+      await holdChart(p, [self(p), standby(joinedId)]);
+      await linkTo(p, joinedId);
+      if (side === "source") await openHandover(p, joinedId, p.nodeId);
+      else await openHandover(p, p.nodeId, joinedId);
+      const before = await readNodeMembership(p.db);
+
+      const res = await remove(p, joinedId, p.adminCookie, DECLARED);
+
+      expect(res.status).toBe(409);
+      expect((await errorOf(res)).code).toBe("handover.operation_in_progress");
+      expect(await readNodeMembership(p.db)).toEqual(before);
+      expect(await removals(p.db)).toEqual([]);
+      expect((await readPairLink(suite.node, p.nodeId))?.peerNodeId).toBe(joinedId);
+      expect(p.reloadStream).not.toHaveBeenCalled();
+    },
+  );
+
+  it("removes the spare while an open handover names two other machines", async () => {
+    const p = await primary();
+    const joinedId = await seedNode(p.db);
+    await holdChart(p, [self(p), standby(joinedId)]);
+    await openHandover(p, randomUUID(), randomUUID());
+
+    const res = await remove(p, joinedId, p.adminCookie, DECLARED);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ removed: true });
+  });
+
+  it("answers an already-removed spare named in an open handover removed:false, and deletes its link", async () => {
+    const p = await primary();
+    const gone = evicted();
+    await holdChart(p, [self(p), gone]);
+    await linkTo(p, gone.nodeId);
+    await openHandover(p, gone.nodeId, p.nodeId);
+
+    const res = await remove(p, gone.nodeId, p.adminCookie, DECLARED);
+
+    expect(await res.json()).toMatchObject({ removed: false });
+    expect(await readPairLink(suite.node, p.nodeId)).toBeNull();
+    expect(p.reloadStream).toHaveBeenCalledOnce();
+  });
+
+  it("holds node.db's lock through the chart commit: a node.db write started mid-round waits for it", async () => {
+    const p = await primary();
+    const gone = standby();
+    await holdChart(p, [self(p), gone]);
+    const before = (await heldTerm(p.db))!;
+    // Run from outside the removal's async context, as another request's write would be.
+    const outside = AsyncLocalStorage.snapshot();
+    let waiting: Promise<number | undefined> | undefined;
+    pause.beforeChartMint = async () => {
+      waiting = outside(() => withNodeTransaction(suite.node, () => heldTerm(p.db)));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    };
+
+    expect((await remove(p, gone.nodeId, p.adminCookie, DECLARED)).status).toBe(200);
+
+    expect(await waiting).toBe(before + 1);
+  });
+
+  it("holds node.db's lock from the chart commit to the link delete: a node.db read started at the commit sees no link", async () => {
+    const p = await primary();
+    const joinedId = await seedNode(p.db);
+    await holdChart(p, [self(p), standby(joinedId)]);
+    await linkTo(p, joinedId);
+    const outside = AsyncLocalStorage.snapshot();
+    let seen: ReturnType<typeof readPairLink> | undefined;
+    const push = p.lines.push.bind(p.lines);
+    vi.spyOn(p.lines, "push").mockImplementation((...lines) => {
+      if (lines.some((l) => l.event === "membership.node_removed")) {
+        seen = outside(() => withNodeTransaction(suite.node, (tx) => readPairLink(tx, p.nodeId)));
+      }
+      return push(...lines);
+    });
+
+    expect((await remove(p, joinedId, p.adminCookie, DECLARED)).status).toBe(200);
+
+    expect(seen).toBeDefined();
+    expect(await seen).toBeNull();
+  });
+});
+
+describe("the stream reload after Remove and Clear", () => {
+  it("Remove reloads on every already-removed answer, with no link left to delete", async () => {
+    const p = await primary();
+    const gone = evicted();
+    await holdChart(p, [self(p), gone]);
+
+    for (let call = 1; call <= 2; call += 1) {
+      const res = await remove(p, gone.nodeId, p.adminCookie);
+      expect(await res.json()).toMatchObject({ removed: false });
+      expect(p.reloadStream).toHaveBeenCalledTimes(call);
+    }
+  });
+
+  it("Clear deletes a pair link a cleared machine left behind, and reloads", async () => {
+    const p = await primary();
+    const gone = evicted();
+    await holdChartRevoking(p, [self(p)], [gone.nodeId]);
+    await linkTo(p, gone.nodeId);
+
+    const res = await clear(p, gone.nodeId, p.adminCookie);
+
+    expect(await res.json()).toMatchObject({ cleared: false });
+    expect(await readPairLink(suite.node, p.nodeId)).toBeNull();
+    expect(p.reloadStream).toHaveBeenCalledOnce();
+  });
+
+  it("Clear deletes the cleared machine's pair link as it clears it", async () => {
+    const p = await primary();
+    const gone = evicted();
+    await holdChart(p, [self(p), gone]);
+    await linkTo(p, gone.nodeId);
+
+    expect(await (await clear(p, gone.nodeId, p.adminCookie)).json()).toMatchObject({
+      cleared: true,
+    });
+    expect(await readPairLink(suite.node, p.nodeId)).toBeNull();
+    expect(p.reloadStream).toHaveBeenCalledOnce();
+  });
+
+  it("Clear reloads on every answer, and leaves a link naming another machine alone", async () => {
+    const p = await primary();
+    const gone = evicted();
+    const linked = standby();
+    await holdChart(p, [self(p), gone, linked]);
+    await linkTo(p, linked.nodeId);
+
+    expect(await (await clear(p, gone.nodeId, p.adminCookie)).json()).toMatchObject({
+      cleared: true,
+    });
+    expect(p.reloadStream).toHaveBeenCalledTimes(1);
+    expect(await (await clear(p, gone.nodeId, p.adminCookie)).json()).toMatchObject({
+      cleared: false,
+    });
+    expect(p.reloadStream).toHaveBeenCalledTimes(2);
+    expect((await readPairLink(suite.node, p.nodeId))?.peerNodeId).toBe(linked.nodeId);
+  });
+
+  it("a failed reload keeps the 200 answer, and the next Remove reloads again", async () => {
+    const p = await primary();
+    const gone = standby();
+    await holdChart(p, [self(p), gone]);
+    p.reloadStream.mockRejectedValueOnce(new AppError("backup.reload_in_progress", {}));
+
+    const first = await remove(p, gone.nodeId, p.adminCookie);
+    expect(first.status).toBe(200);
+    expect(p.lines).toContainEqual({
+      level: "warn",
+      event: "membership.stream_reload_failed",
+      fields: { nodeId: gone.nodeId, errorCode: "backup.reload_in_progress" },
+    });
+
+    const second = await remove(p, gone.nodeId, p.adminCookie);
+    expect(second.status).toBe(200);
+    expect(p.reloadStream).toHaveBeenCalledTimes(2);
+  });
+
+  it("a refused Clear does not reload", async () => {
+    const p = await primary();
+    const live = standby();
+    await holdChart(p, [self(p), live]);
+
+    expect((await clear(p, live.nodeId, p.adminCookie)).status).toBe(409);
+    expect(p.reloadStream).not.toHaveBeenCalled();
   });
 });
 
@@ -948,13 +1293,84 @@ describe("GET /management-api/servers", () => {
       term: await heldTerm(p.db),
       authorityFingerprint: FINGERPRINT,
       nodes: [
-        { ...self(p), isSelf: true, removable: false, canClear: false },
-        { ...neverJoined, isSelf: false, removable: true, canClear: false },
-        { ...joined, isSelf: false, removable: false, canClear: false },
-        { ...former, isSelf: false, removable: false, canClear: false },
-        { ...evicted, isSelf: false, removable: false, canClear: true },
+        {
+          ...self(p),
+          isSelf: true,
+          removable: false,
+          canClear: false,
+          requiresRetirementConfirmation: false,
+        },
+        {
+          ...neverJoined,
+          isSelf: false,
+          removable: true,
+          canClear: false,
+          requiresRetirementConfirmation: false,
+        },
+        {
+          ...joined,
+          isSelf: false,
+          removable: true,
+          canClear: false,
+          requiresRetirementConfirmation: true,
+        },
+        {
+          ...former,
+          isSelf: false,
+          removable: false,
+          canClear: false,
+          requiresRetirementConfirmation: false,
+        },
+        {
+          ...evicted,
+          isSelf: false,
+          removable: false,
+          canClear: true,
+          requiresRetirementConfirmation: false,
+        },
       ],
     });
+  });
+
+  it("asks for the retirement declarations only for a joined spare that is not this node", async () => {
+    const p = await primary();
+    const joinedFormerId = await seedNode(p.db);
+    const joinedEvictedId = await seedNode(p.db);
+    await holdChart(p, [
+      self(p),
+      standby(),
+      { nodeId: joinedFormerId, contactUrl: "https://old.deli.test", standing: "sell-only" },
+      evicted(joinedEvictedId),
+    ]);
+
+    const res = await list(p, p.adminCookie);
+
+    const body = (await res.json()) as {
+      nodes: { nodeId: string; requiresRetirementConfirmation: boolean }[];
+    };
+    expect(body.nodes.map((n) => n.requiresRetirementConfirmation)).toEqual([
+      false,
+      false,
+      false,
+      false,
+    ]);
+  });
+
+  it("does not ask this node to declare itself retired when it is a joined spare", async () => {
+    const p = await primary();
+    const other = standby(randomUUID(), "https://elsewhere.deli.test");
+    await holdChart(p, [
+      { ...other, standing: "serving-primary" },
+      { ...self(p), standing: "serving-secondary" },
+    ]);
+
+    const body = (await (await list(p, p.adminCookie)).json()) as {
+      nodes: { nodeId: string; requiresRetirementConfirmation: boolean }[];
+    };
+    expect(body.nodes.map((n) => [n.nodeId, n.requiresRetirementConfirmation])).toEqual([
+      [other.nodeId, false],
+      [p.nodeId, false],
+    ]);
   });
 
   it("marks nothing removable on a node that is not the serving primary", async () => {

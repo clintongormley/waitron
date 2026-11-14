@@ -183,8 +183,7 @@ const SPARE_JOINED: Record<PairLinkRole, string> = {
   streams: [
     "This box has a standby server, which holds this key ring too.",
     "Rotating here would leave the standby unable to open the venue's keys. Nothing was changed.",
-    "If the standby is not yet set up to receive the venue's data, remove it in the dashboard (Servers, then Remove on its row) and rotate again.",
-    "A standby that is set up to receive the venue's data cannot be removed in this version, so this key ring cannot be rotated while that standby is paired with this box.",
+    "Remove the standby in the dashboard (Servers, then Remove on its row; a standby that finished joining asks you to confirm it is switched off and no other recovery is in progress) and rotate again.",
   ].join(" "),
   serves: [
     "This box joined another server as its standby, so it holds that server's key ring.",

@@ -8,11 +8,9 @@ ofrece acceso al panel de gestión.
 
 ## Añadir un servidor de reserva {#adding-a-spare}
 
-En esta versión no se puede retirar un servidor de reserva que ha terminado de unirse. No lo añadas
-a un local que esté abierto al público hasta que una actualización permita retirarlo.
-
 Mientras un servidor de reserva que ha terminado de unirse está apagado, el servidor principal espera
-en cada inicio hasta que un administrador [deje que siga sin él](servers.md#carry-on).
+en cada inicio hasta que un administrador [deje que siga sin él](servers.md#carry-on) o
+[lo retire](servers.md#remove-a-spare).
 
 Antes de empezar, comprueba dos cosas en el servidor principal:
 
@@ -38,6 +36,14 @@ tenga la sesión iniciada en el panel del servidor principal, abre **Ajustes →
 **Coincide** solo si son iguales. Después introduce los datos de la cuenta y elige **Conectar**. El
 servidor nuevo recibe su primera copia por la red del local y se reinicia solo como servidor de
 reserva.
+
+## Retirar un servidor de reserva {#remove-a-spare}
+
+En el servidor principal, abre **Ajustes → Servidores**, abre el menú de la fila del servidor de
+reserva y elige **Retirar**. Si ha terminado de unirse, apágalo primero y asegúrate de que no hay
+otra recuperación en curso; después activa las dos declaraciones. Una vez retirado, el servidor principal
+deja de esperarlo en cada inicio, y puedes guardar tu bucket o añadir otro servidor de reserva. Para
+volver a usar esa máquina, restablécela y añádela como un nuevo servidor de reserva.
 
 ## Iniciar aquí si ha fallado el servidor principal {#emergency}
 
@@ -208,7 +214,9 @@ normalidad o, si el otro ha pasado a llevar el local, lo indica.
 Si sabes que el otro servidor está apagado, puedes dejar que este servidor siga sin él. Abre el servidor
 en su dirección `https://`, inicia sesión como administrador en **Seguir como equipo principal** y
 marca las dos casillas. Este servidor lleva entonces el local hasta que se reinicie, y entonces vuelve
-a preguntar al otro servidor.
+a preguntar al otro servidor. Si el otro es un servidor de reserva que ya no necesitas,
+[retíralo](servers.md#remove-a-spare) cuando este servidor esté funcionando, para que deje de
+esperarlo en cada inicio.
 
 Si el otro servidor responde antes, manda su respuesta. Un servidor que ya ha pasado el local no puede
 seguir; su página lo indica en lugar de mostrar el formulario.

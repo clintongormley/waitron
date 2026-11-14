@@ -1030,9 +1030,9 @@ makes the distinction for us any more.
 `waitron-credentials rotate` re-seals nothing while `node.db` holds a pair link under any node id:
 it refuses with `credentials.rotation_spare_joined`, because the spare holds the same key ring and
 nothing sends it a new one (decision D7 in
-[the 3b plan](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md)). Removing a spare that
-is not yet set up to receive the venue's data (no `nodes` row yet) deletes the link, and rotation
-then runs. A spare that is set up cannot be removed in this version, so while it is paired the ring is not rotated. On the spare,
+[the 3b plan](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md)). Removing the spare on
+Servers deletes the link, and rotation then runs; a spare that finished joining is removed only
+after an administrator declares it switched off and no other recovery in progress (A1321). On the spare,
 whose own link names its main box, `rotate` refuses too. A ring changed by hand in `secrets.env` is
 not stopped by this.
 
@@ -3643,23 +3643,23 @@ NEW entry point which reads `tls/` calls `finishTlsInstall` first.
 **The rule.** A main box with a spare streams `venue.db` to the spare's store and never to the
 owner's bucket, so the two are never configured together. Saving bucket settings is refused with
 `backup.spare_stream_active` while `node.db` holds a pair link (`refuseWhilePaired`,
-`apps/server/src/stream-api.ts:160-164`), and a join is refused with `mirror.bucket_stream_active`
-while bucket settings are stored (`refuseWhileBucketStream`, `apps/server/src/mirror-bundle-api.ts:318-325`).
+`apps/server/src/stream-api.ts:159-163`), and a join is refused with `mirror.bucket_stream_active`
+while bucket settings are stored (`refuseWhileBucketStream`, `apps/server/src/mirror-bundle-api.ts:341-348`).
 Each check is repeated under `node.db`'s write lock, where the other side writes
-(`stream-api.ts:254-255`, `mirror-bundle-api.ts:189-195`), so of two requests at once one sees the
+(`stream-api.ts:253-254`, `mirror-bundle-api.ts:190-200`), so of two requests at once one sees the
 other. The stream host reads the pair link first and the bucket settings only when there is no
-streaming link (`apps/server/src/stream-host.ts:279-282`). Passing the spare's copy on to the
+streaming link (`apps/server/src/stream-host.ts:286-289`). Passing the spare's copy on to the
 bucket is not built (the 3b plan's "copy-up", slice 5e).
 
 **The pair link.** `node_pair_link` (`packages/node-db/src/schema/node-pair-link.ts`) is one row per
 box, keyed by its own node id, so a box has at most one spare; a join is refused with
-`mirror.spare_already_joined` while the link is `streaming` (`mirror-bundle-api.ts:191-192`), and a
-`pending` one is replaced. The main box's row has role `streams` and moves `pending` → `streaming`
-when it writes the spare's `nodes` row, which happens when the spare's store first answers it, not
-when the bundle is handed out (`recordSpare`, `apps/server/src/spare-join.ts:157-186`; decision D6
-in [the 3b plan](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md)). The spare's row
-has role `serves` and moves `awaiting_copy` → `copied` (`apps/server/src/adopt.ts:262`,
-`finish-adoption.ts:86`). The table's check refuses any other role and state pair. The store's
+`mirror.spare_already_joined` while the link is `streaming` to a spare the held chart does not list
+as evicted or cleared (`mirror-bundle-api.ts:192-197`); any other link is replaced. The main box's
+row has role `streams` and moves `pending` → `streaming` when it writes the spare's `nodes` row,
+which happens when the spare's store first answers it, not when the bundle is handed out
+(`recordSpare`, `apps/server/src/spare-join.ts:157-186`; decision D6 in [the 3b plan](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md)). The spare's row
+has role `serves` and moves `awaiting_copy` → `copied` (`apps/server/src/adopt.ts:260`,
+`finish-adoption.ts:75`). The table's check refuses any other role and state pair. The store's
 secret key is sealed under the key ring, bound to both boxes' ids
 (`packages/credentials/src/node-pair-link.ts`), which is why the key ring is not rotated while a
 link exists (see the write-path entry above, decision D7).

@@ -3189,6 +3189,9 @@ and nothing guards it across screens:
 - A1088: Box status's note dialog (`apps/dashboard/src/widgets/misdated-note-dialog.ts`); Add
   note's Save follows the rule. Its leave cases are in `misdated-note-dialog.unsaved.test.ts`
   beside it;
+- A1321: Servers' Remove dialog (`apps/dashboard/src/screens/servers-screen.ts`) takes no draft
+  scope and has no `*.unsaved.test.ts`: its two statements are a confirmation, not staged input,
+  and each opening of the dialog starts with both off;
 - A585-1: the Staff roles page's staff-role dialog (`packages/staffing/src/dashboard/staff-role-dialog.ts`).
   Its leave cases are in `packages/staffing/src/dashboard/staff-role-dialog.unsaved.test.ts`;
 - A585-4: the season and special-day staffing painters

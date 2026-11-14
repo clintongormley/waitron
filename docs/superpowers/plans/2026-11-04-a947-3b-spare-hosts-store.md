@@ -46,6 +46,10 @@
 > owns how a spare listens on the network and the authenticated switch screen. See the
 > [narrowed A1113 plan](2026-11-08-a1113-spare-screen.md).
 
+> **2026-11-14, A1321:** Servers can now remove a spare that finished joining, after two
+> declarations. D7/D17/G.3/5.6/5.9/5.10/6.10's “cannot be removed in this version” statements are
+> superseded; see [the A1321 plan](2026-11-08-a1321-retire-spare.md). The text below is unchanged.
+
 > **2026-11-08 13:34 update:** The owner approved A1321’s reduced design for planning. Its [one-page plan](2026-11-08-a1321-retire-spare.md) awaits watcher approval and 3b-6 before build. The earlier status and implementation text below remain historical.
 
 > **2026-11-08: A1321 design pending OWNER approval.**

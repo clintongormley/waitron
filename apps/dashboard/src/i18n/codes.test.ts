@@ -464,11 +464,27 @@ it("has a sentence in both languages for each refusal of a server's removal", ()
     "membership.node_has_served",
     "membership.standby_joined",
     "membership.write_contended",
+    "handover.operation_in_progress",
   ]) {
     expect(codeMessage(code, "en")).not.toBe(GENERIC_EN);
     expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
     expect(codeMessage(code, "es")).not.toBe(codeMessage(code, "en"));
   }
+});
+
+it.each([
+  ["membership.standby_joined", "switched off", "apagado"],
+  ["backup.spare_stream_active", "then save again", "vuelve a guardar"],
+  [
+    "handover.operation_in_progress",
+    "before starting another handover or removing a server",
+    "antes de iniciar otro traspaso o retirar un servidor",
+  ],
+])("words %s as the next step a person can take", (code, enStep, esStep) => {
+  expect(codeMessage(code, "en")).toContain(enStep);
+  expect(codeMessage(code, "es")).toContain(esStep);
+  for (const language of ["en", "es"] as const)
+    expect(codeMessage(code, language)).not.toMatch(/cannot be removed|no se puede retirar/);
 });
 
 it("has a sentence in both languages for each refusal of clearing a server", () => {
