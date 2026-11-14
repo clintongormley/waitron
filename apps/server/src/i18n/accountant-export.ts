@@ -59,7 +59,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
       "Original invoice id",
       "Original invoice number",
       "Voided at (UTC)",
-      "Notes: F3 replacements omitted; original tickets retained; voids flagged, not netted",
+      "Notes: F3 replacements omitted; original tickets retained; voids flagged, not netted; replacement correctives flagged, not added",
     ],
     purchaseColumns: [
       "Invoice number",
@@ -142,7 +142,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
       "Id. de factura original",
       "Número de factura original",
       "Anulada el (UTC)",
-      "Notas: se omiten las sustituciones F3 y se conservan los tickets originales; las anulaciones se indican, no se restan",
+      "Notas: se omiten las sustituciones F3 y se conservan los tickets originales; las anulaciones se indican, no se restan; las rectificativas por sustitución se indican, no se suman",
     ],
     purchaseColumns: [
       "Número de factura",
