@@ -661,6 +661,7 @@ export class SetupApp extends LitElement {
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-lg);
         background: var(--wt-color-surface-raised);
+        --wt-form-actions-surface: var(--wt-color-surface-raised);
       }
 
       main > header {

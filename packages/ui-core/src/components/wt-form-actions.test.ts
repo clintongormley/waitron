@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { cleanup, host, mount } from "../test-helpers.js";
 import "./wt-button.js";
 import type { WtFormActions } from "./wt-form-actions.js";
@@ -193,4 +193,91 @@ test("spaces direct Cancel and Delete controls with the shared token and wraps t
   expect(wrapped.left).toBe(cancel!.getBoundingClientRect().left);
   expect(wrapped.top - cancel!.getBoundingClientRect().bottom).toBe(13);
   expect(save!.getBoundingClientRect().right).toBe(el.getBoundingClientRect().right);
+});
+
+const TALL_FORM = `<div data-scroller style="height: 200px; overflow-y: auto">
+  <div style="height: 1000px">Fields</div>
+  <wt-form-actions error="Correct the highlighted fields to continue."><wt-button slot="cancel">Cancel</wt-button><wt-button variant="primary">Save</wt-button></wt-form-actions>
+</div>`;
+
+async function mountTallForm() {
+  const scroller = (await mount(TALL_FORM)) as HTMLElement;
+  const el = scroller.querySelector<WtFormActions>("wt-form-actions")!;
+  await el.updateComplete;
+  return { scroller, el };
+}
+
+const separatorWidth = (el: WtFormActions) =>
+  getComputedStyle(el.shadowRoot!.querySelector<HTMLElement>("[data-bar]")!).borderTopWidth;
+
+test("stays at the bottom of whatever scrolls, message above its buttons, until the form's end", async () => {
+  const { scroller, el } = await mountTallForm();
+  const box = scroller.getBoundingClientRect();
+  expect(el.getBoundingClientRect().bottom).toBe(box.bottom);
+  const message = el
+    .shadowRoot!.querySelector<HTMLElement>("[data-error]")!
+    .getBoundingClientRect();
+  const save = el.querySelector<HTMLElement>("wt-button:not([slot])")!.getBoundingClientRect();
+  expect(message.top).toBeGreaterThanOrEqual(box.top);
+  expect(message.bottom).toBeLessThanOrEqual(save.top);
+  expect(save.bottom).toBeLessThanOrEqual(box.bottom);
+
+  scroller.scrollTop = scroller.scrollHeight;
+  const block = scroller.firstElementChild!.getBoundingClientRect();
+  expect(el.getBoundingClientRect().top).toBe(block.bottom);
+});
+
+test("draws a line along its top edge only while it is held at the bottom", async () => {
+  const { scroller, el } = await mountTallForm();
+  await vi.waitFor(() => expect(separatorWidth(el)).toBe("1px"));
+  const bar = el.shadowRoot!.querySelector<HTMLElement>("[data-bar]")!;
+  expect(bar.getBoundingClientRect().top).toBe(el.getBoundingClientRect().top);
+  scroller.scrollTop = scroller.scrollHeight;
+  await vi.waitFor(() => expect(separatorWidth(el)).toBe("0px"));
+
+  const short = (await mount(
+    '<wt-form-actions><wt-button variant="primary">Save</wt-button></wt-form-actions>',
+  )) as WtFormActions;
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  expect(separatorWidth(short)).toBe("0px");
+});
+
+test("paints the line from the border token", async () => {
+  const { el } = await mountTallForm();
+  host.style.setProperty("--wt-color-border", "rgb(4, 5, 6)");
+  await vi.waitFor(() => expect(separatorWidth(el)).toBe("1px"));
+  const bar = el.shadowRoot!.querySelector<HTMLElement>("[data-bar]")!;
+  expect(getComputedStyle(bar).borderTopColor).toBe("rgb(4, 5, 6)");
+});
+
+test("paints the surface its container names, or the surface token", async () => {
+  const el = await mount(
+    '<wt-form-actions><wt-button variant="primary">Save</wt-button></wt-form-actions>',
+  );
+  host.style.setProperty("--wt-color-surface", "rgb(7, 8, 9)");
+  expect(getComputedStyle(el).backgroundColor).toBe("rgb(7, 8, 9)");
+  host.style.setProperty("--wt-form-actions-surface", "rgb(10, 11, 12)");
+  expect(getComputedStyle(el).backgroundColor).toBe("rgb(10, 11, 12)");
+});
+
+test("pads its block ends with the shared space token", async () => {
+  const el = await mount(
+    '<wt-form-actions><wt-button variant="primary">Save</wt-button></wt-form-actions>',
+  );
+  host.style.setProperty("--wt-space-2", "13px");
+  const style = getComputedStyle(el);
+  const bar = getComputedStyle(el.shadowRoot!.querySelector<HTMLElement>("[data-bar]")!);
+  expect([bar.paddingTop, style.paddingBottom, style.position]).toEqual(["13px", "13px", "sticky"]);
+});
+
+test("in a dialog's footer, keeps the footer's own look: not held, no padding or background", async () => {
+  const el = await mount(
+    '<wt-form-actions slot="footer"><wt-button variant="primary">Save</wt-button></wt-form-actions>',
+  );
+  host.style.setProperty("--wt-space-2", "13px");
+  const style = getComputedStyle(el);
+  const bar = getComputedStyle(el.shadowRoot!.querySelector<HTMLElement>("[data-bar]")!);
+  expect(style.position).toBe("static");
+  expect([bar.paddingTop, style.paddingBottom]).toEqual(["0px", "0px"]);
+  expect(style.backgroundColor).toBe("rgba(0, 0, 0, 0)");
 });

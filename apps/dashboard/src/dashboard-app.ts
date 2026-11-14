@@ -645,6 +645,7 @@ export class DashboardApp extends LitElement {
         container-type: size;
         --wt-table-body-gutter: var(--wt-space-4);
         --wt-table-max: calc(100cqb - 2 * var(--wt-table-body-gutter));
+        --wt-form-actions-surface: var(--wt-color-bg);
         position: relative;
         flex: 1 1 auto;
         min-width: 0;

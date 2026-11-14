@@ -1027,6 +1027,15 @@ describe("dashboard-app", () => {
     expect(main.getBoundingClientRect().top).toBeGreaterThanOrEqual(bannerBox.bottom);
   });
 
+  it("gives a form's action row in the page column the page's own background", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+    await flush(el);
+    const main = el.shadowRoot!.querySelector<HTMLElement>(".main")!;
+    expect(getComputedStyle(main).getPropertyValue("--wt-form-actions-surface").trim()).toBe(
+      getComputedStyle(main).getPropertyValue("--wt-color-bg").trim(),
+    );
+  });
+
   it("shows login when no session, business overview after a manager logs in", async () => {
     // getMe rejects at boot (no session), then resolves as a MANAGER after login.
     const api = stubApi({

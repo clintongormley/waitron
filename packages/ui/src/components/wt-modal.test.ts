@@ -1355,3 +1355,16 @@ test("shows the focus ring on its body when Shift+Tab brings focus back to it", 
   expect(body.matches(":focus-visible")).toBe(true);
   expect(getComputedStyle(body).outlineStyle).toBe("solid");
 });
+
+test("gives a form's action row in its body the raised surface it paints, and keeps a footer row unpainted", async () => {
+  const el = await mount(`<wt-modal heading="Edit" open>
+    <wt-form-actions data-body-row><wt-button>Save</wt-button></wt-form-actions>
+    <wt-form-actions slot="footer"><wt-button>Save</wt-button></wt-form-actions>
+  </wt-modal>`);
+  host.style.setProperty("--wt-color-surface-raised", "rgb(10, 11, 12)");
+  host.style.setProperty("--wt-form-actions-surface", "rgb(1, 1, 1)");
+  const body = el.querySelector<HTMLElement>("[data-body-row]")!;
+  const footer = el.querySelector<HTMLElement>('[slot="footer"]')!;
+  expect(getComputedStyle(body).backgroundColor).toBe("rgb(10, 11, 12)");
+  expect(getComputedStyle(footer).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+});

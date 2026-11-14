@@ -1,6 +1,7 @@
 import { expect, test, afterEach } from "vitest";
 import { cleanup, host, mount } from "../test-helpers.js";
 import "./wt-card.js";
+import "./wt-form-actions.js";
 
 afterEach(cleanup);
 
@@ -34,4 +35,19 @@ test("raised uses the raised surface token", async () => {
   host.style.setProperty("--wt-color-surface-raised", "rgb(10, 11, 12)");
   const inner = el.shadowRoot!.querySelector(".card")!;
   expect(getComputedStyle(inner).backgroundColor).toBe("rgb(10, 11, 12)");
+});
+
+test("gives a form's action row the surface it paints, raised or not", async () => {
+  const flat = await mount("<wt-card><wt-form-actions></wt-form-actions></wt-card>");
+  host.style.setProperty("--wt-color-surface", "rgb(7, 8, 9)");
+  host.style.setProperty("--wt-color-surface-raised", "rgb(10, 11, 12)");
+  host.style.setProperty("--wt-form-actions-surface", "rgb(1, 1, 1)");
+  expect(getComputedStyle(flat.querySelector("wt-form-actions")!).backgroundColor).toBe(
+    "rgb(7, 8, 9)",
+  );
+  flat.setAttribute("raised", "");
+  await (flat as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+  expect(getComputedStyle(flat.querySelector("wt-form-actions")!).backgroundColor).toBe(
+    "rgb(10, 11, 12)",
+  );
 });

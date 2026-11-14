@@ -1398,13 +1398,8 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
     charges and lists those that do not match (`apps/dashboard/src/widgets/backup-audit.ts`); it
     is a check, not a setting.
 
-- **A1530. Every form's Save bar stays on screen, and every long table can be searched and
-  filtered (owner, 2026-11-14).** Both so that every screen works the same way. No migration.
-  Not started.
-  - **Save and Cancel stay fixed at the bottom of the screen while the form scrolls**, with the
-    form's one error message on its own line above them. This goes in the shared
-    `wt-form-actions`, so every page form gets it, not screen by screen. A1528 does the same for
-    a dialog's own footer.
+- **A1530. Every long table can be searched and filtered (owner, 2026-11-14).** So that every
+  screen works the same way. No migration. Not started.
   - **Every dashboard table that can grow past about ten rows has the shared search bar and
     filters** (`wt-data-table`'s `searchable` and column `filter`s). Devices, Units, Modifiers and
     the product and staff lists already do. Missing on 2026-11-14: Printers' agents, printers

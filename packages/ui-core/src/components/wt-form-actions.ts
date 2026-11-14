@@ -36,6 +36,27 @@ export class WtFormActions extends LitElement {
         width: 100%;
       }
 
+      /* A dialog already keeps its footer in view, so a row in that slot keeps the footer's look. */
+      :host(:not([slot="footer"])) {
+        position: sticky;
+        bottom: 0;
+        z-index: 1;
+        padding-bottom: var(--wt-space-2);
+        background: var(--wt-form-actions-surface, var(--wt-color-surface));
+        container-type: scroll-state;
+      }
+
+      /* On the wrapper rather than the host, so the line drawn while held is the row's top edge. */
+      :host(:not([slot="footer"])) .bar {
+        padding-top: var(--wt-space-2);
+      }
+
+      @container scroll-state(stuck: bottom) {
+        .bar {
+          border-top: 1px solid var(--wt-color-border);
+        }
+      }
+
       .actions {
         display: flex;
         align-items: center;
@@ -81,10 +102,12 @@ export class WtFormActions extends LitElement {
 
   override render() {
     return html`
-      ${this.showError ? formMessage(this.error) : nothing}
-      <div class="actions" data-actions>
-        <div class="cancel"><slot name="cancel"></slot></div>
-        <div class="primary"><slot name="secondary"></slot><slot></slot></div>
+      <div class="bar" data-bar>
+        ${this.showError ? formMessage(this.error) : nothing}
+        <div class="actions" data-actions>
+          <div class="cancel"><slot name="cancel"></slot></div>
+          <div class="primary"><slot name="secondary"></slot><slot></slot></div>
+        </div>
       </div>
     `;
   }
