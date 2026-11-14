@@ -21,6 +21,7 @@ import { recordReplacement } from "./record-replacement.js";
 import type { RecordReplacementInput } from "./record-replacement.js";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
+import { recordSubstitution } from "./record-substitution.js";
 import { recordVoid } from "./record-void.js";
 import { seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
 
@@ -372,6 +373,46 @@ describe("recordReplacement — refusals use no number", () => {
       saleId,
       {},
       { code: "sale.correction_unsupported", params: { saleId } },
+    );
+  });
+
+  it("refuses a ticket already swapped for a full invoice", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const [fullSeries] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId, code: "F", purpose: "full" })
+      .returning({ id: invoiceSeries.id });
+    const { saleId } = await sell(backend);
+    await withTransaction(suite.db, (tx) =>
+      recordSubstitution(tx, backend, {
+        origin: deviceOrigin(deviceId),
+        nodeId,
+        seriesId: brandSeriesId(fullSeries!.id),
+        substitutedSaleIds: [saleId],
+        counterparty: { taxId: "B12345674", legalName: "Acme Corp SL", countryCode: "ES" },
+        total: "12.10",
+        lines: [
+          {
+            lineNo: 1,
+            name: "Menu",
+            descriptions: { "es-ES": "Menu" },
+            quantity: "2",
+            unitPrice: "6.05",
+            vatRate: "21.00",
+            lineTotal: "10.00",
+          },
+        ],
+        locale: "es-ES",
+        invoiceLocales: ["es-ES"],
+        clock: steadyClock,
+      }),
+    );
+
+    await expectRefused(
+      backend,
+      saleId,
+      {},
+      { code: "sale.correction_not_admitted", params: { reason: "replaced" } },
     );
   });
 

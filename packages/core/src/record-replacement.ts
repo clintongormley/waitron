@@ -2,7 +2,14 @@
 import "./errors.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { allocateInvoiceNumber, insertInChunks, saleLines, saleVoids, sales } from "@waitron/db";
+import {
+  allocateInvoiceNumber,
+  insertInChunks,
+  saleLines,
+  saleSubstitutions,
+  saleVoids,
+  sales,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, centsToDecimal, decimal } from "@waitron/shared";
 import type { NodeId, SaleId, SaleOrigin, SeriesId } from "@waitron/shared";
@@ -63,6 +70,14 @@ export async function recordReplacement(
     .where(eq(saleVoids.saleId, input.correctsSaleId));
   if (voided !== undefined) {
     throw new AppError("sale.voided", { saleId: input.correctsSaleId });
+  }
+
+  const [substituted] = await tx
+    .select({ id: saleSubstitutions.id })
+    .from(saleSubstitutions)
+    .where(eq(saleSubstitutions.substitutedSaleId, input.correctsSaleId));
+  if (substituted !== undefined) {
+    throw new AppError("sale.correction_not_admitted", { reason: "replaced" });
   }
 
   const series = await requireCorrectiveSeries(tx, input.seriesId, input.nodeId);
