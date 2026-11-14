@@ -1743,8 +1743,8 @@ async function raiseIncident(
  * can confirm our record. An absent record or fingerprint leaves the answer unresolved; when the
  * fingerprint matches, missing installation identity also leaves it unresolved.
  *
- * `Ejercicio`/`Periodo` come from `fecha_expedicion_factura`: our records never carry a separate
- * `FechaOperacion`, so the operation month is the expedition month.
+ * `Ejercicio`/`Periodo` come from `fecha_expedicion_factura`, also for a replacement corrective
+ * that carries a separate `FechaOperacion`.
  */
 async function routeB(
   client: VerifactuClient,

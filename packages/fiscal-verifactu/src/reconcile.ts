@@ -266,8 +266,8 @@ export async function reconcile(
 }
 
 /**
- * Our envios for the expedition month, joined to their registros. Records carry no FechaOperacion,
- * so the period filter uses fecha_expedicion_factura.
+ * Our envios for the expedition month, joined to their registros. The period filter uses
+ * fecha_expedicion_factura, also for a replacement corrective that carries a FechaOperacion.
  *
  * Plain text work on the stored `YYYY-MM-DD` string, no engine date parsing near a value AEAT will
  * judge. The prefix filter relies on the stored month always being two digits: the column's only
