@@ -1,8 +1,8 @@
 // The stream loop, end to end, against whichever bucket its fixture names: box A streams its
 // venue, dies, box B is rebuilt with its kit, saved node key and signed allocation, sells under a fresh
 // installation number and chain, streams into a generation of its own and moves the pointer, and a
-// restore of B's generation holds exactly what B's database holds. `stream-loop.e2e.test.ts` runs it
-// against versitygw; `aws-stream-loop.aws-rehearsal.test.ts` against Amazon S3, by opt-in only.
+// restore of B's generation holds exactly what B's database holds; given versitygw, B then adds a
+// spare (`stream-loop-spare.ts`). `stream-loop.e2e.test.ts` runs it against versitygw; `aws-stream-loop.aws-rehearsal.test.ts` against Amazon S3, by opt-in only.
 import { randomBytes, X509Certificate } from "node:crypto";
 import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";

@@ -1240,9 +1240,14 @@ and a real S3-compatible server started as a plain child process, because no pac
 container. Box A streams to the bucket and dies; box B is rebuilt from the recovery kit, sells under a
 fresh installation number, opens a generation of its own and moves the pointer; and a restore of B's
 generation must equal B's database, every table but Litestream's own two
-([conventions-data.md](conventions-data.md), the last section). On the owner's Mac it takes about
-twelve seconds (2026-09-25). Its timeout is the sum of its waits and budgets, a little under ten
-minutes, for the reason the "per-test timeout" section above gives.
+([conventions-data.md](conventions-data.md), the last section). Then B adds a spare, box C
+(`apps/server/src/testing/stream-loop-spare.ts`): C's join is refused while B streams to the
+bucket, B stops streaming, C joins and takes its first copy with nothing fiscal written, and B's
+start check counts C. On the owner's Mac it takes about twelve seconds without the spare
+(2026-09-25). Its timeout is the sum of its waits and budgets, for the reason the "per-test
+timeout" section above gives; with the spare's phases that is about sixteen minutes, longer than
+the `test-server-stream` job's ten-minute limit, so in CI the job's limit, not the test's, ends a
+run that is slow or hung.
 
 The loop itself lives in `apps/server/src/testing/stream-loop-scenario.ts`, so it can also run
 against Amazon S3 by hand, without the frozen-server stage's timing check: see [aws-backup-rehearsal.md](aws-backup-rehearsal.md).

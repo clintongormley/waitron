@@ -63,7 +63,7 @@ if (missing.length > 0 && !REQUIRED) {
   console.warn(`stream loop test SKIPPED: ${missing.join("; ")}. Install with: ${INSTALL}`);
 }
 
-describe("the stream loop: stream, rebuild from the bucket, sell under a fresh chain, stream again", () => {
+describe("the stream loop: stream, rebuild from the bucket, sell under a fresh chain, stream again, add a spare", () => {
   let scratch: string | undefined;
   let s3: S3TestServer | undefined;
   const stop = new AbortController();
