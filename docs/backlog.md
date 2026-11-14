@@ -466,8 +466,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A1522. One product, the right VAT eaten here or taken away (owner, 2026-11-14).** Each product
   gets a second VAT class for takeaway, each department says whether it sells eaten in, taken away
   or chosen on the till, and each order records which. One price either way. Fiscal: the owner lands it.
-  Design approved by the owner on 14 November; not yet planned.
-  [Design](superpowers/specs/2026-11-14-eat-in-takeaway-vat-design.md)
+  Design approved by the owner on 14 November; planned the same day, not yet built.
+  [Design](superpowers/specs/2026-11-14-eat-in-takeaway-vat-design.md),
+  [plan](superpowers/plans/2026-11-14-a1522-eat-in-takeaway-vat.md)
 
 - **A1523. A cover charge, and dearer seats on the terrace (owner, 2026-11-14).** Not supported
   today. A cover charge applies only to orders eaten in (A1522's setting). The only way to charge
