@@ -589,13 +589,13 @@ back is signed by M2's own key. `mintNextMembershipDocument`'s `minTerm` exists 
 
 ## The module preparation file grows with every write, and a handover cannot promise room in it
 
-Left open by A1018 Slice 5 (Rulings R29, R30). `module-preparation-state.json` repeats all earlier
-entries in every revision and is capped at 1 MiB; a venue needs about 20 attempts to get near (Ruling
-R30's figure), with no handover involved. At the limit every later module operation refuses
-`setup.attempt_invalid`.
+Left open by A1018 Slice 5 (Rulings R29, R30). Each `module-records/<module>.json` keeps prepared
+revisions that repeat earlier entries. Prepared revisions are capped at 1 MiB across modules; each
+record, including retained history, also has a 1 MiB limit. At the limit later module operations
+refuse `setup.attempt_invalid`.
 
 `modulePreparationMergeFits` (`packages/provisioning/src/module-preparation-state.ts`) estimates room
-from the file itself for three writes now: the dormant setup, the wait and the selection. **Any
+from all prepared revisions for three writes now: the dormant setup, the wait and the selection. **Any
 further write can still fill the file**, so it is a check on the likely shapes and promises nothing.
 If it does fill, M2 fails to activate after the old box has given up filing, with no exit but the
 file's owner clearing it. The cure is a format change: stop repeating the earlier entries, or lift
@@ -979,6 +979,8 @@ used** (A1018 Slice 4's Ruling R3, landed in #2442). The handover manifest marks
 `module-preparation-state.json` transferred, and Slice 5's Task 5.7 merges the old box's retained
 selections into the new box's own preparation file, so a new box never takes such a name. The
 alternative the owner declined: such a name does not count, and the row goes back to source-only.
+2026-11-14: fl9 carries the same selections in the one `module-records/<module>.json#prepared`
+indicator row and places them in each module's prepared section.
 
 **SQLite + Litestream replaces PostgreSQL** (owner decision 2026-09-16). The architecture is
 [SQLite + Litestream topologies](../superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md).

@@ -69,3 +69,40 @@ it("restore bytes keep prepared and overlay only the archive's retained sources 
   });
   expect(await readFile(path)).toEqual(before);
 });
+
+it("Start again sets an unreadable module record aside with its bytes intact", async () => {
+  const root = await fixture();
+  const path = join(root, "module-records/fiscal-verifactu.json");
+  const { mkdir, writeFile, readdir } = await import("node:fs/promises");
+  await mkdir(join(root, "module-records"));
+  const damaged = Buffer.from("{damaged\r\n");
+  await writeFile(path, damaged);
+  await clearModulePrepared(root);
+  await expect(readFile(path)).rejects.toMatchObject({ code: "ENOENT" });
+  const folder = join(root, "records/set-aside");
+  const saved = (await readdir(folder, { recursive: true })).find((name) =>
+    name.endsWith("fiscal-verifactu.json"),
+  );
+  expect(saved).toBeDefined();
+  expect(await readFile(join(folder, saved!))).toEqual(damaged);
+});
+
+it("Start again clears malformed prepared data while keeping a readable retained section", async () => {
+  const root = await fixture();
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  await mkdir(join(root, "module-records"));
+  await writeFile(
+    join(root, "module-records/fiscal-verifactu.json"),
+    JSON.stringify({
+      version: 1,
+      prepared: "damaged",
+      retained: { archive: { names: ["AAAAA"] } },
+    }),
+  );
+  await clearModulePrepared(root);
+  expect(await readModuleRecord(root, "fiscal-verifactu")).toEqual({
+    version: 1,
+    prepared: [],
+    retained: { archive: { names: ["AAAAA"] } },
+  });
+});

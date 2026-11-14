@@ -56,8 +56,7 @@ const REFUSALS_FETCHED_AGAIN: ReadonlySet<ErrorCode> = new Set<ErrorCode>([
   "handover.copy_damaged",
 ]);
 
-// Room for what else a signed indicator holds beside the old box's retained selections, which come
-// from a file limited to 1 MiB (`module-preparation-state.ts`).
+// Leave room for the indicator's other fields beside the aggregate 1 MiB prepared-revision budget.
 const MAX_INDICATOR_BYTES = 4 * 1024 * 1024;
 
 // The first request makes the old box take and digest its whole copy before it answers.

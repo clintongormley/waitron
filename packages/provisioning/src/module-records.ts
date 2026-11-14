@@ -1,5 +1,6 @@
 import { MODULE_RECORDS_DIR } from "@waitron/store";
-import { AppError } from "@waitron/shared";
+import { setAsideUnreadableModuleRecord } from "./first-setup-start-again-set-aside.js";
+import { AppError, isAppError } from "@waitron/shared";
 import { lstat, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
@@ -77,7 +78,18 @@ export async function replaceModuleRetained(
 }
 export async function clearModulePrepared(stateDir: string): Promise<void> {
   for (const module of await moduleRecordNames(stateDir)) {
-    await updateModulePrepared(stateDir, module, () => []);
+    const path = recordPath(stateDir, module);
+    let retained: Record<string, unknown>;
+    try {
+      const value = await readDurableHostJson(path, LIMIT);
+      if (!record(value) || value.version !== 1 || !record(value.retained)) throw invalid();
+      retained = value.retained;
+    } catch (error) {
+      if (!isAppError(error)) throw error;
+      await setAsideUnreadableModuleRecord(stateDir, path);
+      continue;
+    }
+    await writeDurableHostJson(path, { version: 1, prepared: [], retained }, LIMIT);
   }
 }
 export async function moduleRecordBytes(

@@ -39,7 +39,17 @@ it("in the held state, a damaged recovery-key record: the summary shows it, and 
   await expect(startAgain.run({ recoveryRecordDamagedShown: true })).resolves.toBeUndefined();
   const left = await snapshot(f);
   expect(Object.keys(left.venue).filter((name) => !LEFT_VENUE.test(name))).toEqual([]);
-  expect(Object.keys(left.state).filter((name) => !LEFT_STATE.test(name))).toEqual(["flows/"]);
+  expect(Object.keys(left.state).filter((name) => !LEFT_STATE.test(name))).toEqual([
+    "flows/",
+    "module-records/",
+    "module-records/fiscal-verifactu.json",
+  ]);
+  await expectStartAgainDeleted(f.roots);
+  expect(
+    JSON.parse(
+      await readFile(join(f.roots.stateDir, "module-records/fiscal-verifactu.json"), "utf8"),
+    ),
+  ).toEqual({ version: 1, prepared: [], retained: {} });
   await noConfirmations(f);
 });
 

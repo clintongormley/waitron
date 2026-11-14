@@ -247,25 +247,31 @@ it("with the box ticked, the real fiscal module draws a new server key that the 
       keyRotatedAt: "2026-09-20T08:00:00.000Z",
     });
     await ensureBoxSecrets({ stateDir: scratch, hostnames: ["localhost"], now: () => new Date() });
-    await mkdir(join(scratch, "module-evidence/fiscal-verifactu"), { recursive: true });
-    const historyPath = join(scratch, "module-evidence/fiscal-verifactu/hour-history.json");
+    await mkdir(join(scratch, "module-records"), { recursive: true });
+    const historyPath = join(scratch, "module-records/fiscal-verifactu.json");
     await writeFile(
       historyPath,
       JSON.stringify({
-        reference: "prepared-hours",
-        complete: true,
-        records: [
-          {
-            reference: "restored-sheet/0CNPG",
-            kind: "backup",
-            taxpayerNif: "89890001K",
-            environment: "preproduction",
-            softwareId: "W2",
-            nodeId: "retired-node",
-            identity: "0CNPG",
-            recordedAtMs: null,
+        version: 1,
+        prepared: [],
+        retained: {
+          "hour-history": {
+            reference: "prepared-hours",
+            complete: true,
+            records: [
+              {
+                reference: "restored-sheet/0CNPG",
+                kind: "backup",
+                taxpayerNif: "89890001K",
+                environment: "preproduction",
+                softwareId: "W2",
+                nodeId: "retired-node",
+                identity: "0CNPG",
+                recordedAtMs: null,
+              },
+            ],
           },
-        ],
+        },
       }),
     );
     const originalHistory = await readFile(historyPath);

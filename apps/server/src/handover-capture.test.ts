@@ -1,4 +1,5 @@
 import { seedModuleSettings } from "../test/module-settings.js";
+import { dirname } from "node:path";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -521,14 +522,18 @@ describe("capturing a stepped-down box's final copy", () => {
         value: { selected: "AAAAA" },
       },
     ];
+    await mkdir(dirname(join(stateDir, "module-records/fiscal-verifactu.json")), {
+      recursive: true,
+    });
     await writeFile(
-      join(stateDir, "module-preparation-state.json"),
-      JSON.stringify({ version: 1, revisions }),
+      join(stateDir, "module-records/fiscal-verifactu.json"),
+      JSON.stringify({ version: 1, prepared: revisions, retained: {} }),
     );
     const envelope = await captureFinalCopy(deps(self), OP);
     const parsed = parseIndicator(envelope.body);
     expect(
-      parsed.nodeLocal.find((row) => row.item === "module-preparation-state.json")?.revisions,
+      parsed.nodeLocal.find((row) => row.item === "module-records/<module>.json#prepared")
+        ?.revisions,
     ).toEqual(revisions);
     const stored = await captureFinalCopy(deps(self), OP);
     expect(parseIndicator(stored.body)).toEqual(parsed);

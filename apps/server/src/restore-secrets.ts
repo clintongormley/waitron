@@ -1,5 +1,9 @@
-import { INCOMING_SUFFIX as STAGED_SECRET_SUFFIX, TRADING_ENV_FILE } from "@waitron/store";
-
+import { moduleRecordBytes } from "@waitron/provisioning";
+import {
+  INCOMING_SUFFIX as STAGED_SECRET_SUFFIX,
+  MODULE_RECORDS_DIR,
+  TRADING_ENV_FILE,
+} from "@waitron/store";
 import { rename, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { AppError, isAppError } from "@waitron/shared";
@@ -11,6 +15,39 @@ import { unpackStateFiles } from "./state-secrets.js";
 import "./errors.js";
 
 const SECRETS_PREFIX = "secrets/";
+
+export async function moduleRecordEntries(
+  entries: readonly ArchiveEntry[],
+  stateDir: string,
+): Promise<ArchiveEntry[]> {
+  const result: ArchiveEntry[] = [];
+  const retained = new Map<string, Record<string, unknown>>();
+  for (const entry of entries) {
+    if (!entry.name.startsWith("secrets/module-evidence/")) {
+      result.push(entry);
+      continue;
+    }
+    const match = /^secrets\/module-evidence\/([a-z][a-z0-9-]*)\/([a-z][a-z0-9-]*)\.json$/.exec(
+      entry.name,
+    );
+    if (match === null) throw new AppError("restore.unsafe_entry_path", { name: entry.name });
+    const module = match[1]!,
+      source = match[2]!;
+    const values = retained.get(module) ?? {};
+    try {
+      values[source] = JSON.parse(Buffer.from(entry.bytes).toString("utf8"));
+    } catch {
+      throw new AppError("backup.archive_invalid", { reason: "module_evidence_invalid" });
+    }
+    retained.set(module, values);
+  }
+  for (const [module, values] of retained)
+    result.push({
+      name: `secrets/${MODULE_RECORDS_DIR}/${module}.json`,
+      bytes: await moduleRecordBytes(stateDir, module, values),
+    });
+  return result;
+}
 
 export { INCOMING_SUFFIX as STAGED_SECRET_SUFFIX } from "@waitron/store";
 /** A killed restore can leave `.incoming`, `.incoming.tmp` and
@@ -61,7 +98,7 @@ export async function stageSecrets(args: {
   log: Logger;
 }): Promise<StagedSecrets> {
   const { stateDir, log } = args;
-  const secrets: Secret[] = args.entries.map((entry) => ({
+  const secrets: Secret[] = (await moduleRecordEntries(args.entries, stateDir)).map((entry) => ({
     rel: entry.name.slice(SECRETS_PREFIX.length),
     entryName: entry.name,
     contents: Buffer.from(entry.bytes).toString("utf8"),

@@ -167,10 +167,10 @@ it("freezes a password-confirmed real hour request and imports only its matching
   state = (await f.host.store.read())!;
   expect(state.inputs[MODULE]).toEqual(input);
   const journal = JSON.parse(
-    await readFile(join(f.root, "state/module-preparation-state.json"), "utf8"),
+    await readFile(join(f.root, "state/module-records/fiscal-verifactu.json"), "utf8"),
   );
-  expect(journal.revisions.at(-1).value.entries.at(-1).identity).toBe("0CNNY");
-  expect(journal.revisions.at(-1).binding).toEqual(context.binding);
+  expect(journal.prepared.at(-1).value.entries.at(-1).identity).toBe("0CNNY");
+  expect(journal.prepared.at(-1).binding).toEqual(context.binding);
   expect(
     initialSetupFor(f.host.modules, MODULE)!.inspect(
       firstSetupModuleContext(state, MODULE),
@@ -186,9 +186,9 @@ it("refuses a missing password grant before recording a selected hour", async ()
     code: "setup.owner_required",
   });
   expect((await f.host.store.read())!.status).toBe("claimed");
-  await expect(readFile(join(f.root, "state/module-preparation-state.json"))).rejects.toMatchObject(
-    { code: "ENOENT" },
-  );
+  await expect(
+    readFile(join(f.root, "state/module-records/fiscal-verifactu.json")),
+  ).rejects.toMatchObject({ code: "ENOENT" });
   await f.selectPastWaits();
   expect((await f.host.store.read())!.status).toBe("consumption-intent");
 });
@@ -478,9 +478,9 @@ it("refuses a wait with a garbage grant and records no wait", async () => {
   await expect(f.select("x".repeat(43))).rejects.toMatchObject({
     code: "setup.owner_required",
   });
-  await expect(readFile(join(f.root, "state/module-preparation-state.json"))).rejects.toMatchObject(
-    { code: "ENOENT" },
-  );
+  await expect(
+    readFile(join(f.root, "state/module-records/fiscal-verifactu.json")),
+  ).rejects.toMatchObject({ code: "ENOENT" });
 });
 
 it("refuses a new wait with an expired grant, recording nothing, and takes the name after it with fresh grants", async () => {
@@ -493,9 +493,9 @@ it("refuses a new wait with an expired grant, recording nothing, and takes the n
   vi.advanceTimersByTime(300_001);
   expect(Date.now()).toBeGreaterThan((first.preparation as { targetMs: number }).targetMs);
   await f.compare();
-  const ledger = join(f.root, "state/module-preparation-state.json");
+  const ledger = join(f.root, "state/module-records/fiscal-verifactu.json");
   const entryKinds = async () =>
-    JSON.parse(await readFile(ledger, "utf8")).revisions.flatMap(
+    JSON.parse(await readFile(ledger, "utf8")).prepared.flatMap(
       (row: { value: { entries: { kind: string }[] } }) =>
         row.value.entries.map((entry) => entry.kind),
     );
@@ -524,7 +524,7 @@ it.each([
     const f = await fixture();
     await f.compare();
     expect((await f.select()).preparation).toMatchObject({ status: "waiting" });
-    const ledger = join(f.root, "state/module-preparation-state.json");
+    const ledger = join(f.root, "state/module-records/fiscal-verifactu.json");
     const before = await readFile(ledger, "utf8");
     vi.advanceTimersByTime(30_000);
     await f.compare();
@@ -541,7 +541,7 @@ it("refuses a first wait with a grant for another purpose and records no wait", 
   await expect(
     f.select(await f.host.owner.reconfirm(f.owner, PASSWORD, "activation")),
   ).rejects.toMatchObject({ code: "setup.owner_required" });
-  await expect(readFile(join(f.root, "state/module-preparation-state.json"))).rejects.toMatchObject(
-    { code: "ENOENT" },
-  );
+  await expect(
+    readFile(join(f.root, "state/module-records/fiscal-verifactu.json")),
+  ).rejects.toMatchObject({ code: "ENOENT" });
 });

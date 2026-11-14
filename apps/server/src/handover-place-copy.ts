@@ -3,7 +3,7 @@ import { chmod, copyFile, open, rename, rm, rmdir, type FileHandle } from "node:
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { lockVenueDatabase, withNodeTransaction, type NodeDatabase } from "@waitron/db";
-import { parseIndicator, type RetainedRevision } from "@waitron/handover";
+import { MODULE_PREPARED_ITEM, parseIndicator, type RetainedRevision } from "@waitron/handover";
 import type { SignedMembershipDocument } from "@waitron/membership";
 import { mergeModulePreparationRevisions } from "@waitron/provisioning";
 import { appendHandoverEventTx, readHandoverEvent } from "@waitron/node-db";
@@ -281,7 +281,7 @@ export async function placeAcceptedCopyAtStart(args: {
       stateDir,
       // `parseIndicator` refuses an indicator whose row for this file lacks them.
       indicator.nodeLocal
-        .filter((row) => row.item === "module-preparation-state.json")
+        .filter((row) => row.item === MODULE_PREPARED_ITEM)
         .flatMap((row) => row.revisions!),
     );
     await deleteBackupRoomNote(stateDir);

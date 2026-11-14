@@ -156,11 +156,11 @@ it.each(["production", "preproduction"] as const)(
       },
     });
     const journal = JSON.parse(
-      await readFile(join(f.stateDir, "module-preparation-state.json"), "utf8"),
+      await readFile(join(f.stateDir, "module-records/fiscal-verifactu.json"), "utf8"),
     );
-    expect(journal.revisions).toHaveLength(2);
-    expect(journal.revisions[0].value.entries[0].kind).toBe("wait");
-    expect(journal.revisions[1].value.entries.at(-1)).toMatchObject({
+    expect(journal.prepared).toHaveLength(2);
+    expect(journal.prepared[0].value.entries[0].kind).toBe("wait");
+    expect(journal.prepared[1].value.entries.at(-1)).toMatchObject({
       kind: "intent",
       identity: "0CNNY",
     });
@@ -196,10 +196,10 @@ it("a configured first selection returns its durable settle wait without freezin
   expect(state.status).toBe("claimed");
   expect(firstSetupModuleContext(state, MODULE).request).toBeNull();
   const journal = JSON.parse(
-    await readFile(join(f.stateDir, "module-preparation-state.json"), "utf8"),
+    await readFile(join(f.stateDir, "module-records/fiscal-verifactu.json"), "utf8"),
   );
-  expect(journal.revisions[0].value.entries[0].kind).toBe("wait");
-  expect(journal.revisions[0].value.entries[0]).not.toHaveProperty("identity");
+  expect(journal.prepared[0].value.entries[0].kind).toBe("wait");
+  expect(journal.prepared[0].value.entries[0]).not.toHaveProperty("identity");
 });
 
 it("rejects an unauthenticated clock action before contacting the outside source", async () => {
@@ -220,7 +220,9 @@ it("a bad password grant cannot record an hour using the real configured contrib
   const result = await f.select("forged");
   expect(result.status).toBe(403);
   expect(result.body.error.code).toBe("setup.owner_required");
-  await expect(readFile(join(f.stateDir, "module-preparation-state.json"))).rejects.toMatchObject({
+  await expect(
+    readFile(join(f.stateDir, "module-records/fiscal-verifactu.json")),
+  ).rejects.toMatchObject({
     code: "ENOENT",
   });
 });
@@ -335,7 +337,7 @@ it("reads an existing settle wait without another password grant or journal writ
   await f.clocks();
   const saved = await f.select();
   expect(saved.status).toBe(200);
-  const before = await readFile(join(f.stateDir, "module-preparation-state.json"), "utf8");
+  const before = await readFile(join(f.stateDir, "module-records/fiscal-verifactu.json"), "utf8");
   const preview = await f.post("preparation", {
     module: MODULE,
     proposal: { action: "selection" },
@@ -346,5 +348,7 @@ it("reads an existing settle wait without another password grant or journal writ
     targetMs: Date.parse("2026-10-16T11:42:00Z"),
   });
   expect(preview.body.preparation).not.toHaveProperty("input");
-  expect(await readFile(join(f.stateDir, "module-preparation-state.json"), "utf8")).toBe(before);
+  expect(await readFile(join(f.stateDir, "module-records/fiscal-verifactu.json"), "utf8")).toBe(
+    before,
+  );
 });

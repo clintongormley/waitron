@@ -2,6 +2,7 @@ import { stat } from "node:fs/promises";
 import { nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
 import type { Database, NodeDatabase } from "@waitron/db";
 import {
+  MODULE_PREPARED_ITEM,
   bindingFingerprint,
   parseIndicator,
   verifyEnvelope,
@@ -338,8 +339,7 @@ async function settingsRefused(
     own,
   );
   if (difference !== null) return refuse(difference);
-  const incoming: readonly RetainedRevision[] =
-    rowOf(body, "module-preparation-state.json")?.revisions ?? [];
+  const incoming: readonly RetainedRevision[] = rowOf(body, MODULE_PREPARED_ITEM)?.revisions ?? [];
   return (await modulePreparationMergeFits({ stateDir: deps.stateDir }, incoming))
     ? null
     : refuse("handover.preparation_state_too_large");

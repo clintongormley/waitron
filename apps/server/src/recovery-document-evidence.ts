@@ -1,7 +1,5 @@
-import { MODULE_EVIDENCE_DIR } from "@waitron/store";
-import { join } from "node:path";
 import {
-  readDurableHostJson,
+  readModuleRecord,
   readModulePreparationHistory,
   canonicalFirstSetupDirectory,
 } from "@waitron/provisioning";
@@ -24,11 +22,8 @@ export async function readRecoveryDocumentEvidence(
     if (source.kind !== "preparation-history") continue;
     if (![module.name, source.source].every((name) => /^[a-z][a-z0-9-]*$/.test(name)))
       throw new AppError("recovery.pack_invalid", { reason: "module_unsupported" });
-    const value = await readDurableHostJson(
-      join(currentStateDir, MODULE_EVIDENCE_DIR, module.name, `${source.source}.json`),
-      1024 * 1024,
-    );
-    const retained = value === null ? [] : [value];
+    const value = (await readModuleRecord(currentStateDir, module.name)).retained[source.source];
+    const retained = value === undefined ? [] : [value];
     evidence[source.source] = source.project({ preparations, retained });
   }
   return evidence;

@@ -62,7 +62,7 @@ it("persists a recovery hour before the real configured restore runner activates
   expect(journal).toHaveLength(2);
   expect(JSON.stringify(journal)).toContain('"identity":"0CNQT"');
   expect(
-    await readFile(join(f.roots.stateDir, "module-preparation-state.json"), "utf8"),
+    await readFile(join(f.roots.stateDir, "module-records/fiscal-verifactu.json"), "utf8"),
   ).not.toContain(key.secret);
   const old = await suite.db.select().from(invoiceSeries);
   await runRestoreHooks({

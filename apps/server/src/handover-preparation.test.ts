@@ -1376,7 +1376,7 @@ describe("setting the spare's clock from this device", () => {
 
 describe("the spare's dormant setup, written at a good sign-in", () => {
   const stateDir = () => join(root, "state");
-  const file = () => join(stateDir(), "module-preparation-state.json");
+  const file = () => join(stateDir(), "module-records/fiscal-verifactu.json");
   const bytes = () => readFile(file()).catch(() => null);
   const challenge = (app: Hono) => post(app, request({ action: "clock-challenge" }));
   const dormantRevisions = async () =>

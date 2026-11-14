@@ -151,7 +151,9 @@ it.each(["demo", "prepare"])(
     await expect(readFile(join(stateDir, "flows/setup/record.json"))).rejects.toMatchObject({
       code: "ENOENT",
     });
-    await expect(readFile(join(stateDir, "module-preparation-state.json"))).rejects.toMatchObject({
+    await expect(
+      readFile(join(stateDir, "module-records/fiscal-verifactu.json")),
+    ).rejects.toMatchObject({
       code: "ENOENT",
     });
   },
@@ -167,7 +169,7 @@ it("owned development Live consumes its durable hour through publication without
     undefined,
     time.clock,
   );
-  const before = await readFile(join(stateDir, "module-preparation-state.json"), "utf8");
+  const before = await readFile(join(stateDir, "module-records/fiscal-verifactu.json"), "utf8");
   const response = await app.request("https://box.test/setup-api/provision", {
     method: "POST",
     headers: owned.headers,
@@ -187,5 +189,7 @@ it("owned development Live consumes its durable hour through publication without
     { code: "FF-0CNNY", nextNumber: 1 },
     { code: "R-0CNNY", nextNumber: 1 },
   ]);
-  expect(await readFile(join(stateDir, "module-preparation-state.json"), "utf8")).toBe(before);
+  expect(await readFile(join(stateDir, "module-records/fiscal-verifactu.json"), "utf8")).toBe(
+    before,
+  );
 });

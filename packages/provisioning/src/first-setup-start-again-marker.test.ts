@@ -46,7 +46,11 @@ const VENUE_FILES: Record<string, string> = {
   "venue.db-shm": "shared memory",
 };
 const STATE_FILES: Record<string, string> = {
-  "module-preparation-state.json": "{}",
+  "module-records/fiscal-verifactu.json": JSON.stringify({
+    version: 1,
+    prepared: ["spent"],
+    retained: { archive: "kept" },
+  }),
   "flows/setup/documents/a.json": "document",
   [`flows/setup/documents/.first-setup-${randomUUID()}.tmp`]: "half-written",
   "flows/setup/key.json": "key",
@@ -106,10 +110,18 @@ const snapshot = async (roots: { venueDir: string; stateDir: string }) => ({
   state: await tree(roots.stateDir),
 });
 
-async function expectOnlyKept(roots: { venueDir: string; stateDir: string }) {
+async function expectOnlyKept(roots: { venueDir: string; stateDir: string }, hasModule = true) {
   expect(Object.keys(await tree(roots.venueDir))).toEqual([]);
   expect(await tree(roots.stateDir)).toEqual({
     "flows/": "",
+    ...(hasModule
+      ? {
+          "module-records/": "",
+          "module-records/fiscal-verifactu.json": sha(
+            JSON.stringify({ version: 1, prepared: [], retained: { archive: "kept" } }),
+          ),
+        }
+      : {}),
     "records/": "",
     "records/choices/": "",
     "records/choices/1-x.json": sha("confirmation"),
@@ -157,7 +169,9 @@ it("a marker names every listed file, records the side files' state, and reads b
   expect(marker.files.map((entry) => `${entry.root}:${entry.name}`).sort()).toEqual(
     [
       ...["venue.db", "node.db"].map((name) => `venue:${name}`),
-      ...Object.keys(STATE_FILES).map((name) => `state:${name}`),
+      ...Object.keys(STATE_FILES)
+        .filter((name) => !name.startsWith("module-records/"))
+        .map((name) => `state:${name}`),
     ].sort(),
   );
   expect(marker.files.find((entry) => entry.name === "venue.db")).toEqual({
@@ -199,7 +213,7 @@ it("an attempt that never chose a name is finished from the marker alone", async
   const marker = await marked(roots);
   expect(marker.files.map((entry) => entry.name).sort()).toEqual(["flows/setup/record.json"]);
   await finishStartAgainDeletion(roots);
-  await expectOnlyKept(roots);
+  await expectOnlyKept(roots, false);
 });
 
 it("a record folder with a step-000003/ subfolder is finished, subfolder first", async () => {
@@ -588,7 +602,7 @@ it.each([
     expect(marker.files.some((entry) => entry.name === "venue.db")).toBe(false);
     if (!placed) {
       await finishStartAgainDeletion(roots);
-      await expectOnlyKept(roots);
+      await expectOnlyKept(roots, false);
       return;
     }
     await writeFile(join(roots.venueDir, "venue.db"), "a restored database");

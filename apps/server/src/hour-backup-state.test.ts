@@ -1,3 +1,4 @@
+import { seedModuleRecord } from "../test/module-records.js";
 import { ARCHIVE_MAX_METADATA_BYTES } from "./backup-archive-file.js";
 import { collectModuleNonDbState, readModuleRecoveryEvidence } from "./backup-sources.js";
 import { mkdir, mkdtemp, realpath, readFile, rm, writeFile } from "node:fs/promises";
@@ -82,10 +83,11 @@ afterEach(async () => {
 async function journal(
   revisions: unknown[] = [{ binding, value: { version: 1, entries: [intent] } }],
 ) {
-  await writeFile(
-    join(stateDir, "module-preparation-state.json"),
-    JSON.stringify({ version: 1, revisions }),
-  );
+  const rows = revisions as { binding: { module: string } }[];
+  for (const module of new Set(rows.map((row) => row.binding.module)))
+    await seedModuleRecord(stateDir, module, {
+      prepared: rows.filter((row) => row.binding.module === module),
+    });
 }
 const deps = () => ({ modules, stateDir, venueDir, resolvers: {}, snapshotNode: stubNodeSnapshot });
 const evidence = (entries: { name: string; bytes: Uint8Array }[]) => {
@@ -115,27 +117,23 @@ it("captures abandoned module preparation in encrypted archives and bucket-seale
   );
   for (const entries of [archive, sealed]) {
     expect(evidence(entries)).toEqual(expected);
-    expect(entries.some((e) => /module-preparation-state|\.pdf$/.test(e.name))).toBe(false);
+    expect(entries.some((e) => /module-records|\.pdf$/.test(e.name))).toBe(false);
     expect(entries.map((e) => Buffer.from(e.bytes).toString("utf8")).join("\n")).not.toMatch(
       /RAW-KEY-MUST-NOT-TRAVEL|PDF-PRIVATE|OWNER-PRIVATE|PRIVATE-CONTEXT/,
     );
   }
-  expect(await readFile(join(stateDir, "module-preparation-state.json"), "utf8")).toContain(
+  expect(await readFile(join(stateDir, "module-records/fiscal-verifactu.json"), "utf8")).toContain(
     "OWNER-PRIVATE",
   );
 });
 it("retains a restored higher floor when the current preparation journal is absent", async () => {
-  const path = join(stateDir, entryName.slice("secrets/".length));
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, JSON.stringify(expected));
+  await seedModuleRecord(stateDir, "fiscal-verifactu", { retained: { "hour-history": expected } });
   expect(evidence(assembleArchiveEntries(manifest, null, await collectStateParts(deps())))).toEqual(
     expected,
   );
 });
 it("combines the restored floor with new lower intents instead of overwriting it", async () => {
-  const path = join(stateDir, entryName.slice("secrets/".length));
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, JSON.stringify(expected));
+  await seedModuleRecord(stateDir, "fiscal-verifactu", { retained: { "hour-history": expected } });
   const low = {
     ...intent,
     binding: { ...binding, eventId: "lower" },
@@ -158,29 +156,36 @@ it("does not interpret another module's opaque private preparation", async () =>
   expect(entries.some((e) => e.name === entryName)).toBe(false);
 });
 it.each([
-  [{ version: 2, revisions: [] }, "setup.attempt_invalid"],
+  [{ version: 2, prepared: [], retained: {} }, "setup.attempt_invalid"],
   [
-    { version: 1, revisions: [{ binding, value: { version: 2, entries: [] } }] },
+    { version: 1, prepared: [{ binding, value: { version: 2, entries: [] } }], retained: {} },
     "sif.allocation_invalid",
   ],
   [
-    { version: 1, revisions: [{ binding: { ...binding, sourceId: "" }, value: null }] },
+    {
+      version: 1,
+      prepared: [{ binding: { ...binding, sourceId: "" }, value: null }],
+      retained: {},
+    },
     "setup.attempt_invalid",
   ],
 ])(
   "refuses corrupt retained history before a short backup can be produced %#",
   async (value, code) => {
-    await writeFile(join(stateDir, "module-preparation-state.json"), JSON.stringify(value));
+    await mkdir(join(stateDir, "module-records"), { recursive: true });
+    await writeFile(
+      join(stateDir, "module-records/fiscal-verifactu.json"),
+      JSON.stringify({ version: value.version, prepared: value.prepared, retained: {} }),
+    );
     await expect(collectStateParts(deps())).rejects.toMatchObject({ code });
   },
 );
 it("refuses malformed restored evidence rather than discarding its floor", async () => {
-  const path = join(stateDir, entryName.slice("secrets/".length));
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(
-    path,
-    JSON.stringify({ ...expected, records: [{ ...expected.records[0], identity: "bad!" }] }),
-  );
+  await seedModuleRecord(stateDir, "fiscal-verifactu", {
+    retained: {
+      "hour-history": { ...expected, records: [{ ...expected.records[0], identity: "bad!" }] },
+    },
+  });
   await expect(collectStateParts(deps())).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "history_invalid" },

@@ -1,3 +1,4 @@
+import { seedModuleRecord } from "../../test/module-records.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./fresh-management-sign-in.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
@@ -293,7 +294,6 @@ export function useBackupVerificationFixture() {
       await mkdir(dirname(join(stateDir, name)), { recursive: true });
       await writeFile(join(stateDir, name), value);
     }
-    const historyName = "module-evidence/fiscal-verifactu/hour-history.json";
     const fiscal = ALL_MODULES.find((m) => m.name === "fiscal-verifactu")!;
     const history = fiscal.backup!.nonDbState!.find((s) => s.kind === "preparation-history")!;
     if (history.kind !== "preparation-history") throw new Error("missing hour history source");
@@ -318,8 +318,9 @@ export function useBackupVerificationFixture() {
         },
       ],
     });
-    await mkdir(dirname(join(stateDir, historyName)), { recursive: true });
-    await writeFile(join(stateDir, historyName), JSON.stringify(retained));
+    await seedModuleRecord(stateDir, "fiscal-verifactu", {
+      retained: { "hour-history": retained },
+    });
     const databasePath = join(root, "source.db");
     await suite.db.archiveTo(databasePath);
     const manifest = await buildManifest({

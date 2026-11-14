@@ -4,6 +4,7 @@ import type { KeyRing } from "@waitron/credentials";
 import {
   isSha256Hex,
   NODE_LOCAL_MANIFEST,
+  MODULE_PREPARED_ITEM,
   refuseRequest,
   sha256Hex,
   type NodeLocalItem,
@@ -14,7 +15,7 @@ import { canonicalize } from "@waitron/membership";
 import { imageMigrationHashes, manifestSets } from "@waitron/migrations";
 import { readModulePreparationRevisions } from "@waitron/provisioning";
 import { AppError, isAppError, type ErrorCode } from "@waitron/shared";
-import { BACKUP_ENV_FILE, MODULE_PREPARATION_STATE_FILE, SECRETS_ENV_FILE } from "@waitron/store";
+import { BACKUP_ENV_FILE, SECRETS_ENV_FILE } from "@waitron/store";
 import { backupSettingsDigestOf, readBackupSettings } from "./backup-env-writer.js";
 import { readModuleConfig } from "./module-config.js";
 import "./errors.js";
@@ -47,7 +48,7 @@ async function manifestItem(
       return { ...row, sha256: backupSettingsDigestOf(await readBackupSettings(stateDir)) };
     case SECRETS_ENV_FILE:
       return { ...row, ringVersions: ringVersions(ring) };
-    case MODULE_PREPARATION_STATE_FILE: {
+    case MODULE_PREPARED_ITEM: {
       // The file holds parsed JSON, so each value is one a signed body can carry.
       const revisions = await readModulePreparationRevisions({ stateDir });
       return { ...row, revisions: revisions as readonly RetainedRevision[] };

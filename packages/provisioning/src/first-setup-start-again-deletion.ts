@@ -3,7 +3,6 @@ import {
   FIRST_SETUP_FILE,
   SETUP_FLOW_DIR,
   START_AGAIN_GUESSES_FILE,
-  MODULE_PREPARATION_STATE_FILE,
   RESET_REQUEST_FILE,
   RESTORE_FLOW_DIR,
   SETUP_OPERATION_FILE,
@@ -39,6 +38,7 @@ import {
   nodeSigningKey,
 } from "@waitron/node-db";
 import { AppError, isUuid } from "@waitron/shared";
+import { clearModulePrepared } from "./module-records.js";
 import { deleteBackupRoomNote } from "./backup-room-note-file.js";
 import { readDurableHostJsonWithBytes, writeDurableHostJson } from "./durable-host-json.js";
 import { canonicalFirstSetupRoots } from "./first-setup-directories.js";
@@ -140,7 +140,7 @@ function listed(root: Root, name: string): boolean {
   const parts = name.split("/");
   if (!parts.every(entryName)) return false;
   if (root === "venue") return parts.length === 1 && [VENUE_FILE, NODE_FILE].includes(name);
-  if ([MODULE_PREPARATION_STATE_FILE, ...HELD_ONLY].includes(name)) return true;
+  if (isHeldOnly(name)) return true;
   if (name.startsWith(`${SETUP_FLOW_DIR}/`)) {
     const flow = name.slice(SETUP_FLOW_DIR.length + 1).split("/");
     return (
@@ -283,7 +283,6 @@ async function itemsOnDisk(roots: Roots, options: Options = {}): Promise<Item[]>
     const path = join(roots.venueDir, name);
     if (await present(path)) items.push({ kind: "side", path });
   }
-  await file("state", MODULE_PREPARATION_STATE_FILE);
   if (options.held === true) for (const name of HELD_ONLY) await file("state", name);
   const records = await entries(join(roots.stateDir, RECORDS));
   if (records !== null) {
@@ -573,6 +572,7 @@ export async function deleteMarkedAttempt(
       else if (item.kind === "side" || named.has(`${item.root}:${item.name}`))
         await remove(item.path, "file");
     }
+    await clearModulePrepared(canonical.stateDir);
   } catch (error) {
     if (error instanceof AppError) throw error;
     throw incomplete(`deletion failed: ${codeOf(error)} ${pathOf(error) ?? current}`);

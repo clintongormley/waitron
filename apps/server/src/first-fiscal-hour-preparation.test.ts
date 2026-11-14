@@ -98,7 +98,9 @@ it("activation-started cannot gain a new preparation revision even with a host w
       );
     }),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
-  await expect(readFile(join(f.stateDir, "module-preparation-state.json"))).rejects.toMatchObject({
+  await expect(
+    readFile(join(f.stateDir, "module-records/fiscal-verifactu.json")),
+  ).rejects.toMatchObject({
     code: "ENOENT",
   });
 });

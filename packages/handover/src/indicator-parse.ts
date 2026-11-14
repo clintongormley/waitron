@@ -1,3 +1,4 @@
+import { MODULE_PREPARED_ITEM } from "./manifest.js";
 import {
   isOperationBinding,
   isOperationBindingField,
@@ -81,7 +82,7 @@ function namedOnce(
   });
 }
 
-// M2 merges these into its `module-preparation-state.json`, whose reader holds them to the same
+// M2 merges these into its module records' `prepared` sections, whose reader holds them to the same
 // rule: one it refuses would fail every later module operation on M2.
 function revision(raw: unknown, field: string): void {
   const entry = objectWith(raw, field, ["binding", "value"]);
@@ -126,7 +127,7 @@ const REQUIRED_STATE_FIELDS: readonly (readonly [string, string])[] = [
   ["backup.env", "sha256"],
   ["settings:modules", "sha256"],
   ["secrets.env", "ringVersions"],
-  ["module-preparation-state.json", "revisions"],
+  [MODULE_PREPARED_ITEM, "revisions"],
 ];
 
 function nodeLocal(raw: unknown): void {

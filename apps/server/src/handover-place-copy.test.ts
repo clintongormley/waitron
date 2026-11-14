@@ -1,3 +1,4 @@
+import { createFirstSetupCoordinator, createRecoveryPreparationHost } from "@waitron/provisioning";
 import { createHash } from "node:crypto";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import {
@@ -66,7 +67,7 @@ const SOURCE = "11111111-1111-4111-8111-111111111111";
 const OTHER_NODE = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const NOTE = "backup-room-note.json";
-const PREPARATION = "module-preparation-state.json";
+const PREPARATION = "module-records/<module>.json#prepared";
 
 const BINDING: HandoverBinding = {
   operationId: OP,
@@ -208,6 +209,7 @@ describe("placeAcceptedCopyAtStart", () => {
     sha256: string,
     bytes: number,
     withRevision: boolean,
+    revisions = withRevision ? [REVISION] : [],
   ): Promise<void> {
     const nodeLocal: NodeLocalItem[] = [
       { item: "backup.env", where: "state", class: "transferred", treatment: "x", sha256: null },
@@ -230,7 +232,7 @@ describe("placeAcceptedCopyAtStart", () => {
         where: "state",
         class: "transferred",
         treatment: "merged",
-        revisions: withRevision ? [REVISION] : [],
+        revisions,
       },
     ];
     const envelope = signIndicator(
@@ -260,6 +262,7 @@ describe("placeAcceptedCopyAtStart", () => {
       mode?: "mirror" | "primary" | null;
       state?: "copy_accepted" | "filing_assumed";
       withRevision?: boolean;
+      revisions?: (typeof REVISION)[];
       anotherBoxIsAMirror?: boolean;
       /** The chart the accepted copy holds. */
       acceptedChart?: unknown;
@@ -269,7 +272,7 @@ describe("placeAcceptedCopyAtStart", () => {
     const venueDir = join(root, "venue");
     const stateDir = join(root, "state");
     mkdirSync(venueDir);
-    mkdirSync(stateDir);
+    mkdirSync(join(stateDir, "module-records"), { recursive: true });
     const accepted = acceptedCopyPath(stateDir, OP);
     mkdirSync(join(stateDir, "handover", OP), { recursive: true });
     sqliteFile(accepted, "placed");
@@ -284,7 +287,7 @@ describe("placeAcceptedCopyAtStart", () => {
 
     const { mode = "mirror", state = "filing_assumed", withRevision = true } = options;
     await beginHandover(storeDeps(), BINDING, "destination");
-    await recordIndicator(sha(accepted), statSync(accepted).size, withRevision);
+    await recordIndicator(sha(accepted), statSync(accepted).size, withRevision, options.revisions);
     await advanceHandover(storeDeps(), OP, "copy_accepted", {});
     if (state === "filing_assumed") await advanceHandover(storeDeps(), OP, "filing_assumed", {});
     if (mode !== null) {
@@ -306,7 +309,7 @@ describe("placeAcceptedCopyAtStart", () => {
       nodePath,
       logged,
       note: join(stateDir, NOTE),
-      preparation: join(stateDir, PREPARATION),
+      preparation: join(stateDir, "module-records/verifactu.json"),
       litestream: join(venueDir, ".venue.db-litestream"),
       args: {
         venueDir,
@@ -1140,6 +1143,45 @@ describe("placeAcceptedCopyAtStart", () => {
   });
 
   describe("the old box's retained selections", () => {
+    it("the prepared row's revisions land in each module's own file and latest selection", async () => {
+      const second = {
+        ...REVISION,
+        binding: { ...REVISION.binding, module: "payments" },
+        value: { minute: "FGHIJ" },
+      };
+      const b = await box({ revisions: [REVISION, second] });
+      await placeAcceptedCopyAtStart(b.args);
+      const host = createRecoveryPreparationHost({
+        ...b.args,
+        coordinator: createFirstSetupCoordinator(),
+        authorize: async () => {},
+        readRecoveryFacts: async () => {
+          throw new Error("unexpected recovery read");
+        },
+        withVenueExclusion: async (run) => {
+          const hold = await lockVenueDatabase(b.venueDir);
+          try {
+            return await run();
+          } finally {
+            hold.release();
+          }
+        },
+      });
+      for (const revision of [REVISION, second]) {
+        expect(
+          JSON.parse(
+            readFileSync(
+              join(b.stateDir, `module-records/${revision.binding.module}.json`),
+              "utf8",
+            ),
+          ),
+        ).toEqual({ version: 1, prepared: [revision], retained: {} });
+        await host.withPreparationState(revision.binding, async (state) => {
+          expect(state.value).toEqual(revision.value);
+        });
+      }
+    });
+
     it("merges them into this box's own file before placing, and a second placing adds nothing", async () => {
       const b = await box();
 
@@ -1147,7 +1189,8 @@ describe("placeAcceptedCopyAtStart", () => {
 
       expect(JSON.parse(readFileSync(b.preparation, "utf8"))).toEqual({
         version: 1,
-        revisions: [REVISION],
+        prepared: [REVISION],
+        retained: {},
       });
       const merged = readFileSync(b.preparation, "utf8");
       const opened = await openVenueDatabase(b.venueDir);
@@ -1179,7 +1222,8 @@ describe("placeAcceptedCopyAtStart", () => {
       // Readable as it stands, and over the file's limit of 1 MiB once the old box's is added.
       const own = {
         version: 1,
-        revisions: [
+        retained: {},
+        prepared: [
           {
             binding: { ...REVISION.binding, eventId: "own" },
             value: { padding: "x".repeat(1024 * 1024 - 300) },

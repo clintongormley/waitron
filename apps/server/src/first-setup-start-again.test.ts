@@ -358,7 +358,7 @@ async function attemptFiles(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]
   return Promise.all(
     [
       join(f.stateDir, "flows/setup/record.json"),
-      join(f.stateDir, "module-preparation-state.json"),
+      join(f.stateDir, "module-records/fiscal-verifactu.json"),
     ].map((path) => readFile(path)),
   );
 }
@@ -908,7 +908,7 @@ it("the Start again route takes recoveryRecordDamagedShown only as true", async 
 });
 
 function picksFile(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) {
-  return join(f.stateDir, "module-preparation-state.json");
+  return join(f.stateDir, "module-records/fiscal-verifactu.json");
 }
 
 async function damagePicks(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) {
@@ -925,6 +925,12 @@ it("with the database missing, a damaged picks file adds nothing to the summary,
     confirmMissingDatabase: { nothingFiledOrSold: true, shown },
   });
   await expectStartAgainDeleted(f);
+  const folder = join(f.stateDir, "records/set-aside");
+  const saved = (await readdir(folder, { recursive: true })).find((name) =>
+    name.endsWith("fiscal-verifactu.json"),
+  );
+  expect(saved).toBeDefined();
+  expect(await readFile(join(folder, saved!), "utf8")).toBe("{damaged");
 });
 
 it("with the database present, a damaged picks file asks for no password: Start again goes ahead and deletes the attempt", async () => {
@@ -1301,7 +1307,6 @@ const folderTrees = async (f: { stateDir: string; venueDir: string }) => ({
 });
 const ATTEMPT_STATE = [
   "flows/setup/record.json",
-  "module-preparation-state.json",
   "flows/setup/documents/",
   "first-setup-resolutions/",
   "first-setup-workspaces/",
@@ -1311,6 +1316,7 @@ async function expectAttemptGone(f: { stateDir: string; venueDir: string }) {
   const { venue, state } = await folderTrees(f);
   expect(venue).toEqual({});
   for (const name of ATTEMPT_STATE) expect(state[name], name).toBeUndefined();
+  await expectStartAgainDeleted(f);
 }
 
 it("start again leaves no workspace and none of the attempt's files, node.db included", async () => {

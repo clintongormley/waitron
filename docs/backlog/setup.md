@@ -491,8 +491,8 @@ Ask the owner which fire immediately and which wait. Left open by A1458.
 - **Older backups' hour records keep being accepted with `timeFloorMs`** (A1385): the field is
   validated as a whole millisecond and never used. The acceptance may be removed once a check of
   shipped backups, and of each box's retained
-  `<state>/module-evidence/fiscal-verifactu/hour-history.json` (read by
-  `apps/server/src/recovery-document-evidence.ts:26-31`), finds none carrying it.
+  `<state>/module-records/fiscal-verifactu.json` retained `hour-history` section (read by
+  `apps/server/src/recovery-document-evidence.ts`), finds none carrying it.
 - **The setup and restore pages, and the handover start, carry on to the invoice series by themselves once the person
   confirms and presses Proceed** (owner, 2026-11-07, on A1385; 2026-11-09 and 2026-11-10, A1466):
   making a series and throwing it away unused costs nothing, because the first invoice is what

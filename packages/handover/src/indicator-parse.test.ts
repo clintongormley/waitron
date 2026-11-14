@@ -47,7 +47,7 @@ function valid(): FinalStateIndicator {
         ringVersions: [2, 3],
       },
       {
-        item: "module-preparation-state.json",
+        item: "module-records/<module>.json#prepared",
         where: "state",
         class: "transferred",
         treatment: "x",
@@ -86,7 +86,7 @@ function refusedAt(field: string) {
   return { code: "handover.indicator_mismatch", params: { field } };
 }
 
-const FIRST_REVISION = "nodeLocal.module-preparation-state.json.revisions.0";
+const FIRST_REVISION = "nodeLocal.module-records/<module>.json#prepared.revisions.0";
 
 // Each case changes one thing a whole indicator holds; the control below shows the rest passes.
 const CASES: readonly [string, string, (body: Mutable) => void][] = [
@@ -243,57 +243,59 @@ const CASES: readonly [string, string, (body: Mutable) => void][] = [
   ],
   [
     "no retained selections",
-    "nodeLocal.module-preparation-state.json.revisions",
-    (b) => delete rowNamed(b, "module-preparation-state.json").revisions,
+    "nodeLocal.module-records/<module>.json#prepared.revisions",
+    (b) => delete rowNamed(b, "module-records/<module>.json#prepared").revisions,
   ],
   [
     "retained selections that are no list",
-    "nodeLocal.module-preparation-state.json.revisions",
-    (b) => (rowNamed(b, "module-preparation-state.json").revisions = {}),
+    "nodeLocal.module-records/<module>.json#prepared.revisions",
+    (b) => (rowNamed(b, "module-records/<module>.json#prepared").revisions = {}),
   ],
   [
     "a retained selection that is no object",
     FIRST_REVISION,
-    (b) => (rowNamed(b, "module-preparation-state.json").revisions[0] = 1),
+    (b) => (rowNamed(b, "module-records/<module>.json#prepared").revisions[0] = 1),
   ],
   [
     "a retained selection with no value key",
     `${FIRST_REVISION}.value`,
-    (b) => delete rowNamed(b, "module-preparation-state.json").revisions[0].value,
+    (b) => delete rowNamed(b, "module-records/<module>.json#prepared").revisions[0].value,
   ],
   [
     "a retained selection with an unknown field",
     `${FIRST_REVISION}.extra`,
-    (b) => (rowNamed(b, "module-preparation-state.json").revisions[0].extra = 1),
+    (b) => (rowNamed(b, "module-records/<module>.json#prepared").revisions[0].extra = 1),
   ],
   [
     "a retained selection with no binding",
     `${FIRST_REVISION}.binding`,
-    (b) => delete rowNamed(b, "module-preparation-state.json").revisions[0].binding,
+    (b) => delete rowNamed(b, "module-records/<module>.json#prepared").revisions[0].binding,
   ],
   ...(["module", "action", "eventId", "sourceId", "targetNodeId"] as const).flatMap(
     (key): [string, string, (body: Mutable) => void][] => [
       [
         `a retained selection's binding with no ${key}`,
         `${FIRST_REVISION}.binding.${key}`,
-        (b) => delete rowNamed(b, "module-preparation-state.json").revisions[0].binding[key],
+        (b) =>
+          delete rowNamed(b, "module-records/<module>.json#prepared").revisions[0].binding[key],
       ],
       [
         `a retained selection's binding with a blank ${key}`,
         `${FIRST_REVISION}.binding.${key}`,
-        (b) => (rowNamed(b, "module-preparation-state.json").revisions[0].binding[key] = "  "),
+        (b) =>
+          (rowNamed(b, "module-records/<module>.json#prepared").revisions[0].binding[key] = "  "),
       ],
       [
         `a retained selection's binding with a ${key} that is not text`,
         `${FIRST_REVISION}.binding.${key}`,
-        (b) => (rowNamed(b, "module-preparation-state.json").revisions[0].binding[key] = 1),
+        (b) => (rowNamed(b, "module-records/<module>.json#prepared").revisions[0].binding[key] = 1),
       ],
     ],
   ),
   [
     "a retained selection's binding with an unknown field",
     `${FIRST_REVISION}.binding.extra`,
-    (b) => (rowNamed(b, "module-preparation-state.json").revisions[0].binding.extra = "x"),
+    (b) => (rowNamed(b, "module-records/<module>.json#prepared").revisions[0].binding.extra = "x"),
   ],
 ];
 
@@ -311,7 +313,7 @@ describe("parseIndicator", () => {
       b.snapshot.modules = [];
       b.modulesSummary = {};
       rowNamed(b, "settings:modules").sha256 = null;
-      rowNamed(b, "module-preparation-state.json").revisions = [];
+      rowNamed(b, "module-records/<module>.json#prepared").revisions = [];
     }) as FinalStateIndicator;
     const signed = JSON.parse(JSON.stringify(signIndicator(body, m1))) as { body: unknown };
     expect(refusal(signed.body)).toBeNull();
@@ -319,7 +321,7 @@ describe("parseIndicator", () => {
 
   it("accepts a retained selection whose value is null, and a summary of any JSON value", () => {
     const body = altered((b) => {
-      rowNamed(b, "module-preparation-state.json").revisions[0].value = null;
+      rowNamed(b, "module-records/<module>.json#prepared").revisions[0].value = null;
       b.modulesSummary = { a: null, b: [1], c: "x" };
     });
     expect(refusal(body)).toBeNull();
@@ -339,4 +341,18 @@ describe("parseIndicator", () => {
   it.each(CASES)("refuses %s, naming %s", (_name, field, change) => {
     expect(refusal(altered(change))).toEqual(refusedAt(field));
   });
+});
+
+it("refuses an indicator whose module prepared row is missing", () => {
+  const current = valid();
+  const item = "module-records/<module>.json#prepared";
+  const body = {
+    ...current,
+    nodeLocal: current.nodeLocal.map((row) =>
+      row.item === "module-records/<module>.json#prepared" ? { ...row, item } : row,
+    ),
+  };
+  const missing = { ...body, nodeLocal: body.nodeLocal.filter((row) => row.item !== item) };
+  expect(refusal(missing)).toEqual(refusedAt(`nodeLocal.${item}`));
+  expect(parseIndicator(body)).toEqual(body);
 });

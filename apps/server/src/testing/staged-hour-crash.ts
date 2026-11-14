@@ -256,7 +256,7 @@ export async function stagedHourCrash(
       });
       return recoverySelectPastWaits(clock, next, client, follow);
     };
-    const journalPath = join(roots.stateDir, "module-preparation-state.json");
+    const journalPath = join(roots.stateDir, "module-records/fiscal-verifactu.json");
     const journal = () => readFileSync(journalPath, "utf8");
     const snapshot = async () => {
       const copy = await openVenueDatabase(roots.venueDir);

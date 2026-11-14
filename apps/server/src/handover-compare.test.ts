@@ -1217,7 +1217,9 @@ describe("compareFinalCopy", () => {
 
   describe("the retained selections", () => {
     const revisions = (body: Mutable, list: ReturnType<typeof revisionOf>[]) => {
-      body.nodeLocal.find((one) => one.item === "module-preparation-state.json")!.revisions = list;
+      body.nodeLocal.find(
+        (one) => one.item === "module-records/<module>.json#prepared",
+      )!.revisions = list;
     };
     const LIMIT = 1024 * 1024;
 
@@ -1230,9 +1232,12 @@ describe("compareFinalCopy", () => {
     it("each box's selections fit but together they do not, so they are refused", async () => {
       const r = await rig();
       const sizeable = "x".repeat(200 * 1024);
+      await mkdir(dirname(join(r.m2State, "module-records/fiscal-verifactu.json")), {
+        recursive: true,
+      });
       await writeFile(
-        join(r.m2State, "module-preparation-state.json"),
-        JSON.stringify({ version: 1, revisions: [revisionOf(sizeable, "own")] }),
+        join(r.m2State, "module-records/fiscal-verifactu.json"),
+        JSON.stringify({ version: 1, prepared: [revisionOf(sizeable, "own")], retained: {} }),
       );
       const envelope = r.resigned((body) => revisions(body, [revisionOf(sizeable, "theirs")]));
       expect(await r.compareRow(envelope)).toEqual(refused("handover.preparation_state_too_large"));
@@ -1253,9 +1258,12 @@ describe("compareFinalCopy", () => {
     it("control: a selection both boxes hold is counted once", async () => {
       const r = await rig();
       const sizeable = "x".repeat(140 * 1024);
+      await mkdir(dirname(join(r.m2State, "module-records/fiscal-verifactu.json")), {
+        recursive: true,
+      });
       await writeFile(
-        join(r.m2State, "module-preparation-state.json"),
-        JSON.stringify({ version: 1, revisions: [revisionOf(sizeable)] }),
+        join(r.m2State, "module-records/fiscal-verifactu.json"),
+        JSON.stringify({ version: 1, prepared: [revisionOf(sizeable)], retained: {} }),
       );
       const envelope = r.resigned((body) => revisions(body, [revisionOf(sizeable)]));
       expect(await r.compareRow(envelope)).toEqual({ ok: true });

@@ -163,7 +163,7 @@ async function runCliPastWait(args: string[], deps: Parameters<typeof runCli>[1]
 it("the venue command claims ownership, waits out its settle wait saying why and until when, before any venue write, and carries on in the same run", async () => {
   const f = await fixture();
   let atWait: Awaited<ReturnType<typeof f.runtime.store.read>> | undefined;
-  let journalAtWait: { revisions: { value: { entries: unknown[] } }[] } | undefined;
+  let journalAtWait: { prepared: { value: { entries: unknown[] } }[] } | undefined;
   let outputAtWait: string[] = [];
   let writesAtWait: unknown[] | undefined;
   let promptsAtWait: string[] = [];
@@ -171,7 +171,7 @@ it("the venue command claims ownership, waits out its settle wait saying why and
     promptsAtWait = [...f.prompts];
     atWait = await f.runtime.store.read();
     journalAtWait = JSON.parse(
-      await readFile(join(f.root, "state/module-preparation-state.json"), "utf8"),
+      await readFile(join(f.root, "state/module-records/fiscal-verifactu.json"), "utf8"),
     );
     outputAtWait = [...f.output];
     writesAtWait = [
@@ -183,10 +183,10 @@ it("the venue command claims ownership, waits out its settle wait saying why and
   expect(await runCli(f.args, f.deps)).toBe(1);
   expect(atWait).toMatchObject({ status: "claimed", consumptionIntent: false, ownerGeneration: 1 });
   expect(atWait!.inputs).toEqual({});
-  expect(journalAtWait!.revisions.at(-1)!.value.entries).toMatchObject([
+  expect(journalAtWait!.prepared.at(-1)!.value.entries).toMatchObject([
     { kind: "wait", targetMs: Date.parse("2026-10-16T11:42:00Z") },
   ]);
-  expect(journalAtWait!.revisions.at(-1)!.value.entries[0]).not.toHaveProperty("answer");
+  expect(journalAtWait!.prepared.at(-1)!.value.entries[0]).not.toHaveProperty("answer");
   expect(outputAtWait).toContain(
     "Waiting to confirm the time, so no invoice series is ever repeated.",
   );

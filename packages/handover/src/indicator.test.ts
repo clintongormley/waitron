@@ -125,7 +125,7 @@ function withRevisions(): FinalStateFacts {
     nodeLocal: [
       ...facts().nodeLocal,
       {
-        item: "module-preparation-state.json",
+        item: "module-records/<module>.json#prepared",
         where: "state",
         class: "transferred",
         treatment: "merged",
@@ -139,7 +139,7 @@ describe("assembleIndicator", () => {
   it("carries the retained selections in the order they were written, inside what is signed", () => {
     const envelope = signIndicator(withRevisions(), m1);
     const row = envelope.body.nodeLocal.find(
-      (entry) => entry.item === "module-preparation-state.json",
+      (entry) => entry.item === "module-records/<module>.json#prepared",
     );
     expect(row?.revisions).toEqual(REVISIONS);
     expect(verifyEnvelope(envelope, "final-state", () => m1.publicKey).valid).toBe(true);
@@ -147,7 +147,7 @@ describe("assembleIndicator", () => {
       body: { nodeLocal: { item: string; revisions?: { value: unknown }[] }[] };
     };
     changed.body.nodeLocal.find(
-      (entry) => entry.item === "module-preparation-state.json",
+      (entry) => entry.item === "module-records/<module>.json#prepared",
     )!.revisions![0].value = { selected: "CCCCC" };
     expect(verifyEnvelope(changed, "final-state", () => m1.publicKey).valid).toBe(false);
   });

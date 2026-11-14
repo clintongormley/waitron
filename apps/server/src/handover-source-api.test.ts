@@ -1,3 +1,4 @@
+import { dirname } from "node:path";
 import { createHash } from "node:crypto";
 import type { FileHandle } from "node:fs/promises";
 import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -382,7 +383,10 @@ describe("the final copy and its indicator, served to the selected box only", ()
     const { app, destination } = await boxes({
       log: (_level, event, fields) => lines.push({ event, fields }),
     });
-    await writeFile(join(stateDir, "module-preparation-state.json"), "{ not json");
+    await mkdir(dirname(join(stateDir, "module-records/fiscal-verifactu.json")), {
+      recursive: true,
+    });
+    await writeFile(join(stateDir, "module-records/fiscal-verifactu.json"), "{ not json");
 
     const response = await ask(app, "indicator", destination);
 
@@ -391,7 +395,7 @@ describe("the final copy and its indicator, served to the selected box only", ()
       error: { code: "setup.attempt_invalid", params: {} },
     });
     const line = lines.find((entry) => entry.event === "setup.attempt_invalid");
-    expect(line?.fields?.logReason).toContain("module-preparation-state.json");
+    expect(line?.fields?.logReason).toContain("module-records/fiscal-verifactu.json");
   });
 
   it("a retake left behind by an earlier crash is removed when the copy is taken again", async () => {

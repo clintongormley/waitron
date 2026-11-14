@@ -20,7 +20,7 @@ export type {
   ModuleEntry,
   SchemaEntry,
 } from "./indicator.js";
-export { NODE_LOCAL_MANIFEST } from "./manifest.js";
+export { NODE_LOCAL_MANIFEST, MODULE_PREPARED_ITEM } from "./manifest.js";
 export { handoverActivations, handoverScenario } from "@waitron/db";
 export type { NodeLocalItem, NodeLocalManifestRow, RetainedRevision } from "./manifest.js";
 export {

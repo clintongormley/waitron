@@ -343,9 +343,9 @@ it.each(["key", "manager"])(
     expect((await readNodeMode(suite.node, standby.nodeId)).singletonRole).toBe("primary");
     expect(await promote(s, selected.input, auth)).toMatchObject({ alreadyPrimary: true });
     expect(await rows()).toEqual(after);
-    expect(await readFile(join(root, "state/module-preparation-state.json"), "utf8")).not.toContain(
-      key.secret,
-    );
+    expect(
+      await readFile(join(root, "state/module-records/fiscal-verifactu.json"), "utf8"),
+    ).not.toContain(key.secret);
   },
 );
 
@@ -379,7 +379,7 @@ it.each(["key", "isolation", "parallel", "source", "node"])(
       ...(fault === "source" ? { sourceId: "changed" } : {}),
       ...(fault === "node" ? { targetNodeId: primary.nodeId } : {}),
     };
-    const before = await readFile(join(root, "state/module-preparation-state.json"), "utf8");
+    const before = await readFile(join(root, "state/module-records/fiscal-verifactu.json"), "utf8");
     await expect(
       s.prepare(
         held,
@@ -404,7 +404,9 @@ it.each(["key", "isolation", "parallel", "source", "node"])(
                 ? "module.operation_invalid"
                 : "sif.allocation_invalid",
     });
-    expect(await readFile(join(root, "state/module-preparation-state.json"), "utf8")).toBe(before);
+    expect(await readFile(join(root, "state/module-records/fiscal-verifactu.json"), "utf8")).toBe(
+      before,
+    );
   },
 );
 
@@ -1028,7 +1030,10 @@ it.each(["key", "manager"])(
           ),
         ),
       );
-      const journal = await readFile(join(stateDir, "module-preparation-state.json"), "utf8");
+      const journal = await readFile(
+        join(stateDir, "module-records/fiscal-verifactu.json"),
+        "utf8",
+      );
       restartAsked.mockClear();
       vi.setSystemTime(new Date("2026-10-16T13:40:00Z"));
       server = await startServer(env);
@@ -1036,7 +1041,9 @@ it.each(["key", "manager"])(
       expect(await send()).toEqual({ alreadyPrimary: true, restarting: false });
       expect(restartAsked).not.toHaveBeenCalled();
       expect(await rows()).toEqual(before);
-      expect(await readFile(join(stateDir, "module-preparation-state.json"), "utf8")).toBe(journal);
+      expect(await readFile(join(stateDir, "module-records/fiscal-verifactu.json"), "utf8")).toBe(
+        journal,
+      );
       expect((await readNodeMode(suite.node, standby.nodeId)).mode).toBe("primary");
       expect((await readNodeMode(suite.node, standby.nodeId)).singletonRole).toBe("primary");
     } finally {
@@ -1359,12 +1366,14 @@ it("refuses a recovery key rotated while a comparison is in flight", async () =>
     await gate;
     return { source: "internet", result: "unavailable", reason: "offline" };
   });
-  const before = await readFile(join(root, "state/module-preparation-state.json"), "utf8");
+  const before = await readFile(join(root, "state/module-records/fiscal-verifactu.json"), "utf8");
   const pending = compare(s);
   await started;
   key = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, standby.nodeId);
   const refused = expect(pending).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
   release();
   await refused;
-  expect(await readFile(join(root, "state/module-preparation-state.json"), "utf8")).toBe(before);
+  expect(await readFile(join(root, "state/module-records/fiscal-verifactu.json"), "utf8")).toBe(
+    before,
+  );
 });

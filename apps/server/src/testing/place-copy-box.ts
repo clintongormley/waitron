@@ -334,7 +334,7 @@ export function placeCopyBoxes(deps: {
         ringVersions: [1],
       },
       {
-        item: "module-preparation-state.json",
+        item: "module-records/<module>.json#prepared",
         where: "state",
         class: "transferred",
         treatment: "merged",

@@ -846,7 +846,7 @@ it("keeps email testing inside the claimed owner and uses its frozen administrat
 
 type Preparation = { preparation: { status: string; targetMs: number } };
 const ledger = (f: Awaited<ReturnType<typeof fixture>>) =>
-  join(f.stateDir, "module-preparation-state.json");
+  join(f.stateDir, "module-records/fiscal-verifactu.json");
 
 it("keeps one password grant through two waits to taking the name, and refuses it once setup has moved on", async () => {
   const f = await fixture();
@@ -920,7 +920,7 @@ it("refuses a take with an expired grant, spending nothing, and takes the name w
   expect(expired.status).toBe(403);
   expect((await expired.json()).error.code).toBe("setup.owner_required");
   expect((await f.host.store.read())?.status).toBe("claimed");
-  const entries = JSON.parse(await readFile(ledger(f), "utf8")).revisions.flatMap(
+  const entries = JSON.parse(await readFile(ledger(f), "utf8")).prepared.flatMap(
     (row: { value: { entries: { kind: string }[] } }) => row.value.entries.map((e) => e.kind),
   );
   expect(entries).not.toContain("intent");
