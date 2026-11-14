@@ -79,6 +79,9 @@ keep their field-specific or guarded refusal focus local. Inventory each later b
 migrating it; leave single-job forms local.
 Keep the translation editor local: the helper removes no duplicated logic while its refusal clearing and reveal/focus remain local.
 Keep Backup archive settings local too: moving only its attempt flag and message joiner removes no repeated logic; its domain refusal clearing and form-scoped focus stay local.
+Keep Venue details local: only its attempt flag is reusable; its named-field focus, policy checks and address acknowledgement stay specific to the form.
+Keep Business-day start local: only its attempt state repeats helper work; its preview and refusal handling stay specific to the form.
+Keep fresh sign-in local: its message joiner is small, and its child-form focus is guarded against an older sign-in attempt completing.
 Keep station field-refusal dismissal local: it is one domain-specific conditional clearing the refusal that names the edited field.
 Preserve each form's field mapping and message behavior; keep domain-specific refusal clearing local. See the
 [second-slice inventory](../superpowers/plans/2026-11-12-d-form-plumbing-2.md) and the
