@@ -4,7 +4,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { roles, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -241,4 +241,23 @@ it("lets a default Manager read a captured message", async () => {
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ id: "mail-1", subject: "Set up your account" });
   expect(mailpit.read).toHaveBeenCalledWith("mail-1");
+});
+
+it("keeps captured mail private from a person.manage holder without person.admin", async () => {
+  const venue = await setupVenue();
+  await suite.db
+    .update(roles)
+    .set({ permissions: ["person.manage"] })
+    .where(eq(roles.builtInKey, "manager"));
+  const { app, mailpit } = mount("local_capture");
+  const list = await get(app, "/management-api/email", venue.manager);
+  expect(list.status).toBe(200);
+  expect(await list.json()).toEqual({ mode: "local_capture", count: 0, messages: [] });
+  expect(mailpit.list).not.toHaveBeenCalled();
+  const message = await get(app, "/management-api/email/message/mail-1", venue.manager);
+  expect(message.status).toBe(403);
+  expect(await message.json()).toEqual({
+    error: { code: "authorization.not_permitted", params: { permission: "person.admin" } },
+  });
+  expect(mailpit.read).not.toHaveBeenCalled();
 });
