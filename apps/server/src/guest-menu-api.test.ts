@@ -63,3 +63,17 @@ it("requires a signed-in manager with catalogue permission", async () => {
     expect(await res.json()).toMatchObject({ error: { code } });
   }
 });
+
+it("starts public sharing Off and limits its status to managers", async () => {
+  const f = await fixture();
+  for (const [cookie, status, code] of [
+    ["", 401, "management_session.required"],
+    [f.cookies.staff, 403, "authorization.not_permitted"],
+    [f.cookies.manager, 200, null],
+  ] as const) {
+    const answer = await f.app.request("/management-api/guest-menu", { headers: { cookie } });
+    expect(answer.status).toBe(status);
+    if (code === null) expect(await answer.json()).toEqual({ enabled: false, revision: 0 });
+    else expect(await answer.json()).toMatchObject({ error: { code } });
+  }
+});

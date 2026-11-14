@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
-import { readVenue, withTransaction, type Database } from "@waitron/db";
-import { readContentLanguages, readLiveMenu } from "@waitron/catalogue";
+import { readSettings, readVenue, withTransaction, type Database } from "@waitron/db";
+import { GUEST_MENU_SETTINGS, readContentLanguages, readLiveMenu } from "@waitron/catalogue";
 import { authorizeManager } from "@waitron/identity";
 import {
   createErrorBoundary,
@@ -17,6 +17,7 @@ const run = createErrorBoundary(
     "authorization.not_permitted": 403,
     "person.suspended": 403,
     "catalogue.not_found": 404,
+    "settings.invalid": 500,
   },
   "catalogue.failed",
 );
@@ -25,6 +26,21 @@ export function mountGuestMenuApi(
   deps: { db: Database; venueLocale?: string },
   log: Logger,
 ): void {
+  app.get("/management-api/guest-menu", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const answer = await withTransaction(deps.db, async (tx) => {
+        await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: "catalogue.manage",
+        });
+        const { doc, revision } = await readSettings(tx, GUEST_MENU_SETTINGS);
+        return { ...doc, revision };
+      });
+      c.header("Cache-Control", "no-store");
+      return c.json(answer);
+    }),
+  );
   app.get("/management-api/catalogues/:id/guest-preview", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
