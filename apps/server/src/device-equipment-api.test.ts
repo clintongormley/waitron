@@ -1795,13 +1795,21 @@ describe("GET /api/device/equipment's notices", () => {
       }
     });
 
-    it("a kitchen printer that printed a later ticket shows nothing, and the bell still names it", async () => {
+    it("a kitchen printer that printed a later ticket asks for the failed one to be reprinted, and the bell still names it", async () => {
       const id = await kitchenPrinter();
       await job(id, ago(10 * MINUTE), { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS });
       const done = await job(id, ago(5 * MINUTE), { status: "done" });
       const app = printerApp();
       for (const cookie of [venue.cookie, venue.cookie2]) {
-        expect(await printerNotices(app, cookie)).toEqual([]);
+        expect(await printerNotices(app, cookie)).toEqual([
+          {
+            owner: "printers",
+            key: `printer.ticket_failed:${id}`,
+            code: "printer.ticket_failed",
+            severity: "warning",
+            params: { printer: "Kitchen" },
+          },
+        ]);
       }
       const alerts = await inTx((tx) =>
         printingAlertSource().read({ tx, now: READING.instant } as never),
