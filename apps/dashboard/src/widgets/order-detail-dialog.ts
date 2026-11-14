@@ -399,7 +399,7 @@ export class OrderDetailDialog extends LitElement {
                     ${detail.invoices.map(
                       (invoice) =>
                         html`<li>
-                          ${invoice.kind === "credit_note" ? t("orders.detail.credit_note") : invoice.kind === "substitution" ? t("orders.detail.substitution") : invoice.invoiceType === "F1" ? t("orders.invoice_full") : t("orders.col.invoice")}
+                          ${invoice.kind === "credit_note" ? t("orders.detail.credit_note") : invoice.kind === "replacement" ? t("orders.detail.replacement") : invoice.kind === "substitution" ? t("orders.detail.substitution") : invoice.invoiceType === "F1" ? t("orders.invoice_full") : t("orders.col.invoice")}
                           ${invoice.number} · ${date(invoice.issuedAt)} ·
                           ${money(invoice.total)}${invoice.rungBy === null ? nothing : html` · ${fill("orders.detail.rung_by", { name: invoice.rungBy })}`}${
                             invoice.invoiceType === "F1" && invoice.taxpayerDomicile !== undefined

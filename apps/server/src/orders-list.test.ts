@@ -38,6 +38,7 @@ import {
   type OrderListFilter,
 } from "./orders-list.js";
 import { deferredCloseKit } from "./testing/deferred-close-fixture.js";
+import { insertCorrective } from "./testing/replacement-fixture.js";
 import "./errors.js";
 
 let venue: OrderVenue;
@@ -288,6 +289,38 @@ describe("credit notes and what is still owed", () => {
       credited: "in_full",
       stillOwed: null,
     });
+  });
+});
+
+describe("a replaced invoice", () => {
+  it("is not credited, keeps its total, and lists its replacement as Replaced by; a refund of the replacement credits it in part", async () => {
+    const id = await placedIssuedBill(venue, "Red wine bottle");
+    const [sale] = await inTx(venue, (tx) =>
+      tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, id)),
+    );
+    const replacement = await inTx(venue, (tx) =>
+      insertCorrective(tx, sale!.id, { replaces: true }),
+    );
+    const replaced = await rowOf(id);
+    expect(replaced).toMatchObject({ credited: null, stillOwed: "30.00", creditNotes: [] });
+    expect(ids((await list("anyDate=true&limit=200&credited=true")).rows)).not.toContain(id);
+    const detail = await inTx(venue, (tx) => readOrderDetail(tx, id, "all", false));
+    expect(detail.invoices.map((invoice) => invoice.kind)).toEqual(["invoice", "replacement"]);
+
+    await inTx(venue, (tx) => insertCorrective(tx, replacement, { total: "-2.42" }));
+    const refunded = await rowOf(id);
+    expect(refunded).toMatchObject({
+      credited: "in_part",
+      stillOwed: "27.58",
+      creditNotes: [expect.stringMatching(/^R\/\d+$/)],
+    });
+    expect(ids((await list("anyDate=true&limit=200&credited=true")).rows)).toContain(id);
+    const after = await inTx(venue, (tx) => readOrderDetail(tx, id, "all", false));
+    expect(after.invoices.map((invoice) => invoice.kind)).toEqual([
+      "invoice",
+      "replacement",
+      "credit_note",
+    ]);
   });
 });
 

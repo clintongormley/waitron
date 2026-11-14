@@ -6,6 +6,7 @@ import { and, asc, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm";
 import { formatInvoiceNumber } from "@waitron/core";
 import {
   billPaymentRefunds,
+  correctivesOf,
   billPayments,
   diningTables,
   invoiceSeries,
@@ -133,7 +134,8 @@ const BILL_STATUS = sql`case
   when wo.status = 'settled' or ss.id is not null then 'paid'
   else 'cancelled' end`;
 
-const CORRECTIONS = sql`cast(coalesce((select sum(c.total) from sales c where c.corrects_sale_id = s.id), 0) as text)`;
+const CORRECTIONS = sql`cast(coalesce((select sum(c.total) from sales c where c.id in (${correctivesOf(sql`s.id`)})), 0) as text)`;
+const CREDITED = sql`exists (${correctivesOf(sql`r.sale_id`)})`;
 
 /** The statuses that only an `open` or `placed` bill can have (BILL_STATUS above). */
 const LIVE_FILTERS: readonly OrderStatusFilter[] = [
@@ -321,8 +323,7 @@ function filterClauses(filter: OrderListFilter): SQL[] {
       })(sql`r.at`),
     );
   }
-  if (filter.credited)
-    clauses.push(sql`exists (select 1 from sales c where c.corrects_sale_id = r.sale_id)`);
+  if (filter.credited) clauses.push(CREDITED);
   if (filter.staffId !== undefined) clauses.push(staffClause(filter.staffId));
   if (filter.table !== undefined) clauses.push(tableClause(filter.table));
   if (filter.search !== undefined && isNumberSearch(filter.search))
@@ -368,7 +369,7 @@ export function ordersPageSql(filter: OrderListFilter): SQL {
     if (filter.after !== undefined) clauses.push(cursorClause(filter.after, false));
     return sql`
     with r as (${rowsSql(filter)})
-    select r.*, exists (select 1 from sales c where c.corrects_sale_id = r.sale_id) as credited
+    select r.*, ${CREDITED} as credited
     from r where ${whereOf(clauses)}
     order by r.at desc, r.id desc
     limit ${filter.limit + 1}`;
@@ -387,7 +388,7 @@ export function ordersPageSql(filter: OrderListFilter): SQL {
           (select group_concat(n.value, ' ') from json_each(r.party_table_names) n))) as search_rank
       from base r where ${whereOf(clauses)}
     )
-    select r.*, exists (select 1 from sales c where c.corrects_sale_id = r.sale_id) as credited
+    select r.*, ${CREDITED} as credited
     from ranked r where ${whereOf(rankedClauses)}
     order by r.search_rank, r.at desc, r.id desc
     limit ${filter.limit + 1}`;
@@ -485,21 +486,28 @@ export async function listOrders(tx: Transaction, filter: OrderListFilter): Prom
   return { rows, next };
 }
 
-/** The formatted numbers of the sales correcting each sale, oldest first, keyed by the sale. */
+/**
+ * The formatted numbers of each sale's credit notes (`correctivesOf`: never its replacement, and
+ * its replacement's own), oldest first, keyed by the sale.
+ */
 export async function readCreditNotes(
   tx: Transaction,
   saleIds: readonly string[],
 ): Promise<Map<string, string[]>> {
   const notes = new Map<string, string[]>();
   if (saleIds.length === 0) return notes;
-  const rows = await tx
-    .select({ of: sales.correctsSaleId, code: invoiceSeries.code, number: sales.invoiceNumber })
-    .from(sales)
-    .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
-    .where(inArray(sales.correctsSaleId, [...saleIds]))
-    .orderBy(asc(sales.issuedAt), sql`${sales}.rowid`);
+  const { rows } = await tx.execute<{ of: string; code: string; number: number }>(sql`
+    select s.id as of, sr.code as code, c.invoice_number as number
+    from sales s
+    join sales c on c.id in (${correctivesOf(sql`s.id`)})
+    join invoice_series sr on sr.id = c.series_id
+    where s.id in (${sql.join(
+      saleIds.map((id) => sql`${id}`),
+      sql`, `,
+    )})
+    order by c.issued_at, c.rowid`);
   for (const row of rows)
-    notes.set(row.of!, [...(notes.get(row.of!) ?? []), formatInvoiceNumber(row.code, row.number)]);
+    notes.set(row.of, [...(notes.get(row.of) ?? []), formatInvoiceNumber(row.code, row.number)]);
   return notes;
 }
 
@@ -584,7 +592,7 @@ export interface OrderLine {
   creditedTo: string | null;
 }
 export interface OrderInvoice {
-  kind: "invoice" | "credit_note" | "substitution";
+  kind: "invoice" | "credit_note" | "replacement" | "substitution";
   invoiceType?: "F1" | "F2";
   recipient?: {
     taxId: string;
@@ -963,8 +971,21 @@ async function readInvoices(tx: Transaction, saleId: string): Promise<OrderInvoi
     .from(sales)
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
     .leftJoin(persons, eq(persons.id, sales.operatorId))
-    .where(eq(sales.correctsSaleId, saleId))
+    .where(sql`${sales.id} in (${correctivesOf(sql`${saleId}`)})`)
     .orderBy(sales.issuedAt, sql`${sales}.rowid`);
+  const replacements = await tx
+    .select({
+      id: sales.id,
+      number: sales.invoiceNumber,
+      code: invoiceSeries.code,
+      issuedAt: sales.issuedAt,
+      total: sales.total,
+      rungBy: persons.displayName,
+    })
+    .from(sales)
+    .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+    .leftJoin(persons, eq(persons.id, sales.operatorId))
+    .where(and(eq(sales.correctsSaleId, saleId), eq(sales.replacesOriginal, true)));
   const substitutes = await tx
     .select({
       id: sales.id,
@@ -1001,6 +1022,13 @@ async function readInvoices(tx: Transaction, saleId: string): Promise<OrderInvoi
             },
           }
         : {}),
+      number: formatInvoiceNumber(invoice.code, invoice.number),
+      issuedAt: invoice.issuedAt,
+      total: centsToDecimal(invoice.total),
+      rungBy: invoice.rungBy,
+    })),
+    ...replacements.map((invoice): OrderInvoice => ({
+      kind: "replacement",
       number: formatInvoiceNumber(invoice.code, invoice.number),
       issuedAt: invoice.issuedAt,
       total: centsToDecimal(invoice.total),
