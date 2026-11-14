@@ -148,7 +148,7 @@ texto, quizá de una versión más reciente del servidor. Avisa al encargado par
 
 Elige **Abrir recuperación** junto al rechazo para abrir la recuperación de este servidor en otra
 pestaña. Conserva la ventana de pago. Si indica que la tarjeta ya se ha cobrado, no vuelvas a
-cobrar. Usa la clave de recuperación actual de este servidor y sigue
+cobrar. Usa la clave del servidor actual y sigue
 [Recuperar una identidad de facturación](box-status.md#invoice-conflict).
 Puedes cerrar la ventana de pago sin iniciar una recuperación. El cambio de identidad conserva
 los resultados de envío y las incidencias existentes.

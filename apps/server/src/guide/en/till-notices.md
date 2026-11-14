@@ -133,8 +133,8 @@ a newer version of the server. Tell a manager so they can check the server.
 ## When invoices stop after an identity conflict {#invoice-conflict}
 
 Choose **Open recovery** beside the refusal to open this server's recovery page in a separate tab.
-Keep the payment window available. If it says the card was charged, do not charge again. Use this
-server's current recovery key and follow [Recover an invoice identity](box-status.md#invoice-conflict).
+Keep the payment window available. If it says the card was charged, do not charge again. Use the
+current server key and follow [Recover an invoice identity](box-status.md#invoice-conflict).
 You can close the payment window without starting a recovery. A completed switch leaves existing
 filing results and cases unchanged.
 

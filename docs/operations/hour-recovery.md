@@ -2,7 +2,7 @@
 
 Choose a usable archive, bucket copy or Waitron Cloud backup, then find the recovery sheet whose
 key name matches that copy. A newer sheet may contain a replacement key that an older backup
-does not accept. Keep the archive password or Cloud login separate from the node recovery key.
+does not accept. Keep the archive password or Cloud login separate from the server key.
 
 ## Switch a running box after an invoice identity conflict
 
@@ -11,7 +11,7 @@ collections or refunds stop. Money already captured remains recorded for later c
 old or copied box offline before proceeding; your answers on this page do not stop that other box.
 
 Open **Open recovery** beside the till refusal, or open `/manage/recovery/fiscal-conflict` on this
-box over HTTPS. Use the current live box's recovery key. A dashboard sign-in, backup password or
+box over HTTPS. Use the current live box's server key. A dashboard sign-in, backup password or
 key from an older backup does not replace it. Enter the key and choose **Check conflict** to inspect
 the affected invoice and identity. Confirm that the old box is offline and no parallel recovery is
 underway, then choose **Compare clocks**.
@@ -22,7 +22,7 @@ every five seconds; when the wait ends, compare clocks again. Review the selecte
 choose **Switch identity** explicitly. No countdown or background task activates it for you.
 
 The request limit is shared by everyone using this box's recovery route: 60 admitted requests
-per fixed one-minute window, with at most two requests running. The recovery key does not bypass
+per fixed one-minute window, with at most two requests running. The server key does not bypass
 that limit. Invalid TLS, origin or site checks are refused before this budget is used. Other devices can keep recovery unavailable by sending accepted HTTPS requests or holding their
 bodies open. Close other recovery pages and stop those requests, or isolate untrusted devices on the
 venue network, before retrying. **Stop** ends this page's work; it does not clear the box's shared
@@ -111,7 +111,7 @@ page goes back to choosing the backup and sends nothing"). Once the series are m
 read.
 
 There is no "last hour" question (`recovery-hour.browser.test.ts`, "asks no last-hour question and
-offers no clock confirmation"). Enter the recovery key, tick both statements and "These details are correct.", in any order, and
+offers no clock confirmation"). Enter the server key, tick both statements and "These details are correct.", in any order, and
 press **Proceed**. The invoice series is the code at the start of every invoice number; recovery
 creates new ones so the box never repeats the old box's. Until **Proceed** the page sends nothing
 to the box; while the button reads **Proceed** it says "When you press Proceed, Waitron creates new invoice series for this box, so

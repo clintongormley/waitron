@@ -17,7 +17,7 @@ When this box has stopped issuing invoices because of an identity conflict, a re
 says so and lists each invoice involved with what AEAT holds for it. AEAT's own words, its
 fingerprint and the installation name are under **Technical details**. Choose **Open conflict
 recovery** and follow [Recover an invoice identity conflict](box-status.md#invoice-conflict). You
-need the box's recovery key.
+need the server key.
 
 ## Sending progress {#progress}
 

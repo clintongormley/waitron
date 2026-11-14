@@ -44,7 +44,7 @@ describe("key-only recovery PDF", () => {
         ])
           expect(text).toContain(value);
         expect(text).toContain(
-          locale === "en" ? "Waitron recovery key" : "Clave de recuperación de Waitron",
+          locale === "en" ? "Waitron server key" : "Clave del servidor de Waitron",
         );
         expect(text).not.toMatch(/raw192|47 characters|47 caracteres/);
         for (const instruction of locale === "en"

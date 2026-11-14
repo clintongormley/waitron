@@ -218,7 +218,7 @@ run the production selector.
 
 Configure backup destinations, schedule and retention on the dashboard's **Backups** screen.
 Backups previously configured in `deploy/.env` stop until you configure them there. Keep the old recovery
-key from `deploy/.env` to open existing archives. The dashboard stores its backup key in
+key from `deploy/.env` to open existing archives. The dashboard stores its recovery key in
 `backup.env`; keep each key with your recovery documents.
 
 The compose project is named `waitron`. On a developer machine that is also running the repository's
@@ -701,11 +701,11 @@ command against it treat that entrypoint differently:
   in a bucket. The dashboard no longer shows either restore code on screen; both are in the
   recovery pack.
 
-  **Keep older paper recovery keys.** Restoring an older backup also restores the node key
+  **Keep older paper server keys.** Restoring an older backup also restores the server key
   from that time. A replaced key can work again on the restored box, while its replacement
   can be refused. Keep the older paper until every backup made before the replacement has
   been deleted. When the restored copy contains a key name, `restore.recovery_key_selected`
-  names the paper you need. The node key authenticates recovery; the separate backup encryption
+  names the paper you need. The server key authenticates recovery; the separate backup encryption
   key opens the backup file.
 
   A restore that fails while it writes the backup's secrets or moves its database into place

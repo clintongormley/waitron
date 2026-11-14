@@ -58,8 +58,8 @@ describe("setup-done-screen", () => {
   );
 
   it.each([
-    ["en-GB", "Recovery key 15 Oct 2026 · K7QF"],
-    ["es-ES", "Clave de recuperación 15 oct 2026 · K7QF"],
+    ["en-GB", "Server key 15 Oct 2026 · K7QF"],
+    ["es-ES", "Clave del servidor 15 oct 2026 · K7QF"],
   ] as const)("localizes the issue date and key label in %s", async (locale, name) => {
     setLocale(locale);
     const el = await mountDone(() => new Promise(() => {}), {
@@ -74,8 +74,8 @@ describe("setup-done-screen", () => {
     await el.updateComplete;
     expect(q(el, "[data-test=break-glass-key-name]")?.textContent?.trim()).toBe(
       locale === "en-GB"
-        ? "Clave de recuperación 15 oct 2026 · K7QF"
-        : "Recovery key 15 Oct 2026 · K7QF",
+        ? "Clave del servidor 15 oct 2026 · K7QF"
+        : "Server key 15 Oct 2026 · K7QF",
     );
     expect(el.breakGlassKeyName).toBe("2026-10-15 · K7QF");
   });
@@ -462,11 +462,11 @@ describe("setup-done-screen", () => {
   });
 
   it.each([
-    ["en-GB", "Older backups need the key from that time", "Recovery key 15 Oct 2026 · K7QF"],
+    ["en-GB", "Older backups need the key from that time", "Server key 15 Oct 2026 · K7QF"],
     [
       "es-ES",
       "Las copias antiguas necesitan la clave de entonces",
-      "Clave de recuperación 15 oct 2026 · K7QF",
+      "Clave del servidor 15 oct 2026 · K7QF",
     ],
   ] as const)(
     "shows the paper key name and the old-backup warning in %s",

@@ -201,7 +201,7 @@ The output combines the signed block with the custodian's public key and fingerp
 private signing key with the custodian. This command signs the reserved block again; it does not
 allocate another block or clear any entry's consumption history.
 
-In the dashboard, open **Backups**, enter the current **Node recovery key**, choose
+In the dashboard, open **Backups**, enter the current **Server key**, choose
 `recovery-register.json`, and select **Create pack**. You need management permission and the node
 key you already hold. You do not need bucket settings or a subscription. A wrong node key or a
 register for a different taxpayer, environment, venue or series set is refused.

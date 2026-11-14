@@ -52,7 +52,7 @@ it.each(["en", "es"] as const)(
         .map((item) => ("str" in item ? item.str : ""))
         .join(" ");
       expect(text).toContain(
-        locale === "en" ? "Waitron recovery key" : "Clave de recuperación de Waitron",
+        locale === "en" ? "Waitron server key" : "Clave del servidor de Waitron",
       );
       expect(text).toContain("Olivo Restauración SL");
       expect(text).toContain("06R9 T4FH M4H3 599J EEMM 5D5D ABTV 2RSX 6QDQ WE8M C");

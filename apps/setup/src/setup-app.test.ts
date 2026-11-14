@@ -1854,7 +1854,7 @@ describe("setup-app", () => {
     adoptRequest(el);
     await flush(el);
     expect(await screenText(el, "done", "[data-test=break-glass-key-name]")).toBe(
-      "Recovery key 15 Oct 2026 · K7QF",
+      "Server key 15 Oct 2026 · K7QF",
     );
     expect(await screenText(el, "done", "[data-test=break-glass-secret]")).toBe("key-on-paper");
   });

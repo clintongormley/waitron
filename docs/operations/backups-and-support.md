@@ -1,4 +1,4 @@
-# Keep backup keys and investigate a box
+# Keep recovery keys and investigate a box
 
 ## Keep the recovery pack
 
@@ -17,14 +17,14 @@ If rotation reports `backup.rotation_metadata_failed`, the new key is already in
 Keep that key and make a new recovery pack. Do not assume that the failed metadata step kept
 the former key active. See the [archive settings reference](../../apps/server/README.md)
 and [restore procedures](../developers/offline-fiscal-restore.md) for the separate archive
-and node recovery keys.
+recovery keys and the server key.
 
 ## Recover from an interrupted first setup
 
 Choose **Recover from backup** on the repair page: it deletes the failed setup as Start again does,
 and after the box restarts **Reconnect** opens "Join or recover an existing restaurant", where you
 restore as on a new box ([procedure](hour-recovery.md#recover-while-first-setup-is-blocked)). Keep
-the selected copy's named node key and any archive key or source credentials ready. A backup file
+the selected copy's named server key and any archive key or source credentials ready. A backup file
 carries two databases, the venue's (`db.dump`) and the old box's own (`node.dump`), and a file
 without `node.dump` is refused (`restore.archive_incomplete`, `apps/server/src/restore.ts`).
 

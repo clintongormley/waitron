@@ -48,7 +48,7 @@ ninguna: configura antes la conexión segura.
 Cuando se ha borrado la configuración, el servidor se reinicia. Después de **Recuperar desde una
 copia**, **Reconectar** abre «Unirse a un restaurante existente o recuperarlo», donde eliges
 **Restaurar desde una copia de seguridad** o **Restaurar desde mi bucket**, como en un servidor nuevo;
-restaurar necesita la clave de la propia copia y la clave de recuperación de su nodo. Después de
+restaurar necesita la clave de la propia copia y su clave del servidor. Después de
 **Empezar de nuevo**, **Reconectar** abre «Configura este servidor Waitron», donde eliges cómo
 configurar este servidor. Si se recarga la página antes de pulsar **Reconectar**, no recuerda cuál
 elegiste y abre su primera pantalla. Si esa pantalla pregunta «¿Es segura esta página?», pulsa
@@ -80,7 +80,7 @@ Si la reparación sigue fallando, detente aquí. Esta página no puede reparar t
 de certificados guardados ni sustituir un certificado instalado por separado. Para uno instalado
 por separado, comprueba la dirección HTTPS del servidor y detente si muestra un aviso. Si tu
 dispositivo bloquea la instalación del certificado, usa uno del local que la permita. Introduce
-contraseñas y claves de recuperación solo cuando HTTPS se abra sin avisos.
+contraseñas, claves de recuperación y claves del servidor solo cuando HTTPS se abra sin avisos.
 
 Apaga el servidor anterior y coordínate con los otros locales: solo una persona debe recuperar este contribuyente a la vez.
 
@@ -106,11 +106,11 @@ muestra la página en tu cuenta de Waitron Cloud (**Abrir Waitron Cloud**) y des
 **Comprobar la aprobación**. La recuperación de Cloud requiere un servicio compatible.
 
 Después elige **Revisar copia**. La página muestra la copia elegida: su origen, el negocio, el
-local, la fecha, el nodo y la clave de recuperación del nodo. Compruébalos antes de continuar.
+local, la fecha, el nodo y la clave del servidor. Compruébalos antes de continuar.
 Mantén separados producción y preproducción.
 
 La clave de la copia, el kit del bucket y la aprobación de Cloud dan acceso a una copia. También
-necesitas la clave de recuperación de su nodo para identificarte.
+necesitas su clave del servidor para identificarte.
 
 En un servidor de prueba restaurado desde Waitron Cloud, si **Servicios Cloud** dice que no se puede
 leer la solicitud guardada de reconexión, elige **Obtener una nueva solicitud de reconexión** y pide
@@ -120,7 +120,7 @@ al propietario de Cloud que apruebe la nueva solicitud en Cloud.
 
 Bajo la revisión, en «Recuperar este servidor», elige en **PDF de recuperación** tu paquete de
 recuperación, o un PDF de recuperación anterior, que tenga la clave del servidor de esta copia; o
-escribe la clave agrupada impresa en él en **Clave de recuperación**. Si el paquete no tiene la
+escribe la clave agrupada impresa en él en **Clave del servidor**. Si el paquete no tiene la
 clave del servidor, la página lo dice y, cuando el paquete lo registra, indica el paquete o el
 nombre de la clave que hay que buscar. Un paquete o una hoja con una clave del servidor más nueva
 puede no abrir una copia anterior. Marca «El servidor anterior está apagado y seguirá desconectado.»,
@@ -145,7 +145,7 @@ copias guardados desde que se inició, de la más reciente a la más antigua y c
 una con lo que falló: por ejemplo, el número de clave con que se cerraron los ajustes y los números
 de clave que tiene este servidor. Después describe el registro guardado tal como está ahora: cuándo se
 escribió por última vez y, si se puede leer, las carpetas y los buckets que indica y si existe cada
-carpeta. Indica si el servidor tiene una clave de recuperación de copias válida. Muestra el ID de la clave de acceso
+carpeta. Indica si el servidor tiene una clave de recuperación válida. Muestra el ID de la clave de acceso
 de un bucket, pero nunca su secreto, y la clave de recuperación solo por su huella. El panel solo
 lee y no cambia nada: **Leer de nuevo** vuelve a leer los datos y no activa las copias, y **Parar**
 cierra el panel. Tampoco repara nada; para sustituir los ajustes guardados, elige de nuevo los
@@ -178,7 +178,7 @@ observaciones en otros dispositivos.
 
 La restauración sustituye la base de datos que ya está en este servidor.
 
-Escribe la clave de recuperación del nodo, marca las dos declaraciones y «Estos datos son
+Escribe la clave del servidor, marca las dos declaraciones y «Estos datos son
 correctos.», y elige **Continuar**. La serie de facturas es el código al principio de cada número de factura; la recuperación crea series
 nuevas para que el servidor nunca repita los números del servidor anterior. Después de **Continuar**, la
 página compara los relojes y crea las series de facturas sola, también tras cualquier espera que
@@ -218,7 +218,7 @@ Hasta que eliges el botón de restaurar, la página conserva lo que introdujiste
 abierta. Cambiar el archivo, la clave o el entorno descarta lo que comprobó, y al recargar se abre
 la primera pantalla de la página; desde ahí elige **Unirse o recuperar** y empieza de nuevo la
 restauración. Si el servidor rechaza la restauración, la página vuelve al formulario y tienes que
-introducir de nuevo la clave de recuperación del nodo.
+introducir de nuevo la clave del servidor.
 
 Cuando eliges el botón de restaurar, la página dice «Configurando este servidor» y te pide que la
 mantengas abierta. El servidor guarda la solicitud y se reinicia. Si se detiene después de guardar la

@@ -2083,9 +2083,9 @@ export const en = {
     "Clearing frees the place it takes on the list of servers. If it tries to come back under its old identity, this primary refuses it, so to use that machine again it has to join from scratch. This cannot be undone.",
   "backup.title": "Backups",
   "node_pack.create": "Create pack",
-  "node_pack.key_error": "The node recovery key is not valid.",
+  "node_pack.key_error": "The server key is not valid.",
   "node_pack.title": "Node recovery pack",
-  "node_pack.key": "Node recovery key",
+  "node_pack.key": "Server key",
   "node_pack.register": "Allocation register",
   "node_pack.secret_warning": "Keep this secret pack outside the server and its backups.",
   "node_pack.old_key_warning":
@@ -2148,9 +2148,9 @@ export const en = {
   "backup_evidence.cause.settings_invalid":
     "The saved settings opened, but their {part} could not be used.",
   "backup_evidence.cause.recovery_key_missing":
-    "The saved settings read correctly, but this box holds no backup recovery key, and backups are never made without one.",
+    "The saved settings read correctly, but this box holds no recovery key, and backups are never made without one.",
   "backup_evidence.cause.recovery_key_too_short":
-    "The saved settings read correctly, but the backup recovery key on this box is shorter than {min} characters.",
+    "The saved settings read correctly, but the recovery key on this box is shorter than {min} characters.",
   "backup_evidence.cause.unknown":
     "The box could not use its backup settings ({code}). Waitron cannot say more about this failure.",
   "backup_evidence.part.not_json": "format",
@@ -2188,11 +2188,10 @@ export const en = {
   "backup_evidence.access_key_id": "Access key ID",
   "backup_evidence.archive_folder": "Archive folder",
   "backup_evidence.key_heading": "Recovery key",
-  "backup_evidence.key.missing": "This box holds no backup recovery key.",
-  "backup_evidence.key.too_short": "The backup recovery key on this box is too short.",
-  "backup_evidence.key.usable":
-    "This box holds a usable backup recovery key, fingerprint {fingerprint}.",
-  "backup_evidence.key.usable_plain": "This box holds a usable backup recovery key.",
+  "backup_evidence.key.missing": "This box holds no recovery key.",
+  "backup_evidence.key.too_short": "The recovery key on this box is too short.",
+  "backup_evidence.key.usable": "This box holds a usable recovery key, fingerprint {fingerprint}.",
+  "backup_evidence.key.usable_plain": "This box holds a usable recovery key.",
   "backup_evidence.reads_now":
     "The saved settings read correctly now. Backups stay off until the settings are saved again, the recovery key is replaced, or the box restarts. Nothing was changed.",
   "backup_evidence.turn_on":
@@ -6258,9 +6257,9 @@ export const es: Record<StringKey, string> = {
     "Quitarla libera el sitio que ocupa en la lista de servidores. Si intenta volver con su identidad anterior, este servidor principal la rechaza, así que para volver a usarla tiene que unirse de nuevo desde el principio. No se puede deshacer.",
   "backup.title": "Copias de seguridad",
   "node_pack.create": "Crear kit",
-  "node_pack.key_error": "La clave de recuperación del nodo no es válida.",
+  "node_pack.key_error": "La clave del servidor no es válida.",
   "node_pack.title": "Kit de recuperación del nodo",
-  "node_pack.key": "Clave de recuperación del nodo",
+  "node_pack.key": "Clave del servidor",
   "node_pack.register": "Registro de asignaciones",
   "node_pack.secret_warning":
     "Guarda este kit secreto fuera del servidor y de sus copias de seguridad.",
@@ -6325,9 +6324,9 @@ export const es: Record<StringKey, string> = {
   "backup_evidence.cause.settings_invalid":
     "Los ajustes guardados se abrieron, pero esta parte no se pudo usar: {part}.",
   "backup_evidence.cause.recovery_key_missing":
-    "Los ajustes guardados se leen bien, pero este servidor no tiene clave de recuperación de copias, y nunca se hacen copias sin ella.",
+    "Los ajustes guardados se leen bien, pero este servidor no tiene clave de recuperación, y nunca se hacen copias sin ella.",
   "backup_evidence.cause.recovery_key_too_short":
-    "Los ajustes guardados se leen bien, pero la clave de recuperación de copias de este servidor tiene menos de {min} caracteres.",
+    "Los ajustes guardados se leen bien, pero la clave de recuperación de este servidor tiene menos de {min} caracteres.",
   "backup_evidence.cause.unknown":
     "El servidor no pudo usar sus ajustes de copias de seguridad ({code}). Waitron no puede decir nada más de este fallo.",
   "backup_evidence.part.not_json": "el formato",
@@ -6366,13 +6365,11 @@ export const es: Record<StringKey, string> = {
   "backup_evidence.access_key_id": "ID de la clave de acceso",
   "backup_evidence.archive_folder": "Carpeta de las copias",
   "backup_evidence.key_heading": "Clave de recuperación",
-  "backup_evidence.key.missing": "Este servidor no tiene clave de recuperación de copias.",
-  "backup_evidence.key.too_short":
-    "La clave de recuperación de copias de este servidor es demasiado corta.",
+  "backup_evidence.key.missing": "Este servidor no tiene clave de recuperación.",
+  "backup_evidence.key.too_short": "La clave de recuperación de este servidor es demasiado corta.",
   "backup_evidence.key.usable":
-    "Este servidor tiene una clave de recuperación de copias válida, con huella {fingerprint}.",
-  "backup_evidence.key.usable_plain":
-    "Este servidor tiene una clave de recuperación de copias válida.",
+    "Este servidor tiene una clave de recuperación válida, con huella {fingerprint}.",
+  "backup_evidence.key.usable_plain": "Este servidor tiene una clave de recuperación válida.",
   "backup_evidence.reads_now":
     "Los ajustes guardados se leen bien ahora. Las copias siguen desactivadas hasta que se vuelvan a guardar los ajustes, se cambie la clave de recuperación o se reinicie el servidor. No se ha cambiado nada.",
   "backup_evidence.turn_on":
