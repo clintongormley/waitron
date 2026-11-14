@@ -1,11 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import {
-  contentSuggestionJobs,
-  contentSuggestions,
-  markSuggestionRunOpened,
-} from "@waitron/menu";
+import { contentSuggestionJobs, contentSuggestions, markSuggestionRunOpened } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   printAgents,

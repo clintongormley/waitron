@@ -26,11 +26,7 @@ import {
   localToday,
   vatRateOn,
 } from "@waitron/shared";
-import {
-  fixedLanguages,
-  parseMenuPatch,
-  patchFieldValue,
-} from "@waitron/menu/src/menu-patch.js";
+import { fixedLanguages, parseMenuPatch, patchFieldValue } from "@waitron/menu/src/menu-patch.js";
 import type { MenuDocument } from "@waitron/shared";
 import { PATCH_FIELDS } from "@waitron/menu/src/menu-patch-types.js";
 import "@waitron/ui/src/components/wt-button.js";

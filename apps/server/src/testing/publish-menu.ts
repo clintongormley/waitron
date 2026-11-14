@@ -1,9 +1,4 @@
-import {
-  buildMenuDocument,
-  menuDocumentHash,
-  menuPublications,
-  publishMenu,
-} from "@waitron/menu";
+import { buildMenuDocument, menuDocumentHash, menuPublications, publishMenu } from "@waitron/menu";
 import type { Transaction } from "@waitron/db";
 
 /** Publishes the menu's working state, as the dashboard's preview-then-publish does; the version id. */

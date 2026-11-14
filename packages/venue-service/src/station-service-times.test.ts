@@ -1,12 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
-import {
-  addProductToMenu,
-  createCatalogue,
-  createCategory,
-  createProduct,
-} from "@waitron/menu";
+import { addProductToMenu, createCatalogue, createCategory, createProduct } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   floorZones,

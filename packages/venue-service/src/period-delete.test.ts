@@ -2,12 +2,7 @@ import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import {
-  buildMenuDocument,
-  createCatalogue,
-  menuDocumentHash,
-  publishMenu,
-} from "@waitron/menu";
+import { buildMenuDocument, createCatalogue, menuDocumentHash, publishMenu } from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   categories,
