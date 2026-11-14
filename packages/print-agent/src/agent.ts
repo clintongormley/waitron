@@ -6,6 +6,7 @@ import {
   type AgentClient,
   type BluetoothCommand,
   type BluetoothCommandOutcome,
+  type BluetoothFailureReason,
   type Failure,
   type JobOutcome,
   type PageHold,
@@ -283,6 +284,7 @@ export function createAgent(opts: AgentOptions): Agent {
   async function runBluetoothCommand(command: BluetoothCommand): Promise<BluetoothCommandOutcome> {
     let ok = false;
     let error: string | undefined;
+    let reason: BluetoothFailureReason | undefined;
     try {
       const result =
         command.kind === "pair"
@@ -290,11 +292,17 @@ export function createAgent(opts: AgentOptions): Agent {
           : await host.forgetBluetooth(command.address);
       ok = result.ok === true;
       if (!ok && result.error !== undefined) error = describeRejection(result.error);
+      if (!ok) reason = result.reason;
     } catch (thrown) {
       error = describeRejection(thrown);
     }
     if (error !== undefined) error = withholdPin(error, command.pin);
-    return { id: command.id, ok, ...(error === undefined ? {} : { error }) };
+    return {
+      id: command.id,
+      ok,
+      ...(error === undefined ? {} : { error }),
+      ...(reason === undefined ? {} : { reason }),
+    };
   }
 
   /** The one background worker: runs queued commands one at a time, in arrival order, outside the

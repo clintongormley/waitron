@@ -843,6 +843,7 @@ describe("createBluetoothctlHost — forget()", () => {
     expect(await createBluetoothctlHost({ run }).forget(MAC)).toStrictEqual({
       ok: false,
       error: "No default controller available",
+      reason: "bluetooth_unavailable",
     });
   });
 
@@ -1017,7 +1018,7 @@ describe("pair() through the real spawn", () => {
 
   it("reports a wrong PIN, without the PIN in the result", async () => {
     const outcome = await pairWithBluetoothctl(MAC, "9999");
-    expect(outcome).toStrictEqual({ ok: false, error: "wrong PIN" });
+    expect(outcome).toStrictEqual({ ok: false, error: "wrong PIN", reason: "wrong_pin" });
     expect(await sent()).toBe(`pair ${MAC}\n9999\nquit\n`);
   });
 

@@ -25,6 +25,7 @@ export type {
 } from "./host.js";
 export {
   BLUETOOTH_COMMAND_LIMIT,
+  BLUETOOTH_FAILURE_REASONS,
   DEFAULT_TIMEOUT_MS,
   MAX_OUTCOME_ERROR_LENGTH,
   PAGE_DOCUMENT_TIMEOUT_MS,
@@ -43,6 +44,7 @@ export type {
   BluetoothCommand,
   BluetoothCommandKind,
   BluetoothCommandOutcome,
+  BluetoothFailureReason,
   Failure,
   JobOutcome,
   InvoicePrintClaim,

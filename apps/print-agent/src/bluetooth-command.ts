@@ -1,5 +1,10 @@
 import { type ChildProcessWithoutNullStreams, execFile, spawn } from "node:child_process";
-import { type PairResult, isBluetoothAddress, isBluetoothPin } from "@waitron/print-agent";
+import {
+  type BluetoothFailureReason,
+  type PairResult,
+  isBluetoothAddress,
+  isBluetoothPin,
+} from "@waitron/print-agent";
 
 export interface BluetoothctlRunOptions {
   /** Kills bluetoothctl after this long; its error then carries `killed: true`. */
@@ -79,7 +84,8 @@ export function pairWithBluetoothctl(
   if (pin !== undefined && !isBluetoothPin(pin))
     return Promise.resolve({ ok: false, error: BAD_PIN });
   const address = mac.toUpperCase();
-  const fail = (error: string): PairResult => ({ ok: false, error });
+  const fail = (error: string, reason?: BluetoothFailureReason): PairResult =>
+    reason === undefined ? { ok: false, error } : { ok: false, error, reason };
 
   return new Promise((resolve) => {
     let child: ChildProcessWithoutNullStreams;
@@ -95,7 +101,10 @@ export function pairWithBluetoothctl(
     let pending = "";
     let lastLine: string | undefined;
     let outcome: PairResult | undefined;
-    let deadline = setTimeout(() => finish(fail(UNAVAILABLE), "end"), REGISTER_TIMEOUT_MS);
+    let deadline = setTimeout(
+      () => finish(fail(UNAVAILABLE, "bluetooth_unavailable"), "end"),
+      REGISTER_TIMEOUT_MS,
+    );
     let grace: NodeJS.Timeout | undefined;
 
     const settle = (): void => {
@@ -118,13 +127,16 @@ export function pairWithBluetoothctl(
     const onPrompt = (prompt: string): void => {
       if (!prompt.includes(PIN_PROMPT)) {
         child.stdin.write("no\n");
-        finish(fail("this printer asked for a pairing method we do not support"), "quit");
+        finish(
+          fail("this printer asked for a pairing method we do not support", "unsupported_method"),
+          "quit",
+        );
       } else if (pinWritten) {
         return;
       } else if (pin === undefined) {
         // Measured against the stand-in: at the end of its input bluetoothctl answers the request with
         // "" and exits.
-        finish(fail("this printer needs a PIN"), "end");
+        finish(fail("this printer needs a PIN", "pin_needed"), "end");
       } else {
         child.stdin.write(`${pin}\n`);
         pinWritten = true;
@@ -136,20 +148,21 @@ export function pairWithBluetoothctl(
       if (!pinWritten && !line.startsWith(SHELL_PROMPT)) lastLine = line;
       if (line === "Request canceled") canceled = true;
       if (line === "Pairing successful") return finish({ ok: true, localKey: address }, "quit");
-      if (line === NO_CONTROLLER) return finish(fail(NO_CONTROLLER), "quit");
+      if (line === NO_CONTROLLER)
+        return finish(fail(NO_CONTROLLER, "bluetooth_unavailable"), "quit");
       if (line.toUpperCase() === `DEVICE ${address} NOT AVAILABLE`)
-        return finish(fail("printer not found — scan first"), "quit");
+        return finish(fail("printer not found — scan first", "not_found"), "quit");
       const failed = /^Failed to pair: (.+)$/.exec(line);
       if (failed === null) return;
       const name = failed[1]!;
       if (name === "org.bluez.Error.AlreadyExists") finish({ ok: true, localKey: address }, "quit");
       // bluetoothd cancels the request when our answer is late.
       else if (name === "org.bluez.Error.AuthenticationFailed" && canceled)
-        finish(fail("the printer stopped waiting for the PIN"), "quit");
+        finish(fail("the printer stopped waiting for the PIN", "pin_too_slow"), "quit");
       else if (name === "org.bluez.Error.AuthenticationFailed" && pinWritten)
-        finish(fail("wrong PIN"), "quit");
+        finish(fail("wrong PIN", "wrong_pin"), "quit");
       else if (name === "org.bluez.Error.ConnectionAttemptFailed")
-        finish(fail("printer is off or out of range"), "quit");
+        finish(fail("printer is off or out of range", "out_of_range"), "quit");
       else if (DBUS_ERROR_NAME.test(name)) finish(fail(`pairing failed: ${name}`), "quit");
       else finish(fail("pairing failed"), "quit");
     };
@@ -161,11 +174,15 @@ export function pairWithBluetoothctl(
         clearTimeout(deadline);
         phase = "pairing";
         child.stdin.write(`pair ${address}\n`);
-        deadline = setTimeout(() => finish(fail("pairing timed out"), "end"), PAIR_TIMEOUT_MS);
+        deadline = setTimeout(
+          () => finish(fail("pairing timed out", "timed_out"), "end"),
+          PAIR_TIMEOUT_MS,
+        );
         return;
       }
       const refused = /^Failed to register agent: (.+)$/.exec(line);
-      if (refused !== null) finish(fail(`bluetooth agent refused: ${refused[1]!}`), "quit");
+      if (refused !== null)
+        finish(fail(`bluetooth agent refused: ${refused[1]!}`, "bluetooth_unavailable"), "quit");
     };
 
     const clean = (fragment: string): string =>
@@ -191,7 +208,7 @@ export function pairWithBluetoothctl(
       settle();
     });
     child.on("close", () => {
-      if (phase === "registering") finish(fail(UNAVAILABLE), "end");
+      if (phase === "registering") finish(fail(UNAVAILABLE, "bluetooth_unavailable"), "end");
       else if (phase === "pairing")
         finish(fail(lastLine === undefined ? INCOMPLETE : `${INCOMPLETE}: ${lastLine}`), "end");
       settle();

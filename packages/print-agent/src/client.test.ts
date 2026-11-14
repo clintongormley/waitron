@@ -683,6 +683,20 @@ describe("createClient — pullJobs body bounds", () => {
       { id: "c3", ok: true },
     ]);
   });
+
+  it("keeps a failed outcome's reason code beside its cut error", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(reply(200, { nodeId: "n", servers: [], jobs: [] }));
+    await createClient({ fetch: fetchImpl }).pullJobs(URL_A, "t", {
+      ...NO_INVENTORY,
+      bluetoothOutcomes: [
+        { id: "c1", ok: false, error: `${"e".repeat(500)}TAIL`, reason: "out_of_range" },
+      ],
+    });
+    const sent = JSON.parse(fetchImpl.mock.calls[0]![1].body as string);
+    expect(sent.bluetoothOutcomes).toStrictEqual([
+      { id: "c1", ok: false, error: "e".repeat(500), reason: "out_of_range" },
+    ]);
+  });
 });
 
 describe("createClient — report", () => {

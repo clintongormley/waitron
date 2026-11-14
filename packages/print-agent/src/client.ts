@@ -34,10 +34,25 @@ export interface BluetoothCommand {
   pin?: string;
 }
 
+/** Why a Pair or Unpair failed, for the dashboard to word; `error` stays the agent's own English
+ * for its log. A failure the agent cannot name carries none. */
+export const BLUETOOTH_FAILURE_REASONS = [
+  "wrong_pin",
+  "pin_needed",
+  "pin_too_slow",
+  "unsupported_method",
+  "not_found",
+  "out_of_range",
+  "timed_out",
+  "bluetooth_unavailable",
+] as const;
+export type BluetoothFailureReason = (typeof BLUETOOTH_FAILURE_REASONS)[number];
+
 export interface BluetoothCommandOutcome {
   id: string;
   ok: boolean;
   error?: string;
+  reason?: BluetoothFailureReason;
 }
 
 export interface NodeProbe {
