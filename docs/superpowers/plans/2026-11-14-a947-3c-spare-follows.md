@@ -1,6 +1,6 @@
 # A947 3c: the spare follows
 
-**Proposed; building waits for watcher clearance and the decisions below.** Sol drafted; H checked; Claude reviewed `7a53d5fe1f`. H queue assignment: watcher, 14 November 2026 12:21. No owner approval of this plan is claimed. [A947](../specs/2026-10-21-a947-two-box-failover-design.md), top A1018/3b amendments, §5 and §11 3c, states the requested outcome. Inspection base: `5b5fe0f820`.
+**Measurement stopped; runtime building awaits a revised comparison decision.** Sol drafted; H checked; Claude reviewed `7a53d5fe1f`. H queue assignment: watcher, 14 November 2026 12:21. No owner approval of this plan is claimed. [A947](../specs/2026-10-21-a947-two-box-failover-design.md), top A1018/3b amendments, §5 and §11 3c, states the requested outcome. Inspection base: `5b5fe0f820`. The watcher cleared the corrected plan on 14 November at 12:48, explicitly keeping promotion in 4b. The [measurement](../../research/2026-11-14-a947-follow-mode.md) then failed its exact-byte gate; the tasks below remain unbuilt.
 
 **Finish line:** your joined spare continuously applies the main box's stream; Box status, Servers and the bell show its measured delay, unreachability and disagreeing clocks. Switching names its actual copy; promotion stays manual.
 **Reuse:** mirror read/write gates and `/health` already exist (`boot.ts:1433,2346–2404`); `waiting-start.ts` is the non-mirror peer wait. Reuse pair-store/link, `spare-copy.ts` trust checks, Litestream helpers, signed peer status. Keep private reads closed. Never follow into open `venue.db`.

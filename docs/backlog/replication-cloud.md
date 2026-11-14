@@ -1109,6 +1109,11 @@ test) as [#2779](https://github.com/clintongormley/waitron/pull/2779); 3b-5a (th
 the main box refuses before reserving anything and hands out the pair's access key and its backup settings) as [#2898](https://github.com/clintongormley/waitron/pull/2898); 3b-5b (a spare runs its store behind a listener
 that admits only its main box's client certificate, a venue with a standby refuses bucket-copy settings, and key ring
 rotation is refused while a pair link exists) landed too, and so did 3b-G (the start check trusts only the venue's authority and sets aside a spare still joining, the start's chart check reaches a real box, and a box that lost its own record does not start selling or filing), and so did 3b-6a (a spare of a venue that does not file with Veri*Factu takes its first copy over the venue's network and finishes joining), 3b-6b (a test runs a main box and a spare together over the venue's network, and the Servers guide explains adding a spare) and 3b-6c-email (a spare's join and its reset take the administrator's sign-in email) and 3b-6c (the main box sends its backup settings to its spare, again after every change and to a spare that was off), and 3b-F (a Veri*Factu venue's spare joins with nothing fiscal written) landed too. Slices 3c onwards are still open; for 4b, the activation writes the spare's dormant setup first (A947 3b-F, 2026-11-14);
+**14 November 2026, 3c measurement:** pinned `restore -f` applied an ordinary data-growth
+transaction but failed complete-byte equality against the same frozen generation's direct
+restore. Only header offsets 18, 19 and 24–27 differed. Runtime integration is stopped pending
+the watcher's comparison decision; [measurement and limits](../research/2026-11-14-a947-follow-mode.md).
+
 A1273 to A1285 and A1296 are the loose ends slice 3a left (A1295 went with 3b-3: no box keeps a second authority).
 A1018's simple handover amends §§6.3, 6.4, 7, 7.1, 7.2 and 11 (the dated A1018 block at the top
 of the [design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md), 2026-11-02).
