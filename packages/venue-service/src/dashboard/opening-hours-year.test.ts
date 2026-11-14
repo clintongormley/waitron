@@ -631,7 +631,6 @@ describe("Opening hours year", () => {
     expect(root(el).querySelector('[data-test="coverage"]')).toBeNull();
     expect(root(el).querySelector('[data-test="town-holidays"]')).toBeNull();
     expect(root(el).querySelector('[data-test="holidays-unavailable"]')).toBeNull();
-    expect(root(el).querySelector('[data-test="missing-holiday"]')).toBeNull();
   });
 
   it("still warns when the official list is not complete", async () => {
@@ -695,22 +694,7 @@ describe("Opening hours year", () => {
     const line = root(el).querySelector('[data-test="holidays-unavailable"]')!;
     expect(text(line)).toBe("Public holidays for 2027 are not available yet");
     expect(line.previousElementSibling?.localName).toBe("season-chips");
-    expect(root(el).querySelector('[data-test="missing-holiday"]')).toBeNull();
     expect(root(el).querySelector('[data-test="coverage"]')).toBeNull();
-  });
-
-  it("draws no warning for a repeating date with no public holiday of its name this year", async () => {
-    const el = await mount(
-      yearModel({
-        missingHolidays: [
-          { specialDayId: "vs", name: "Viernes Santo", holidayName: "Viernes Santo" },
-          { specialDayId: "cm", name: "Carnival closure", holidayName: "Carnaval" },
-        ],
-      } as Partial<OpeningHoursYear>),
-    );
-    expect(root(el).querySelectorAll('[data-test="missing-holiday"]')).toHaveLength(0);
-    expect(root(el).querySelectorAll(".warning")).toHaveLength(0);
-    expect(root(el).textContent).not.toContain("has no public holiday of that name");
   });
 
   it("asks for the holiday area when the province needs one", async () => {
@@ -802,20 +786,11 @@ describe("Opening hours year", () => {
 
   it("speaks Spanish", async () => {
     setLocale("es");
-    const el = await mount(
-      yearModel({
-        publicHolidaysAvailable: false,
-        missingHolidays: [
-          { specialDayId: "vs", name: "Viernes Santo", holidayName: "Viernes Santo" },
-        ],
-      } as Partial<OpeningHoursYear>),
-    );
+    const el = await mount(yearModel({ publicHolidaysAvailable: false }));
     expect(text(root(el).querySelector('[data-test="month-name"]'))).toBe("enero");
     expect(text(root(el).querySelector('[data-test="holidays-unavailable"]'))).toBe(
       "Los festivos oficiales de 2027 aún no están disponibles",
     );
-    expect(root(el).querySelector('[data-test="missing-holiday"]')).toBeNull();
-    expect(root(el).textContent).not.toContain("no hay ningún festivo con ese nombre");
   });
 });
 

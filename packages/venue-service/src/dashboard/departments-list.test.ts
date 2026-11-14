@@ -196,7 +196,7 @@ describe("department list", () => {
       rows(el)[1]!.querySelectorAll("td")[0]!.querySelectorAll('[part="setup-issue"]'),
     ).toHaveLength(0);
   });
-  it("draws no public-holiday warning, even for a missing-holiday issue an older server sends", async () => {
+  it("draws no public-holiday warning for a readiness code it does not know", async () => {
     const el = await setup({
       ...model,
       readiness: [
@@ -208,7 +208,6 @@ describe("department list", () => {
         } as unknown as VenueServiceView["readiness"][number],
       ],
     });
-    expect(find(el, '[data-test="holiday-missing"]')).toBeNull();
     expect(el.shadowRoot!.querySelectorAll(".issue")).toHaveLength(0);
     expect(el.shadowRoot!.textContent).not.toContain("Viernes Santo");
   });

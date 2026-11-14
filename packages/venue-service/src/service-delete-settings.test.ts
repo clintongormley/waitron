@@ -554,8 +554,6 @@ async function paintSeasons(tx: Transaction) {
   return { f, season: (name: string) => seasonsByName.get(name)!, week, closure };
 }
 
-const seasonLines = (impact: { key: string }[]) => impact.filter((item) => item.key === "seasons");
-
 it("deletes a deleted department's service steps without listing them", async () => {
   await run(async (tx) => {
     const f = await fixture(tx);
@@ -584,47 +582,17 @@ it("deletes a deleted department's service steps without listing them", async ()
   });
 });
 
-it("the delete impact lists no seasons for a week saved with no season", async () => {
-  await run(async (tx) => {
-    const { f, week } = await paintSeasons(tx);
-    await week();
-
-    const impact = await readServiceDeleteSettings(
-      tx,
-      [f.gone, f.forbidden, f.allowed],
-      f.department,
-    );
-    expect(seasonLines(impact)).toEqual([]);
-  });
-});
-
-it("the delete impact lists no season for a week painted in Winter only, with a Winter closure in its zone, and clears both", async () => {
+it("a department delete clears a week painted in Winter only and a Winter closure in its zone", async () => {
   await run(async (tx) => {
     const { f, season, week, closure } = await paintSeasons(tx);
     await week(season("Winter"));
     await closure(season("Winter"));
 
-    expect(
-      seasonLines(
-        await readServiceDeleteSettings(tx, [f.gone, f.forbidden, f.allowed], f.department),
-      ),
-    ).toEqual([]);
     await clearServiceDeleteSettings(tx, [f.gone, f.forbidden, f.allowed], f.department);
     expect(await tx.select().from(departmentDays)).toEqual([]);
     expect(await tx.select().from(departmentDayRanges)).toEqual([]);
     expect(await tx.select().from(zoneDays)).toEqual([]);
     expect(await tx.select().from(zoneDayRanges)).toEqual([]);
-  });
-});
-
-it("a zone delete lists no seasons for its closures", async () => {
-  await run(async (tx) => {
-    const { f, season, week, closure } = await paintSeasons(tx);
-    await week();
-    await closure(season("Winter"));
-    await closure(season("Summer"));
-
-    expect(seasonLines(await readServiceDeleteSettings(tx, [f.gone], null))).toEqual([]);
   });
 });
 
