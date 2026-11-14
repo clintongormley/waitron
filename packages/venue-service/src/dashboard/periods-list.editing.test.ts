@@ -743,12 +743,12 @@ it("Opening a period shows Painted in as links from the list's own read, with no
     {
       text: "Winter",
       tag: "a",
-      href: "/manage/opening-hours/view/season/season/winter/department/restaurant",
+      href: "/manage/opening-hours/view/season/season/winter/department/restaurant?back=/manage/periods",
     },
     {
       text: "Company dinners",
       tag: "a",
-      href: "/manage/opening-hours/view/special-day/special-day/sd1",
+      href: "/manage/opening-hours/view/special-day/special-day/sd1?back=/manage/periods",
     },
   ]);
   expect(dialog.paintedInLinks).toBe(true);
