@@ -29,7 +29,7 @@ export class BackupAudit extends LitElement {
         margin-block: var(--wt-space-2);
       }
       .error {
-        color: var(--wt-color-danger-text);
+        color: var(--wt-color-danger);
       }
     `,
   ];
