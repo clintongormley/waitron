@@ -344,8 +344,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     const { nodeSecret: mintedSecret, ...a } = await provisionStreamBox({
       dirs: dirsA,
       advertisedOrigin: `https://127.0.0.1:${portA}`,
-      bucket,
-      recoveryKey: RECOVERY_KEY,
+      streaming: { bucket, recoveryKey: RECOVERY_KEY },
       modulesJson: { modules: { "fiscal-none": false } },
       venue: { request: VENUE, modules: ALL_MODULES },
       ...(fixture.useRecoveryPack ? { apply: applyWithFirstSetup(dirsA.state) } : {}),

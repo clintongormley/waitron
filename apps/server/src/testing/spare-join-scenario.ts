@@ -3,7 +3,7 @@
 // `spare-join.e2e.test.ts` runs it against versitygw.
 import { randomUUID, X509Certificate } from "node:crypto";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { Socket } from "node:net";
 import { join } from "node:path";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
@@ -59,6 +59,7 @@ import {
   boxDirs,
   copyMigrations,
   provisionStreamBox,
+  switchOnStreaming,
   type BoxDirs,
 } from "./stream-box.js";
 import { synchronisedBoxHost } from "./synchronised-box-host.js";
@@ -108,7 +109,8 @@ const SPARE_RESTARTS_AFTER_FIRST_COPY = 2;
 // migrations, provisioning and closes, is a budget nothing here enforces; the health wait is
 // `fetchHealthOk`'s poll budget. S starts five times: setup, the latch start that takes the copy,
 // the start that places it and finishes joining, the mirror's, and once more after the test stops
-// it; M starts three times: first, in the middle of S's join, and for the start check.
+// it; M starts four times: first, once it has its bucket copy, in the middle of S's join, and for
+// the start check.
 const BOOT_MS = 30_000;
 const HEALTH_MS = POLL_TRIES * POLL_INTERVAL_MS;
 const UNTIMED_MS = 60_000;
@@ -124,8 +126,8 @@ const SETTINGS_CHECK_MS = 1_000;
 const SETTINGS_RETRY_MS = 2_000;
 const WAIT_POLL_MS = 250;
 export const SPARE_JOIN_SCENARIO_MS =
-  8 * BOOT_MS +
-  3 * HEALTH_MS +
+  9 * BOOT_MS +
+  4 * HEALTH_MS +
   3 * SETTINGS_WAIT_MS +
   POINTER_WAIT_MS +
   LINK_WAIT_MS +
@@ -135,6 +137,7 @@ export const SPARE_JOIN_SCENARIO_MS =
 
 export const SPARE_JOIN_PHASES = [
   "probe",
+  "spare-refused-no-key",
   "spare-refused",
   "bucket-stopped",
   "spare-join",
@@ -483,6 +486,18 @@ async function backupSettingsDigestIn(stateDir: string): Promise<string | null> 
   return backupSettingsDigestOf(await readBackupSettings(stateDir));
 }
 
+/**
+ * Every file under `dir`, sorted. Folders are left out: a refused adopt leaves its request store's
+ * empty folder behind.
+ */
+async function filesUnder(dir: string): Promise<string[]> {
+  const entries = await readdir(dir, { recursive: true, withFileTypes: true });
+  return entries
+    .filter((entry) => !entry.isDirectory())
+    .map((entry) => join(entry.parentPath, entry.name))
+    .sort();
+}
+
 /** The logger's JSON lines among `lines`. */
 function logLines(lines: readonly string[]): LogLine[] {
   return lines.flatMap((text) => {
@@ -558,8 +573,6 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
     const m = await provisionStreamBox({
       dirs: dirsM,
       advertisedOrigin: `https://${BOX_HOSTNAME}:${portM}`,
-      bucket,
-      recoveryKey: RECOVERY_KEY,
       modulesJson: MODULES_M,
       venue: {
         request: VENUE_M,
@@ -661,6 +674,22 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
       });
       return { status: adopted.status, body: (await adopted.json()) as unknown };
     };
+
+    clock.begin("spare-refused-no-key");
+    const beforeNoKey = await joinState(dirsM.venue, m.nodeId);
+    const filesBeforeNoKey = await filesUnder(dirsS.state);
+    const noKey = await adopt();
+    expect(noKey.status, JSON.stringify(noKey.body)).toBe(409);
+    expect(noKey.body).toEqual({ error: { code: "backup.recovery_key_missing", params: {} } });
+    expect(await joinState(dirsM.venue, m.nodeId)).toEqual(beforeNoKey);
+    expect(await filesUnder(dirsS.state)).toEqual(filesBeforeNoKey);
+
+    // M gets its key and its bucket copy while it is down: a real Save is refused against
+    // versitygw (`encryption_ignored`), and the join checks for a bucket copy before a key.
+    await boxM.stopForRestart();
+    await switchOnStreaming(dirsM, m.locationId, { bucket, recoveryKey: RECOVERY_KEY });
+    await boundedStart(boxM.start(), "M's start with its bucket copy");
+    await fetchHealthOk(`${urlM}/health`, viaM);
 
     clock.begin("spare-refused");
     const bucketStore = createS3ObjectStore(bucket);

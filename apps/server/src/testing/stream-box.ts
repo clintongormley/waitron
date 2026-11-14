@@ -79,17 +79,17 @@ export interface StreamBox {
  * Secrets and TLS in the state folder, a migrated and provisioned venue, a node key and a term-0
  * membership document naming `advertisedOrigin`, and streaming to `bucket` switched on with
  * `recoveryKey`; `modulesJson` is written as `modules.json`, and must agree with `venue`'s modules.
+ * Without `streaming` the box has neither a bucket copy nor `backup.env`.
  */
 export async function provisionStreamBox(options: {
   dirs: BoxDirs;
   advertisedOrigin: string;
-  bucket: BucketConfig;
-  recoveryKey: string;
+  streaming?: { bucket: BucketConfig; recoveryKey: string };
   modulesJson: unknown;
   venue: { request: VenueRequest; modules: readonly WaitronModule[] };
   apply?: typeof applyMinuteVenue;
 }): Promise<StreamBox> {
-  const { dirs, bucket } = options;
+  const { dirs } = options;
   const { modules } = options.venue;
   await ensureBoxSecrets({
     stateDir: dirs.state,
@@ -118,12 +118,6 @@ export async function provisionStreamBox(options: {
       venue.nodeId,
       options.advertisedOrigin,
     );
-    await withTransaction(seeding.venue, (tx) =>
-      putCredential(tx, ring, {
-        purpose: "backup.stream",
-        value: streamSettingsPayload({ venueId, bucket }),
-      }),
-    );
     const [row] = await seeding.venue
       .select({ publicKey: nodes.publicKey })
       .from(nodes)
@@ -145,10 +139,35 @@ export async function provisionStreamBox(options: {
       WAITRON_ENV: "preproduction",
     }),
   );
+  await writeFile(join(dirs.state, "modules.json"), JSON.stringify(options.modulesJson));
+  if (options.streaming !== undefined)
+    await switchOnStreaming(dirs, box.locationId, options.streaming);
+  return box;
+}
+
+/**
+ * Streaming to `bucket` switched on with `recoveryKey`, written into a provisioned box's folders.
+ * Only while no server runs on them.
+ */
+export async function switchOnStreaming(
+  dirs: Pick<BoxDirs, "state" | "venue">,
+  venueId: string,
+  streaming: { bucket: BucketConfig; recoveryKey: string },
+): Promise<void> {
+  const ring = loadKeyRing(parseEnvFile(await readFile(join(dirs.state, "secrets.env"), "utf8")));
+  const store = await openVenueDatabase(dirs.venue);
+  try {
+    await withTransaction(store.venue, (tx) =>
+      putCredential(tx, ring, {
+        purpose: "backup.stream",
+        value: streamSettingsPayload({ venueId, bucket: streaming.bucket }),
+      }),
+    );
+  } finally {
+    await store.close();
+  }
   await writeFile(
     join(dirs.state, "backup.env"),
-    formatEnvFile({ WAITRON_BACKUP_RECOVERY_KEY: options.recoveryKey }),
+    formatEnvFile({ WAITRON_BACKUP_RECOVERY_KEY: streaming.recoveryKey }),
   );
-  await writeFile(join(dirs.state, "modules.json"), JSON.stringify(options.modulesJson));
-  return box;
 }
