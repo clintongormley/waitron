@@ -359,7 +359,7 @@ State: A reconciliation lookup still finds no authority copy after one resubmiss
 
 Route: The producer is the library reconciliation function; this audit has not established a user-facing invocation for it. Establish that caller before proposing a recovery screen or promising a periodic check.
 
-Reworded 2026-11-14 (W41s-9 evidence step): the words above no longer end with a support referral; they say Waitron has already queued the invoice to be sent once more and will not send it again by itself, that it asks AEAT again every day, and that the person can look the invoice up with AEAT. Still missing: a page showing this alert's evidence. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.reconcile_no_trace`.
+Reworded 2026-11-14 (W41s-9 evidence step): the words above no longer end with a support referral; they say Waitron has already queued the invoice to be sent once more and will not send it again by itself, that it asks AEAT again every day, and that the person should keep the box running and note when this appeared. Still missing: a page showing this alert's evidence. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.reconcile_no_trace`.
 
 ### `fiscal.reconcile_drift_anulada`
 
@@ -376,7 +376,7 @@ State: Reconciliation sees an authority cancellation not represented locally. Th
 
 Route: Same caller caveat as reconcile_no_trace. Missing: evidence inspection and an administrator/asesor decision path if this alert is surfaced.
 
-Reworded 2026-11-14 (W41s-9 evidence step): the words above no longer end with a support referral; they say Waitron leaves its own record of the invoice as it is and asks AEAT again every day, and that the person can look the invoice up with AEAT. Still missing: evidence inspection and a decision path. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.reconcile_drift_anulada`.
+Reworded 2026-11-14 (W41s-9 evidence step): the words above no longer end with a support referral; they say Waitron leaves its own record of the invoice as it is and asks AEAT again every day, and that the person should keep the box running and note when this appeared. Still missing: evidence inspection and a decision path. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.reconcile_drift_anulada`.
 
 ### `fiscal.filing_cases_open`
 
