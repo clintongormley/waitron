@@ -10,8 +10,9 @@ import type { SQL } from "drizzle-orm";
  * through this (guard: `scripts/corrective-sums.test.ts`).
  */
 export function correctivesOf(saleId: SQL): SQL {
-  return sql`select k.id from sales k
-    where (k.corrects_sale_id = ${saleId} and k.replaces_original = 0)
-      or k.corrects_sale_id in
-        (select r.id from sales r where r.corrects_sale_id = ${saleId} and r.replaces_original = 1)`;
+  return sql`select correctives_of_k.id from sales correctives_of_k
+    where (correctives_of_k.corrects_sale_id = ${saleId} and correctives_of_k.replaces_original = 0)
+      or correctives_of_k.corrects_sale_id in
+        (select correctives_of_r.id from sales correctives_of_r
+          where correctives_of_r.corrects_sale_id = ${saleId} and correctives_of_r.replaces_original = 1)`;
 }

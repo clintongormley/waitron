@@ -66,6 +66,26 @@ describe("correctivesOf", () => {
     expect(await correctives(original)).toEqual([refund, refundOfReplacement]);
   });
 
+  it("reads the caller's sale even when the caller's alias is one a helper might use", async () => {
+    const sell = await seller();
+    const original = await sell(1210);
+    const replacement = await sell(1210, { correctsSaleId: original, replacesOriginal: true });
+    await sell(-300, { correctsSaleId: replacement });
+
+    const owed = await suite.db.execute<{ owed: number }>(
+      sql`select coalesce((select sum(c.total) from sales c
+            where c.id in (${correctivesOf(sql`r.id`)})), 0) as owed
+          from sales r where r.id = ${original}`,
+    );
+    const owedK = await suite.db.execute<{ owed: number }>(
+      sql`select coalesce((select sum(c.total) from sales c
+            where c.id in (${correctivesOf(sql`k.id`)})), 0) as owed
+          from sales k where k.id = ${original}`,
+    );
+
+    expect([owed.rows[0]!.owed, owedK.rows[0]!.owed]).toEqual([-300, -300]);
+  });
+
   it("lists every corrective of a sale with no replacement", async () => {
     const sell = await seller();
     const original = await sell(1210);
