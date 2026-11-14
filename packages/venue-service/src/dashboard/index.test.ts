@@ -6,6 +6,7 @@ import type { VenueOperationsScreen } from "./venue-operations-screen.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import type { OpeningHoursScreen } from "./opening-hours-screen.js";
 import type { PeriodsList } from "./periods-list.js";
+import { painterModel } from "../testing/season-painter-fixture.js";
 
 const containers: HTMLElement[] = [];
 const originalUrl = location.href;
@@ -327,6 +328,64 @@ it("registers Floor plans in Operations, configured with venue.configure and rea
   expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
 });
 
+it("opens the Seasons page on a passive watch with viewer and manager controls", async () => {
+  const model = painterModel();
+  let failed = true;
+  const fetchImpl = vi.fn(() =>
+    failed
+      ? Promise.reject(new Error("offline"))
+      : Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(model),
+        } as Response),
+  );
+  const entry = VENUE_SERVICE_DASHBOARD.moreScreens!.find((x) => x.screen.id === "seasons")!;
+  expect(entry, "module contributes the Seasons page").toBeDefined();
+  expect(entry.screen.requiresPermission).toBe("venue.configure");
+  expect(entry.screen.readPermission).toBe("venue.view");
+  const handle = entry.create({
+    request: createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
+    liveData: new LiveData(),
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  containers.push(container);
+  render(handle.render(true), container);
+  const screen = container.querySelector("dashboard-seasons-screen")!;
+  await vi.waitFor(() =>
+    expect(screen.shadowRoot?.querySelector("h1")?.textContent).toBe("Seasons"),
+  );
+  await vi.waitFor(() =>
+    expect(screen.shadowRoot!.querySelector("[data-test=read-error]")).not.toBeNull(),
+  );
+  failed = false;
+  screen.api.rereadWatches();
+  const editor = () => screen.shadowRoot!.querySelector("seasons-window")!;
+  await vi.waitFor(() => expect(editor()).not.toBeNull());
+  await editor().updateComplete;
+  expect(editor().shadowRoot!.querySelector("[data-test=add-season]")).toBeNull();
+  render(handle.render(false), container);
+  await vi.waitFor(() =>
+    expect(editor().shadowRoot!.querySelector("[data-test=add-season]")).not.toBeNull(),
+  );
+  model.seasons[0]!.name = "Renamed winter";
+  editor().dispatchEvent(new CustomEvent("seasons-saved", { bubbles: true, composed: true }));
+  await vi.waitFor(() =>
+    expect(
+      [
+        ...editor().shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-input"]>(
+          'wt-input[name$="-name"]',
+        ),
+      ].map((input) => input.value),
+    ).toContain("Renamed winter"),
+  );
+  expect(screen.shadowRoot!.querySelector("[data-test=read-error]")).toBeNull();
+  const [path, init] = (fetchImpl.mock.calls as unknown as [string, RequestInit][])[0]!;
+  expect(path).toBe("/management-api/venue-service/opening-hours");
+  expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
+});
+
 it("the Periods page is read-only for a viewer and editable for a manager", async () => {
   const model = {
     dayCutover: "06:00",
@@ -385,6 +444,7 @@ it("registers Opening hours without a separate Station hours page", () => {
     "prep-stations",
     "floor-plans",
     "opening-hours",
+    "seasons",
     "periods",
   ]);
   expect(customElements.get("dashboard-hours-screen")).toBeUndefined();
@@ -481,6 +541,7 @@ it("A725 puts Prep stations immediately after Departments and zones, before Cale
     "prep-stations",
     "floor-plans",
     "opening-hours",
+    "seasons",
     "periods",
   ]);
 });

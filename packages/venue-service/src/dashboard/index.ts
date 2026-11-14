@@ -12,6 +12,7 @@ import "./venue-operations-screen.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import "./opening-hours-screen.js";
 import "./periods-list.js";
+import "./seasons-screen.js";
 import "./floor-plans-screen.js";
 
 export const VENUE_SERVICE_DASHBOARD: DashboardContribution & DashboardFurtherScreen = {
@@ -135,6 +136,26 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution & DashboardFurtherSc
               .readOnly=${readOnly}
               .calendar=${calendar}
             ></dashboard-opening-hours-screen>`,
+        };
+      },
+    },
+    {
+      screen: {
+        id: "seasons",
+        navLabelKey: "season.seasons",
+        group: "operations",
+        order: 16,
+        requiresPermission: "venue.configure",
+        readPermission: "venue.view",
+      },
+      create(ctx) {
+        const api = new OpeningHoursApi(ctx.request, ctx.liveData);
+        return {
+          render: (readOnly = false) =>
+            html`<dashboard-seasons-screen
+              .api=${api}
+              .readOnly=${readOnly}
+            ></dashboard-seasons-screen>`,
         };
       },
     },
