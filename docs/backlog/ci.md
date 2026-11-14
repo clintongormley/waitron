@@ -348,11 +348,8 @@ Judge the first cut by drafts' own file time in its PR run; do not compare cover
 PR timings with those coverage-on timings as a measured speed gain. Bring the next
 cause and its measurement to the watcher before splitting files or changing capacity.
 
-The [14 November plan](../superpowers/plans/2026-11-14-a1398-next-browser-cut.md)
-records the measured dashboard/till baseline and the watcher's clearance for six dashboard
-shards. Matching Cloud runner support was published at `aebcacc54aa2` on 14 November.
-The Waitron candidate still needs hosted coverage-on jobs at 240 seconds or under and
-actual server execution of shards 5–6 before merging.
+Dashboard uses six shards. The [14 November plan](../superpowers/plans/2026-11-14-a1398-next-browser-cut.md)
+records the measured dashboard/till baseline and the rationale for that count.
 Till's internal cause and the archiver wait remain open.
 
 ## Bundle A1398: Pack the other packages' test shards by measured time
