@@ -1,3 +1,4 @@
+import { accessRoleChoices } from "./testing/access-role-fixture.js";
 import {
   chooseTheme,
   leaveCoordinatorFor,
@@ -213,6 +214,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     forgetLocales: vi.fn(),
     getGoogleConfig: vi.fn().mockResolvedValue({ configured: false }),
     putLocale: vi.fn().mockResolvedValue(undefined),
+    listAccessRoles: vi.fn().mockResolvedValue(accessRoleChoices),
     listStaff: vi.fn().mockResolvedValue(people),
     getStaffRoster: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ada" }]),
     login: vi.fn().mockResolvedValue({ personId: "p1" }),

@@ -39,7 +39,9 @@ async function edited(el: PersonEdit): Promise<void> {
 }
 
 async function bottomOf(el: PersonEdit): Promise<string> {
-  const actions = el.shadowRoot!.querySelector('wt-form-actions[slot="footer"]')!;
+  const actions = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+    'wt-form-actions[slot="footer"]',
+  )!;
   return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 

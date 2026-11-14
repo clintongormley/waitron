@@ -1,25 +1,30 @@
 # Users
 
-Use **Users** to keep your team's details up to date. Only an admin can manage another
-person's sign-in, so managing contact details cannot give someone access to that account.
+Use **Users** to keep your team's details and access roles up to date. Access roles decide what
+each person may do; job roles put them on the rota and on the devices that take that job.
 
 ## Names and contact details {#staff-details}
 
 As a manager, open a person's row menu and choose **Edit** to change their names and telephone.
-Their email is their login address, so only an admin can change it. The same restriction applies
-to roles and account status.
+Their email is their login address. Changing someone else's address needs an extra permission, which only Admin holds by default.
 
 ## Account access {#account-access}
 
 Keep at least one active admin who can sign in to the dashboard with a password, Google or a
 passkey. A PIN alone only gives access to the till.
 
-As an admin, you can add a person and send their invitation, resend an invitation, reset their
+Managers can add a person and send their invitation, resend an invitation, reset their
 PIN or login, and disable or re-enable their account. Resetting a PIN clears it; the person
 chooses its replacement. Resetting a login clears their credentials and sends a new invitation if
 email is set up; for when Waitron refuses it or it changes nothing, see
 [Common losses](data-protection.md#breach-losses). Disabling an account also deletes the person's
-PIN, password, passkeys, two-factor settings, recovery codes and Google link. Re-enabling it sends a new invitation. Managers do not see these actions.
+PIN, password, passkeys, two-factor settings, recovery codes and Google link. Re-enabling it sends a new invitation. You can change another person's sign-in only when you
+hold every permission they hold.
+
+In **Access roles — what they may do**, choose the roles a person needs and press **Save access
+roles**. You can give or remove a role only when you hold all its permissions; locked roles stay
+visible. A person with **No access role** can still sign in and use their own pages. Role changes
+leave invitation and password-reset links usable. Save names and contact details separately.
 
 To configure delivery of these links, open [Email settings](email.md#set-up). If an invitation does not arrive within a few minutes, check the recipient’s junk mail and Email settings before resending: only the newest link works. If a retry says nothing changed, wait a minute before trying again.
 

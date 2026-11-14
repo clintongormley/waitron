@@ -24,7 +24,7 @@ import type {
 } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { accessRoleName, statusName } from "../i18n/domain.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 import { refusedField } from "./person-form.js";
 import { sameValue } from "./product-editor-model.js";
 
@@ -531,6 +531,7 @@ export class PersonEdit extends LitElement {
       <wt-combobox
         multiple
         name="accessRoles"
+        .countLabel=${(count: number) => fill("person.access_roles_selected", { count: String(count) })}
         label=${t("person.access_roles")}
         .values=${this.accessRoleIds.filter((id) => this.accessRoles.some((r) => r.id === id && this.#canGrant(r)))}
         .options=${this.accessRoles.filter((r) => this.#canGrant(r)).map((r) => ({ value: r.id, label: accessRoleName(r) }))}

@@ -1,15 +1,14 @@
 import { and, count, eq, inArray, isNotNull, isNull, notInArray } from "drizzle-orm";
-import {
-  persons,
-  personRoles,
-  roles,
-  recordActivity,
-  type Transaction,
-} from "@waitron/db";
+import { persons, personRoles, roles, recordActivity, type Transaction } from "@waitron/db";
 import "./errors.js";
 import { AppError } from "@waitron/shared";
 import { foldForUniqueness } from "./fold.js";
-import { declaredPermissions, isDeclaredPermission, defaultPermissionsFor, type BuiltInRoleKey } from "./permissions.js";
+import {
+  declaredPermissions,
+  isDeclaredPermission,
+  defaultPermissionsFor,
+  type BuiltInRoleKey,
+} from "./permissions.js";
 import { resolveManagementSession } from "./management-session.js";
 import { holds } from "./authority.js";
 import { authorizeManager } from "./manager-login.js";
@@ -23,17 +22,33 @@ export async function listAccessRoles(tx: Transaction, managementSessionId: stri
   const session = await resolveManagementSession(tx, managementSessionId, { touch: false });
   if (!holds(session.authority, "person.manage") && !holds(session.authority, "person.admin"))
     throw new AppError("authorization.not_permitted", { permission: "person.manage" });
-  const rows = await tx.select({
-    id: roles.id, builtInKey: roles.builtInKey, name: roles.name,
-    permissions: roles.permissions, holderCount: count(personRoles.personId),
-  }).from(roles).leftJoin(personRoles, eq(personRoles.roleId, roles.id)).groupBy(roles.id);
-  return rows.sort((a, b) => {
-    if (a.builtInKey !== null || b.builtInKey !== null)
-      return (a.builtInKey === null ? 4 : BUILT_IN_ROLE_KEYS.indexOf(a.builtInKey)) -
-        (b.builtInKey === null ? 4 : BUILT_IN_ROLE_KEYS.indexOf(b.builtInKey));
-    return a.name!.localeCompare(b.name!, session.locale ?? "en");
-  }).map((role) => ({ ...role, permissions: role.builtInKey === "admin"
-    ? declaredPermissions() : role.permissions.filter(isDeclaredPermission) }));
+  const rows = await tx
+    .select({
+      id: roles.id,
+      builtInKey: roles.builtInKey,
+      name: roles.name,
+      permissions: roles.permissions,
+      holderCount: count(personRoles.personId),
+    })
+    .from(roles)
+    .leftJoin(personRoles, eq(personRoles.roleId, roles.id))
+    .groupBy(roles.id);
+  return rows
+    .sort((a, b) => {
+      if (a.builtInKey !== null || b.builtInKey !== null)
+        return (
+          (a.builtInKey === null ? 4 : BUILT_IN_ROLE_KEYS.indexOf(a.builtInKey)) -
+          (b.builtInKey === null ? 4 : BUILT_IN_ROLE_KEYS.indexOf(b.builtInKey))
+        );
+      return a.name!.localeCompare(b.name!, session.locale ?? "en");
+    })
+    .map((role) => ({
+      ...role,
+      permissions:
+        role.builtInKey === "admin"
+          ? declaredPermissions()
+          : role.permissions.filter(isDeclaredPermission),
+    }));
 }
 
 export async function setPersonAccessRoles(

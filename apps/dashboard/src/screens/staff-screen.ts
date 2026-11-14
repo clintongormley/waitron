@@ -11,12 +11,12 @@ import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { fill, t } from "../i18n/t.js";
-import { roleName, rolesByName, statusName } from "../i18n/domain.js";
+import { accessRoleName, statusName } from "../i18n/domain.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import "../widgets/staff-list.js";
 import "../widgets/person-form.js";
 import "../widgets/person-edit.js";
-import type { DashboardApi, PersonEditDetails, PersonRole, PersonSummary } from "../api/client.js";
+import type { AccessRole, DashboardApi, PersonEditDetails, PersonSummary } from "../api/client.js";
 
 @customElement("dashboard-staff-screen")
 export class StaffScreen extends LitElement {
@@ -89,6 +89,10 @@ export class StaffScreen extends LitElement {
   );
   @property({ attribute: false }) currentPersonId: string | null = null;
   @property({ type: Boolean }) canAdminister = false;
+  @property({ type: Boolean }) canChangeEmail = false;
+  @property({ attribute: false }) viewerPermissions: string[] = [];
+  @property({ attribute: false }) viewerRoleIds: string[] = [];
+  @state() private accessRoles: AccessRole[] = [];
   @property({ type: Boolean }) canManageSchedule = false;
   @property({ type: Boolean }) canExportPersonalData = false;
   @state() private people: PersonSummary[] = [];
@@ -103,7 +107,7 @@ export class StaffScreen extends LitElement {
   @state() private invitationStatus: "sent" | "captured" | "unconfigured" | "throttled" | null =
     null;
   @state() private search = "";
-  @state() private roleFilter: PersonRole | "all" = "all";
+  @state() private roleFilter: string[] = [];
   @state() private statusFilter: "current" | "pending" | "active" | "suspended" | "all" = "current";
 
   @state() private rowAction: {
@@ -251,7 +255,8 @@ export class StaffScreen extends LitElement {
     if (this.#filtered?.inputs.every((input, index) => input === inputs[index]))
       return this.#filtered.people;
     const people = this.people.filter((person) => {
-      if (this.roleFilter !== "all" && person.role !== this.roleFilter) return false;
+      if (this.roleFilter.length > 0 && !this.roleFilter.some((id) => person.roleIds.includes(id)))
+        return false;
       if (this.statusFilter === "current" && person.status === "suspended") return false;
       return (
         this.statusFilter === "current" ||
@@ -290,6 +295,9 @@ export class StaffScreen extends LitElement {
   async #readList(): Promise<boolean> {
     if (this.#readErrorShown) this.#showError(null);
     try {
+      await this.#queries.watch("listAccessRoles", [], (value) => {
+        this.accessRoles = value;
+      });
       await this.#queries.watch("listStaff", [], (value) => {
         this.people = value;
       });
@@ -408,7 +416,7 @@ export class StaffScreen extends LitElement {
       firstNames: string;
       lastNames: string;
       telephone: string | null;
-      role: PersonRole;
+      roleIds: string[];
       email: string;
     }>,
   ): Promise<void> {
@@ -489,13 +497,15 @@ export class StaffScreen extends LitElement {
           name="role-filter"
           label=${t("staff.filter_role")}
           search="auto"
-          .options=${[
-            { value: "all", fixed: true, label: t("staff.filter_all_roles") },
-            ...rolesByName().map((role) => ({ value: role, label: roleName(role) })),
-          ]}
-          .value=${this.roleFilter}
-          @wt-change=${(event: CustomEvent<{ value: string }>) =>
-            (this.roleFilter = event.detail.value as PersonRole | "all")}
+          multiple
+          placeholder=${t("staff.filter_all_roles")}
+          .countLabel=${(count: number) => fill("person.access_roles_selected", { count: String(count) })}
+          .options=${[...this.accessRoles].sort((a, b) => accessRoleName(a).localeCompare(accessRoleName(b))).map((role) => ({ value: role.id, label: accessRoleName(role) }))}
+          .values=${this.roleFilter}
+          @wt-change=${(event: CustomEvent<{ values: string[] }>) => {
+            event.stopPropagation();
+            this.roleFilter = [...event.detail.values];
+          }}
         ></wt-combobox>
         <wt-combobox
           ?preserve-order=${true /* Preserve current/active/pending/suspended/all lifecycle. */}
@@ -524,6 +534,7 @@ export class StaffScreen extends LitElement {
         </wt-combobox>
       </div>
       <dashboard-staff-list
+        .accessRoles=${this.accessRoles}
         .people=${this.#filteredPeople()}
         .searchTerm=${this.search}
         .emptyMessage=${this.people.length === 0 ? t("staff.empty") : tableNoMatches()}
@@ -596,6 +607,9 @@ export class StaffScreen extends LitElement {
         </wt-form-actions>
       </wt-dialog>
       <dashboard-person-form
+        .accessRoles=${this.accessRoles}
+        .viewerPermissions=${this.viewerPermissions}
+        .viewerAdmin=${this.accessRoles.some((role) => role.builtInKey === "admin" && this.viewerRoleIds.includes(role.id))}
         .busy=${this.#creating}
         .open=${this.formOpen}
         .error=${this.formOpen ? this.errorKey : null}
@@ -606,13 +620,25 @@ export class StaffScreen extends LitElement {
             firstNames: string;
             lastNames: string;
             telephone: string | null;
-            role: PersonRole;
+            roleIds: string[];
             email: string;
           }>,
         ) => void this.#onCreatePerson(e)}
         @wt-close=${() => (this.formOpen = false)}
       ></dashboard-person-form>
       <dashboard-person-edit
+        .canChangeEmail=${this.canChangeEmail}
+        .viewerPermissions=${this.viewerPermissions}
+        .viewerAdmin=${this.accessRoles.some((role) => role.builtInKey === "admin" && this.viewerRoleIds.includes(role.id))}
+        @access-roles-saved=${(event: CustomEvent<{ personId: string; roleIds: string[] }>) => {
+          const { personId, roleIds } = event.detail;
+          this.people = this.people.map((person) =>
+            person.personId === personId ? { ...person, roleIds } : person,
+          );
+          if (this.editingPerson?.personId === personId)
+            this.editingPerson = { ...this.editingPerson, roleIds };
+          void this.#load();
+        }}
         .api=${this.api}
         .canManageSchedule=${this.canManageSchedule}
         .busy=${this.#editing}

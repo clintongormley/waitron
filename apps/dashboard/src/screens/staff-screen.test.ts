@@ -1,8 +1,9 @@
+import { accessRoleChoices } from "../testing/access-role-fixture.js";
 import { useLocale } from "../testing/locale-setup.js";
 import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { cleanupWidgets, mountWidget as mountBaseWidget } from "../widgets/test-helpers.js";
+import { chooseOption, chooseOptions, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { roleName, rolesByName, statusName } from "../i18n/domain.js";
@@ -11,6 +12,9 @@ import type { StaffList } from "../widgets/staff-list.js";
 import type { PersonForm } from "../widgets/person-form.js";
 import type { PersonEdit } from "../widgets/person-edit.js";
 import { StaffScreen } from "./staff-screen.js";
+
+const mountWidget = <T extends StaffScreen>(tag: string, props: Partial<T>) =>
+  mountBaseWidget<T>(tag, { viewerRoleIds: ["admin"], ...props } as Partial<T>);
 
 useLocale("es-ES");
 
@@ -23,7 +27,7 @@ const people: PersonSummary[] = [
     firstNames: "Ada Augusta",
     lastNames: "Lovelace",
     telephone: "+44 20",
-    role: "manager",
+    roleIds: ["manager"],
     status: "active",
     hasPassword: true,
     hasTotp: false,
@@ -35,7 +39,7 @@ const people: PersonSummary[] = [
     firstNames: "Beatrice",
     lastNames: "Potter",
     telephone: null,
-    role: "staff",
+    roleIds: ["staff"],
     status: "suspended",
     hasPassword: false,
     hasTotp: false,
@@ -45,6 +49,7 @@ const people: PersonSummary[] = [
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
+    listAccessRoles: vi.fn().mockResolvedValue(accessRoleChoices),
     listStaff: vi.fn().mockResolvedValue(people),
     createPerson: vi.fn().mockResolvedValue({ id: "p3", invitationSent: true }),
     updatePerson: vi.fn().mockResolvedValue(undefined),
@@ -94,8 +99,8 @@ function form(el: StaffScreen): PersonForm {
 
 async function bottomOf(dialog: HTMLElement): Promise<string | undefined> {
   return (
-    (await formMessageOf(dialog.shadowRoot!.querySelector("wt-form-actions")!))?.textContent ??
-    undefined
+    (await formMessageOf(dialog.shadowRoot!.querySelector('wt-form-actions[slot="footer"]')!))
+      ?.textContent ?? undefined
   );
 }
 
@@ -143,7 +148,7 @@ const createdThroughForm = {
   displayName: "Cy Young",
   email: "cy@x.com",
   telephone: null,
-  role: "staff",
+  roleIds: ["staff"],
 };
 
 /** Edits one field of the open edit form and presses Save, so save-person carries what it holds. */
@@ -273,7 +278,7 @@ describe("staff-screen", () => {
     await flush(el);
     expect(await drawn(el)).toEqual(["p999"]);
     const role = el.shadowRoot!.querySelector<HTMLElement>("[data-test=role-filter]")!;
-    await chooseOption(role, "staff");
+    await chooseOptions(role, ["staff"]);
     await flush(el);
     expect(list(el).people).toEqual([]);
     expect(api.listStaff).toHaveBeenCalledTimes(1);
@@ -528,7 +533,7 @@ describe("staff-screen", () => {
     await flush(el);
     form(el).dispatchEvent(
       new CustomEvent("create-person", {
-        detail: { displayName: "Cy", role: "staff", pin: "1234", email: "cy@x.com" },
+        detail: { displayName: "Cy", roleIds: ["staff"], pin: "1234", email: "cy@x.com" },
         bubbles: true,
         composed: true,
       }),
@@ -550,7 +555,7 @@ describe("staff-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
     await el.updateComplete;
 
-    const detail = { displayName: "Cy", role: "staff" as const, pin: "1234", email: "cy@x.com" };
+    const detail = { displayName: "Cy", roleIds: ["staff"], pin: "1234", email: "cy@x.com" };
     form(el).dispatchEvent(
       new CustomEvent("create-person", { detail, bubbles: true, composed: true }),
     );
@@ -673,6 +678,7 @@ describe("staff-screen", () => {
   it("opens the existing inactive user when a create reuses their email", async () => {
     const inactive = { ...people[1]!, email: "dupe@x.com" };
     const api = stubApi({
+      listAccessRoles: vi.fn().mockResolvedValue(accessRoleChoices),
       listStaff: vi.fn().mockResolvedValue([people[0], inactive]),
       createPerson: vi.fn().mockRejectedValue({ code: "person.email_taken" }),
     });
@@ -691,7 +697,7 @@ describe("staff-screen", () => {
           firstNames: "Beatrice",
           lastNames: "Potter",
           telephone: null,
-          role: "staff",
+          roleIds: ["staff"],
           email: " DUPE@x.com ",
         },
         bubbles: true,
@@ -743,7 +749,7 @@ describe("staff-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
     await el.updateComplete;
 
-    const detail = { displayName: "Cy", role: "staff" as const, pin: "12", email: "cy@x.com" };
+    const detail = { displayName: "Cy", roleIds: ["staff"], pin: "12", email: "cy@x.com" };
     form(el).dispatchEvent(
       new CustomEvent("create-person", { detail, bubbles: true, composed: true }),
     );
@@ -768,7 +774,7 @@ describe("staff-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
     await el.updateComplete;
 
-    const detail = { displayName: "Cy", role: "staff" as const, pin: "12", email: "cy@x.com" };
+    const detail = { displayName: "Cy", roleIds: ["staff"], pin: "12", email: "cy@x.com" };
     form(el).dispatchEvent(
       new CustomEvent("create-person", { detail, bubbles: true, composed: true }),
     );
@@ -792,7 +798,7 @@ describe("staff-screen", () => {
     await el.updateComplete;
     form(el).dispatchEvent(
       new CustomEvent("create-person", {
-        detail: { displayName: "Cy", role: "staff", pin: "12", email: "cy@x.com" },
+        detail: { displayName: "Cy", roleIds: ["staff"], pin: "12", email: "cy@x.com" },
         bubbles: true,
         composed: true,
       }),
@@ -815,7 +821,7 @@ describe("staff-screen", () => {
 
     const detail = {
       displayName: "Ada",
-      role: "staff" as const,
+      roleIds: ["staff"],
       pin: "1234",
       email: "ada@x.com",
     };
@@ -875,7 +881,6 @@ describe("staff-screen — row edit", () => {
       lastNames: "Lovelace",
       telephone: "+44 21",
       email: "ada@example.com",
-      role: "admin" as const,
       status: "active" as const,
     };
     editForm(el).dispatchEvent(
@@ -927,7 +932,7 @@ describe("staff-screen — row edit", () => {
           lastNames: "Lovelace",
           telephone: null,
           email: "ada@x.com",
-          role: "manager",
+          roleIds: ["manager"],
           status: "active",
         },
         bubbles: true,
@@ -963,7 +968,7 @@ describe("staff-screen — row edit", () => {
           lastNames: "Lovelace",
           telephone: null,
           email: "ada@x.com",
-          role: "manager",
+          roleIds: ["manager"],
           status: "active",
         },
         bubbles: true,
@@ -984,7 +989,6 @@ describe("staff-screen — row edit", () => {
     lastNames: "Lovelace",
     telephone: null,
     email: "ada@x.com",
-    role: "manager" as const,
     status: "active" as const,
   };
   function dispatchSave(el: StaffScreen): void {
@@ -1460,7 +1464,7 @@ describe("staff-screen — row actions, filters and edit races", () => {
           lastNames: "Lovelace",
           telephone: null,
           email: "bea@x.com",
-          role: "manager",
+          roleIds: ["manager"],
           status: "active",
         },
         bubbles: true,
@@ -1487,6 +1491,7 @@ describe("staff-screen filter fields", () => {
     hideLabel: boolean;
     search: string;
     value: string;
+    values: string[];
     options: { value: string; label: string }[];
   };
   const field = (el: StaffScreen, selector: string) =>
@@ -1605,15 +1610,12 @@ describe("staff-screen filter fields", () => {
     expect(role.name).toBe("role-filter");
     expect(role.label).toBe(t("staff.filter_role"));
     expect(role.search).toBe("auto");
-    expect(role.options).toEqual([
-      { value: "all", fixed: true, label: t("staff.filter_all_roles") },
-      ...rolesByName().map((value) => ({ value, label: roleName(value) })),
-    ]);
-    expect(role.value).toBe("all");
-    await chooseOption(role, "staff");
+    expect(role.options).toEqual(rolesByName().map((value) => ({ value, label: roleName(value) })));
+    expect((role as unknown as { values: string[] }).values).toEqual([]);
+    await chooseOptions(role, ["staff"]);
     await flush(el);
     expect(shown(el)).toEqual([]);
-    await chooseOption(role, "manager");
+    await chooseOptions(role, ["manager"]);
     await flush(el);
     expect(shown(el)).toEqual(["p1"]);
   });

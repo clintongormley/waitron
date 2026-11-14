@@ -6,13 +6,14 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import { currentLocale, t } from "../i18n/t.js";
-import { roleName, statusName } from "../i18n/domain.js";
-import type { PersonSummary } from "../api/client.js";
+import { accessRoleName, statusName } from "../i18n/domain.js";
+import type { AccessRole, PersonSummary } from "../api/client.js";
 
 const personKey = (person: PersonSummary): string => person.personId;
 
 @customElement("dashboard-staff-list")
 export class StaffList extends LitElement {
+  @property({ attribute: false }) accessRoles: AccessRole[] = [];
   @property({ attribute: false }) people: PersonSummary[] = [];
 
   @property({ attribute: false }) currentPersonId: string | null = null;
@@ -40,6 +41,7 @@ export class StaffList extends LitElement {
   #columns(): DataTableColumn<PersonSummary>[] {
     const inputs = [
       currentLocale(),
+      this.accessRoles,
       this.currentPersonId,
       this.canAdminister,
       this.canExportPersonalData,
@@ -70,8 +72,18 @@ export class StaffList extends LitElement {
         key: "role",
         choosable: "shown",
         label: t("staff.field_role"),
-        cell: (person) => roleName(person.role),
-        sortValue: (person) => roleName(person.role),
+        cell: (person) =>
+          person.roleIds
+            .map((id) => this.accessRoles.find((role) => role.id === id))
+            .filter((role) => role !== undefined)
+            .map((role) => accessRoleName(role))
+            .join(", ") || t("person.no_access_role"),
+        sortValue: (person) =>
+          person.roleIds
+            .map((id) => this.accessRoles.find((role) => role.id === id))
+            .filter((role) => role !== undefined)
+            .map((role) => accessRoleName(role))
+            .join(", ") || t("person.no_access_role"),
       },
       {
         key: "email",

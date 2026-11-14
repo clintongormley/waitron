@@ -13,7 +13,8 @@ import {
 } from "@waitron/db";
 import {
   hashPin,
-  importAccessRoleMembership, ensureBuiltInRoles,
+  importAccessRoleMembership,
+  ensureBuiltInRoles,
   foldForUniqueness,
   verifyPersonCredential,
   startManagementSession,

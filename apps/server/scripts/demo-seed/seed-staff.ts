@@ -10,7 +10,13 @@ import { starterName } from "@waitron/country-packs";
 import { DEMO_JOB_ROLE_NAMES } from "@waitron/provisioning";
 import type { SeedLocale } from "./locale.js";
 import type { Transaction } from "@waitron/db";
-import { importAccessRoleMembership, ensureBuiltInRoles, hashPassword, hashPin, persons } from "@waitron/identity";
+import {
+  importAccessRoleMembership,
+  ensureBuiltInRoles,
+  hashPassword,
+  hashPin,
+  persons,
+} from "@waitron/identity";
 import { DEMO_PIN, DEMO_DASHBOARD_PASSWORD } from "./credentials.js";
 import type { DemoDataSet } from "./data-set.js";
 

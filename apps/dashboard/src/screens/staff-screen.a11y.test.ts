@@ -1,3 +1,4 @@
+import { accessRoleChoices } from "../testing/access-role-fixture.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setHelpMode } from "@waitron/ui";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
@@ -9,7 +10,7 @@ const people: PersonSummary[] = [
   {
     personId: "p1",
     displayName: "Ada",
-    role: "manager",
+    roleIds: ["manager"],
     status: "active",
     hasPassword: true,
     hasTotp: true,
@@ -18,7 +19,7 @@ const people: PersonSummary[] = [
   {
     personId: "p2",
     displayName: "Bea",
-    role: "staff",
+    roleIds: ["staff"],
     status: "suspended",
     hasPassword: false,
     hasTotp: false,
@@ -28,6 +29,7 @@ const people: PersonSummary[] = [
 
 function stubApi(): DashboardApi {
   return {
+    listAccessRoles: async () => accessRoleChoices,
     listStaff: vi.fn().mockResolvedValue(people),
     createPerson: vi.fn().mockResolvedValue({ id: "p3" }),
   } as unknown as DashboardApi;

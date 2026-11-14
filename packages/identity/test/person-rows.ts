@@ -44,14 +44,20 @@ export async function setBuiltInRoleForTest(
   role: BuiltInRoleKey,
 ): Promise<void> {
   const builtIns = await ensureBuiltInRoles(db as Transaction);
-  await db.delete(personRoles).where(and(eq(personRoles.personId, personId), inArray(personRoles.roleId, Object.values(builtIns))));
+  await db
+    .delete(personRoles)
+    .where(
+      and(eq(personRoles.personId, personId), inArray(personRoles.roleId, Object.values(builtIns))),
+    );
   await db.insert(personRoles).values({ personId, roleId: builtIns[role] });
 }
 export async function builtInRoleForTest(
   db: Database | Transaction,
   personId: string,
 ): Promise<BuiltInRoleKey | null> {
-  const [row] = await db.select({ key: roles.builtInKey }).from(personRoles)
+  const [row] = await db
+    .select({ key: roles.builtInKey })
+    .from(personRoles)
     .innerJoin(roles, eq(roles.id, personRoles.roleId))
     .where(and(eq(personRoles.personId, personId), isNotNull(roles.builtInKey)))
     .orderBy(desc(eq(roles.builtInKey, "admin")));

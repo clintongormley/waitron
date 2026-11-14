@@ -1,3 +1,4 @@
+import { accessRoleChoices } from "../testing/access-role-fixture.js";
 import { useLocale } from "../testing/locale-setup.js";
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -21,7 +22,7 @@ const people: PersonSummary[] = [
   {
     personId: "p1",
     displayName: "Ada",
-    role: "manager",
+    roleIds: ["manager"],
     status: "active",
     hasPassword: true,
     hasTotp: false,
@@ -30,7 +31,7 @@ const people: PersonSummary[] = [
   {
     personId: "p2",
     displayName: "Bea",
-    role: "staff",
+    roleIds: ["staff"],
     status: "suspended",
     hasPassword: false,
     hasTotp: false,
@@ -47,6 +48,7 @@ async function editButton(el: StaffList, personId: string): Promise<HTMLElement>
 describe("staff-list", () => {
   it("opens a row menu with edit, reset login, reset PIN and Disable", async () => {
     const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+      accessRoles: accessRoleChoices,
       canAdminister: true,
       people,
     });
@@ -76,6 +78,7 @@ describe("staff-list", () => {
       setLocale(locale);
       try {
         const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+          accessRoles: accessRoleChoices,
           canAdminister: true,
           people,
         });
@@ -97,6 +100,7 @@ describe("staff-list", () => {
     setLocale("en-GB");
     try {
       const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+        accessRoles: accessRoleChoices,
         canAdminister: true,
         people,
       });
@@ -127,6 +131,7 @@ describe("staff-list", () => {
 
   it("renders one row per person with role and status", async () => {
     const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+      accessRoles: accessRoleChoices,
       canAdminister: true,
       people,
     });
@@ -144,6 +149,7 @@ describe("staff-list", () => {
 
   it("shows the person's email, and an em-dash when there is none", async () => {
     const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+      accessRoles: accessRoleChoices,
       canAdminister: true,
       people,
     });
@@ -157,6 +163,7 @@ describe("staff-list", () => {
 
   it("emits edit-person when a row's edit control is clicked", async () => {
     const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+      accessRoles: accessRoleChoices,
       canAdminister: true,
       people,
     });
@@ -169,6 +176,7 @@ describe("staff-list", () => {
 
   it("emits edit-person as a bubbling, composed event", async () => {
     const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+      accessRoles: accessRoleChoices,
       canAdminister: true,
       people,
     });
@@ -189,6 +197,7 @@ describe("staff-list", () => {
       },
     ];
     const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+      accessRoles: accessRoleChoices,
       canAdminister: true,
       people: detailed,
     });
@@ -201,6 +210,7 @@ describe("staff-list", () => {
 
   it("offers every column but the display name and the actions in a translated column chooser, and remembers a hidden one", async () => {
     const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+      accessRoles: accessRoleChoices,
       canAdminister: true,
       people,
     });
@@ -240,6 +250,7 @@ describe("staff-list", () => {
 
   it("renders no rows for an empty people list", async () => {
     const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+      accessRoles: accessRoleChoices,
       canAdminister: true,
       people: [],
     });
@@ -261,7 +272,7 @@ describe("staff-list sorting", () => {
       firstNames: "Dorotea",
       lastNames: "Abad",
       telephone: "+34 600",
-      role: "manager",
+      roleIds: ["manager"],
       status: "pending",
       hasPassword: false,
       hasTotp: false,
@@ -272,7 +283,7 @@ describe("staff-list sorting", () => {
       displayName: "Eva",
       firstNames: "Eva María",
       telephone: null,
-      role: "staff",
+      roleIds: ["staff"],
       status: "suspended",
       hasPassword: false,
       hasTotp: false,
@@ -283,7 +294,7 @@ describe("staff-list sorting", () => {
       displayName: "Carl",
       lastNames: "Abad",
       telephone: "+34 500",
-      role: "admin",
+      roleIds: ["admin"],
       status: "active",
       hasPassword: true,
       hasTotp: false,
@@ -293,6 +304,7 @@ describe("staff-list sorting", () => {
 
   async function sortedBy(key: string): Promise<string[]> {
     const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+      accessRoles: accessRoleChoices,
       canAdminister: true,
       people: roster,
     });
@@ -329,6 +341,7 @@ describe("staff-list sorting", () => {
 
   it("offers Resend invitation only to a pending person and emits it for that person", async () => {
     const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+      accessRoles: accessRoleChoices,
       canAdminister: true,
       people: roster,
     });
@@ -352,7 +365,7 @@ describe("the staff list at phone width", () => {
     {
       personId: "p3",
       displayName: "Maria-Guadalupe-Fernandez-de-la-Concepcion-Montoya",
-      role: "staff",
+      roleIds: ["staff"],
       status: "pending",
       hasPassword: false,
       hasTotp: false,
@@ -370,6 +383,7 @@ describe("the staff list at phone width", () => {
         await page.viewport(390, 844);
         expect(window.innerWidth).toBe(390);
         const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+          accessRoles: accessRoleChoices,
           canAdminister: true,
           people: phonePeople,
         });

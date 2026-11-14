@@ -294,7 +294,7 @@ export class PersonForm extends LitElement {
           label=${t("person.access_roles")}
           multiple
           placeholder=${t("person.no_access_role")}
-          .countLabel=${(count: number) => fill(t("person.access_roles_selected"), { count })}
+          .countLabel=${(count: number) => fill("person.access_roles_selected", { count: String(count) })}
           ?disabled=${this.busy}
           search="auto"
           searchPlaceholder=${t("categories.combobox_search")}

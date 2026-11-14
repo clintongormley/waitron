@@ -893,6 +893,7 @@ export class DashboardApp extends LitElement {
   }[] = [];
 
   #sessionPermissions: string[] = [];
+  #sessionRoleIds: string[] = [];
 
   @state() private drawerOpen = false;
 
@@ -1302,6 +1303,7 @@ export class DashboardApp extends LitElement {
   #applyMe(
     me: {
       personId: string;
+      roleIds: string[];
       email: string | null;
       locale: string | null;
       venueLocale: string;
@@ -1345,6 +1347,7 @@ export class DashboardApp extends LitElement {
     }
     this.sessionPersonId = me.personId;
     this.#sessionPermissions = me.permissions;
+    this.#sessionRoleIds = me.roleIds;
     this.#permissionContinuation.notify();
     // A plain field: redraw so the screens given a permission see the change.
     this.requestUpdate();
@@ -3033,6 +3036,9 @@ export class DashboardApp extends LitElement {
         ></dashboard-orders-screen>`;
       case "staff":
         return html`<dashboard-staff-screen
+          .viewerPermissions=${this.#sessionPermissions}
+          .viewerRoleIds=${this.#sessionRoleIds}
+          .canChangeEmail=${this.#sessionPermissions.includes("person.email")}
           .canManageSchedule=${this.#sessionPermissions.includes("schedule.manage")}
           .api=${this.api}
           .canAdminister=${this.#sessionPermissions.includes("person.admin")}

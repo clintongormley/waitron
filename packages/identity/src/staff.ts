@@ -1,5 +1,5 @@
 import "./errors.js";
-import { and, eq, isNotNull, isNull, ne, or } from "drizzle-orm";
+import { and, eq, isNull, ne, or } from "drizzle-orm";
 import {
   recordActivity,
   indexViolated,
@@ -443,7 +443,12 @@ export async function invitePerson(
       })
       .returning({ id: persons.id });
 
-    await setPersonAccessRoles(tx, { managementSessionId: input.managementSessionId, personId: row!.id, roleIds: input.roleIds, expectedRoleIds: [] });
+    await setPersonAccessRoles(tx, {
+      managementSessionId: input.managementSessionId,
+      personId: row!.id,
+      roleIds: input.roleIds,
+      expectedRoleIds: [],
+    });
     return { id: row!.id };
   } catch (error) {
     // Any unique violation off the email index is read as the display name: the insert leaves

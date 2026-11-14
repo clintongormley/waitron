@@ -1,3 +1,4 @@
+import { accessRoleChoices } from "../testing/access-role-fixture.js";
 import { afterEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
@@ -43,28 +44,32 @@ class PersonEditApp extends LitElement {
   canManageSchedule = false;
   api = new DashboardApi(
     "",
-    async () =>
+    async (path) =>
       new Response(
-        JSON.stringify({
-          staffRoles: [
-            {
-              id: "waiter",
-              name: "Waiter",
-              colour: "blue",
-              position: 0,
-              holderIds: ["p1"],
-              holderNames: ["Ada"],
-            },
-            {
-              id: "chef",
-              name: "Chef",
-              colour: "red",
-              position: 1,
-              holderIds: [],
-              holderNames: [],
-            },
-          ],
-        }),
+        JSON.stringify(
+          String(path).endsWith("/access-roles")
+            ? accessRoleChoices
+            : {
+                staffRoles: [
+                  {
+                    id: "waiter",
+                    name: "Waiter",
+                    colour: "blue",
+                    position: 0,
+                    holderIds: ["p1"],
+                    holderNames: ["Ada"],
+                  },
+                  {
+                    id: "chef",
+                    name: "Chef",
+                    colour: "red",
+                    position: 1,
+                    holderIds: [],
+                    holderNames: [],
+                  },
+                ],
+              },
+        ),
         { headers: { "content-type": "application/json" } },
       ),
   );
@@ -366,12 +371,14 @@ it("warns about job-role edits even after the person's details were saved", asyn
 it("protects access-role changes independently of a saved details draft", async () => {
   const { app, form } = await mount();
   form.viewerAdmin = true;
-  form.api = Object.assign(new DashboardApi(""), {
+  app.api = Object.assign(new DashboardApi(""), {
     listAccessRoles: async (): Promise<AccessRole[]> => [
       { id: "manager", builtInKey: "manager", name: null, permissions: [], holderCount: 1 },
       { id: "waiter", builtInKey: "staff", name: null, permissions: [], holderCount: 0 },
     ],
   });
+  app.requestUpdate();
+  await app.updateComplete;
   await form.updateComplete;
   const roles = () =>
     form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>('[name="accessRoles"]')!;

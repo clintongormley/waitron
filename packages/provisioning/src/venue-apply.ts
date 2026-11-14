@@ -1,11 +1,14 @@
-import { importAccessRoleMembership, ensureBuiltInRoles, registerModulePermissions } from "@waitron/identity";
+import {
+  importAccessRoleMembership,
+  ensureBuiltInRoles,
+  registerModulePermissions,
+} from "@waitron/identity";
 import { createStarterStaffRole } from "@waitron/staffing";
 import { requireCountryTimeZone } from "@waitron/country-packs";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import {
   BUSINESS_DAY_SETTINGS,
-  roles,
   personStaffRoles,
   recordActivity,
   FIRST_DAY_START,
@@ -244,17 +247,11 @@ export async function applyVenue(
               })
               .returning({ id: persons.id });
             createdAdministrator = created!.id;
-            await importAccessRoleMembership(tx, created!.id, (await ensureBuiltInRoles(tx))["admin"]);
-            const [adminRole] = await tx
-              .select({ id: roles.id })
-              .from(roles)
-              .where(eq(roles.builtInKey, "admin"));
-            await recordActivity(tx, {
-              kind: "access_role.member_added",
-              subjectId: created!.id,
-              personId: null,
-              data: { roleId: adminRole!.id, builtInKey: "admin", name: null },
-            });
+            await importAccessRoleMembership(
+              tx,
+              created!.id,
+              (await ensureBuiltInRoles(tx))["admin"],
+            );
             const staffRoleId = await createStarterStaffRole(tx, action.jobRoleName);
             await tx.insert(personStaffRoles).values({ personId: created!.id, staffRoleId });
             starterJob = { id: staffRoleId, name: action.jobRoleName };

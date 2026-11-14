@@ -1061,23 +1061,34 @@ export function mountManagementApi(
     }),
   );
 
-  app.get("/management-api/access-roles", (c) => run(c, log, async () => {
-    const sessionId = requireManagementSession(c);
-    return c.json(await withTransaction(deps.db, (tx) => listAccessRoles(tx, sessionId)));
-  }));
+  app.get("/management-api/access-roles", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      return c.json(await withTransaction(deps.db, (tx) => listAccessRoles(tx, sessionId)));
+    }),
+  );
 
-  app.put("/management-api/staff/:id/access-roles", (c) => run(c, log, async () => {
-    const managementSessionId = requireManagementSession(c);
-    const personId = requirePersonId(c.req.param("id"));
-    const body = await readJsonBody<{ roleIds?: unknown; expectedRoleIds?: unknown }>(c);
-    for (const field of ["roleIds", "expectedRoleIds"] as const) {
-      if (!Array.isArray(body[field]) || body[field].some((id) => typeof id !== "string"))
-        throw new AppError("management.request_invalid", { field });
-    }
-    return c.json(await withTransaction(deps.db, (tx) => setPersonAccessRoles(tx, {
-      managementSessionId, personId, roleIds: body.roleIds as string[], expectedRoleIds: body.expectedRoleIds as string[],
-    })));
-  }));
+  app.put("/management-api/staff/:id/access-roles", (c) =>
+    run(c, log, async () => {
+      const managementSessionId = requireManagementSession(c);
+      const personId = requirePersonId(c.req.param("id"));
+      const body = await readJsonBody<{ roleIds?: unknown; expectedRoleIds?: unknown }>(c);
+      for (const field of ["roleIds", "expectedRoleIds"] as const) {
+        if (!Array.isArray(body[field]) || body[field].some((id) => typeof id !== "string"))
+          throw new AppError("management.request_invalid", { field });
+      }
+      return c.json(
+        await withTransaction(deps.db, (tx) =>
+          setPersonAccessRoles(tx, {
+            managementSessionId,
+            personId,
+            roleIds: body.roleIds as string[],
+            expectedRoleIds: body.expectedRoleIds as string[],
+          }),
+        ),
+      );
+    }),
+  );
 
   app.get("/management-api/staff", (c) =>
     run(c, log, async () => {
@@ -1105,7 +1116,8 @@ export function mountManagementApi(
         typeof body.displayName !== "string" ||
         typeof body.firstNames !== "string" ||
         typeof body.lastNames !== "string" ||
-        !Array.isArray(body.roleIds) || body.roleIds.some((id) => typeof id !== "string") ||
+        !Array.isArray(body.roleIds) ||
+        body.roleIds.some((id) => typeof id !== "string") ||
         (body.telephone !== undefined &&
           body.telephone !== null &&
           typeof body.telephone !== "string")
