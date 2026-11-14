@@ -289,7 +289,7 @@ interface PullReply {
   nodeId: string;
   servers: { nodeId: string; url: string; standing: string }[];
   jobs: PullJob[];
-  discoveryUntil: number | null;
+  discoveryExpiresInMs: number | null;
   networkProbes?: NetworkProbe[];
   bluetoothCommands?: BluetoothCommand[];
 }
@@ -1023,10 +1023,10 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
     expect(probe?.expiresInMs).toBeLessThanOrEqual(30_000);
   });
 
-  it("returns discoveryUntil after a discovery window is opened", async () => {
+  it("returns the remaining discovery duration after a discovery window is opened", async () => {
     const app = mountApp();
     const { token } = await joinAndAccept(app);
-    expect((await pull(app, token)).discoveryUntil).toBeNull();
+    expect((await pull(app, token)).discoveryExpiresInMs).toBeNull();
 
     const start = await send(app, "POST", "/management-api/printer-discovery/start", {
       cookie: managerCookie,
@@ -1035,7 +1035,12 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
     const { discoveryUntil } = (await start.json()) as { discoveryUntil: number };
     expect(discoveryUntil).toBeGreaterThan(Date.now());
 
-    expect((await pull(app, token)).discoveryUntil).toBe(discoveryUntil);
+    const now = vi.spyOn(Date, "now").mockReturnValue(discoveryUntil - 1234);
+    try {
+      expect((await pull(app, token)).discoveryExpiresInMs).toBe(1234);
+    } finally {
+      now.mockRestore();
+    }
   });
 
   // Opened at T for three minutes; a clock read earlier than T leaves its end further ahead than
@@ -1055,7 +1060,7 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
       const { discoveryUntil } = (await start.json()) as { discoveryUntil: number };
       const now = vi.spyOn(Date, "now").mockReturnValue(discoveryUntil - 3 * 60_000 - stepBack);
       try {
-        expect((await pull(app, token)).discoveryUntil).toBe(open ? discoveryUntil : null);
+        expect((await pull(app, token)).discoveryExpiresInMs).toBe(open ? 180_000 : null);
       } finally {
         now.mockRestore();
       }
@@ -1093,7 +1098,7 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
     expect(renewed.status).toBe(200);
     const { discoveryUntil } = (await renewed.json()) as { discoveryUntil: number };
     expect(discoveryUntil).toBeGreaterThan(Date.now());
-    expect((await pull(app, agentToken)).discoveryUntil).toBe(discoveryUntil);
+    expect((await pull(app, agentToken)).discoveryExpiresInMs).toBeGreaterThan(0);
     expect((await session()).expiresAt).toBe(before.expiresAt);
 
     const started = await send(app, "POST", "/management-api/printer-discovery/start", { cookie });
@@ -1111,7 +1116,7 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
     expect(((await renewed.json()) as { error: { code: string } }).error.code).toBe(
       "management_session.expired",
     );
-    expect((await pull(app, agentToken)).discoveryUntil).toBeNull();
+    expect((await pull(app, agentToken)).discoveryExpiresInMs).toBeNull();
   });
 
   it("GET /management-api/discovered-printers lists reported devices, marking registered ones", async () => {
@@ -6263,6 +6268,29 @@ describe("held print pulls", () => {
     expect(await response.json()).toEqual({
       error: { code: "management.request_invalid", params: { field: "wait" } },
     });
+  });
+
+  it("computes the remaining discovery duration after a held pull", async () => {
+    const r = await rig();
+    let now = Date.now();
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const opened = await send(r.app, "POST", "/management-api/printer-discovery/start", {
+        cookie: managerCookie,
+      });
+      expect(opened.status).toBe(200);
+      const pending = r.request("1");
+      await held(r.bus);
+      now += 1_000;
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(await (await pending).json()).toMatchObject({
+        jobs: [],
+        discoveryExpiresInMs: 179_000,
+      });
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   it("answers empty at the requested deadline", async () => {

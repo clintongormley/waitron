@@ -245,10 +245,10 @@ describe("createContainerHost — the rest of the seam", () => {
     expect(await host.visibleDevices()).toEqual([
       { transport: "usb", localKey: "SN-1", make: "Epson", model: "TM-T20" },
     ]);
-    expect(await host.scan(["bluetooth"])).toEqual([
+    expect(await host.scan(["bluetooth"], 1234)).toEqual([
       { transport: "bluetooth", localKey: "AA:BB:CC:DD:EE:FF", name: "Star" },
     ]);
-    expect(devices.scan).toHaveBeenCalledWith(["bluetooth"]);
+    expect(devices.scan).toHaveBeenCalledWith(["bluetooth"], 1234);
     expect(await host.pair("AA:BB:CC:DD:EE:FF", "1234")).toEqual({
       ok: true,
       localKey: "AA:BB:CC:DD:EE:FF",

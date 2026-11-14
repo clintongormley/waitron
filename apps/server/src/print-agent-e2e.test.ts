@@ -30,6 +30,7 @@ import {
   createAgent,
   createClient,
   type PrinterTarget,
+  type DiscoveredDevice,
 } from "@waitron/print-agent";
 import { fakeHost } from "@waitron/print-agent/testing/fake-host.js";
 import { nodeId as brandNodeId } from "@waitron/shared";
@@ -152,6 +153,129 @@ afterEach(async () => {
 });
 
 describe("print-agent end to end", () => {
+  it("keeps scan discoveries listed during a held pass without renewing pairing or paired evidence", async () => {
+    let now = Date.now();
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+    let finish!: (devices: DiscoveredDevice[]) => void;
+    const held = new Promise<DiscoveredDevice[]>((resolve) => {
+      finish = resolve;
+    });
+    try {
+      const app = new Hono();
+      const pairingMode = createPairingMode({ holdMs: 1_000 });
+      pairingMode.open();
+      mountPrintApi(
+        app,
+        {
+          db: suite.db,
+          cfg,
+          pairingMode,
+          readMembership: async () => null,
+          venueLocale: "es-ES",
+          readInvoiceDocument: () => Promise.reject(new Error("unused")),
+          layOutSaleReceipt: () => Promise.reject(new Error("unused")),
+        },
+        noopLog,
+      );
+      mountJoinApi(
+        app,
+        { db: suite.db, cfg, pairingMode, deviceAddress: "https://waitron.local" },
+        noopLog,
+      );
+      mountNodeApi(
+        app,
+        {
+          nodeId: cfg.nodeId,
+          acceptingSales: true,
+          environment: "preproduction",
+          readMembership: async () => null,
+        },
+        noopLog,
+      );
+      const address = "AA:BB:CC:DD:EE:31";
+      const bt: DiscoveredDevice = {
+        transport: "bluetooth",
+        localKey: address,
+        name: "Scan printer",
+      };
+      const office: DiscoveredDevice = {
+        transport: "network_tcp",
+        host: "192.0.2.31",
+        port: 9100,
+        pagePrinter: true,
+      };
+      const host = fakeHost({
+        config: { serverUrl: BASE, name: "Replay agent" },
+        now: () => now,
+        scan: vi.fn().mockResolvedValueOnce([bt, office]).mockReturnValue(held),
+        pairedBluetooth: async () => (now === initial ? [{ localKey: address }] : []),
+        fetch: (input, init) => Promise.resolve(app.request(input, init)),
+      });
+      const initial = now;
+      const agent = createAgent({ host });
+      await agent.runOnce();
+      const id = (await host.token())!.split(".")[0]!;
+      const choice = agent.status.verificationCode;
+      expect(
+        (
+          await send(app, "POST", `/management-api/print-agent-join-requests/${id}/accept`, {
+            cookie: managerCookie,
+            body: { choice },
+          })
+        ).status,
+      ).toBe(204);
+      expect(
+        (
+          await send(app, "POST", "/management-api/printer-discovery/start", {
+            cookie: managerCookie,
+          })
+        ).status,
+      ).toBe(200);
+      await agent.runOnce();
+      await agent.runOnce();
+      await agent.runOnce();
+      const listed = async () =>
+        (await (
+          await send(app, "GET", "/management-api/discovered-printers", { cookie: managerCookie })
+        ).json()) as {
+          localKey?: string;
+          paired?: boolean;
+          host?: string;
+          pagePrinter?: boolean;
+          lastSeenAt: string;
+        }[];
+      expect((await listed()).find((row) => row.localKey === address)?.paired).toBe(true);
+      now += 60_000;
+      await agent.runOnce();
+      expect(pairingMode.isOpen()).toBe(false);
+      const rows = await listed();
+      expect(rows.find((row) => row.localKey === address)).toMatchObject({
+        lastSeenAt: new Date(now).toISOString(),
+      });
+      expect(rows.find((row) => row.localKey === address)?.paired).toBeUndefined();
+      expect(rows.find((row) => row.host === office.host)?.pagePrinter).toBe(true);
+      const pair = () =>
+        send(app, "POST", `/management-api/print-agents/${id}/bluetooth/pair`, {
+          cookie: managerCookie,
+          body: { address, pin: "1234" },
+        });
+      expect((await pair()).status).toBe(202);
+      now = initial + 180_001;
+      await agent.runOnce();
+      now += 15_001;
+      expect(await listed()).toEqual([]);
+      const refused = await pair();
+      expect(refused.status).toBe(409);
+      expect(await refused.json()).toMatchObject({
+        error: { code: "printer.bluetooth_not_discovered" },
+      });
+    } finally {
+      finish([]);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      clock.mockRestore();
+    }
+  });
+
   it("checks a requested address through an accepted agent and makes it available to Add without sending bytes", async () => {
     const loopback = printer!;
     const app = new Hono();
@@ -214,6 +338,8 @@ describe("print-agent end to end", () => {
     await agent.runOnce();
     await agent.runOnce();
     expect(await loopback.firstConnection).toEqual(Buffer.alloc(0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await agent.runOnce();
     const discovery = await send(app, "GET", "/management-api/discovered-printers", {
       cookie: managerCookie,
     });
@@ -967,9 +1093,10 @@ describe("a printer deleted over real HTTP", () => {
       const tcp = new NetworkTcpTransport();
       let holdPrinter: string | null = null;
       const results = new Map<string, number>();
+      const addressProbe = vi.fn(probeNetwork);
       const host = fakeHost({
         config: { serverUrl: base, name: "Real HTTP agent" },
-        probeNetwork,
+        probeNetwork: addressProbe,
         transport: {
           async send(target, bytes) {
             if (target.id === holdPrinter) {
@@ -1103,6 +1230,8 @@ describe("a printer deleted over real HTTP", () => {
           ).status,
         ).toBe(200);
         await agent!.runOnce();
+        await agent!.runOnce();
+        await addressProbe.mock.results.at(-1)!.value;
         await agent!.runOnce();
         const rows = (await call("GET", "/management-api/discovered-printers")).body as Array<{
           host: string | null;

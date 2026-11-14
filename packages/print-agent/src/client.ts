@@ -90,7 +90,7 @@ export interface PullReply {
   nodeId: string;
   servers: ServerEntry[];
   jobs: WireJob[];
-  discoveryUntil: number | null;
+  discoveryExpiresInMs: number | null;
   networkProbes?: NetworkProbe[];
   bluetoothCommands?: BluetoothCommand[];
 }
@@ -349,7 +349,13 @@ async function parsePullReply(response: Response): Promise<PullReply | undefined
       ...(invoiceClaim === undefined ? {} : { invoiceClaim }),
     });
   }
-  const discoveryUntil = typeof b.discoveryUntil === "number" ? b.discoveryUntil : null;
+  const discoveryExpiresInMs =
+    typeof b.discoveryExpiresInMs === "number" &&
+    Number.isFinite(b.discoveryExpiresInMs) &&
+    b.discoveryExpiresInMs > 0 &&
+    b.discoveryExpiresInMs <= 180_000
+      ? b.discoveryExpiresInMs
+      : null;
   const networkProbes: NetworkProbe[] = [];
   for (const raw of Array.isArray(b.networkProbes) ? b.networkProbes.slice(0, 8) : []) {
     if (typeof raw !== "object" || raw === null) continue;
@@ -374,7 +380,7 @@ async function parsePullReply(response: Response): Promise<PullReply | undefined
     nodeId: b.nodeId,
     servers,
     jobs,
-    discoveryUntil,
+    discoveryExpiresInMs,
     ...(networkProbes.length ? { networkProbes } : {}),
     ...(bluetoothCommands.length ? { bluetoothCommands } : {}),
   };

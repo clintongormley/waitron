@@ -126,6 +126,11 @@ export function createAgent(opts: AgentOptions): Agent {
   let scanning = false;
   let scanGeneration = 0;
   let scanFound: DiscoveredDevice[] = [];
+  let scanUnsent = false;
+  let probing = false;
+  let nextProbeAt = 0;
+  let probeGeneration = 0;
+  let probeFound: { device: DiscoveredDevice; expiresAt: number; length: number }[] = [];
   let nextScanAt = 0;
   // One claim loop at a time, with any number of A4 jobs out: the server hands out at most one job
   // per printer, so the agent keeps no lock of its own.
@@ -179,6 +184,10 @@ export function createAgent(opts: AgentOptions): Agent {
     bluetoothQueue = [];
     bluetoothGeneration += 1;
     scanFound = [];
+    scanUnsent = false;
+    probeFound = [];
+    nextProbeAt = 0;
+    probeGeneration += 1;
     scanGeneration += 1;
     nextScanAt = 0;
   }
@@ -337,29 +346,81 @@ export function createAgent(opts: AgentOptions): Agent {
     if (!bluetoothWorking && bluetoothQueue.length > 0) void drainBluetoothCommands();
   }
 
-  /** Runs outside the poll loop's lock, so a pass never holds up a pull; its devices ride the next
-   * pull. A throwing pass reports nothing. */
+  async function classify(found: DiscoveredDevice[]): Promise<DiscoveredDevice[]> {
+    if (host.markPagePrinters && found.some((device) => device.transport === "network_tcp")) {
+      try {
+        return await host.markPagePrinters(found);
+      } catch (error) {
+        host.log.warn("office-printer check failed", { error: describeRejection(error) });
+      }
+    }
+    return found;
+  }
+
+  /** Scan and classification share a worker, so neither holds the job pull. */
   async function discover(): Promise<void> {
     scanning = true;
     const generation = scanGeneration;
     let found: DiscoveredDevice[] = [];
     try {
-      // A delivery wake may run the next tick early, but passes stay at least one interval apart.
       nextScanAt = host.now() + intervalMs;
-      found = await host.scan();
+      found = await classify(await host.scan(undefined, discoveryUntil));
+      // An unanswered IPP-only queue cannot become a receipt printer.
+      found = found.map((device) =>
+        device.ippOnly === true && device.ipp !== undefined && device.office === undefined
+          ? {
+              ...device,
+              office: {
+                ...device.ipp,
+                printable: false,
+                reason: "invalid_reply",
+                supportedFormats: [],
+              },
+            }
+          : device,
+      );
     } catch (error) {
       try {
         host.log.warn("scan failed", { error: describeRejection(error) });
       } catch {
-        // Nothing awaits this pass, so a throw here would be an unhandled rejection.
+        /* Nothing awaits this worker. */
+      }
+    } finally {
+      scanning = false;
+      if (generation === scanGeneration) {
+        const changed = scanFound.length > 0 || found.length > 0;
+        scanFound = found;
+        scanUnsent = true;
+        if (changed) wake();
       }
     }
-    scanning = false;
-    if (generation === scanGeneration) {
-      if (found.length > 0) {
-        scanFound = found;
+  }
+
+  async function checkAddresses(targets: typeof networkProbes): Promise<void> {
+    probing = true;
+    const generation = probeGeneration;
+    try {
+      nextProbeAt = host.now() + intervalMs;
+      const found = await classify(await host.probeNetwork(targets.map(({ target }) => target)));
+      if (generation === probeGeneration) {
+        probeFound = found.flatMap((device) => {
+          const hit = targets.find(
+            ({ target }) => target.host === device.host && target.port === device.port,
+          );
+          return hit === undefined
+            ? []
+            : [{ device, expiresAt: hit.expiresAt, length: hit.target.expiresInMs }];
+        });
         wake();
       }
+    } catch (error) {
+      try {
+        host.log.warn("address probe failed", { error: describeRejection(error) });
+      } catch {
+        /* Nothing awaits this worker. */
+      }
+    } finally {
+      probing = false;
     }
   }
 
@@ -658,67 +719,31 @@ export function createAgent(opts: AgentOptions): Agent {
     const pairedListing = listPairedBluetooth();
     const visible = await host.visibleDevices();
     const pairedBluetooth = await pairedListing;
-    // A copy, so the merges below never touch the pending list; it is dropped only once a pull
-    // carrying it succeeds, and only if no newer pass or reset has replaced it meanwhile.
+    if (current !== probeServer) {
+      probeServer = current;
+      networkProbes = [];
+      probeFound = [];
+      nextProbeAt = 0;
+      probeGeneration += 1;
+    }
     const sentScan = scanFound;
-    let scanned = [...sentScan];
-    if (
-      !passed(discoveryUntil, discoveryLength) &&
-      !scanning &&
-      (!running || passed(nextScanAt, intervalMs))
-    ) {
-      void discover();
-    }
-    const targets =
-      current === probeServer
-        ? networkProbes
-            .filter((probe) => !passed(probe.expiresAt, probe.target.expiresInMs))
-            .map((probe) => probe.target)
-        : [];
-    if (targets.length) {
-      try {
-        const reachable = await host.probeNetwork(targets);
-        scanned.push(
-          ...reachable.filter(
-            (target) =>
-              !scanned.some(
-                (device) =>
-                  device.transport === "network_tcp" &&
-                  device.host === target.host &&
-                  device.port === target.port,
-              ),
-          ),
-        );
-      } catch (error) {
-        host.log.warn("address probe failed", {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-    // Classifying the merged list keeps an announced queue when a raw address probe also finds it.
-    if (host.markPagePrinters && scanned.some((device) => device.transport === "network_tcp")) {
-      try {
-        scanned = await host.markPagePrinters(scanned);
-      } catch (error) {
-        host.log.warn("office-printer check failed", {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-    // Without an unambiguous raw counterpart, an unanswered queue cannot become a receipt printer.
-    scanned = scanned.map((device) =>
-      device.ippOnly === true && device.ipp !== undefined && device.office === undefined
-        ? {
-            ...device,
-            office: {
-              ...device.ipp,
-              printable: false,
-              reason: "invalid_reply",
-              supportedFormats: [],
-            },
-          }
-        : device,
+    const discoveryOpen = !passed(discoveryUntil, discoveryLength);
+    const scanned = discoveryOpen || scanUnsent ? [...sentScan] : [];
+    if (discoveryOpen && !scanning && (!running || passed(nextScanAt, intervalMs))) void discover();
+    const targets = networkProbes.filter(
+      (probe) => !passed(probe.expiresAt, probe.target.expiresInMs),
     );
+    for (const { device, expiresAt, length } of probeFound) {
+      if (
+        !passed(expiresAt, length) &&
+        !scanned.some(
+          (d) => d.transport === "network_tcp" && d.host === device.host && d.port === device.port,
+        )
+      )
+        scanned.push(device);
+    }
+    if (targets.length && !probing && (!running || passed(nextProbeAt, intervalMs)))
+      void checkAddresses(targets);
     const hostname = host.hostname?.();
     const setupUrl = host.setupUrl?.();
     const setupPort = host.setupPort?.();
@@ -753,7 +778,7 @@ export function createAgent(opts: AgentOptions): Agent {
     outOfTouch = false;
     resetAt = undefined;
     bluetoothOutcomes = bluetoothOutcomes.filter((outcome) => !sentOutcomes.includes(outcome));
-    if (scanFound === sentScan) scanFound = [];
+    if (scanFound === sentScan) scanUnsent = false;
     r.merge(pulled.value.servers);
     const servers = r
       .servers()
@@ -765,8 +790,8 @@ export function createAgent(opts: AgentOptions): Agent {
     }
     // A remote server's epoch deadline cannot be compared with this host's clock.
     const receivedAt = host.now();
-    discoveryUntil = pulled.value.discoveryUntil ?? 0;
-    discoveryLength = discoveryUntil - receivedAt;
+    discoveryLength = pulled.value.discoveryExpiresInMs ?? 0;
+    discoveryUntil = receivedAt + discoveryLength;
     networkProbes = (pulled.value.networkProbes ?? []).map((target) => ({
       target,
       expiresAt: receivedAt + target.expiresInMs,

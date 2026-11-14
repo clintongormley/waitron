@@ -24,7 +24,7 @@ export function fakeHost(
     transport: Transport;
     fetch: typeof fetch;
     visibleDevices: () => Promise<VisibleDevice[]>;
-    scan: (kinds?: TransportKind[]) => Promise<DiscoveredDevice[]>;
+    scan: (kinds?: TransportKind[], deadline?: number) => Promise<DiscoveredDevice[]>;
     probeNetwork: (targets: NetworkProbe[]) => Promise<DiscoveredDevice[]>;
     markPagePrinters: (devices: DiscoveredDevice[]) => Promise<DiscoveredDevice[]>;
     resolve: (job: WireJob) => Promise<PrinterTarget>;

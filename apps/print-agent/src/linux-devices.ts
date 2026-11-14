@@ -28,7 +28,7 @@ export interface LinuxDeviceOptions {
   sysfsRoot?: string;
   devRoot?: string;
   bluetooth?: BluetoothHost;
-  scanNetwork?: () => Promise<DiscoveredDevice[]>;
+  scanNetwork?: (deadline?: number) => Promise<DiscoveredDevice[]>;
   /** A paired report's deadline: the wait for its devices' kinds gets only what the listing left of
    * it. With the default `bluetooth` it also kills a paired listing, and an `info` the report
    * starts, that BlueZ has not answered. */
@@ -77,8 +77,9 @@ export function createLinuxDevices(
       listTimeoutMs,
       ...(opts.log !== undefined ? { log: opts.log } : {}),
     });
-  const scanNetwork = opts.scanNetwork ?? liveNetworkScan;
   const now = opts.now ?? Date.now;
+  const scanNetworkImpl =
+    opts.scanNetwork ?? ((deadline?: number) => scanNetwork(deadline, { now }));
   let availability: BluetoothAvailability | undefined;
   let listedAt = -Infinity;
   let listing: Promise<BluetoothDevice[]> | undefined;
@@ -179,7 +180,7 @@ export function createLinuxDevices(
       return [...usbDevices, ...btDevices];
     },
 
-    async scan(kinds?): Promise<DiscoveredDevice[]> {
+    async scan(kinds?, deadline?): Promise<DiscoveredDevice[]> {
       const wanted = new Set(kinds ?? (["usb", "network_tcp", "bluetooth"] as const));
       const found: DiscoveredDevice[] = [];
       if (wanted.has("usb")) {
@@ -192,7 +193,7 @@ export function createLinuxDevices(
           });
         }
       }
-      if (wanted.has("network_tcp")) found.push(...(await scanNetwork()));
+      if (wanted.has("network_tcp")) found.push(...(await scanNetworkImpl(deadline)));
       if (wanted.has("bluetooth")) {
         try {
           found.push(...(await bluetooth.scan()));
@@ -289,20 +290,31 @@ export function buildPdlQuery(): Buffer {
   return Buffer.concat(parts);
 }
 
-/* v8 ignore start -- opens the mDNS and port-9100 sockets; covered by the
-   receipts, not unit tests (no radio or LAN in CI). */
+export interface NetworkScanDeps {
+  interfaces?: typeof networkInterfaces;
+  connect?: typeof connectTcp;
+  mdns?: () => Promise<DiscoveredDevice[]>;
+  now?: () => number;
+}
 
-/** Repeated answers and the IPP and raw announcements of one printer are merged by {@link mergeDiscovered}. */
-async function liveNetworkScan(): Promise<DiscoveredDevice[]> {
-  const [announced, swept] = await Promise.all([liveMdnsScan(), liveSweep()]);
+export async function scanNetwork(
+  deadline?: number,
+  deps: NetworkScanDeps = {},
+): Promise<DiscoveredDevice[]> {
+  const [announced, swept] = await Promise.all([
+    (deps.mdns ?? liveMdnsScan)(),
+    sweepPort({
+      hosts: sweepCandidates({ interfaces: deps.interfaces ?? networkInterfaces }),
+      port: SWEEP_PORT,
+      connect: deps.connect ?? connectTcp,
+      deadline,
+      now: deps.now,
+    }),
+  ]);
   return mergeDiscovered(announced, swept);
 }
 
-function liveSweep(): Promise<DiscoveredDevice[]> {
-  const hosts = sweepCandidates({ interfaces: networkInterfaces });
-  return sweepPort({ hosts, port: SWEEP_PORT, connect: connectTcp });
-}
-
+/* v8 ignore start -- opens the mDNS socket; no radio or LAN in CI. */
 function liveMdnsScan(windowMs = 1500): Promise<DiscoveredDevice[]> {
   return new Promise((resolve) => {
     const socket = dgram.createSocket({ type: "udp4", reuseAddr: true });

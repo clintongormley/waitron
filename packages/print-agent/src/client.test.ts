@@ -330,7 +330,7 @@ describe("createClient — pullJobs", () => {
     expect(result.value.nodeId).toBe("n1");
     expect(result.value.servers).toEqual([{ url: "http://a.test", nodeId: "n1" }]);
     expect(result.value.jobs[0]!.payload).toEqual(new Uint8Array([1, 2, 3]));
-    expect(result.value.discoveryUntil).toBeNull();
+    expect(result.value.discoveryExpiresInMs).toBeNull();
     expect(fetchImpl.mock.calls[0]![0]).toBe(`${URL_A}/print-api/agent/jobs?wait=25`);
     expect(fetchImpl.mock.calls[0]![1].headers.authorization).toBe("Bearer a1.secret");
   });
@@ -342,7 +342,7 @@ describe("createClient — pullJobs", () => {
         nodeId: "n",
         servers: [],
         jobs: [],
-        discoveryUntil: null,
+        discoveryExpiresInMs: null,
         networkProbes: [
           target,
           null,
@@ -362,7 +362,28 @@ describe("createClient — pullJobs", () => {
     expect(result.ok && result.value.networkProbes).toEqual([target]);
   });
 
-  it("posts the inventory and parses discoveryUntil + localKey", async () => {
+  it.each([0, -1, 180_001, Infinity, NaN, "123", null])(
+    "ignores invalid discovery duration %s without losing jobs",
+    async (duration) => {
+      const c = createClient({
+        fetch: vi.fn().mockResolvedValue(
+          reply(200, {
+            nodeId: "n",
+            servers: [],
+            discoveryExpiresInMs: duration,
+            jobs: [
+              { id: "j", printerId: "p", transport: "usb", localKey: "SN-1", payload: "AQ==" },
+            ],
+          }),
+        ),
+      });
+      const r = await c.pullJobs("http://s", "tok", NO_INVENTORY);
+      expect(r.ok && r.value.discoveryExpiresInMs).toBeNull();
+      expect(r.ok && r.value.jobs.map((j) => j.id)).toEqual(["j"]);
+    },
+  );
+
+  it("posts the inventory and parses discoveryExpiresInMs + localKey", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       reply(200, {
         nodeId: "n",
@@ -376,7 +397,7 @@ describe("createClient — pullJobs", () => {
             payload: Buffer.from([0xaa]).toString("base64"),
           },
         ],
-        discoveryUntil: 123,
+        discoveryExpiresInMs: 123,
       }),
     );
     const client = createClient({ fetch: fetchImpl });
@@ -396,7 +417,7 @@ describe("createClient — pullJobs", () => {
     };
     const r = await client.pullJobs("http://s", "tok", inventory);
     expect(r.ok && r.value.jobs[0]!.localKey).toBe("SN-1");
-    expect(r.ok && r.value.discoveryUntil).toBe(123);
+    expect(r.ok && r.value.discoveryExpiresInMs).toBe(123);
     const [, init] = fetchImpl.mock.calls[0]!;
     expect(init.method).toBe("POST");
     expect(init.headers["content-type"]).toBe("application/json");

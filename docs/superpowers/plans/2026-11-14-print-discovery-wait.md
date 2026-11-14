@@ -1,6 +1,6 @@
 # Printing does not wait for discovery
 
-**Authority:** PRINT-DISCOVERY-WAIT, `/Users/clintongormley/waitron-campaign-e/queue.md`, watcher assignment 2026-11-14 04:25. Separate Sol high-effort draft, corrected by the Codex driver after Claude's review. The watcher clears implementation; no owner design approval is claimed. Landing authority is the owner's prompt for this firing: “The owner authorises finish-branch and land-branch.”
+**Authority:** PRINT-DISCOVERY-WAIT, `/Users/clintongormley/waitron-campaign-e/queue.md`, watcher assignment 2026-11-14 04:25. Separate Sol high-effort draft, corrected by the Codex driver after Claude's review. The watcher cleared this corrected plan at 2026-11-14 05:25 in the lane questions.md: “Cleared as corrected (b738bf146e), with the reviewers’ simpler-version cuts.” That note retains literal unicast acceptance, including a bounded port-631 POST to public IPv4, keeps the IPv6 IPP skip, and accepts duplicate bounded queries. No owner design approval is claimed. Landing authority is the owner's prompt for this firing: “The owner authorises finish-branch and land-branch.”
 
 **Finish line:** Jobs print during discovery; sweeps stop dialling at window expiry despite clock offsets; discoveries stay listed through the next pass. Reuse existing workers, generation/wake/results handling, queue merging, relative probe lifetimes and classifier cache. Keep the agent database-free. No UI, storage, endpoint, scheduler framework, lease redesign or inventory caching. Real-box throughput remains open.
 

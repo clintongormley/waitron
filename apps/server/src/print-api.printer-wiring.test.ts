@@ -398,7 +398,9 @@ describe("Print API — the agent lifecycle end to end", () => {
     expect(refusedRenew.status).toBe(403);
     const pulled = await send(app, "POST", "/print-api/agent/jobs", { bearer: token });
     expect(pulled.status).toBe(200);
-    expect(((await pulled.json()) as { discoveryUntil: number | null }).discoveryUntil).toBeNull();
+    expect(
+      ((await pulled.json()) as { discoveryExpiresInMs: number | null }).discoveryExpiresInMs,
+    ).toBeNull();
 
     for (const { method, path } of routes) {
       const body = path.endsWith("/probe") ? { host: "192.168.20.247", port: 9100 } : undefined;
