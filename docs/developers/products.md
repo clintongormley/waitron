@@ -949,7 +949,7 @@ This sent-order/history exception follows the owner's 11-November decision 6 in
 ### Regional practice names
 
 A demo set up in Catalonia or the Balearic Islands uses the pack's
-`casa-delgado-ca` data and Can Delgado as the default venue name. The tenant's stored country
+`casa-delgado-ca` data and Can Delgado as the default venue name. The taxpayer's stored country
 and the venue's province select the data. The Valencian Community selects
 `casa-delgado-valencia` and Casa Delgado de l'Horta; Galicia selects `casa-delgado-gl` and
 A Casa Delgado.

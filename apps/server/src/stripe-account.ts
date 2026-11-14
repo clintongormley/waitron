@@ -79,10 +79,6 @@ async function resolveStripeSecretKey(deps: StripeAccountDeps): Promise<string> 
 }
 
 /**
- * `StripeReconcilerOptions.resolveAccount`, wired to the vault. One reconciler is built for the
- * whole settlement identity and swept across taxpayer, so the resolved ACCOUNT is what scopes each
- * sweep — the accounts are standalone, one per merchant, with no Connect layer to carry the scope.
- *
  * `report` and `refund` are two views of one SDK client: the audit lists balance transactions, and
  * a claimed orphan's reversal issues a refund.
  */

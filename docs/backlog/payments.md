@@ -343,8 +343,6 @@ refund slip says "Propina" where the English says "Tip returned"
 
 ## Loose ends left by A633
 
-- `packages/payments-stripe`'s `tenant-scoping.test.ts` is named for tenant scoping but guards
-  that no source file opens a bare `.transaction(`.
 - `packages/payments-stripe`'s `vitest.config.ts` leaves `src/stripe-client.ts` out of coverage
   although the normal suite reaches it (CLAUDE.md §2).
 

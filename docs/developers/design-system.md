@@ -3920,7 +3920,7 @@ authenticated screen. In Demo and Preparation, put `wt-demo-bar` above it; in Li
 at the top. The menu and page content belong underneath the banner. The
 banner shows the venue's logo when one is set (`wt-venue-logo`, `size="banner"`, alt empty,
 Waitron's lockup in its fallback slot), else the canonical Waitron lockup, and then the deployment
-tenant's legal name. The name sits on the lockup word's baseline whenever the lockup is what shows
+taxpayer's legal name. The name sits on the lockup word's baseline whenever the lockup is what shows
 (no venue logo, or a venue logo that failed to load), and is centred on a venue's own logo. While a browser with no saved copy of the venue's theme
 waits for its first theme read, the logo's place is an empty `wt-venue-logo` `size="banner"` box; a
 read that fails or passes its 5-second limit (`VENUE_THEME_TIME_LIMIT_MS`) ends the wait with the
@@ -4606,7 +4606,7 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
 - **Each preview panel opens with a banner strip** (A841 slice 8, D10): the draft's logo in a
   `wt-venue-logo` `size="bar"` box (the light image in the light panel; the dark image, or the light
   one on its plate, in the dark panel), or with no logo Waitron's lockup (`wt-waitron-lockup`, `--wt-space-5` tall) in that panel's colours,
-  then the tenant's legal name in bold, which may wrap: on the lockup word's baseline, or centred on a
+  then the taxpayer's legal name in bold, which may wrap: on the lockup word's baseline, or centred on a
   venue's logo, as in the dashboard banner. A border runs under the strip from edge to
   edge of the panel.
 - **A readability warning is drawn with the warning icon in `--wt-color-warning`, never as a field

@@ -2608,7 +2608,7 @@ conflict.
   `scripts/no-tenant-column.test.ts` (text-matching, and blind to test files). The cloud is a
   dedicated instance per tenant, hosted in Spain — a server process and a SQLite file streamed to
   object storage. Density comes from many isolated instances per host. The only multi-tenant pieces are a small control plane and the preproduction
-  trial demo.
+  trial demo. Since A1308 vb1 (2026-11-14) the table is `taxpayer`.
 - **Warm standby plus human promotion; active-active is shelved.** Nothing was deleted for it: branch
   **`shelved/active-active`** (= `main` at `c65d3cbe`, 2026-09-05) is the snapshot to return to.
 - **Modules are core to the product** (opt-in domains, third-party modules later); fiscal is swappable

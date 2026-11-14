@@ -117,8 +117,6 @@ describe("waitron-credentials set", () => {
   });
 
   it("rejects a --tenant flag with usage", async () => {
-    // An operator script written for the per-taxpayer CLI must fail loudly, not have its taxpayer
-    // silently ignored.
     const h = harness(STRIPE_JSON);
     const code = await runCli(
       ["set", "--tenant", "11111111-1111-4111-8111-111111111111", "--purpose", "payments.stripe"],

@@ -9,7 +9,7 @@ import {
 
 /**
  * Contract: the schema carries no tenant column and no code carries a tenant id. One taxpayer lives
- * in a database, as the single row of `tenants`. Nothing filters by a tenant, so a column
+ * in a database, as the single row of `taxpayer`. Nothing filters by a tenant, so a column
  * reintroduced by habit would be silently unfiltered on every read.
  *
  * Reads TEXT, not code: it matches SPELLINGS of the column, so a column reintroduced under a name

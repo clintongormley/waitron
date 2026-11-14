@@ -159,17 +159,15 @@ That fiscal protection decision remains outside A646's optional-module repair.
 
 ## These index and key names still read `tenant`, and the columns they name are gone
 
-`print_agents_tenant_node_key`,
-  `purchase_invoices_tenant_received_idx`, `sales_tenant_issued_idx`,
-  `working_orders_tenant_status_idx`, `registros_tenant_node_secuencia_uq`, and four in identity:
-  `persons_tenant_email_uq`, `persons_tenant_live_display_name_uq`,
-  `persons_tenant_pending_email_uq` and `persons_tenant_google_subject_uq`. (The `tenants*`
-  and `tenant_credentials*` names are correct and stay.) This is
-  its own slice, not a tidy-up: THREE of the four `persons_*` names are matched BY NAME in production
-  error translation — `persons_tenant_email_uq`, `persons_tenant_live_display_name_uq` and
-  `persons_tenant_pending_email_uq`, whose names are held in `packages/identity/src/person-constraints.ts`
-  (read by `staff.ts` and `account-action.ts`) — so renaming them changes behaviour and wants its own
-  failing tests first.
+A1308 leaves these names with the slices that own their tables:
+
+- `persons_tenant_email_uq`, `persons_tenant_live_display_name_uq`,
+  `persons_tenant_pending_email_uq` and `persons_tenant_google_subject_uq`: people slice pp4.
+  The first three are matched by name in `packages/identity/src/person-constraints.ts`.
+- `working_orders_tenant_status_idx`: orders slice os1; `sales_tenant_issued_idx`: os8.
+- `registros_tenant_node_secuencia_uq`: fiscal slice fi1, which the owner lands.
+- `print_agents_tenant_node_key` and `purchase_invoices_tenant_received_idx`: the devices and
+  menu areas; no slice plan names their rename yet.
 
 ## `server.credential_unusable` names an unusable credential, although `server.*` is reserved for facts about the process itself
 

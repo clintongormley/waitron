@@ -294,7 +294,7 @@ Rebuild on the asynchronous adopt (see the residuals). Open
 design question: how the dormant certificate is protected when the seal must happen after the
 initial copy ([design](../superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md),
 [plan](../superpowers/plans/2026-09-07-fiscal-cert-distribution.md)). Beside it, **the vault-ring
-question**: `tenant_credentials` is `local` and a blob sealed under one node's ring cannot be opened
+question**: `venue_credentials` is `local` and a blob sealed under one node's ring cannot be opened
 under another's. Since A947 slice 3a a spare receives the main box's ring when it joins
 (`credentialsRing` in `apps/server/src/mirror-bundle.ts`, written by `apps/server/src/adopt.ts`), so
 rows a copy of `venue.db` brings open there. Since 3b-6a a spare receives that copy, and since 3b-F
