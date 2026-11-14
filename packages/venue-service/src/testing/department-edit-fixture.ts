@@ -185,6 +185,32 @@ export class ReceiptEditorStub extends LitElement {
   get invalid(): boolean {
     return !!this.error;
   }
+  savedOperationDescription?: string;
+  descriptionRefusal?: string;
+  descriptionSaves: string[] = [];
+  descriptionProblem(value: string) {
+    if (!value.trim()) return "Description required";
+    return value.length > 500 ? "Description invalid" : "";
+  }
+  protected override firstUpdated() {
+    if (this.savedOperationDescription !== undefined) this.notify("department-receipt-description");
+  }
+  offerDescription(saved: string | undefined) {
+    this.savedOperationDescription = saved;
+    this.notify("department-receipt-description");
+  }
+  async saveOperationDescription(value: string) {
+    this.descriptionSaves.push(value);
+    this.busy = true;
+    if (this.hold)
+      await new Promise<void>((resolve) => {
+        this.finish = resolve;
+      });
+    this.busy = false;
+    if (this.descriptionRefusal) return this.descriptionRefusal;
+    this.savedOperationDescription = value;
+    return undefined;
+  }
   async refuse(error = "Refused") {
     this.error = error;
     this.requestUpdate();
@@ -239,8 +265,10 @@ customElements.define("dashboard-department-receipt-editor", ReceiptEditorStub);
 export async function supplyReceiptEditor(
   el: HTMLElementTagNameMap["department-edit-dialog"],
   form: HTMLElementTagNameMap["department-settings"],
+  description?: string,
 ) {
   const editor = document.createElement("dashboard-department-receipt-editor") as ReceiptEditorStub;
+  editor.savedOperationDescription = description;
   el.receiptEditor = html`${editor}`;
   await el.updateComplete;
   await form.updateComplete;

@@ -129,7 +129,10 @@ export class DepartmentReceiptEditor extends LitElement {
   @state() private previewWidth: PrintPaperWidth | undefined;
   @state() private focusedField = "";
   #scope?: DraftScope<DepartmentReceiptWrite>;
+  /** What the draft is compared with: a field edited here keeps the value it was edited from. */
   #baseline?: DepartmentReceiptWrite;
+  /** The record as last read or written, which a description save sends. */
+  #saved?: DepartmentReceiptWrite;
   #opening = 0;
   #previewGeneration = 0;
   #explicitPreviewLanguage = false;
@@ -140,6 +143,7 @@ export class DepartmentReceiptEditor extends LitElement {
   #paper = new PrintPaper();
   #marked = false;
   #announcedMarked = false;
+  #announcedDescription?: string;
   readonly #queries = new QueryController(
     this,
     () => this.api.liveData,
@@ -165,7 +169,57 @@ export class DepartmentReceiptEditor extends LitElement {
   get invalid(): boolean {
     return this.#marked;
   }
+  /** The saved description the department's Details tab edits; this editor draws no field for it. */
+  get savedOperationDescription(): string | undefined {
+    return this.department && this.model && this.#saved && this.requiresDescription
+      ? (this.#saved.receipt.operationDescription ?? "")
+      : undefined;
+  }
+  descriptionProblem(value: string): string {
+    if (!value.trim()) return t("venue_settings.required");
+    return value.length > 500 ||
+      Array.from(value).some(
+        (character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127,
+      )
+      ? t("venue_settings.invalid")
+      : "";
+  }
+  /** Writes the last saved record with only the description replaced, so the Receipts tab's
+   * unsaved edits are never sent; answers the refusal's sentence, or undefined once written. */
+  async saveOperationDescription(value: string): Promise<string | undefined> {
+    const scope = this.#scope;
+    if (this.busy || !this.department || !this.#baseline || !this.#saved || !scope)
+      return codeMessage("server.internal_error");
+    const submitted = structuredClone(this.#saved);
+    submitted.receipt.operationDescription = value;
+    const opening = this.#opening;
+    this.busy = true;
+    try {
+      await this.api.putDepartmentReceipt(this.department.id, submitted);
+    } catch (error) {
+      if (opening === this.#opening) this.busy = false;
+      return refusal(error).sentence;
+    }
+    if (opening !== this.#opening || scope !== this.#scope) return undefined;
+    this.#saved = submitted;
+    const baseline = structuredClone(this.#baseline);
+    baseline.receipt.operationDescription = value;
+    this.#baseline = baseline;
+    this.draft = {
+      ...this.draft,
+      receipt: { ...this.draft.receipt, operationDescription: value },
+    };
+    scope.commit(baseline);
+    this.busy = false;
+    this.#queuePreview();
+    return undefined;
+  }
   protected override updated(): void {
+    const description = this.savedOperationDescription;
+    if (description !== this.#announcedDescription) {
+      this.#announcedDescription = description;
+      this.#notify("department-receipt-description");
+    }
     if (this.#marked === this.#announcedMarked) return;
     this.#announcedMarked = this.#marked;
     this.#notify("department-receipt-invalid", this.department?.id, { invalid: this.#marked });
@@ -174,7 +228,7 @@ export class DepartmentReceiptEditor extends LitElement {
     this.#opening++;
     this.department = { id };
     this.model = undefined;
-    this.#baseline = undefined;
+    this.#baseline = this.#saved = undefined;
     this.busy = false;
     this.#feedback.reset();
     this.errors = {};
@@ -205,7 +259,7 @@ export class DepartmentReceiptEditor extends LitElement {
     const departmentId = this.department?.id;
     this.#opening++;
     this.#release();
-    this.#baseline = undefined;
+    this.#baseline = this.#saved = undefined;
     this.department = null;
     this.busy = false;
     if (notifyHost && departmentId && this.isConnected)
@@ -217,7 +271,8 @@ export class DepartmentReceiptEditor extends LitElement {
       | "department-receipt-cancel"
       | "department-receipt-closed"
       | "department-receipt-invalid"
-      | "department-receipt-refused",
+      | "department-receipt-refused"
+      | "department-receipt-description",
     departmentId = this.department?.id,
     detail: { invalid?: boolean } = {},
   ): void {
@@ -299,6 +354,7 @@ export class DepartmentReceiptEditor extends LitElement {
         (model) => {
           if (opening !== this.#opening) return;
           this.readError = "";
+          this.#saved = structuredClone({ receipt: model.receipt, policy: model.policy });
           const first = this.model === undefined;
           if (!first && !this.busy && this.#scope?.isDirty()) this.#adoptUntouched(model);
           this.model = model;
@@ -401,7 +457,7 @@ export class DepartmentReceiptEditor extends LitElement {
     return body;
   }
   #edit(
-    field: "phone" | "email" | "logo" | "operationDescription" | "headerSubtitle" | "footerMessage",
+    field: "phone" | "email" | "logo" | "headerSubtitle" | "footerMessage",
     value: string | null,
     language?: string,
   ): void {
@@ -453,17 +509,6 @@ export class DepartmentReceiptEditor extends LitElement {
         problems[field] = t(
           field === "phone" ? "receipts.invalid_phone" : "receipts.invalid_email",
         );
-    }
-    if (this.requiresDescription) {
-      const value = receipt.operationDescription ?? "";
-      if (!value.trim()) problems.operationDescription = t("venue_settings.required");
-      else if (
-        value.length > 500 ||
-        Array.from(value).some(
-          (character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127,
-        )
-      )
-        problems.operationDescription = t("venue_settings.invalid");
     }
     return problems;
   }
@@ -543,28 +588,7 @@ export class DepartmentReceiptEditor extends LitElement {
     } catch (error) {
       if (opening !== this.#opening) return;
       this.busy = false;
-      const params = (error as { params?: Record<string, unknown> } | null)?.params;
-      const field =
-        codeOf(error) === "image.invalid_file"
-          ? "logo"
-          : typeof params?.field === "string"
-            ? params.field
-            : "";
-      const key = typeof params?.language === "string" ? `${field}-${params.language}` : field;
-      const sentence =
-        typeof params?.maxLength === "number"
-          ? t("receipts.trim_too_long").replace("{max}", String(params.maxLength))
-          : params?.reason === "invalid_phone"
-            ? t("receipts.invalid_phone")
-            : params?.reason === "invalid_email"
-              ? t("receipts.invalid_email")
-              : params?.reason === "image_not_found"
-                ? t("receipts.logo_not_found")
-                : params?.reason === "invalid_logo"
-                  ? t("receipts.invalid_logo")
-                  : field === "operationDescription"
-                    ? t("venue_settings.invalid")
-                    : codeMessage(codeOf(error));
+      const { key, sentence } = refusal(error, "venue_settings.fix_on_details");
       if (
         Array.from(this.shadowRoot!.querySelectorAll("[name]")).some(
           (element) => element.getAttribute("name") === key,
@@ -579,7 +603,7 @@ export class DepartmentReceiptEditor extends LitElement {
     }
     if (opening !== this.#opening || scope !== this.#scope) return;
     scope.commit(submitted);
-    this.#baseline = submitted;
+    this.#baseline = this.#saved = submitted;
     this.draft = structuredClone(submitted);
     this.#feedback.reset();
     this.busy = false;
@@ -747,23 +771,6 @@ export class DepartmentReceiptEditor extends LitElement {
                       }}
                     ></wt-input>`,
                 )}
-                ${
-                  this.requiresDescription
-                    ? html`<wt-input
-                        name="operationDescription"
-                        required
-                        label=${t("venue_settings.description")}
-                        hint=${t("receipts.operation_description_hint")}
-                        .value=${this.draft.receipt.operationDescription ?? ""}
-                        error=${errors.operationDescription ?? ""}
-                        ?disabled=${this.busy}
-                        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                          event.stopPropagation();
-                          this.#edit("operationDescription", event.detail.value);
-                        }}
-                      ></wt-input>`
-                    : nothing
-                }
                 ${warnings.length ? html`<p class="note" data-test="translation-warning" role="note">${t("receipts.translation_warning")}</p>` : nothing}
                 ${this.model.languages.map(
                   (language) =>
@@ -831,6 +838,36 @@ export class DepartmentReceiptEditor extends LitElement {
         >
       </wt-form-actions>`;
   }
+}
+/** `description` words a description refusal; the Receipts tab's own save points to Details. */
+function refusal(
+  error: unknown,
+  description:
+    "venue_settings.invalid" | "venue_settings.fix_on_details" = "venue_settings.invalid",
+): { key: string; sentence: string } {
+  const params = (error as { params?: Record<string, unknown> } | null)?.params;
+  const field =
+    codeOf(error) === "image.invalid_file"
+      ? "logo"
+      : typeof params?.field === "string"
+        ? params.field
+        : "";
+  const key = typeof params?.language === "string" ? `${field}-${params.language}` : field;
+  const sentence =
+    typeof params?.maxLength === "number"
+      ? t("receipts.trim_too_long").replace("{max}", String(params.maxLength))
+      : params?.reason === "invalid_phone"
+        ? t("receipts.invalid_phone")
+        : params?.reason === "invalid_email"
+          ? t("receipts.invalid_email")
+          : params?.reason === "image_not_found"
+            ? t("receipts.logo_not_found")
+            : params?.reason === "invalid_logo"
+              ? t("receipts.invalid_logo")
+              : field === "operationDescription"
+                ? t(description)
+                : codeMessage(codeOf(error));
+  return { key, sentence };
 }
 function receiptButton(host: DepartmentReceiptEditor): HTMLElement | null {
   return host.shadowRoot!.querySelector("[data-test=save-receipt]");

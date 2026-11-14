@@ -58,15 +58,22 @@ interface ReceiptEditor {
   hasUnsavedChanges?: boolean;
   saving?: boolean;
   invalid?: boolean;
+  savedOperationDescription?: string;
+  descriptionProblem?(value: string): string;
+  saveOperationDescription?(value: string): Promise<string | undefined>;
 }
+/** `operationDescription` is the receipt record's, present while the receipt editor offers it; it
+ * is saved through that editor, never with the department's settings. */
 type DepartmentDraft = Omit<DepartmentSettingsInput, "serviceSteps"> & {
   serviceSteps: ServiceStepDraft[];
+  operationDescription?: string;
 };
 const REMINDER_MINUTES = [0, 5, 10, 15, 20, 30];
 type Field = keyof DepartmentDraft | "receivingProfileId" | "destinationDepartmentIds";
 const fieldTab: Record<Field, DepartmentTab> = {
   name: "details",
   tradingName: "details",
+  operationDescription: "details",
   orderStart: "service",
   paidWhen: "service",
   collectionNumber: "service",
@@ -91,6 +98,8 @@ const copy = (value: DepartmentDraft): DepartmentDraft => ({
     : {}),
 });
 const equal = (a: DepartmentDraft, b: DepartmentDraft) =>
+  a.operationDescription === b.operationDescription && settingsEqual(a, b);
+const settingsEqual = (a: DepartmentDraft, b: DepartmentDraft) =>
   a.name.trim() === b.name.trim() &&
   a.tradingName.trim() === b.tradingName.trim() &&
   a.orderStart === b.orderStart &&
@@ -208,6 +217,7 @@ export class DepartmentSettings extends LitElement {
   private transferLoading = false;
   private transfersLoaded = false;
   private transfersShown = false;
+  private descriptionFocusDue = false;
   override connectedCallback() {
     super.connectedCallback();
     this.requestUpdate();
@@ -244,9 +254,27 @@ export class DepartmentSettings extends LitElement {
     return this.busy || this.refreshing || !!this.receipt?.saving;
   }
   private get shownErrors(): Partial<Record<Field, string>> {
-    return { ...(this.feedback.attempted ? this.errors : {}), ...this.refused };
+    return { ...(this.feedback.attempted ? this.fieldErrors(this.receipt) : {}), ...this.refused };
+  }
+  /** Focuses the description on Details once the receipt editor offers it; a tab change, a click or
+   * edit on Details, or another department cancels the request. */
+  focusDescription() {
+    this.descriptionFocusDue = true;
+    this.requestUpdate();
+  }
+  protected override updated() {
+    if (!this.descriptionFocusDue) return;
+    const field = this.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      "[slot=details] [name=operationDescription]",
+    );
+    if (!field) return;
+    this.descriptionFocusDue = false;
+    void field.updateComplete.then(() => {
+      if (this.tab === "details" && field.isConnected) field.focus();
+    });
   }
   private selectTab(tab: DepartmentTab, replace: boolean) {
+    this.descriptionFocusDue = false;
     this.tab = tab;
     this.emit("department-tab-change", { tab, replace });
   }
@@ -267,6 +295,29 @@ export class DepartmentSettings extends LitElement {
     if (event.detail?.departmentId !== this.departmentId) return;
     this.requestUpdate();
     if (event.detail.invalid && this.tab !== "receipt") this.showFirstInvalid(new Set(["receipt"]));
+  }
+  private receiptDescription(event: CustomEvent<{ departmentId?: string }>) {
+    event.stopPropagation();
+    if (event.detail?.departmentId === this.departmentId) this.requestUpdate();
+  }
+  /** Takes the receipt editor's saved description into baseline, and into the draft while the
+   * draft's copy is untouched. */
+  private followDescription() {
+    const saved = this.receipt?.savedOperationDescription;
+    if (saved === this.baseline!.operationDescription || this.busy) return;
+    const draft = { ...this.draft! },
+      baseline = { ...this.baseline! };
+    if (saved === undefined) {
+      delete draft.operationDescription;
+      delete baseline.operationDescription;
+    } else {
+      if (draft.operationDescription === baseline.operationDescription)
+        draft.operationDescription = saved;
+      baseline.operationDescription = saved;
+    }
+    this.draft = draft;
+    this.baseline = baseline;
+    this.scope?.commit(baseline);
   }
   private async receiptRefused(event: CustomEvent<{ departmentId?: string }>) {
     event.stopPropagation();
@@ -306,6 +357,7 @@ export class DepartmentSettings extends LitElement {
       serviceSteps: this.modelSteps(row.id),
     };
     if (this.opened !== row.id) {
+      this.descriptionFocusDue = false;
       this.scope?.dispose();
       this.scope = undefined;
       this.leave = undefined;
@@ -386,11 +438,15 @@ export class DepartmentSettings extends LitElement {
           ...source,
           serviceSteps: steps,
           ...(this.draft!.transfers ? { transfers: this.draft!.transfers } : {}),
+          ...(this.draft!.operationDescription === undefined
+            ? {}
+            : { operationDescription: this.draft!.operationDescription }),
         };
         this.baseline = copy(this.draft);
         this.scope.commit(this.baseline);
       }
     }
+    this.followDescription();
     if (
       this.isConnected &&
       this.showsTransfers &&
@@ -490,6 +546,7 @@ export class DepartmentSettings extends LitElement {
   }
   private changed(field: Field, value: unknown) {
     if (!this.department?.active) return;
+    this.descriptionFocusDue = false;
     if (field === "receivingProfileId")
       this.draft = {
         ...this.draft!,
@@ -592,9 +649,16 @@ export class DepartmentSettings extends LitElement {
       shown[key] = { ...shown[key], ...row };
     return shown;
   }
-  private get errors(): Partial<Record<Field, string>> {
+  private fieldErrors(receipt: ReceiptEditor | undefined): Partial<Record<Field, string>> {
+    const value = this.draft?.operationDescription;
+    // A description equal to the saved one is not sent, so it is not judged.
+    const description =
+      value === undefined || value === this.baseline?.operationDescription
+        ? ""
+        : (receipt?.descriptionProblem?.(value) ?? "");
     return {
       ...(this.draft?.name.trim() ? {} : { name: t("venue.field_required") }),
+      ...(description ? { operationDescription: description } : {}),
       ...(this.draft?.tradingName.trim() ? {} : { tradingName: t("venue.field_required") }),
       ...(Object.keys(this.stepErrors).length ? { serviceSteps: "" } : {}),
     };
@@ -686,7 +750,7 @@ export class DepartmentSettings extends LitElement {
     this.refused = {};
     this.refusedSteps = {};
     this.failure = "";
-    if (Object.keys(this.errors).length) {
+    if (Object.keys(this.fieldErrors(this.receipt)).length) {
       this.showFirstInvalid();
       return;
     }
@@ -695,27 +759,54 @@ export class DepartmentSettings extends LitElement {
     kept.name = kept.name.trim();
     kept.tradingName = kept.tradingName.trim();
     if (!this.showsTransfers) delete kept.transfers;
-    const { serviceSteps, ...unchanged } = kept;
+    const { serviceSteps, operationDescription, ...unchanged } = kept;
+    const description =
+      operationDescription !== undefined &&
+      operationDescription !== this.baseline!.operationDescription
+        ? operationDescription
+        : undefined;
     const submitted: DepartmentSettingsInput = stepsEqual(serviceSteps, this.baseline!.serviceSteps)
       ? unchanged
       : { ...unchanged, serviceSteps: toStepInputs(serviceSteps) };
     const publish = this.publishSaved;
     this.busy = true;
+    let written = false;
     try {
-      const answer = await this.api.saveDepartmentSettings(id, submitted);
-      publish?.(answer);
-      if (this.current(id, generation)) {
-        const committed = copy(kept);
-        if (!kept.transfers && this.showsTransfers)
-          committed.transfers = copy(this.baseline!).transfers;
-        if (!this.showsTransfers) delete committed.transfers;
-        this.baseline = committed;
-        this.model = { ...this.model!, ...answer };
-        this.scope?.commit(committed);
-        this.emit("saved", { departmentId: id });
+      if (!settingsEqual(kept, this.baseline!)) {
+        try {
+          const answer = await this.api.saveDepartmentSettings(id, submitted);
+          publish?.(answer);
+          if (!this.current(id, generation)) return;
+          const committed = {
+            ...copy(kept),
+            operationDescription: this.baseline!.operationDescription,
+          };
+          if (!kept.transfers && this.showsTransfers)
+            committed.transfers = copy(this.baseline!).transfers;
+          if (!this.showsTransfers) delete committed.transfers;
+          this.baseline = committed;
+          this.model = { ...this.model!, ...answer };
+          this.scope?.commit(committed);
+          written = true;
+        } catch (error) {
+          if (this.current(id, generation)) this.fieldRefusal(error, submitted, serviceSteps);
+          return;
+        }
       }
-    } catch (error) {
-      if (this.current(id, generation)) this.fieldRefusal(error, submitted, serviceSteps);
+      const receipt = this.receipt;
+      if (description !== undefined && receipt?.saveOperationDescription) {
+        const refusal = await receipt.saveOperationDescription(description);
+        if (!this.current(id, generation)) return;
+        if (refusal === undefined) {
+          this.baseline = { ...this.baseline!, operationDescription: description };
+          this.scope?.commit(this.baseline);
+          written = true;
+        } else {
+          this.refused = { operationDescription: refusal };
+          this.showFirstInvalid();
+        }
+      }
+      if (written) this.emit("saved", { departmentId: id });
     } finally {
       if (this.current(id, generation)) this.busy = false;
     }
@@ -788,7 +879,9 @@ export class DepartmentSettings extends LitElement {
     const row = this.department,
       draft = this.draft;
     if (!row || !row.active || !draft) return nothing;
-    const errors = this.shownErrors,
+    const receipt = this.receipt,
+      fieldErrors = this.feedback.attempted ? this.fieldErrors(receipt) : {},
+      errors: Partial<Record<Field, string>> = { ...fieldErrors, ...this.refused },
       disabled = !row.active,
       state = saveActionState(this.scope),
       highlighted =
@@ -798,7 +891,7 @@ export class DepartmentSettings extends LitElement {
     for (const field of ["orderStart", "paidWhen", "collectionNumber"] as const)
       if (errors[field]) serviceErrors[field] = errors[field];
     const marked = new Set(Object.keys(errors).map((field) => fieldTab[field as Field]));
-    if (this.receipt?.invalid) marked.add("receipt");
+    if (receipt?.invalid) marked.add("receipt");
     const offered = this.offeredTabs;
     const tabs: TabItem[] = offered.map((key) => ({
       key,
@@ -821,7 +914,12 @@ export class DepartmentSettings extends LitElement {
           this.selectTab(e.detail.value, false);
         }}
       >
-        <div class="panel" slot="details" @keydown=${this.submitOnEnter}>
+        <div
+          class="panel"
+          slot="details"
+          @keydown=${this.submitOnEnter}
+          @pointerdown=${() => (this.descriptionFocusDue = false)}
+        >
           <wt-input
             name="name"
             label=${t("venue.name")}
@@ -847,6 +945,23 @@ export class DepartmentSettings extends LitElement {
               this.changed("tradingName", e.detail.value);
             }}
           ></wt-input>
+          ${
+            draft.operationDescription === undefined
+              ? nothing
+              : html`<wt-input
+                  name="operationDescription"
+                  label=${t("venue.operation_description")}
+                  hint=${t("venue.operation_description_hint")}
+                  required
+                  .value=${draft.operationDescription}
+                  error=${errors.operationDescription ?? ""}
+                  ?disabled=${disabled}
+                  @wt-change=${(e: CustomEvent<{ value: string }>) => {
+                    e.stopPropagation();
+                    this.changed("operationDescription", e.detail.value);
+                  }}
+                ></wt-input>`
+          }
         </div>
         <div class="panel" slot="service" @keydown=${this.submitOnEnter}>
           <section aria-label=${t("venue.orders_and_payment")}>
@@ -943,6 +1058,7 @@ export class DepartmentSettings extends LitElement {
                 slot="receipt"
                 @department-receipt-invalid=${this.receiptInvalid}
                 @department-receipt-refused=${this.receiptRefused}
+                @department-receipt-description=${this.receiptDescription}
               >
                 ${this.receiptEditor}
               </div>`
@@ -1006,7 +1122,7 @@ export class DepartmentSettings extends LitElement {
             : nothing
         }
       </wt-tabs>
-      ${row.active && this.tab !== "receipt" ? html`<wt-form-actions .error=${bottomMessage(this.failure, highlighted ? t("venue.fix_fields") : "")}><wt-button slot="cancel" variant="secondary" data-test="cancel-editor" ?disabled=${this.busy || this.refreshing} @click=${() => void this.cancel()}>${t("venue.cancel")}</wt-button><wt-button data-test="save-editor" variant=${this.refreshing ? "secondary" : state.variant} ?disabled=${this.busy || this.refreshing || state.unchanged || (this.feedback.attempted && Object.keys(this.errors).length > 0)} @click=${() => void this.save()}>${t("venue.save")}</wt-button></wt-form-actions>` : nothing}
+      ${row.active && this.tab !== "receipt" ? html`<wt-form-actions .error=${bottomMessage(this.failure, highlighted ? t("venue.fix_fields") : "")}><wt-button slot="cancel" variant="secondary" data-test="cancel-editor" ?disabled=${this.busy || this.refreshing} @click=${() => void this.cancel()}>${t("venue.cancel")}</wt-button><wt-button data-test="save-editor" variant=${this.refreshing ? "secondary" : state.variant} ?disabled=${this.busy || this.refreshing || state.unchanged || Object.keys(fieldErrors).length > 0} @click=${() => void this.save()}>${t("venue.save")}</wt-button></wt-form-actions>` : nothing}
     </div>`;
   }
 }

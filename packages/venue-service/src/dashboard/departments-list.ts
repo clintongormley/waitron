@@ -170,10 +170,10 @@ export class DepartmentsList extends LitElement {
                   part="link"
                   variant="ghost"
                   size="sm"
-                  data-test=${`receipt-setup-${row.id}`}
+                  data-test=${`description-setup-${row.id}`}
                   @click=${(event: Event) => {
                     event.stopPropagation();
-                    this.#emit("edit-receipt", { departmentId: row.id });
+                    this.#emit("edit-description", { departmentId: row.id });
                   }}
                   >${t("venue.readiness.department_description")}</wt-button
                 >`

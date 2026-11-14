@@ -58,6 +58,12 @@ export class DepartmentEditDialog extends LitElement {
       this.emit("gone", this.departmentId);
     }
   }
+  async focusDescription() {
+    await this.updateComplete;
+    const form = this.shadowRoot!.querySelector("department-settings");
+    await form?.updateComplete;
+    form?.focusDescription();
+  }
   private readonly beforeClose = async (reason: LeaveReason) =>
     this.shadowRoot!.querySelector("department-settings")?.requestLeave(reason) ?? true;
 

@@ -28,7 +28,8 @@ it("keeps receipt decoration without an automatic-print switch", async () => {
 });
 it("opens with required description, bare languages and no inherited content or no-op write", async () => {
   const { el, api } = await mountReceiptEditor();
-  expect(receiptField(el, "operationDescription").required).toBe(true);
+  expect(el.savedOperationDescription).toBe("Dining service");
+  expect(receiptRoot(el).querySelector("[name=operationDescription]")).toBeNull();
   expect(
     [...receiptRoot(el).querySelectorAll("h3[lang]")].map((h) => h.textContent!.trim()),
   ).toEqual(["Spanish", "Catalan"]);
@@ -62,28 +63,6 @@ it("saves exact independent receipt and policy, keeps hidden translations and st
   expect(receiptRoot(el).querySelector("wt-form-actions")!.error).toBe("");
   expect(receiptSave(el).disabled).toBe(false);
 });
-it("explains an empty required description and disables Save until repaired", async () => {
-  const { el, api } = await mountReceiptEditor();
-  await editReceipt(el, "operationDescription", "");
-  await clickReceiptSave(el);
-  expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
-  expect(receiptField(el, "operationDescription").error).toBe(t("venue_settings.required"));
-  expect(receiptRoot(el).querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
-  expect(receiptSave(el).disabled).toBe(true);
-  const description = receiptField(el, "operationDescription");
-  await expect
-    .poll(() => description.shadowRoot!.activeElement)
-    .toBe(description.shadowRoot!.querySelector("input"));
-  expect(description.value).toBe("");
-  expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
-  await editReceipt(el, "operationDescription", "Counter service");
-  expect(description.error).toBe("");
-  expect(receiptRoot(el).querySelector("wt-form-actions")!.error).toBe("");
-  expect(receiptSave(el).disabled).toBe(false);
-  await editReceipt(el, "operationDescription", " ");
-  expect(description.error).toBe(t("venue_settings.required"));
-  expect(receiptSave(el).disabled).toBe(true);
-});
 
 it("uses the server's installed contribution metadata to hide the description and save decoration", async () => {
   const { el, api } = await mountReceiptEditor(
@@ -109,20 +88,8 @@ it("allows installations without a description field to save their empty receipt
   await expect.poll(() => api.putDepartmentReceipt.mock.calls.length).toBe(1);
   expect(api.putDepartmentReceipt.mock.lastCall?.[1].receipt).toEqual({ email: "bar@example.com" });
 });
-it.each(["a".repeat(501), "Sale\u0001service"])(
-  "refuses an invalid authored description without writing (%j)",
-  async (value) => {
-    const { el, api } = await mountReceiptEditor();
-    await editReceipt(el, "operationDescription", value);
-    await clickReceiptSave(el);
-    expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
-    expect(receiptField(el, "operationDescription").error).toBe(t("venue_settings.invalid"));
-    expect(receiptSave(el).disabled).toBe(true);
-  },
-);
-it("permits a 500-character description and validates the telephone before writing", async () => {
+it("validates the telephone before writing and sends the saved description unchanged", async () => {
   const { el, api } = await mountReceiptEditor();
-  await editReceipt(el, "operationDescription", "a".repeat(500));
   await editReceipt(el, "phone", "not a telephone");
   await clickReceiptSave(el);
   expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
@@ -130,7 +97,7 @@ it("permits a 500-character description and validates the telephone before writi
   await editReceipt(el, "phone", "+34 912 345 678");
   await clickReceiptSave(el);
   expect(api.putDepartmentReceipt.mock.lastCall?.[1].receipt.operationDescription).toBe(
-    "a".repeat(500),
+    "Dining service",
   );
 });
 it("edits receipt policies with the same venue authority as receipt text", async () => {
@@ -411,7 +378,7 @@ it("a replacement subject loads the new department and shows its values in place
   await el.updateComplete;
   await expect.poll(() => api.getDepartmentReceipt.mock.calls.length).toBe(2);
   expect(api.getDepartmentReceipt.mock.lastCall?.[0]).toBe("terrace");
-  await expect.poll(() => receiptField(el, "operationDescription")?.value).toBe("Terrace service");
+  await expect.poll(() => el.savedOperationDescription).toBe("Terrace service");
   expect(receiptField(el, "email").value).toBe("");
   expect(receiptSave(el).disabled).toBe(true);
   expect(app.leave.coordinator.isDirty()).toBe(false);
