@@ -37,7 +37,7 @@ On the main box, open **System → Servers** to check the spare's delay in secon
 Keep both boxes switched on. If the copy is more than a minute behind or **Freshness unknown** stays on screen,
 check that the spare is connected to the restaurant's network. **Rebuilding the copy** means you should leave both boxes on while the copy is restored.
 
-Switching still uses the copy taken when this spare joined. Check the copy offered on the handover page before switching.
+A switch first brings this spare's copy up to date. Check the copy offered on the handover page before switching.
 The bell and **Box status** warn when sending or applying changes is delayed, or the spare cannot be reached for two minutes.
 
 ## Remove a spare box {#remove-a-spare}

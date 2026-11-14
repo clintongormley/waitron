@@ -41,7 +41,7 @@ En el servidor principal, abre **Sistema → Servidores** para comprobar el retr
 Deja ambos equipos encendidos. Si la copia lleva más de un minuto de retraso o sigue apareciendo **Actualización desconocida**,
 comprueba que el equipo de reserva esté conectado a la red del restaurante. **Reconstruyendo la copia** indica que debes dejar ambos equipos encendidos mientras se restaura la copia.
 
-El cambio sigue usando la copia tomada cuando este equipo de reserva se unió. Comprueba la copia que ofrece la página de traspaso antes de cambiar.
+Al cambiar, primero se pone al día la copia de este equipo de reserva. Comprueba la copia que ofrece la página de traspaso antes de cambiar.
 La campana y **Estado del servidor** avisan si se retrasa el envío o la aplicación de cambios, o si no se puede contactar con el equipo de reserva durante dos minutos.
 
 ## Retirar un servidor de reserva {#remove-a-spare}

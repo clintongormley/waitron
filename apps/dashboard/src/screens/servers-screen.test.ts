@@ -1083,9 +1083,7 @@ it("shows cached spare delay, last copy and the switch limit through passive ref
   const copy = () => inTable(el, `follow-${STANDBY}`);
   expect(copy()!.textContent).toContain("61 s behind");
   expect(copy()!.textContent).toContain("Last copy received");
-  expect(copy()!.textContent).toContain(
-    "Switching still uses the copy taken when this spare joined.",
-  );
+  expect(copy()!.textContent).toContain("A switch first brings this spare's copy up to date.");
   expect(copy()!.getAttribute("data-state")).toBe("attention");
   expect(inTable(el, `follow-${SELF}`)).toBeNull();
   vi.mocked(api.listServers).mockResolvedValue({ ...listing, spare: { ...spare, lagMs: 3000 } });
