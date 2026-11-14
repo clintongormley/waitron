@@ -44,26 +44,26 @@ describe("print payload housekeeping", () => {
   it("empties only old terminal jobs and stores an empty blob without changing their history", async () => {
     const p = await printer();
     const cases = [
-      { status: "done", want: 0 },
-      { status: "done", createdAt: "2026-11-07T04:00:00.000Z", want: 3 },
-      { status: "done", createdAt: "2026-11-07T03:59:59.999Z", want: 0 },
-      { status: "done", createdAt: "2026-11-13T04:00:00.000Z", want: 3 },
-      { status: "queued", want: 3 },
-      { status: "printing", want: 3 },
-      { status: "failed", attempts: 4, want: 3 },
-      { status: "failed", attempts: 5, want: 3 },
-      { status: "failed", attempts: 5, lastError: "print_job.moved", want: 3 },
-      { status: "failed", attempts: 5, lastError: "printer.unpaired", want: 3 },
-      { status: "failed", attempts: 5, lastError: "printer.deleted", want: 0 },
-      { status: "failed", kind: "drawer", attempts: 1, want: 0 },
+      [{ status: "done" }, 0],
+      [{ status: "done", createdAt: "2026-11-07T04:00:00.000Z" }, 3],
+      [{ status: "done", createdAt: "2026-11-07T03:59:59.999Z" }, 0],
+      [{ status: "done", createdAt: "2026-11-13T04:00:00.000Z" }, 3],
+      [{ status: "queued" }, 3],
+      [{ status: "printing" }, 3],
+      [{ status: "failed", attempts: 4 }, 3],
+      [{ status: "failed", attempts: 5 }, 3],
+      [{ status: "failed", attempts: 5, lastError: "print_job.moved" }, 3],
+      [{ status: "failed", attempts: 5, lastError: "printer.unpaired" }, 3],
+      [{ status: "failed", attempts: 5, lastError: "printer.deleted" }, 0],
+      [{ status: "failed", kind: "drawer", attempts: 1 }, 0],
     ] as const;
-    for (const { want: _want, ...patch } of cases) await job(p.id, patch);
+    for (const [patch] of cases) await job(p.id, patch);
     const before = await suite.db.select().from(printJobs);
     expect(await clearOldPrintPayloads(suite.db, now, new AbortController().signal)).toBe(4);
-    expect(lengths()).toEqual(cases.map(({ want }) => ({ size: want, storage: "blob" })));
+    expect(lengths()).toEqual(cases.map(([, want]) => ({ size: want, storage: "blob" })));
     const after = await suite.db.select().from(printJobs);
-    expect(after.map(({ payload: _payload, ...row }) => row)).toEqual(
-      before.map(({ payload: _payload, ...row }) => row),
+    expect(after.map((row) => ({ ...row, payload: null }))).toEqual(
+      before.map((row) => ({ ...row, payload: null })),
     );
     expect(await clearOldPrintPayloads(suite.db, now, new AbortController().signal)).toBe(0);
   });
