@@ -141,6 +141,11 @@ Every point the owner's answers left open, the default built, and why. Each can 
 13. **A remote administrator reaching the box through the cloud tunnel is refused**, like the box's
     own screen: the tunnel delivers requests from loopback (`packages/tunnel/src/client.ts`, read).
     Fails closed; a backlog entry asks how to tell them apart.
+    > **Pointer (2026-11-14):** the relay this sentence read (`packages/tunnel`) was retired in
+    > #2543. Cloud's staff access now reaches the box's staff entrance (A951-S,
+    > `apps/server/src/cloud-remote.ts`), which marks its requests remote, so an administrator coming
+    > in through it is not refused. `apps/server/src/clock-set.route.test.ts` runs the challenge, set
+    > and confirm routes for one, beside the same requests refused when sent unmarked from loopback.
 14. **On a developer's laptop (`WAITRON_ENV=dev`) an administrator may confirm from the same
     machine**; everywhere else the box's own screen is refused. Devices on the box never count, even
     in development.
