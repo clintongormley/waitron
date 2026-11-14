@@ -3103,7 +3103,10 @@ BEGIN
   WHERE exists (SELECT 1 FROM sales WHERE id = new.sale_id)
     AND (SELECT coalesce(sum(amount), 0) FROM tenders WHERE sale_id = new.sale_id)
         <> (SELECT total FROM sales WHERE id = new.sale_id)
-           + (SELECT coalesce(sum(total), 0) FROM sales WHERE corrects_sale_id = new.sale_id)
+           + (SELECT coalesce(sum(total), 0) FROM sales
+              WHERE (corrects_sale_id = new.sale_id AND replaces_original = 0)
+                 OR corrects_sale_id IN (SELECT id FROM sales
+                   WHERE corrects_sale_id = new.sale_id AND replaces_original = 1))
            + (SELECT coalesce(sum(tip_amount), 0) FROM tenders WHERE sale_id = new.sale_id);
 END;
 --> statement-breakpoint

@@ -847,6 +847,24 @@ describe("Find Bills SQL paging", () => {
     await inTx(venue, (tx) => insertCorrective(tx, replacement, { total: "-1.21" }));
     expect(await owed()).toEqual(["1.79", "1.79"]);
   });
+  it("collects a replaced bill whose replacement was refunded at what is left", async () => {
+    const id = await placedIssuedBill(venue, "Caña");
+    const [sale] = await inTx(venue, (tx) =>
+      tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, id)),
+    );
+    const replacement = await inTx(venue, (tx) =>
+      insertCorrective(tx, sale!.id, { replaces: true }),
+    );
+    await inTx(venue, (tx) => insertCorrective(tx, replacement, { total: "-1.21" }));
+
+    const answer = await collect(venue, id, "1.79");
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(await inTx(venue, (tx) => readFindBill(tx, id))).toMatchObject({
+      paid: "1.79",
+      stillOwed: "0.00",
+    });
+  });
   it("marks earlier days at the venue business boundary rather than midnight", async () => {
     const id = await parked(venue, "Caña");
     await inTx(venue, (tx) =>
