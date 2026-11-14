@@ -955,7 +955,8 @@ export class DeviceProfilesScreen extends LitElement {
   #errors(): FieldErrors {
     const errors = this.#ownErrors();
     const refused = this.fieldRefusal;
-    if (refused !== null && !errors[refused.field]) errors[refused.field] = refused.sentence;
+    if (refused !== null && this.#shownFields().includes(refused.field) && !errors[refused.field])
+      errors[refused.field] = refused.sentence;
     return errors;
   }
 
@@ -2569,7 +2570,7 @@ export class DeviceProfilesScreen extends LitElement {
   #renderEditor(): TemplateResult {
     const errors = this.#errors();
     const ordering = this.#ordering();
-    const marked = this.#shownFields().some((field) => errors[field]);
+    const marked = FIELDS.some((field) => errors[field]);
     const ownMarked = Object.keys(this.#ownErrors()).length > 0;
     const save = this.#saveState();
     const message = bottomMessage(
