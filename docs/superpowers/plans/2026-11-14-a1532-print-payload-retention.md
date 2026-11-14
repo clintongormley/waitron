@@ -1,60 +1,59 @@
-# A1532: release old print-job payloads after one week
+# A1532: release print-job payloads after one week
 
-**Authority and finish line.** The owner said “a week is fine” on 2026-11-14 at
-17:02 (Lane J `queue.md`, A1532). A daily runner job releases old printed bytes while
-keeping every row/link; unavailable queue reprints explain how to proceed. The owner
-chose the period; this plan still needs Claude's read and the watcher's clearance.
+**Authority and finish line.** The owner chose “a week is fine” (Lane J queue,
+2026-11-14 17:02); the watcher's same-time questions.md note says “The owner chose a week”.
+Watcher 17:37 clears R16's existing housekeeping seat, all printouts and 30-day measurement.
+This plan still needs its corrected Claude read and watcher clearance. Old terminal jobs lose
+bytes, retain rows/links, and explain unavailable reprints; sale receipts/invoices remain
+rebuildable from Orders. Kitchen tickets, refund receipts, payment slips and reports do not.
 
-**Policy.** Keep the NOT NULL binary column; use `new Uint8Array(0)`, with no schema
-change. Age means `created_at < now − 604800000 ms` (UTC ISO); equality stays.
-Clear only nonempty payloads on `done` jobs, failed nonretryable drawer jobs, and
-failed documents explicitly ended by `printer.deleted`, `printer.unpaired` or
-`print_job.moved`, or exhausted failures whose replacement has printed under
-`printJobInTrouble`'s existing resend/sale/kitchen-coverage rules. Preserve queued and
-printing jobs, every other failed document, and jobs with a queued/sending/unknown invoice
-delivery. Age, a disabled printer and exhausted attempts alone do not mean abandoned.
+**Policy.** Keep NOT NULL and bind `new Uint8Array(0)`; no schema/migration. In a real
+`useVenueDb` test first assert `typeof(payload) = 'blob'` and `length(payload) = 0`.
+Age is `created_at < now − 604800000 ms` in UTC ISO; equality stays. Clear nonempty payloads
+only for done jobs, failed drawers, and failed documents either marked `printer.deleted`
+or exhausted **and** cleared by `NOT printJobInTrouble(now)`'s existing replacement rules.
+Do not exempt moved/unpaired jobs. Keep every queued/printing job, retryable failed document,
+undecided exhausted failure, and linked queued/sending/unknown invoice delivery.
 
-**Reuse and files.** Add `apps/server/src/print-payload-retention.ts`: use
-`withTransaction`, `printJobInTrouble` and `JobDefinition`; clear up to 100 rows per
-transaction, rechecking eligibility, releasing the lock and checking cancellation
-between batches. Register on the writable primary in `boot.ts`, once at start and every
-24 hours through the existing runner/backoff. Mark `printing.payload_retention` as stopping
-at stepdown in `job-catalogue.ts`. Preserve all statuses, timestamps and audit/history links.
+**Build and reuse.** Create `apps/server/src/housekeeping.ts` with `housekeepingJob`
+using jr7's existing deps (`db`, `isPrimary`, `readClock`, `jitterSeed`, `now`, `log`) and only
+this payload step. Use `nextFireMs` for 04:00 venue time, no startup sweep; wire the existing
+primary-only, stop-at-stepdown `housekeeping` seat in `boot.ts`. Reuse its catalogue, wording,
+runner backoff and stop handling. Scan bounded rowid windows forward; recheck eligibility in
+each `withTransaction`, retain all other values, and yield a real event-loop turn/check the
+signal between batches. Choose the batch by the measurement below, not an invented bound.
 
-Add an exported empty-document assertion in `packages/printing/src/outbox.ts` and
-`index.ts`, with `print_job.sale_payload_expired` / `print_job.payload_expired` in
-`errors.ts`. Apply it before resend insertion (even with supplied replacement bytes),
-before both printer paths/sale layout in `apps/server/src/print-job-reprint.ts`, before
-reservation changes in `invoice-print.ts`, and before preview in `print-api.ts`.
-Keep existing queue reprint availability so an attempted reprint receives the explanation;
-keep View, refuse stale requests, and exclude empty practice previews. Reuse existing
-request-error display and `apps/dashboard/src/i18n/codes.ts` for English/Spanish wording:
-stored bytes were removed after a week; reprint receipts/invoices from **Orders**;
-old kitchen tickets/other opaque printouts cannot be reprinted from this job.
-Identify sale documents by `saleId`, not `receipt_reprints` (which also links refunds).
+In `invoice-print.ts`, export one shared empty-document assertion and call it before resend
+side effects; reuse it early in `print-job-reprint.ts` before either printer path/layout, and
+`print-api.ts` before preview. No printing-package API or transport-gate change.
+Declare `print_job.sale_payload_expired` / `print_job.payload_expired` in server `errors.ts`;
+map them to 409 in `print-api.ts`, `till-api.ts` and `orders-api.ts`. Add English/Spanish
+wording in dashboard and till `src/i18n/codes.ts`: bytes were removed after a week; rebuild
+sale receipts/invoices from Orders; kitchen/refund/payment/report printouts cannot be reprinted.
+Use `saleId` to distinguish them. Keep existing reprint availability and request-error UI.
+Consumer trace includes resend, invoice retry/switch, alternate-printer layout, queue width,
+preview and practice preview; the latter already accepts empty bytes, so add no special filter.
 
-**Consumer trace.** Resend, agent claim/transport, reprint layout, queue width, preview and
-practice preview read payloads. The sweep's terminal-state rule keeps cleared jobs outside
-claim eligibility; do not add a new transport gate. Retained rows preserve receipt history,
-invoice delivery, kitchen problems, printer/station alerts, deletion and live-query references.
+**Tests, failing first.** Server `housekeeping.test.ts` owns age boundaries, each terminal
+case, preserved retryable/undecided failures (including moved/unpaired), repeat sweeps, cursor
+progress over ineligible rows, yielding/stop, daily scheduling and unchanged audit/link/problem
+rows. Reuse generic runner/backoff tests; `boot.failed-start.test.ts` checks registration/cleanup.
+`invoice-print-api.test.ts`, `print-job-reprint.test.ts`, `print-api.test.ts`,
+`till-api.receipt.test.ts`, `transaction-receipt-api.test.ts` and
+`orders-invoice-deliveries.test.ts` each test their own affected answer and no new job/delivery;
+`orders-reprint.test.ts` retains rebuilding old sales. Dashboard's reprint-dialog/printers-screen
+files and till `i18n/codes.test.ts` check localized wording through existing flows. Run changed
+files, server guide-content, root guide-links, alert-codes and errors-reachable guards.
 
-**Tests, failing first.** Printing's `outbox.test.ts` owns empty resend refusals and a
-nonempty byte-for-byte control. New server `print-payload-retention.test.ts` uses
-`useVenueDb` for cutoff boundaries, terminal states, preserved undecided failures, repeat
-sweeps, batches and unchanged audit/link/problem state. Existing runtime eligibility
-assertions remain intact; reuse runner scheduling/backoff tests; test this job's daily interval/registration/stop in
-`job-catalogue.test.ts` and `boot.failed-start.test.ts`. `print-job-reprint.test.ts`,
-`print-api.test.ts` and invoice-print's existing suite own affected route answers and no new
-job/delivery. `orders-reprint.test.ts` owns rebuilding the sale; dashboard's existing
-`widgets/print-job-reprint-dialog.test.ts` / `screens/printers-screen.test.ts` own localized
-refusal display. Run every changed file, server guide-content and root guide-links guards.
-
-**Measure and scope.** On a disposable copy of the retained 30-day/250-bill/seed-1 bench
-at `95e668a747`, record database size, dbstat, freelist and identical backup-capture size
-before/after in the PR, including unchanged file size if observed. Baseline: database
-1,296,785,408 bytes; print table 782,790,656 (60.364%). No promised savings.
-Update `docs/backlog/printers.md`, its `docs/backlog.md` summary, and server guide
-`en/printers.md` / `es/printers.md`; retain the week/bytes/rows decision and virtual-printer work.
-Estimate: production +180–260/−20–40, tests +220–320/−0–20, test support 0, docs +60/−20.
-Omit virtual printing, A664 retention, row deletion, production VACUUM, streamed uploads,
-new records/protocols/deadlines/approval systems and fiscal writers.
+**Measure and document.** On disposable copies of the retained 30-day/250-bill/seed-1 bench
+at `95e668a747`, fix now at its final `bench-session.json` clock. Apply jr7 Task 1's paired
+five-minute sale-wait test here (watcher 17:37 substitutes 30 days): try 500, then 100/25 if
+the job increases maximum sale wait by over 50 ms; stop if 25 fails. Record chosen batch,
+raw file size, dbstat/freelist and `VACUUM INTO`/identical backup sizes before/after in the PR.
+Baseline: database 1,296,785,408 bytes; print table 782,790,656. No promised saving or year claim.
+Update backlog printers/index and EN/ES server printers guides; retain virtual-printer work.
+Update only print-retention wording in R16 jobs.md and append a dated pointer to historical jr7.
+Tell lane E in the PR and append one line to its questions.md so jr7 reuses this seat.
+Estimate +180–260/−20–40 production, +220–320/−0–20 tests, no test support, +80/−20 docs.
+Leave jr7's other steps, A664, row deletion, production VACUUM, new clock gates, streamed uploads,
+new records/protocols/deadlines/approval systems and fiscal writers out.

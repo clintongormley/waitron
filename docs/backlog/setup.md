@@ -416,7 +416,8 @@ A second build with the same profile and revision measured 1,296,785,408 databas
 with its indexes. Attendance source state and operation facts, each with indexes, use
 11.69% and 7.89%. Its encrypted backup is 1,268,463,897 bytes (1,209.70 MiB).
 The useful compression measurement is before encryption: encrypted bytes no longer expose
-the database's repeated patterns. On the plain `venue.db`, gzip -6 took 14.48 seconds and
+the database's repeated patterns. On the plain `venue.db` (a stand-in for the writer's
+compacted `db.dump`, not a compressed backup-format measurement), gzip -6 took 14.48 seconds and
 produced 230,623,991 bytes (output/input 0.177843); zstd -3 took 0.57 seconds and produced
 152,964,251 bytes (0.117956). Both decompressed to the original SHA-256. Their linear
 360-day estimates are 2,639.28 and 1,750.54 MiB respectively, still above the upload limit.
