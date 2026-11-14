@@ -79,7 +79,7 @@ describe("whole-order instructions on pass boards", () => {
       });
       await vi.waitFor(() => expect(boardRoot(el).textContent).toContain("Burger"));
       const heading = boardRoot(el).querySelector("[data-kitchen-note]");
-      expect(heading?.textContent).toContain("For the kitchen: Train at 14:30 <keep together>");
+      expect(heading?.textContent).toContain("For the station: Train at 14:30 <keep together>");
       expect(
         heading!.compareDocumentPosition(boardRoot(el).querySelector(".item-name")!) &
           Node.DOCUMENT_POSITION_FOLLOWING,

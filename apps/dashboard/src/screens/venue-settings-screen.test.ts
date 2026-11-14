@@ -1,3 +1,4 @@
+import { es } from "../i18n/strings.js";
 import { html } from "lit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WtTabs } from "@waitron/ui";
@@ -261,7 +262,7 @@ describe("the Venue settings page", () => {
     expect(el.shadowRoot!.querySelector("h1")!.textContent!.trim()).toBe("Ajustes del local");
     expect(
       [...tabs(el)!.shadowRoot!.querySelectorAll('[role="tab"]')].map((t) => t.textContent!.trim()),
-    ).toEqual(["Datos del local", "Cocina"]);
+    ).toEqual(["Datos del local", es["venue_settings.tab.kitchen"]]);
   });
 });
 

@@ -7,14 +7,14 @@ it.each([
   [
     "en",
     "Delete station",
-    "Choose another default station first.",
+    "Choose another default station on Routes first.",
     "Move these screens first: Grill, Bar.",
     "3 dishes are still waiting or being prepared.",
   ],
   [
     "es",
     "Eliminar estación",
-    "Elige otra estación predeterminada primero.",
+    VENUE_SERVICE_STRINGS.es["prep.delete_default"],
     "Cambia primero estas pantallas: Grill, Bar.",
     "3 platos siguen pendientes o en preparación.",
   ],
@@ -124,7 +124,7 @@ it.each([
 it.each([
   [
     "en",
-    "Choose another default station first.",
+    "Choose another default station on Routes first.",
     "Move the bound screens first.",
     "Move the bound screen first.",
     "3 dishes are still waiting or being prepared.",
@@ -132,7 +132,7 @@ it.each([
   ],
   [
     "es",
-    "Elige otra estación predeterminada primero.",
+    VENUE_SERVICE_STRINGS.es["prep.delete_default"],
     "Cambia primero las pantallas vinculadas.",
     "Cambia primero la pantalla vinculada.",
     "3 platos siguen pendientes o en preparación.",

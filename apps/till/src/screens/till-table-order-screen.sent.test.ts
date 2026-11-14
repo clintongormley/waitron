@@ -1,3 +1,4 @@
+import { es } from "../i18n/strings.js";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { setLocale, t } from "../i18n/t.js";
@@ -161,10 +162,18 @@ it("keeps a due group's Fire behind the same confirmation", async () => {
 });
 
 it.each([
-  ["en", "held", "It goes to the kitchen now: 0.375 × Fish 1.5, 2 × small, 2 × Bread"],
-  ["es", "held", "Pasa a cocina ahora: 0,375 × Fish 1.5, 2 × small, 2 × Bread"],
-  ["en", "reminder", "It goes to the kitchen now: 0.375 × Fish 1.5, 2 × small, 2 × Bread"],
-  ["es", "reminder", "Pasa a cocina ahora: 0,375 × Fish 1.5, 2 × small, 2 × Bread"],
+  ["en", "held", "It goes to the station now: 0.375 × Fish 1.5, 2 × small, 2 × Bread"],
+  [
+    "es",
+    "held",
+    es["table.fire_group_body"].replace("{summary}", "0,375 × Fish 1.5, 2 × small, 2 × Bread"),
+  ],
+  ["en", "reminder", "It goes to the station now: 0.375 × Fish 1.5, 2 × small, 2 × Bread"],
+  [
+    "es",
+    "reminder",
+    es["table.fire_group_body"].replace("{summary}", "0,375 × Fish 1.5, 2 × small, 2 × Bread"),
+  ],
 ] as const)("shows %s quantities before the native %s Fire", async (locale, entry, expected) => {
   setLocale(locale);
   const held = {
@@ -225,7 +234,7 @@ it("retains every dish in Fire's server summary when the structured read lacks a
   await click(el, "[data-held-toggle]");
   await click(el, '[data-group-fire="g3"]');
   expect(find(el, "[data-fire-summary]").textContent!.replace(/\s+/g, " ").trim()).toBe(
-    "It goes to the kitchen now: 2 × Flan, 0.125 × Fish",
+    "It goes to the station now: 2 × Flan, 0.125 × Fish",
   );
 });
 
@@ -236,7 +245,7 @@ it("retains Fire's server quantity when the structured read has the same line wi
   await click(el, "[data-held-toggle]");
   await click(el, '[data-group-fire="g3"]');
   expect(find(el, "[data-fire-summary]").textContent!.replace(/\s+/g, " ").trim()).toBe(
-    "It goes to the kitchen now: 3 × Flan",
+    "It goes to the station now: 3 × Flan",
   );
 });
 

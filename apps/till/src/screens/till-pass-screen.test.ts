@@ -1,3 +1,4 @@
+import { es } from "../i18n/strings.js";
 import { liveConnectionFixture } from "../../test/live-connection.js";
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -2598,8 +2599,11 @@ describe("A773 pass screen: a pass monitor", () => {
   });
 
   it.each([
-    ["en-GB", "This screen is no longer available: Pass monitor"],
-    ["es-ES", "Esta pantalla ya no está disponible: Monitor de pase"],
+    ["en-GB", "This screen is no longer available: Pass display (view only)"],
+    [
+      "es-ES",
+      es["kitchen_screen.unavailable"].replace("{screen}", es["kitchen_screen.pass_monitor"]),
+    ],
   ])(
     "at a till whose device chose it, shows only its line when a narrowing took the monitor itself, reading no board (%s)",
     (locale, line) =>

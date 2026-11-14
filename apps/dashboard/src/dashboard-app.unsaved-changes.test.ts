@@ -846,7 +846,7 @@ it.each([
   },
   { use: { kind: "included-menu" }, path: "/manage/menus/menu/menu-two/view/structure" },
   { use: { kind: "menu-preview" }, path: "/manage/menus/menu/menu-one/view/preview" },
-  { use: { kind: "routing-device" }, path: "/manage/devices" },
+  { use: { kind: "routing-device" }, path: "/manage/devices/device/station-display" },
 ] as const)(
   "the rendered $use.kind link asks before leaving actual edited profile input",
   async ({ use, path }) => {
@@ -993,6 +993,41 @@ it.each([
               showsRestOfOrder: false,
             },
           ] as never;
+        if (url === "/management-api/devices")
+          return [
+            {
+              id: "station-display",
+              label: "Bar display",
+              kind: "kds",
+              active: true,
+              madeHereStationIds: [],
+              approvedProfileIds: [],
+              lastSeenAt: null,
+              enrolledAt: "2026-10-06T10:00:00Z",
+              deviceProfileId: null,
+              profileRetired: false,
+              receiptPrinterId: null,
+              paymentSlipPrinterId: null,
+              cashDrawerPrinterId: null,
+              equipment: [],
+              batteryLevel: null,
+              batteryCharging: null,
+              batteryReportedAt: null,
+              kitchenScreens: [
+                {
+                  kind: "station",
+                  available: true,
+                  everyStation: true,
+                  everyZone: true,
+                  profileEveryStation: true,
+                  stations: [{ id: "bar", name: "Bar", available: true }],
+                  zones: null,
+                  nonPassStationsOverride: null,
+                  showNonPassStations: true,
+                },
+              ],
+            },
+          ] as never;
         if (url === "/management-api/stations/pass-coverage") return [] as never;
         if (
           [
@@ -1000,7 +1035,6 @@ it.each([
             "/management-api/zones",
             "/management-api/products",
             "/management-api/printers",
-            "/management-api/devices",
             "/management-api/stations/bar/printers",
           ].includes(url)
         )

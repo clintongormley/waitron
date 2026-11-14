@@ -333,13 +333,21 @@ it.each(
     tabs.scrollIntoView();
     tabs.dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "stations" } }));
     await settle(el);
-    const headings = stationTable(el)!.querySelectorAll("thead th");
-    const label = headings[3]!.querySelector(".head-label")!;
-    const text = [...label.childNodes].find((node) => node.nodeType === Node.TEXT_NODE)!;
-    const range = document.createRange();
-    range.selectNode(text);
-    for (const box of range.getClientRects())
-      expect(box.right).toBeLessThanOrEqual(headings[4]!.getBoundingClientRect().left);
+    const family = host.style.getPropertyValue("--wt-font-family");
+    const small = host.style.getPropertyValue("--wt-font-size-sm");
+    for (const font of [family, "Arial"]) {
+      host.style.setProperty("--wt-font-family", font);
+      if (font === "Arial") host.style.setProperty("--wt-font-size-sm", "16px");
+      const headings = stationTable(el)!.querySelectorAll("thead th");
+      const label = headings[3]!.querySelector(".head-label")!;
+      const text = [...label.childNodes].find((node) => node.nodeType === Node.TEXT_NODE)!;
+      const range = document.createRange();
+      range.selectNode(text);
+      for (const box of range.getClientRects())
+        expect(box.right).toBeLessThanOrEqual(headings[4]!.getBoundingClientRect().left);
+    }
+    host.style.setProperty("--wt-font-family", family);
+    host.style.setProperty("--wt-font-size-sm", small);
     await expectNoA11yViolations(el);
     await page.screenshot({
       path: `__screenshots__/look/routing-complete-${locale}-${theme}-${width}-stations.png`,

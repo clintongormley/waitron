@@ -1,3 +1,4 @@
+import { es } from "./i18n/strings.js";
 import { openOrderAddress } from "../test/order-address.js";
 import { userEvent } from "vitest/browser";
 import type { TillCancelItemDialog } from "./widgets/cancel-item-dialog.js";
@@ -1745,8 +1746,8 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     ungrouped: [startedBurger],
   };
   const started = {
-    es: "La cocina ya ha empezado a preparar Burger, así que no se puede cambiar.",
-    en: "The kitchen has already started Burger, so it can't be changed.",
+    es: es["table.change_dish_started"].replace("{dish}", "Burger"),
+    en: "The station has already started Burger, so it can't be changed.",
   } as const;
 
   /** The table with the started burger in Sent, its window open. */
@@ -3009,7 +3010,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     await flush(el);
 
     expect(banner(el)!.textContent).toContain(
-      "Burger ya ha ido a cocina y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
+      es["table.change_dish_fired_void"].replace("{dish}", "Burger"),
     );
     expect(api.getTabLines).toHaveBeenCalledTimes(reads + 1);
   });

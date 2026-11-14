@@ -71,7 +71,7 @@ it.each([
     "station.is_default",
     { stationId: "bar" },
     [{ id: "bar", name: "Bar" }],
-    "Choose another default station first.",
+    "Choose another default station on Routes first.",
   ],
   [
     "station.screen_in_use",

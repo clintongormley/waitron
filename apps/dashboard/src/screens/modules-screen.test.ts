@@ -268,7 +268,7 @@ it.each(
     .click();
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("wt-dialog")!.textContent).toContain("tills reconnect");
-  expect(el.shadowRoot!.querySelector("wt-dialog")!.textContent).toContain("kitchen");
+  expect(el.shadowRoot!.querySelector("wt-dialog")!.textContent).toContain("station");
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-provider-state]")!.click();
   await vi.waitFor(() => expect(rows(el).join()).toContain("Waiting for restart"));
   expect(rows(el).join()).toContain("Disabled");

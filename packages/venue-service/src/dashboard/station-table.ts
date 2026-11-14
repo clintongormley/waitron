@@ -25,7 +25,10 @@ export class StationTable extends LitElement {
         min-width: 0;
       }
       wt-data-table::part(table-head) {
-        --wt-space-3: var(--wt-space-2);
+        --wt-space-3: var(--wt-space-1);
+      }
+      wt-data-table::part(station-cell) {
+        padding-inline: var(--wt-space-1);
       }
       wt-data-table::part(screens) {
         display: grid;
@@ -126,6 +129,7 @@ export class StationTable extends LitElement {
       .columns=${this.#columns()}
       .rows=${rows}
       .rowKey=${(station: PrepStation) => station.id}
+      .rowCellParts=${() => "station-cell"}
       .rowClickLabel=${(station: PrepStation) => `${t("prep.edit_station")}: ${station.name}`}
       .rowClick=${
         this.disabled
