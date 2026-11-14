@@ -37,7 +37,7 @@ export const failedOnlineTrialProbe = `
 app=$(docker compose --project-directory /opt/waitron -f /opt/waitron/compose.yml ps -q app)
 docker inspect --format '{{.Id}} {{.State.StartedAt}}' "$app" >/opt/waitron/online-before
 if A950_PROBE=trial PATH=/opt/waitron-host/probe-bin:$PATH ${apply} >/opt/waitron/online-result 2>/opt/waitron/online-error; then exit 1; fi
-grep -q 'Online migration trial failed:.*injected trial refusal.*selling version and its data are unchanged' /opt/waitron/online-error
+grep -q 'Online migration trial failed:.*injected trial refusal.*selling version and its data are unchanged' /opt/waitron/online-error || { cat /opt/waitron/online-error >&2; exit 1; }
 docker inspect --format '{{.Id}} {{.State.StartedAt}}' "$app" >/opt/waitron/online-after
 cmp /opt/waitron/online-before /opt/waitron/online-after
 ${fingerprint} >/opt/waitron/after.json
@@ -93,7 +93,7 @@ chown -R 10001:10001 "$state"
 cp /run/a950-inputs/fixture-env.json /opt/waitron/fixture-env.json
 umount /run/a950-inputs
 cd /opt/waitron
-COMPOSE_PROFILES=staff-tunnel docker compose config --format json >/run/a950-compose.json
+COMPOSE_PROFILES=staff-tunnel,practice-inbox docker compose config --format json >/run/a950-compose.json
 ${run(`import fs from 'node:fs'; import {execFileSync} from 'node:child_process'; const c=JSON.parse(fs.readFileSync('/run/a950-compose.json','utf8')); Object.assign(c.services.app.environment,JSON.parse(fs.readFileSync('/opt/waitron/fixture-env.json','utf8'))); for(const [name,s] of Object.entries(c.services)){if(name!=='tunnel')s.image=execFileSync('docker',['image','inspect',s.image,'--format','{{.Id}}'],{encoding:'utf8'}).trim();} fs.writeFileSync('/opt/waitron/compose.yml',JSON.stringify(c));`)}
 printf '%s\\n' ${quote(`#!/bin/bash\n${prepare}\n`)} >/opt/waitron-host/prepare-fixture.sh
 mkdir /opt/waitron-host/probe-bin
