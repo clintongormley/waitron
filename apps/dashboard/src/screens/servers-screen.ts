@@ -432,6 +432,7 @@ export class ServersScreen extends LitElement {
     try {
       const listing = await this.api.listServers();
       this.servers = listing.nodes;
+      this.spare = listing.spare ?? null;
       this.authorityFingerprint = listing.authorityFingerprint;
       this.loadErrorKey = null;
     } catch (error) {

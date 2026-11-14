@@ -175,9 +175,33 @@ describe("spare following", () => {
       }),
     );
     await vi.waitFor(() => expect(follow).toHaveBeenCalledTimes(3));
-    await pointer(next, spare.privateKey);
-    await vi.waitFor(() => expect(running!.progress()).toBeNull());
-    expect(events.at(-1)).toBe(`stop ${next}`);
+    let entered = false;
+    let release!: () => void;
+    const held = new Promise<void>((r) => {
+      release = r;
+    });
+    const originalGet = store.get.bind(store);
+    const reading = vi.spyOn(store, "get").mockImplementation(async (...args) => {
+      if (args[0] === "current.json") {
+        entered = true;
+        await held;
+      }
+      return originalGet(...args);
+    });
+    let clock: { mockRestore(): void } | undefined;
+    try {
+      await pointer(next, spare.privateKey);
+      await vi.waitFor(() => expect(entered).toBe(true));
+      clock = vi.spyOn(performance, "now").mockReturnValue(performance.now() + 10000);
+      await vi.waitFor(() => expect(running!.progress()).toBeNull());
+      expect(events.at(-1)).not.toBe(`stop ${next}`);
+    } finally {
+      release();
+      clock?.mockRestore();
+      reading.mockRestore();
+    }
+    await vi.waitFor(() => expect(events.at(-1)).toBe(`stop ${next}`));
+    expect(running.progress()).toBeNull();
   });
   it("keeps cached reads off the network and invalidates generation/chart changes or malformed progress", async () => {
     const deps = await setup("streams");

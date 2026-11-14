@@ -252,13 +252,13 @@ export const ALERT_MESSAGES: Readonly<
     es: "El servidor marca {clockAt:minute}, antes del 28 de octubre de 2024, así que no se puede registrar ninguna venta en Hacienda. Con internet, el servidor corrige la hora solo; si no, un administrador normalmente puede ponerla en hora en Estado del servidor.",
   },
   "clock.peer_disagrees": {
-    en: "A connected device's clock and this box's clock differ by {differenceMs:duration}. Check the date and time on this box and the connected devices. Sales continue.",
-    es: "El reloj de un dispositivo conectado y el reloj de este servidor difieren en {differenceMs:duration}. Comprueba la fecha y la hora de este servidor y de los dispositivos conectados. Las ventas continúan.",
+    en: "A connected device's clock and this box's clock differ by {differenceMs:duration}. Check the date and time on this box and the connected devices.",
+    es: "El reloj de un dispositivo conectado y el reloj de este servidor difieren en {differenceMs:duration}. Comprueba la fecha y la hora de este servidor y de los dispositivos conectados.",
     variants: {
       peer: {
         mode: "replace",
-        en: "The spare box's clock and this box's clock differ by {differenceMs:duration}. Check the date and time on both boxes. Sales continue.",
-        es: "El reloj del equipo de reserva y el reloj de este servidor difieren en {differenceMs:duration}. Comprueba la fecha y la hora de ambos servidores. Las ventas continúan.",
+        en: "The spare box's clock and this box's clock differ by {differenceMs:duration}. Check the date and time on both boxes.",
+        es: "El reloj del equipo de reserva y el reloj de este servidor difieren en {differenceMs:duration}. Comprueba la fecha y la hora de ambos servidores.",
       },
     },
   },

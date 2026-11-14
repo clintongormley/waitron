@@ -469,7 +469,16 @@ export class StreamHost {
     const pipeProblem = pipe.problem();
     return {
       ...view,
-      bucketProblem: view.bucketProblem ?? pipeProblem,
+      bucketProblem:
+        view.bucketProblem !== null && pipeProblem !== null
+          ? {
+              ...view.bucketProblem,
+              since:
+                Date.parse(view.bucketProblem.since) <= Date.parse(pipeProblem.since)
+                  ? view.bucketProblem.since
+                  : pipeProblem.since,
+            }
+          : (view.bucketProblem ?? pipeProblem),
       toSpare: true,
     };
   }

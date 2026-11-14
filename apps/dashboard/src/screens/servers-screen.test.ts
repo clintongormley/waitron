@@ -436,8 +436,23 @@ describe("servers screen list", () => {
 
 describe("servers screen removal", () => {
   it("opens a confirmation naming the address, and Remove posts that machine's id then refreshes", async () => {
-    const api = stubApi();
+    const api = stubApi({
+      listServers: vi.fn().mockResolvedValue({
+        ...listing,
+        spare: {
+          peerNodeId: STANDBY,
+          generation: null,
+          state: "unknown",
+          appliedTXID: null,
+          uploadedTXID: null,
+          lagMs: null,
+          lastAppliedAt: null,
+          clockAt: null,
+        },
+      }),
+    });
     const el = await mount(api);
+    expect(inTable(el, `follow-${STANDBY}`)).not.toBeNull();
     await openRemove(el);
     expect(dialog(el).open).toBe(true);
     expect(el.shadowRoot!.querySelector("[data-test=remove-address]")!.textContent!.trim()).toBe(
@@ -445,8 +460,9 @@ describe("servers screen removal", () => {
     );
     expect(api.removeServer).not.toHaveBeenCalled();
 
-    vi.mocked(api.listServers).mockResolvedValue(afterRemoval);
+    vi.mocked(api.listServers).mockResolvedValue({ ...afterRemoval, spare: null });
     await confirmRemove(el);
+    expect(inTable(el, `follow-${STANDBY}`)).toBeNull();
     expect(api.removeServer).toHaveBeenCalledExactlyOnceWith(STANDBY);
     expect(api.listServers).toHaveBeenCalledTimes(2);
     expect(dialog(el).open).toBe(false);
@@ -801,8 +817,23 @@ describe("servers screen clearing", () => {
   });
 
   it("opens a confirmation naming the machine, and Clear posts that machine's id then refreshes", async () => {
-    const api = clearApi();
+    const api = clearApi({
+      listServers: vi.fn().mockResolvedValue({
+        ...clearable,
+        spare: {
+          peerNodeId: STANDBY,
+          generation: null,
+          state: "unknown",
+          appliedTXID: null,
+          uploadedTXID: null,
+          lagMs: null,
+          lastAppliedAt: null,
+          clockAt: null,
+        },
+      }),
+    });
     const el = await mount(api);
+    expect(inTable(el, `follow-${STANDBY}`)).not.toBeNull();
     await openClear(el);
     expect(clearDialog(el).open).toBe(true);
     expect(dialog(el).open).toBe(false);
@@ -813,8 +844,9 @@ describe("servers screen clearing", () => {
     expect(body).toContain(t("servers.clear_explanation"));
     expect(api.clearServer).not.toHaveBeenCalled();
 
-    vi.mocked(api.listServers).mockResolvedValue(afterClearing);
+    vi.mocked(api.listServers).mockResolvedValue({ ...afterClearing, spare: null });
     await confirmClear(el);
+    expect(inTable(el, `follow-${STANDBY}`)).toBeNull();
     expect(api.clearServer).toHaveBeenCalledExactlyOnceWith(REMOVED);
     expect(api.removeServer).not.toHaveBeenCalled();
     expect(api.listServers).toHaveBeenCalledTimes(2);

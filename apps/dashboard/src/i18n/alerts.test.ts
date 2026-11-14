@@ -1026,7 +1026,9 @@ it("names the actual pending phase and the two clocks in both languages", () => 
       locale === "en" ? "connected device's clock" : "reloj de un dispositivo conectado",
     );
     expect(peer).toContain(locale === "en" ? "spare box's clock" : "reloj del equipo de reserva");
-    for (const message of [device, peer])
+    for (const message of [device, peer]) {
       expect(message).toContain(locale === "en" ? "this box's clock" : "reloj de este servidor");
+      expect(message).toContain(locale === "en" ? "20 seconds" : "20 segundos");
+    }
   }
 });
