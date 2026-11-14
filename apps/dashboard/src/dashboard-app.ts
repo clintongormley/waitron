@@ -109,6 +109,7 @@ import "./screens/planned-actual-screen.js";
 import "./screens/purchases-screen.js";
 import "./screens/devices-screen.js";
 import "./screens/printers-screen.js";
+import { printerSettingSearchDestinations } from "./printer-setting-search.js";
 import "./screens/floor-plan-editor.js";
 import "./screens/device-profiles-screen.js";
 import "./screens/diagnostics-screen.js";
@@ -1669,7 +1670,10 @@ export class DashboardApp extends LitElement {
       renderPanel: this.#renderPanel,
     };
     if (this.#coreSettingDestinations.length === 0)
-      this.#coreSettingDestinations = departmentReceiptSearchDestinations(this.api);
+      this.#coreSettingDestinations = [
+        ...departmentReceiptSearchDestinations(this.api),
+        ...printerSettingSearchDestinations(this.api),
+      ];
     for (const c of DASHBOARD_MODULES) {
       if (!enabled.includes(c.module)) continue;
       const screens: readonly DashboardFurtherScreen[] = contributedScreens(c);

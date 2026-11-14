@@ -6,6 +6,7 @@ import {
   focusFirstInvalid,
   submitOnEnter,
   UrlStateController,
+  navigationGuardFor,
   baseStyles,
   pageTitleStyles,
   type DataTableColumn,
@@ -76,6 +77,93 @@ import type {
   PrinterProfileOffer,
   PrinterStationName,
 } from "../api/client.js";
+
+export const printerSettingFields = [
+  {
+    id: "printer-detail-name",
+    name: "printer-detail-name",
+    labelKey: "printers.name",
+    editor: "edit",
+    rows: "all",
+  },
+  {
+    id: "printer-detail-host",
+    name: "printer-detail-host",
+    labelKey: "printers.host",
+    editor: "edit",
+    rows: "network",
+  },
+  {
+    id: "printer-detail-port",
+    name: "printer-detail-port",
+    labelKey: "printers.port",
+    editor: "edit",
+    rows: "network",
+  },
+  {
+    id: "printer-ruler-number",
+    name: "printer-ruler-number",
+    labelKey: "printers.ruler_last_number",
+    editor: "calibrate",
+    step: 1,
+    rows: "receipt",
+  },
+  {
+    id: "paper-width",
+    name: "printer-ruler-number",
+    labelKey: "printers.paper_width",
+    editor: "calibrate",
+    step: 1,
+    rows: "receipt",
+  },
+  {
+    id: "printer-qr-square",
+    name: "printer-qr-square",
+    labelKey: "printers.qr_square",
+    editor: "calibrate",
+    step: 1,
+    rows: "receipt",
+  },
+  {
+    id: "resolution",
+    name: "printer-qr-square",
+    labelKey: "printers.resolution",
+    editor: "calibrate",
+    step: 1,
+    rows: "receipt",
+  },
+  {
+    id: "printer-cash-drawer",
+    name: "printer-cash-drawer",
+    labelKey: "printers.drawer_attached",
+    editor: "calibrate",
+    step: 3,
+    rows: "receipt",
+  },
+  {
+    id: "printer-portable",
+    name: "printer-portable",
+    labelKey: "printers.portable",
+    editor: "calibrate",
+    step: 3,
+    rows: "receipt",
+  },
+  {
+    id: "printer-pickup-roles",
+    name: "printer-pickup-roles",
+    labelKey: "printers.pickup_roles",
+    editor: "calibrate",
+    step: 3,
+    rows: "receipt",
+  },
+] as const satisfies readonly {
+  id: string;
+  name: string;
+  labelKey: StringKey;
+  editor: "edit" | "calibrate";
+  step?: 1 | 3;
+  rows: "all" | "network" | "receipt";
+}[];
 
 /** The printer details form, as it would be saved. */
 interface DetailEditValues {
@@ -703,9 +791,71 @@ export class PrintersScreen extends LitElement {
             ? ""
             : this.#defaultView();
       if (this.view) this.#url.write({ view: this.view }, true);
+      this.#restorePrinterTarget();
     },
     dashboardPath,
   );
+
+  #printersReady = false;
+  #pagePrintersReady = false;
+  #restoredPrinterTarget: string | null = null;
+  @state() private settingUnavailable = false;
+
+  #restorePrinterTarget(): void {
+    const id = this.selectedPrinterId;
+    const editor = this.#url.read("editor");
+    const step = this.#url.read("step");
+    const target =
+      id !== null && (editor !== null || step !== null) ? JSON.stringify([id, editor, step]) : null;
+    if (target === this.#restoredPrinterTarget) return;
+    if (this.#restoredPrinterTarget !== null) {
+      this.#disposeDetailDrafts();
+      this.#disposeCalibrationDraft();
+      this.editingPrinter = null;
+      this.#closeTest();
+    }
+    this.#restoredPrinterTarget = null;
+    this.settingUnavailable = false;
+    if (target === null) return;
+    const printer = this.printers.find((row) => row.id === id);
+    const page = this.pagePrinters.find((row) => row.id === id);
+    if (!printer && !page && (!this.#printersReady || !this.#pagePrintersReady)) return;
+    this.#restoredPrinterTarget = target;
+    if (!printer && !page) return;
+    if (editor === "edit" && step === null && (printer || this.canManage)) {
+      this.#openDetailEdit(
+        id!,
+        printer ? this.#savedEditValues(printer) : { name: page!.name, host: "", port: "" },
+      );
+    } else if (
+      editor === "calibrate" &&
+      printer &&
+      (step === "1" || step === "2" || step === "3")
+    ) {
+      this.#disposeDetailDrafts();
+      this.#openPrinter(printer);
+      this.calibrationStep = Number(step);
+    } else this.settingUnavailable = true;
+  }
+
+  #clearPrinterEditor(): void {
+    if (this.#url.read("editor") !== null || this.#url.read("step") !== null)
+      void this.#url.write({ editor: null, step: null }, true);
+  }
+
+  #calibrationStepAddress(): void {
+    if (this.#url.read("editor") !== "calibrate") return;
+    const step = String(this.calibrationStep);
+    this.#restoredPrinterTarget = JSON.stringify([this.selectedPrinterId, "calibrate", step]);
+    const guard = navigationGuardFor(window);
+    if (!guard) {
+      this.#url.write({ step }, true);
+      return;
+    }
+    const url = new URL(guard.href);
+    url.pathname = url.pathname.replace(/\/step\/[^/]+$/, `/step/${step}`);
+    guard.rewrite(url);
+  }
 
   #defaultView(): string {
     return !this.agents.some((agent) => agent.active)
@@ -894,6 +1044,7 @@ export class PrintersScreen extends LitElement {
     this.#disposeCalibrationDraft();
     this.editingPrinter = null;
     this.#closeTest();
+    this.#clearPrinterEditor();
     this.#restoreEditFocus();
   }
   @state() private editingAgent: PrintAgentRow | null = null;
@@ -1189,7 +1340,9 @@ export class PrintersScreen extends LitElement {
           const listed = new Set(printers.map(({ id }) => id));
           const gone = this.printers.filter(({ id }) => !listed.has(id));
           this.printers = printers;
+          this.#printersReady = true;
           for (const { id } of gone) this.#printerGone(id, true);
+          this.#restorePrinterTarget();
         }),
         this.#queries.watch("listRecentJobs", [], (jobs) => {
           this.jobs = jobs;
@@ -1204,6 +1357,8 @@ export class PrintersScreen extends LitElement {
         }),
         this.#queries.watch("listPagePrinters", [], (pagePrinters) => {
           this.pagePrinters = pagePrinters;
+          this.#pagePrintersReady = true;
+          this.#restorePrinterTarget();
           this.#pagePrinterLiveAt = ++this.#pagePrinterReads;
         }),
         this.#queries.watch("pairingMode", [], (pairing) => {
@@ -2970,6 +3125,7 @@ export class PrintersScreen extends LitElement {
     const proceed = () => {
       if (scope !== this.#detailEditScope) return;
       this.#disposeDetailDrafts();
+      this.#clearPrinterEditor();
       void this.updateComplete.then(() => {
         this.renderRoot
           .querySelector<HTMLElement>(
@@ -3040,7 +3196,10 @@ export class PrintersScreen extends LitElement {
     scope.commit(values);
     this.#detailEditBaseline = values;
     if (scope.isDirty()) this.detailEdit = { ...this.detailEdit!, saving: false, error: null };
-    else this.#disposeDetailDrafts();
+    else {
+      this.#disposeDetailDrafts();
+      this.#clearPrinterEditor();
+    }
     await reload();
   }
 
@@ -3073,7 +3232,7 @@ export class PrintersScreen extends LitElement {
   /** Closing the details asks first when a detail draft is dirty, through the address change. */
   readonly #beforeDetailsClose = async (): Promise<boolean> => {
     if (this.detailEdit?.saving) return false;
-    const leaving = this.#url.write({ printer: null });
+    const leaving = this.#url.write({ printer: null, editor: null, step: null });
     if (!leaving) {
       this.#resetPrinterSections();
       this.selectedPrinterId = null;
@@ -3122,27 +3281,33 @@ export class PrintersScreen extends LitElement {
         ${
           this.selectedPrinterId === null
             ? nothing
-            : p
-              ? errors
-                ? this.#renderDetailEditForm(p.id, p.transport === "network_tcp", errors)
-                : this.#renderPrinterStatus(p)
-              : a4
-                ? a4Errors
-                  ? this.#renderDetailEditForm(a4.id, false, a4Errors)
-                  : this.#renderPagePrinterDetails(a4)
-                : html`<p role="status">
-                    ${this.loading ? t("printers.table_loading") : codeMessage("printer.not_found")}
-                  </p>`
+            : this.settingUnavailable
+              ? html`<p role="alert" data-test="printer-setting-unavailable">
+                  ${t("printers.setting_unavailable")}
+                </p>`
+              : p
+                ? errors
+                  ? this.#renderDetailEditForm(p.id, p.transport === "network_tcp", errors)
+                  : this.#renderPrinterStatus(p)
+                : a4
+                  ? a4Errors
+                    ? this.#renderDetailEditForm(a4.id, false, a4Errors)
+                    : this.#renderPagePrinterDetails(a4)
+                  : html`<p role="status">
+                      ${this.loading ? t("printers.table_loading") : codeMessage("printer.not_found")}
+                    </p>`
         }
       </div>
       ${
-        p && errors
-          ? this.#renderDetailEditActions(errors, () => void this.#saveDetailEdit(p))
-          : a4 && a4Errors
-            ? this.#renderDetailEditActions(a4Errors, () => void this.#savePagePrinterEdit(a4))
-            : a4
-              ? this.#renderPagePrinterActions(a4)
-              : this.#renderDetailViewActions(p)
+        this.settingUnavailable
+          ? html`<wt-form-actions slot="footer">${this.#closeDetailsButton()}</wt-form-actions>`
+          : p && errors
+            ? this.#renderDetailEditActions(errors, () => void this.#saveDetailEdit(p))
+            : a4 && a4Errors
+              ? this.#renderDetailEditActions(a4Errors, () => void this.#savePagePrinterEdit(a4))
+              : a4
+                ? this.#renderPagePrinterActions(a4)
+                : this.#renderDetailViewActions(p)
       }
     </wt-modal>`;
   }
@@ -4334,6 +4499,7 @@ export class PrintersScreen extends LitElement {
                 data-test="calibration-back"
                 @click=${() => {
                   this.calibrationStep--;
+                  this.#calibrationStepAddress();
                 }}
                 >${t("action.back")}</wt-button
               >`
@@ -4345,7 +4511,10 @@ export class PrintersScreen extends LitElement {
                 variant="primary"
                 data-test="calibration-next"
                 @click=${() => {
-                  if (this.#validatePrinter(p)) this.calibrationStep++;
+                  if (this.#validatePrinter(p)) {
+                    this.calibrationStep++;
+                    this.#calibrationStepAddress();
+                  }
                 }}
                 >${t("action.continue")}</wt-button
               >`
@@ -4983,7 +5152,7 @@ export class PrintersScreen extends LitElement {
     if (this.selectedPrinterId === id) {
       this.#resetPrinterSections();
       this.selectedPrinterId = null;
-      void this.#url.write({ printer: null }, true);
+      void this.#url.write({ printer: null, editor: null, step: null }, true);
       await this.updateComplete;
       if (generation !== this.#deleteGeneration) return;
     }
@@ -5018,7 +5187,7 @@ export class PrintersScreen extends LitElement {
       open = true;
       this.#resetPrinterSections();
       this.selectedPrinterId = null;
-      void this.#url.write({ printer: null }, true);
+      void this.#url.write({ printer: null, editor: null, step: null }, true);
     }
     this.printers = this.printers.filter((p) => p.id !== id);
     this.pagePrinters = this.pagePrinters.filter((p) => p.id !== id);
