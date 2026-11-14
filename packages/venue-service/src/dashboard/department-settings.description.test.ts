@@ -9,6 +9,7 @@ import {
   selectDepartmentTab,
   supplyReceiptEditor,
 } from "../testing/department-edit-fixture.js";
+import { VENUE_SERVICE_STRINGS } from "./strings.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(() => {
@@ -42,7 +43,11 @@ it("draws no description on Details without a receipt editor, or when the editor
 });
 it.each([
   ["en", "Invoice operation description", "Sent to the tax agency; not printed"],
-  ["es", "Descripción de la operación", "Se envía a Hacienda; no se imprime"],
+  [
+    "es",
+    VENUE_SERVICE_STRINGS.es["venue.operation_description"],
+    VENUE_SERVICE_STRINGS.es["venue.operation_description_hint"],
+  ],
 ] as const)(
   "Details draws the required description with its %s label and hint",
   async (locale, label, hint) => {
