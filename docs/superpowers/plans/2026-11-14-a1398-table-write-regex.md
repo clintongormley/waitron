@@ -3,8 +3,8 @@
 **Ask and authority.** Lane I `~/waitron-campaign-i/queue.md`, A1398-2:
 “every CI test job finishes in about four minutes (owner, 2026-10-09 and 2026-10-11; CLAUDE.md §2: "Fix the cause, never cut a check"). Measure the cause before a performance plan; at most one page, Claude review and watcher clearance.”
 A separate high-effort Sol invocation drafted this plan; Claude reviewed it on 14 November (177 s),
-and the driver accepted its scope and test corrections. Watcher clearance remains pending;
-no owner design approval is recorded. Obtain watcher clearance before implementation.
+and the driver accepted its scope and test corrections. The watcher cleared the corrected plan
+at 13:01 on 14 November in Lane I questions.md; no owner design approval is recorded.
 
 **Measured cause.** Driver measurements at `30e1703a68f3625510fb35ae2211d7cb00070c30`: hosted PR run `43590761440` root 278 s/test step 250 s; write-path suite 23 cases/13.838 s.
 Its 11 s checkout makes hosted timing diagnostic only. Local unchanged focused run: 23/23 pass,
