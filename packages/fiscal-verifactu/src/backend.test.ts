@@ -11,7 +11,7 @@ import {
   writeNodeMembership,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import type { SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
+import type { Counterparty, SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
 import { AppError, deviceOrigin, jobOrigin } from "@waitron/shared";
 import type { DeviceId, NodeId, SeriesId } from "@waitron/shared";
 import {
@@ -1054,12 +1054,11 @@ describe("recordSale — invoice type selection", () => {
     expect(row?.tipoFactura).toBe("F1");
   });
 
-  /** Records one recipient-identified sale directly through the backend: core always passes
-   * `counterparty: null`. */
+  /** Records one recipient-identified sale directly through the backend. */
   async function sellWithRecipient(
     saleId: string,
     invoiceNumber: number,
-    counterparty: { taxId: string; legalName: string; countryCode: string },
+    counterparty: Counterparty,
   ): Promise<void> {
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(sales).values({
@@ -1112,10 +1111,9 @@ describe("recordSale — invoice type selection", () => {
   });
 
   /**
-   * Pins a DECISION: a foreign recipient is refused rather than guessed at, because a guessed AEAT
-   * identifier type would be filed into an append-only table and could never be unfiled. The F3
-   * canje path gets the SAME refusal. A future B2B task that builds the `IDOtro` shape replaces
-   * this test.
+   * Pins a DECISION: a foreign recipient that names no identifier type is refused rather than
+   * guessed at, because a guessed AEAT identifier type would be filed into an append-only table and
+   * could never be unfiled. The F3 canje path gets the SAME refusal.
    */
   it("refuses a non-Spanish recipient rather than guessing an identifier type", async () => {
     await expect(
@@ -1133,6 +1131,54 @@ describe("recordSale — invoice type selection", () => {
       .select()
       .from(registrosFacturacion)
       .where(eq(registrosFacturacion.numSerieFactura, "A/997"));
+    expect(rows).toEqual([]);
+  });
+
+  it.each([
+    { identifierType: "vat-number", idType: "02", id: "FR12345678901", invoiceNumber: 996 },
+    { identifierType: "passport", idType: "03", id: "X1234567", invoiceNumber: 995 },
+    { identifierType: "residence-country-id", idType: "04", id: "X1234567", invoiceNumber: 994 },
+  ] as const)(
+    "names a foreign recipient's $identifierType by AEAT identifier type $idType",
+    async ({ identifierType, idType, id, invoiceNumber }) => {
+      await sellWithRecipient(`77777777-7777-4777-8777-77777777${invoiceNumber}0`, invoiceNumber, {
+        taxId: id,
+        legalName: "Client SARL",
+        countryCode: "BE",
+        identifierType,
+        identifierCountryCode: "fr",
+      });
+
+      const [row] = await suite.db
+        .select()
+        .from(registrosFacturacion)
+        .where(eq(registrosFacturacion.numSerieFactura, `A/${invoiceNumber}`));
+      expect(row?.destinatarios).toEqual({
+        IDDestinatario: [
+          { NombreRazon: "Client SARL", IDOtro: { CodigoPais: "FR", IDType: idType, ID: id } },
+        ],
+      });
+    },
+  );
+
+  it("refuses a recipient whose identifier type does not fit its issuing country", async () => {
+    await expect(
+      sellWithRecipient("66666666-6666-4666-8666-666666666666", 993, {
+        taxId: "X1234567",
+        legalName: "Client SARL",
+        countryCode: "FR",
+        identifierType: "tax-number",
+        identifierCountryCode: "FR",
+      }),
+    ).rejects.toMatchObject({
+      code: "fiscal.record_invalid",
+      params: { fields: ["identifierType"], codes: ["RECIPIENT_IDENTIFIER_INVALID"] },
+    });
+
+    const rows = await suite.db
+      .select()
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.numSerieFactura, "A/993"));
     expect(rows).toEqual([]);
   });
 });

@@ -656,6 +656,40 @@ it.each(
   expect(await snapshot()).toEqual(before);
 });
 
+it("refuses a blank registroId", async () => {
+  const before = await snapshot();
+  const res = await send({ ...body, registroId: "  " });
+  expect(res.status).toBe(400);
+  expect(await res.json()).toMatchObject({ error: { code: "fiscal.remedy_request_invalid" } });
+  expect(await snapshot()).toEqual(before);
+});
+
+it.each(["actionKey", "reason"])(
+  "refuses a blank %s before it looks for the record",
+  async (field) => {
+    const before = await snapshot();
+    const res = await send({
+      ...body,
+      registroId: "99999999-9999-4999-8999-999999999999",
+      [field]: "  ",
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: { code: "fiscal.remedy_request_invalid" } });
+    expect(await snapshot()).toEqual(before);
+  },
+);
+
+it("refuses a record this venue does not hold", async () => {
+  const registroId = "99999999-9999-4999-8999-999999999999";
+  const before = await snapshot();
+  const res = await send({ ...body, registroId });
+  expect(res.status).toBe(400);
+  expect(await res.json()).toMatchObject({
+    error: { code: "fiscal.remedy_invalid", params: { registroId } },
+  });
+  expect(await snapshot()).toEqual(before);
+});
+
 it("refuses issuance without trusted runtime facts", async () => {
   const before = await snapshot();
   const res = await send(body, true, false);

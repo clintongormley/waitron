@@ -237,7 +237,8 @@ F1 paths in every environment, with no environment switch. The [design](../super
 [implementation plan](../superpowers/plans/2026-10-03-full-invoices-at-till.md) retain the decisions
 and dated implementation receipts.
 
-The build covers a Spanish recipient's saved tax ID, name and address, a separate full-invoice
+The build covers a saved recipient's tax ID or foreign document (with its type and issuing
+country), name and address, a separate full-invoice
 series, taxpayer domicile, filed receipt data and replay, original/duplicate printing, delivery
 status and retry, staff handover confirmation, invoice lookup, and reporting. Paper and till
 omit the venue address when an F1 shows its filed taxpayer domicile; phone/email and the
@@ -248,7 +249,7 @@ refusal, including its could-not-open operator advice; provenance, HTTP400/domai
 unchanged-database and empty-staging checks remain. This is preproduction format rejection,
 with no backward-compatibility implementation.
 
-The till offers **Full invoice**. A saved Spanish recipient can be invoiced through table bill
+The till offers **Full invoice**. A saved recipient can be invoiced through table bill
 payments or an unpaid departure, and, since #2725, a Counter bill paid through the shared Pay
 window. Email and A4 originals use the existing delivery queue. Direct counter cash/manual-card
 sales (`POST /api/sales`), integrated-card payment (`POST /api/pay`), unissued counter
@@ -261,8 +262,8 @@ the existing recipient checks and F1 series selection remain in place.
 
 **Next action:** complete the physical 58/80 mm paper and QR checks, the asesor's
 manual-remedy confirmation and current business-invoice delivery qualification as separate work.
-Future structured B2B integration has its own entry above. F3 conversion, F1's
-R1–R4 correction path and foreign-recipient `IDOtro`/`IDType` remain separate decisions.
+Future structured B2B integration has its own entry above. F3 conversion and F1's
+R1–R4 correction path remain separate decisions.
 
 ## When the business e-invoicing regime starts
 
