@@ -358,9 +358,13 @@ export function mountVenueSettingsApi(
           );
         }
         if ("defaultProductVatClass" in request)
-          await saveCatalogueSettings(tx, {
-            defaultProductVatClass: request.defaultProductVatClass,
-          });
+          await saveCatalogueSettings(
+            tx,
+            {
+              defaultProductVatClass: request.defaultProductVatClass,
+            },
+            personId,
+          );
         return readVenueDefaults(tx, state ?? (await readReceiptLanguageState(tx)));
       });
       return c.json(answer);

@@ -408,3 +408,24 @@ it("creates the starter units once, even when two seeds race", async () => {
   expect(await storedUnits()).toHaveLength(5);
   expect((await readSettings(suite.db, MENU_SETTINGS)).revision).toBe(1);
 });
+
+it("keeps defaults saved before the first seed and creates its units only once", async () => {
+  const node = await venue("ES", "Madrid", "es-ES");
+  await withTransaction(suite.db, (tx) =>
+    saveCatalogueSettings(tx, { defaultProductVatClass: "zero" }),
+  );
+  const run = () => withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+  await run();
+  expect(await readSettings(suite.db, MENU_SETTINGS)).toEqual({
+    revision: 2,
+    doc: {
+      defaultProductVatClass: "zero",
+      defaultColor: null,
+      starterUnitsCreated: true,
+    },
+  });
+  expect(await storedUnits()).toHaveLength(5);
+  await run();
+  expect((await readSettings(suite.db, MENU_SETTINGS)).revision).toBe(2);
+  expect(await storedUnits()).toHaveLength(5);
+});

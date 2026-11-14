@@ -619,7 +619,7 @@ it.each(["getMenuStatus", "getMenuStatuses", "getMenuPreview"] as const)(
     try {
       await vi.waitFor(() => expect(observed.snapshot.status).toBe("ready"));
       const before = fetchImpl.mock.calls.length;
-      api.liveData.invalidate([{ type: "settings.menu", id: "1" }]);
+      api.liveData.invalidate([{ type: "settings.menu" }]);
       await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(before + 1));
     } finally {
       observed.unsubscribe();

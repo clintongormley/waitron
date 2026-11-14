@@ -54,12 +54,13 @@ export async function readCatalogueSettings(tx: Transaction): Promise<CatalogueS
 async function upsertSettings(
   tx: Transaction,
   values: Partial<CatalogueSettings>,
+  personId: string | null,
 ): Promise<CatalogueSettings> {
   const { doc, revision } = await readSettings(tx, MENU_SETTINGS);
   const saved = await saveSettings(tx, MENU_SETTINGS, {
     doc: { ...doc, ...values },
     expectedRevision: revision,
-    personId: null,
+    personId,
   });
   return {
     defaultProductVatClass: saved.doc.defaultProductVatClass,
@@ -70,19 +71,21 @@ async function upsertSettings(
 export async function saveCatalogueSettings(
   tx: Transaction,
   input: { defaultProductVatClass: unknown },
+  personId: string | null = null,
 ): Promise<CatalogueSettings> {
   const value = input.defaultProductVatClass;
   if (typeof value !== "string" || !VAT_CLASSES.includes(value as VatClass))
     throw new AppError("product.invalid", { field: "defaultProductVatClass" });
-  return upsertSettings(tx, { defaultProductVatClass: value as VatClass });
+  return upsertSettings(tx, { defaultProductVatClass: value as VatClass }, personId);
 }
 
 export async function saveCatalogueDefaultColor(
   tx: Transaction,
   color: unknown,
+  personId: string | null = null,
 ): Promise<CatalogueSettings> {
   const defaultColor = colorOrNull(color, () => {
     throw new AppError("category.invalid", { field: "color" });
   });
-  return upsertSettings(tx, { defaultColor });
+  return upsertSettings(tx, { defaultColor }, personId);
 }
