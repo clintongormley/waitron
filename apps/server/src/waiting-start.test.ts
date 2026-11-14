@@ -954,7 +954,7 @@ describe("the waiting start", () => {
       expect(answer.status).toBe(500);
       const shown = await answer.text();
       expect(shown).toContain(
-        '<p id="carry-on-message" role="alert">Nothing was changed, because something went wrong. Try again.</p>',
+        '<p id="carry-on-message" role="alert">A fault in Waitron stopped this, so nothing was changed. Try again. If it happens again, switch this box off and on again, then try once more.</p>',
       );
       expect(log).toHaveBeenCalledWith("warn", "waiting_start.carry_on_failed", {
         errorCode: "unknown",
@@ -1004,7 +1004,7 @@ describe("the waiting start", () => {
       expect(answer.status).toBe(500);
       const refused = await answer.text();
       expect(refused).toContain(
-        '<p id="carry-on-message" role="alert">Nothing was changed, because something went wrong. Try again.</p>',
+        '<p id="carry-on-message" role="alert">A fault in Waitron stopped this, so nothing was changed. Try again. If it happens again, switch this box off and on again, then try once more.</p>',
       );
       expect(refused).not.toContain("owner@example.test");
       expect(log).toHaveBeenCalledWith("warn", "waiting_start.carry_on_failed", {
