@@ -68,8 +68,6 @@ const LOCKS = new Set([
   VENUE_HOLDER_FILE,
   MIGRATIONS_LOCK_FILE,
   RECOVERY_LOCK_FILE,
-  VENUE_LOCK_FILE,
-  VENUE_HOLDER_FILE,
 ]);
 const STEP = /^step-\d{6}$/;
 
