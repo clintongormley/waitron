@@ -142,6 +142,9 @@ export interface FilingOverview {
 /** The answer of `GET /management-api/fiscal-filing`. */
 export interface FilingOverviewAnswer extends FilingOverview {
   warnings: FilingWarnings;
+  /** The box's own day, `YYYY-MM-DD` in the venue's zone, that a replacement corrective issued
+   * now is dated; null when this box issues no records or the venue's time zone cannot be read. */
+  today: string | null;
   filing: boolean;
   awaitingCertificate: boolean;
 }

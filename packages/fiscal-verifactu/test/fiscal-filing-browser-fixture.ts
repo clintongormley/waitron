@@ -139,6 +139,7 @@ export const FLAGGED_WARNING: RecordWarningView = {
 export function overview(over: Partial<FilingOverviewAnswer> = {}): FilingOverviewAnswer {
   return {
     readAt: "2026-11-10T09:30:00.000Z",
+    today: "2026-11-10",
     progress: {
       counts: {
         pendiente: 4,

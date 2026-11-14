@@ -1019,11 +1019,15 @@ Size: about 130 production lines, 300 test lines.
 
 As Task 3c's browser half, with the clock sentence dropped and the date field added: a date field
 ("Day the sale really happened", from a field primitive, CLAUDE.md §3), starting empty and required as
-above, inline error when after today, Send disabled until valid. The confirmation names the
+above, inline error when after today, shown and holding Send as the Forms contract says (from the
+first Send on). The confirmation names the
 refused invoice's number, date and total, the VAT period the sale will count in, and the
-replacement's date — the server's own day, read from the overview's `readAt`
-(`filing-overview.ts:41`). When that day differs from this device's day, Send stays disabled with
-one sentence saying the server's date and this device's date differ and that the time can be
+replacement's date — the box's own day, which the overview answers as `today`
+(`filing-overview-routes.ts`, `boxToday`): the remedy route's clock read through
+`prepareIssueClock` in the venue's zone, as the replacement is dated; null, with the confirmation
+saying the server dates it when sent, on a box that issues no records or whose venue zone cannot be
+read. When that day differs from this device's day, Send stays disabled with
+one sentence in the form's bottom message saying the server's date and this device's date differ and that the time can be
 checked and confirmed on Box status (a server whose clock is still ahead would file a replacement
 AEAT refuses again for the same reason, using a corrective number). It says the replacement goes to
 AEAT after any earlier invoices Waitron is holding back, not "at once" (`drain.ts:845-855`,

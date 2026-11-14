@@ -269,6 +269,8 @@ const en = {
     "Choose a day no later than the invoice's date, {date}.",
   "fiscal_filing.put_right.replace.confirm":
     "Waitron will issue a replacement corrective invoice for invoice {number} of {date}, total {total}, dated {today}.",
+  "fiscal_filing.put_right.replace.confirm_undated":
+    "Waitron will issue a replacement corrective invoice for invoice {number} of {date}, total {total}, dated the server's day when it is sent.",
   "fiscal_filing.put_right.replace.period": "The VAT return counts the sale in {period}.",
   "fiscal_filing.put_right.replace.order":
     "It goes to AEAT after any earlier invoices Waitron is holding back. The refused invoice stays as it is.",
@@ -647,6 +649,8 @@ const es: Record<AeatCertificateKey, string> = {
     "Elige un día que no sea posterior a la fecha de la factura, {date}.",
   "fiscal_filing.put_right.replace.confirm":
     "Waitron emitirá una factura rectificativa que sustituye a la factura {number} del {date}, con un total de {total}, con fecha {today}.",
+  "fiscal_filing.put_right.replace.confirm_undated":
+    "Waitron emitirá una factura rectificativa que sustituye a la factura {number} del {date}, con un total de {total}, con la fecha del servidor en el momento del envío.",
   "fiscal_filing.put_right.replace.period": "La declaración de IVA cuenta la venta en {period}.",
   "fiscal_filing.put_right.replace.order":
     "Se envía a la AEAT después de las facturas anteriores que Waitron tenga detenidas. La factura rechazada se queda como está.",

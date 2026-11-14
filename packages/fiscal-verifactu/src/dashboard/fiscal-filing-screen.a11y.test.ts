@@ -9,6 +9,7 @@ import {
 } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed, type Theme } from "@waitron/ui/src/a11y-helpers.js";
+import { localCalendarDate, localToday } from "@waitron/shared";
 import { VERIFACTU_DASHBOARD } from "./index.js";
 import type { FiscalFilingScreen } from "./fiscal-filing-screen.js";
 import type { FilingOverviewAnswer } from "../filing-overview-types.js";
@@ -51,6 +52,7 @@ const DESCRIPTION = overview({
 /** A simplified invoice AEAT refused for a future date, read today, which the dialog replaces. */
 const FUTURE_DATE = overview({
   readAt: new Date().toISOString(),
+  today: localToday(),
   cases: [
     {
       ...base,
@@ -67,10 +69,11 @@ const FUTURE_DATE = overview({
   totalCases: 1,
 });
 
-/** The same case, read two days ago, so the server's date and this device's differ. */
+/** The same case on a box whose day is two days behind this device's, so the dates differ. */
+const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
 const DAYS_DIFFER: FilingOverviewAnswer = {
   ...FUTURE_DATE,
-  readAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+  today: localCalendarDate(twoDaysAgo, -twoDaysAgo.getTimezoneOffset()),
 };
 
 /** Opens the case and chooses a valid day, so the confirmation names the VAT period. */
@@ -199,6 +202,8 @@ describe.each(["light", "dark"] as const)("fiscal filing accessibility %s", (the
     input.value = "2026-11-04";
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
     await screen.updateComplete;
+    (details.querySelector("[data-test=put-right]") as HTMLElement).click();
+    await screen.updateComplete;
     expect(details.querySelector("wt-input[name=operationDate]")).toHaveProperty("invalid", true);
     await expectNoA11yViolations(host);
   });
@@ -207,7 +212,8 @@ describe.each(["light", "dark"] as const)("fiscal filing accessibility %s", (the
     await page.viewport(1280, 1000);
     const screen = await show(DAYS_DIFFER, theme);
     const details = await confirmReplacement(screen);
-    expect(details.querySelector("[data-test=day-differs]")).not.toBeNull();
+    const actions = details.querySelector("wt-form-actions") as HTMLElement & { error: string };
+    expect(actions.error).toContain("differ");
     await expectNoA11yViolations(host);
   });
 

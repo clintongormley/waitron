@@ -29,7 +29,7 @@ import {
   subscribeLocale,
   type DashboardPermissionContinuation,
 } from "@waitron/dashboard-kit";
-import { formatMoney } from "@waitron/shared";
+import { formatMoney, localToday } from "@waitron/shared";
 import type { EnvioState } from "../filing-states.js";
 import type {
   ActiveConflictView,
@@ -43,7 +43,7 @@ import type {
   ReplyMismatchView,
   WarnedRecordView,
 } from "../filing-overview-types.js";
-import { descriptionProblem, putRightFor } from "../put-right.js";
+import { descriptionProblem, putRightFor, type PutRight } from "../put-right.js";
 import type { FiscalFilingClient } from "./fiscal-filing-client.js";
 import { calendarDay } from "./dates.js";
 import { REFUSAL_WORDS, refusalKey } from "./put-right-words.js";
@@ -74,12 +74,6 @@ const STATES: readonly EnvioState[] = [
 const count = (value: number): string => value.toLocaleString(currentLocale());
 const when = (iso: string | null): string =>
   iso === null ? t("fiscal_filing.none") : formatIsoMinute(iso);
-
-/** The calendar day `YYYY-MM-DD` of an instant, on this device's clock and in its time zone. */
-function localDay(instant: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${instant.getFullYear()}-${pad(instant.getMonth() + 1)}-${pad(instant.getDate())}`;
-}
 
 /** The month a `YYYY-MM-DD` day falls in, as "October 2026": the VAT return the sale counts in. */
 function vatPeriod(day: string): string {
@@ -701,6 +695,8 @@ export class FiscalFilingScreen extends LitElement {
   #unsubscribeLocale?: () => void;
   #unsubscribeAccount?: () => void;
   #actionKey = "";
+  /** What the open case's dialog offers, decided when it opened. */
+  #fix: PutRight | null = null;
   #scope?: DraftScope<string>;
   #leave?: LeaveCoordinator;
   #login?: AbortController;
@@ -726,14 +722,14 @@ export class FiscalFilingScreen extends LitElement {
     this.#forget();
     this.caseChanged = false;
     this.viewing = row;
-    const kind = putRightFor(row).kind;
+    const { kind } = (this.#fix = putRightFor(row));
     if (kind === "none") return;
-    this.description = row.record.descripcionOperacion ?? "";
-    // Never prefilled: a refused future date is wrong by definition, and a prefill could put the
-    // sale in the wrong VAT period with one click.
-    this.operationDate = "";
-    this.#actionKey = crypto.randomUUID();
     const describes = kind === "record-correction";
+    // The day is never prefilled: a refused future date is wrong by definition, and a prefill
+    // could put the sale in the wrong VAT period with one click.
+    if (describes) this.description = row.record.descripcionOperacion ?? "";
+    else this.operationDate = "";
+    this.#actionKey = crypto.randomUUID();
     const { scope, coordinator } = draftScopeFor(this, {
       id: {},
       current: () => (describes ? this.description : this.operationDate),
@@ -762,6 +758,15 @@ export class FiscalFilingScreen extends LitElement {
   #close(): void {
     this.#forget();
     this.viewing = null;
+    this.#fix = null;
+  }
+
+  #replaces(): boolean {
+    return this.#fix?.kind === "replacement-invoice";
+  }
+
+  #dialog(): WtModal {
+    return this.shadowRoot!.querySelector<WtModal>("wt-modal[data-test=case-details]")!;
   }
 
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> => {
@@ -778,43 +783,56 @@ export class FiscalFilingScreen extends LitElement {
     return problem === "control_character" ? t("fiscal_filing.put_right.description_control") : "";
   }
 
-  /** The server's day when the page was read, on this device's calendar. */
-  #serverDay(): string {
-    return localDay(new Date(this.overview?.readAt ?? Date.now()));
+  /** The box's own day, as the server dates a replacement; null when it could not say. */
+  #serverDay(): string | null {
+    return this.overview?.today ?? null;
   }
 
   #daysDiffer(): boolean {
-    return this.#serverDay() !== localDay(new Date());
+    const today = this.#serverDay();
+    return today !== null && today !== localToday();
   }
 
   /** What is wrong with the chosen day by the server's upper bounds; empty while none is chosen. */
   #dayProblem(found: FilingCaseView): string {
     const day = this.operationDate;
     if (day === "") return "";
-    if (day > this.#serverDay()) return t("fiscal_filing.put_right.replace.day_after_today");
+    const today = this.#serverDay();
+    if (today !== null && day > today) return t("fiscal_filing.put_right.replace.day_after_today");
     const stamped = found.record.fechaExpedicionFactura;
     return day > stamped
       ? t("fiscal_filing.put_right.replace.day_after_invoice", { date: calendarDay(stamped) })
       : "";
   }
 
-  #dayError(found: FilingCaseView): string {
-    const problem = this.#dayProblem(found);
-    if (problem !== "") return problem;
+  #dayError(problem: string): string {
+    if (this.attempted && problem !== "") return problem;
     return this.refusal === DAY_REFUSED ? t(REFUSAL_WORDS[DAY_REFUSED]) : "";
   }
 
-  #bottom(found: FilingCaseView): string {
+  /** What holds Send: the day's own check once Send was chosen, or this device's day differing
+   * from the box's. */
+  #replacementBlocked(problem: string): boolean {
+    return (this.attempted && problem !== "") || this.#daysDiffer();
+  }
+
+  #bottom(problem: string): string {
     // A refused day is said under its field.
     const unsaid = this.refusal === "" || this.refusal === DAY_REFUSED;
     const key = unsaid ? undefined : refusalKey(this.refusal);
     const said = unsaid ? "" : key ? t(key) : codeMessage(this.refusal);
-    const marked =
-      putRightFor(found).kind === "replacement-invoice"
-        ? this.#dayError(found)
-        : this.#descriptionError();
+    const replaces = this.#replaces();
+    const marked = replaces ? this.#dayError(problem) : this.#descriptionError();
     const fix = marked === "" ? "" : t("fiscal_filing.put_right.fix_fields");
-    return [said, fix].filter((part) => part !== "").join(" ");
+    const today = this.#serverDay();
+    const differs =
+      replaces && today !== null && this.#daysDiffer()
+        ? t("fiscal_filing.put_right.replace.day_differs", {
+            server: calendarDay(today),
+            device: calendarDay(localToday()),
+          })
+        : "";
+    return [said, fix, differs].filter((part) => part !== "").join(" ");
   }
 
   #needsAdmin(): boolean {
@@ -845,15 +863,15 @@ export class FiscalFilingScreen extends LitElement {
 
   async #send(found: FilingCaseView): Promise<void> {
     if (this.sending || saveActionState(this.#scope).unchanged) return;
-    const replaces = putRightFor(found).kind === "replacement-invoice";
-    if (replaces && (this.#dayProblem(found) !== "" || this.#daysDiffer())) {
-      // This device's day may have moved on since the dialog was drawn.
-      this.requestUpdate();
-      return;
-    }
+    const replaces = this.#replaces();
     this.attempted = true;
-    if (!replaces && this.#descriptionError() !== "") {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+    const invalid = replaces
+      ? this.#replacementBlocked(this.#dayProblem(found))
+      : this.#descriptionError() !== "";
+    if (invalid) {
+      // Drawn again even when already attempted: this device's day may have moved on since.
+      this.requestUpdate();
+      void this.updateComplete.then(() => focusFirstInvalid(this.#dialog()));
       return;
     }
     this.sending = true;
@@ -902,11 +920,16 @@ export class FiscalFilingScreen extends LitElement {
     this.#close();
   }
 
-  #replacement(found: FilingCaseView): TemplateResult {
+  #replacement(found: FilingCaseView, problem: string): TemplateResult {
     const { record } = found;
-    const error = this.#dayError(found);
+    const error = this.#dayError(problem);
     const today = this.#serverDay();
-    const chosen = this.operationDate !== "" && this.#dayProblem(found) === "";
+    const chosen = this.operationDate !== "" && problem === "";
+    const invoice = {
+      number: record.numSerieFactura,
+      date: calendarDay(record.fechaExpedicionFactura),
+      total: formatMoney(record.importeTotal ?? "0", currentLocale()),
+    };
     return html`<section class="put-right" aria-labelledby="fiscal-filing-put-right">
       <h3 id="fiscal-filing-put-right" data-test="put-right-heading">
         ${t("fiscal_filing.put_right.replace.heading")}
@@ -930,12 +953,14 @@ export class FiscalFilingScreen extends LitElement {
       ></wt-input>
       <div class="confirmation" data-test="replacement-confirmation">
         <p>
-          ${t("fiscal_filing.put_right.replace.confirm", {
-            number: record.numSerieFactura,
-            date: calendarDay(record.fechaExpedicionFactura),
-            total: formatMoney(record.importeTotal ?? "0", currentLocale()),
-            today: calendarDay(today),
-          })}
+          ${
+            today === null
+              ? t("fiscal_filing.put_right.replace.confirm_undated", invoice)
+              : t("fiscal_filing.put_right.replace.confirm", {
+                  ...invoice,
+                  today: calendarDay(today),
+                })
+          }
           ${
             chosen
               ? t("fiscal_filing.put_right.replace.period", {
@@ -946,26 +971,17 @@ export class FiscalFilingScreen extends LitElement {
         </p>
         <p>${t("fiscal_filing.put_right.replace.order")}</p>
       </div>
-      ${
-        this.#daysDiffer()
-          ? html`<p class="error" role="status" data-test="day-differs">
-              ${t("fiscal_filing.put_right.replace.day_differs", {
-                server: calendarDay(today),
-                device: calendarDay(localDay(new Date())),
-              })}
-            </p>`
-          : nothing
-      }
     </section>`;
   }
 
-  #putRight(found: FilingCaseView): TemplateResult {
-    const fix = putRightFor(found);
+  #putRight(found: FilingCaseView, problem: string): TemplateResult {
+    // Set whenever a case is being viewed.
+    const fix = this.#fix!;
     if (fix.kind === "none")
       return html`<p class="put-right-none" data-test="put-right-none">
         ${t(`fiscal_filing.put_right.none.${fix.why}`)}
       </p>`;
-    if (fix.kind === "replacement-invoice") return this.#replacement(found);
+    if (fix.kind === "replacement-invoice") return this.#replacement(found, problem);
     const said = aeatWords(found.submission?.mensajeError ?? found.evidence.mensaje);
     const error = this.#descriptionError();
     return html`<section class="put-right" aria-labelledby="fiscal-filing-put-right">
@@ -997,17 +1013,12 @@ export class FiscalFilingScreen extends LitElement {
     </section>`;
   }
 
-  #putRightActions(found: FilingCaseView): TemplateResult {
+  #putRightActions(found: FilingCaseView, problem: string): TemplateResult {
     const action = saveActionState(this.#scope);
-    const stop = () =>
-      void this.shadowRoot!.querySelector<WtModal>(
-        "wt-modal[data-test=case-details]",
-      )!.requestClose("cancel");
-    const replaces = putRightFor(found).kind === "replacement-invoice";
-    const blocked = replaces
-      ? this.#dayProblem(found) !== "" || this.#daysDiffer()
-      : this.attempted && this.#descriptionError() !== "";
-    return html`<wt-form-actions slot="footer" .error=${this.#bottom(found)}>
+    const stop = () => void this.#dialog().requestClose("cancel");
+    const replaces = this.#replaces();
+    const blocked = replaces ? this.#replacementBlocked(problem) : this.#descriptionError() !== "";
+    return html`<wt-form-actions slot="footer" .error=${this.#bottom(problem)}>
       <wt-button
         slot="cancel"
         variant="secondary"
@@ -1168,6 +1179,7 @@ export class FiscalFilingScreen extends LitElement {
   #details(): TemplateResult {
     const found = this.viewing;
     const close = () => this.#close();
+    const problem = found !== null && this.#replaces() ? this.#dayProblem(found) : "";
     return html`<wt-modal
       size="compact"
       data-test="case-details"
@@ -1182,11 +1194,11 @@ export class FiscalFilingScreen extends LitElement {
       ${
         found === null
           ? nothing
-          : html`${caseDetails(found, this.overview?.activeConflicts ?? [])}${this.#putRight(found)}`
+          : html`${caseDetails(found, this.overview?.activeConflicts ?? [])}${this.#putRight(found, problem)}`
       }
       ${
         found !== null && this.#scope
-          ? this.#putRightActions(found)
+          ? this.#putRightActions(found, problem)
           : html`<div slot="footer" class="footer">
               <wt-button variant="secondary" data-test="close" @click=${close}
                 >${t("fiscal_filing.close")}</wt-button

@@ -1260,15 +1260,24 @@ function futureCase(stamped = "2026-11-03"): FilingCaseView {
   return { ...found, record: { ...found.record, fechaExpedicionFactura: stamped } };
 }
 
-/** As `server`, with the page read at `readAt` (by default, now). */
+/** As `server`, with the box's own day `today` (by default, this device's). */
 function replacementServer(
   found: FilingCaseView,
   remedy: () => Promise<unknown> = async () => ({}),
-  readAt = new Date().toISOString(),
+  today: string | null = deviceDay(),
 ) {
   return vi.fn(async (path: string) =>
-    path === REMEDY ? remedy() : overview({ cases: [found], totalCases: 1, readAt }),
+    path === REMEDY
+      ? remedy()
+      : overview({ cases: [found], totalCases: 1, readAt: new Date().toISOString(), today }),
   );
+}
+
+/** The element focus is on, looking through shadow roots. */
+function focused(): Element | null {
+  let at: Element | null = document.activeElement;
+  while (at?.shadowRoot?.activeElement) at = at.shadowRoot.activeElement;
+  return at;
 }
 
 function dateField(details: HTMLElement) {
@@ -1321,16 +1330,31 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
     expect(action(details).disabled).toBe(false);
   });
 
-  it("marks a day after today, and sends nothing", async () => {
+  it("marks a day after today once Send is chosen, moving focus to it, and sends nothing", async () => {
     const { screen, request } = await mount(
       replacementServer(futureCase(deviceDay(3))),
       continuation(["fiscal.remedy"]).value,
     );
     const details = await openDetails(screen);
     await pick(screen, details, deviceDay(1));
+    expect(dateField(details).error).toBe("");
+    expect(bottomMessage(details)).toBe("");
+    expect(action(details).disabled).toBe(false);
+
+    await userEvent.click(action(details));
+    await screen.updateComplete;
     expect(dateField(details).error).toBe("Choose a day no later than today.");
+    expect(bottomMessage(details)).toBe("Correct the field marked above.");
     expect(action(details).disabled).toBe(true);
+    await vi.waitFor(() =>
+      expect(focused()).toBe(dateField(details).shadowRoot!.querySelector("input")),
+    );
     expect(remedyCalls(request)).toHaveLength(0);
+
+    await pick(screen, details, "2026-11-02");
+    expect(dateField(details).error).toBe("");
+    expect(bottomMessage(details)).toBe("");
+    expect(action(details).disabled).toBe(false);
   });
 
   it("marks a day after the refused invoice's date", async () => {
@@ -1340,6 +1364,9 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
     );
     const details = await openDetails(screen);
     await pick(screen, details, "2026-11-04");
+    expect(dateField(details).error).toBe("");
+    await userEvent.click(action(details));
+    await screen.updateComplete;
     expect(dateField(details).error).toBe(
       `Choose a day no later than the invoice's date, ${calendar("2026-11-03")}.`,
     );
@@ -1364,17 +1391,17 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
     expect(confirmation()).toContain("The VAT return counts the sale in October 2026.");
   });
 
-  it("keeps Send disabled, saying so, when the server's date and this device's differ", async () => {
-    const yesterday = new Date(Date.now() - 2 * DAY_MS).toISOString();
+  it("keeps Send disabled, saying so under the actions, when the server's date and this device's differ", async () => {
     const { screen, request } = await mount(
-      replacementServer(futureCase("2026-11-03"), async () => ({}), yesterday),
+      replacementServer(futureCase("2026-11-03"), async () => ({}), deviceDay(-2)),
       continuation(["fiscal.remedy"]).value,
     );
     const details = await openDetails(screen);
     await pick(screen, details, "2026-11-02");
     expect(dateField(details).error).toBe("");
     expect(action(details).disabled).toBe(true);
-    expect(flat(details.querySelector("[data-test=day-differs]"))).toBe(
+    expect(details.querySelector("[data-test=day-differs]")).toBeNull();
+    expect(bottomMessage(details)).toBe(
       `The server's date, ${calendar(deviceDay(-2))}, and this device's, ${calendar(deviceDay())}, differ. Choose Stop, then Refresh, and open this case again. If the dates still differ, check the time on the Box status page.`,
     );
     action(details).click();
@@ -1397,7 +1424,7 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
       await screen.updateComplete;
       expect(remedyCalls(request)).toHaveLength(0);
       expect(action(details).disabled).toBe(true);
-      expect(flat(details.querySelector("[data-test=day-differs]"))).toBe(
+      expect(bottomMessage(details)).toBe(
         `The server's date, ${calendar(server)}, and this device's, ${calendar(deviceDay())}, differ. Choose Stop, then Refresh, and open this case again. If the dates still differ, check the time on the Box status page.`,
       );
     } finally {
@@ -1409,7 +1436,7 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
     const request = replacementServer(futureCase("2026-11-03"));
     const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
     const details = await openDetails(screen);
-    expect(details.querySelector("[data-test=day-differs]")).toBeNull();
+    expect(bottomMessage(details)).toBe("");
     await pick(screen, details, "2026-11-02");
     action(details).click();
     await vi.waitFor(() => expect(remedyCalls(request)).toHaveLength(1));
@@ -1460,6 +1487,48 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
     expect(dateField(details).error).toBe("");
     expect(dateField(details).hasAttribute("invalid")).toBe(false);
     expect(bottomMessage(details)).toBe("");
+  });
+
+  it.each([
+    // 23:30 in UTC, 18:30 in New York (this browser's zone), already 1 March in Madrid.
+    ["2026-02-28T23:30:00.000Z", "2026-03-01", "2026-02-28"],
+    ["2026-11-15T00:30:00.000Z", "2026-11-15", "2026-11-14"],
+  ])(
+    "dates the replacement with the box's own day, not this device's, at %s",
+    async (instant, boxDay, browserDay) => {
+      vi.useFakeTimers({ toFake: ["Date"], now: new Date(instant) });
+      try {
+        const request = replacementServer(futureCase("2026-11-20"), async () => ({}), boxDay);
+        const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+        const details = await openDetails(screen);
+        await pick(screen, details, browserDay);
+        expect(flat(details.querySelector("[data-test=replacement-confirmation]"))).toContain(
+          `, dated ${calendar(boxDay)}.`,
+        );
+        expect(bottomMessage(details)).toBe(
+          `The server's date, ${calendar(boxDay)}, and this device's, ${calendar(browserDay)}, differ. Choose Stop, then Refresh, and open this case again. If the dates still differ, check the time on the Box status page.`,
+        );
+        expect(action(details).disabled).toBe(true);
+        action(details).click();
+        await screen.updateComplete;
+        expect(remedyCalls(request)).toHaveLength(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it("leaves the replacement's date to the server when the page could not read the box's day", async () => {
+    const request = replacementServer(futureCase("2026-11-03"), async () => ({}), null);
+    const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+    const details = await openDetails(screen);
+    await pick(screen, details, "2026-11-02");
+    expect(flat(details.querySelector("[data-test=replacement-confirmation]"))).toContain(
+      `Waitron will issue a replacement corrective invoice for invoice T1/41 of ${calendar("2026-11-03")}, total ${formatMoney("12.10", "en")}, dated the server's day when it is sent.`,
+    );
+    expect(bottomMessage(details)).toBe("");
+    action(details).click();
+    await vi.waitFor(() => expect(remedyCalls(request)).toHaveLength(1));
   });
 
   it.each([

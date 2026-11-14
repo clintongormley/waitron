@@ -9,6 +9,7 @@ import type { ModuleRouteContext } from "@waitron/module";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError, jobOrigin, type ErrorCode, type ErrorParams } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
+import { steadyClock } from "../test/write-path-fixtures.js";
 import { readFilingOverview } from "./filing-overview.js";
 import { readFilingWarnings } from "./filing-warnings.js";
 import { FISCAL_ROUTES } from "./routes.js";
@@ -77,6 +78,48 @@ it("reads the conflicts of the box that issues records here", async () => {
   const res = await app.request(PATH, { headers: { cookie: await sessionCookie("manager") } });
   expect(res.status).toBe(200);
   expect(readFilingOverview).toHaveBeenCalledWith(expect.anything(), { nodeId, limit: 200 });
+});
+
+it("answers the box's own day in the venue's time zone, as a replacement issued now is dated", async () => {
+  const node = await seedNode(suite.db);
+  // 23:30 in UTC on 28 February is already 00:30 on 1 March in Madrid, the venue's zone. The
+  // clock's own offset says UTC, so only the venue's zone can give 1 March.
+  const instant = new Date("2026-02-28T23:30:00Z");
+  const app = mount(undefined, {
+    nodeId: node.nodeId,
+    clock: { ...steadyClock, now: () => ({ ...steadyClock.now(), instant, offsetMinutes: 0 }) },
+  } as unknown as NonNullable<ModuleRouteContext["recordGeneration"]>);
+  const res = await app.request(PATH, { headers: { cookie: await sessionCookie("manager") } });
+  expect(res.status).toBe(200);
+  expect(await res.json()).toMatchObject({ today: "2026-03-01" });
+});
+
+it("answers no day on a box that issues no records here, or whose node the venue does not list", async () => {
+  const cookie = await sessionCookie("manager");
+  const none = await mount().request(PATH, { headers: { cookie } });
+  expect(await none.json()).toMatchObject({ today: null });
+  const unknown = mount(undefined, {
+    nodeId: "44444444-4444-4444-8444-444444444444",
+    clock: steadyClock,
+  } as unknown as NonNullable<ModuleRouteContext["recordGeneration"]>);
+  const res = await unknown.request(PATH, { headers: { cookie } });
+  expect(res.status).toBe(200);
+  expect(await res.json()).toMatchObject({ today: null });
+});
+
+it("fails the read, rather than answer a day, when the clock itself fails", async () => {
+  const node = await seedNode(suite.db);
+  const app = mount(undefined, {
+    nodeId: node.nodeId,
+    clock: {
+      ...steadyClock,
+      now: () => {
+        throw new Error("clock broken");
+      },
+    },
+  } as unknown as NonNullable<ModuleRouteContext["recordGeneration"]>);
+  const res = await app.request(PATH, { headers: { cookie: await sessionCookie("manager") } });
+  expect(res.status).toBe(500);
 });
 
 it("reports the submission loop's state beside the overview", async () => {
