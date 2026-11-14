@@ -1060,10 +1060,13 @@ before treating an implementation as a rule violation.
   Guard: `apps/server/src/mdns.test.ts`.
 - **The dev stack from a worktree is started with `wa-wt demo <worktree-name>` or
   `wa-wt onboarding <worktree-name>`**, never a bare `pnpm dev*`.
-- **The first dev stack's venue is a seeded directory of SQLite files on the host, shared by
-  worktrees that take the first port slot. Moving between worktrees on the same target does not wipe
-  that slot's venue — so a branch's migrations can fail on the rows already in it.**
-  `wa-wt reset demo <name>` rebuilds it.
+- **The first port slot (5190/5191/8080) is the owner's alone: Claude's `wa-wt` stacks take slots
+  1–7, never stop the owner's, and keep their data and settings in
+  `~/workspace/.waitron-dev/claude/<name>`** (owner, 2026-11-14). The owner's demo venue, shared
+  by the owner's checkouts, survives moving between them, so a branch's migrations can fail on its
+  rows. Claude rebuilds it only from main (`wa-wt reset demo waitron`, which restarts the owner's
+  stack); `wa-wt reset own demo <name>` rebuilds Claude's own copy. Guard: `wa-wt.test.sh` in
+  `~/workspace/tools`. [Detail](docs/developers/workflow-guide.md#the-owners-dev-stack-and-claudes).
 - **Mock-ups and screenshots are never committed, and not copied to Drive** (owner, 2026-11-02):
   they stay in the working folder of whoever made them and are shown to the owner directly. Cost:
   184 MiB of them in the tree when removed. Guard:
