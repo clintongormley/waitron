@@ -1357,7 +1357,7 @@ declare module "@waitron/shared" {
      * The membership document could not be written because every read-mint-write round lost its
      * term race. The mirror-bundle adopt handshake refuses rather than force a write that would drop
      * the winner's node from the chart; transient, so the caller retries. `attempts` is the round
-     * bound, a constant of this process. A machine's removal (`removeUnjoinedStandby`) and
+     * bound, a constant of this process. A machine's removal (`removeStandby`) and
      * clearance (`clearRemovedMachine`) raise it the same way.
      */
     "membership.write_contended": { attempts: number };

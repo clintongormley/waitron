@@ -11,6 +11,7 @@ import {
   withTransaction,
   type Database,
   type NodeDatabase,
+  type NodeTransaction,
   type Transaction,
 } from "@waitron/db";
 import {
@@ -21,7 +22,7 @@ import {
   type SignedMembershipDocument,
 } from "@waitron/membership";
 import { deletePairLinkTx, type KeyRing } from "@waitron/credentials";
-import { readPairLink } from "@waitron/node-db";
+import { readOpenHandoverOperation, readPairLink } from "@waitron/node-db";
 import { MAX_CHART_WRITE_ROUNDS, mintNextMembershipDocument } from "./membership-mint.js";
 import type { Logger } from "./logger.js";
 
@@ -43,14 +44,14 @@ export type ClearanceVerdict =
 
 /**
  * Whether the serving primary may remove `targetNodeId` from its chart. The rule: the target is
- * `serving-secondary` and this database holds no `nodes` row with its id — a standby whose store
- * never answered this box (`spare-join.ts` writes the row when it does).
+ * `serving-secondary`, and one that finished joining (it has a `nodes` row) only once `declared`.
  */
 export function judgeRemoval(
   held: SignedMembershipDocument | null,
   selfNodeId: string,
   targetNodeId: string,
   targetHasNodeRow: boolean,
+  declared: boolean,
 ): RemovalVerdict {
   const found = locate(held, selfNodeId, targetNodeId);
   if (found.kind === "refused") return found;
@@ -64,7 +65,7 @@ export function judgeRemoval(
     case "sell-only":
       return refused("membership.node_has_served");
     case "serving-secondary":
-      return targetHasNodeRow
+      return targetHasNodeRow && !declared
         ? refused("membership.standby_joined")
         : { kind: "removable", node: target };
   }
@@ -139,6 +140,7 @@ export interface ServerListing {
     readonly isSelf: boolean;
     readonly removable: boolean;
     readonly canClear: boolean;
+    readonly requiresRetirementConfirmation: boolean;
   }[];
 }
 
@@ -157,8 +159,10 @@ export async function listServers(db: Database, selfNodeId: string): Promise<Ser
       standing: n.standing,
       isSelf: n.nodeId === selfNodeId,
       removable:
-        judgeRemoval(held, selfNodeId, n.nodeId, withRows.has(n.nodeId)).kind === "removable",
+        judgeRemoval(held, selfNodeId, n.nodeId, withRows.has(n.nodeId), true).kind === "removable",
       canClear: judgeClearance(held, selfNodeId, n.nodeId).kind === "clearable",
+      requiresRetirementConfirmation:
+        n.standing === "serving-secondary" && withRows.has(n.nodeId) && n.nodeId !== selfNodeId,
     })),
   };
 }
@@ -230,12 +234,39 @@ async function writeChartInRounds<T>(
 }
 
 /**
- * Marks a never-joined standby `evicted` in a new chart this node signs, and records the removal in
- * the same transaction. Every refusal throws before anything commits.
+ * Marks a standby `evicted` in a new chart this node signs, records the removal in the same
+ * transaction, then deletes this box's pair link if it names the standby. node.db's lock is held
+ * from the handover check to the link delete; venue.db commits first, so a run stopped between the
+ * two deletes the link when it is run again. Every refusal throws before anything commits.
  */
-export async function removeUnjoinedStandby(
+export async function removeStandby(
+  deps: RemovalDeps,
+  args: {
+    readonly targetNodeId: string;
+    readonly personId: string;
+    /** Both retirement declarations were made; required for a standby that finished joining. */
+    readonly declared?: boolean;
+  },
+): Promise<RemovalResult> {
+  const declared = args.declared === true;
+  return withNodeTransaction(deps.node, async (nodeTx) => {
+    const open = await readOpenHandoverOperation(nodeTx, deps.nodeId);
+    if (
+      open !== null &&
+      (open.sourceNodeId === args.targetNodeId || open.destinationNodeId === args.targetNodeId)
+    ) {
+      throw new AppError("handover.operation_in_progress", { operationId: open.operationId });
+    }
+    const result = await writeRemoval(deps, args, declared);
+    await unlinkTx(nodeTx, deps, args.targetNodeId);
+    return result;
+  });
+}
+
+function writeRemoval(
   deps: RemovalDeps,
   args: { readonly targetNodeId: string; readonly personId: string },
+  declared: boolean,
 ): Promise<RemovalResult> {
   return writeChartInRounds<RemovalResult>(deps, async (held) => {
     const withRows = await nodeIdsWithRows(deps.db, [args.targetNodeId]);
@@ -244,6 +275,7 @@ export async function removeUnjoinedStandby(
       deps.nodeId,
       args.targetNodeId,
       withRows.has(args.targetNodeId),
+      declared,
     );
     if (verdict.kind === "refused") throw new AppError(verdict.code, {});
     // `held` is non-null past `judgeRemoval`: a null chart is refused as not found.
@@ -255,7 +287,7 @@ export async function removeUnjoinedStandby(
       nodes: evictNode(held!.body.nodes, args.targetNodeId),
       record: async (tx, term) => {
         // Checked again under the write lock: the check above ran outside this transaction.
-        if ((await nodeIdsWithRows(tx, [args.targetNodeId])).has(args.targetNodeId)) {
+        if (!declared && (await nodeIdsWithRows(tx, [args.targetNodeId])).has(args.targetNodeId)) {
           throw new AppError("membership.standby_joined", {});
         }
         await recordActivity(tx, {
@@ -277,27 +309,22 @@ export async function removeUnjoinedStandby(
   });
 }
 
-/**
- * Deletes this box's pair link when it names `targetNodeId`, then reloads the stream. Run after
- * `removeUnjoinedStandby` commits the chart, so a removal that stops between the two deletes the
- * link when it is run again.
- */
-export async function unlinkRemovedStandby(
-  deps: {
-    readonly node: NodeDatabase;
-    readonly nodeId: string;
-    readonly log: Logger;
-    readonly reloadStream: () => Promise<void>;
-  },
+/** Deletes this box's pair link when it names `targetNodeId`; an active link is left alone. */
+async function unlinkTx(
+  tx: NodeTransaction,
+  deps: { readonly nodeId: string; readonly log: Logger },
   targetNodeId: string,
 ): Promise<void> {
-  const unlinked = await withNodeTransaction(deps.node, async (tx) => {
-    if ((await readPairLink(tx, deps.nodeId))?.peerNodeId !== targetNodeId) return false;
-    await deletePairLinkTx(tx, deps.nodeId);
-    return true;
-  });
-  if (!unlinked) return;
+  if ((await readPairLink(tx, deps.nodeId))?.peerNodeId !== targetNodeId) return;
+  await deletePairLinkTx(tx, deps.nodeId);
   deps.log("info", "membership.pair_link_deleted", { nodeId: targetNodeId });
+}
+
+/** Reloads the stream after a Remove or Clear answer; a failure is logged, never answered. */
+export async function reloadAfterRemoval(
+  deps: { readonly log: Logger; readonly reloadStream: () => Promise<void> },
+  targetNodeId: string,
+): Promise<void> {
   try {
     await deps.reloadStream();
   } catch (error) {
@@ -316,10 +343,23 @@ export interface ClearanceResult {
 
 /**
  * Moves a removed (`evicted`) machine from the chart's `nodes` to its `revoked` list in a new chart
- * this node signs, freeing its place, and records the clearance in the same transaction. A full
- * revoked list is refused by the mint (`membership.cleared_list_full`) before anything commits.
+ * this node signs, freeing its place, and records the clearance in the same transaction, then
+ * deletes this box's pair link if it names the machine, under node.db's lock as `removeStandby`
+ * does. A full revoked list is refused by the mint (`membership.cleared_list_full`) before anything
+ * commits.
  */
 export async function clearRemovedMachine(
+  deps: RemovalDeps,
+  args: { readonly targetNodeId: string; readonly personId: string },
+): Promise<ClearanceResult> {
+  return withNodeTransaction(deps.node, async (nodeTx) => {
+    const result = await writeClearance(deps, args);
+    await unlinkTx(nodeTx, deps, args.targetNodeId);
+    return result;
+  });
+}
+
+function writeClearance(
   deps: RemovalDeps,
   args: { readonly targetNodeId: string; readonly personId: string },
 ): Promise<ClearanceResult> {

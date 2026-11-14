@@ -64,7 +64,7 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { streamSettingsPayload } from "./stream-host.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
-import { clearRemovedMachine, removeUnjoinedStandby } from "./membership-removal.js";
+import { clearRemovedMachine, removeStandby } from "./membership-removal.js";
 import { enrolAuthenticator, wrongTotpCode, TOTP_KEY_RING } from "./testing/authenticator.js";
 import { writerBesideRequest } from "./testing/watched-scrypt.js";
 import { boxHostnameFor } from "./box-name.js";
@@ -2386,7 +2386,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const removeDuringRequest =
       (designated: AdoptResult, adminPersonId: string, standbyNodeId: string) =>
       async (): Promise<void> => {
-        await removeUnjoinedStandby(
+        await removeStandby(
           { db, node: suite.node, ring: RING, nodeId: designated.nodeId, log: () => {} },
           { targetNodeId: standbyNodeId, personId: adminPersonId },
         );
