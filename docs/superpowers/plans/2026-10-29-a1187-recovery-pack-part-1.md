@@ -521,7 +521,7 @@ only).
 the pack name; for the pack, the size limit is the pack's; parse with `parseRecoveryPackFile`, then
 run the existing `parseRecoveryDocument` and canonical comparison on `serverKey`; the digest check
 covers the attached file's bytes as today. Wait for `importFile` in the component test as
-`testing-guide.md` → "Wait for the native picker's PDF import" says.
+`testing-guide.md` → "Wait for the native picker's PDF import" says. (2026-11-15: that heading is now "Wait for the recovery PDF picker's import".)
 
 **Checks:** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/recovery-reader.browser.test.ts src/recovery-reader.pack.browser.test.ts src/setup/recovery-key.browser.test.ts`;
 the unedited fiscal set: `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts src/correction-amount.huella.test.ts src/money-conversion.huella.test.ts src/sale-amount.huella.test.ts`
