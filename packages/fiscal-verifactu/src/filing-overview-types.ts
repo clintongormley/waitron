@@ -144,3 +144,43 @@ export interface FilingOverviewAnswer extends FilingOverview {
   filing: boolean;
   awaitingCertificate: boolean;
 }
+
+export interface WarnedRecordView {
+  numSerieFactura: string;
+  fechaExpedicionFactura: string;
+  tipoRegistro: string;
+  /** Its sending state now; null when it has none. */
+  estado: string | null;
+}
+
+export interface ReplyMismatchView {
+  detectedAt: string;
+  csv: string | null;
+  /** The records sent, in the order sent. */
+  sent: WarnedRecordView[];
+  /** AEAT's lines, in AEAT's order. */
+  lines: {
+    numSerieFactura: string;
+    fechaExpedicionFactura: string;
+    tipoOperacion: string | null;
+    estado: string | null;
+    codigo: number | null;
+    mensaje: string | null;
+  }[];
+}
+
+export interface RecordWarningView {
+  detectedAt: string;
+  kind: "totals" | "flagged";
+  fields: string[];
+  codes: string[];
+  /** Null unless exactly one record of the sale was generated at that second. */
+  record: WarnedRecordView | null;
+}
+
+export interface FilingWarnings {
+  replyMismatches: ReplyMismatchView[];
+  recordWarnings: RecordWarningView[];
+  /** Open alerts of these three codes, listed or not. */
+  total: number;
+}
