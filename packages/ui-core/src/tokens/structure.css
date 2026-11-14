@@ -128,6 +128,9 @@
   --wt-till-receipt-qr-size: 10rem;
   --wt-station-ticket-min-width: 12rem;
 
+  /* Module dashboard views. */
+  --wt-booking-date-field-max-width: 16rem;
+
   --wt-shadow-1: 0 1px 2px rgb(0 0 0 / 0.08);
   --wt-shadow-2: 0 8px 24px rgb(0 0 0 / 0.16);
 

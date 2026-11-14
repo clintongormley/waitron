@@ -1,23 +1,32 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { sourceFilesIn } from "./no-till-as-issuer.mjs";
 
 /**
- * Contract: the styles of the dashboard's and the till's views read colours and rem/em lengths from
- * declared `--wt-*` tokens, as `packages/ui/src/no-hardcoded-chrome.test.ts` requires of the
- * shared primitives.
+ * Contract: the styles of the dashboard's and the till's views, and of the screens modules add to
+ * the dashboard, read colours and rem/em lengths from declared `--wt-*` tokens, as
+ * `packages/ui/src/no-hardcoded-chrome.test.ts` requires of the shared primitives.
  *
- * Weaker than its name. It reads the TEXT of each Lit `css` tagged template in every non-test
- * `.ts` on disk under `apps/dashboard/src` and `apps/till/src`, skipping `sourceFilesIn`'s
- * ignored folders, and does not see: px sizes; styles outside a `css` tag (inline `style=`
- * attributes, `unsafeCSS` strings, string constants such as `DRAWER_BREAKPOINT` or `PHONE_WIDTH`,
- * `index.html`); the condition of a `@media` or `@container` rule, which cannot read a custom
- * property; a value interpolated with `${…}`; any other app. Only the short list of named colours below is caught.
+ * Weaker than its name. It reads the declaration values in each Lit `css` tagged template in every
+ * non-test `.ts` on disk under `apps/dashboard/src`, `apps/till/src` and every
+ * `packages/<name>/src/dashboard` there is when it runs, skipping `sourceFilesIn`'s ignored
+ * folders, and does not see: px sizes; styles outside a `css` tag (inline `style=` attributes,
+ * `unsafeCSS` strings, string constants such as `DRAWER_BREAKPOINT` or `PHONE_WIDTH`,
+ * `index.html`); selectors and quoted strings; the condition of a `@media` or `@container` rule,
+ * which cannot read a custom property; a value interpolated with `${…}`; `apps/setup`,
+ * `apps/server`, or a package's other folders. Only the short list of named colours below is caught.
  */
 
 const repoRoot = join(import.meta.dirname, "..");
-const APPS = ["apps/dashboard/src", "apps/till/src"] as const;
+const MODULE_DASHBOARDS = readdirSync(join(repoRoot, "packages"))
+  .map((name) => `packages/${name}/src/dashboard`)
+  .filter((dir) => statSync(join(repoRoot, dir), { throwIfNoEntry: false })?.isDirectory());
+const GROUPS: readonly (readonly [string, readonly string[]])[] = [
+  ["apps/dashboard/src", ["apps/dashboard/src"]],
+  ["apps/till/src", ["apps/till/src"]],
+  ["packages/*/src/dashboard", MODULE_DASHBOARDS],
+];
 
 interface CssBlock {
   readonly line: number;
@@ -55,6 +64,16 @@ function skipInterpolation(source: string, start: number): number {
       i = skipTemplate(source, i);
       continue;
     }
+    if (ch === "/" && source[i + 1] === "*") {
+      const end = source.indexOf("*/", i + 2);
+      i = end === -1 ? source.length : end + 2;
+      continue;
+    }
+    if (ch === "/" && source[i + 1] === "/") {
+      const end = source.indexOf("\n", i + 2);
+      i = end === -1 ? source.length : end + 1;
+      continue;
+    }
     if (ch === '"' || ch === "'") {
       i += 1;
       while (i < source.length && source[i] !== ch) i += source[i] === "\\" ? 2 : 1;
@@ -72,7 +91,7 @@ function skipInterpolation(source: string, start: number): number {
 /** The body of each `css\`…\`` in `source`, with every interpolation replaced by a space. */
 function cssBlocks(source: string): CssBlock[] {
   const blocks: CssBlock[] = [];
-  for (const match of source.matchAll(/(?<![\w$.])css`/g)) {
+  for (const match of source.matchAll(/(?<![\w$.])css(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*\n)*`/g)) {
     const open = match.index + match[0].length - 1;
     const out: string[] = [];
     skipTemplate(source, open, out);
@@ -88,10 +107,21 @@ const LITERAL_PATTERNS: readonly RegExp[] = [
   /(?<![\w-])-?\d*\.?\d+(?:rem|em)\b/g,
 ];
 
-/** The colour and rem/em literals in a css body, outside comments and query conditions. */
+/**
+ * The colour and rem/em literals in a css body's declaration values. Comments and quoted strings
+ * are blanked first; a segment ending in `{` is a selector or an at-rule's condition, not a value.
+ */
 function hardcodedLiterals(body: string): string[] {
-  const css = body.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/@(?:media|container)\b[^{]*\{/g, "{");
-  return LITERAL_PATTERNS.flatMap((pattern) => [...css.matchAll(pattern)].map((m) => m[0]));
+  const css = body
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/"(?:[^"\\]|\\[\s\S])*"|'(?:[^'\\]|\\[\s\S])*'/g, '""');
+  const values = [...css.matchAll(/[^;{}]*[;{}]|[^;{}]+$/g)]
+    .map((m) => m[0])
+    .filter((segment) => !segment.endsWith("{") && segment.includes(":"))
+    .map((segment) => segment.slice(segment.indexOf(":") + 1));
+  return values.flatMap((value) =>
+    LITERAL_PATTERNS.flatMap((pattern) => [...value.matchAll(pattern)].map((m) => m[0])),
+  );
 }
 
 describe("the scanner", () => {
@@ -104,6 +134,12 @@ describe("the scanner", () => {
     ["a rem", "max-width: 3rem;", "3rem"],
     ["an em", "letter-spacing: 0.1em;", "0.1em"],
     ["a rem inside a var() fallback", "width: var(--wt-x, 24rem);", "24rem"],
+    ["the last declaration of a rule, with no semicolon", "a { color: #000 }", "#000"],
+    [
+      "a value in a rule nested in a media query",
+      "@media (min-width: 1px) { a { color: red } }",
+      "red",
+    ],
   ])("finds %s", (_label, css, literal) => {
     expect(found(css)).toEqual([literal]);
   });
@@ -116,6 +152,9 @@ describe("the scanner", () => {
     ["currentColor", "border-color: currentColor;"],
     ["a token read", "color: var(--wt-color-text); padding: var(--wt-space-2);"],
     ["a comment", "/* #fff and 2rem */ color: var(--wt-color-text);"],
+    ["a selector naming a colour", ".white { color: var(--wt-color-text); }"],
+    ["a :not() selector naming a colour", "a:not(.red) { color: var(--wt-color-text); }"],
+    ["a quoted string", 'a::after { content: "red"; }'],
   ])("passes %s", (_label, css) => {
     expect(found(css)).toEqual([]);
   });
@@ -128,15 +167,33 @@ describe("the scanner", () => {
     expect(block?.body).not.toContain("2rem");
     expect(hardcodedLiterals(block?.body ?? "")).toEqual(["#000"]);
   });
+
+  it.each([
+    ["a block comment", "css /* app styles */ `a { color: #12abef; }`"],
+    ["whitespace", "css\n  `a { color: #12abef; }`"],
+    ["a line comment", "css // app styles\n`a { color: #12abef; }`"],
+  ])("finds a css tag separated from its template by %s", (_label, source) => {
+    const blocks = cssBlocks(source);
+    expect(blocks.map((block) => hardcodedLiterals(block.body))).toEqual([["#12abef"]]);
+  });
+
+  it.each([
+    ["a block comment", 'a { width: ${/* } */ unsafeCSS("2rem")}; color: #000; }'],
+    ["a line comment", 'a { width: ${unsafeCSS("1px") // } 2rem\n}; color: #000; }'],
+  ])("skips %s inside an interpolation", (_label, body) => {
+    const [block] = cssBlocks(`css\`${body}\``);
+    expect(block?.body).not.toContain("2rem");
+    expect(hardcodedLiterals(block?.body ?? "")).toEqual(["#000"]);
+  });
 });
 
-describe.each(APPS)("%s views", (dir) => {
+describe.each(GROUPS)("%s views", (_group, dirs) => {
   it("declare no literal colours or rem/em lengths in their css", () => {
     const offenders: string[] = [];
     let blockCount = 0;
-    for (const file of sourceFilesIn(repoRoot, dir).filter(
-      (path) => path.endsWith(".ts") && !path.endsWith(".test.ts"),
-    )) {
+    for (const file of dirs
+      .flatMap((dir) => sourceFilesIn(repoRoot, dir))
+      .filter((path) => path.endsWith(".ts") && !path.endsWith(".test.ts"))) {
       for (const block of cssBlocks(readFileSync(join(repoRoot, file), "utf8"))) {
         blockCount += 1;
         const literals = hardcodedLiterals(block.body);

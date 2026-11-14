@@ -1060,7 +1060,8 @@ On a till's PIN sign-in, a person the device's profile does not admit also answe
 several of them more broadly — the token rule there binds any component or view, not only
 `packages/ui`. What follows records what the GUARDS mechanically enforce, which is narrower:
 `packages/ui/src/no-hardcoded-chrome.test.ts` scans `packages/ui/src/components/*.ts` only, and
-`scripts/no-hardcoded-chrome-views.test.ts` the dashboard's and till's views (below).
+`scripts/no-hardcoded-chrome-views.test.ts` the dashboard's, the till's and modules' dashboard
+views (below).
 The shared package also runs `packages/ui-core/src/no-hardcoded-chrome.test.ts` and
 `packages/ui-core/src/tap-target-and-focus.test.ts` directly over its own controls.
 
@@ -1077,14 +1078,16 @@ every component via `import.meta.glob("./components/*.ts", ...)` — a new compo
 moment the file exists, with nothing to register. If a needed token doesn't exist, it belongs in
 `packages/ui-core/src/tokens/`, not inlined.
 
-`scripts/no-hardcoded-chrome-views.test.ts` reads the text of every Lit `css` tagged template in
-a tracked, non-test `.ts` under `apps/dashboard/src` and `apps/till/src`, and refuses hex, the
+`scripts/no-hardcoded-chrome-views.test.ts` reads the declaration values in every Lit `css` tagged
+template in a non-test `.ts` on disk under `apps/dashboard/src`, `apps/till/src` and every
+`packages/<name>/src/dashboard` (skipping the folders `sourceFilesIn` in
+`scripts/no-till-as-issuer.mjs` ignores, such as `node_modules` and `dist`), and refuses hex, the
 colour functions, the same short list of named colours, and `rem`/`em` (a `var()` fallback
 included). It does not see `px` sizes; styles outside a `css` tag (inline `style=` attributes,
 `unsafeCSS` strings, string constants such as `DRAWER_BREAKPOINT` or `PHONE_WIDTH`, `index.html`);
-the condition of a `@media` or `@container` rule, which cannot read a custom property, so app
-breakpoints stay literal; a value interpolated with `${…}`; or `apps/setup`, `apps/server` and any
-other app.
+selectors and quoted strings; the condition of a `@media` or `@container` rule, which cannot read a
+custom property, so app breakpoints stay literal; a value interpolated with `${…}`; or
+`apps/setup`, `apps/server` and a package's other folders.
 
 A `--wt-*` name a stylesheet reads must be declared somewhere, anywhere under `apps/` or
 `packages/`: CSS gives a property that reads an undeclared name with no fallback its inherited or
@@ -2400,8 +2403,8 @@ object with that key is held to the rule and a data column must take another key
 **Every colour, spacing, radius and font reads a `--wt-*` token**, and the name read must be
 declared. No hex, no named colours, no `rem`/`em`. Guards: `packages/ui/src/no-hardcoded-chrome.test.ts`
 (scans `packages/ui` alone; the rule covers any component or view),
-`scripts/no-hardcoded-chrome-views.test.ts` (the dashboard's and till's `css` tags, no `px`;
-[limits](#no-hardcoded-chrome)) and
+`scripts/no-hardcoded-chrome-views.test.ts`, weaker than its name — values in the `css` tags of the
+dashboard, the till and modules' dashboard screens only, no `px` ([limits](#no-hardcoded-chrome)) — and
 `scripts/style-token-names.test.ts`, weaker than its name — it reads text and matches a read
 against declarations anywhere in the tree.
 

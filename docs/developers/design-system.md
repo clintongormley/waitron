@@ -28,14 +28,17 @@ and `inherit` are legitimate escape hatches, not chrome.
 `packages/ui/src/no-hardcoded-chrome.test.ts` discovers primitives via
 `import.meta.glob("./components/*.ts", ...)` (excluding `*.test.ts`), scans each one's `static
 styles`, and fails on violations. It covers a new primitive automatically.
-`scripts/no-hardcoded-chrome-views.test.ts` reads the text of every Lit `css` tagged template in
-a tracked, non-test `.ts` under `apps/dashboard/src` and `apps/till/src`, and refuses hex, the
+`scripts/no-hardcoded-chrome-views.test.ts` reads the declaration values in every Lit `css` tagged
+template in a non-test `.ts` on disk under `apps/dashboard/src`, `apps/till/src` and every
+`packages/<name>/src/dashboard` (skipping the folders `sourceFilesIn` in
+`scripts/no-till-as-issuer.mjs` ignores, such as `node_modules` and `dist`), and refuses hex, the
 colour functions, the same short list of named colours, and `rem`/`em` (a `var()` fallback
 included). It does not see `px` sizes; styles outside a `css` tag (inline `style=` attributes,
 `unsafeCSS` strings, string constants such as `DRAWER_BREAKPOINT` or `PHONE_WIDTH`, `index.html`);
-the condition of a `@media` or `@container` rule, which cannot read a custom property, so app
-breakpoints stay literal; a value interpolated with `${…}`; or `apps/setup`, `apps/server` and any
-other app. The rule above still applies to everything the guards do not see.
+selectors and quoted strings; the condition of a `@media` or `@container` rule, which cannot read a
+custom property, so app breakpoints stay literal; a value interpolated with `${…}`; or
+`apps/setup`, `apps/server` and a package's other folders. The rule above still applies to
+everything the guards do not see.
 The shared package also runs `packages/ui-core/src/no-hardcoded-chrome.test.ts` and
 `packages/ui-core/src/tap-target-and-focus.test.ts` directly over its own controls.
 
