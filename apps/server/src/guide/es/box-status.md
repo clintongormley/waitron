@@ -56,8 +56,8 @@ Cuando no pasa nada, cada fila dice:
   cuando se retrasa.
 - **Equipo de reserva**: cuando el equipo principal copia a una reserva emparejada, esta fila sustituye
   a **Copia en el bucket**. Muestra el retraso medido en segundos y cuándo se recibió la
-  última copia. **Reconstruyendo la copia** significa que está restaurando una copia.
-  Deja ambos equipos encendidos hasta que termine.
+  última copia. Deja ambos equipos encendidos cuando veas **Actualización pendiente** o
+  **Reconstruyendo la copia**.
   **Actualización desconocida** significa que la principal no puede confirmar su progreso.
   Abre **Servidores** para comprobar el par. El cambio sigue usando la copia tomada cuando se
   incorporó este equipo de reserva.

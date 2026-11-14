@@ -177,6 +177,11 @@ describe("followGeneration", () => {
         await writeFile(`${f.args.outPath}-txid`, txid(n));
         expect((await follower.read()).lagMs).toBe(0);
       }
+      for (let n = 17; n <= 19; n++) {
+        f.tick((n - 1) * 5000);
+        await f.store.put(`${generation}/0000/${txid(n)}-${txid(n)}.ltx`, new Uint8Array([1]));
+        expect((await follower.read()).lagMs).toBe((n - 16) * 5000);
+      }
       f.tick(145000);
       expect((await follower.read()).lagMs).toBe(70000);
     } finally {
