@@ -6,7 +6,7 @@ import { AppError } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setupVenue } from "./testing/venue-fixtures.js";
-import { readPeerNames, waitingPageRoute } from "./waiting-page.js";
+import { readPeerNames, renderWaitingPage, waitingPageRoute } from "./waiting-page.js";
 
 async function page(names: readonly (string | null)[], language: string): Promise<string> {
   const app = new Hono();
@@ -94,6 +94,25 @@ describe("the waiting page", () => {
       errorCode: "shared.invalid_id",
       reason: "r",
     });
+  });
+
+  it("marks its answer as the waiting page, so an open page can tell when the wait has ended", async () => {
+    const app = new Hono();
+    waitingPageRoute(
+      () => Promise.resolve(["Spare"]),
+      () => {},
+    )(app);
+    const res = await app.request("/");
+    expect(res.headers.get("x-waitron-waiting")).toBe("1");
+  });
+
+  it("asks every 5 seconds whether it is still the waiting page, and leaves for the box's page once not", () => {
+    const html = renderWaitingPage("Spare", "en-GB");
+    expect(html).toContain("<script>");
+    expect(html).toContain('fetch("/", { cache: "no-store" })');
+    expect(html).toContain('response.headers.get("x-waitron-waiting") === null');
+    expect(html).toContain('location.replace("/")');
+    expect(html).toContain("5000");
   });
 
   it("with no box to name, waits for the other box", async () => {

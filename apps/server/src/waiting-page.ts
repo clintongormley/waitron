@@ -42,6 +42,22 @@ export function otherBoxPhrase(names: readonly (string | null)[], locale: Suppor
     : new Intl.ListFormat(locale, { type: "conjunction" }).format(shown);
 }
 
+/** Marks an answer to `GET /` as the waiting page; its absence tells an open page the wait ended. */
+const WAITING_HEADER = "X-Waitron-Waiting";
+
+// A failed fetch is the gap between the waiting start's listener closing and the next start's
+// opening, so it is tried again. `replace` rather than `reload`, because the carry-on form's
+// answers are drawn from a POST that a reload would send again.
+const LEAVE_WHEN_DONE = `<script>
+setInterval(async () => {
+  try {
+    const response = await fetch("/", { cache: "no-store" });
+    if (response.headers.get("${WAITING_HEADER.toLowerCase()}") === null) location.replace("/");
+  } catch {}
+}, 5000);
+</script>
+`;
+
 /** The waiting page, with `section` (escaped HTML, such as the carry-on form) below its body. */
 export function renderWaitingPage(other: string, locale: SupportedLocale, section = ""): string {
   const text = WAITING_PAGE_WORDS[locale];
@@ -49,7 +65,7 @@ export function renderWaitingPage(other: string, locale: SupportedLocale, sectio
     locale,
     `${text.title[0]}${other}${text.title[1]}`,
     `<p>${escapeHtml(text.body[0])}<strong>${escapeHtml(other)}</strong>${escapeHtml(text.body[1])}</p>
-${section}`,
+${section}${LEAVE_WHEN_DONE}`,
   );
 }
 
@@ -74,6 +90,7 @@ export function waitingPageRoute(
       const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
       c.header("Cache-Control", "no-store");
       c.header("Vary", "Accept-Language");
+      c.header(WAITING_HEADER, "1");
       let shown: readonly (string | null)[] = [];
       try {
         shown = await names();
