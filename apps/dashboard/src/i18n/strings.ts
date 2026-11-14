@@ -7195,7 +7195,7 @@ export const es: Record<StringKey, string> = {
   "menus.paper_title": "Carta impresa A4",
   "menus.paper_preset": "Diseño",
   "menus.paper_bistro": "Bistró",
-  "menus.paper_lunch-wine": "Menú y vinos",
+  "menus.paper_lunch-wine": "Platos y vinos",
   "menus.paper_font": "Tipografía",
   "menus.paper_serif": "Con remates",
   "menus.paper_sans": "Sin remates",

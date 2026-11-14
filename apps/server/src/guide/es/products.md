@@ -513,7 +513,7 @@ El enlace para clientes con datos móviles y el envío a Cloud aún no están di
 ## Imprime una carta publicada {#guest-paper}
 
 En **Vista previa para clientes**, elige el idioma del cliente y usa **Carta impresa A4**.
-Elige **Bistró** para dos columnas equilibradas o **Menú y vinos** para una columna de platos más
+Elige **Bistró** para dos columnas equilibradas o **Platos y vinos** para una columna de platos más
 ancha y, cuando hay varias secciones, la última en un panel estrecho. Elige la tipografía, el espaciado, los colores y
 la leyenda de alérgenos. Usa las palabras junto a cada plato si prefieres leer allí las declaraciones.
 
