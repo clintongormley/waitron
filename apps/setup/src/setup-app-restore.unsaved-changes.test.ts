@@ -6,7 +6,7 @@ import type { SetupApi } from "./api/client.js";
 import type { SetupRestoreScreen } from "./screens/restore-screen.js";
 import type { WtInput } from "@waitron/ui/src/components/wt-input.js";
 import type { WtUnsavedChanges } from "@waitron/ui/src/components/wt-unsaved-changes.js";
-import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
+import { chooseFiles, cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { setLocale, t } from "./i18n/t.js";
 
 afterEach(() => {
@@ -19,7 +19,8 @@ const screen = (el: SetupApp) => (el as unknown as { screen: Screen }).screen;
 const q = <T extends HTMLElement>(form: SetupRestoreScreen, selector: string) =>
   form.shadowRoot!.querySelector<T>(selector)!;
 const key = (form: SetupRestoreScreen) => q<WtInput>(form, "[data-test=recovery-key]");
-const artifact = (form: SetupRestoreScreen) => q<HTMLInputElement>(form, "[data-test=artifact]");
+const artifact = (form: SetupRestoreScreen) =>
+  q<HTMLElement & { files: File[] }>(form, "[data-test=artifact]");
 const backup = new File(["encrypted"], "waitron.backup");
 async function mount() {
   const api = {
@@ -39,10 +40,7 @@ async function mount() {
 }
 async function edit(form: SetupRestoreScreen, field: string) {
   if (field === "artifact") {
-    const files = new DataTransfer();
-    files.items.add(backup);
-    artifact(form).files = files.files;
-    artifact(form).dispatchEvent(new Event("change"));
+    chooseFiles(artifact(form), backup);
   } else {
     q(form, `[data-test=${field}]`).dispatchEvent(
       new CustomEvent("wt-change", {
@@ -147,8 +145,7 @@ describe("setup archive restore unsaved changes", () => {
     const { el, form } = await mount();
     await fill(form);
     expect(unload()).toBe(true);
-    artifact(form).value = "";
-    artifact(form).dispatchEvent(new Event("change"));
+    chooseFiles(artifact(form));
     for (const [field, value] of [
       ["recovery-key", ""],
       ["environment", "production"],

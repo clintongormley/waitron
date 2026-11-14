@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import type { LitElement } from "lit";
 import { SetupApi, type RecoveryRestoreCredentials } from "../api/client.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { chooseFiles, cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { SetupRestoreScreen } from "./restore-screen.js";
 import { SetupRestoreBucketScreen } from "./restore-bucket-screen.js";
 import { SetupCloudRestoreScreen } from "./cloud-restore-screen.js";
@@ -42,11 +42,10 @@ async function selected(extra: Record<string, unknown> = {}) {
   const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {
     api: new SetupApi("", async () => new Response(JSON.stringify({ ...preview, ...extra }))),
   });
-  const files = new DataTransfer();
-  files.items.add(new File(["encrypted"], "selected.backup"));
-  const picker = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=artifact]")!;
-  picker.files = files.files;
-  picker.dispatchEvent(new Event("change"));
+  chooseFiles(
+    el.shadowRoot!.querySelector("[data-test=artifact]")!,
+    new File(["encrypted"], "selected.backup"),
+  );
   change(el, "recovery-key", "archive-key");
   await el.updateComplete;
   const copy = el.shadowRoot!.querySelector<LitElement>("setup-recovery-copy")!;
@@ -179,11 +178,10 @@ it("refuses an old allocation even when Restore follows a new file before render
   acknowledged.dispatchEvent(new Event("change"));
   const listener = vi.fn();
   el.addEventListener("restore-requested", listener);
-  const files = new DataTransfer();
-  files.items.add(new File(["different"], "different.backup"));
-  const picker = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=artifact]")!;
-  picker.files = files.files;
-  picker.dispatchEvent(new Event("change"));
+  chooseFiles(
+    el.shadowRoot!.querySelector("[data-test=artifact]")!,
+    new File(["different"], "different.backup"),
+  );
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!.click();
   expect(listener).not.toHaveBeenCalled();
 });

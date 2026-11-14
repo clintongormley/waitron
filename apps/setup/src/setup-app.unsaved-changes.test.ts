@@ -7,7 +7,7 @@ import type { SetupLiveSourceScreen } from "./screens/live-source-screen.js";
 import type { SetupAdminScreen } from "./screens/admin-screen.js";
 import type { WtInput } from "@waitron/ui/src/components/wt-input.js";
 import type { WtUnsavedChanges } from "@waitron/ui/src/components/wt-unsaved-changes.js";
-import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
+import { chooseFiles, cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { setLocale } from "./i18n/t.js";
 
 afterEach(() => {
@@ -886,12 +886,11 @@ async function sourcePassphrase(source: SetupLiveSourceScreen, value: string) {
     );
   await source.updateComplete;
 }
+/** The export the live-source screen's `wt-file-input` shows as chosen. */
+const sourcePicked = (source: SetupLiveSourceScreen): File[] =>
+  source.shadowRoot!.querySelector<HTMLElement & { files: File[] }>("wt-file-input")!.files;
 function sourceFile(source: SetupLiveSourceScreen, file?: File) {
-  const input = source.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!;
-  const selection = new DataTransfer();
-  if (file) selection.items.add(file);
-  input.files = selection.files;
-  input.dispatchEvent(new Event("change"));
+  chooseFiles(source.shadowRoot!.querySelector("wt-file-input")!, ...(file ? [file] : []));
 }
 function startEmpty(source: SetupLiveSourceScreen) {
   source.shadowRoot!.querySelector<HTMLElement>("[data-test=empty]")!.click();
@@ -940,9 +939,7 @@ describe("setup Start empty and import draft", () => {
       expect((el as unknown as State).screen).toBe("live-source");
       expect((el as unknown as State).draft).toEqual(original);
       await choose(el, "keep");
-      expect(
-        source.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!.files![0],
-      ).toBe(artifact);
+      expect(sourcePicked(source)[0]).toBe(artifact);
       expect(source.shadowRoot!.querySelector<WtInput>("wt-input")!.value).toBe(
         "authored passphrase",
       );
@@ -953,9 +950,7 @@ describe("setup Start empty and import draft", () => {
       await expect
         .poll(() => (el as unknown as State).screen)
         .toBe(route === "empty" ? "admin" : "mode");
-      expect(
-        source.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!.files!.length,
-      ).toBe(0);
+      expect(sourcePicked(source).length).toBe(0);
       expect(source.shadowRoot!.querySelector<WtInput>("wt-input")!.value).toBe("");
       expect((el as unknown as State).draft).toEqual(
         route === "empty" ? { ...original, configurationImport: false } : original,
@@ -993,9 +988,7 @@ describe("setup Start empty and import draft", () => {
     expect(source.shadowRoot!.querySelector<WtInput>("wt-input")!.value).toBe(
       "authored passphrase",
     );
-    expect(source.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!.files![0]).toBe(
-      artifact,
-    );
+    expect(sourcePicked(source)[0]).toBe(artifact);
   });
 });
 
@@ -1061,9 +1054,7 @@ describe("setup import draft lifecycle", () => {
     await expect.poll(() => warning(el).open).toBe(true);
     await sourcePassphrase(source, "newer passphrase");
     await expect.poll(() => warning(el).open).toBe(false);
-    expect(source.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!.files![0]).toBe(
-      artifact,
-    );
+    expect(sourcePicked(source)[0]).toBe(artifact);
     startEmpty(source);
     await expect.poll(() => warning(el).open).toBe(true);
     await choose(el, "keep");
@@ -1220,14 +1211,10 @@ it("discard after import restores the accepted file identity in the native selec
   sourceFile(source, newer);
   accept(importedConfiguration);
   await expect.poll(() => warning(el).open).toBe(true);
-  expect(source.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!.files![0]).toBe(
-    newer,
-  );
+  expect(sourcePicked(source)[0]).toBe(newer);
   await choose(el, "discard");
   await expect.poll(() => (el as unknown as State).screen).toBe("configuration-preview");
-  expect(source.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!.files![0]).toBe(
-    submitted,
-  );
+  expect(sourcePicked(source)[0]).toBe(submitted);
   expect(stage).toHaveBeenCalledExactlyOnceWith(submitted, "submitted passphrase");
   expect(unload()).toBe(true);
 });

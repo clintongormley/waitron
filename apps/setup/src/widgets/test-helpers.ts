@@ -83,3 +83,18 @@ export async function expectNoA11yViolations(context: Element): Promise<void> {
   const colourReadings = undecidedColourReadings(results.incomplete);
   expect(colourReadings, colourReadings.join("\n\n")).toEqual([]);
 }
+
+/** The native file control inside a `wt-file-input`. */
+export function fileControl(picker: Element): HTMLInputElement {
+  return picker.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!;
+}
+
+/** Chooses `files` through the picker's own native control, so the primitive's real `change`
+ * handler runs; no files is the chooser cancelling to an empty choice. */
+export function chooseFiles(picker: Element, ...files: File[]): void {
+  const input = fileControl(picker);
+  const selection = new DataTransfer();
+  for (const file of files) selection.items.add(file);
+  input.files = selection.files;
+  input.dispatchEvent(new Event("change"));
+}

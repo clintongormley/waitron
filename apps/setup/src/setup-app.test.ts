@@ -304,16 +304,17 @@ async function reloadOntoHeldFirstSetup(): Promise<void> {
  * screen's `#<name>-error` paragraph. */
 function messageUnder(screen: HTMLElement, name: string): string | null {
   const field = screen.shadowRoot!.querySelector<HTMLElement & { error: string }>(
-    `:is(wt-input, wt-textarea, wt-combobox)[data-test="${name}"]`,
+    `:is(wt-file-input, wt-input, wt-textarea, wt-combobox)[data-test="${name}"]`,
   );
   if (field !== null) return field.error;
   return screen.shadowRoot!.querySelector(`#${name}-error`)?.textContent ?? null;
 }
 
-/** The kit and environment are shared fields, whose invalid marking is inside their own shadow roots,
- * where a `[aria-invalid=true]` query of the screen cannot see it. */
+/** The kit file, kit and environment are shared fields, whose invalid marking is inside their own
+ * shadow roots, where a `[aria-invalid=true]` query of the screen cannot see it. */
 async function expectBucketSharedFieldsUnmarked(screen: HTMLElement): Promise<void> {
   for (const [field, control] of [
+    ["kit-file", "input[type=file]"],
     ["kit", "textarea"],
     ["environment", ".trigger"],
   ] as const) {

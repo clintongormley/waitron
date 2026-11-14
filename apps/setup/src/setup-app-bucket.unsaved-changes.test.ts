@@ -6,7 +6,7 @@ import type { SetupApi } from "./api/client.js";
 import type { SetupRestoreBucketScreen } from "./screens/restore-bucket-screen.js";
 import type { WtTextarea } from "@waitron/ui/src/components/wt-textarea.js";
 import type { WtUnsavedChanges } from "@waitron/ui/src/components/wt-unsaved-changes.js";
-import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
+import { chooseFiles, cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { setLocale } from "./i18n/t.js";
 
 afterEach(() => {
@@ -290,11 +290,8 @@ describe("setup bucket restore unsaved changes", () => {
   );
   it("loading a kit file protects its resulting text", async () => {
     const { el, form } = await mount();
-    const files = new DataTransfer();
-    files.items.add(new File([" kit from file \n"], "recovery.txt"));
-    const input = q<HTMLInputElement>(form, "[data-test=kit-file]");
-    input.files = files.files;
-    input.dispatchEvent(new Event("change"));
+    const input = q<HTMLElement & { files: File[] }>(form, "[data-test=kit-file]");
+    chooseFiles(input, new File([" kit from file \n"], "recovery.txt"));
     await expect.poll(() => kit(form).value).toBe(" kit from file \n");
     expect(unload()).toBe(true);
     back(form);
@@ -317,11 +314,7 @@ describe("setup bucket restore unsaved changes", () => {
           }),
       );
       const finish = (text: string) => open(new TextEncoder().encode(text).buffer);
-      const files = new DataTransfer();
-      files.items.add(new File(["old"], "kit.txt"));
-      const input = q<HTMLInputElement>(form, "[data-test=kit-file]");
-      input.files = files.files;
-      input.dispatchEvent(new Event("change"));
+      chooseFiles(q(form, "[data-test=kit-file]"), new File(["old"], "kit.txt"));
       if (action === "edit") await edit(form, "kit", "new kit");
       else if (action === "discard") {
         back(form);

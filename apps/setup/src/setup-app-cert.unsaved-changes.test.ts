@@ -6,7 +6,7 @@ import type { ProvisionBody, SetupApi } from "./api/client.js";
 import type { SetupCertScreen } from "./screens/cert-screen.js";
 import type { WtInput } from "@waitron/ui/src/components/wt-input.js";
 import type { WtUnsavedChanges } from "@waitron/ui/src/components/wt-unsaved-changes.js";
-import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
+import { chooseFiles, cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { setLocale } from "./i18n/t.js";
 
 afterEach(() => {
@@ -22,7 +22,7 @@ const warning = (el: SetupApp) =>
 const field = (cert: SetupCertScreen, key: string) =>
   cert.shadowRoot!.querySelector<WtInput>(`[data-test=${key}]`)!;
 const fileInput = (cert: SetupCertScreen) =>
-  cert.shadowRoot!.querySelector<HTMLInputElement>("[data-test=pfx]")!;
+  cert.shadowRoot!.querySelector<HTMLElement & { files: File[] }>("[data-test=pfx]")!;
 
 async function mount(certDraft = initialCert) {
   const api = {
@@ -47,10 +47,7 @@ async function edit(cert: SetupCertScreen, key: string, value: string) {
   await cert.updateComplete;
 }
 function select(cert: SetupCertScreen, file?: File) {
-  const files = new DataTransfer();
-  if (file) files.items.add(file);
-  fileInput(cert).files = files.files;
-  fileInput(cert).dispatchEvent(new Event("change"));
+  chooseFiles(fileInput(cert), ...(file ? [file] : []));
 }
 function back(cert: SetupCertScreen) {
   cert.shadowRoot!.querySelector<HTMLElement>("[data-test=back]")!.click();
@@ -104,7 +101,7 @@ describe("setup certificate unsaved changes", () => {
     await expect.poll(() => warning(el).open).toBe(true);
     await choose(el, "discard");
     await expect.poll(() => (el as unknown as State).screen).toBe("venue");
-    expect(fileInput(cert).files!.length).toBe(0);
+    expect(fileInput(cert).files.length).toBe(0);
   });
   it("removing only the certificate child clears its unload protection", async () => {
     const { cert } = await mount();
@@ -166,8 +163,8 @@ describe("setup certificate unsaved changes", () => {
     await expect.poll(() => warning(el).open).toBe(true);
     await choose(el, "discard");
     await expect.poll(() => (el as unknown as State).screen).toBe("fiscal-test");
-    expect(fileInput(cert).files![0].name).toBe("accepted.pfx");
-    expect(await fileInput(cert).files![0].text()).toBe("\u0004\u0005\u0006");
+    expect(fileInput(cert).files[0]!.name).toBe("accepted.pfx");
+    expect(await fileInput(cert).files[0]!.text()).toBe("\u0004\u0005\u0006");
     expect((el as unknown as State).draft.aeatCert).toEqual({ ...initialCert, pfxBase64: "BAUG" });
   });
   it("input delivered during Next stays protected against the submitted snapshot", async () => {
@@ -217,7 +214,7 @@ describe("setup certificate unsaved changes", () => {
     DeferredFileReader.pending[0].onerror?.();
     await cert.updateComplete;
     expect(cert.shadowRoot!.querySelector("[data-test=file-status]")).not.toBeNull();
-    expect(fileInput(cert).files!.length).toBe(0);
+    expect(fileInput(cert).files.length).toBe(0);
     expect((el as unknown as State).draft.aeatCert).toEqual(initialCert);
   });
   it.each([
@@ -262,7 +259,7 @@ describe("setup certificate unsaved changes", () => {
     back(cert);
     await expect.poll(() => warning(el).open).toBe(true);
     await choose(el, "keep");
-    expect(fileInput(cert).files![0].name).toBe("cert.pfx");
+    expect(fileInput(cert).files[0]!.name).toBe("cert.pfx");
     select(cert, new File([new Uint8Array([1, 2, 3])], "cert.pfx"));
     await expect.poll(() => unload()).toBe(false);
     back(cert);
