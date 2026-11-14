@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm";
 import type { Hono } from "hono";
 import { generateSync } from "otplib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { withNodeTransaction, withTransaction } from "@waitron/db";
+import { withNodeTransaction, withTransaction, type NodeDatabase } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   beginOwnTotpEnrollment,
@@ -98,6 +98,62 @@ function harness(
   });
   return { waiting, app: () => app!, health, closeListeners, closeStore, restart };
 }
+
+/**
+ * The suite's real node.db, except that each query begun with `select` waits until the test lets
+ * it through, in the order they began. A superseded stepdown's first query is its read of the
+ * stored restriction.
+ */
+function holdingReads(node: NodeDatabase) {
+  const gates: (() => void)[] = [];
+  let released = 0;
+  const held = (value: object, gate: Promise<void>): object =>
+    new Proxy(value, {
+      get(target, key) {
+        const member: unknown = Reflect.get(target, key, target);
+        if (typeof member !== "function") return member;
+        const call = member as (...args: unknown[]) => unknown;
+        if (key === "then")
+          return (...args: unknown[]) => gate.then(() => call.apply(target, args));
+        return (...args: unknown[]) => {
+          const out = call.apply(target, args);
+          return typeof out === "object" && out !== null ? held(out, gate) : out;
+        };
+      },
+    });
+  const handle = new Proxy(node, {
+    get(target, key) {
+      const member: unknown = Reflect.get(target, key, target);
+      if (typeof member !== "function") return member;
+      const call = member as (...args: unknown[]) => unknown;
+      if (key !== "select") return call.bind(target);
+      return (...args: unknown[]) =>
+        held(call.apply(target, args) as object, new Promise<void>((open) => gates.push(open)));
+    },
+  });
+  return {
+    node: handle,
+    arrived: () => gates.length,
+    releaseNext: () => gates[released++]!(),
+  };
+}
+
+/** `POST /step` asks for a superseded stepdown naming SPARE_ID, answering a refusal's code. */
+const stepRoute: WaitingStartDeps["routes"][number] = (app, hooks) =>
+  app.post("/step", async (c) => {
+    try {
+      return c.json(
+        await hooks.stepDown({
+          kind: "superseded",
+          successorNodeId: SPARE_ID,
+          membershipTerm: 4,
+          self: c,
+        }),
+      );
+    } catch (error) {
+      return c.json({ refused: (error as { code?: string }).code }, 409);
+    }
+  });
 
 describe("the waiting start", () => {
   it("waits, answering `acceptingSales: false` with its term", async () => {
@@ -316,6 +372,287 @@ describe("the waiting start", () => {
       await vi.waitFor(() => expect(h.restart).toHaveBeenCalledTimes(1));
       expect(h.closeStore).toHaveBeenCalledTimes(1);
       expect(h.closeListeners).toHaveBeenCalledTimes(1);
+    });
+
+    it("a stepdown refused before it stops anything leaves the box waiting and asking again", async () => {
+      await withNodeTransaction(suite.node, (tx) =>
+        recordHandoverRestrictionTx(tx, {
+          nodeId: NODE_ID,
+          operationId: null,
+          kind: "superseded",
+          successorNodeId: SPARE_ID,
+          membershipTerm: 4,
+        }),
+      );
+      let answer: (outcome: StartPeerCheckOutcome) => void = () => {};
+      let next: StartPeerCheckOutcome | null = null;
+      const recheck = vi.fn(() =>
+        next === null
+          ? new Promise<StartPeerCheckOutcome>((done) => (answer = done))
+          : Promise.resolve(next),
+      );
+      const h = harness(recheck, {
+        node: suite.node,
+        intervalMs: 1,
+        routes: [
+          (app, hooks) =>
+            app.post("/step", async (c) => {
+              // The re-ask in flight answers in the same turn as the stepdown begins, so it sees
+              // the stepdown under way and does not ask again.
+              answer(WAIT);
+              const stepping = hooks.stepDown({
+                kind: "superseded",
+                successorNodeId: TERRACE_ID,
+                membershipTerm: 5,
+                self: c,
+              });
+              try {
+                return c.json(await stepping);
+              } catch (error) {
+                return c.json({ refused: (error as { code?: string }).code }, 409);
+              }
+            }),
+        ],
+      });
+      await vi.waitFor(() => expect(recheck).toHaveBeenCalledTimes(1));
+      const stepped = await h.app().request("/step", { method: "POST" });
+      expect(await stepped.json()).toEqual({ refused: "handover.restriction_conflict" });
+      next = PROCEED;
+      const ended = await Promise.race([
+        h.waiting.ended,
+        new Promise((done) => setTimeout(() => done("still waiting"), 500)),
+      ]);
+      expect(ended).toEqual({ kind: "checked", outcome: PROCEED });
+      expect(recheck).toHaveBeenCalledTimes(2);
+      expect(h.restart).not.toHaveBeenCalled();
+      expect(h.closeStore).not.toHaveBeenCalled();
+    });
+
+    it("a stepdown in flight as a peer's answer ends the wait stops the start rather than continuing it", async () => {
+      const order: string[] = [];
+      let answer: (outcome: StartPeerCheckOutcome) => void = () => {};
+      const pending = new Promise<StartPeerCheckOutcome>((done) => (answer = done));
+      let release: () => void = () => {};
+      const held = new Promise<void>((done) => (release = done));
+      let stepAnswered: () => void = () => {};
+      const stepDone = new Promise<void>((done) => (stepAnswered = done));
+      // Slow enough that a restart not waiting for it would come first.
+      const closeStore = vi.fn(async () => {
+        await new Promise((done) => setTimeout(done, 30));
+        order.push("closeStore");
+      });
+      const restart = vi.fn(() => {
+        order.push("restart");
+      });
+      let app: Hono | undefined;
+      const h = harness(() => pending, {
+        node: suite.node,
+        intervalMs: 1,
+        closeStore,
+        restart,
+        // As a real listener does, closing waits for the requests in flight.
+        listen: (bound) => {
+          app = bound;
+          return { close: () => stepDone };
+        },
+        routes: [
+          (app, hooks) =>
+            app.post("/step", async (c) => {
+              await held;
+              return c.json(
+                await hooks.stepDown({
+                  kind: "superseded",
+                  successorNodeId: SPARE_ID,
+                  membershipTerm: 4,
+                  self: c,
+                }),
+              );
+            }),
+        ],
+      });
+      await new Promise((done) => setTimeout(done, 10));
+      const stepping = Promise.resolve(app!.request("/step", { method: "POST" })).finally(() =>
+        stepAnswered(),
+      );
+      answer(PROCEED);
+      await new Promise((done) => setTimeout(done, 10));
+      release();
+      expect(await (await stepping).json()).toEqual({ restarting: true, replayed: false });
+      expect(await h.waiting.ended).toEqual({ kind: "stopped" });
+      expect(h.health.takesNoSales).toBe(true);
+      await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1));
+      expect(closeStore).toHaveBeenCalledTimes(1);
+      expect(order).toEqual(["closeStore", "restart"]);
+    });
+
+    it("a listener that fails to close as a peer's answer ends the wait, with a stepdown in flight, stops the start rather than failing it", async () => {
+      const log = vi.fn();
+      let answer: (outcome: StartPeerCheckOutcome) => void = () => {};
+      const pending = new Promise<StartPeerCheckOutcome>((done) => (answer = done));
+      let release: () => void = () => {};
+      const held = new Promise<void>((done) => (release = done));
+      let stepAnswered: () => void = () => {};
+      const stepDone = new Promise<void>((done) => (stepAnswered = done));
+      let app: Hono | undefined;
+      const h = harness(() => pending, {
+        node: suite.node,
+        intervalMs: 1,
+        log,
+        listen: (bound) => {
+          app = bound;
+          return {
+            close: async () => {
+              await stepDone;
+              throw new Error("listener remains bound");
+            },
+          };
+        },
+        routes: [
+          (app, hooks) =>
+            app.post("/step", async (c) => {
+              await held;
+              return c.json(
+                await hooks.stepDown({
+                  kind: "superseded",
+                  successorNodeId: SPARE_ID,
+                  membershipTerm: 4,
+                  self: c,
+                }),
+              );
+            }),
+        ],
+      });
+      await new Promise((done) => setTimeout(done, 10));
+      const stepping = Promise.resolve(app!.request("/step", { method: "POST" })).finally(() =>
+        stepAnswered(),
+      );
+      answer(PROCEED);
+      await new Promise((done) => setTimeout(done, 10));
+      release();
+      expect(await (await stepping).json()).toEqual({ restarting: true, replayed: false });
+      expect(await h.waiting.ended).toEqual({ kind: "stopped" });
+      expect(h.closeStore).toHaveBeenCalledTimes(1);
+      expect(log).toHaveBeenCalledWith("warn", "waiting_start.close_failed", {
+        errorCode: "unknown",
+      });
+      expect(log).not.toHaveBeenCalledWith(
+        "error",
+        "waiting_start.close_failed",
+        expect.anything(),
+      );
+      await vi.waitFor(() => expect(h.restart).toHaveBeenCalledTimes(1));
+    });
+
+    /** A restriction for another successor, so a stepdown naming SPARE_ID is refused. */
+    const recordConflictingRestriction = () =>
+      withNodeTransaction(suite.node, (tx) =>
+        recordHandoverRestrictionTx(tx, {
+          nodeId: NODE_ID,
+          operationId: null,
+          kind: "superseded",
+          successorNodeId: TERRACE_ID,
+          membershipTerm: 5,
+        }),
+      );
+
+    /**
+     * A peer's answer ends the wait and the listeners begin to close; a stepdown then starts, the
+     * close settles, and only then is the stepdown refused, before it has closed the gate.
+     */
+    async function refusedAfterTheListenersClose(closeFailure: Error | null) {
+      await recordConflictingRestriction();
+      let answer: (outcome: StartPeerCheckOutcome) => void = () => {};
+      const pending = new Promise<StartPeerCheckOutcome>((done) => (answer = done));
+      const reads = holdingReads(suite.node);
+      let closeNow: () => void = () => {};
+      const closing = new Promise<void>((done) => (closeNow = done));
+      let closeSettled = false;
+      let app: Hono | undefined;
+      const h = harness(() => pending, {
+        node: reads.node,
+        intervalMs: 1,
+        listen: (bound) => {
+          app = bound;
+          return {
+            close: async () => {
+              try {
+                await closing;
+                if (closeFailure !== null) throw closeFailure;
+              } finally {
+                closeSettled = true;
+              }
+            },
+          };
+        },
+        routes: [stepRoute],
+      });
+      // A failed start is asserted by the caller, after this rejection lands.
+      h.waiting.ended.catch(() => {});
+      await new Promise((done) => setTimeout(done, 10));
+      answer(PROCEED);
+      await new Promise((done) => setTimeout(done, 10));
+      const stepping = Promise.resolve(app!.request("/step", { method: "POST" }));
+      await vi.waitFor(() => expect(reads.arrived()).toBe(1));
+      closeNow();
+      await vi.waitFor(() => expect(closeSettled).toBe(true));
+      await new Promise((done) => setTimeout(done, 10));
+      reads.releaseNext();
+      expect(await (await stepping).json()).toEqual({ refused: "handover.restriction_conflict" });
+      return h;
+    }
+
+    it("a stepdown refused after the listeners failed to close, as a peer's answer ended the wait, fails the start", async () => {
+      const failure = new Error("listener remains bound");
+      const h = await refusedAfterTheListenersClose(failure);
+      await expect(h.waiting.ended).rejects.toBe(failure);
+      expect(h.closeStore).not.toHaveBeenCalled();
+      expect(h.restart).not.toHaveBeenCalled();
+    });
+
+    it("a stepdown refused after the listeners closed, as a peer's answer ended the wait, lets the start go on", async () => {
+      const h = await refusedAfterTheListenersClose(null);
+      expect(await h.waiting.ended).toEqual({ kind: "checked", outcome: PROCEED });
+      expect(h.closeStore).not.toHaveBeenCalled();
+      expect(h.health.takesNoSales).toBe(false);
+      expect(h.restart).not.toHaveBeenCalled();
+    });
+
+    it("a second stepdown that begins while the first is awaited, both refused, lets the start go on", async () => {
+      await recordConflictingRestriction();
+      let answer: (outcome: StartPeerCheckOutcome) => void = () => {};
+      const pending = new Promise<StartPeerCheckOutcome>((done) => (answer = done));
+      const reads = holdingReads(suite.node);
+      let closeNow: () => void = () => {};
+      const closing = new Promise<void>((done) => (closeNow = done));
+      let app: Hono | undefined;
+      const h = harness(() => pending, {
+        node: reads.node,
+        intervalMs: 1,
+        listen: (bound) => {
+          app = bound;
+          return { close: () => closing };
+        },
+        routes: [stepRoute],
+      });
+      await new Promise((done) => setTimeout(done, 10));
+      answer(PROCEED);
+      await new Promise((done) => setTimeout(done, 10));
+      const first = Promise.resolve(app!.request("/step", { method: "POST" }));
+      await vi.waitFor(() => expect(reads.arrived()).toBe(1));
+      closeNow();
+      // The listeners have closed and the start is waiting on the first stepdown.
+      await new Promise((done) => setTimeout(done, 10));
+      const second = Promise.resolve(app!.request("/step", { method: "POST" }));
+      await vi.waitFor(() => expect(reads.arrived()).toBe(2));
+      reads.releaseNext();
+      expect(await (await first).json()).toEqual({ refused: "handover.restriction_conflict" });
+      await new Promise((done) => setTimeout(done, 10));
+      reads.releaseNext();
+      expect(await (await second).json()).toEqual({ refused: "handover.restriction_conflict" });
+      expect(await h.waiting.ended).toEqual({ kind: "checked", outcome: PROCEED });
+      expect(h.closeStore).not.toHaveBeenCalled();
+      expect(h.health.takesNoSales).toBe(false);
+      expect(h.restart).not.toHaveBeenCalled();
     });
   });
 
@@ -845,7 +1182,7 @@ describe("the waiting start", () => {
       expect(answer.status).toBe(500);
       const shown = await answer.text();
       expect(shown).toContain(
-        '<p id="carry-on-message" role="alert">Nothing was changed, because something went wrong. Try again.</p>',
+        '<p id="carry-on-message" role="alert">Nothing was changed: this is a fault in Waitron or this box. Try again. If it fails again, switch this box off and on, then try once more.</p>',
       );
       expect(log).toHaveBeenCalledWith("warn", "waiting_start.carry_on_failed", {
         errorCode: "unknown",
@@ -895,7 +1232,7 @@ describe("the waiting start", () => {
       expect(answer.status).toBe(500);
       const refused = await answer.text();
       expect(refused).toContain(
-        '<p id="carry-on-message" role="alert">Nothing was changed, because something went wrong. Try again.</p>',
+        '<p id="carry-on-message" role="alert">Nothing was changed: this is a fault in Waitron or this box. Try again. If it fails again, switch this box off and on, then try once more.</p>',
       );
       expect(refused).not.toContain("owner@example.test");
       expect(log).toHaveBeenCalledWith("warn", "waiting_start.carry_on_failed", {

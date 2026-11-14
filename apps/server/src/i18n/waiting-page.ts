@@ -96,7 +96,8 @@ export const WAITING_PAGE_WORDS: Readonly<
       insecure: "To carry on as the main box, open this page at its https:// address.",
       unavailable:
         "The form to carry on as the main box could not be shown. Reload this page to try again.",
-      failed: "Nothing was changed, because something went wrong. Try again.",
+      failed:
+        "Nothing was changed: this is a fault in Waitron or this box. Try again. If it fails again, switch this box off and on, then try once more.",
       knownHandover: [
         "This box has already handed over to ",
         ". It cannot carry on as the main box.",
@@ -155,7 +156,8 @@ export const WAITING_PAGE_WORDS: Readonly<
       insecure: "Para seguir como equipo principal, abre esta página en su dirección https://.",
       unavailable:
         "No se ha podido mostrar el formulario para seguir como equipo principal. Vuelve a cargar esta página para intentarlo.",
-      failed: "No se ha cambiado nada, porque algo ha fallado. Vuelve a intentarlo.",
+      failed:
+        "No se ha cambiado nada: es un fallo de Waitron o de este equipo. Vuelve a intentarlo. Si vuelve a fallar, apaga y enciende este equipo y después inténtalo otra vez.",
       knownHandover: [
         "Este equipo ya ha pasado el local a ",
         ". No puede seguir como equipo principal.",

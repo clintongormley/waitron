@@ -464,20 +464,6 @@ emailed notice in `apps/server/src/i18n/invoice-email-notice.ts`, since the prov
 receives what staff type into the till's address search and which suggestion they pick. Left
 open by A1171.
 
-## The waiting start's loose ends
-
-Left open by A1018 Slice 3, each read in review rather than run:
-- A refused stepdown leaves `steppingDown` set (`apps/server/src/waiting-start.ts`), which stops
-  the re-ask and turns a carry-on away, so the box stays waiting until its process restarts.
-- A stepdown request in flight on the waiting app after the wait ended (a carry-on finished, or a
-  peer answered) writes the restriction and restarts the box, but its close does nothing, so the
-  continuing start runs until the restart. Untested.
-- `node-entry` releases its venue-folder hold when the waiting server returns
-  (`apps/server/src/node-entry.ts`, its rule 5), before the start has finished; the open store holds
-  the venue lock meanwhile.
-- The dev entry's relaunch path into `failedLater` (`apps/server/src/first-setup-launch.ts`) has no
-  test of its own; it uses the same wrapper as the tested first launch.
-
 ## The peer-status route's minor follow-ups
 
 Left open by A1018 Slice 3 (`apps/server/src/peer-status-api.ts`):
@@ -858,21 +844,6 @@ signal, so only an answer or an exit ends its wait. Left open by A1018 Slice 5 (
   `nextStandings` appends it with an empty `contactUrl`, and `routableServers` then drops it.
   Found by reading, not run.
   [Detail](replication-cloud.md#a-promoting-standby-may-list-itself-with-an-empty-contacturl)
-
-## Bundle: The waiting start's stuck and stale cases
-
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **The waiting start's loose ends.** A refused stepdown leaves it waiting until its process
-  restarts, and a stepdown request still in flight after the wait ended restarts the box but closes
-  nothing. Left open by A1018 Slice 3.
-  [Detail](replication-cloud.md#the-waiting-starts-loose-ends)
-- **The waiting page does not change when the wait ends.** A person already looking at it keeps
-  seeing "This box is waiting for…" until they reload (`apps/server/src/waiting-page.ts`). Left
-  open by A1018 Slice 3.
-- **The carry-on page's unexpected-failure sentence does not call itself a fault in Waitron**
-  (`failed` in `apps/server/src/i18n/waiting-page.ts`). A refused disk write lands there too, so
-  the wording is a judgement call. Left open by A1018 Slice 3.
 
 ## Bundle: Decide what the old promote route still does
 
