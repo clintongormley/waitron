@@ -8,7 +8,7 @@ import { DashboardApi, type PersonSummary } from "../api/client.js";
 const person: PersonSummary = {
   personId: "p1",
   displayName: "Ada",
-  role: "manager",
+  roleIds: ["manager"],
   status: "active",
   hasPassword: true,
   hasTotp: false,
@@ -21,7 +21,7 @@ describe.each(["light", "dark"] as const)("person-edit a11y (%s theme)", (theme)
   it("renders accessibly when open", async () => {
     const { el, host } = await mountWidget<PersonEdit>(
       "dashboard-person-edit",
-      { canAdminister: true, person, open: true },
+      { canAdminister: true, canChangeEmail: true, person, open: true },
       theme,
     );
     const wtDialog = el.shadowRoot!.querySelector("wt-modal")!;
@@ -38,7 +38,7 @@ describe.each(["light", "dark"] as const)("person-edit a11y (%s theme)", (theme)
   it("with Save quiet and then ready", async () => {
     const { el, host } = await mountWidget<PersonEdit>(
       "dashboard-person-edit",
-      { canAdminister: true, person, open: true },
+      { canAdminister: true, canChangeEmail: true, person, open: true },
       theme,
     );
     await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
@@ -92,7 +92,7 @@ describe.each(["light", "dark"] as const)("manager staff editor (%s)", (theme) =
     await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
     expect(
       el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-test=edit-email]")!
-        .disabled,
+        .readonly,
     ).toBe(true);
     expect(
       el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(

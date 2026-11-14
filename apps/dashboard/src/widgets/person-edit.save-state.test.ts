@@ -20,7 +20,7 @@ const ada: PersonSummary = {
   firstNames: "Ada Augusta",
   lastNames: "Lovelace",
   telephone: "+44 20 7946 0000",
-  role: "manager",
+  roleIds: ["manager"],
   status: "pending",
   hasPassword: false,
   hasTotp: false,
@@ -29,7 +29,7 @@ const ada: PersonSummary = {
 const sparse: PersonSummary = {
   personId: "p2",
   displayName: "Grace",
-  role: "staff",
+  roleIds: ["staff"],
   status: "active",
   hasPassword: true,
   hasTotp: false,
@@ -41,6 +41,7 @@ async function mount(person = ada) {
   setLocale("en-GB");
   const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
     canAdminister: true,
+    canChangeEmail: true,
     person,
     open: true,
   });
@@ -132,10 +133,7 @@ it.each([
   },
 );
 
-it.each([
-  ["role", "staff", "manager"],
-  ["status", "suspended", "pending"],
-] as const)(
+it.each([["status", "suspended", "pending"]] as const)(
   "choosing another %s wakes Save, and choosing the stored one again quiets it",
   async (name, other, stored) => {
     const { el } = await mount();
@@ -158,7 +156,6 @@ it("an edited person is ready and sends the stored details beside the edit", asy
     lastNames: "Lovelace",
     telephone: "+44 20 7946 0001",
     email: "ada@example.com",
-    role: "manager",
     status: "pending",
   });
 });
