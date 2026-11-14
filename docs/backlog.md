@@ -1422,6 +1422,54 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   asking which department when there are several. Needs a design for how the list of settings is
   kept from going stale. Not started.
 
+- **A1529. A Hardware section in the menu, and its screens brought into line (owner, 2026-11-14).**
+  The owner reviewed mock-ups of the first three points and approved them. No migration. Not
+  started.
+  - **The menu.** A new **Hardware** section holds, in this order, Device profiles, Devices,
+    Printers and Card payments. **Settings is renamed System** and keeps the rest (Appearance,
+    Content languages, Modules, Box status, Diagnostics, Backups, Servers, Cloud services).
+    Every "Settings → …" pointer is reworded in English and Spanish: the till's
+    `apps/till/src/i18n/strings.ts` names Settings → Servers, Box status, Email and Devices, and
+    the guides and help bubbles need the same search. A1527's page search must find the moved
+    pages.
+  - **The device profiles list becomes the shared table** (`wt-data-table`), like the other
+    list screens, instead of one card per profile with its own Edit, Duplicate and Delete
+    buttons. A row opens the profile; Edit, Duplicate and Delete go in the row menu, keyed
+    `actions` and pinned to the end. Columns: name, form factor, where it serves, and what it
+    can do as a few labels plus "+N more", so rows stay one height
+    (`apps/dashboard/src/screens/device-profiles-screen.ts`).
+  - **The device profile editor is split into tabs** instead of one long column: General (name,
+    form factor, auto-logout, Opens on), Where it serves, Who can sign in, What it can do (actions
+    and screens side by side) and Printers and card readers. Where it serves and Who can sign in
+    are one column. A tab holding a field to fix shows a mark, so an error on a hidden tab is
+    still visible. A kitchen profile shows a Kitchen screens tab in place of Where it serves and
+    Who can sign in, as the screen does today. Save and Cancel stay at the bottom (A1530).
+  - **The Card payments page is only about the card readers:** the readers table, with Add reader
+    at the top; the demo-mode notice stays. The Providers list and the "Configure card providers"
+    link come off the page. Add reader first asks which provider, only when more than one is set
+    up, and that step links to the provider's setup (today in the card-providers module's
+    settings, `CARD_PROVIDERS_PATH`).
+  - **"Backup-machine comparison" moves to Reporting** under a plain name, such as "Check card
+    payments against SumUp". It compares each day's recorded card payments with SumUp's own
+    charges and lists those that do not match (`apps/dashboard/src/widgets/backup-audit.ts`); it
+    is a check, not a setting.
+
+- **A1530. Every form's Save bar stays on screen, and every long table can be searched and
+  filtered (owner, 2026-11-14).** Both so that every screen works the same way. No migration.
+  Not started.
+  - **Save and Cancel stay fixed at the bottom of the screen while the form scrolls**, with the
+    form's one error message on its own line above them. This goes in the shared
+    `wt-form-actions`, so every page form gets it, not screen by screen. A1528 does the same for
+    a dialog's own footer.
+  - **Every dashboard table that can grow past about ten rows has the shared search bar and
+    filters** (`wt-data-table`'s `searchable` and column `filter`s). Devices, Units, Modifiers and
+    the product and staff lists already do. Missing on 2026-11-14: Printers' agents, printers
+    and print jobs tables (filters but no search bar), the card readers table (neither) and the
+    device profiles table A1529 adds. To check against the ten-row rule: alerts, orders, access
+    roles, handover intervals and modules. Content languages and servers stay short. A table
+    whose data lives on the server takes "Shared database-backed table paging, search and
+    sorting" below instead.
+
 - **A1089: account-access recovery needs an authenticated decision when no offered sign-in works.**
   The passkey refusal offers retry, password entry and an emailed password reset. These do not
   reactivate a disabled account or replace unavailable email delivery. Design a recovery choice
