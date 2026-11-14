@@ -8,6 +8,7 @@ import {
   COUNTRY_PACKS,
   FISCAL_TERRITORIES,
   VENUE_SETUP_COUNTRY_PACKS,
+  chargesTakeawayVat,
   findFiscalModules,
   getCountryPack,
   getVenueSetupCountryPack,
@@ -43,6 +44,14 @@ describe("installed country packs", () => {
     expect(findFiscalModules("ES-canary")).toBeUndefined();
     expect(findFiscalModules("missing")).toBeUndefined();
     expect(Object.isFrozen(findFiscalModules("ES-common"))).toBe(true);
+  });
+
+  it("says which fiscal regions charge takeaway at a different VAT class", () => {
+    expect(chargesTakeawayVat("ES", "ES-common")).toBe(true);
+    expect(chargesTakeawayVat("ES", "ES-canary")).toBe(false);
+    expect(chargesTakeawayVat("GB", "GB-vat")).toBe(false);
+    expect(chargesTakeawayVat("XX", "ES-common")).toBe(false);
+    expect(chargesTakeawayVat("ES", "missing")).toBe(false);
   });
 
   it("resolves venue locales through installed country and area preferences", () => {

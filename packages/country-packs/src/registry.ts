@@ -78,6 +78,13 @@ export function findFiscalModules(territory: string): FiscalModules | undefined 
   return supportedJurisdictions.find(({ id }) => id === territory)?.modules;
 }
 
+export function chargesTakeawayVat(country: string, territory: string): boolean {
+  return (
+    getCountryPack(country)?.fiscalJurisdictions.find(({ id }) => id === territory)?.takeawayVat ===
+    true
+  );
+}
+
 export function resolveInstalledCountryLocale<Locale extends string>(
   availableLocales: readonly Locale[],
   input: {

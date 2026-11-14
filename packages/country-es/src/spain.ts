@@ -340,6 +340,7 @@ export const SPAIN: CountryPack = {
         .filter((code) => !unsupportedAreaCodes.has(code)),
       supported: true,
       modules: { filing: "verifactu", tax: "vat" },
+      takeawayVat: true,
     },
     ...unsupportedFiscalJurisdictions,
   ],
