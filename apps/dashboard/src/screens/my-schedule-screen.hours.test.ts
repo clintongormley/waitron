@@ -119,6 +119,9 @@ it("moves keyboard tabs to Hours and pushes its address once", async () => {
   tabs(el).shadowRoot!.querySelector<HTMLButtonElement>('[data-key="schedule"]')!.focus();
   await userEvent.keyboard("{ArrowRight}");
   await el.updateComplete;
+  expect(push).not.toHaveBeenCalled();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
   expect(location.pathname).toBe("/manage/my-schedule/view/hours");
   expect(push).toHaveBeenCalledTimes(1);
 });

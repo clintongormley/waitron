@@ -6598,6 +6598,42 @@ describe("alerts in the shell", () => {
     return { el, host, liveData };
   }
 
+  it("holds an alert that arrives while a window is open until it closes, then closes on a real click", async () => {
+    history.replaceState(null, "", "/manage/profile");
+    const liveData = new LiveData();
+    const listAlerts = vi
+      .fn()
+      .mockResolvedValueOnce({ visible: true, alerts: [alert("1")] })
+      .mockResolvedValue({ visible: true, alerts: [alert("1"), alert("2")] });
+    const api = alertsApi({
+      listAlerts,
+      liveData,
+      getProfile: vi.fn().mockResolvedValue({
+        displayName: "Alex",
+        email: "alex@example.com",
+        locale: "en-GB",
+        hasPassword: true,
+        hasTotp: false,
+        passkeys: [],
+      }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    const profile = el.shadowRoot!.querySelector("wt-modal")!;
+    expect(profile.open).toBe(true);
+
+    liveData.invalidate([{ type: "incidents", id: "new" }]);
+    await vi.waitFor(() => expect(toast(el).open).toBe(true));
+    await toast(el).updateComplete;
+    expect(toastButton(el, "close")).toBeNull();
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
+    await expect.poll(() => profile.open).toBe(false);
+    await toast(el).updateComplete;
+    await userEvent.click(toastButton(el, "close"));
+    await expect.poll(() => toast(el).open).toBe(false);
+  });
+
   const tapMin = (el: DashboardApp): number => {
     const value = parseFloat(getComputedStyle(el).getPropertyValue("--wt-tap-min"));
     expect(value, "--wt-tap-min resolves to a length").toBeGreaterThan(0);

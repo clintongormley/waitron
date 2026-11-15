@@ -225,8 +225,8 @@ describe("scheduling with allergen warnings", () => {
         q<HTMLElementTagNameMap["wt-button"]>(
           el,
           '[data-test="schedule-submit"]',
-        ).shadowRoot!.querySelector<HTMLButtonElement>("button")!.disabled,
-      ).toBe(true);
+        ).shadowRoot!.querySelector<HTMLButtonElement>("button")!.ariaDisabled,
+      ).toBe("true");
       expect(q<HTMLElementTagNameMap["wt-dialog"]>(el, '[data-test="schedule-dialog"]').open).toBe(
         true,
       );

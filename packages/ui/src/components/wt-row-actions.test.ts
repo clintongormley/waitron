@@ -582,15 +582,51 @@ test("a menu at the right edge of the screen holds its popup exactly 8px inside 
   expect(edge.popup.width).toBeCloseTo(roomy.popup.width, 0);
 });
 
-test("a menu at the bottom of the screen lifts its popup to exactly 8px above that edge", async () => {
+test("a menu at the bottom of the screen opens its popup directly above its trigger", async () => {
   const edge = await openMenuAt({
     position: "fixed",
     "inset-inline-start": "40%",
     "inset-block-end": "0",
   });
-  expect(edge.popup.bottom).toBeCloseTo(innerHeight - 8, 0);
-  expect(edge.popup.top).toBeLessThan(edge.trigger.bottom);
+  expect(edge.popup.bottom).toBeCloseTo(edge.trigger.top, 0);
+  expect(edge.popup.top).toBeGreaterThanOrEqual(8 - 0.5);
 });
+
+test.each([false, true])(
+  "on a phone, a menu on one of the last rows opens above its trigger, never over it (opens-below %s)",
+  async (opensBelow) => {
+    await page.viewport(390, 844);
+    try {
+      const { el, trigger, popup } = await mountActions();
+      el.opensBelow = opensBelow;
+      el.style.setProperty("position", "fixed");
+      el.style.setProperty("inset-inline-end", "16px");
+      el.style.setProperty("inset-block-start", "790px");
+      for (const label of ["Duplicate", "Move"]) {
+        const action = document.createElement("wt-button");
+        action.textContent = label;
+        el.append(action);
+        await action.updateComplete;
+      }
+      await el.updateComplete;
+      await userEvent.click(trigger);
+
+      const box = popup.getBoundingClientRect();
+      const anchor = trigger.getBoundingClientRect();
+      expect(box.bottom).toBeLessThanOrEqual(anchor.top + 0.5);
+      expect(box.top).toBeGreaterThanOrEqual(8 - 0.5);
+      expect(popup.scrollHeight).toBeLessThanOrEqual(popup.clientHeight);
+      expect(
+        el.shadowRoot!.elementFromPoint(
+          anchor.left + anchor.width / 2,
+          anchor.top + anchor.height / 2,
+        ),
+      ).toSatisfy((hit: Element) => trigger.contains(hit));
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  },
+);
 
 describe("opens-below", () => {
   async function longMenu(count: number) {
@@ -726,16 +762,19 @@ describe("opens-below", () => {
     }
   });
 
-  it("without it, the same menu still moves up to fit, over its trigger", async () => {
+  it("without it, the same menu opens directly above its trigger, never over it", async () => {
     await page.viewport(600, 400);
     try {
       const { el, trigger, popup } = await longMenu(5);
       el.style.setProperty("inset-block-start", "200px");
       el.show();
       const box = popup.getBoundingClientRect();
-      expect(box.bottom).toBeCloseTo(innerHeight - 8, 0);
-      expect(box.top).toBeLessThan(trigger.getBoundingClientRect().bottom);
-      expect(popup.style.maxHeight).toBe("");
+      const anchor = trigger.getBoundingClientRect();
+      // Taller than either side's room, it takes the roomier side, above, capped to it.
+      expect(box.bottom).toBeCloseTo(anchor.top, 0);
+      expect(box.top).toBeCloseTo(8, 0);
+      expect(popup.style.maxHeight).toBe(`${anchor.top - 8}px`);
+      expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
       el.hide();
 
       // At the same trigger, the room under it shows more than one action and a half.
@@ -793,17 +832,17 @@ describe("opens-below", () => {
     }
   });
 
-  it("a list taller than the window, moved up to fit, is capped to the window and scrolls", async () => {
+  it("a list taller than the room on either side opens on the roomier side, capped to it, and scrolls", async () => {
     await page.viewport(600, 400);
     try {
-      const { el, popup, actions, picked } = await longMenu(15);
+      const { el, trigger, popup, actions, picked } = await longMenu(15);
       el.opensBelow = true;
       await el.updateComplete;
       el.style.setProperty("inset-block-start", "350px");
       el.show();
       const box = popup.getBoundingClientRect();
       expect(box.top).toBeCloseTo(8, 0);
-      expect(box.bottom).toBeCloseTo(innerHeight - 8, 0);
+      expect(box.bottom).toBeCloseTo(trigger.getBoundingClientRect().top, 0);
       expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
       await userEvent.click(actions.at(-1)!);
       expect(picked).toEqual(["Action 15"]);
@@ -916,7 +955,7 @@ describe("opens-below", () => {
     ["one whole action and half the next fits", 2, true],
     ["less than that", -2, false],
   ])(
-    "with room under the trigger for %s, it opens there or moves up to fit",
+    "with room under the trigger for %s, it opens there or directly above it",
     async (_name, spare, opensUnder) => {
       await page.viewport(600, 400);
       try {
@@ -934,10 +973,9 @@ describe("opens-below", () => {
           expect(box.top).toBeCloseTo(anchor.bottom, 0);
           expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
         } else {
-          expect(box.top).toBeLessThan(anchor.bottom);
-          expect(box.bottom).toBeCloseTo(innerHeight - 8, 0);
-          expect(popup.style.maxHeight).toBe(`${innerHeight - 16}px`);
-          expect(popup.scrollHeight).toBeLessThanOrEqual(popup.clientHeight);
+          expect(box.bottom).toBeCloseTo(anchor.top, 0);
+          expect(box.top).toBeCloseTo(8, 0);
+          expect(popup.style.maxHeight).toBe(`${anchor.top - 8}px`);
         }
       } finally {
         await page.viewport(1280, 900);
@@ -962,26 +1000,25 @@ describe("opens-below", () => {
       el.prepend(...hidden);
       el.show();
 
-      expect(popup.getBoundingClientRect().top).toBeLessThan(
-        trigger.getBoundingClientRect().bottom,
-      );
-      expect(popup.style.maxHeight).toBe(`${innerHeight - 16}px`);
+      const anchor = trigger.getBoundingClientRect();
+      expect(popup.getBoundingClientRect().bottom).toBeCloseTo(anchor.top, 0);
+      expect(popup.style.maxHeight).toBe(`${anchor.top - 8}px`);
     } finally {
       await page.viewport(1280, 900);
     }
   });
 
-  it("a trigger at the window's bottom edge moves the list up to fit, whole", async () => {
+  it("a trigger at the window's bottom edge opens the list directly above it, whole", async () => {
     await page.viewport(600, 400);
     try {
-      const { el, trigger, popup } = await longMenu(5);
+      const { el, trigger, popup } = await longMenu(4);
       el.opensBelow = true;
       await el.updateComplete;
       el.style.setProperty("inset-block-start", "350px");
       el.show();
       const box = popup.getBoundingClientRect();
-      expect(box.bottom).toBeCloseTo(innerHeight - 8, 0);
-      expect(box.top).toBeLessThan(trigger.getBoundingClientRect().bottom);
+      expect(box.bottom).toBeCloseTo(trigger.getBoundingClientRect().top, 0);
+      expect(box.top).toBeGreaterThanOrEqual(8 - 0.5);
       expect(popup.scrollHeight).toBeLessThanOrEqual(popup.clientHeight);
     } finally {
       await page.viewport(1280, 900);
@@ -991,16 +1028,20 @@ describe("opens-below", () => {
   it("turned off, the next open drops the height it capped", async () => {
     await page.viewport(600, 400);
     try {
-      const { el, popup } = await longMenu(15);
+      const { el, trigger, popup } = await longMenu(15);
       el.opensBelow = true;
       await el.updateComplete;
       el.show();
-      expect(popup.style.maxHeight).not.toBe("");
+      const cut = popup.style.maxHeight;
+      expect(cut).not.toBe("");
       el.hide();
       el.opensBelow = false;
       await el.updateComplete;
       el.show();
-      expect(popup.style.maxHeight).toBe("");
+      // Too tall for either side, it still caps to the whole room under the trigger, not the cut.
+      const room = `${innerHeight - 8 - trigger.getBoundingClientRect().bottom}px`;
+      expect(popup.style.maxHeight).toBe(room);
+      expect(room).not.toBe(cut);
     } finally {
       await page.viewport(1280, 900);
     }

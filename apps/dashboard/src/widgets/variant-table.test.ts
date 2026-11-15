@@ -86,6 +86,15 @@ async function atDesktopWidth(body: () => Promise<void>): Promise<void> {
     await page.viewport(width, height);
   }
 }
+function centre(row: Element) {
+  const box = row.getBoundingClientRect();
+  return box.top + box.height / 2;
+}
+
+function pointer(target: EventTarget, type: string, clientY: number) {
+  target.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1, clientY }));
+}
+
 function handles(el: VariantTable) {
   return rows(el).map((row) => row.querySelector<HTMLButtonElement>("button.handle")!);
 }
@@ -573,6 +582,49 @@ it("moves a row among the rows on screen and reports the move in the whole list"
   );
 });
 
+it("puts the whole list back, hidden rows included, when Escape cancels a drag", async () => {
+  const el = await mountTable({
+    variants: withRemoved(),
+    archivedIds: new Set([threeVariants()[1]!.id!]),
+  });
+  // What the host's list becomes as it applies each move the table reports.
+  let list = withRemoved();
+  el.addEventListener("wt-reorder", (event) => {
+    const { from, to } = (event as CustomEvent<{ from: number; to: number }>).detail;
+    list = reorder(list, from, to);
+  });
+  const [half, double] = rows(el);
+  pointer(handles(el)[0]!, "pointerdown", centre(half!));
+  pointer(document, "pointermove", centre(double!));
+  await el.updateComplete;
+  expect(cells(el, 1)).toEqual(["Double", "Half"]);
+  expect(list.map((variant) => variant.name)).toEqual(["Whole", "Double", "Half"]);
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  await el.updateComplete;
+  expect(cells(el, 1)).toEqual(["Half", "Double"]);
+  expect(list.map((variant) => variant.name)).toEqual(["Half", "Whole", "Double"]);
+});
+
+it("reports no move when Escape finds the dragged row's starting place gone from the list", async () => {
+  const el = await mountTable();
+  const reordered = listen(el, "wt-reorder");
+  const [, whole, double] = el.variants;
+  pointer(handles(el)[2]!, "pointerdown", centre(rows(el)[2]!));
+  pointer(document, "pointermove", centre(rows(el)[1]!));
+  await el.updateComplete;
+  pointer(document, "pointermove", centre(rows(el)[0]!));
+  await el.updateComplete;
+  expect(cells(el, 1)).toEqual(["Double", "Half", "Whole"]);
+  expect(reordered).toHaveBeenCalledTimes(2);
+  // Mid-drag the host's list loses Half, so the third place Double started from no longer exists.
+  el.variants = [double!, whole!];
+  await el.updateComplete;
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  await el.updateComplete;
+  expect(reordered).toHaveBeenCalledTimes(2);
+  expect(cells(el, 1)).toEqual(["Double", "Whole"]);
+});
+
 it("shows a problem beside a variant archived in this draft", async () => {
   const el = await mountTable({ variants: withRemoved(), errors: { 1: "Introduce un nombre" } });
   expect(cells(el, 1)[1]).toContain("Whole");
@@ -896,8 +948,6 @@ it("draws a dragged row over the controls of the rows it passes", async () => {
     const [dragged, passed] = rows(el) as HTMLElement[];
     const start = dragged!.getBoundingClientRect();
     const centre = start.top + start.height / 2;
-    const pointer = (target: EventTarget, type: string, clientY: number) =>
-      target.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1, clientY }));
     pointer(handles(el)[0]!, "pointerdown", centre);
     try {
       // Not far enough to swap the rows: the dragged one now overlaps the top of the next.

@@ -311,7 +311,10 @@ test("a failed read shows its message above the buttons, keeps Delete off and of
 
   el.loading = true;
   await settle(el);
-  expect(inner(el, "retry").disabled, "Retry while the read is under way").toBe(true);
+  expect(
+    inner(el, "retry").getAttribute("aria-disabled"),
+    "Retry while the read is under way",
+  ).toBe("true");
   button(el, "retry").dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
   expect(retries).toHaveLength(1);
   el.loading = false;

@@ -857,6 +857,7 @@ class VolatileReorderHost extends LitElement {
   readonly moves: [string, number][] = [];
   readonly vias: ("key" | "pointer")[] = [];
   readonly drops: string[] = [];
+  readonly ordersAtDrop: string[][] = [];
   readonly #reorder = new ReorderController(
     this,
     {
@@ -874,6 +875,7 @@ class VolatileReorderHost extends LitElement {
       },
       drop: (id) => {
         this.drops.push(id);
+        this.ordersAtDrop.push(this.items.map((item) => item.id));
       },
       label: (id) => this.items.find((item) => item.id === id)?.name ?? id,
       busy: () => false,
@@ -1155,7 +1157,10 @@ it("edge scroll follows a stationary held row to rows beyond the visible box", a
 it("edge scroll stops when Escape ends a held reorder", async () => {
   const el = await mount(Array.from({ length: 30 }, (_, i) => ({ id: `r${i}`, name: `Row ${i}` })));
   const box = document.createElement("div");
-  box.style.cssText = "position:fixed;top:100px;left:100px;width:300px;height:220px;overflow:auto";
+  // Escape puts the row back above the rows on screen, and the browser's scroll anchoring would
+  // then scroll the box once to keep them still; this case measures only the edge scroll.
+  box.style.cssText =
+    "position:fixed;top:100px;left:100px;width:300px;height:220px;overflow:auto;overflow-anchor:none";
   el.parentElement!.append(box);
   box.append(el);
   const handle = el.shadowRoot!.querySelector<HTMLElement>('[data-test="drag-r0"]')!;
@@ -1342,6 +1347,109 @@ it("ends a drag on Escape even inside an element that stops the key, and keeps t
   expect(row(el, "a").hasAttribute("data-dragging")).toBe(false);
   expect(el.drops).toEqual(["a"]);
   expect(heard).toEqual([]);
+});
+
+it("puts the row back where it started when Escape cancels a drag, so the drop sees no move", async () => {
+  const el = await mountVolatile();
+  pointer(handle(el, "a"), "pointerdown", 1, rowCentre(el, "a"));
+  pointer(document, "pointermove", 1, rowCentre(el, "b"));
+  await el.updateComplete;
+  pointer(document, "pointermove", 1, rowCentre(el, "c"));
+  await el.updateComplete;
+  expect(order(el)).toEqual(["b", "c", "a"]);
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  await el.updateComplete;
+  expect(order(el)).toEqual(["a", "b", "c"]);
+  expect(el.drops).toEqual(["a"]);
+  expect(el.ordersAtDrop).toEqual([["a", "b", "c"]]);
+});
+
+it("asks for no move back when Escape cancels a drag that moved nothing", async () => {
+  const el = await mountVolatile();
+  pointer(handle(el, "a"), "pointerdown", 1, rowCentre(el, "a"));
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  expect(el.moves).toEqual([]);
+  expect(el.drops).toEqual(["a"]);
+});
+
+/** A host that draws only the items not `hidden`, and moves a row to the place of the row drawn at
+ * `to`, as a list with archived rows hidden does. */
+@customElement("test-reorder-hiding-host")
+class HidingReorderHost extends LitElement {
+  @property({ attribute: false }) items: { id: string; name: string; hidden?: boolean }[] = [];
+  readonly moves: [string, number][] = [];
+  readonly ordersAtDrop: string[][] = [];
+  #shown() {
+    return this.items.filter((item) => !item.hidden);
+  }
+  #place(id: string, at: number) {
+    this.items = reorder(
+      this.items,
+      this.items.findIndex((item) => item.id === id),
+      at,
+    );
+  }
+  readonly #reorder = new ReorderController(
+    this,
+    {
+      order: () => this.#shown().map((item) => item.id),
+      move: (id, to) => {
+        this.moves.push([id, to]);
+        const target = this.#shown()[to];
+        if (target !== undefined) this.#place(id, this.items.indexOf(target));
+      },
+      keepPlace: (id) => {
+        const at = this.items.findIndex((item) => item.id === id);
+        return () => this.#place(id, at);
+      },
+      drop: () => {
+        this.ordersAtDrop.push(this.items.map((item) => item.id));
+      },
+      label: (id) => id,
+      busy: () => false,
+      reorderLabel: "Reorder",
+    } satisfies ReorderModel,
+    { announce: announcement },
+  );
+  override render() {
+    return html`<table>
+      <tbody>
+        ${repeat(
+          this.#shown(),
+          (item) => item.id,
+          (item) =>
+            html`<tr data-choice=${item.id}>
+              <td>${this.#reorder.handle(item.id)}</td>
+            </tr>`,
+        )}
+      </tbody>
+    </table>`;
+  }
+}
+declare global {
+  interface HTMLElementTagNameMap {
+    "test-reorder-hiding-host": HidingReorderHost;
+  }
+}
+
+it("puts every row back, rows the screen leaves out included, when Escape cancels a drag", async () => {
+  const { el } = await mountWidget<HidingReorderHost>("test-reorder-hiding-host", {
+    items: [
+      { id: "a", name: "One" },
+      { id: "b", name: "Two", hidden: true },
+      { id: "c", name: "Three" },
+    ],
+  });
+  pointer(handle(el, "a"), "pointerdown", 1, rowCentre(el, "a"));
+  pointer(document, "pointermove", 1, rowCentre(el, "c"));
+  await el.updateComplete;
+  expect(el.items.map((item) => item.id)).toEqual(["b", "c", "a"]);
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  await el.updateComplete;
+  expect(el.items.map((item) => item.id)).toEqual(["a", "b", "c"]);
+  // Put back through the host's own record of the place, not by a move among the drawn rows.
+  expect(el.moves).toEqual([["a", 1]]);
+  expect(el.ordersAtDrop).toEqual([["a", "b", "c"]]);
 });
 
 it("keeps a modal dialog open when Escape ends a drag inside it", async () => {

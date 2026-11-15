@@ -109,7 +109,12 @@ export interface ReorderModel {
   /** `to` may be out of range (the pointer-drag path can pass -1); an implementation must ignore
    * it, as `reorder()` does. `via` says whether a key press or a pointer drag asked. */
   move(id: string, to: number, via: "key" | "pointer"): void;
-  /** Called once when a pointer drag of `id` ends, whether released or cancelled. */
+  /** Called as a pointer drag of `id` starts; returns what puts `id` back exactly where it is now.
+   * Needed by a model whose `order()` leaves rows out: without it, Escape moves the row back to its
+   * starting index in `order()`, which can land it on the other side of a row left out. */
+  keepPlace?(id: string): () => void;
+  /** Called once when a pointer drag of `id` ends, whether released or cancelled. Escape cancels:
+   * the row is first put back where the drag started, so the drop sees no move. */
   drop?(id: string): void;
   label(id: string): string;
   busy(): boolean;
@@ -121,7 +126,8 @@ export class ReorderController implements ReactiveController {
   readonly #model: ReorderModel;
   readonly #announceText: () => string;
   /** `grab` is how far below the row's top the pointer pressed; `y` is where the pointer is now. */
-  #drag: { id: string; pointerId: number; grab: number; y: number } | null = null;
+  #drag: { id: string; pointerId: number; grab: number; y: number; putBack: () => void } | null =
+    null;
   /** Each row's id and vertical bounds, measured from the top of the table body so scrolling the
    * host does not move them. The id is a SCREEN SNAPSHOT taken at measurement time: the i-th `<tr>`
    * is `order()[i]` only while the rendered DOM matches the data, so binding the id here — rather
@@ -328,7 +334,13 @@ export class ReorderController implements ReactiveController {
     const row = (event.currentTarget as HTMLElement).closest("tr")!;
     this.#draggedRow = row;
     const grab = event.clientY - row.getBoundingClientRect().top;
-    this.#drag = { id, pointerId: event.pointerId, grab, y: event.clientY };
+    const from = this.#model.order().indexOf(id);
+    const putBack =
+      this.#model.keepPlace?.(id) ??
+      (() => {
+        if (this.#model.order().indexOf(id) !== from) this.#model.move(id, from, "pointer");
+      });
+    this.#drag = { id, pointerId: event.pointerId, grab, y: event.clientY, putBack };
     this.#stopSlide(row);
     row.setAttribute("data-dragging", "");
     holdPageCursor();
@@ -378,8 +390,9 @@ export class ReorderController implements ReactiveController {
     if (event.key !== "Escape" || !this.#drag) return;
     event.preventDefault();
     event.stopPropagation();
-    const id = this.#drag.id;
+    const { id, putBack } = this.#drag;
     this.#endDrag();
+    putBack();
     this.#model.drop?.(id);
   };
 

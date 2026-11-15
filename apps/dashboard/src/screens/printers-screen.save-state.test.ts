@@ -597,7 +597,6 @@ describe("the calibration wizard's Save, when an add opened it", () => {
     expect(api.updatePrinter).toHaveBeenLastCalledWith("p5", { portable: true });
     // Back to the stored settings: unchanged from what the wizard opened on, but still an add.
     await toggle(el, "printer-portable", false);
-    // A loading button's inner button is disabled, so the look is read from the host alone.
     expect(await state(el, "save-printer-p5")).toMatchObject({
       variant: "primary",
       disabled: false,

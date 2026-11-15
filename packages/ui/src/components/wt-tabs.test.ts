@@ -70,6 +70,7 @@ test("sticky tab selection keeps the content's scroll position", async () => {
   buttons(tabs)[0]!.focus({ preventScroll: true });
   scroller.scrollTop = 800;
   await userEvent.keyboard("{ArrowRight}");
+  await userEvent.keyboard("{Enter}");
   expect(tabs.value).toBe("menus");
   expect(scroller.scrollTop).toBe(800);
   await userEvent.click(page.elementLocator(buttons(tabs)[2]!));
@@ -157,7 +158,7 @@ test("choosing a tab emits wt-tab-change, bubbling and composed, and stops the c
   }
 });
 
-test("arrow keys wrap, Home/End select extremes, and unrelated keys remain untouched", async () => {
+test("arrow keys wrap, Home/End reach the ends, all moving focus without selecting, and unrelated keys remain untouched", async () => {
   const el = await setup();
   el.focus();
   expect(el.shadowRoot!.activeElement).toBe(buttons(el)[0]);
@@ -173,33 +174,43 @@ test("arrow keys wrap, Home/End select extremes, and unrelated keys remain untou
     await el.updateComplete;
     expect(event.defaultPrevented).toBe(true);
     expect(el.shadowRoot!.activeElement).toBe(buttons(el)[expected]);
-    expect(el.value).toBe(items[expected]!.key);
+    expect(buttons(el).map((tab) => tab.tabIndex)).toEqual(
+      items.map((_, index) => (index === expected ? 0 : -1)),
+    );
+    expect(el.value).toBe("");
+    expect(buttons(el).map((tab) => tab.getAttribute("aria-selected"))).toEqual([
+      "true",
+      "false",
+      "false",
+    ]);
   }
   const event = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
   buttons(el)[1]!.dispatchEvent(event);
   expect(event.defaultPrevented).toBe(false);
 });
 
-test("each keyboard selection emits one wt-tab-change naming the newly selected tab", async () => {
+test("arrow keys emit no wt-tab-change; Enter or Space emits one naming the focused tab", async () => {
   const el = await setup();
   const listener = vi.fn();
   el.addEventListener("wt-tab-change", listener);
   try {
     el.focus();
-    for (const [key, expected] of [
-      ["ArrowLeft", 2],
-      ["ArrowRight", 0],
-      ["End", 2],
-      ["Home", 0],
-      ["ArrowRight", 1],
+    for (const [moves, choose, expected] of [
+      [["{ArrowLeft}"], "{Enter}", 2],
+      [["{ArrowRight}", "{ArrowRight}"], " ", 1],
+      [["{Home}"], "{Enter}", 0],
+      [["{End}"], " ", 2],
     ] as const) {
       listener.mockClear();
-      (el.shadowRoot!.activeElement as HTMLElement).dispatchEvent(
-        new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }),
-      );
+      for (const move of moves) await userEvent.keyboard(move);
+      await el.updateComplete;
+      expect(listener).not.toHaveBeenCalled();
+      await userEvent.keyboard(choose);
       await el.updateComplete;
       expect(listener).toHaveBeenCalledTimes(1);
       expect(listener.mock.calls[0]![0].detail).toEqual({ value: items[expected]!.key });
+      expect(el.value).toBe(items[expected]!.key);
+      expect(el.shadowRoot!.activeElement).toBe(buttons(el)[expected]);
     }
     listener.mockClear();
     buttons(el)[2]!.dispatchEvent(
@@ -210,6 +221,37 @@ test("each keyboard selection emits one wt-tab-change naming the newly selected 
   } finally {
     el.removeEventListener("wt-tab-change", listener);
   }
+});
+
+test("focus leaving the strip after arrowing gives its Tab stop back to the selected tab", async () => {
+  const el = await setup();
+  const outside = document.createElement("button");
+  host.append(outside);
+  el.focus();
+  await userEvent.keyboard("{ArrowRight}");
+  await el.updateComplete;
+  expect(buttons(el).map((tab) => tab.tabIndex)).toEqual([-1, 0, -1]);
+  await userEvent.keyboard("{ArrowRight}");
+  await el.updateComplete;
+  expect(buttons(el).map((tab) => tab.tabIndex)).toEqual([-1, -1, 0]);
+  outside.focus();
+  await el.updateComplete;
+  expect(buttons(el).map((tab) => tab.tabIndex)).toEqual([0, -1, -1]);
+  await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+  expect(el.shadowRoot!.activeElement!.getAttribute("role")).toBe("tabpanel");
+  await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+  expect(el.shadowRoot!.activeElement).toBe(buttons(el)[0]);
+  expect(el.value).toBe("");
+});
+
+test("a focused tab that is taken away hands the Tab stop back to the selected tab", async () => {
+  const el = await setup();
+  el.focus();
+  await userEvent.keyboard("{End}");
+  await el.updateComplete;
+  el.items = items.slice(0, 2);
+  await el.updateComplete;
+  expect(buttons(el).map((tab) => tab.tabIndex)).toEqual([0, -1]);
 });
 
 test("a strip nested in another's panel reaches the outer listener, which the target check ignores", async () => {
@@ -348,6 +390,7 @@ test("a strip beside a wide action scrolls, and End brings the last tab clear of
   buttons(el)[0]!.dispatchEvent(
     new KeyboardEvent("keydown", { key: "End", bubbles: true, cancelable: true }),
   );
+  await userEvent.keyboard("{Enter}");
   await el.updateComplete;
   await frames();
   const last = buttons(el)[2]!.getBoundingClientRect();

@@ -233,6 +233,12 @@ export class VariantTable extends LitElement {
     {
       order: () => this.#visible().map((row) => row.key),
       move: (key, to) => this.#move(key, to),
+      // The archived rows left off the screen would otherwise make Escape put the row back on the
+      // wrong side of them.
+      keepPlace: (key) => {
+        const at = this.rows.findIndex((row) => row.key === key);
+        return () => this.#place(key, at);
+      },
       label: (key) => this.#label(this.rows.find((row) => row.key === key)?.variant),
       busy: () => this.busy,
       get reorderLabel(): string {
@@ -313,12 +319,16 @@ export class VariantTable extends LitElement {
    * position is in the whole list, which keeps the visible rows' order what the person made it
    * while the hidden rows stay where they were relative to their neighbours. */
   #move(key: string, to: number): void {
-    const from = this.rows.findIndex((row) => row.key === key);
     const target = this.#visible()[to];
-    const at = target === undefined ? -1 : this.rows.indexOf(target);
-    // A key that no longer names a row, or a move that lands where it started, would otherwise be
-    // reported to the host as a move — one of them from index -1.
-    if (from < 0 || at < 0 || from === at) return;
+    this.#place(key, target === undefined ? -1 : this.rows.indexOf(target));
+  }
+
+  /** Moves a row to `at` in the whole list, hidden rows included, and tells the host. */
+  #place(key: string, at: number): void {
+    const from = this.rows.findIndex((row) => row.key === key);
+    // A key that no longer names a row, a place no longer in the list, or a move that lands where it
+    // started would otherwise be reported to the host as a move — one of them from index -1.
+    if (from < 0 || at < 0 || at >= this.rows.length || from === at) return;
     this.rows = reorder(this.rows, from, at);
     this.#emit("wt-reorder", { from, to: at });
   }

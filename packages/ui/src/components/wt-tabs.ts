@@ -1,5 +1,5 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, uniqueId } from "../interactive.js";
@@ -138,6 +138,10 @@ export class WtTabs extends LitElement {
   @property({ type: Boolean, reflect: true }) sticky = false;
   readonly #id = uniqueId("wt-tabs");
   readonly #help = new HelpModeController(this);
+  /** The tab the arrow keys last moved focus to, while focus stays in the strip. Selecting a tab
+   * can add a history entry or ask to leave unsaved changes, so arrows only move focus; Enter,
+   * Space or a click selects. */
+  @state() private focusedKey: string | null = null;
 
   get #selected(): string | undefined {
     return this.items.find((item) => item.key === this.value)?.key ?? this.items[0]?.key;
@@ -171,7 +175,7 @@ export class WtTabs extends LitElement {
         return;
     }
     event.preventDefault();
-    this.#select(event, this.items[next]!.key);
+    this.focusedKey = this.items[next]!.key;
     const button = this.renderRoot.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]!;
     button.focus();
     button.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -378,8 +382,16 @@ export class WtTabs extends LitElement {
     );
   }
 
+  #focusLeft(event: FocusEvent): void {
+    const bar = event.currentTarget as HTMLElement;
+    if (!bar.contains(event.relatedTarget as Node | null)) this.focusedKey = null;
+  }
+
   override render() {
     if (this.items.length === 0) return nothing;
+    const stop = this.items.some((item) => item.key === this.focusedKey)
+      ? this.focusedKey
+      : this.#selected;
     return html`
       <div class="tab-row" part="tab-row">
         <div
@@ -387,6 +399,7 @@ export class WtTabs extends LitElement {
           part="tablist"
           aria-label=${this.label}
           @scroll=${() => this.#scheduleOverflow()}
+          @focusout=${(event: FocusEvent) => this.#focusLeft(event)}
         >
           ${repeat(
             this.items,
@@ -401,7 +414,7 @@ export class WtTabs extends LitElement {
                 id=${`${this.#id}-tab-${index}`}
                 aria-selected=${item.key === this.#selected}
                 aria-controls=${`${this.#id}-panel-${index}`}
-                tabindex=${item.key === this.#selected ? 0 : -1}
+                tabindex=${item.key === stop ? 0 : -1}
                 @click=${(event: MouseEvent) => this.#select(event, item.key)}
                 @keydown=${(event: KeyboardEvent) => this.#keydown(event, index)}
               >

@@ -1,4 +1,4 @@
-import { expect, test, afterEach } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanup, host, mount } from "../test-helpers.js";
 import "./wt-button.js";
@@ -200,10 +200,11 @@ test.each(["secondary", "ghost"] as const)(
   },
 );
 
-test("loading disables the button, marks it busy and shows a spinner", async () => {
+test("loading marks the button unavailable and busy and shows a spinner", async () => {
   const el = await mount("<wt-button loading>Scan</wt-button>");
   const inner = el.shadowRoot!.querySelector("button")!;
-  expect(inner.disabled).toBe(true);
+  expect(inner.getAttribute("aria-disabled")).toBe("true");
+  expect(inner.disabled).toBe(false);
   expect(inner.getAttribute("aria-busy")).toBe("true");
   expect(el.shadowRoot!.querySelector("wt-spinner")).toBeTruthy();
   expect(el.getAttribute("loading")).not.toBeNull();
@@ -358,4 +359,83 @@ test("an owning menu can centre a start-aligned button through inheritance", asy
   const el = await mount('<wt-button align="start">Edit</wt-button>');
   host.style.setProperty("--wt-button-justify", "center");
   expect(getComputedStyle(el.shadowRoot!.querySelector("button")!).justifyContent).toBe("center");
+});
+
+describe("a button that starts loading while focused", () => {
+  type Button = HTMLElement & { loading: boolean; updateComplete: Promise<unknown> };
+
+  async function focusedSave(): Promise<{ el: Button; inner: HTMLButtonElement }> {
+    const el = (await mount("<wt-button>Save</wt-button>")) as Button;
+    const inner = el.shadowRoot!.querySelector("button")!;
+    await userEvent.keyboard("{Tab}");
+    expect(el.shadowRoot!.activeElement).toBe(inner);
+    return { el, inner };
+  }
+
+  test("keeps keyboard focus when Enter starts its loading", async () => {
+    const { el, inner } = await focusedSave();
+    el.addEventListener("click", () => (el.loading = true));
+    await userEvent.keyboard("{Enter}");
+    await el.updateComplete;
+    expect(el.loading).toBe(true);
+    expect(document.activeElement).toBe(el);
+    expect(el.shadowRoot!.activeElement).toBe(inner);
+    expect(inner.matches(":focus-visible")).toBe(true);
+  });
+
+  test("ignores Enter, Space and a click while loading", async () => {
+    const { el, inner } = await focusedSave();
+    el.loading = true;
+    await el.updateComplete;
+    let clicks = 0;
+    el.addEventListener("click", () => clicks++);
+    await userEvent.keyboard("{Enter}");
+    await userEvent.keyboard(" ");
+    await userEvent.click(el);
+    expect(clicks).toBe(0);
+    expect(el.shadowRoot!.activeElement).toBe(inner);
+  });
+
+  test("tells assistive technology it is unavailable, and takes presses again once done", async () => {
+    const { el, inner } = await focusedSave();
+    el.loading = true;
+    await el.updateComplete;
+    expect(inner.getAttribute("aria-disabled")).toBe("true");
+    el.loading = false;
+    await el.updateComplete;
+    expect(inner.hasAttribute("aria-disabled")).toBe(false);
+    let clicks = 0;
+    el.addEventListener("click", () => clicks++);
+    await userEvent.keyboard("{Enter}");
+    expect(clicks).toBe(1);
+  });
+
+  test.each(["primary", "danger", "secondary"] as const)(
+    "a loading %s button looks the same hovered as resting, with the not-allowed cursor",
+    async (variant) => {
+      const el = await mount(`<wt-button variant="${variant}" loading>x</wt-button>`);
+      paintDistinctColourTokens();
+      host.style.setProperty("--wt-color-primary-hover", "rgb(4, 5, 6)");
+      host.style.setProperty("--wt-color-danger-hover", "rgb(4, 5, 6)");
+      host.style.setProperty("--wt-color-primary-text", "rgb(4, 5, 6)");
+      const inner = el.shadowRoot!.querySelector("button")!;
+      const resting = { ...paint(el), border: getComputedStyle(inner).borderTopColor };
+      await userEvent.hover(inner);
+      expect(inner.matches(":hover")).toBe(true);
+      expect({ ...paint(el), border: getComputedStyle(inner).borderTopColor }).toEqual(resting);
+      expect(getComputedStyle(inner).cursor).toBe("not-allowed");
+    },
+  );
+
+  test("a disabled button, loading or not, stays natively disabled and out of the tab order", async () => {
+    for (const markup of [
+      "<wt-button disabled>Save</wt-button>",
+      "<wt-button disabled loading>Save</wt-button>",
+    ]) {
+      const el = await mount(markup);
+      const inner = el.shadowRoot!.querySelector("button")!;
+      expect(inner.disabled).toBe(true);
+      expect(inner.hasAttribute("aria-disabled")).toBe(false);
+    }
+  });
 });

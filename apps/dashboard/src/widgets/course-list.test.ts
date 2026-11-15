@@ -1059,7 +1059,12 @@ describe("reordering", () => {
   });
 
   /** Presses on a course's grip, crosses the rows named in `over` one by one, then lets go. */
-  async function drag(el: CourseList, id: string, over: string[]): Promise<void> {
+  async function drag(
+    el: CourseList,
+    id: string,
+    over: string[],
+    ending: "pointerup" | "Escape" = "pointerup",
+  ): Promise<void> {
     q(el, `[data-test="drag-${id}"]`)!.dispatchEvent(
       new PointerEvent("pointerdown", { bubbles: true, pointerId: 9 }),
     );
@@ -1074,7 +1079,11 @@ describe("reordering", () => {
       );
       await el.updateComplete;
     }
-    document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 9 }));
+    document.dispatchEvent(
+      ending === "Escape"
+        ? new KeyboardEvent("keydown", { key: "Escape", bubbles: true })
+        : new PointerEvent("pointerup", { bubbles: true, pointerId: 9 }),
+    );
     await el.updateComplete;
   }
 
@@ -1086,6 +1095,15 @@ describe("reordering", () => {
     expect(api.moveCourse).toHaveBeenCalledTimes(1);
     expect(api.moveCourse).toHaveBeenCalledWith("c1", 2);
     expect(rowIds(el)).toEqual(["c2", "c3", "c1"]);
+  });
+
+  it("puts the row back and saves nothing when Escape cancels a drag", async () => {
+    const api = stubApi();
+    const { el } = await mount(api);
+    await drag(el, "c1", ["c2", "c3"], "Escape");
+    await settle(el);
+    expect(rowIds(el)).toEqual(["c1", "c2", "c3"]);
+    expect(api.moveCourse).not.toHaveBeenCalled();
   });
 
   it("saves nothing for a drag that ends where it started", async () => {
