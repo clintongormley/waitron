@@ -6,6 +6,8 @@ This authorises the proposal, not retention periods.
 Before the audit starts, the driver supplies Claude a brief quoting that ask,
 obtains a completed plan read, addresses findings and obtains watcher clearance.
 This is an audit plan, not a trimming design or an approved policy.
+Claude read and its single corrections read completed; the watcher cleared the approach
+and synthetic-copy measurements on 2026-11-15 at 13:19, not retention or trimming.
 
 **Finish line.** Write `docs/superpowers/specs/2026-11-15-a1543-working-records-proposal.md`:
 a plain-English table-by-table choice with reader/link receipts, explicit no-trim
