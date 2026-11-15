@@ -31,6 +31,7 @@ describe("VENUE_SERVICE", () => {
       "findOrderContext",
       "findOrderModes",
       "findOrderZones",
+      "findOrdersWithDiningChoice",
       "getOrderContext",
       "keepZoneOpen",
       "kitchenNoteKey",

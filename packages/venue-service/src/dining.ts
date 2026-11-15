@@ -1,8 +1,9 @@
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { chargesTakeawayVat } from "@waitron/country-packs";
 import {
   departments,
   floorZones,
+  orderServiceContexts,
   readTaxpayer,
   readVenueSettings,
   type Transaction,
@@ -31,6 +32,31 @@ export async function departmentDining(
     .where(eq(departments.id, departmentId));
   if (row === undefined) throw new AppError("department.not_found", { departmentId });
   return row;
+}
+
+/**
+ * Of the named orders, those staff may switch between eaten here and takeaway while nothing is sent
+ * or paid: their department leaves the way to the till, in a region that charges takeaway VAT.
+ */
+export async function findOrdersWithDiningChoice(
+  tx: Transaction,
+  workingOrderIds: readonly string[],
+): Promise<ReadonlySet<string>> {
+  if (workingOrderIds.length === 0 || !(await venueChargesTakeawayVat(tx))) return new Set();
+  const rows = await tx
+    .select({ id: orderServiceContexts.workingOrderId })
+    .from(orderServiceContexts)
+    .innerJoin(
+      departmentSalePolicies,
+      eq(departmentSalePolicies.departmentId, orderServiceContexts.departmentId),
+    )
+    .where(
+      and(
+        inArray(orderServiceContexts.workingOrderId, [...workingOrderIds]),
+        eq(departmentSalePolicies.dining, "till_choice"),
+      ),
+    );
+  return new Set(rows.map((row) => row.id));
 }
 
 /**

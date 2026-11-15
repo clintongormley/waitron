@@ -818,6 +818,8 @@ describe("GET /api/parties/:id/bills", () => {
         hasPayments: false,
         leftUnpaid: false,
         receiptAvailable: false,
+        dining: "eat_in",
+        diningChoice: "none",
       },
     ]);
   });

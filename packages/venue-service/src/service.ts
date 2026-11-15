@@ -93,7 +93,7 @@ import {
   orderInZones,
   orderZoneIdSql,
 } from "./operations.js";
-import { resolveOrderDining } from "./dining.js";
+import { findOrdersWithDiningChoice, resolveOrderDining } from "./dining.js";
 import {
   acknowledgeKitchenNotice,
   listStationNotices,
@@ -186,6 +186,7 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   keepZoneOpen,
   resolveSalePolicy,
   resolveOrderDining,
+  findOrdersWithDiningChoice,
   recordSaleReceiptHeader,
   readSaleReceiptHeader,
   readDepartmentReceipt,

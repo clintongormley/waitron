@@ -251,7 +251,13 @@ import { authorize, type Override, type PinAttempts } from "@waitron/identity";
 import { issuancePass } from "./issuance-pass.js";
 import { issueMoment, type IssueMoment } from "./issue-moment.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { refuseTakeawaySetLunch, requireOrderDining, storedOrderDining } from "./order-dining.js";
+import {
+  readOrderDinings,
+  refuseTakeawaySetLunch,
+  requireOrderDining,
+  storedOrderDining,
+  type DiningChoice,
+} from "./order-dining.js";
 import { readMadeHereStations } from "./made-here.js";
 import { foodOnItsWay } from "./delivery-release.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
@@ -5064,6 +5070,9 @@ export interface HeldOrder {
   receiptLanguage?: string;
   /** The invoice the order is set to issue: `F1` once a full invoice has been chosen for it. */
   invoiceType: "F1" | "F2";
+  /** The order's own way of selling, whatever its department now says. */
+  dining: Dining;
+  diningChoice: DiningChoice;
   /**
    * PARENT rows only, each dish's child lines nested as `extras`.
    */
@@ -5354,6 +5363,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
       kitchenNote,
       ...(order.receiptLocale === null ? {} : { receiptLanguage: order.receiptLocale }),
       invoiceType: order.invoiceType,
+      ...(await readOrderDinings(tx, [order.id])).get(order.id)!,
       lines,
     };
   });

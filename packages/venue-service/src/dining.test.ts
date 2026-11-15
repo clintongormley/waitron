@@ -8,10 +8,20 @@ import {
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue, seedZone } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedWorkingOrder, seedZone } from "@waitron/db/testing/seed.js";
 import { AppError, type Dining, type DiningPolicy } from "@waitron/shared";
-import { departmentDining, resolveOrderDining, venueChargesTakeawayVat } from "./dining.js";
-import { createDepartment, resolveSalePolicy, setDepartmentSalePolicyField } from "./operations.js";
+import {
+  departmentDining,
+  findOrdersWithDiningChoice,
+  resolveOrderDining,
+  venueChargesTakeawayVat,
+} from "./dining.js";
+import {
+  createDepartment,
+  recordOrderServiceContext,
+  resolveSalePolicy,
+  setDepartmentSalePolicyField,
+} from "./operations.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 let db: Database;
@@ -205,4 +215,38 @@ describe("resolveOrderDining", () => {
       });
     },
   );
+});
+
+describe("findOrdersWithDiningChoice", () => {
+  /** An order opened in a fresh department's counter zone, the department selling `dining`. */
+  async function orderSelling(dining: DiningPolicy): Promise<string> {
+    return withTransaction(db, async (tx) => {
+      const department = await createDepartment(tx, { name: `Deli ${dining}` });
+      await setDepartmentSalePolicyField(tx, department.id, "dining", dining);
+      const zone = await seedZone(tx, { name: `Counter ${dining}`, departmentId: department.id });
+      const order = await seedWorkingOrder(tx, { orderNumber: nextOrderNumber++ });
+      await recordOrderServiceContext(tx, order.id, zone.id);
+      return order.id;
+    });
+  }
+  let nextOrderNumber = 1;
+
+  function find(ids: readonly string[]): Promise<ReadonlySet<string>> {
+    return withTransaction(db, (tx) => findOrdersWithDiningChoice(tx, ids));
+  }
+
+  it("names only the orders whose department leaves the way to the till", async () => {
+    await venueIn("ES", "ES-common");
+    const choice = await orderSelling("till_choice");
+    const eatIn = await orderSelling("eat_in");
+    const takeaway = await orderSelling("takeaway");
+    const noContext = (await seedWorkingOrder(db, { orderNumber: nextOrderNumber++ })).id;
+    expect(await find([choice, eatIn, takeaway, noContext])).toEqual(new Set([choice]));
+    expect(await find([])).toEqual(new Set());
+  });
+
+  it("names none in a region without takeaway VAT", async () => {
+    await venueIn("GB", "GB-vat");
+    expect(await find([await orderSelling("till_choice")])).toEqual(new Set());
+  });
 });

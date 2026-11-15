@@ -32,7 +32,7 @@ export { runMigrations } from "./migrate.js";
 export { correctivesOf } from "./correctives-of.js";
 export { tableExists } from "./table-exists.js";
 export { tableInService } from "./table-in-service.js";
-export { orderDiningLocked } from "./order-dining.js";
+export { orderDiningLocked, ordersDiningLocked } from "./order-dining.js";
 export { needsMoving, resetRowMoves } from "./joined-parts.js";
 export type { MigrationDatabase, MigrationOptions } from "./migrate.js";
 export { claimRows } from "./job-claim.js";

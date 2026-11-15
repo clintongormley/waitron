@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
-import { orderDiningLocked } from "./order-dining.js";
+import { orderDiningLocked, ordersDiningLocked } from "./order-dining.js";
 import { billPayments } from "./schema/bill-payments.js";
 import { kitchenStations } from "./schema/kitchen-stations.js";
 import { menus, products } from "./schema/menus.js";
@@ -248,6 +248,32 @@ describe("an order's way of selling, once the kitchen has it or money is taken",
 
   it("answers null for an order that does not exist", async () => {
     expect(await inTx((tx) => orderDiningLocked(tx, "no-such-order"))).toBeNull();
+  });
+
+  it("answers several orders in one read, each by its own lines and payments", async () => {
+    const free = await openOrder();
+    const sent = await openOrder();
+    const paid = await openOrder();
+    await inTx(async (tx) => {
+      await tx
+        .update(workingOrderLines)
+        .set({ sentAt: AT })
+        .where(eq(workingOrderLines.id, sent.lineId));
+      await tx
+        .update(workingOrders)
+        .set({ paymentAttemptAt: AT })
+        .where(eq(workingOrders.id, paid.orderId));
+    });
+    const locks = await inTx((tx) =>
+      ordersDiningLocked(tx, [free.orderId, sent.orderId, paid.orderId, "no-such-order"]),
+    );
+    expect([...locks].sort()).toEqual(
+      [
+        [sent.orderId, "sent"],
+        [paid.orderId, "paid"],
+      ].sort(),
+    );
+    expect(await inTx((tx) => ordersDiningLocked(tx, []))).toEqual(new Map());
   });
 
   it("refuses a placed order's line changing its takeaway class, as it refuses its served class", async () => {

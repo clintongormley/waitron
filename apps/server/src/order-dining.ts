@@ -1,5 +1,10 @@
-import { eq } from "drizzle-orm";
-import { orderDiningLocked, workingOrders, type Transaction } from "@waitron/db";
+import { eq, inArray } from "drizzle-orm";
+import {
+  orderDiningLocked,
+  ordersDiningLocked,
+  workingOrders,
+  type Transaction,
+} from "@waitron/db";
 import { AppError, DININGS, type Dining } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";
@@ -38,6 +43,35 @@ export async function requireOrderDining(
     .from(workingOrders)
     .where(eq(workingOrders.id, workingOrderId));
   if (order !== undefined) refuseOtherDining(workingOrderId, order, requested);
+}
+
+/** Whether the till offers the switch: never, now, or no longer (something is sent or paid). */
+export type DiningChoice = "none" | "open" | "locked";
+
+/**
+ * Each named order's own stored way of selling, whatever its department now says, and whether staff
+ * may switch it; read at once. An order that does not exist is absent.
+ */
+export async function readOrderDinings(
+  tx: Transaction,
+  workingOrderIds: readonly string[],
+): Promise<ReadonlyMap<string, { dining: Dining; diningChoice: DiningChoice }>> {
+  if (workingOrderIds.length === 0) return new Map();
+  const rows = await tx
+    .select({ id: workingOrders.id, dining: workingOrders.dining })
+    .from(workingOrders)
+    .where(inArray(workingOrders.id, [...workingOrderIds]));
+  const switchable = await VENUE_SERVICE.findOrdersWithDiningChoice(tx, workingOrderIds);
+  const locked = await ordersDiningLocked(tx, [...switchable]);
+  return new Map(
+    rows.map((row) => [
+      row.id,
+      {
+        dining: row.dining,
+        diningChoice: !switchable.has(row.id) ? "none" : locked.has(row.id) ? "locked" : "open",
+      },
+    ]),
+  );
 }
 
 /** The way an existing order sells, as stored. */

@@ -863,6 +863,12 @@ export interface VenueServiceContribution {
     zoneId: string,
     requested: Dining | undefined,
   ): Promise<Dining>;
+  /** Of the named orders, those whose department leaves the way to the till, in a region that
+   *  charges takeaway VAT; read at once. */
+  findOrdersWithDiningChoice(
+    tx: Transaction,
+    workingOrderIds: readonly string[],
+  ): Promise<ReadonlySet<string>>;
   recordSaleReceiptHeader(tx: Transaction, saleId: string, zoneId: string | null): Promise<void>;
   readDepartmentReceiptPolicy(
     tx: Transaction,

@@ -2081,6 +2081,8 @@ describe("getHeldOrder", () => {
       label: "Table 7",
       revision: 0,
       invoiceType: "F2",
+      dining: "eat_in",
+      diningChoice: "none",
       kitchenNote: { note: null, revision: 0, ownerRevision: 0, scope: { workingOrderId: id } },
       lines: [
         {

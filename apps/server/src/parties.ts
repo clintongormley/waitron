@@ -27,6 +27,7 @@ import {
   jobOrigin,
   normalisePartyName,
   rawCentsToDecimal,
+  type Dining,
 } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import type { Logger } from "./logger.js";
@@ -34,6 +35,7 @@ import { enqueuePartyNameChange } from "./kitchen-print.js";
 import { floorDeletionFor } from "./floor-delete.js";
 import { floorPlanSetsFor } from "./floor-plan-sets.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
+import { readOrderDinings, type DiningChoice } from "./order-dining.js";
 import { createOpenOrder, openTab } from "./working-order.js";
 import { outstandingOf, readPaymentsByBill, refuseBillHoldingMoney } from "./bill-payments.js";
 import { discardPartyDrafts } from "./order-drafts.js";
@@ -108,6 +110,9 @@ export interface PartyBill {
   amountDue?: string;
   /** The bill was closed as a deferred payment: the customer pays outside Waitron. */
   deferred?: true;
+  /** The bill's own way of selling, whatever its department now says. */
+  dining: Dining;
+  diningChoice: DiningChoice;
 }
 
 export type CommandScope =
@@ -576,6 +581,10 @@ export async function readPartyBills(
     tx,
     filedSales.flatMap((sale) => (sale.workingOrderId === null ? [] : [sale.workingOrderId])),
   );
+  const dinings = await readOrderDinings(
+    tx,
+    bills.map((bill) => bill.workingOrderId),
+  );
   return bills.map((bill) => {
     const sale = filed.get(bill.workingOrderId);
     const choice = choiceByBill.get(bill.workingOrderId)!;
@@ -620,6 +629,7 @@ export async function readPartyBills(
             amountDue: issued.get(bill.workingOrderId)!.amountDue,
           }),
       ...(bill.deferred === undefined ? {} : { deferred: bill.deferred }),
+      ...dinings.get(bill.workingOrderId)!,
     };
   });
 }
@@ -647,6 +657,8 @@ export type FamilyBill = Omit<
   | "invoiceType"
   | "invoiceDelivery"
   | "recipient"
+  | "dining"
+  | "diningChoice"
 > & {
   lines: number;
 };
