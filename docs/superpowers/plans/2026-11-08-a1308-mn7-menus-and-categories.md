@@ -47,6 +47,10 @@ all changed checks in the PR. Madrid's checked historical adapters retain their 
 the current capture is restored to that input shape before the existing transforms, and the existing
 fold helper combines the captured side tables afterward. Frozen captures remain unchanged.
 
+**Size clearance (watcher, 2026-11-15 12:04; not an owner approval):**
+The measured 1,330 counted lines were cleared as consumer and check ports of the planned removals.
+Keep the retired-version fixture cleanup; add no new table, route or screen.
+
 ## What it builds
 
 1. **`menus` gains** `handheld_columns`, `handheld_tiles`, `handheld_order`, `till_columns`,

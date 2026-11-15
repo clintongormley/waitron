@@ -307,7 +307,6 @@ export const QUERY_DEPENDENCIES = {
   // `menuPrices` (packages/menu/src/operations.ts): the structure's tables for the placements,
   // then each reached product's menu item, menu and price, and its variants' overrides.
   getMenuPrices: [
-    "menu_details",
     "sections",
     "section_members",
     "menu_items",
@@ -352,7 +351,6 @@ export const QUERY_DEPENDENCIES = {
   ],
   getFolderRouting: [
     "categories",
-    "category_details",
     "routing_cells",
     "routing_cell_periods",
     "kitchen_stations",

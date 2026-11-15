@@ -130,7 +130,14 @@ it("gives categories no image column and no image trigger", async () => {
   const cols = await suite.db.execute<{ name: string }>(
     sql`select name from pragma_table_info('categories')`,
   );
-  expect(cols.rows.map((c) => c.name).sort()).toEqual(["category_id", "color", "parent_id"]);
+  expect(cols.rows.map((c) => c.name).sort()).toEqual([
+    "color",
+    "created_at",
+    "id",
+    "name",
+    "parent_id",
+    "updated_at",
+  ]);
   const triggers = await suite.db.execute<{ name: string }>(
     sql`select name from sqlite_master where type = 'trigger' and name like 'categories_media_image_fk_%'`,
   );
