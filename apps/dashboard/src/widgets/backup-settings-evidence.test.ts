@@ -187,13 +187,39 @@ it("says a failure happened again after a rewrite when two failures' records dif
   expect(oldest!.querySelector("[data-test=failure-again]")).toBeNull();
 });
 
-it("says the record was rewritten since the last failure ahead of its facts", async () => {
-  const el = await mount(apiAnswering(async () => evidence({ rewrittenSinceLastFailure: true })));
-  await expect.poll(() => text(q(el, "[data-test=record-changed]"))).not.toBe("");
-  expect(text(q(el, "[data-test=record-changed]"))).toBe(words(en, "backup_evidence.rewritten"));
-  const now = q(el, "[data-test=record-now]")!;
-  expect(now.firstElementChild?.getAttribute("data-test")).toBe("record-changed");
-});
+it.each([
+  ["en-GB", 2, en, "backup_evidence.written"],
+  ["en-GB", null, en, "backup_evidence.written_then"],
+  ["es-ES", 2, es, "backup_evidence.written"],
+  ["es-ES", null, es, "backup_evidence.written_then"],
+] as const)(
+  "says the record was rewritten ahead of its facts (%s, key %s)",
+  async (locale, keyVersion, menu, writtenKey) => {
+    const writtenAt = "2026-10-29T09:00:00.000Z";
+    const el = await mount(
+      apiAnswering(async () =>
+        evidence({
+          rewrittenSinceLastFailure: true,
+          record: { keyVersion, writtenAt, digest: "digest-a" },
+          ...(keyVersion === null ? { now: READABLE } : {}),
+        }),
+      ),
+      locale,
+    );
+    await expect.poll(() => text(q(el, "[data-test=record-changed]"))).not.toBe("");
+    expect(text(q(el, "[data-test=record-changed]"))).toBe(
+      words(menu, "backup_evidence.rewritten"),
+    );
+    const now = q(el, "[data-test=record-now]")!;
+    expect(now.firstElementChild?.getAttribute("data-test")).toBe("record-changed");
+    expect(text(now.children[1] as HTMLElement)).toBe(
+      words(menu, writtenKey, {
+        time: new Date(writtenAt).toLocaleString(locale),
+        n: "2",
+      }),
+    );
+  },
+);
 
 it("says a deleted record is no longer the record that failed, not that it was rewritten", async () => {
   const el = await mount(

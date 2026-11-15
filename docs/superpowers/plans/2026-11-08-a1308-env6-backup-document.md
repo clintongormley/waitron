@@ -337,3 +337,8 @@ old credential-history check failed with no events before this port. Local-only 
 uses keyVersion:null; unknown-key/decryption fixtures include a bucket to retain those failures.
 Malformed settings fixtures now damage the document, and credential failures still damage sealed
 keys. The same domain-code, written-time and independently computed digest assertions remain.
+
+Watcher 02:28 cleared the nullable-key dashboard consumer: the client record field accepts null,
+and the widget uses the existing written_then translation only for null, retaining the key-number
+sentence for a number. The existing rewritten-record case covers both languages and key shapes.
+No other widget behavior changes.
