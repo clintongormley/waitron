@@ -126,6 +126,7 @@ describe("the user guides", () => {
     expect(renderGuide(markdown!, GUIDE_PAGES).sections.map(({ id }) => id)).toEqual([
       "spare",
       "adding-a-spare",
+      "switch-label",
       "remove-a-spare",
       "emergency",
       "old-box-returns",

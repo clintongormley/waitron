@@ -45,6 +45,13 @@ check that the spare is connected to the restaurant's network. **Rebuilding the 
 A switch first brings this spare's copy up to date. Check the copy offered on the handover page before switching.
 The bell and **Box status** warn when sending or applying changes is delayed, or the spare cannot be reached for two minutes.
 
+## Print a switch label for each server {#switch-label}
+
+When a spare has finished joining, open **System → Servers** on the main box. For each server, open
+its row menu, choose **Print switch label**, print it and stick it on that server. If the main
+server fails, scan the spare's label with any till or phone on the venue's network to open its
+switch page.
+
 ## Remove a spare box {#remove-a-spare}
 
 On the main box, open **System → Servers**, open the spare's row menu and choose **Remove**. For a

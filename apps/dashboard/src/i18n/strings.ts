@@ -2117,6 +2117,11 @@ export const en = {
   "diagnostics.empty": "No log lines yet",
   "servers.title": "Servers",
   "servers.hand_over": "Hand over the venue",
+  "servers.switch_label": "Print switch label",
+  "servers.switch_label_title": "Switch label: {name}",
+  "servers.switch_label_qr_alt": "QR code that opens this server's switch page",
+  "servers.switch_label_words":
+    "If the main server fails, scan this with any till or phone on the venue's network",
   "servers.handover_intro":
     "Sales stop on this box while the final copy moves. On the spare, sign in again, confirm the details and start the venue. Payments already recorded stay in the copy. Keep both boxes connected.",
   "servers.handover_no_password":
@@ -6466,6 +6471,11 @@ export const es: Record<StringKey, string> = {
   "diagnostics.empty": "Aún no hay líneas de registro",
   "servers.title": "Servidores",
   "servers.hand_over": "Traspasar el local",
+  "servers.switch_label": "Imprimir etiqueta de cambio",
+  "servers.switch_label_title": "Etiqueta de cambio: {name}",
+  "servers.switch_label_qr_alt": "Código QR que abre la página de cambio de este servidor",
+  "servers.switch_label_words":
+    "Si el servidor principal falla, escanea esto con cualquier caja o móvil conectado a la red del local",
   "servers.handover_intro":
     "Las ventas se detienen en este servidor mientras se mueve la copia final. En el de reserva, identifícate de nuevo, confirma los datos e inicia el local. Los pagos ya registrados se conservan en la copia. Mantén los dos servidores conectados.",
   "servers.handover_no_password":

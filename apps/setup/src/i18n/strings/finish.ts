@@ -75,6 +75,8 @@ export const finishEn = {
   "done.joining.heading": "This server is joining",
   "done.joining.body":
     "The sign-in to the restaurant's primary worked. This server now takes its first copy of the restaurant's data from the primary, over the restaurant's network; no internet is needed. This can take a few minutes. It restarts by itself when it has the copy, and then waits as the standby. The primary keeps selling throughout.",
+  "done.joining.switch_label":
+    "Print a switch label for each server from Servers on the dashboard.",
 } as const;
 
 export const finishEs: Record<keyof typeof finishEn, string> = {
@@ -156,4 +158,6 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.joining.heading": "Este servidor se está uniendo",
   "done.joining.body":
     "El inicio de sesión en el servidor principal del restaurante ha funcionado. Este servidor recibe ahora su primera copia de los datos del restaurante desde el principal, por la red del restaurante; no hace falta internet. Puede tardar unos minutos. Se reinicia solo cuando tiene la copia y después espera como servidor en espera. El principal sigue vendiendo todo el tiempo.",
+  "done.joining.switch_label":
+    "Imprime una etiqueta de cambio para cada servidor desde Servidores en el panel.",
 };

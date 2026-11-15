@@ -49,6 +49,14 @@ comprueba que el equipo de reserva esté conectado a la red del restaurante. **R
 Al cambiar, primero se pone al día la copia de este equipo de reserva. Comprueba la copia que ofrece la página de traspaso antes de cambiar.
 La campana y **Estado del servidor** avisan si se retrasa el envío o la aplicación de cambios, o si no se puede contactar con el equipo de reserva durante dos minutos.
 
+## Imprimir una etiqueta de cambio para cada servidor {#switch-label}
+
+Cuando un servidor de reserva haya terminado de unirse, abre **Sistema → Servidores** en el
+servidor principal. Para cada servidor, abre el menú de su fila, elige **Imprimir etiqueta de
+cambio**, imprímela y pégala en ese servidor. Si el servidor principal falla, escanea la etiqueta
+del servidor de reserva con cualquier caja o móvil conectado a la red del local para abrir su
+página de cambio.
+
 ## Retirar un servidor de reserva {#remove-a-spare}
 
 En el servidor principal, abre **Sistema → Servidores**, abre el menú de la fila del servidor de
