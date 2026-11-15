@@ -1653,7 +1653,10 @@ async function mountPromotion(prepare: Mock<(proposal: unknown) => Promise<unkno
 }
 const promotionActions = (prepare: Mock<(proposal: unknown) => Promise<unknown>>) =>
   prepare.mock.calls.map(([proposal]) => (proposal as { action: string }).action);
-const HANDOVER_DO = "open this handover page on another phone or laptop";
+const HANDOVER_DO =
+  "Switch from a till or phone on the venue's network, or connect the box to the internet.";
+const HANDOVER_ENDS =
+  "It carries on by itself once the box reaches the internet, while this page stays open.";
 
 it("a handover start shows the details tick and Proceed, sends nothing before Proceed, then carries on by itself to the series", async () => {
   let decision = noSecondClock;
@@ -1690,6 +1693,7 @@ it("a handover start shows the details tick and Proceed, sends nothing before Pr
     expect(ready).not.toContain(true);
     await proceed(el);
     await vi.waitFor(() => expect(text(el)).toContain(HANDOVER_DO));
+    expect(text(el)).toContain(HANDOVER_ENDS);
     expect(promotionActions(prepare)).not.toContain("select");
     expect(action(el)).toBeUndefined();
     decision = clock;
@@ -1873,8 +1877,11 @@ it("a Spanish handover start calls the box «servidor», never «equipo»", asyn
   await proceed(el);
   await vi.waitFor(() =>
     expect(text(el)).toContain(
-      "Conecta el servidor a internet o abre esta página de traspaso en otro móvil o portátil.",
+      "Cambia desde una caja o un móvil del local, o conecta el servidor a internet.",
     ),
+  );
+  expect(text(el)).toContain(
+    "Sigue sola cuando el servidor tenga internet, mientras esta página siga abierta.",
   );
   expect(text(el)).not.toMatch(/equipo/i);
   expect(el.refusalMessage({ code: "authorization.not_permitted", params: {} })).toContain(

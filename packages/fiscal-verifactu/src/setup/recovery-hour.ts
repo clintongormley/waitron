@@ -427,11 +427,11 @@ export class RecoveryHourEntry extends LitElement {
       ? {
           ...baseWords,
           secondClockDo: en
-            ? "Connect the box to the internet, or open this handover page on another phone or laptop."
-            : "Conecta el servidor a internet o abre esta página de traspaso en otro móvil o portátil.",
+            ? "Switch from a till or phone on the venue's network, or connect the box to the internet."
+            : "Cambia desde una caja o un móvil del local, o conecta el servidor a internet.",
           secondClockEnds: en
-            ? "Keep this page open, or continue on the other device."
-            : "Mantén esta página abierta o continúa en el otro dispositivo.",
+            ? "It carries on by itself once the box reaches the internet, while this page stays open."
+            : "Sigue sola cuando el servidor tenga internet, mientras esta página siga abierta.",
           inUse: en ? clockWaitStrings.en.inUse : clockWaitStrings.es.inUse,
         }
       : baseWords;
