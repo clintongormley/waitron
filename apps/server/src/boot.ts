@@ -1509,6 +1509,7 @@ async function bootServer(
 
   // Setup and recovery must answer unavailable before their HTML catch-all can handle this path.
   let cloudServing = () => false;
+  let readCloudEmergency: () => { address: string } | null = () => null;
   mountCloudPublic(app, () => cloudServing());
   mountPublicGuestMenu(
     app,
@@ -2866,6 +2867,7 @@ async function bootServer(
       invoiceEmailAvailable,
       workforceEnabled,
       attendanceResponsesEnabled: isSingletonPrimary,
+      cloudEmergency: () => readCloudEmergency(),
       attendance: attendanceRecorder,
       boxClock: {
         correction,
@@ -3994,6 +3996,14 @@ async function bootServer(
         environment: config.environment === "production" ? "production" : "test",
       })
     : undefined;
+  if (cloudConnection) {
+    readCloudEmergency = () => cloudConnection.emergencyHints(config.managementOrigin);
+    await cloudConnection
+      .status()
+      .catch((error: unknown) =>
+        log("error", "cloud.refresh_failed", { errorCode: codeOf(error) }),
+      );
+  }
   const cloudReplacement =
     cloudConnection && cloudOrigin && config.environment !== "production"
       ? createCloudReplacement({
@@ -4595,6 +4605,7 @@ async function bootServer(
     jobRunner.add(
       cloudConnectionJob({
         connection: cloudConnection,
+        managementOrigin: config.managementOrigin,
         isPrimary: cloudPrimary,
         onGuestMenu: (signal) => guestMenuDelivery!.reconcile(signal),
         onGuestMenuError: (error) =>

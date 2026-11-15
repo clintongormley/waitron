@@ -14,6 +14,7 @@ export {
 } from "./roles.js";
 export {
   readPersonAuthority,
+  authorityForRoles,
   listAdminHolders,
   holds,
   holdsInCopy,

@@ -1,3 +1,6 @@
+import * as cloudClientModule from "./cloud-client.js";
+import { installationFixture } from "../test/cloud-installation-fixture.js";
+import { emergencyReply } from "../test/cloud-emergency-fixture.js";
 import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -584,6 +587,52 @@ describe("startServer, against a migrated venue directory", () => {
     }
     expect(() => beforeServerStarts()).not.toThrow();
   });
+
+  it.each([false, true])(
+    "A1188 serves the first till read with locally warmed hints (corrupt=%s)",
+    async (corrupt) => {
+      const f = await installationFixture(undefined, {
+        emergency: async (_v, saved, _q, res) => {
+          const r = (saved.view as { registration: { installationId: string; venueId: string } })
+            .registration;
+          res.end(
+            JSON.stringify(emergencyReply(r.installationId, r.venueId, new Date().toISOString())),
+          );
+        },
+      });
+      onTestFinished(() => f.close());
+      await f.client.refresh();
+      await f.client.emergency(KEY_ENV.WAITRON_MANAGEMENT_ORIGIN);
+      if (corrupt)
+        await writeFile(join(f.options.stateDir, "cloud/connection.json"), "invalid JSON");
+      const restarted = cloudClientModule.createCloudConnection(f.options);
+      const factory = vi
+        .spyOn(cloudClientModule, "createCloudConnection")
+        .mockReturnValue(restarted);
+      const port = await freePort();
+      let server: StartedServer | undefined;
+      try {
+        server = await startServer({
+          ...KEY_ENV,
+          WAITRON_VENUE_DIR: sharedVenueDir,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_CLOUD_ORIGIN: "https://cloud.example.test",
+        });
+        const response = await fetch(`http://127.0.0.1:${httpPort()}/api/till`);
+        expect(response.status).toBe(200);
+        const setup = await response.json();
+        if (corrupt) expect(setup.cloudEmergency).toBeUndefined();
+        else
+          expect(setup.cloudEmergency).toMatchObject({
+            address: "https://emergency.example.test/",
+          });
+      } finally {
+        await server?.close();
+        factory.mockRestore();
+      }
+    },
+  );
 
   it("boots and serves local requests when a saved Cloud replacement cannot be resumed", async () => {
     const port = await freePort();

@@ -20,6 +20,8 @@ import {
 import {
   fetchEmergencyCode,
   fetchEmergencyDisplay,
+  instant,
+  validEmergencyAddress,
   type EmergencyDisplay,
 } from "./cloud-emergency.js";
 import { fetchBillingDisplay, type BillingDisplay, type BillingRefusal } from "./cloud-billing.js";
@@ -90,7 +92,15 @@ export interface CloudConnectionOptions {
   recordVenueId(venueId: string): Promise<void>;
   environment: "test" | "production";
 }
+interface SavedEmergencyHints {
+  registration: string;
+  staffOrigin: string;
+  address: string | null;
+  open: boolean;
+  asOf: string;
+}
 export interface SavedCloudState {
+  emergencyHints?: SavedEmergencyHints;
   remoteAccessEnabled?: boolean;
   lifecycle?: CloudInstallationState;
   version: 2;
@@ -203,12 +213,48 @@ const activePaths = new Map<string, Promise<void>>();
 /** One server process owns a node state directory. */
 export function createCloudConnection(options: CloudConnectionOptions) {
   const path = join(resolve(options.stateDir), CLOUD_CONNECTION_FILE);
+  let heldEmergencyHints: SavedEmergencyHints | undefined;
+  function readHints(state: SavedCloudState): SavedEmergencyHints | undefined {
+    const value = state.emergencyHints;
+    const registration = registrationOf(state);
+    if (!registration || !record(value) || Buffer.byteLength(JSON.stringify(value)) > 16384)
+      return undefined;
+    if (
+      Object.keys(value).length !== 5 ||
+      value.registration !== registration ||
+      typeof value.staffOrigin !== "string" ||
+      value.staffOrigin.length > 2048 ||
+      typeof value.open !== "boolean" ||
+      !instant(value.asOf) ||
+      (value.open && value.address === null) ||
+      (value.address !== null &&
+        !validEmergencyAddress(value.address, options.origin, value.staffOrigin))
+    )
+      return undefined;
+    try {
+      const origin = new URL(value.staffOrigin);
+      if (origin.origin !== value.staffOrigin || !["https:", "http:"].includes(origin.protocol))
+        return undefined;
+    } catch {
+      return undefined;
+    }
+    return value as unknown as SavedEmergencyHints;
+  }
+  function cleanHints(state: SavedCloudState) {
+    const hints = readHints(state);
+    if (hints) state.emergencyHints = hints;
+    else delete state.emergencyHints;
+    return hints;
+  }
   async function read(): Promise<SavedCloudState | undefined> {
     try {
       const info = await lstat(path);
       if (!info.isFile() || info.size > 65536 || (info.mode & 0o077) !== 0) throw new Error();
       const value: unknown = JSON.parse(await readFile(path, "utf8"));
-      if (record(value) && value.version === 1) return undefined;
+      if (record(value) && value.version === 1) {
+        heldEmergencyHints = undefined;
+        return undefined;
+      }
       const venueId = await options.readVenueId();
       if (
         !record(value) ||
@@ -242,9 +288,14 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       if (state.venueId === "" && venueId !== null) state.venueId = venueId;
       if (state.lifecycle !== undefined)
         state.lifecycle = readCloudInstallation(state.lifecycle, state);
-      if (venueId === null && state.venueId !== "") return undefined;
+      if (venueId === null && state.venueId !== "") {
+        heldEmergencyHints = undefined;
+        return undefined;
+      }
+      heldEmergencyHints = cleanHints(state);
       return state;
     } catch (error) {
+      heldEmergencyHints = undefined;
       if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
       throw new AppError("cloud.state_invalid", {});
     }
@@ -257,8 +308,12 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       if (heldId === null) await options.recordVenueId(venueId);
       state.venueId = venueId;
     }
+    cleanHints(state);
+    if (state.emergencyHints && Buffer.byteLength(JSON.stringify(state)) > 65536)
+      delete state.emergencyHints;
     await mkdirDurable(join(options.stateDir, CLOUD_DIR), 0o700);
     await writeFileDurable(path, JSON.stringify(state), 0o600);
+    heldEmergencyHints = state.emergencyHints;
   }
   function project(state: SavedCloudState | undefined): CloudConnectionStatus {
     if (!state) return { state: "not_connected", code: "", signupUrl: `${options.origin}/signup` };
@@ -430,6 +485,12 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     | undefined;
   let emergencyFacts: { registration: string; display: EmergencyDisplay } | undefined;
   return {
+    emergencyHints(staffOrigin: string): { address: string } | null {
+      const hints = heldEmergencyHints;
+      return hints?.staffOrigin === staffOrigin && hints.open && hints.address !== null
+        ? { address: hints.address }
+        : null;
+    },
     async emergencyCode(staffOrigin: string, signal?: AbortSignal) {
       const state = await leaseState(),
         registration = registrationOf(state);
@@ -499,11 +560,41 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         throw new AppError(current ? "cloud.unavailable" : "cloud.not_configured", {});
       }
       if (
+        display &&
+        heldEmergencyHints?.staffOrigin === staffOrigin &&
+        display.asOf < heldEmergencyHints.asOf
+      )
+        display = undefined;
+      if (
         display?.emergency.status === "ready" &&
         emergencyRead === entry &&
         (!emergencyFacts || display.asOf >= emergencyFacts.display.asOf)
       ) {
         emergencyFacts = { registration, display };
+        const facts = display.emergency;
+        const asOf = display.asOf;
+        await run(async () => {
+          const state = await read();
+          if (!state || registrationOf(state) !== registration || emergencyRead !== entry) return;
+          const hints: SavedEmergencyHints = {
+            registration,
+            staffOrigin,
+            address: facts.address,
+            open: facts.open,
+            asOf,
+          };
+          const previous = state.emergencyHints;
+          if (
+            !previous ||
+            previous.registration !== registration ||
+            previous.staffOrigin !== staffOrigin ||
+            previous.address !== hints.address ||
+            previous.open !== hints.open
+          ) {
+            state.emergencyHints = hints;
+            await save(state);
+          }
+        }, true);
         return { ...display, stale: false };
       }
       if (emergencyFacts) return { ...emergencyFacts.display, stale: true };

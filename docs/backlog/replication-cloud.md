@@ -652,7 +652,7 @@ Veri*Factu can join, with nothing fiscal written at the join. Cloud placement an
 still wait for Cloud's half, and for A947's strip (built in slice 4c, shown only at a venue with a
 spare) to show at a venue with no spare too. The emergency-card adapter is built; its facts need
 Cloud's display endpoint. The card can reveal a fresh code and list permission/authenticator
-readiness; Cloud's code endpoint remains required. Saved till facts, recovery-pack printing and
+readiness; Cloud's code endpoint remains required. The till's outage entrance (part 2b), recovery-pack printing and
 hosted runtime remain open.
 The [part 1 plan](../superpowers/plans/2026-11-14-a1188-part1-emergency-card.md) proposes two
 card slices and pins Cloud’s 14 November 13:33 CET agreement to the contract values.

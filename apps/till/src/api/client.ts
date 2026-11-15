@@ -179,7 +179,13 @@ export interface TillClockState {
  * integrated-card pay control renders at all and whether it prompts for a tip (`cardProvider: "none"`
  * for a till with no integrated reader).
  */
+export interface TillCloudEmergency {
+  address: string;
+  roles: { builtInKey: "staff" | "supervisor" | "manager" | "admin" | null; name: string | null }[];
+}
+
 export interface TillInfo {
+  cloudEmergency?: TillCloudEmergency;
   locale: string;
   clockingAvailable: boolean;
   onboardingIntent?: "demo" | "prepare" | "live";

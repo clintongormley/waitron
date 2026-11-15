@@ -1,5 +1,7 @@
 # A1188 part 1: emergency facts and dashboard card
 
+> **2026-11-15:** [Part 2a](2026-11-15-a1188-part2-till-facts.md) adds only the saved address/open/asOf hints and their till setup delivery. It saves no code, prices or full card snapshot; the disk-storage notes below describe the earlier reserved approach.
+
 **Ask:** “when the venue's box has died, the venue can be started in Waitron Cloud (emergency start).” Build the [design](../specs/2026-10-29-a1188-cloud-emergency-start-design.md) §§1–2 card in two slices; leave hosting/activation, till reads and printing out. The owner-tagged A1187 part 2 backlog entry owns the single pack’s emergency page.
 
 **Authority:** Codex drafted; Claude read the plan and corrections. Watcher 13:17 retained saved facts/daily price; watcher 2026-11-15 05:46 resumed the hold, subject to this post-agreement read and clearance. Nobody claims owner plan approval. [Cloud agreement](https://github.com/waitron-io/waitron-cloud/pull/1214#issuecomment-6877323126) pins commit 417aa6f14afa3cf4a59a13b87859418a41bfb5b1, [contract](https://github.com/waitron-io/waitron-cloud/blob/417aa6f14afa3cf4a59a13b87859418a41bfb5b1/docs/waitron-integration-contract.md#agreed-part-1-values-14-november-2026) blob 771d34b6bd4c8d9b688bb54c5e65bbae99d93dff; endpoint/lease/DNS qualification remains Cloud’s.

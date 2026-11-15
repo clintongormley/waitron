@@ -20,6 +20,7 @@ import type {
   TableState,
   TableParty,
   TillApi,
+  TillInfo,
   TillMenuOffer,
   ZoneOffers,
 } from "./api/client.js";
@@ -346,7 +347,9 @@ async function openTable(el: TillApp, tableId = "t4"): Promise<TillTableOrderScr
   return tableOrder(el)!;
 }
 
-async function mountWithRouter(): Promise<{ el: TillApp; switchServer: () => Promise<void> }> {
+async function mountWithRouter(
+  overrides: Record<string, unknown> = {},
+): Promise<{ el: TillApp; switchServer: () => Promise<void> }> {
   const data = new Map<string, string>();
   const router = new ServerRouter({
     origin: "https://box.deli.test",
@@ -355,7 +358,7 @@ async function mountWithRouter(): Promise<{ el: TillApp; switchServer: () => Pro
     }) as unknown as typeof fetch,
     storage: { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v) },
   });
-  api = stubApi();
+  api = stubApi(overrides);
   const { el } = await mountWidget<TillApp>("till-app", {
     api: api as unknown as TillApi,
     router,
@@ -371,7 +374,8 @@ async function mountWithRouter(): Promise<{ el: TillApp; switchServer: () => Pro
   return { el, switchServer };
 }
 
-const venue = (el: TillApp) => el as unknown as { courses: { id: string }[] };
+const venue = (el: TillApp) =>
+  el as unknown as { courses: { id: string }[]; cloudEmergency?: TillInfo["cloudEmergency"] };
 
 const courseIds = (list: { id: string }[]) => list.map((each) => each.id);
 
@@ -457,6 +461,44 @@ describe("A768 the till follows the venue's setup revision", () => {
     answer(identity("pass"));
     await flush(el);
     expect(shell(el).shadowRoot!.querySelector("wt-button.expo")).toBeNull();
+  });
+
+  it("A1188 retains entrance facts on a failed refresh and removes them when settings close it", async () => {
+    const cloudEmergency = {
+      address: "https://emergency.example.test/",
+      roles: [{ builtInKey: "admin", name: null }],
+    };
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...noCourses, cloudEmergency }),
+    });
+    await openTable(el);
+    expect(venue(el).cloudEmergency).toEqual(cloudEmergency);
+    api.getTill.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    api.menuState.mockImplementation(async () => state("v1", "lf-1", "s2"));
+    await poll(el);
+    expect(venue(el).cloudEmergency).toEqual(cloudEmergency);
+    api.getTill.mockResolvedValue({ ...noCourses, setupRevision: "s2" });
+    await poll(el);
+    expect(venue(el).cloudEmergency).toBeUndefined();
+  });
+
+  it("A1188 entrance facts belong to the server, surviving sign-out but not a server change", async () => {
+    const cloudEmergency = {
+      address: "https://emergency.example.test/",
+      roles: [{ builtInKey: "admin", name: null }],
+    };
+    const { el, switchServer } = await mountWithRouter({
+      getTill: vi.fn().mockResolvedValue({ ...noCourses, cloudEmergency }),
+    });
+    await openTable(el);
+    expect(venue(el).cloudEmergency).toEqual(cloudEmergency);
+    emit(shell(el), "logout");
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    expect(venue(el).cloudEmergency).toEqual(cloudEmergency);
+    api.getTill.mockRejectedValue(new TypeError("Failed to fetch"));
+    await switchServer();
+    expect(venue(el).cloudEmergency).toBeUndefined();
   });
 
   it("new courses reach an open table without a reload", async () => {
