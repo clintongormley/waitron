@@ -1,4 +1,4 @@
-import { categories, categoryDetails, now, products, type Transaction } from "@waitron/db";
+import { categories, now, products, type Transaction } from "@waitron/db";
 import { AppError, colorOrNull } from "@waitron/shared";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { batches } from "./batches.js";
@@ -21,8 +21,8 @@ export interface CategoryInput {
 const columns = {
   id: categories.id,
   name: categories.name,
-  parentId: categoryDetails.parentId,
-  color: categoryDetails.color,
+  parentId: categories.parentId,
+  color: categories.color,
 };
 
 /*
@@ -33,18 +33,10 @@ const columns = {
  * `packages/menu/test/fixtures.ts`.
  */
 export async function listCategories(tx: Transaction): Promise<Category[]> {
-  return tx
-    .select(columns)
-    .from(categories)
-    .leftJoin(categoryDetails, eq(categoryDetails.categoryId, categories.id))
-    .orderBy(categories.createdAt, categories.id);
+  return tx.select(columns).from(categories).orderBy(categories.createdAt, categories.id);
 }
 export async function readCategory(tx: Transaction, id: string): Promise<Category> {
-  const [row] = await tx
-    .select(columns)
-    .from(categories)
-    .leftJoin(categoryDetails, eq(categoryDetails.categoryId, categories.id))
-    .where(eq(categories.id, id));
+  const [row] = await tx.select(columns).from(categories).where(eq(categories.id, id));
   if (!row) throw new AppError("category.not_found", { categoryId: id });
   return row;
 }
@@ -81,10 +73,7 @@ export async function createCategory(tx: Transaction, input: CategoryInput): Pro
   const id = crypto.randomUUID();
   await validateParent(tx, id, input.parentId ?? null);
   await assertCategoryNamesFree(tx, [{ id, name, parentId: input.parentId ?? null }]);
-  await tx.insert(categories).values({ id, name });
-  await tx
-    .insert(categoryDetails)
-    .values({ categoryId: id, parentId: input.parentId ?? null, color });
+  await tx.insert(categories).values({ id, name, parentId: input.parentId ?? null, color });
   return readCategory(tx, id);
 }
 export async function updateCategory(
@@ -102,12 +91,8 @@ export async function updateCategory(
     await assertCategoryNamesFree(tx, [{ id, name: finalName, parentId }]);
   await tx
     .update(categories)
-    .set({ name: finalName, updatedAt: now() })
+    .set({ name: finalName, parentId, color, updatedAt: now() })
     .where(eq(categories.id, id));
-  await tx
-    .insert(categoryDetails)
-    .values({ categoryId: id, parentId, color })
-    .onConflictDoUpdate({ target: categoryDetails.categoryId, set: { parentId, color } });
   return readCategory(tx, id);
 }
 /**

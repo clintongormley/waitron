@@ -314,7 +314,6 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
   ),
 
   // menu
-  classify("category_details", "state", MENU_STATE),
   classify("units", "state", MENU_STATE),
   classify("menu_items", "state", MENU_STATE),
   classify("menu_item_variant_overrides", "state", MENU_STATE),
@@ -325,7 +324,6 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("product_modifiers", "state", MENU_STATE),
   classify("sections", "state", MENU_STATE),
   classify("section_members", "state", MENU_STATE),
-  classify("menu_details", "state", MENU_STATE),
   appendOnly(
     "menu_versions",
     "state",

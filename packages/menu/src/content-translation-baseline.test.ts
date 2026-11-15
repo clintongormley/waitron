@@ -1,9 +1,9 @@
+import { storedMenuParts } from "../test/menu-parts.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { contentLanguageChoices } from "@waitron/shared";
 import {
   CORE_MIGRATIONS,
-  menuDetails,
   products,
   sectionMembers,
   sections,
@@ -346,7 +346,7 @@ describe("translation peer baseline projection", () => {
           name: "STAFF Child",
           names: { es: "CLIENT Antes", en: "CLIENT Before", ca: "CLIENT Abans" },
         });
-        const roots = await tx.select().from(menuDetails);
+        const roots = await storedMenuParts(tx);
         const parentRoot = roots.find((r) => r.menuId === parent.id)!.rootSectionId;
         const childRoot = roots.find((r) => r.menuId === child.id)!.rootSectionId;
         const member = await addMember(tx, parentRoot, { kind: "section", sectionId: childRoot });

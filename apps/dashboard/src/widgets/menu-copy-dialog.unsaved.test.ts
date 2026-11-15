@@ -10,7 +10,7 @@ import "./menu-copy-dialog.js";
 
 registerIcons(DASHBOARD_ICONS);
 const source = { id: "lunch", name: "Lunch" };
-const copied = { id: "copy", name: "Weekday lunch", active: true, version: 1 };
+const copied = { id: "copy", name: "Weekday lunch", active: true };
 class CopyLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   open = true;

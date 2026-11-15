@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
 import {
-  bigCount,
   count,
   flag,
   id,
@@ -15,10 +14,21 @@ import {
   enumType,
   enumCheck,
 } from "./columns.js";
-import { PRODUCT_ORDERINGS, type AllergenMap } from "@waitron/shared";
+import {
+  PRODUCT_ORDERINGS,
+  HOME_DISPLAY_DEFAULTS,
+  HOME_COLUMN_RANGE,
+  HOME_TILE_MODES,
+  HOME_ORDERS,
+  type AllergenMap,
+} from "@waitron/shared";
 import { units } from "./menu/units.js";
 import { kitchenCourses } from "./kitchen-courses.js";
 import { uniqueIndex } from "drizzle-orm/sqlite-core";
+
+const homeTiles = enumType(HOME_TILE_MODES);
+const homeOrder = enumType(HOME_ORDERS);
+const { handheld, till } = HOME_DISPLAY_DEFAULTS;
 
 export const menus = table(
   "menus",
@@ -27,11 +37,28 @@ export const menus = table(
     name: label("name").notNull(),
     active: flag("active").notNull().default(true),
     isDefault: flag("is_default").notNull().default(false),
-    version: bigCount("version").notNull().default(1),
     createdAt: ts("created_at").notNull().$defaultFn(now),
     updatedAt: ts("updated_at").notNull().$defaultFn(now),
+    handheldColumns: count("handheld_columns").notNull().default(handheld.columns),
+    handheldTiles: homeTiles("handheld_tiles").notNull().default(handheld.tiles),
+    handheldOrder: homeOrder("handheld_order").notNull().default(handheld.order),
+    tillColumns: count("till_columns").notNull().default(till.columns),
+    tillTiles: homeTiles("till_tiles").notNull().default(till.tiles),
+    tillOrder: homeOrder("till_order").notNull().default(till.order),
   },
   (t) => [
+    check(
+      "menus_handheld_columns_ck",
+      sql`${t.handheldColumns} between ${sql.raw(String(HOME_COLUMN_RANGE.handheld.min))} and ${sql.raw(String(HOME_COLUMN_RANGE.handheld.max))}`,
+    ),
+    check(
+      "menus_till_columns_ck",
+      sql`${t.tillColumns} between ${sql.raw(String(HOME_COLUMN_RANGE.till.min))} and ${sql.raw(String(HOME_COLUMN_RANGE.till.max))}`,
+    ),
+    check("menus_handheld_tiles_ck", enumCheck(t.handheldTiles)),
+    check("menus_handheld_order_ck", enumCheck(t.handheldOrder)),
+    check("menus_till_tiles_ck", enumCheck(t.tillTiles)),
+    check("menus_till_order_ck", enumCheck(t.tillOrder)),
     uniqueIndex("menus_one_default_uq")
       .on(t.isDefault)
       .where(sql`${t.isDefault} = 1`),
@@ -40,12 +67,25 @@ export const menus = table(
 
 /** The analytics taxonomy ("Food", "Drinks"). Orthogonal to menu; snapshotted onto
  * the sale line as a label so a roll-up sums one canonical bucket across menus. */
-export const categories = table("categories", {
-  id: id("id").primaryKey().$defaultFn(newId),
-  name: label("name").notNull(),
-  createdAt: ts("created_at").notNull().$defaultFn(now),
-  updatedAt: ts("updated_at").notNull().$defaultFn(now),
-});
+export const categories = table(
+  "categories",
+  {
+    id: id("id").primaryKey().$defaultFn(newId),
+    name: label("name").notNull(),
+    createdAt: ts("created_at").notNull().$defaultFn(now),
+    updatedAt: ts("updated_at").notNull().$defaultFn(now),
+    parentId: id("parent_id"),
+    color: label("color"),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.parentId],
+      foreignColumns: [t.id],
+      name: "categories_parent_fk",
+    }).onDelete("restrict"),
+    index("categories_parent_idx").on(t.parentId),
+  ],
+);
 
 /** A priced item. Deactivate via `active`, never delete (may sit behind historical sale-line
  * snapshots). */

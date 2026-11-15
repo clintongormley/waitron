@@ -1,3 +1,4 @@
+import { storedMenuParts } from "../test/menu-parts.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
@@ -7,7 +8,6 @@ import {
   menus,
   contentSuggestions,
   extraLists,
-  menuDetails,
   optionLabels,
   optionLists,
   products,
@@ -80,7 +80,7 @@ async function fixture() {
       .insert(extraLists)
       .values({ name: "STAFF extra", customerName: { es: "CLIENT extra" } })
       .returning();
-    const roots = await tx.select().from(menuDetails);
+    const roots = await storedMenuParts(tx);
     const root = roots.find((r) => r.menuId === menu.id)!.rootSectionId;
     const childRoot = roots.find((r) => r.menuId === child.id)!.rootSectionId;
     const [section] = await tx
@@ -639,62 +639,56 @@ describe("translation cell batch boundaries", () => {
     expect(writes).toBe(0);
     expect(await suite.db.select().from(contentSuggestions)).toEqual([]);
   });
-  it.each([
-    "role",
-    "root ownership",
-    "included root",
-    "child activity",
-    "variant activity",
-    "required",
-  ] as const)("rejects %s races instead of redirecting a draft", async (change) => {
-    const ids = await fixture();
-    const selected =
-      change === "variant activity"
-        ? ref("variant", ids.variant)
-        : change === "role"
-          ? ref("section", ids.section)
-          : change === "root ownership"
-            ? ref("menu", ids.menu)
+  it.each(["role", "included root", "child activity", "variant activity", "required"] as const)(
+    "rejects %s races instead of redirecting a draft",
+    async (change) => {
+      const ids = await fixture();
+      const selected =
+        change === "variant activity"
+          ? ref("variant", ids.variant)
+          : change === "role"
+            ? ref("section", ids.section)
             : change === "required"
               ? ref("product", ids.product)
               : ref("included_menu", ids.included_menu);
-    const batch = { edits: await edits([selected]) };
-    if (change === "role")
-      await suite.db
-        .update(sections)
-        .set({ role: "home_layout" })
-        .where(eq(sections.id, ids.section));
-    if (change === "root ownership")
-      await suite.db
-        .update(menuDetails)
-        .set({ rootSectionId: ids.section })
-        .where(eq(menuDetails.menuId, ids.menuId));
-    if (change === "included root")
-      await suite.db
-        .update(sectionMembers)
-        .set({ childSectionId: ids.menu })
-        .where(eq(sectionMembers.id, ids.included_menu));
-    if (change === "child activity")
-      await suite.db.update(menus).set({ active: false }).where(eq(menus.id, ids.childMenuId));
-    if (change === "variant activity")
-      await suite.db.update(products).set({ active: false }).where(eq(products.id, ids.variant));
-    const before = await snapshot();
-    await expect(
-      app((tx) =>
-        saveContentTranslations(
-          tx,
-          batch,
-          change === "required" ? { ...context, required: ["es", "ca"] } : context,
+      const batch = { edits: await edits([selected]) };
+      if (change === "role") {
+        const [bare] = await suite.db
+          .insert(menus)
+          .values({ name: "Wrong role owner" })
+          .returning({ id: menus.id });
+        await suite.db
+          .update(sections)
+          .set({ role: "home_layout", ownerMenuId: bare!.id })
+          .where(eq(sections.id, ids.section));
+      }
+      if (change === "included root")
+        await suite.db
+          .update(sectionMembers)
+          .set({ childSectionId: ids.menu })
+          .where(eq(sectionMembers.id, ids.included_menu));
+      if (change === "child activity")
+        await suite.db.update(menus).set({ active: false }).where(eq(menus.id, ids.childMenuId));
+      if (change === "variant activity")
+        await suite.db.update(products).set({ active: false }).where(eq(products.id, ids.variant));
+      const before = await snapshot();
+      await expect(
+        app((tx) =>
+          saveContentTranslations(
+            tx,
+            batch,
+            change === "required" ? { ...context, required: ["es", "ca"] } : context,
+          ),
         ),
-      ),
-    ).rejects.toMatchObject({
-      code: ["role", "root ownership", "child activity"].includes(change)
-        ? "content.translation_unavailable"
-        : "content.translation_stale",
-      params: selected,
-    });
-    expect(await snapshot()).toEqual(before);
-  });
+      ).rejects.toMatchObject({
+        code: ["role", "root ownership", "child activity"].includes(change)
+          ? "content.translation_unavailable"
+          : "content.translation_stale",
+        params: selected,
+      });
+      expect(await snapshot()).toEqual(before);
+    },
+  );
   it("does not recreate a removed target or consume its suggestion", async () => {
     const ids = await fixture();
     const batch = { edits: await edits([ref("product", ids.product), ref("unit", ids.unit)]) };

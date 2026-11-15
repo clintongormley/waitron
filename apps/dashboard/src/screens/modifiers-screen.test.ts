@@ -96,7 +96,7 @@ const products: Product[] = [
   }),
 ];
 
-const menus: MenuSummary[] = [{ id: "cat-1", name: "Main", active: true, version: 1 }];
+const menus: MenuSummary[] = [{ id: "cat-1", name: "Main", active: true }];
 
 /** Staff name, customer-facing name and kitchen name all read differently (CLAUDE.md §3). */
 const optionList: OptionListRow = {

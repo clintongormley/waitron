@@ -1,3 +1,4 @@
+import { storedMenuParts } from "../test/menu-parts.js";
 import { countingSettingsReads } from "../test/fixtures.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
@@ -5,7 +6,6 @@ import {
   CORE_MIGRATIONS,
   menus,
   extraLists,
-  menuDetails,
   optionLabels,
   optionLists,
   products,
@@ -39,7 +39,7 @@ async function fixture(tx: Transaction) {
     name: "STAFF Drinks",
     names: { es: "CLIENT Bebidas", en: "Drinks" },
   });
-  const roots = await tx.select().from(menuDetails);
+  const roots = await storedMenuParts(tx);
   const root = roots.find((row) => row.menuId === menu.id)!.rootSectionId;
   const childRoot = roots.find((row) => row.menuId === child.id)!.rootSectionId;
   const product = await createProduct(tx, {
@@ -218,7 +218,14 @@ describe("inline translation targets", () => {
         .update(optionLists)
         .set({ active: false })
         .where(eq(optionLists.id, ids.option_list));
-      await tx.update(sections).set({ role: "home_layout" }).where(eq(sections.id, ids.section));
+      const [bare] = await tx
+        .insert(menus)
+        .values({ name: "Wrong role owner" })
+        .returning({ id: menus.id });
+      await tx
+        .update(sections)
+        .set({ role: "home_layout", ownerMenuId: bare!.id })
+        .where(eq(sections.id, ids.section));
       const resolved = await resolveTranslationTargets(
         tx,
         "en",
@@ -426,14 +433,11 @@ describe("inline translation targets", () => {
     });
   });
 
-  it("a replaced menu root is unavailable while the real root remains savable", async () => {
+  it("a menu root with a changed role is unavailable and becomes savable when restored", async () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const ids = await fixture(tx);
-      await tx
-        .update(menuDetails)
-        .set({ rootSectionId: ids.section })
-        .where(eq(menuDetails.menuId, ids.menuId));
+      await tx.update(sections).set({ role: "section" }).where(eq(sections.id, ids.root));
       const resolved = await resolveTranslationTargets(
         tx,
         "en",
@@ -442,12 +446,9 @@ describe("inline translation targets", () => {
       );
       expect(resolved.targets[0]!.target).toMatchObject({
         eligible: false,
-        unavailableReason: "ownership",
+        unavailableReason: "role",
       });
-      await tx
-        .update(menuDetails)
-        .set({ rootSectionId: ids.root })
-        .where(eq(menuDetails.menuId, ids.menuId));
+      await tx.update(sections).set({ role: "menu_root" }).where(eq(sections.id, ids.root));
       expect(
         (await resolveTranslationTargets(tx, "en", [{ kind: "menu", id: ids.root }], context))
           .targets[0]!.target.eligible,

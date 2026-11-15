@@ -21,6 +21,7 @@ import {
 } from "@waitron/shared";
 import {
   menus,
+  recordActivity,
   categories,
   menuItems,
   menuItemVariantOverrides,
@@ -101,8 +102,6 @@ export interface Menu {
   id: string;
   name: string;
   active: boolean;
-  /** The sync seam. Created at 1; nothing in the tree bumps it today. */
-  version: number;
 }
 
 export interface CreateProductInput {
@@ -175,7 +174,6 @@ const MENU_COLUMNS = {
   id: menus.id,
   name: menus.name,
   active: menus.active,
-  version: menus.version,
 };
 
 /** A product's own identity and names, and its EFFECTIVE inherited values: a query selecting these
@@ -338,7 +336,7 @@ export async function createMenu(
   return row;
 }
 
-/** The menu's own row alone; the caller writes its root and home sections and its `menu_details` row. */
+/** The caller writes the menu's root and Home sections. */
 export async function insertMenu(tx: Transaction, name: string): Promise<Menu> {
   await assertMenuNameFree(tx, name);
   const [row] = await tx.insert(menus).values({ name }).returning(MENU_COLUMNS);
@@ -864,8 +862,23 @@ export async function updateMenuDetails(
     await tx.update(sections).set(presentation).where(eq(sections.id, rootSectionId));
 }
 
-export async function deactivateMenu(tx: Transaction, id: string): Promise<void> {
-  await tx.update(menus).set({ active: false, updatedAt: now() }).where(eq(menus.id, id));
+export async function deactivateMenu(
+  tx: Transaction,
+  id: string,
+  personId: string | null = null,
+): Promise<void> {
+  const [row] = await tx
+    .update(menus)
+    .set({ active: false, updatedAt: now() })
+    .where(and(eq(menus.id, id), eq(menus.active, true)))
+    .returning({ name: menus.name });
+  if (row !== undefined)
+    await recordActivity(tx, {
+      kind: "menu.archived",
+      subjectId: id,
+      personId,
+      data: { name: row.name },
+    });
 }
 
 export async function createProduct(tx: Transaction, input: CreateProductInput): Promise<Product> {

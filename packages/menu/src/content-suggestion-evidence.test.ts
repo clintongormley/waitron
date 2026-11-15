@@ -1,8 +1,8 @@
+import { storedMenuParts } from "../test/menu-parts.js";
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   contentSuggestions,
-  menuDetails,
   optionLabels,
   optionLists,
   products,
@@ -274,7 +274,7 @@ describe("language correction evidence", () => {
         name: "STAFF child",
         names: { ca: "CLIENT inherited" },
       });
-      const roots = await tx.select().from(menuDetails);
+      const roots = await storedMenuParts(tx);
       const root = roots.find((row) => row.menuId === venue.menuId)!.rootSectionId;
       const childRoot = roots.find((row) => row.menuId === child.id)!.rootSectionId;
       const included = await addMember(tx, root, { kind: "section", sectionId: childRoot });

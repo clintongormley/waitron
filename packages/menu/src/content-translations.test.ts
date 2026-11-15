@@ -1,3 +1,4 @@
+import { storedMenuParts } from "../test/menu-parts.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import type { TranslationTarget } from "./content-translation-targets.js";
 import { describe, expect, it, vi } from "vitest";
@@ -6,7 +7,6 @@ import {
   CORE_MIGRATIONS,
   menus,
   extraLists,
-  menuDetails,
   optionLabels,
   optionLists,
   products,
@@ -59,7 +59,7 @@ async function fixture() {
       name: "STAFF Drinks",
       names: { es: "CLIENT ES drinks" },
     });
-    const roots = await tx.select().from(menuDetails);
+    const roots = await storedMenuParts(tx);
     const root = roots.find((row) => row.menuId === menu.id)!.rootSectionId;
     const childRoot = roots.find((row) => row.menuId === child.id)!.rootSectionId;
     const product = await createProduct(tx, {
@@ -186,7 +186,7 @@ async function snapshot(tx: Transaction) {
     members: await tx.select().from(sectionMembers).orderBy(sectionMembers.id),
     units: await tx.select().from(units).orderBy(units.id),
     menus: await tx.select().from(menus).orderBy(menus.id),
-    details: await tx.select().from(menuDetails).orderBy(menuDetails.menuId),
+    details: await storedMenuParts(tx),
   };
 }
 
@@ -384,7 +384,6 @@ describe("atomic content translations", () => {
     "label owner",
     "included root",
     "child activity",
-    "root ownership",
   ] as const)("refuses %s changes rather than redirecting a draft", async (change) => {
     const ids = await fixture();
     const request = await batch(ids);
@@ -399,12 +398,17 @@ describe("atomic content translations", () => {
         case "activity":
           await tx.update(products).set({ active: false }).where(eq(products.id, ids.variant));
           break;
-        case "role":
+        case "role": {
+          const [bare] = await tx
+            .insert(menus)
+            .values({ name: "Wrong role owner" })
+            .returning({ id: menus.id });
           await tx
             .update(sections)
-            .set({ role: "home_layout" })
+            .set({ role: "home_layout", ownerMenuId: bare!.id })
             .where(eq(sections.id, ids.section));
           break;
+        }
         case "configuration":
           await seedVenueSettings(tx, { defaultContentLanguage: "ca" });
           break;
@@ -427,12 +431,6 @@ describe("atomic content translations", () => {
         case "child activity":
           await tx.update(menus).set({ active: false }).where(eq(menus.id, ids.childMenuId));
           break;
-        case "root ownership":
-          await tx
-            .update(menuDetails)
-            .set({ rootSectionId: ids.section })
-            .where(eq(menuDetails.menuId, ids.menuId));
-          break;
       }
     });
     const before = await app(snapshot);
@@ -445,7 +443,7 @@ describe("atomic content translations", () => {
         ),
       ),
     ).rejects.toMatchObject({
-      code: ["role", "child activity", "root ownership"].includes(change)
+      code: ["role", "child activity"].includes(change)
         ? "content.translation_unavailable"
         : "content.translation_stale",
     });

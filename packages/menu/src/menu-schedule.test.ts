@@ -169,10 +169,10 @@ async function readsAtClock(asserted: string) {
 const DRAFT_TABLES = [
   "menus",
   "categories",
-  "category_details",
+
   "extra_list_items",
   "extra_lists",
-  "menu_details",
+
   "menu_item_variant_overrides",
   "menu_items",
   "option_labels",
@@ -859,8 +859,8 @@ describe("a due edition is live at once", () => {
       const stamp = NOW.toISOString();
       await fx.db.run(sql`
         with recursive n(i) as (select 1 union all select i + 1 from n where i < ${count})
-        insert into menus (id, name, active, version, created_at, updated_at)
-        select 'planted-menu-' || i, 'Planted ' || i, 1, 1, ${stamp}, ${stamp} from n`);
+        insert into menus (id, name, active, created_at, updated_at)
+        select 'planted-menu-' || i, 'Planted ' || i, 1, ${stamp}, ${stamp} from n`);
       await fx.db.run(sql`
         insert into menu_versions (id, menu_id, number, document, content_hash, published_at, published_by)
         select 'planted-version-' || substr(id, 14), id, 1, ${document}, 'planted', ${stamp}, ${ANA}

@@ -1,10 +1,10 @@
+import { storedMenuParts } from "../test/menu-parts.js";
 import { countingSettingsReads } from "../test/fixtures.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   extraLists,
-  menuDetails,
   optionLabels,
   optionLists,
   products,
@@ -282,7 +282,7 @@ describe("bounded translation field reads", () => {
         .values({ listId: list!.id, name: "STAFF Toasted", customerName: {} })
         .returning();
       const [extra] = await tx.insert(extraLists).values({ name: "STAFF Extras" }).returning();
-      const roots = await tx.select().from(menuDetails);
+      const roots = await storedMenuParts(tx);
       const root = roots[0]!;
       const [section] = await tx
         .insert(sections)
@@ -292,10 +292,7 @@ describe("bounded translation field reads", () => {
         name: "STAFF Drinks",
         names: { es: "CLIENT ES drinks", en: "CLIENT Drinks", ca: "CLIENT CA drinks" },
       });
-      const [childDetails] = await tx
-        .select()
-        .from(menuDetails)
-        .where(eq(menuDetails.menuId, child.id));
+      const [childDetails] = await storedMenuParts(tx, child.id);
       const member = await addMember(tx, root.rootSectionId, {
         kind: "section",
         sectionId: childDetails!.rootSectionId,

@@ -99,8 +99,7 @@ async function fixture(): Promise<Fixture> {
 /** The root or home section `createMenu` gave the menu. */
 async function menuOwned(role: "menu_root" | "home_layout", menuId: string): Promise<string> {
   const { rows } = await fx.db.execute<{ id: string }>(sql`
-    select ${sql.raw(role === "menu_root" ? "root_section_id" : "default_home_layout_id")} as id
-      from menu_details where menu_id = ${menuId}`);
+    select id from sections where owner_menu_id = ${menuId} and role = ${role}`);
   return rows[0]!.id;
 }
 
@@ -134,7 +133,7 @@ async function cloneProducts(templateId: string, count: number): Promise<string[
 
 async function createOwned(tx: Transaction, input: SectionInput) {
   const { rows } = await tx.execute<{ id: string }>(
-    sql`select root_section_id as id from menu_details join menus on menus.id = menu_details.menu_id where menus.name = 'Lunch menu' limit 1`,
+    sql`select sections.id from sections join menus on menus.id = sections.owner_menu_id where menus.name = 'Lunch menu' and sections.role = 'menu_root' limit 1`,
   );
   return createSectionIn(tx, rows[0]!.id, input);
 }

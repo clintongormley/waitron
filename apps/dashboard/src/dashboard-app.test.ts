@@ -1619,9 +1619,7 @@ describe("dashboard-app", () => {
           .fn()
           .mockResolvedValue({ ...meResponse, permissions: ["product.manage", "venue.view"] }),
         getProfile: vi.fn().mockResolvedValue(ownProfile),
-        listMenus: vi
-          .fn()
-          .mockResolvedValue([{ id: "cat-a", name: "Lunch", active: true, version: 1 }]),
+        listMenus: vi.fn().mockResolvedValue([{ id: "cat-a", name: "Lunch", active: true }]),
         listProducts: vi.fn().mockResolvedValue([menuProduct]),
         listUnits: vi.fn().mockResolvedValue([]),
         listExtraLists: vi.fn().mockResolvedValue([]),
@@ -8688,9 +8686,7 @@ describe("the Products screen in the shell", () => {
   }));
   const productsApi = () => {
     const api = stubApi({
-      listMenus: vi
-        .fn()
-        .mockResolvedValue([{ id: "cat-a", name: "Lunch", active: true, version: 1 }]),
+      listMenus: vi.fn().mockResolvedValue([{ id: "cat-a", name: "Lunch", active: true }]),
       listProducts: vi.fn().mockResolvedValue(listed),
       listUnits: vi.fn().mockResolvedValue([]),
       listExtraLists: vi.fn().mockResolvedValue([]),

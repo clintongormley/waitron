@@ -126,13 +126,13 @@ it("creates the triggers that stand in for the foreign keys", async () => {
   ]);
 });
 
-it("gives category_details no image column and no trigger naming it", async () => {
+it("gives categories no image column and no image trigger", async () => {
   const cols = await suite.db.execute<{ name: string }>(
-    sql`select name from pragma_table_info('category_details')`,
+    sql`select name from pragma_table_info('categories')`,
   );
   expect(cols.rows.map((c) => c.name).sort()).toEqual(["category_id", "color", "parent_id"]);
   const triggers = await suite.db.execute<{ name: string }>(
-    sql`select name from sqlite_master where type = 'trigger' and name like 'category_details_media_image_fk_%'`,
+    sql`select name from sqlite_master where type = 'trigger' and name like 'categories_media_image_fk_%'`,
   );
   expect(triggers.rows).toEqual([]);
 });

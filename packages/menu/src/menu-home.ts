@@ -1,5 +1,5 @@
 import { eq, inArray } from "drizzle-orm";
-import { menuDetails, products, sectionMembers, type Transaction } from "@waitron/db";
+import { menus, products, sectionMembers, type Transaction } from "@waitron/db";
 import { AppError, homeDisplayProblem } from "@waitron/shared";
 import { batches } from "./batches.js";
 import type {
@@ -26,6 +26,7 @@ import {
   refColumns,
   requirePosition,
 } from "./section-members.js";
+import { menuHome, requireMenuRoot } from "./menu-structure.js";
 import "./errors.js";
 
 // A shortcut writes no `menu_items` row: no menu's root reaches a Device Home Page section.
@@ -38,11 +39,11 @@ interface HomeRow {
 }
 
 type HomeDisplayColumns = Pick<
-  typeof menuDetails.$inferSelect,
+  typeof menus.$inferSelect,
   "handheldColumns" | "handheldTiles" | "handheldOrder" | "tillColumns" | "tillTiles" | "tillOrder"
 >;
 
-/** A `menu_details` row's display settings, one per device. */
+/** A menu's display settings, one per device. */
 export function homeDisplaysOf(row: HomeDisplayColumns): Record<HomeDevice, HomeDisplay> {
   return {
     handheld: { columns: row.handheldColumns, tiles: row.handheldTiles, order: row.handheldOrder },
@@ -52,11 +53,11 @@ export function homeDisplaysOf(row: HomeDisplayColumns): Record<HomeDevice, Home
 
 /** The menu's root, its Device Home Page section and both display settings. */
 async function requireMenuHome(tx: Transaction, menuId: string): Promise<HomeRow> {
-  const [row] = await tx.select().from(menuDetails).where(eq(menuDetails.menuId, menuId));
+  const [row] = await tx.select().from(menus).where(eq(menus.id, menuId));
   if (row === undefined) throw new AppError("menu.not_found", { menuId: menuId });
   return {
-    rootSectionId: row.rootSectionId,
-    homeSectionId: row.homeSectionId,
+    rootSectionId: await requireMenuRoot(tx, menuId),
+    homeSectionId: (await menuHome(tx, menuId))!,
     ...homeDisplaysOf(row),
   };
 }
@@ -132,7 +133,7 @@ export async function setHomeDisplay(
       ? { handheldColumns: columns, handheldTiles: tiles, handheldOrder: order }
       : { tillColumns: columns, tillTiles: tiles, tillOrder: order };
   if (Object.values(set).some((value) => value !== undefined))
-    await tx.update(menuDetails).set(set).where(eq(menuDetails.menuId, menuId));
+    await tx.update(menus).set(set).where(eq(menus.id, menuId));
 }
 
 /** Appends a shortcut to a target the menu reaches structurally, or inserts at `position`. */

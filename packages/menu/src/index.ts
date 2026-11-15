@@ -85,12 +85,10 @@ export {
 export * from "./invoice-descriptions.js";
 export * from "./media.js";
 export {
-  categoryDetails,
   contentSuggestionJobs,
   contentSuggestions,
   extraListItems,
   extraLists,
-  menuDetails,
   menuItems,
   menuItemVariantOverrides,
   menuPublications,

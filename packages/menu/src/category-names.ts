@@ -1,4 +1,4 @@
-import { categories, categoryDetails, type Transaction } from "@waitron/db";
+import { categories, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { eq, isNull } from "drizzle-orm";
 import type { Category } from "./categories.js";
@@ -7,16 +7,13 @@ import "./errors.js";
 
 type NamedCategory = Pick<Category, "id" | "name" | "parentId">;
 
-/** The categories directly under `parentId`; null is the root, which holds a category stored with
- * no details row too. */
+/** The categories directly under `parentId`; null is the root. */
 async function categoriesUnder(tx: Transaction, parentId: string | null): Promise<NamedCategory[]> {
   return tx
-    .select({ id: categories.id, name: categories.name, parentId: categoryDetails.parentId })
+    .select({ id: categories.id, name: categories.name, parentId: categories.parentId })
     .from(categories)
-    .leftJoin(categoryDetails, eq(categoryDetails.categoryId, categories.id))
-    .where(
-      parentId === null ? isNull(categoryDetails.parentId) : eq(categoryDetails.parentId, parentId),
-    );
+
+    .where(parentId === null ? isNull(categories.parentId) : eq(categories.parentId, parentId));
 }
 
 /**

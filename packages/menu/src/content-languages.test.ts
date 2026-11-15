@@ -1,3 +1,4 @@
+import { storedMenuParts } from "../test/menu-parts.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import {
@@ -5,8 +6,8 @@ import {
   settings,
   readVenueSettings,
   CORE_MIGRATIONS,
+  menus,
   extraLists,
-  menuDetails,
   optionLabels,
   optionLists,
   products,
@@ -298,12 +299,12 @@ describe("site content languages", () => {
     });
   });
 
-  it("reports partial and empty section maps, leaving out an unmatched menu root", async () => {
+  it("reports partial and empty section maps, leaving out a Home section", async () => {
     await withTransaction(suite.db, async (tx) => {
       const menu = await createMenu(tx, { name: "Lunch" });
       const section = async (
         names: Record<string, string>,
-        role: "section" | "menu_root" = "section",
+        role: "section" | "home_layout" = "section",
       ) =>
         (
           await tx
@@ -312,17 +313,25 @@ describe("site content languages", () => {
               internalName: "Drinks (internal)",
               names,
               role,
-              ownerMenuId: menu.id,
+              ownerMenuId:
+                role === "home_layout"
+                  ? (
+                      await tx
+                        .insert(menus)
+                        .values({ name: "Other Home" })
+                        .returning({ id: menus.id })
+                    )[0]!.id
+                  : menu.id,
             })
             .returning({ id: sections.id })
         )[0]!.id;
       const spanishOnly = await section({ es: "ES drinks" });
       const none = await section({});
       const both = await section({ en: "Drinks", es: "ES drinks" });
-      const root = await section({ es: "Carta" }, "menu_root");
+      const root = await section({ es: "Carta" }, "home_layout");
 
       const gaps = await listContentTranslationGaps(tx, "en");
-      const [details] = await tx.select().from(menuDetails).where(eq(menuDetails.menuId, menu.id));
+      const [details] = await storedMenuParts(tx, menu.id);
       expect(gaps).toContainEqual({ kind: "menu_section", id: details!.rootSectionId });
       expect(gaps).toContainEqual({ kind: "menu_section", id: spanishOnly });
       expect(gaps).toContainEqual({ kind: "menu_section", id: none });
@@ -349,10 +358,9 @@ describe("site content languages", () => {
   describe("an include's folder", () => {
     const rootOf = async (tx: Transaction, menuId: string) =>
       (
-        await tx
-          .select({ root: menuDetails.rootSectionId })
-          .from(menuDetails)
-          .where(eq(menuDetails.menuId, menuId))
+        await storedMenuParts(tx, menuId).then((rows) =>
+          rows.map((row) => ({ root: row.rootSectionId })),
+        )
       )[0]!.root;
 
     /** Lunch includes Drinks. The staff name "STAFF Drinks", Drinks' own customer names and the

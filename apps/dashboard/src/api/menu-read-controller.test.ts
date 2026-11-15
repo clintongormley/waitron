@@ -74,7 +74,7 @@ it("shares the save refresh with an arriving notification, but still reads later
   const refresh = s.controller.refresh();
   await vi.advanceTimersByTimeAsync(50);
   expect(s.requests).toHaveLength(1);
-  s.api.liveData.invalidate([{ type: "menu_details" }]);
+  s.api.liveData.invalidate([{ type: "menus" }]);
   await vi.advanceTimersByTimeAsync(0);
   await refresh;
   await vi.advanceTimersByTimeAsync(1000);
@@ -82,7 +82,7 @@ it("shares the save refresh with an arriving notification, but still reads later
   expect(s.requests[1]!.passive).toBe(true);
   expect(s.values.at(-1)).toEqual({ home: { status: 200, body: { handheld: { columns: 5 } } } });
   s.columns(6);
-  s.api.liveData.invalidate([{ type: "menu_details" }]);
+  s.api.liveData.invalidate([{ type: "menus" }]);
   await vi.advanceTimersByTimeAsync(0);
   expect(s.requests).toHaveLength(3);
   await vi.waitFor(() =>
@@ -119,7 +119,7 @@ it("settles a refused refresh and recovers when a later read succeeds", async ()
   expect(s.values.at(-1)).toEqual({ home: { status: 200, body: { handheld: { columns: 3 } } } });
   s.refusal(false);
   s.columns(5);
-  s.api.liveData.invalidate([{ type: "menu_details" }]);
+  s.api.liveData.invalidate([{ type: "menus" }]);
   await vi.waitFor(() =>
     expect(s.values.at(-1)).toEqual({ home: { status: 200, body: { handheld: { columns: 5 } } } }),
   );
@@ -137,7 +137,7 @@ it.each(["release", "disconnect"] as const)(
     if (action === "release") s.controller.release();
     else for (const host of s.hosts) host.hostDisconnected?.();
     await refresh;
-    s.api.liveData.invalidate([{ type: "menu_details" }]);
+    s.api.liveData.invalidate([{ type: "menus" }]);
     await vi.advanceTimersByTimeAsync(1000);
     expect(s.requests).toHaveLength(1);
   },
@@ -223,7 +223,7 @@ it("retains an invalidation arriving during the refresh's read", async () => {
   const refresh = controller.refresh();
   await vi.advanceTimersByTimeAsync(100);
   expect(reads).toBe(2);
-  api.liveData.invalidate([{ type: "menu_details" }]);
+  api.liveData.invalidate([{ type: "menus" }]);
   await vi.advanceTimersByTimeAsync(0);
   expect(reads).toBe(2);
   second(Response.json({ home: { status: 200, body: { handheld: { columns: 5 } } } }));
@@ -373,7 +373,7 @@ it("does not replay an initial refusal when a shared watch has since recovered",
   ).rejects.toEqual({ code: "connection.failed" });
   s.refusal(false);
   s.columns(5);
-  s.api.liveData.invalidate([{ type: "menu_details" }]);
+  s.api.liveData.invalidate([{ type: "menus" }]);
   await vi.waitFor(() =>
     expect(s.values.at(-1)).toEqual({ home: { status: 200, body: { handheld: { columns: 5 } } } }),
   );
@@ -424,7 +424,7 @@ it.each([
     const write = api.setHomeDisplay("lunch", "handheld", { columns: 5 });
     sequence = snapshotSequence;
     epoch = snapshotEpoch;
-    api.liveData.invalidate([{ type: "menu_details" }]);
+    api.liveData.invalidate([{ type: "menus" }]);
     await vi.advanceTimersByTimeAsync(0);
     expect(paths).toHaveLength(2);
     sequence = 1;
@@ -444,7 +444,7 @@ it.each([
       home: { status: 200, body: { handheld: { columns: 5 } } },
     });
     sequence = 2;
-    api.liveData.invalidate([{ type: "menu_details" }]);
+    api.liveData.invalidate([{ type: "menus" }]);
     await vi.advanceTimersByTimeAsync(0);
     expect(paths).toHaveLength(wantReads + 1);
     await vi.waitFor(() =>

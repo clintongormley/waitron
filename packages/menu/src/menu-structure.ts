@@ -2,7 +2,7 @@ import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
-import { menuDetails, menuItems, menuItemVariantOverrides, sections } from "@waitron/db";
+import { menuItems, menuItemVariantOverrides, sections } from "@waitron/db";
 import { loadSectionGraph, reachableProducts, type SectionGraph } from "./section-graph.js";
 import { directIncludedMenus, includableMenus } from "./menu-inclusion.js";
 import type { IncludeFolder, MemberRef, SectionInput, SectionDetails } from "@waitron/shared";
@@ -41,11 +41,10 @@ export async function createMenuShell(
     .values({ internalName: HOME_SECTION_NAME, role: "home_layout", ownerMenuId: menuId })
     .returning({ id: sections.id });
   const shell = { rootSectionId: root!.id, homeSectionId: home!.id };
-  await tx.insert(menuDetails).values({ menuId, ...shell });
   return shell;
 }
 
-/** Each named menu's root; a menu with no details row is left out. */
+/** Each named menu's root section, when present. */
 export async function menuRoots(
   tx: Transaction,
   menuIds: readonly string[],
@@ -53,21 +52,29 @@ export async function menuRoots(
   const roots = new Map<string, string>();
   for (const batch of batches(menuIds)) {
     const rows = await tx
-      .select({ menuId: menuDetails.menuId, rootSectionId: menuDetails.rootSectionId })
-      .from(menuDetails)
-      .where(inArray(menuDetails.menuId, batch));
+      .select({ menuId: sections.ownerMenuId, rootSectionId: sections.id })
+      .from(sections)
+      .where(and(inArray(sections.ownerMenuId, batch), eq(sections.role, "menu_root")));
     for (const row of rows) roots.set(row.menuId, row.rootSectionId);
   }
   return roots;
 }
 
-/** The menu's root; undefined for a menu with no details row. */
+/** The menu's root section, when present. */
 export async function menuRoot(tx: Transaction, menuId: string): Promise<string | undefined> {
   const [row] = await tx
-    .select({ rootSectionId: menuDetails.rootSectionId })
-    .from(menuDetails)
-    .where(eq(menuDetails.menuId, menuId));
+    .select({ rootSectionId: sections.id })
+    .from(sections)
+    .where(and(eq(sections.ownerMenuId, menuId), eq(sections.role, "menu_root")));
   return row?.rootSectionId;
+}
+
+export async function menuHome(tx: Transaction, menuId: string): Promise<string | undefined> {
+  const [row] = await tx
+    .select({ id: sections.id })
+    .from(sections)
+    .where(and(eq(sections.ownerMenuId, menuId), eq(sections.role, "home_layout")));
+  return row?.id;
 }
 
 export async function requireMenuRoot(tx: Transaction, menuId: string): Promise<string> {

@@ -212,7 +212,7 @@ describe("contained upgrade data checks", () => {
     {
       paymentsOff: false,
       name: "a menu with missing structure",
-      sql: "delete from menu_details",
+      sql: "update sections set role = 'section' where role in ('menu_root', 'home_layout')",
       code: "menu.not_found",
     },
     {

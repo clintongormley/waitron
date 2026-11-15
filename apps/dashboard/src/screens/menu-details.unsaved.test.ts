@@ -48,7 +48,7 @@ for (const kind of ["menu", "section"] as const) {
       const client = {
         listMenus: async () => {
           if (written) throw { code: "connection.failed" };
-          return [{ id: "menu", name: "Menu", active: true, version: 1 }];
+          return [{ id: "menu", name: "Menu", active: true }];
         },
         listLibraryProducts: async () => [],
         listCategories: async () => [],
@@ -142,7 +142,7 @@ for (const succeeds of [true, false]) {
     history.replaceState(null, "", "/manage/menus/menu/menu/view/home");
     const writes: unknown[] = [];
     const client = {
-      listMenus: async () => [{ id: "menu", name: "Menu", active: true, version: 1 }],
+      listMenus: async () => [{ id: "menu", name: "Menu", active: true }],
       listLibraryProducts: async () => [],
       listCategories: async () => [],
       getMenuSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),

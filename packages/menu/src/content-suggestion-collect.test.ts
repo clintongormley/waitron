@@ -1,3 +1,4 @@
+import { storedMenuParts } from "../test/menu-parts.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import {
@@ -5,7 +6,6 @@ import {
   categories,
   contentSuggestions,
   extraLists,
-  menuDetails,
   optionLabels,
   optionLists,
   products,
@@ -64,10 +64,9 @@ interface Lunch {
 }
 
 async function rootOf(tx: Transaction, menuId: string): Promise<string> {
-  const [row] = await tx
-    .select({ root: menuDetails.rootSectionId })
-    .from(menuDetails)
-    .where(eq(menuDetails.menuId, menuId));
+  const [row] = await storedMenuParts(tx, menuId).then((rows) =>
+    rows.map((row) => ({ root: row.rootSectionId })),
+  );
   return row!.root;
 }
 

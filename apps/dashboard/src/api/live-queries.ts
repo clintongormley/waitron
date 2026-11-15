@@ -5,11 +5,9 @@ const MENU_PUBLICATION_READS = [
   "settings.menu",
   "menus",
   "categories",
-  "category_details",
   "settings.venue",
   "extra_list_items",
   "extra_lists",
-  "menu_details",
   "menu_item_variant_overrides",
   "menu_items",
   "menu_publications",
@@ -24,7 +22,7 @@ const MENU_PUBLICATION_READS = [
   "units",
 ] as const;
 
-const CURRENT_CLASSIFICATION_READS = ["products", "categories", "category_details"] as const;
+const CURRENT_CLASSIFICATION_READS = ["products", "categories"] as const;
 
 /** Dependencies describe the read model, independently of which operation changes it. */
 const HIERARCHY_DELETE_READS = [
@@ -72,7 +70,6 @@ const TRANSLATION_READS = [
   "extra_lists",
   "sections",
   "section_members",
-  "menu_details",
   "menus",
   "units",
 ] as const;
@@ -306,8 +303,7 @@ export const QUERY_DEPENDENCIES = {
   listPendingAbsences: ["absences"],
   listPendingSwaps: ["shift_swaps", "shifts"],
   listMenus: ["menus"],
-  // `readMenuStructure` reads the root from `menu_details`, then the whole section graph.
-  getMenuStructure: ["menu_details", "sections", "section_members", "menus"],
+  getMenuStructure: ["sections", "section_members", "menus"],
   // `menuPrices` (packages/menu/src/operations.ts): the structure's tables for the placements,
   // then each reached product's menu item, menu and price, and its variants' overrides.
   getMenuPrices: [
@@ -341,11 +337,9 @@ export const QUERY_DEPENDENCIES = {
     "settings.business_day",
     "settings.venue",
   ],
-  // `readMenuHome` (packages/menu/src/menu-home.ts): the details row, the section graph with
-  // its menus, and each shortcut's name.
-  getMenuHome: ["menu_details", "sections", "section_members", "products", "menus"],
-  listCategories: ["categories", "category_details"],
-  getCategory: ["categories", "category_details"],
+  getMenuHome: ["sections", "section_members", "products", "menus"],
+  listCategories: ["categories"],
+  getCategory: ["categories"],
   listLibraryProducts: ["products"],
   listUnits: ["units"],
   listProducts: [

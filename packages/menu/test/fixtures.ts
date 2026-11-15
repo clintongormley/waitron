@@ -4,7 +4,6 @@ import {
   CORE_MIGRATIONS,
   settings,
   categories,
-  categoryDetails,
   invoiceSeries,
   products,
   units,
@@ -45,7 +44,7 @@ export async function plantStoredUnit(
   await tx.update(products).set({ unitId }).where(eq(products.id, productId));
 }
 
-/** Writes a category straight into its tables, past every category path: how a test sets up two
+/** Writes a category straight into its table, past every category path: how a test sets up two
  * siblings that already share a name, as data written before the unique-name rule existed. */
 export async function plantStoredSiblingCategory(
   tx: Transaction,
@@ -53,8 +52,7 @@ export async function plantStoredSiblingCategory(
   parentId: string | null,
 ): Promise<string> {
   const id = crypto.randomUUID();
-  await tx.insert(categories).values({ id, name });
-  await tx.insert(categoryDetails).values({ categoryId: id, parentId });
+  await tx.insert(categories).values({ id, name, parentId });
   return id;
 }
 

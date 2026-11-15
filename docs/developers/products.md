@@ -432,7 +432,7 @@ or on its Price overrides tab.
 
 That colour is worked out in order. It is the product's own colour (`products.color`) if it has
 one. Otherwise it is its main category's colour, or, when that category has none, the colour of the
-nearest category above it that does (`category_details.color`). Otherwise it is the venue's
+nearest category above it that does (`categories.color`). Otherwise it is the venue's
 default colour (`settings.menu.defaultColor`, which the menu's setup step sets to the
 pale blue `#abcced` when it creates the menu settings document, `MENU_PROVISIONING` in `packages/menu/src/provisioning.ts`); with no default it has none, and each
 screen draws its usual neutral look. The rule lives in one place, `effectiveColor`, `categoryColor` and
@@ -454,7 +454,7 @@ included, as `product.invalid` with `field: "color"`; a default colour is refuse
 `category.invalid` with `field: "color"` (`saveMenuDefaultColor`,
 `packages/menu/src/settings.ts`). A configuration import refuses the whole
 bundle when a product's, a category's or a menu section's colour, or the default, is anything else,
-as `setup.request_invalid` with `field` set to `products.color`, `category_details.color`,
+as `setup.request_invalid` with `field` set to `products.color`, `categories.color`,
 `sections.color` (`validateMenuConfiguration`, `packages/menu/src/configuration-transfer.ts`)
 or `settings.menu.defaultColor` (`checkImportedSettings`, `packages/provisioning/src/settings-transfer.ts`). A category's colour is set from the colour
 square before its name in the Products tree, or from the one in the box that names or renames it

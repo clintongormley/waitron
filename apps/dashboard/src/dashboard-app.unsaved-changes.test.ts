@@ -883,8 +883,8 @@ it.each([
           modules: ["media", "venue-service"],
         }),
         listMenus: async () => [
-          { id: "menu-one", name: "Lunch", active: true, version: 1 },
-          { id: "menu-two", name: "Dinner", active: true, version: 1 },
+          { id: "menu-one", name: "Lunch", active: true },
+          { id: "menu-two", name: "Dinner", active: true },
         ],
         listLibraryProducts: async () => [],
         listProducts: async () => [],

@@ -220,10 +220,10 @@ async function draftSnapshot(): Promise<Record<string, string[]>> {
   for (const table of [
     "menus",
     "categories",
-    "category_details",
+
     "extra_list_items",
     "extra_lists",
-    "menu_details",
+
     "menu_item_variant_overrides",
     "menu_items",
     "option_labels",

@@ -149,8 +149,8 @@ const categories: CategorySummary[] = [
 ];
 
 const menus: MenuSummary[] = [
-  { id: "menu-lunch", name: "Lunch Menu", active: true, version: 1 },
-  { id: "menu-dinner", name: "Dinner Menu", active: true, version: 1 },
+  { id: "menu-lunch", name: "Lunch Menu", active: true },
+  { id: "menu-dinner", name: "Dinner Menu", active: true },
 ];
 
 const productMember = (id: string, position: number, productId: string): SectionMember => ({
@@ -1016,8 +1016,8 @@ it("lists the menus by name, and reverses that order when the name heading is pr
   const el = await mount(
     api({
       listMenus: vi.fn().mockResolvedValue([
-        { id: "menu-a", name: "Terrace Menu", active: true, version: 1 },
-        { id: "menu-b", name: "Brunch Menu", active: true, version: 1 },
+        { id: "menu-a", name: "Terrace Menu", active: true },
+        { id: "menu-b", name: "Brunch Menu", active: true },
       ]),
     }),
   );
@@ -1496,7 +1496,6 @@ describe("the menus list's Changes column", () => {
     id: "menu-brunch",
     name: "Brunch Menu",
     active: true,
-    version: 1,
   };
 
   /** Lunch has changes on its live version 2, Dinner is current, Brunch was never published. */
@@ -2335,7 +2334,6 @@ describe("copying a menu from the list", () => {
     id: "menu-copy",
     name: "Weekday lunch",
     active: true,
-    version: 1,
   };
   const form = (el: MenusScreen) =>
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["dashboard-menu-copy-dialog"]>(
@@ -9794,10 +9792,7 @@ describe("publishing", () => {
     const client = api({
       listMenus: vi
         .fn()
-        .mockResolvedValue([
-          ...menus,
-          { id: "menu-brunch", name: "Brunch Menu", active: true, version: 1 },
-        ]),
+        .mockResolvedValue([...menus, { id: "menu-brunch", name: "Brunch Menu", active: true }]),
       getMenuStatuses: vi
         .fn()
         .mockResolvedValue({ ...statuses(), "menu-brunch": { state: "unpublished", clashes: 0 } }),
@@ -9819,10 +9814,7 @@ describe("publishing", () => {
     const client = api({
       listMenus: vi
         .fn()
-        .mockResolvedValue([
-          ...menus,
-          { id: "menu-brunch", name: "Brunch Menu", active: true, version: 1 },
-        ]),
+        .mockResolvedValue([...menus, { id: "menu-brunch", name: "Brunch Menu", active: true }]),
       getMenuStatuses: vi
         .fn()
         .mockResolvedValue({ ...statuses(), "menu-brunch": { state: "unpublished", clashes: 0 } }),
@@ -9970,10 +9962,7 @@ describe("publishing", () => {
     const client = api({
       listMenus: vi
         .fn()
-        .mockResolvedValue([
-          ...menus,
-          { id: "menu-brunch", name: "Brunch Menu", active: true, version: 1 },
-        ]),
+        .mockResolvedValue([...menus, { id: "menu-brunch", name: "Brunch Menu", active: true }]),
       getMenuStatuses: vi
         .fn()
         .mockResolvedValue({ ...statuses(), "menu-brunch": { state: "unpublished", clashes: 0 } }),
@@ -10928,7 +10917,7 @@ describe("the Home page tab", () => {
     await vi.waitFor(() => expect(preview(el)).not.toBeNull());
     const ownStatus = client.getMenuStatus.mock.calls.length;
     const shownPreviewReads = client.getMenuPreview.mock.calls.length;
-    live.invalidate([{ type: "menu_details" }]);
+    live.invalidate([{ type: "menus" }]);
     await vi.waitFor(() =>
       expect(client.getMenuPreview.mock.calls.length).toBe(shownPreviewReads + 1),
     );
@@ -10936,7 +10925,7 @@ describe("the Home page tab", () => {
     await chooseTab(el, "prices");
     const homeReads = client.getMenuHome.mock.calls.length;
     const previewReads = client.getMenuPreview.mock.calls.length;
-    live.invalidate([{ type: "menu_details" }]);
+    live.invalidate([{ type: "menus" }]);
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(client.getMenuHome.mock.calls.length).toBe(homeReads);
     expect(client.getMenuPreview.mock.calls.length).toBe(previewReads);
@@ -11583,7 +11572,6 @@ describe("the menus list just wider than its narrow layout", () => {
           id: "menu-lunch",
           name: "Weekday-lunch-menu-with-starters-main-and-cakes",
           active: true,
-          version: 1,
         },
         menus[1]!,
       ];
@@ -12483,9 +12471,7 @@ describe("one menu read after an edit", () => {
             };
           else home = { ...home, handheld: { ...home.handheld, columns: 2 } };
           if (notification === "before") {
-            client.liveData.invalidate([
-              { type: view === "home" ? "menu_details" : "section_members" },
-            ]);
+            client.liveData.invalidate([{ type: view === "home" ? "menus" : "section_members" }]);
             await new Promise((resolve) => setTimeout(resolve, 25));
           }
           return new Response(null, {
@@ -12554,9 +12540,7 @@ describe("one menu read after an edit", () => {
       await vi.waitFor(() => expect(writes).toHaveLength(1));
       // The stream notifies the screen of the accepted write's changed table.
       if (notification === "after")
-        client.liveData.invalidate([
-          { type: view === "home" ? "menu_details" : "section_members" },
-        ]);
+        client.liveData.invalidate([{ type: view === "home" ? "menus" : "section_members" }]);
       await vi.waitFor(() => {
         if (view === "structure") {
           expect(structure(el).nodes.map(({ memberId }) => memberId)).toEqual([

@@ -1,8 +1,9 @@
+import { storedMenuParts } from "../test/menu-parts.js";
 import { createIncludedMenu as createSection } from "../test/included-menu.js";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
-  menuDetails,
+  menus,
   menuItems,
   menuItemVariantOverrides,
   sections,
@@ -25,6 +26,7 @@ import {
 } from "./operations.js";
 import { createExtraList } from "./extras.js";
 import { writeProductModifiers } from "./product-modifiers.js";
+import * as menuStructure from "./menu-structure.js";
 import { readMenuStructure, syncMenuOffers } from "./menu-structure.js";
 import { createCategory } from "./categories.js";
 import {
@@ -155,7 +157,7 @@ const offerNames = async (menuId: string) =>
   (await app((tx) => listMenuOffers(tx, [menuId]))).map((offer) => offer.name);
 
 describe("creating a menu", () => {
-  it("makes a root and a home section the menu owns, and records both in menu_details", async () => {
+  it("makes a root and a Home section the menu owns, with default display settings", async () => {
     await seedTaxpayer(fx.db);
     const menu = await app((tx) => createMenu(tx, { name: "Lunch menu" }));
     const owned = await app((tx) =>
@@ -164,9 +166,7 @@ describe("creating a menu", () => {
         .from(sections)
         .where(eq(sections.ownerMenuId, menu.id)),
     );
-    const [details] = await app((tx) =>
-      tx.select().from(menuDetails).where(eq(menuDetails.menuId, menu.id)),
-    );
+    const [details] = await app((tx) => storedMenuParts(tx, menu.id));
     const root = owned.find((row) => row.role === "menu_root")!;
     const layout = owned.find((row) => row.role === "home_layout")!;
     expect(owned).toHaveLength(2);
@@ -969,5 +969,21 @@ describe("a menu's prices", () => {
     await expect(app((tx) => menuPrices(tx, crypto.randomUUID()))).rejects.toMatchObject({
       code: "menu.not_found",
     });
+  });
+});
+
+it("finds a menu's root and Home sections by role without a side row", async () => {
+  await app(async (tx) => {
+    const [menu] = await tx.insert(menus).values({ name: "Role roots" }).returning();
+    const [root, home] = await tx
+      .insert(sections)
+      .values([
+        { internalName: "Root", role: "menu_root", ownerMenuId: menu!.id },
+        { internalName: "Home", role: "home_layout", ownerMenuId: menu!.id },
+      ])
+      .returning();
+    expect(await menuStructure.menuRoot(tx, menu!.id)).toBe(root!.id);
+    expect(await menuStructure.menuHome(tx, menu!.id)).toBe(home!.id);
+    expect(await menuStructure.menuRoots(tx, [menu!.id])).toEqual(new Map([[menu!.id, root!.id]]));
   });
 });

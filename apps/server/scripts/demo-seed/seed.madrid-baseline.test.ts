@@ -434,6 +434,55 @@ for (const locale of ["en", "es"] as const) {
       "before" | "provisioned" | "seeded",
       CanonicalMadridSemantics
     >;
+    for (const [side, parent, key, fields] of [
+      ["category_details", "categories", "category_id", ["parent_id", "color"]],
+      [
+        "menu_details",
+        "catalogues",
+        "menu_id",
+        [
+          "handheld_columns",
+          "handheld_tiles",
+          "handheld_order",
+          "till_columns",
+          "till_tiles",
+          "till_order",
+        ],
+      ],
+    ] as const) {
+      const target = historicalSeeded.tables[parent]!;
+      const rows: Record<string, Record<string, unknown>> = {};
+      for (const row of Object.values(target.rows)) {
+        const detail: Record<string, unknown> = { [key]: row.id };
+        for (const field of fields) {
+          detail[field] = row[field];
+          delete row[field];
+        }
+        if (side === "menu_details") {
+          const owned = Object.values(historicalSeeded.tables.sections!.rows).filter(
+            (section) => section.owner_menu_id === row.id,
+          );
+          detail.root_section_id = owned.find((section) => section.role === "menu_root")!.id;
+          detail.default_home_layout_id = owned.find(
+            (section) => section.role === "home_layout",
+          )!.id;
+          row.version = 1;
+        }
+        rows[stable(detail)] = detail;
+      }
+      historicalSeeded.tables[side] = {
+        ...structuredClone(expected.seeded.tables[side]!),
+        rows: Object.fromEntries(Object.entries(rows).sort(([a], [b]) => a.localeCompare(b))),
+      };
+      target.columns = target.columns.filter((column) => !fields.includes(column.name as never));
+      if (parent === "catalogues")
+        target.columns.splice(
+          target.columns.findIndex((column) => column.name === "created_at"),
+          0,
+          { name: "version", type: "INTEGER", notnull: 1, dflt_value: "1", pk: 0 },
+        );
+      else target.foreignKeys = expected.seeded.tables.categories!.foreignKeys;
+    }
     // The checked added-row adapter consumes the frozen schema before the unit fold below.
     historicalSeeded.tables.product_units = {
       ...structuredClone(expected.seeded.tables.product_units!),
@@ -1685,6 +1734,31 @@ for (const locale of ["en", "es"] as const) {
       )!;
       expect(screenKind.pk).toBe(2);
       screenKind.pk = 0;
+      expected[phase] = madridWithFoldedTables(expected[phase], [
+        {
+          from: "menu_details",
+          into: "menus",
+          match: { from: "menu_id", into: "id" },
+          columns: {
+            handheld_columns: "handheld_columns",
+            handheld_tiles: "handheld_tiles",
+            handheld_order: "handheld_order",
+            till_columns: "till_columns",
+            till_tiles: "till_tiles",
+            till_order: "till_order",
+          },
+        },
+        {
+          from: "category_details",
+          into: "categories",
+          match: { from: "category_id", into: "id" },
+          columns: { parent_id: "parent_id", color: "color" },
+        },
+      ]);
+      expected[phase] = madridWithDroppedColumns(expected[phase], { menus: ["version"] });
+      delete phases[phase]!.menu_details;
+      delete phases[phase]!.category_details;
+
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(expected[phase].tables));
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(phases[phase]!));
       for (const [name, actual] of Object.entries(canonical[phase].tables)) {

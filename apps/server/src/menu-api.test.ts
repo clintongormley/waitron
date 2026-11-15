@@ -1,3 +1,4 @@
+import { storedMenuParts } from "@waitron/menu/test/menu-parts.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -14,13 +15,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
-import {
-  categoryDetails,
-  menuDetails,
-  menuPublications,
-  menuVersions,
-  sectionMembers,
-} from "@waitron/menu";
+import { menuPublications, menuVersions, sectionMembers } from "@waitron/menu";
 import type { MenuPreview, MenuStatus } from "@waitron/menu";
 import type { ExtraList, ExtraListRow, OptionList, OptionListRow } from "@waitron/menu";
 import { type ContentLanguageRules } from "@waitron/shared";
@@ -65,7 +60,6 @@ describe("folder selection routes", () => {
   async function plantFolder(name: string): Promise<string> {
     const id = crypto.randomUUID();
     await suite.db.insert(categories).values({ id, name });
-    await suite.db.insert(categoryDetails).values({ categoryId: id, parentId: null });
     return id;
   }
   it("moves a selection, reports its contents, then deletes it", async () => {
@@ -1189,11 +1183,10 @@ describe("mountMenuApi — menus", () => {
       id: string;
       name: string;
       active: boolean;
-      version: number;
     };
     expect(body.name).toBe("Summer menu");
     expect(body.active).toBe(true);
-    expect(typeof body.version).toBe("number");
+    expect(body).not.toHaveProperty("version");
     expect(body.id).toMatch(/^[0-9a-f-]{36}$/);
   });
 
@@ -4321,7 +4314,7 @@ describe("a menu's structure", () => {
       nodes: unknown[];
     };
     expect(nodes).toEqual([]);
-    const [shell] = await suite.db.select().from(menuDetails).where(eq(menuDetails.menuId, menuId));
+    const [shell] = await storedMenuParts(suite.db, menuId);
     expect(shell).toMatchObject({ menuId, rootSectionId });
     expect(root).toMatchObject({ names: {}, image: null, color: null });
 
@@ -4752,10 +4745,9 @@ describe("publishing a menu", () => {
     const { menuId, name, productId: offeredId } = await menuWithProduct(app);
     const offMenu = `Off menu ${crypto.randomUUID()}`;
     const productId = await createNamedProductVia(app, offMenu);
-    const [details] = await suite.db
-      .select({ homeSectionId: menuDetails.homeSectionId })
-      .from(menuDetails)
-      .where(eq(menuDetails.menuId, menuId));
+    const [details] = await storedMenuParts(suite.db, menuId).then((rows) =>
+      rows.map((row) => ({ homeSectionId: row.homeSectionId })),
+    );
     await suite.db
       .insert(sectionMembers)
       .values({ sectionId: details!.homeSectionId, position: 0, productId });
@@ -5892,10 +5884,9 @@ describe("mountMenuApi — Device Home Page", () => {
       }),
       201,
     );
-    const [details] = await suite.db
-      .select({ homeSectionId: menuDetails.homeSectionId })
-      .from(menuDetails)
-      .where(eq(menuDetails.menuId, menuId));
+    const [details] = await storedMenuParts(suite.db, menuId).then((rows) =>
+      rows.map((row) => ({ homeSectionId: row.homeSectionId })),
+    );
     return {
       menuId,
       soup,

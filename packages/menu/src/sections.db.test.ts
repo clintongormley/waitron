@@ -1,7 +1,7 @@
 import { createIncludedMenu as createSection } from "../test/included-menu.js";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { menuItems, sectionMembers, withTransaction, type Transaction } from "@waitron/db";
+import { menus, menuItems, sectionMembers, withTransaction, type Transaction } from "@waitron/db";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { racePair, seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
 import { and } from "drizzle-orm";
@@ -95,7 +95,11 @@ describe("section ownership", () => {
   it("requires an existing owner for every role", async () => {
     const { menu } = await fixture();
     for (const role of ["section", "menu_root", "home_layout"]) {
-      await insertSection(role, menu);
+      const [owner] = await fx.db
+        .insert(menus)
+        .values({ name: `Owner ${role}` })
+        .returning({ id: menus.id });
+      await insertSection(role, owner!.id);
       await expect(insertSection(role, null)).rejects.toMatchObject({ errcode: 1299 });
       await expect(insertSection(role, "missing")).rejects.toMatchObject({ errcode: 787 });
     }

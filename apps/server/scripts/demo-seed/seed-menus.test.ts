@@ -45,9 +45,8 @@ describe("seedMenus", () => {
       await seedMenus(tx, { locale: LOCALE, dataSet: CASA_DELGADO_ES });
       return (
         await tx.execute<{ name: string; color: string | null }>(sql`
-        select c.name, d.color from categories c
-        join category_details d on d.category_id = c.id
-        where d.parent_id is null
+        select c.name, c.color from categories c
+        where c.parent_id is null
       `)
       ).rows;
     });
@@ -192,8 +191,8 @@ describe("seedMenus", () => {
     const { categories, products } = await withTransaction(suite.db, async (tx) => {
       await seedMenus(tx, { locale: LOCALE, dataSet: CASA_DELGADO_ES });
       const categories = await tx.execute<{ parent: string | null; name: string }>(sql`
-        select d.parent_id as parent, c.name from categories c
-        left join category_details d on d.category_id = c.id`);
+        select c.parent_id as parent, c.name from categories c
+        `);
       const products = await tx.execute<{ name: string }>(sql`
         select p.name from products p left join products parent on parent.id = p.parent_id
         where p.active and (p.parent_id is null or parent.active)`);
@@ -217,10 +216,10 @@ describe("seedMenus", () => {
       });
       const { rows } = await tx.execute<{ menu: string; root: string }>(sql`
         select c.name as menu, s.internal_name as root
-        from menu_details d
-        join menus c on c.id = d.menu_id
-        join sections s on s.id = d.root_section_id
-        where d.menu_id in (${menuIds.restaurant}, ${menuIds.lunch}, ${menuIds.deli})
+        from menus d
+        join menus c on c.id = d.id
+        join sections s on s.owner_menu_id = d.id and s.role = 'menu_root'
+        where d.id in (${menuIds.restaurant}, ${menuIds.lunch}, ${menuIds.deli})
         order by c.name`);
       return rows;
     });

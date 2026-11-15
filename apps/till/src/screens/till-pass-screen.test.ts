@@ -2062,7 +2062,7 @@ describe("D95 the pass on a 1024 px tablet", () => {
   });
 });
 
-it.each(["ticket_items", "ticket_item_moves", "categories", "category_details"])(
+it.each(["ticket_items", "ticket_item_moves", "categories"])(
   "live pass %s changes coalesce behind one read while the fifteen-second timer keeps reading",
   async (type) => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });

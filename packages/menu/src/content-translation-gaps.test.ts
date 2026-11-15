@@ -1,10 +1,10 @@
+import { storedMenuParts } from "../test/menu-parts.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   menus,
   extraLists,
-  menuDetails,
   optionLabels,
   optionLists,
   products,
@@ -39,7 +39,7 @@ async function fixture(tx: Transaction, names: Record<string, string> | null) {
     name: "STAFF Included",
     names: { es: "CLIENT Hijo", en: "CLIENT Child" },
   });
-  const roots = await tx.select().from(menuDetails);
+  const roots = await storedMenuParts(tx);
   const root = roots.find((row) => row.menuId === menu.id)!.rootSectionId;
   const childRoot = roots.find((row) => row.menuId === child.id)!.rootSectionId;
   const product = await createProduct(tx, {
@@ -316,7 +316,14 @@ describe("complete translation gap predicates", () => {
       await tx.update(products).set({ active: false }).where(eq(products.id, f.product.id));
       await tx.update(optionLists).set({ active: false }).where(eq(optionLists.id, f.list.id));
       await tx.update(extraLists).set({ active: false }).where(eq(extraLists.id, f.extra.id));
-      await tx.update(sections).set({ role: "home_layout" }).where(eq(sections.id, f.section.id));
+      const [bare] = await tx
+        .insert(menus)
+        .values({ name: "Other Home" })
+        .returning({ id: menus.id });
+      await tx
+        .update(sections)
+        .set({ role: "home_layout", ownerMenuId: bare!.id })
+        .where(eq(sections.id, f.section.id));
       await tx.update(menus).set({ active: false }).where(eq(menus.id, f.menu.id));
       expect(await listTranslationGapCounts(tx, config)).toEqual([
         { language: "es", count: 1 },

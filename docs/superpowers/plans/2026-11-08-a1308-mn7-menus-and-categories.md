@@ -35,6 +35,18 @@ identifier this plan does not explain is a stop (rules §5.1).
 **Pull request's first line:** "Every venue is reset: core; backups and exports from before this
 cannot be restored or imported." (rules §2)
 
+**Implementation clarifications (watcher, 2026-11-15 11:28 and 11:42; not owner approvals):**
+No production route calls `deactivateMenu`, so record the transition in that function with its supplied
+person and add no route or screen. Port the retired menu-version field and live sources with their
+consumers. Translation fixtures now change a root's role instead of an independent pointer; retain
+the role refusal and positive restored-root control, and remove only the duplicate pointer-mismatch
+variants from the two atomic-save matrices. Wrong-role fixtures use another menu. The retired pointer
+FK cases give way to the new one-root/Home checks and the existing section-owner FK case; the category
+parent refusal moves to `categories.parent_id`. Prove the translated role check by deletion and list
+all changed checks in the PR. Madrid's checked historical adapters retain their original input names;
+the current capture is restored to that input shape before the existing transforms, and the existing
+fold helper combines the captured side tables afterward. Frozen captures remain unchanged.
+
 ## What it builds
 
 1. **`menus` gains** `handheld_columns`, `handheld_tiles`, `handheld_order`, `till_columns`,
@@ -82,8 +94,7 @@ cannot be restored or imported." (rules §2)
    `git grep -c categoryDetails` at `a086eedfb7`. A category write that set both its row and its
    details row now writes one row.
 6. **`menu.archived` in `activity_log`**: `deactivateMenu(tx, id, personId)` (`operations.ts:896-898`)
-   records subject `menu`, data `{ name }`, when the menu was active. Its route passes the session's
-   person (`apps/server/src/menu-api.ts`, the route that calls it).
+   records subject `menu`, data `{ name }`, when the menu was active. No production route calls this function; this slice adds none (watcher 11:28).
 7. **Lists:** classification (`packages/db/src/classification.ts:291`, `:306`;
    `packages/menu/src/classification.ts:5`, `:20`), exports, the configuration-export entries
    (`packages/menu/src/configuration-transfer.ts:212` `category_details`, `:227` `menu_details`; the

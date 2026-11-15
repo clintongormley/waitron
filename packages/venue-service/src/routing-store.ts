@@ -12,7 +12,6 @@ import {
   type Transaction,
 } from "@waitron/db";
 import {
-  categoryDetails,
   documentOffers,
   effectiveProductColumns,
   parentJoin,
@@ -241,10 +240,7 @@ async function readRowProductIds(tx: Transaction, address: CellAddress): Promise
   const { row } = address;
   const folders =
     row.kind === "category"
-      ? await tx
-          .select({ id: categories.id, parentId: categoryDetails.parentId })
-          .from(categories)
-          .leftJoin(categoryDetails, eq(categoryDetails.categoryId, categories.id))
+      ? await tx.select({ id: categories.id, parentId: categories.parentId }).from(categories)
       : [];
   return rowProductIds(
     new Map(folders.map((folder) => [folder.id, folder.parentId])),
@@ -380,9 +376,9 @@ async function snapshot(tx: Transaction, scope: SnapshotScope = UNTIMED) {
     })
     .from(routingCellPeriods);
   const folders = await tx
-    .select({ id: categories.id, name: categories.name, parentId: categoryDetails.parentId })
+    .select({ id: categories.id, name: categories.name, parentId: categories.parentId })
     .from(categories)
-    .leftJoin(categoryDetails, eq(categoryDetails.categoryId, categories.id))
+
     .orderBy(asc(categories.name), asc(categories.id));
   const stations = await tx
     .select({

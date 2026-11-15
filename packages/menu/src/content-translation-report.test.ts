@@ -1,9 +1,9 @@
+import { storedMenuParts } from "../test/menu-parts.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   extraLists,
-  menuDetails,
   optionLabels,
   optionLists,
   products,
@@ -71,10 +71,9 @@ async function report(tx: Transaction, config: ContentLanguages = SPANISH_DEFAUL
 async function lunchIncludingDrinks(tx: Transaction, lunchId: string) {
   const rootOf = async (menuId: string) =>
     (
-      await tx
-        .select({ root: menuDetails.rootSectionId })
-        .from(menuDetails)
-        .where(eq(menuDetails.menuId, menuId))
+      await storedMenuParts(tx, menuId).then((rows) =>
+        rows.map((row) => ({ root: row.rootSectionId })),
+      )
     )[0]!.root;
   const drinks = await createMenu(tx, {
     name: "STAFF Drinks",
@@ -202,10 +201,9 @@ describe("the missing-translations report", () => {
           ownerMenuId: menu.id,
         })
         .returning({ id: sections.id });
-      const [details] = await tx
-        .select({ root: menuDetails.rootSectionId })
-        .from(menuDetails)
-        .where(eq(menuDetails.menuId, menu.id));
+      const [details] = await storedMenuParts(tx, menu.id).then((rows) =>
+        rows.map((row) => ({ root: row.rootSectionId })),
+      );
       await tx
         .update(sections)
         .set({ names: { es: "CLIENT-ES Carta" } })
@@ -579,10 +577,9 @@ describe("the missing-translations report", () => {
           ownerMenuId: menu.id,
         });
         await tx.insert(sections).values({ internalName: "STAFF Desserts", ownerMenuId: menu.id });
-        const [details] = await tx
-          .select({ root: menuDetails.rootSectionId })
-          .from(menuDetails)
-          .where(eq(menuDetails.menuId, menu.id));
+        const [details] = await storedMenuParts(tx, menu.id).then((rows) =>
+          rows.map((row) => ({ root: row.rootSectionId })),
+        );
         await tx.update(sections).set({ names: {} }).where(eq(sections.id, details!.root));
         expect((await report(tx))("ca")).toHaveLength(3);
         await deactivateMenu(tx, menu.id);

@@ -191,9 +191,7 @@ const suite = useVenueDb({
       ids.loopProduct = await product("Loop product", loopB.id);
       // A loop in today's tree, which a snapshot check refuses. Written directly: the menu's
       // own writers refuse it.
-      await tx.execute(
-        sql`update category_details set parent_id = ${loopB.id} where category_id = ${loopA.id}`,
-      );
+      await tx.execute(sql`update categories set parent_id = ${loopB.id} where id = ${loopA.id}`);
     });
 
     const colaLine = randomUUID();

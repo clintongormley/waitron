@@ -1,6 +1,6 @@
 import { eq, inArray } from "drizzle-orm";
 import {
-  menuDetails,
+  menus,
   menuItems,
   menuItemVariantOverrides,
   newId,
@@ -26,7 +26,7 @@ export async function duplicateMenu(
   sourceMenuId: string,
   name: string,
 ): Promise<Menu> {
-  const [details] = await tx.select().from(menuDetails).where(eq(menuDetails.menuId, sourceMenuId));
+  const [details] = await tx.select().from(menus).where(eq(menus.id, sourceMenuId));
   if (details === undefined) throw new AppError("menu.not_found", { menuId: sourceMenuId });
   const { internalName } = await sectionPatchValues(tx, { internalName: name });
   const owned = await tx.select().from(sections).where(eq(sections.ownerMenuId, sourceMenuId));
@@ -70,16 +70,21 @@ export async function duplicateMenu(
         ...section,
         id: sectionIds.get(section.id)!,
         ownerMenuId: copy.id,
-        internalName: section.id === details.rootSectionId ? copy.name : section.internalName,
+        internalName: section.role === "menu_root" ? copy.name : section.internalName,
       })),
     );
   for (const batch of batches(copiedMembers)) await tx.insert(sectionMembers).values(batch);
-  await tx.insert(menuDetails).values({
-    ...details,
-    menuId: copy.id,
-    rootSectionId: sectionIds.get(details.rootSectionId)!,
-    homeSectionId: sectionIds.get(details.homeSectionId)!,
-  });
+  await tx
+    .update(menus)
+    .set({
+      handheldColumns: details.handheldColumns,
+      handheldTiles: details.handheldTiles,
+      handheldOrder: details.handheldOrder,
+      tillColumns: details.tillColumns,
+      tillTiles: details.tillTiles,
+      tillOrder: details.tillOrder,
+    })
+    .where(eq(menus.id, copy.id));
   for (const batch of batches(items))
     await tx
       .insert(menuItems)

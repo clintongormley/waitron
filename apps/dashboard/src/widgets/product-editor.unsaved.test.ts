@@ -248,7 +248,7 @@ for (const succeeds of [true, false]) {
     const api = {
       getMenuSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
       getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
-      listMenus: async () => [{ id: "menu", name: "Menu", active: true, version: 1 }],
+      listMenus: async () => [{ id: "menu", name: "Menu", active: true }],
       listCategories: async () => [],
       listUnits: async () => [],
       listExtraLists: async () => [],

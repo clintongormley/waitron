@@ -20,8 +20,8 @@ import type {
 registerIcons(DASHBOARD_ICONS);
 
 const menus: MenuSummary[] = [
-  { id: "cat-a", name: "Food", active: true, version: 1 },
-  { id: "cat-b", name: "Drinks", active: true, version: 1 },
+  { id: "cat-a", name: "Food", active: true },
+  { id: "cat-b", name: "Drinks", active: true },
 ];
 
 const categories: CategorySummary[] = [{ id: "c1", name: "Starters", parentId: null, color: null }];

@@ -978,17 +978,32 @@ CREATE TABLE `categories` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
 	`created_at` text NOT NULL,
-	`updated_at` text NOT NULL
+	`updated_at` text NOT NULL,
+	`parent_id` text,
+	`color` text,
+	FOREIGN KEY (`parent_id`) REFERENCES `categories`(`id`) ON UPDATE no action ON DELETE restrict
 );
 --> statement-breakpoint
+CREATE INDEX `categories_parent_idx` ON `categories` (`parent_id`);--> statement-breakpoint
 CREATE TABLE `menus` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
 	`active` integer DEFAULT true NOT NULL,
 	`is_default` integer DEFAULT false NOT NULL,
-	`version` integer DEFAULT 1 NOT NULL,
 	`created_at` text NOT NULL,
-	`updated_at` text NOT NULL
+	`updated_at` text NOT NULL,
+	`handheld_columns` integer DEFAULT 3 NOT NULL,
+	`handheld_tiles` text DEFAULT 'colours' NOT NULL,
+	`handheld_order` text DEFAULT 'home_first' NOT NULL,
+	`till_columns` integer DEFAULT 6 NOT NULL,
+	`till_tiles` text DEFAULT 'colours' NOT NULL,
+	`till_order` text DEFAULT 'home_first' NOT NULL,
+	CONSTRAINT "menus_handheld_columns_ck" CHECK("menus"."handheld_columns" between 2 and 3),
+	CONSTRAINT "menus_till_columns_ck" CHECK("menus"."till_columns" between 4 and 10),
+	CONSTRAINT "menus_handheld_tiles_ck" CHECK("menus"."handheld_tiles" in ('colours', 'thumbnails')),
+	CONSTRAINT "menus_handheld_order_ck" CHECK("menus"."handheld_order" in ('home_first', 'menu_first')),
+	CONSTRAINT "menus_till_tiles_ck" CHECK("menus"."till_tiles" in ('colours', 'thumbnails')),
+	CONSTRAINT "menus_till_order_ck" CHECK("menus"."till_order" in ('home_first', 'menu_first'))
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `menus_one_default_uq` ON `menus` (`is_default`) WHERE "menus"."is_default" = 1;--> statement-breakpoint
@@ -1878,22 +1893,6 @@ CREATE TABLE `webauthn_credentials` (
 --> statement-breakpoint
 CREATE INDEX `webauthn_credentials_person_idx` ON `webauthn_credentials` (`person_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `webauthn_credentials_credential_id_uq` ON `webauthn_credentials` (`credential_id`);--> statement-breakpoint
-CREATE TABLE `menu_details` (
-	`menu_id` text PRIMARY KEY NOT NULL,
-	`root_section_id` text NOT NULL,
-	`default_home_layout_id` text NOT NULL,
-	`handheld_columns` integer DEFAULT 3 NOT NULL,
-	`handheld_tiles` text DEFAULT 'colours' NOT NULL,
-	`handheld_order` text DEFAULT 'home_first' NOT NULL,
-	`till_columns` integer DEFAULT 6 NOT NULL,
-	`till_tiles` text DEFAULT 'colours' NOT NULL,
-	`till_order` text DEFAULT 'home_first' NOT NULL,
-	FOREIGN KEY (`menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`root_section_id`) REFERENCES `sections`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`default_home_layout_id`) REFERENCES `sections`(`id`) ON UPDATE no action ON DELETE no action
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `menu_details_root_uq` ON `menu_details` (`root_section_id`);--> statement-breakpoint
 CREATE TABLE `menu_items` (
 	`id` text PRIMARY KEY NOT NULL,
 	`menu_id` text NOT NULL,
@@ -1906,15 +1905,6 @@ CREATE TABLE `menu_items` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `menu_items_id_product_key` ON `menu_items` (`id`,`product_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `menu_items_menu_product_key` ON `menu_items` (`menu_id`,`product_id`);--> statement-breakpoint
-CREATE TABLE `category_details` (
-	`category_id` text PRIMARY KEY NOT NULL,
-	`parent_id` text,
-	`color` text,
-	FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`parent_id`) REFERENCES `categories`(`id`) ON UPDATE no action ON DELETE restrict
-);
---> statement-breakpoint
-CREATE INDEX `category_details_parent_idx` ON `category_details` (`parent_id`);--> statement-breakpoint
 CREATE TABLE `units` (
 	`id` text PRIMARY KEY NOT NULL,
 	`seed_key` text,
@@ -2046,6 +2036,7 @@ CREATE TABLE `sections` (
 	CONSTRAINT "sections_role_ck" CHECK("sections"."role" in ('section', 'menu_root', 'home_layout'))
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `sections_one_root_per_menu_uq` ON `sections` (`owner_menu_id`,`role`) WHERE "sections"."role" in ('menu_root','home_layout');--> statement-breakpoint
 CREATE INDEX `sections_owner_menu_idx` ON `sections` (`owner_menu_id`);--> statement-breakpoint
 CREATE TABLE `menu_publications` (
 	`menu_id` text PRIMARY KEY NOT NULL,

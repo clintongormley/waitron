@@ -40,9 +40,7 @@ const changed: MenuStatus = {
 
 function api(status: MenuStatus = changed): DashboardApi {
   return {
-    listMenus: vi
-      .fn()
-      .mockResolvedValue([{ id: "menu-lunch", name: "Lunch Menu", active: true, version: 1 }]),
+    listMenus: vi.fn().mockResolvedValue([{ id: "menu-lunch", name: "Lunch Menu", active: true }]),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     listLibraryProducts: vi.fn().mockResolvedValue([lager]),
     listCategories: vi.fn().mockResolvedValue([]),

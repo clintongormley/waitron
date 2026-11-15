@@ -732,7 +732,7 @@ export class MenusScreen extends LitElement {
   #menuFormGeneration = 0;
   @state() private includedRoot = "";
   @state() private includeError = "";
-  @state() private menuDetails: SectionDetails | null = null;
+  @state() private menuPresentation: SectionDetails | null = null;
   /** The include whose Edit dialog is open, as the structure held it when the dialog opened. */
   @state() private editingInclude: {
     listId: string;
@@ -1398,7 +1398,7 @@ export class MenusScreen extends LitElement {
   async #openMenuForm(menu: MenuSummary | null): Promise<void> {
     const generation = ++this.#menuFormGeneration;
     this.menuFormErrors = {};
-    this.menuDetails = null;
+    this.menuPresentation = null;
     this.menuForm = null;
     let details: SectionDetails | null = null;
     if (menu) {
@@ -1410,7 +1410,7 @@ export class MenusScreen extends LitElement {
       }
     }
     if (generation !== this.#menuFormGeneration) return;
-    this.menuDetails = details;
+    this.menuPresentation = details;
     this.menuForm = { id: menu?.id ?? null, name: menu?.name ?? "" };
   }
 
@@ -2495,7 +2495,7 @@ export class MenusScreen extends LitElement {
       .busy=${this.busy}
       .api=${this.api}
       .languages=${currentContentLanguages()}
-      .value=${this.menuDetails}
+      .value=${this.menuPresentation}
       .fieldErrors=${this.menuFormErrors}
       heading=${this.menuForm?.id ? fill("menus.rename_heading", { name: this.menuForm.name }) : t("menus.create")}
       @wt-submit=${(event: CustomEvent<SectionInput>) => {

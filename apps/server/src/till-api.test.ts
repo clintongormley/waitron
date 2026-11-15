@@ -2291,9 +2291,9 @@ describe("zone-offer menu routes", () => {
         grossPrice: number | null;
       }>(sql`
         select m.section_id as "sectionId", m.position, i.gross_price as "grossPrice"
-        from section_members m join menu_details d on d.root_section_id = m.section_id
-          join menu_items i on i.menu_id = d.menu_id and i.product_id = m.product_id
-        where d.menu_id = ${menuId} and m.product_id = ${waterProduct.id}`)
+        from section_members m join sections d on d.id = m.section_id and d.role = 'menu_root'
+          join menu_items i on i.menu_id = d.owner_menu_id and i.product_id = m.product_id
+        where d.owner_menu_id = ${menuId} and m.product_id = ${waterProduct.id}`)
     ).rows;
 
     try {

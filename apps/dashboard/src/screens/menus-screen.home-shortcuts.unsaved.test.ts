@@ -41,7 +41,7 @@ const home: MenuHome = {
 function client(addHomeShortcut: () => Promise<unknown>, afterAdd: () => Promise<MenuHome>) {
   let added = false;
   const api = {
-    listMenus: async () => [{ id: "menu", name: "Menu", active: true, version: 1 }],
+    listMenus: async () => [{ id: "menu", name: "Menu", active: true }],
     listLibraryProducts: async () =>
       ["p-lager", "p-burger"].map((id) => ({
         id,
