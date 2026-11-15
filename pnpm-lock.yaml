@@ -2194,6 +2194,9 @@ importers:
 
   packages/ui:
     dependencies:
+      '@oddbird/popover-polyfill':
+        specifier: 0.7.3
+        version: 0.7.3
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
@@ -3580,6 +3583,9 @@ packages:
 
   '@nodable/entities@3.1.0':
     resolution: {integrity: sha512-LsS/DjHr+uDM647Gru/cA8+J3a3HfhttwCKLyuoyN7yXTFCxKBtSgMQBvrW9yNPa2/zDRUNuGPaH5QUFoa4arQ==}
+
+  '@oddbird/popover-polyfill@0.7.3':
+    resolution: {integrity: sha512-uOY7RLqS1M12u+EzZHQ8vPSh3NjwDlb4qwJ1WDzQ0inZ14+47Vv0NNs+1Lh4PtX1nLiiCbfJyIxPRHsgBTvhvg==}
 
   '@otplib/core@13.6.0':
     resolution: {integrity: sha512-TL6/FKKzR55Vr7zo3YGFtPMCSV3SpYPtuvE3T1XcwjFczD9pHU4dYYQBl0AcNvGcqAt4/fPqhZEFfB2OBcnlPA==}
@@ -7223,6 +7229,8 @@ snapshots:
   '@noble/hashes@2.4.0': {}
 
   '@nodable/entities@3.1.0': {}
+
+  '@oddbird/popover-polyfill@0.7.3': {}
 
   '@otplib/core@13.6.0': {}
 

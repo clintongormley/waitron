@@ -39,6 +39,10 @@ export class WtRelativeTime extends LitElement {
   static override styles = [
     baseStyles,
     css`
+      [popover].\\:popover-open {
+        z-index: 100;
+      }
+
       :host {
         display: inline;
         color: inherit;

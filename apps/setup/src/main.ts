@@ -1,5 +1,5 @@
 import { html, render } from "lit";
-import { applyTokens, startThemeChoice, startThemedFavicon } from "@waitron/ui";
+import { applyTokens, startWithPopover, startThemeChoice, startThemedFavicon } from "@waitron/ui";
 import { createInstrumentedFetch, installErrorCapture, watchBuild } from "@waitron/diagnostics";
 import { diag, setReportBuild } from "./diagnostics.js";
 import { makeSetupId } from "./random-id.js";
@@ -20,18 +20,26 @@ const transport = createInstrumentedFetch(
   { makeId: makeSetupId },
 );
 installErrorCapture(window, diag);
-const emergency = location.pathname === "/handover/emergency";
-const operation = /^\/handover\/([^/]+)$/.exec(location.pathname);
-if (emergency || operation) {
-  setLocale(matchBrowserLocale(navigator.languages));
-  render(
-    html`<setup-handover-screen
-      .api=${new SetupApi("", transport)}
-      .emergency=${emergency}
-      operationId=${emergency ? "" : decodeURIComponent(operation![1]!)}
-    ></setup-handover-screen>`,
-    app,
-  );
-} else {
-  render(html`<setup-app .api=${new SetupApi("", transport)}></setup-app>`, app);
-}
+startWithPopover(
+  () => {
+    const emergency = location.pathname === "/handover/emergency";
+    const operation = /^\/handover\/([^/]+)$/.exec(location.pathname);
+    if (emergency || operation) {
+      setLocale(matchBrowserLocale(navigator.languages));
+      render(
+        html`<setup-handover-screen
+          .api=${new SetupApi("", transport)}
+          .emergency=${emergency}
+          operationId=${emergency ? "" : decodeURIComponent(operation![1]!)}
+        ></setup-handover-screen>`,
+        app,
+      );
+    } else {
+      render(html`<setup-app .api=${new SetupApi("", transport)}></setup-app>`, app);
+    }
+  },
+  (error) =>
+    diag.record("error", "ui.popover_load_failed", {
+      name: error instanceof Error ? error.name : "Unknown",
+    }),
+);

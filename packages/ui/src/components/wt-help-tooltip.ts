@@ -10,6 +10,10 @@ export class WtHelpTooltip extends LitElement {
   static override styles = [
     baseStyles,
     css`
+      [popover].\\:popover-open {
+        z-index: 100;
+      }
+
       :host {
         display: inline-flex;
         vertical-align: middle;

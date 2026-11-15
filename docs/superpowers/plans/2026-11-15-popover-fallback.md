@@ -18,3 +18,9 @@
 | Source | Source words | Use |
 | --- | --- | --- |
 | [OddBird README](https://github.com/oddbird/popover-polyfill), caveats | “`matches` and `closest` have also been patched” | Keep JS queries; test consumers. |
+
+**Build clarification, 2026-11-15.** The watcher cleared this plan at 17:12 for setup,
+dashboard and till, with the guest menu queued separately. A forced-fallback phone Filters
+run then found sticky headings covering Close. At 17:20 the watcher cleared fallback-only
+stacking rules in the existing overlay styles, with trusted pointer checks; no portal or
+new overlay manager. These are watcher clearances, not owner approval of this design.

@@ -16,6 +16,10 @@ export class ProductAppearance extends LitElement {
   static override styles = [
     baseStyles,
     css`
+      [popover].\\:popover-open {
+        z-index: 100;
+      }
+
       :host {
         display: grid;
         grid-template-columns: auto minmax(0, 1fr);
@@ -83,7 +87,7 @@ export class ProductAppearance extends LitElement {
         color: var(--wt-color-text);
         box-shadow: var(--wt-shadow-2);
       }
-      [popover]:popover-open {
+      [popover]:is(:popover-open, .\\:popover-open) {
         display: grid;
         gap: var(--wt-space-4);
       }

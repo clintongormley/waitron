@@ -1,0 +1,31 @@
+import { afterEach, expect, test, vi } from "vitest";
+import { render } from "lit";
+
+const gate = vi.hoisted(() => ({ start: undefined as (() => void) | undefined }));
+vi.mock("@waitron/ui", async (original) => ({
+  ...(await original<typeof import("@waitron/ui")>()),
+  startWithPopover: (start: () => void) => {
+    gate.start = start;
+  },
+}));
+vi.mock("./trust-check.js", () => ({ isTrustBroken: async () => false }));
+let root: HTMLElement;
+afterEach(() => {
+  root.querySelector<import("./till-app.js").TillApp>("till-app")?.router?.stop();
+  render(null, root);
+  root.remove();
+  vi.unstubAllGlobals();
+});
+
+test("no app shadow roots mount until Popover startup releases them", async () => {
+  vi.stubGlobal("fetch", () => new Promise<Response>(() => {}));
+  root = document.createElement("div");
+  root.id = "app";
+  document.body.append(root);
+  await import("./main.js");
+  expect(root.children).toHaveLength(0);
+  expect(gate.start).toBeTypeOf("function");
+  gate.start!();
+  await vi.waitFor(() => expect(root.querySelector("till-app")?.shadowRoot).toBeTruthy());
+  expect(root.querySelectorAll("till-app")).toHaveLength(1);
+});

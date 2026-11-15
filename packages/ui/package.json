@@ -14,9 +14,10 @@
     "mutation": "stryker run"
   },
   "dependencies": {
+    "@oddbird/popover-polyfill": "0.7.3",
     "@waitron/shared": "workspace:*",
-    "lit": "^3.2.0",
-    "@waitron/ui-core": "workspace:*"
+    "@waitron/ui-core": "workspace:*",
+    "lit": "^3.2.0"
   },
   "devDependencies": {
     "@stryker-mutator/core": "^10.1.1",

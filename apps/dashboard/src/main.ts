@@ -1,6 +1,7 @@
 import { html, render } from "lit";
 import {
   applyTokens,
+  startWithPopover,
   registerIcons,
   startThemeChoice,
   startThemedFavicon,
@@ -36,9 +37,19 @@ const publicLocale =
     ?.toLowerCase() === "es"
     ? "es"
     : "en";
-if (!mountPublicModulePage(app, location.pathname, DASHBOARD_MODULES, { locale: publicLocale })) {
-  startSessionDashboard();
-}
+startWithPopover(
+  () => {
+    if (
+      !mountPublicModulePage(app, location.pathname, DASHBOARD_MODULES, { locale: publicLocale })
+    ) {
+      startSessionDashboard();
+    }
+  },
+  (error) =>
+    diag.record("error", "ui.popover_load_failed", {
+      name: error instanceof Error ? error.name : "Unknown",
+    }),
+);
 
 function startSessionDashboard(): void {
   const instrumentedFetch = createInstrumentedFetch(

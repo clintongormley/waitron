@@ -38,6 +38,7 @@ export default defineConfig({
     // Pre-bundled up front rather than discovered by the optimizer partway through a run.
     include: [
       "axe-core",
+      "@waitron/ui > @oddbird/popover-polyfill",
       "qrcode-generator",
       "jsqr",
       "lit/directives/unsafe-html.js",

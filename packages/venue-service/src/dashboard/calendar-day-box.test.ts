@@ -457,3 +457,21 @@ it.each(["Winter standard hours", ""])(
     );
   },
 );
+
+it("calendar day fallback layout is positioned, hittable and light dismisses", async () => {
+  await resizeViewport(390, 844);
+  const action = document.createElement("button");
+  action.textContent = "Edit hours";
+  box.append(action);
+  box.show(anchor);
+  insideViewport(popup().getBoundingClientRect());
+  expect(popup().getBoundingClientRect().width).toBeGreaterThan(0);
+  await userEvent.click(action);
+  expect(isOpen()).toBe(true);
+  const outside = document.createElement("button");
+  outside.textContent = "Outside";
+  outside.style.cssText = "position:fixed;bottom:4px;left:4px";
+  host.append(outside);
+  await userEvent.click(outside);
+  await expect.poll(() => closes).toBe(1);
+});

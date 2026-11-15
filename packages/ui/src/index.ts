@@ -250,3 +250,5 @@ export {
 export { ChangeObserver } from "./change-observer.js";
 
 export { TableRequestController } from "./components/table-request-controller.js";
+
+export { startWithPopover } from "./popover-startup.js";

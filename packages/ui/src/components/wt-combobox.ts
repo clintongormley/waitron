@@ -95,6 +95,10 @@ export class WtCombobox extends LitElement {
     baseStyles,
     fieldStyles,
     css`
+      [popover].\\:popover-open {
+        z-index: 100;
+      }
+
       /* min-width: 0 lets a grid or flex parent narrow the field below its unwrapped text, which
          the value then cuts with an ellipsis. */
       :host {

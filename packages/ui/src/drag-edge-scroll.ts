@@ -2,7 +2,7 @@ type Point = { x: number; y: number };
 type Axis = "x" | "y";
 
 function parentOf(element: Element): Element | null {
-  // A top-layer surface is painted outside its ancestors' clipping and scroll chain.
+  // A drag in a modal or open popover must not scroll the page beneath it.
   if (element.matches(":modal, :popover-open")) return null;
   const parent = element.parentNode;
   return (

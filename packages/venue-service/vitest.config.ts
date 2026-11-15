@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
 import { playwright } from "@vitest/browser-playwright";
 import { parkPointerCommands } from "@waitron/ui/src/vitest-park-pointer.js";
@@ -37,7 +38,21 @@ export default defineConfig({
             enabled: true,
             provider: playwright({}),
             headless: true,
-            instances: [{ browser: "chromium" }],
+            instances: [
+              { browser: "chromium" },
+              {
+                browser: "chromium",
+                name: "chromium-fallback",
+                include: [
+                  "src/dashboard/calendar-day-box.test.ts",
+                  "src/dashboard/paint-grid-parts.test.ts",
+                ],
+                testNamePattern: "fallback layout",
+                setupFiles: [
+                  fileURLToPath(new URL("../ui/test/popover-fallback-ready.ts", import.meta.url)),
+                ],
+              },
+            ],
             // The dashboard a11y suites import a11y-helpers.ts, whose beforeEach runs `parkPointer`.
             commands: { ...parkPointerCommands, ...pointerGestureCommands },
           },

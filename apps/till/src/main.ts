@@ -1,5 +1,11 @@
 import { html, render } from "lit";
-import { applyTokens, startThemeChoice, startThemedFavicon, startVenueTheme } from "@waitron/ui";
+import {
+  applyTokens,
+  startWithPopover,
+  startThemeChoice,
+  startThemedFavicon,
+  startVenueTheme,
+} from "@waitron/ui";
 import {
   BUILD_CHANGED_EVENT,
   createInstrumentedFetch,
@@ -32,7 +38,15 @@ installErrorCapture(window, diag);
 
 const app = document.querySelector<HTMLElement>("#app")!;
 
-void bootTill();
+startWithPopover(
+  () => {
+    void bootTill();
+  },
+  (error) =>
+    diag.record("error", "ui.popover_load_failed", {
+      name: error instanceof Error ? error.name : "Unknown",
+    }),
+);
 
 async function bootTill(): Promise<void> {
   if (await isTrustBroken()) {

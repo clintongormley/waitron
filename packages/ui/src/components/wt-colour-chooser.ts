@@ -33,6 +33,10 @@ export class WtColourChooser extends LitElement {
     baseStyles,
     fieldStyles,
     css`
+      [popover].\\:popover-open {
+        z-index: 100;
+      }
+
       :host {
         display: block;
         max-width: var(--wt-field-max-width);
