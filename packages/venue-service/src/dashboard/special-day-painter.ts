@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { cutoverForBusinessDay } from "@waitron/shared";
 import { codeOf, currentLocale } from "@waitron/dashboard-kit";
 import {
   baseStyles,
@@ -231,11 +232,6 @@ const byStart = (cutover: string) => (a: Paint, b: Paint) =>
 const columnLabel = (date: LocalDate) =>
   `${formatWeekday(date, "short")} ${formatMonthDay(date.slice(5))}`;
 
-/**
- * One special day in a full-screen painter: its name, dates and Every year in a side panel, and a
- * column per date with that date's Closed tick under its heading. A stored day opens on what is
- * stored; Save sends the facts and takes the answer as the new saved state.
- */
 @customElement("special-day-painter")
 export class SpecialDayPainter extends LitElement {
   static override styles = [
@@ -364,10 +360,22 @@ export class SpecialDayPainter extends LitElement {
       .required {
         margin-inline-start: var(--wt-space-1);
       }
+      .closure-ticks {
+        display: flex;
+        flex-direction: column;
+      }
+      .venue-closed {
+        border-block-start: 1px solid var(--wt-color-border);
+      }
+      .tick:has(input:disabled) {
+        color: var(--wt-color-text-muted);
+        cursor: default;
+      }
       .tick {
         display: inline-flex;
         align-items: center;
         gap: var(--wt-space-1);
+        min-block-size: var(--wt-tap-min);
         cursor: pointer;
       }
       .tick input {
@@ -433,6 +441,7 @@ export class SpecialDayPainter extends LitElement {
   /** A new day pre-filled from a public holiday can be saved as it opened. */
   private savableAtOpen = false;
   private baseline: Draft = blank([]);
+  private beforeClosed: OwnerPaint = new Map();
   /** What the draft was seeded from, as {@link seedKey} names it. */
   private seeded?: string;
   /** The stored dates, each with the public holiday it was saved on, if any. */
@@ -501,6 +510,7 @@ export class SpecialDayPainter extends LitElement {
         equal: sameDraft,
         restore: (value) => {
           this.draft = copyDraft(value);
+          this.beforeClosed.clear();
           this.feedback.reset();
           this.refused = undefined;
           this.notice = "";
@@ -757,6 +767,7 @@ export class SpecialDayPainter extends LitElement {
     name = "",
     kept: OwnerPaint = new Map(),
   ) {
+    this.beforeClosed.clear();
     this.stored = new Map(detail?.dates.map(({ date, holidayName }) => [date, holidayName]));
     this.vacated = undefined;
     this.savableAtOpen = !detail && name !== "";
@@ -1172,6 +1183,39 @@ export class SpecialDayPainter extends LitElement {
     });
   }
 
+  private dateCutover(date: LocalDate): string {
+    return (
+      this.seasonDays.get(date)?.dayCutover ??
+      cutoverForBusinessDay(this.model.businessDayClock, date)
+    );
+  }
+  private departmentClosed(owner: string, date: LocalDate): boolean {
+    const day = this.draft.paint.get(owner)?.get(date) ?? [];
+    const cutover = this.dateCutover(date);
+    return (
+      day.length === 1 &&
+      day[0]!.periodId === null &&
+      day[0]!.startsAt === cutover &&
+      day[0]!.endsAt === cutover
+    );
+  }
+  private setDepartmentClosed(owner: string, date: LocalDate, closed: boolean) {
+    const paint = new Map(this.draft.paint);
+    const days = new Map(paint.get(owner));
+    const prior = new Map(this.beforeClosed.get(owner));
+    if (closed) {
+      prior.set(date, days.get(date) ?? []);
+      const cutover = this.dateCutover(date);
+      days.set(date, [{ periodId: null, startsAt: cutover, endsAt: cutover }]);
+    } else {
+      days.set(date, prior.get(date) ?? []);
+      prior.delete(date);
+    }
+    this.beforeClosed.set(owner, prior);
+    paint.set(owner, days);
+    this.change({ ...this.draft, paint });
+  }
+
   private department(): Department | undefined {
     const active = this.model.departments.filter(({ active }) => active);
     return active.find(({ id }) => id === this.departmentId) ?? active[0];
@@ -1384,19 +1428,36 @@ export class SpecialDayPainter extends LitElement {
           </p>`
         : nothing
     }`;
+    const zone = department && this.zone(department);
+    const owner = department ? (zone ? zoneKey(zone.id) : departmentKey(department.id)) : undefined;
     const ticks = this.draft.dates.map(
       ({ date, closedAllDay }) =>
-        html`<label slot=${`column-head-${date}`} class="tick"
-          ><input
-            type="checkbox"
-            name=${`closed.${date}`}
-            aria-label=${`${t("special.closed")}, ${formatLongDate(date)}`}
-            .checked=${closedAllDay}
-            ?disabled=${locked}
-            @change=${(event: Event) =>
-              this.setClosed(date, (event.target as HTMLInputElement).checked)}
-          />${t("hours.closed")}</label
-        >`,
+        html` <div slot=${`column-head-${date}`} class="closure-ticks">
+          ${
+            department && !zone
+              ? html`<label class="tick">
+                  <input
+                    type="checkbox"
+                    name=${`closed.${date}`}
+                    aria-label=${`${format("painter.department_closed", { department: department.name })}, ${formatLongDate(date)}`}
+                    .checked=${closedAllDay || this.departmentClosed(owner!, date)}
+                    ?disabled=${locked || closedAllDay}
+                    @change=${(event: Event) => this.setDepartmentClosed(owner!, date, (event.target as HTMLInputElement).checked)}
+                  />${t("hours.closed")}</label
+                >`
+              : nothing
+          }
+          <label class="tick venue-closed">
+            <input
+              type="checkbox"
+              name=${`venueClosed.${date}`}
+              aria-label=${`${t("hours.close_whole_venue")}, ${formatLongDate(date)}`}
+              .checked=${closedAllDay}
+              ?disabled=${locked}
+              @change=${(event: Event) => this.setClosed(date, (event.target as HTMLInputElement).checked)}
+            />${t("hours.close_whole_venue")}</label
+          >
+        </div>`,
     );
     const columnErrors = (shown: string | undefined) =>
       this.refused?.column && (this.refused.owner === undefined || this.refused.owner === shown)
@@ -1423,8 +1484,6 @@ export class SpecialDayPainter extends LitElement {
               >${ticks}</paint-grid
             >`
       }`;
-    const zone = this.zone(department);
-    const owner = zone ? zoneKey(zone.id) : departmentKey(department.id);
     const chosen = this.effectiveChosen(department, zone !== undefined);
     const periods = zone ? this.zonePeriods(department) : department.periods;
     const stopped = this.loading || this.loadFailed || this.offered !== undefined;
@@ -1457,7 +1516,7 @@ export class SpecialDayPainter extends LitElement {
         : html`<paint-grid
             .target=${`${this.seeded ?? ""}/${owner}`}
             .columns=${this.columns()}
-            .days=${zone ? this.zoneDays(this.draft.paint.get(owner) ?? NOTHING_BY_KEY, cutover) : (this.draft.paint.get(owner) ?? NOTHING_BY_KEY)}
+            .days=${zone ? this.zoneDays(this.draft.paint.get(owner!) ?? NOTHING_BY_KEY, cutover) : (this.draft.paint.get(owner!) ?? NOTHING_BY_KEY)}
             .underlay=${this.underlay(department, zone?.id, cutover)}
             .closedBehind=${within ? this.closedBehind(department, within) : NOTHING_BY_KEY}
             .periods=${periods}
@@ -1468,7 +1527,7 @@ export class SpecialDayPainter extends LitElement {
             .cutover=${cutover}
             .readOnly=${this.readOnly || stopped}
             .columnErrors=${columnErrors(owner)}
-            @paint-change=${(event: CustomEvent<PaintChange>) => this.paint(owner, event)}
+            @paint-change=${(event: CustomEvent<PaintChange>) => this.paint(owner!, event)}
             >${ticks}</paint-grid
           >`
     }`;
@@ -1492,8 +1551,13 @@ export class SpecialDayPainter extends LitElement {
   /** The dates ticked Closed, kept while they stay so the grid sees the same set. */
   private shutDates?: { key: string; dates: ReadonlySet<LocalDate> };
   private closedDates(): ReadonlySet<LocalDate> {
+    const department = this.department();
+    const owner = department && !this.zone(department) ? departmentKey(department.id) : undefined;
     const dates = this.draft.dates
-      .filter(({ closedAllDay }) => closedAllDay)
+      .filter(
+        ({ date, closedAllDay }) =>
+          closedAllDay || (owner !== undefined && this.departmentClosed(owner, date)),
+      )
       .map(({ date }) => date);
     const key = dates.join(",");
     if (this.shutDates?.key !== key) this.shutDates = { key, dates: new Set(dates) };

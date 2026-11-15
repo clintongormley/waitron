@@ -8,6 +8,14 @@ For the period detail, choose **Open this week** in the pop-up. In Week, click a
 
 To change the usual timetable, choose **Edit <season>'s standard week** beside the season at the top of the pop-up. For an exception, choose **Make a special day** at the bottom.
 
+## Close a department for a special day {#department-closed}
+
+In the special-day editor, choose the department and tick **Closed** under the date. This closes that department all day and leaves the others on their own hours. A full-day Closed stroke also checks this tick. Untick it before painting new hours.
+
+To close every department, use the separate **Close the whole venue** tick under that date. Untick it to change an individual department’s closure.
+
+If an all-day closure blocks a change to the venue’s business-day start, untick the listed closures and save. Change the start time, then paint the closures again.
+
 ## Paint a zone closure {#zone-closures}
 
 Paint the zone’s whole **Closed** stretch, even past its department’s current closing time.

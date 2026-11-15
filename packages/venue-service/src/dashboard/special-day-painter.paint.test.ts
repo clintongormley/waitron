@@ -338,7 +338,7 @@ describe("the department and zone picker", () => {
     expect(grid(painter).readOnly).toBe(true);
     expect(grid(painter).columns.map(({ key }) => key)).toEqual([DEC_14, DEC_15, DEC_25]);
     expect(
-      painter.shadowRoot!.querySelector<HTMLInputElement>(`input[name="closed.${DEC_14}"]`)!
+      painter.shadowRoot!.querySelector<HTMLInputElement>(`input[name="venueClosed.${DEC_14}"]`)!
         .disabled,
     ).toBe(false);
   });
@@ -452,11 +452,111 @@ describe("the department and zone picker", () => {
   });
 });
 
+describe("department Closed", () => {
+  const tick = (el: SpecialDayPainter, date: string) =>
+    el.shadowRoot!.querySelector<HTMLInputElement>(`input[name="closed.${date}"]`)!;
+
+  it("restores prior draft hours when an unsaved closure is unticked, keeping other owners", async () => {
+    const { painter, writes } = await mount();
+    painter.model = {
+      ...painter.model,
+      departments: painter.model.departments.map((d) =>
+        d.id === "d2" ? { ...d, active: true, name: "Deli" } : d,
+      ),
+    };
+    chip(painter, "paint-p2").click();
+    await drag(painter, DEC_14, at("19:00"), at("22:00"));
+    tick(painter, DEC_14).click();
+    await settle(painter);
+    expect(grid(painter).days.get(DEC_14)).toEqual([closed("06:00", "06:00")]);
+    await pick(painter, "d2");
+    expect(tick(painter, DEC_14).checked).toBe(false);
+    expect(grid(painter).closedAllDay.has(DEC_14)).toBe(false);
+    await pick(painter, "d1");
+    tick(painter, DEC_14).click();
+    await settle(painter);
+    expect(grid(painter).days.get(DEC_14)).toEqual([dinner("19:00", "22:00")]);
+    tick(painter, DEC_15).click();
+    await settle(painter);
+    tick(painter, DEC_15).click();
+    await settle(painter);
+    expect(grid(painter).days.get(DEC_15)).toEqual([]);
+    saveButton(painter).click();
+    await expect.poll(() => writes.length).toBe(1);
+    expect(writes[0]!.body).toMatchObject({
+      paint: [{ departmentId: "d1", date: DEC_14, ranges: [dinner("19:00", "22:00")] }],
+    });
+  });
+
+  it("uses each date's changeover for saved all-day paint and draws mixed dates closed", async () => {
+    const { painter, writes } = await mount({
+      season: (date) => ({ dayCutover: date === DEC_14 ? "05:00" : "06:00" }),
+      days: {
+        sd1: storedDay({
+          paint: [{ departmentId: "d1", date: DEC_14, ranges: [closed("05:00", "05:00")] }],
+        }),
+      },
+    });
+    expect(tick(painter, DEC_14).checked).toBe(true);
+    expect(grid(painter).closedAllDay.has(DEC_14)).toBe(true);
+    tick(painter, DEC_14).click();
+    tick(painter, DEC_15).click();
+    await settle(painter);
+    expect(grid(painter).closedAllDay.has(DEC_14)).toBe(false);
+    expect(grid(painter).closedAllDay.has(DEC_15)).toBe(true);
+    expect(
+      grid(painter).shadowRoot!.querySelector(`.day[data-column="${DEC_15}"] .all-closed`)!
+        .textContent,
+    ).toContain("Closed all day");
+    await drag(painter, DEC_15, at("12:00"), at("14:00"));
+    saveButton(painter).click();
+    await expect.poll(() => writes.length).toBe(1);
+    expect(writes[0]!.body).toMatchObject({
+      paint: [
+        { departmentId: "d1", date: DEC_14, ranges: [] },
+        { departmentId: "d1", date: DEC_15, ranges: [closed("06:00", "06:00")] },
+      ],
+    });
+  });
+
+  it("a hand-painted all-day closure locks its column until Closed is unticked", async () => {
+    const { painter } = await mount();
+    chip(painter, "paint-closed").click();
+    await drag(painter, DEC_14, 0, 1440);
+    expect(tick(painter, DEC_14).checked).toBe(true);
+    expect(grid(painter).closedAllDay.has(DEC_14)).toBe(true);
+    chip(painter, "paint-p2").click();
+    await drag(painter, DEC_14, at("19:00"), at("22:00"));
+    expect(grid(painter).days.get(DEC_14)).toEqual([closed("06:00", "06:00")]);
+    tick(painter, DEC_14).click();
+    await settle(painter);
+    await drag(painter, DEC_14, at("19:00"), at("22:00"));
+    expect(grid(painter).days.get(DEC_14)).toEqual([dinner("19:00", "22:00")]);
+  });
+
+  it("a whole-venue closure checks and disables department Closed, which is absent for zones", async () => {
+    const { painter } = await mount();
+    expect(tick(painter, DEC_25).checked).toBe(true);
+    expect(tick(painter, DEC_25).disabled).toBe(true);
+    painter
+      .shadowRoot!.querySelector<HTMLInputElement>(`input[name="venueClosed.${DEC_25}"]`)!
+      .click();
+    await settle(painter);
+    expect(tick(painter, DEC_25).checked).toBe(false);
+    expect(tick(painter, DEC_25).disabled).toBe(false);
+    painter.readOnly = true;
+    await settle(painter);
+    expect(tick(painter, DEC_14).disabled).toBe(true);
+    await pick(painter, "zone:z1");
+    expect(painter.shadowRoot!.querySelector(`input[name="closed.${DEC_14}"]`)).toBeNull();
+  });
+});
+
 describe("a date ticked Closed", () => {
   const column = (el: SpecialDayPainter, date: string) =>
     grid(el).shadowRoot!.querySelector<HTMLElement>(`.day[data-column="${date}"]`)!;
   const tick = (el: SpecialDayPainter, date: string) =>
-    el.shadowRoot!.querySelector<HTMLInputElement>(`input[name="closed.${date}"]`)!;
+    el.shadowRoot!.querySelector<HTMLInputElement>(`input[name="venueClosed.${date}"]`)!;
 
   it("draws closed all day across its column, over its season and its paint, and unticking shows the paint again", async () => {
     const { painter, writes } = await mount();
@@ -952,7 +1052,7 @@ describe("a zone's closures are stored independently of department hours", () =>
   it("a date unticked from Closed all day allows a zone's full Closed stroke", async () => {
     const { painter } = await mount({ season: restaurantOnly });
     const tick = () =>
-      painter!.shadowRoot!.querySelector<HTMLInputElement>(`input[name="closed.${DEC_15}"]`)!;
+      painter!.shadowRoot!.querySelector<HTMLInputElement>(`input[name="venueClosed.${DEC_15}"]`)!;
     tick().click();
     await settle(painter);
     await pick(painter, "zone:z2");

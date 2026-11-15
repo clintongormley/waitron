@@ -747,7 +747,9 @@ describe("a refused save", () => {
       ],
     });
     await pick(painter, "zone:z1");
-    painter.shadowRoot!.querySelector<HTMLInputElement>(`input[name="closed.${DEC_15}"]`)!.click();
+    painter
+      .shadowRoot!.querySelector<HTMLInputElement>(`input[name="venueClosed.${DEC_15}"]`)!
+      .click();
     await settle(painter);
     await save(painter, writes);
     expect(frame(painter).refusal).toBe(
@@ -1000,7 +1002,9 @@ describe("a live update while the day is open", () => {
   it("a date another manager removed stays while the draft has changed its Closed tick, beside a removal it follows", async () => {
     const days = { sd1: storedDay() };
     const { painter, writes } = await mount({ days });
-    painter.shadowRoot!.querySelector<HTMLInputElement>(`input[name="closed.${DEC_14}"]`)!.click();
+    painter
+      .shadowRoot!.querySelector<HTMLInputElement>(`input[name="venueClosed.${DEC_14}"]`)!
+      .click();
     await settle(painter);
     days.sd1 = storedDay({ dates: storedDay().dates.slice(2) });
     await deliver(painter);

@@ -660,11 +660,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   "Calendar marks" bundle.
   [Detail](backlog/service-periods.md#a1546-the-calendar-prep-station-hours-and-the-day-box)
 
-- **A1547. Closed on a special day closes the chosen department, not the whole venue (owner,
-  2026-11-15).** With Deli chosen in the special-day editor, ticking Closed closes the restaurant and
-  bar too.
-  [Detail](backlog/service-periods.md#a1547-closed-on-a-special-day-closes-the-chosen-department-not-the-whole-venue)
-
 - **One rule for two managers editing at once** (bundle of 6, 2 important, size M). Holds A1073. [Detail](backlog/service-periods.md#bundle-one-rule-for-two-managers-editing-at-once)
 
 - **Loose ends left by A755 (#1809).**

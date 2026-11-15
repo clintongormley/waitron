@@ -106,7 +106,7 @@ const removeRun = async (el: SpecialDayPainter, first: string) => {
 const dated = (...dates: string[]) =>
   storedDay({ dates: dates.map((date) => ({ date, closedAllDay: false })) });
 const tick = (el: SpecialDayPainter, date: string) =>
-  el.shadowRoot!.querySelector<HTMLInputElement>(`input[name="closed.${date}"]`)!;
+  el.shadowRoot!.querySelector<HTMLInputElement>(`input[name="venueClosed.${date}"]`)!;
 const saveButton = (el: SpecialDayPainter) =>
   frame(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
 async function typeName(el: SpecialDayPainter, value: string) {
@@ -151,7 +151,9 @@ describe("a stored special day", () => {
       false,
       true,
     ]);
-    expect(tick(painter, "2026-12-14").closest("label")!.slot).toBe("column-head-2026-12-14");
+    expect(tick(painter, "2026-12-14").closest(".closure-ticks")!.getAttribute("slot")).toBe(
+      "column-head-2026-12-14",
+    );
     expect(saveButton(painter).disabled).toBe(true);
   });
 
@@ -757,6 +759,56 @@ describe("dates", () => {
     part(painter, "add-dates")!.click();
     await settle(painter);
     expect(painter.shadowRoot!.querySelector("add-dates-calendar")).toBeNull();
+  });
+
+  it("Closed saves all-day paint for the chosen department and date only", async () => {
+    const { painter, writes } = await mount();
+    painter.shadowRoot!.querySelector<HTMLInputElement>('input[name="closed.2026-12-15"]')!.click();
+    await settle(painter);
+    await save(painter, writes);
+    expect(writes[0]!.body).toEqual({
+      name: "Christmas dinners",
+      repeatsYearly: false,
+      expectedClockRevision: 4,
+      dates: [
+        { date: "2026-12-14", closedAllDay: false },
+        { date: "2026-12-15", closedAllDay: false },
+        { date: "2026-12-25", closedAllDay: true },
+      ],
+      paint: [
+        {
+          departmentId: "d1",
+          date: "2026-12-15",
+          ranges: [{ periodId: null, startsAt: "06:00", endsAt: "06:00" }],
+        },
+      ],
+    });
+    expect(grid(painter).days.get("2026-12-15")).toEqual([
+      { periodId: null, startsAt: "06:00", endsAt: "06:00" },
+    ]);
+  });
+
+  it("department Closed uses the scheduled changeover when the season read fails", async () => {
+    const { painter, writes } = await mount({ failingSeason: () => true });
+    painter.model = {
+      ...painter.model,
+      businessDayClock: {
+        ...painter.model.businessDayClock,
+        cutoverChanges: [{ effectiveBusinessDay: "2026-12-15", dayCutover: "07:00" }],
+      },
+    };
+    await settle(painter);
+    await expect.poll(() => part(painter, "season-error")).not.toBeNull();
+    painter.shadowRoot!.querySelector<HTMLInputElement>('input[name="closed.2026-12-15"]')!.click();
+    await settle(painter);
+    await save(painter, writes);
+    expect((writes[0]!.body as { paint: unknown }).paint).toEqual([
+      {
+        departmentId: "d1",
+        date: "2026-12-15",
+        ranges: [{ periodId: null, startsAt: "07:00", endsAt: "07:00" }],
+      },
+    ]);
   });
 
   it("a date's Closed tick changes that date alone", async () => {

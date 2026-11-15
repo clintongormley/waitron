@@ -88,7 +88,6 @@ const en = {
   "special.add_dates": "+ Add dates…",
   "special.remove_date": "Remove {date}",
   "special.no_dates": "Add dates to paint them.",
-  "special.closed": "Closed all day",
   "special.every_year": "Every year",
   "special.holiday_note":
     "With Yes, a date on a holiday repeats on that holiday, whatever its date that year.",
@@ -114,9 +113,9 @@ const en = {
   "special.changeover_differs":
     "These dates start their day at different times; drawn from {time}.",
   "special.explain":
-    "Each date starts with its season's usual hours, shown faded. Drag down a day to paint the hours you want instead, or drag over a block to replace it. Paint Closed to shut part of a day, or tick Closed under a date to shut it all day.",
+    "Each date starts with its season's usual hours, shown faded. Drag down a day to paint the hours you want instead, or drag over a block to replace it. Paint Closed to shut part of a day, or tick Closed under a date to close this department all day. Close the whole venue is separate.",
   "special.zone_explain":
-    "The department's hours and this zone's usual closures are shown faded. Drag down a day with Open or Closed to change that part of the day. Tick Closed under a date to shut it all day.",
+    "The department's hours and this zone's usual closures are shown faded. Drag down a day with Open or Closed to change that part of the day. Paint the whole day Closed to close this zone all day. Close the whole venue is separate.",
   "season.seasons": "Seasons",
   "season.new_row": "New season {number}",
   "season.row_field": "{field}: {name}",
@@ -694,9 +693,7 @@ const en = {
   "hours.colour_required": "Choose a colour.",
   "hours.colour_used_by": "{colour}, used by {names}",
   "hours.add_date": "Add a date",
-  "hours.close_venue": "Close the whole venue on a date",
   "hours.add_heading": "Add a special date",
-  "hours.close_heading": "Close the whole venue",
   "hours.default_station": "{name}: Always open (default station)",
   "hours.actions": "Actions",
   "hours.row_actions": "Actions: {name}",
@@ -1023,7 +1020,6 @@ const es: Record<keyof typeof en, string> = {
   "special.add_dates": "+ Añadir fechas…",
   "special.remove_date": "Quitar {date}",
   "special.no_dates": "Añade fechas para pintarlas.",
-  "special.closed": "Cerrado todo el día",
   "special.every_year": "Cada año",
   "special.holiday_note":
     "Con Sí, una fecha en un festivo se repite en ese festivo, caiga en la fecha que caiga ese año.",
@@ -1050,9 +1046,9 @@ const es: Record<keyof typeof en, string> = {
   "special.changeover_differs":
     "Estas fechas empiezan el día a horas distintas; se dibujan desde las {time}.",
   "special.explain":
-    "Cada fecha empieza con el horario habitual de su temporada, en tenue. Arrastra por un día para pintar el horario que quieras, o sobre un bloque para sustituirlo. Pinta Cerrado para cerrar parte del día, o marca Cerrado bajo una fecha para cerrarla entera.",
+    "Cada fecha empieza con el horario habitual de su temporada, en tenue. Arrastra por un día para pintar el horario que quieras, o sobre un bloque para sustituirlo. Pinta Cerrado para cerrar parte del día, o marca Cerrado bajo una fecha para cerrar este departamento todo el día. Cerrar todo el establecimiento es una opción aparte.",
   "special.zone_explain":
-    "El horario del departamento y los cierres habituales de esta zona aparecen en tenue. Arrastra por un día con Abierto o Cerrado para cambiar ese tramo. Marca Cerrado bajo una fecha para cerrarla entera.",
+    "El horario del departamento y los cierres habituales de esta zona aparecen en tenue. Arrastra por un día con Abierto o Cerrado para cambiar ese tramo. Pinta todo el día como Cerrado para cerrar esta zona todo el día. Cerrar todo el establecimiento es una opción aparte.",
   "season.seasons": "Temporadas",
   "season.new_row": "Temporada nueva {number}",
   "season.row_field": "{field}: {name}",
@@ -1645,9 +1641,7 @@ const es: Record<keyof typeof en, string> = {
   "hours.colour_required": "Elige un color.",
   "hours.colour_used_by": "{colour}, en uso por {names}",
   "hours.add_date": "Añadir una fecha",
-  "hours.close_venue": "Cerrar todo el establecimiento una fecha",
   "hours.add_heading": "Añadir una fecha especial",
-  "hours.close_heading": "Cerrar todo el establecimiento",
   "hours.default_station": "{name}: Siempre abierta (estación predeterminada)",
   "hours.actions": "Acciones",
   "hours.row_actions": "Acciones: {name}",
