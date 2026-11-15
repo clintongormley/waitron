@@ -68,7 +68,7 @@ const complete = (regionCode: string) => [
 describe("source artifacts", () => {
   const files: Record<string, string> = {
     [ANNEX]: ANNEX_FILE,
-    "BOE-A-2026-21254": ANNEX_2027_FILE,
+    [ANNEX_2027]: ANNEX_2027_FILE,
     "BOE-A-2015-2294": "BOE-A-2015-2294.xml",
     "INE-cod_ccaa_provincia": "ine-cod_ccaa_provincia.htm",
     "INE-cod_islas": "ine-cod_islas.htm",
@@ -82,7 +82,7 @@ describe("source artifacts", () => {
 
   it.each([
     [ANNEX, annex],
-    ["BOE-A-2026-21254", annex2027],
+    [ANNEX_2027, annex2027],
   ])("names the BOE resolution %s by its own title and address", (id, page) => {
     const annexSource = calendar.sources.find((source) => source.id === id)!;
     expect(annexSource.title).toBe(page.title);
@@ -272,33 +272,6 @@ describe("Spain's 2026 holidays", () => {
     expect(ids(day("Las Palmas", "2026-05-30"))).toEqual([`shipped:${ANNEX}:3005`]);
   });
 
-  it("describes 2028, not yet published nationally, as a missing year", () => {
-    expect(
-      calendar.read({ provinceCode: "41", areaKey: null, from: "2027-12-25", to: "2028-01-06" }),
-    ).toEqual({
-      facts: [
-        {
-          id: `shipped:${ANNEX_2027}:2512`,
-          date: "2027-12-25",
-          name: "Natividad del Señor",
-          englishName: "Christmas Day",
-          scope: "national",
-          sourceId: ANNEX_2027,
-        },
-      ],
-      coverage: [
-        {
-          year: 2027,
-          state: "complete",
-          regionCode: "01",
-          dataVersion: "ES-2027.1",
-          sourceIds: [ANNEX_2027],
-        },
-        { year: 2028, state: "missing_year", regionCode: "01", dataVersion: null, sourceIds: [] },
-      ],
-    });
-  });
-
   it("allows two local holidays a year, as the resolution's local-holiday paragraph says", () => {
     expect(
       annex.paragraphs.some((text) =>
@@ -339,6 +312,33 @@ describe("Spain's 2027 holidays", () => {
       `shipped:${ANNEX_2027}:note-1:fuerteventura`,
     ]);
     expect(ids(day("Las Palmas", "2027-09-17", "gran-canaria"))).toEqual([]);
+  });
+
+  it("describes 2028, not yet published nationally, as a missing year", () => {
+    expect(
+      calendar.read({ provinceCode: "41", areaKey: null, from: "2027-12-25", to: "2028-01-06" }),
+    ).toEqual({
+      facts: [
+        {
+          id: `shipped:${ANNEX_2027}:2512`,
+          date: "2027-12-25",
+          name: "Natividad del Señor",
+          englishName: "Christmas Day",
+          scope: "national",
+          sourceId: ANNEX_2027,
+        },
+      ],
+      coverage: [
+        {
+          year: 2027,
+          state: "complete",
+          regionCode: "01",
+          dataVersion: "ES-2027.1",
+          sourceIds: [ANNEX_2027],
+        },
+        { year: 2028, state: "missing_year", regionCode: "01", dataVersion: null, sourceIds: [] },
+      ],
+    });
   });
 });
 

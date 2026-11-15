@@ -3,7 +3,7 @@ import { ALL, rowsFrom, type SpanishHolidayYear } from "./rows.js";
 
 const SOURCE = ANNEX_2027.id;
 // This page gives its rows no ids, so each key is the row's day and month, lettered in page order
-// where two rows share a date, as 2026's page ids are.
+// where two rows share a date.
 const { annex, note } = rowsFrom(SOURCE);
 
 export const SPAIN_2027: SpanishHolidayYear = {

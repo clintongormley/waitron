@@ -293,10 +293,11 @@ its id. Left open by A789 slice 3, #2051 (plan D33).
 
 ## Decisions and deliberate limits
 
-- **The holiday area has no "not chosen" choice once one is picked** (lane C, 2026-11-15, with the
-  2027 holiday data). A province with areas needs one chosen for its area holidays to apply, and
-  a wrong pick is corrected by picking the right one, so no real event needs going back to none.
-  Open to the owner.
+- **A holiday name has one date per year in each place** (lane C's default, 2026-11-15, with the
+  2027 holiday data). `readHolidayDates` (`packages/venue-service/src/holidays.ts`) keeps only a
+  name's first date in a year. Rather than change that reader, the test "never gives two holidays
+  one name in a year, in any place a venue can choose" in `packages/country-es/src/holidays.test.ts`
+  fails on shipped data that gives a name two dates in one place.
 
 _2026-11-14, A1536: Seasons and Periods now have module-contributed pages beside Calendar.
 The A719/A721 window decisions below describe their earlier presentation; see
@@ -617,7 +618,7 @@ the season painter continues saving through the season-week route._
   caught: the route takes no expected address, and an area save already on its way has the same
   gap. The address-change warning names only the new city, though a province change also
   triggers it. The owner decided on 2026-10-06 not to queue these, or the clear-area control
-  (listed among the smaller notes from the public holidays reviews, above).
+  (a way to clear a chosen holiday area back to "not chosen"; the route accepts it).
 
 ### A723's plan defaults sent to the owner as an FYI
 

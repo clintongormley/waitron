@@ -89,7 +89,7 @@ export function parseAnnex(xml: string): Annex {
   );
   const table = body.slice(0, body.indexOf("</table>"));
   // The 2026 page marks its region headers, month cells and row ids with attributes; the 2027 page
-  // has none, so its regions are the last header row and a row's id is built as 2026's read.
+  // has none, so its regions are the last header row and a row's id is its day and month.
   const marked = /<th axis="comunidad"/.test(table);
   const headerRows = [...table.matchAll(/<tr>([\s\S]*?)<\/tr>/g)].filter(([, row]) =>
     row!.includes("<th"),

@@ -64,7 +64,7 @@ Deliberate territorial choices:
 - A Canary island's holiday applies only on that island; with no island chosen it is left out and
   the year's coverage says `area_required`.
 - In Lleida, 26 December 2026 and 29 March 2027 apply outside Arán, and 17 June inside it; with no
-  choice, both are left out. 26 December 2026 still applies in the rest of Cataluña and in Illes
+  choice, none of them applies. 26 December 2026 still applies in the rest of Cataluña and in Illes
   Balears, and 29 March 2027 in the rest of Cataluña and the other regions the annex marks.
 - Annex rows are national (`*`, `**`) or regional (`***`) by their mark; note holidays are regional.
 

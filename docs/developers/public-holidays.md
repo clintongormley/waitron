@@ -163,15 +163,18 @@ These steps assume Spain; another country follows the same shape with its own of
    run `shasum -a 256` on it, and record the hash in `sources.ts` and in the sources `README.md`
    table with the fetch date and the resolution's publication date. For each territorial note or
    unusual cell the data depends on, write down where it sits in the annex (the row and column, or
-   the note's number), as the README does for 2026's notes 1 and 2. A moved address is not a new
+   the note's number), as the README's "2027" section does for its notes 1 and 2. A moved address is not a new
    fact. A changed hash for a page already
    shipped means the page changed: compare its rows again before shipping anything.
 4. **Transcribe and compare.** Write `es-YYYY.ts` by hand from the annex and notes, with data
    version `ES-YYYY.1`; a correction to a shipped year raises the revision (`ES-YYYY.2`). Keep every
    earlier year and every fact key unchanged, because a fact's id is `shipped:` plus its key. Keep
    each row's regions as the annex marks them. Never fill an empty cell from last year, and never
-   work out a moved Monday yourself. Point the annex comparison test at the new year and read every
-   difference it reports against the page.
+   work out a moved Monday yourself. Add the year to `SPAIN_HOLIDAY_YEARS` in
+   `packages/country-es/src/holidays.ts`; in `holidays.test.ts`, add its resolution to the source
+   artifacts' `files` map and the title-and-address `it.each`, add the year to the annex
+   comparison's `describe.each` list and the one-name check's pinned year list, and move the "not
+   yet published" case to the next year. Read every difference the comparison reports against the page.
 5. **Verify.** Run the three country suites, then the venue-service holiday suites:
 
    ```sh
