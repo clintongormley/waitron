@@ -37,7 +37,6 @@ import { DEMO_DATA_SETS } from "../scripts/demo-seed/data-set.js";
 const operationDescription = ALL_MODULES.find((module) => module.fiscal?.id === "verifactu")!
   .fiscal!.venueFields!.defaults!.operationDescription;
 
-
 function venueWithLocales(invoiceLocales: string[], country = "ES"): VenueRequest {
   return {
     country,
