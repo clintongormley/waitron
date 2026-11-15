@@ -100,7 +100,10 @@ export class WtSwitch extends LitElement {
         outline-offset: var(--wt-focus-offset);
       }
 
-      /* A contrast theme repaints backgrounds as the page colour, which would hide both parts. */
+      /* A contrast theme repaints backgrounds as the page colour, which would hide both parts, so
+         they are painted in system colours the theme is told to keep. That keeps the focus ring's
+         brand colour too, so it is set here. GrayText already marks a disabled switch, so it is not
+         dimmed as well. */
       @media (forced-colors: active) {
         :host {
           --ink: CanvasText;
@@ -124,6 +127,12 @@ export class WtSwitch extends LitElement {
         }
         :host([checked]) .thumb {
           background: HighlightText;
+        }
+        :host([disabled]) {
+          opacity: 1;
+        }
+        input:focus-visible ~ .track {
+          outline-color: Highlight;
         }
       }
 

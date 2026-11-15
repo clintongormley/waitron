@@ -1,42 +1,14 @@
-/// <reference types="@vitest/browser-playwright" />
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { cdp, page } from "vitest/browser";
-import { cleanup, mount } from "../test-helpers.js";
+import { cleanup, elementPixels, emulateForcedColours, mount } from "../test-helpers.js";
 import "./wt-input.js";
 
 type Pixel = number[];
 
-async function emulateForcedColours(value: "active" | "none"): Promise<void> {
-  await cdp().send("Emulation.setEmulatedMedia", {
-    features: [{ name: "forced-colors", value }],
-  });
-}
-
 beforeEach(() => emulateForcedColours("active"));
 afterEach(async () => {
   cleanup();
-  await emulateForcedColours("none");
+  await emulateForcedColours(null);
 });
-
-/** Reads an element's pixels from a real screenshot, at points in page px. */
-async function pixels(el: Element): Promise<(x: number, y: number) => Pixel> {
-  const shot: unknown = await page.screenshot({ element: el, base64: true, save: false });
-  const image = new Image();
-  image.src = `data:image/png;base64,${shot as string}`;
-  await image.decode();
-  const canvas = document.createElement("canvas");
-  canvas.width = image.width;
-  canvas.height = image.height;
-  const context = canvas.getContext("2d")!;
-  context.drawImage(image, 0, 0);
-  const box = el.getBoundingClientRect();
-  const k = image.width / box.width;
-  return (x, y) => [
-    ...context
-      .getImageData(Math.floor((x - box.left) * k), Math.floor((y - box.top) * k), 1, 1)
-      .data.slice(0, 3),
-  ];
-}
 
 const same = (a: Pixel, b: Pixel) => a.every((v, i) => Math.abs(v - b[i]!) <= 8);
 
@@ -48,24 +20,13 @@ function fieldOf(el: HTMLElement): HTMLElement {
  * field's own background. */
 async function edgeRows(field: HTMLElement): Promise<number> {
   const box = field.getBoundingClientRect();
-  const at = await pixels(field);
+  const at = await elementPixels(field);
   const x = box.left + 6;
   const background = at(x, box.top + box.height / 2);
   let rows = 0;
   while (rows < 8 && !same(at(x, box.bottom - 0.5 - rows), background)) rows += 1;
   return rows;
 }
-
-test("forced-colours emulation applies: the control loses its background and shadow", async () => {
-  expect(matchMedia("(forced-colors: active)").matches).toBe(true);
-  const control = await mount(
-    '<div style="width: 40px; height: 40px; background: rgb(255, 0, 0); box-shadow: inset 0 0 0 10px rgb(0, 0, 255)"></div>',
-  );
-  const at = await pixels(control);
-  const box = control.getBoundingClientRect();
-  expect(same(at(box.left + 20, box.top + 20), [255, 0, 0])).toBe(false);
-  expect(same(at(box.left + 2, box.top + 2), [0, 0, 255])).toBe(false);
-});
 
 test("a field draws its bottom edge, a thicker one while focused, and one disabled line", async () => {
   const el = await mount('<wt-input label="Name"></wt-input>');
@@ -79,7 +40,7 @@ test("a field draws its bottom edge, a thicker one while focused, and one disabl
   const disabled = await mount('<wt-input label="Name" disabled></wt-input>');
   const disabledField = fieldOf(disabled);
   const box = disabledField.getBoundingClientRect();
-  const at = await pixels(disabledField);
+  const at = await elementPixels(disabledField);
   const background = at(box.left + 6, box.top + box.height / 2);
   const inkIn = (y: number) => {
     let ink = 0;
@@ -92,10 +53,18 @@ test("a field draws its bottom edge, a thicker one while focused, and one disabl
   expect(inkIn(box.bottom - 0.5 - resting)).toBe(0);
 });
 
+test("an invalid field's bottom edge is thicker than a valid one's, at the same height", async () => {
+  const valid = fieldOf(await mount('<wt-input label="Name"></wt-input>'));
+  const invalid = fieldOf(await mount('<wt-input label="Name" invalid></wt-input>'));
+  expect(await edgeRows(invalid)).toBeGreaterThan(await edgeRows(valid));
+  expect(invalid.offsetHeight).toBe(valid.offsetHeight);
+});
+
 test("outside forced colours the field's line is still its box-shadow", async () => {
   await emulateForcedColours("none");
   const el = await mount('<wt-input label="Name"></wt-input>');
   const field = fieldOf(el);
   expect(getComputedStyle(field).boxShadow).toMatch(/inset/);
   expect(getComputedStyle(field).borderBottomStyle).toBe("none");
+  expect(getComputedStyle(field, "::after").content).toBe("none");
 });

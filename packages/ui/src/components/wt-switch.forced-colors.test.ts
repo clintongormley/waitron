@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "vitest";
+import { userEvent } from "vitest/browser";
 import { cleanup, elementPixels, emulateForcedColours, mount } from "../test-helpers.js";
 import type { WtSwitch } from "./wt-switch.js";
 import "./wt-switch.js";
@@ -6,10 +7,19 @@ import "./wt-switch.js";
 beforeEach(() => emulateForcedColours("active"));
 afterEach(async () => {
   cleanup();
-  await emulateForcedColours("none");
+  await emulateForcedColours(null);
 });
 
 const distance = (a: number[], b: number[]) => Math.hypot(...a.map((v, i) => v - b[i]!));
+
+/** The pixel the contrast theme paints for a system colour, read from a swatch the theme leaves alone. */
+async function systemColour(name: "Highlight" | "GrayText"): Promise<number[]> {
+  const swatch = await mount(
+    `<div style="width: 20px; height: 20px; forced-color-adjust: none; background: ${name}"></div>`,
+  );
+  const box = swatch.getBoundingClientRect();
+  return (await elementPixels(swatch))(box.left + 10, box.top + 10);
+}
 
 /** Samples a switch under forced colours: the page background beside it, the middle of the
  * thumb's OFF place, and the middle of the track's far end, which only the ON thumb covers. */
@@ -43,16 +53,29 @@ test("an OFF switch draws its track and thumb, and ON reads differently", async 
   expect(on.start).not.toEqual(off.start);
 });
 
-test("a disabled switch is still drawn under forced colours", async () => {
+test("a disabled switch is drawn in the theme's disabled colour at full strength", async () => {
+  const grayText = await systemColour("GrayText");
   const el = (await mount(
     `<wt-switch accessible-name="Training mode" disabled></wt-switch>`,
   )) as WtSwitch;
-  const track = el.shadowRoot!.querySelector(".track")!.getBoundingClientRect();
-  const control = el.shadowRoot!.querySelector(".control")!.getBoundingClientRect();
+  const thumb = el.shadowRoot!.querySelector(".thumb")!.getBoundingClientRect();
   const at = await elementPixels(el);
-  expect(at(track.left + 4, track.top + track.height / 2)).not.toEqual(
-    at(control.right - 2, control.top + 2),
+  expect(at(thumb.left + thumb.width / 2, thumb.top + thumb.height / 2)).toEqual(grayText);
+});
+
+test("a keyboard-focused switch is ringed in the theme's highlight colour", async () => {
+  const highlight = await systemColour("Highlight");
+  const before = await mount(
+    `<button style="display: block">Before</button><wt-switch accessible-name="Training mode"></wt-switch>`,
   );
+  const el = before.nextElementSibling as WtSwitch;
+  before.focus();
+  await userEvent.tab();
+  expect(el.shadowRoot!.querySelector("input")!.matches(":focus-visible")).toBe(true);
+  const track = el.shadowRoot!.querySelector(".track")!.getBoundingClientRect();
+  const at = await elementPixels(el);
+  // The ring sits a focus offset above the track, centred on its width.
+  expect(at(track.left + track.width / 2, track.top - 3)).toEqual(highlight);
 });
 
 test("outside forced colours the track is still its fill alone", async () => {
