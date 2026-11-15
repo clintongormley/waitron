@@ -1,5 +1,11 @@
 import { guideHref } from "../help-guide.js";
-import { ReorderController, baseStyles, reorder, type ReorderModel } from "@waitron/ui";
+import {
+  ReorderController,
+  baseStyles,
+  belongsToComposition,
+  reorder,
+  type ReorderModel,
+} from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
@@ -354,7 +360,7 @@ export class CourseList extends LitElement {
   }
 
   #onKeydown(event: KeyboardEvent, edit: Edit): void {
-    if (event.key !== "Enter" && event.key !== "Escape") return;
+    if ((event.key !== "Enter" && event.key !== "Escape") || belongsToComposition(event)) return;
     // Kept from a surrounding dialog, which would close on Escape or act on Enter.
     event.preventDefault();
     event.stopPropagation();

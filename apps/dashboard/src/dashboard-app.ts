@@ -10,6 +10,7 @@ import { live } from "lit/directives/live.js";
 import { repeat } from "lit/directives/repeat.js";
 import {
   baseStyles,
+  belongsToComposition,
   chooseTheme,
   iconButtonStyles,
   ThemeChoiceController,
@@ -1546,6 +1547,13 @@ export class DashboardApp extends LitElement {
       else document.addEventListener("pointerdown", this.#onPointerDownOutsidePanel, true);
     }
     this.#placeStripPanel();
+    const page = this.#permittedNav()
+      .flatMap(({ pages }) => pages)
+      .find((entry) => entry.screen === this.screen);
+    document.title =
+      page === undefined
+        ? t("nav.document_title_none")
+        : fill("nav.document_title", { page: page.label });
     if (
       (changed.has("contentLanguagesReady") || changed.has("contentLanguageError")) &&
       this.sessionPersonId !== undefined
@@ -2607,7 +2615,7 @@ export class DashboardApp extends LitElement {
 
   /** A no-op when the drawer is closed, so it never swallows Escape from anything else. */
   #onLayoutKeydown(e: KeyboardEvent): void {
-    if (e.key === "Escape" && !e.isComposing && this.drawerOpen) this.drawerOpen = false;
+    if (e.key === "Escape" && !belongsToComposition(e) && this.drawerOpen) this.drawerOpen = false;
   }
 
   /** The pages this person may open, group by group in nav order, each labelled in the current
@@ -2877,7 +2885,7 @@ export class DashboardApp extends LitElement {
   }
 
   #onStripPanelKeydown(event: KeyboardEvent): void {
-    if (event.key !== "Escape" || event.isComposing || this.stripPanel === null) return;
+    if (event.key !== "Escape" || belongsToComposition(event) || this.stripPanel === null) return;
     event.stopPropagation();
     const icon = this.#stripPanelParts()?.icon;
     this.stripPanel = null;
@@ -3001,10 +3009,9 @@ export class DashboardApp extends LitElement {
     this.#selectScreen(screen);
   }
 
-  /** Escape is stopped only when it cleared a term, so on an empty box it still closes the drawer.
-   * A key reported with isComposing set belongs to an input method's composition, not the box. */
+  /** Escape is stopped only when it cleared a term, so on an empty box it still closes the drawer. */
   #onNavSearchKeydown(e: KeyboardEvent): void {
-    if (e.isComposing) return;
+    if (belongsToComposition(e)) return;
     if (e.key === "Enter" && this.navSearch.trim() !== "") {
       const first = this.#shownNav().find((section) => section.pages?.length)?.pages?.[0];
       if (first) this.#openFromNav(first.screen);

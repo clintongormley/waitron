@@ -3002,6 +3002,31 @@ describe("the product list as a tree", () => {
     expect(sent).toEqual([{ name: "Juice" }, { name: "Tea" }, "cancel", "cancel"]);
   });
 
+  it("sends nothing for an Enter that confirms an input method's text (key code 229), and sends on the next Enter", async () => {
+    const { el } = await mountTree();
+    const sent: unknown[] = [];
+    el.addEventListener("name-commit", (event) => sent.push((event as CustomEvent).detail));
+    el.addEventListener("name-cancel", () => sent.push("cancel"));
+    el.nameDraft = { kind: "create", parentId: null };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    await userEvent.keyboard("Juice");
+    const box = el.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!.activeElement!;
+    const event = new KeyboardEvent("keydown", {
+      key: "Enter",
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+    });
+    Object.defineProperty(event, "keyCode", { value: 229 });
+    box.shadowRoot!.querySelector("input")!.dispatchEvent(event);
+    await el.updateComplete;
+    expect(sent).toEqual([]);
+    expect(event.defaultPrevented).toBe(false);
+    await userEvent.keyboard("{Enter}");
+    expect(sent).toEqual([{ name: "Juice" }]);
+  });
+
   it("sends a name once, shows a refusal under the box, and then lets Enter send again", async () => {
     const { el, root } = await mountTree();
     const sent: unknown[] = [];

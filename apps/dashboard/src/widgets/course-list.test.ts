@@ -338,6 +338,28 @@ describe("renaming", () => {
     expect(el.shadowRoot!.activeElement).toBe(nameButton(el, "c1"));
   });
 
+  it("saves nothing on an Enter that confirms an input method's text (key code 229), and saves on the next Enter", async () => {
+    const api = stubApi();
+    const { el } = await mount(api);
+    await openRename(el, "c1");
+    await typeName(el, "Entrées");
+    const event = new KeyboardEvent("keydown", {
+      key: "Enter",
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+    });
+    Object.defineProperty(event, "keyCode", { value: 229 });
+    field(el)!.shadowRoot!.querySelector("input")!.dispatchEvent(event);
+    await settle(el);
+    expect(api.updateCourse).not.toHaveBeenCalled();
+    expect(field(el)).not.toBeNull();
+    expect(event.defaultPrevented).toBe(false);
+    await press(el, "Enter");
+    await settle(el);
+    expect(api.updateCourse).toHaveBeenCalledWith("c1", { name: "Entrées" });
+  });
+
   it("saves a changed name when focus leaves the field", async () => {
     const api = stubApi();
     const { el } = await mount(api);

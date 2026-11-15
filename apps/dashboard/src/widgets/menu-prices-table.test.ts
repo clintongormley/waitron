@@ -856,6 +856,25 @@ it("shows the inherited price as a blank field's placeholder and in its hint, re
   });
 });
 
+it("sends nothing for an Enter that confirms an input method's text (key code 229), and sends on the next Enter", async () => {
+  const el = await mount();
+  const heard = priceSaves(el);
+  await typeIn(el, "mi-burger", "9.50");
+  const event = new KeyboardEvent("keydown", {
+    key: "Enter",
+    bubbles: true,
+    composed: true,
+    cancelable: true,
+  });
+  Object.defineProperty(event, "keyCode", { value: 229 });
+  override(el, "mi-burger").shadowRoot!.querySelector("input")!.dispatchEvent(event);
+  await el.updateComplete;
+  expect(heard).not.toHaveBeenCalled();
+  expect(event.defaultPrevented).toBe(false);
+  await press(el, "mi-burger", "Enter");
+  expect(heard).toHaveBeenCalledTimes(1);
+});
+
 it("sends nothing for Enter on a field nobody changed, reading an emptied field as no price of the menu's own", async () => {
   const el = await mount();
   const heard = priceSaves(el);

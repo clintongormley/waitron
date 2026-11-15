@@ -2,6 +2,7 @@ import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { classMap } from "lit/directives/class-map.js";
 import { guard } from "lit/directives/guard.js";
+import { belongsToComposition } from "@waitron/ui-core/submit-on-enter";
 import { fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
 import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
 import { createLabelComparator, foldCache, foldForSearch, searchFor } from "@waitron/shared";
@@ -674,6 +675,7 @@ export class WtCombobox extends LitElement {
   }
 
   private async onSearchKeydown(event: KeyboardEvent): Promise<void> {
+    if (belongsToComposition(event)) return;
     if (event.key === "Enter") {
       // Whether or not a row is active, so a form's submit-on-Enter never sees it.
       event.preventDefault();
@@ -947,7 +949,7 @@ export class WtCombobox extends LitElement {
       this.closeAndReturnFocus();
       return;
     }
-    if (event.key !== "Escape") return;
+    if (event.key !== "Escape" || belongsToComposition(event)) return;
     event.preventDefault();
     event.stopPropagation();
     this.closeAndReturnFocus();

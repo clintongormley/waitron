@@ -54,13 +54,13 @@ export class WtFormActions extends LitElement {
         container-type: scroll-state;
       }
 
-      :host(:state(empty)) {
+      :host([data-actions-empty]) {
         display: none;
       }
 
       /* For the one call of the row's own scrollIntoView. Important, so a screen's own position
          for the row does not hold it during that call. */
-      :host(:state(placing)) {
+      :host([data-actions-placing]) {
         position: static !important;
       }
 
@@ -92,7 +92,7 @@ export class WtFormActions extends LitElement {
 
         /* In the row's own box for that call, so the scroll also brings in the padding a held row
            stops above, and the row lands where it is held. */
-        :host(:state(placing)) .below {
+        :host([data-actions-placing]) .below {
           position: static;
         }
       }
@@ -156,7 +156,6 @@ export class WtFormActions extends LitElement {
   /** Off while a container shows `error` instead — `wt-dialog` does, above its footer's content. */
   @property({ attribute: false }) showError = true;
 
-  private readonly internals = this.attachInternals();
   private watched!: Node;
   #focusFrame = 0;
   readonly #resize = new ResizeObserver(() => this.#fitBelow());
@@ -209,11 +208,11 @@ export class WtFormActions extends LitElement {
    * This scrolls to where the row rests at the form's end instead; with `block: "nearest"` or
    * `"end"`, what is said just above the row comes into view above it. */
   override scrollIntoView(arg?: boolean | ScrollIntoViewOptions): void {
-    this.internals.states.add("placing");
+    this.toggleAttribute("data-actions-placing", true);
     try {
       super.scrollIntoView(arg);
     } finally {
-      this.internals.states.delete("placing");
+      this.removeAttribute("data-actions-placing");
     }
   }
 
@@ -246,8 +245,7 @@ export class WtFormActions extends LitElement {
       [...this.renderRoot.querySelectorAll("slot")].some(
         (slot) => slot.assignedElements({ flatten: true }).length > 0,
       );
-    if (filled) this.internals.states.delete("empty");
-    else this.internals.states.add("empty");
+    this.toggleAttribute("data-actions-empty", !filled);
   }
 
   override updated(changed: Map<string, unknown>): void {

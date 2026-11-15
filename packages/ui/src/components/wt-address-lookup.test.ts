@@ -742,3 +742,63 @@ test("the form's line shows again for the next choice, even when its text is the
   await settle(el);
   expect(status(el)).toBe("That address is in another country.");
 });
+
+test.each(["isComposing", "keyCode 229"] as const)(
+  "an Enter that confirms an input-method character (%s) chooses no suggestion",
+  async (how) => {
+    const provider = fakeProvider();
+    const el = await mountLookup(provider, true);
+    input(el).focus();
+    type(el, "Calle Mayor");
+    await settle(el);
+    await userEvent.keyboard("{ArrowDown}");
+    const event = new KeyboardEvent("keydown", {
+      key: "Enter",
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+      isComposing: how === "isComposing",
+    });
+    if (how === "keyCode 229") Object.defineProperty(event, "keyCode", { value: 229 });
+    input(el).dispatchEvent(event);
+    await settle(el);
+    expect(provider.calls.resolve).toEqual([]);
+    expect(event.defaultPrevented).toBe(false);
+
+    await userEvent.keyboard("{Enter}");
+    await settle(el);
+    expect(provider.calls.resolve).toHaveLength(1);
+  },
+);
+
+test.each(["isComposing", "keyCode 229"] as const)(
+  "an Escape or arrow key an input method owns (%s) leaves the list alone",
+  async (how) => {
+    const el = await mountLookup();
+    const outside = vi.fn();
+    host.addEventListener("keydown", outside);
+    input(el).focus();
+    type(el, "Calle Mayor");
+    await settle(el);
+    for (const key of ["ArrowDown", "ArrowUp", "Escape"]) {
+      const event = new KeyboardEvent("keydown", {
+        key,
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+        isComposing: how === "isComposing",
+      });
+      if (how === "keyCode 229") Object.defineProperty(event, "keyCode", { value: 229 });
+      input(el).dispatchEvent(event);
+      await settle(el);
+      expect(event.defaultPrevented).toBe(false);
+    }
+    expect(options(el).length).toBeGreaterThan(0);
+    expect(outside).toHaveBeenCalledTimes(3);
+    host.removeEventListener("keydown", outside);
+
+    await userEvent.keyboard("{Escape}");
+    await el.updateComplete;
+    expect(options(el)).toHaveLength(0);
+  },
+);

@@ -441,12 +441,9 @@ export class TillShell extends LitElement {
         padding: var(--wt-space-2) var(--wt-space-4);
       }
 
-      /* wt-row-actions keeps its popup 8px from each viewport edge; what does not fit scrolls. */
-      wt-row-actions::part(popup) {
-        max-height: calc(100dvh - 2 * var(--wt-space-2));
-        overflow-y: auto;
-      }
-      /* A handheld's More opens under ☰ and scrolls rather than moving up over the bar. */
+      /* A max-height set through ::part outranks the one wt-row-actions sets on its own popup, so
+         it must never be taller than the room the menu places the popup in. A handheld's More opens
+         under ☰ and scrolls rather than moving up over the bar. */
       wt-row-actions[data-test="more-menu"]::part(popup) {
         max-height: calc(100dvh - var(--more-top, var(--wt-space-2)) - var(--wt-space-2));
       }

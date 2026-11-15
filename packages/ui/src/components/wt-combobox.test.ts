@@ -4186,3 +4186,52 @@ test("grouped options add one indent and keep the same row spacing, including se
   expect(optionRows(el)).toHaveLength(1);
   expect(parseFloat(getComputedStyle(optionRows(el)[0]!).paddingInlineStart)).toBe(30);
 });
+
+/** A keydown an input method owns: flagged as composing, or, as Safari sends it, with key code 229. */
+function composingKey(how: "isComposing" | "keyCode 229", key = "Enter"): KeyboardEvent {
+  const event = new KeyboardEvent("keydown", {
+    key,
+    bubbles: true,
+    composed: true,
+    cancelable: true,
+    isComposing: how === "isComposing",
+  });
+  if (how === "keyCode 229") Object.defineProperty(event, "keyCode", { value: 229 });
+  return event;
+}
+
+test.each(["isComposing", "keyCode 229"] as const)(
+  "an Enter that confirms an input-method character (%s) in the search box chooses nothing",
+  async (how) => {
+    const { el, trigger } = await mountWithOptions();
+    await userEvent.click(trigger);
+    await userEvent.keyboard("{ArrowDown}");
+    const event = composingKey(how);
+    searchBox(el).dispatchEvent(event);
+    await el.updateComplete;
+    expect(el.value).toBe("");
+    expect(event.defaultPrevented).toBe(false);
+
+    await userEvent.keyboard("{Enter}");
+    expect(el.value).toBe("gluten-free");
+  },
+);
+
+test.each(["isComposing", "keyCode 229"] as const)(
+  "an Escape or arrow key an input method owns (%s) in the search box leaves the list alone",
+  async (how) => {
+    const { el, trigger, popup } = await mountWithOptions();
+    await userEvent.click(trigger);
+    for (const key of ["ArrowDown", "ArrowUp", "Escape"]) {
+      const event = composingKey(how, key);
+      searchBox(el).dispatchEvent(event);
+      await el.updateComplete;
+      expect(event.defaultPrevented).toBe(false);
+    }
+    expect(popup.matches(":popover-open")).toBe(true);
+    expect(el.shadowRoot!.activeElement).toBe(searchBox(el));
+
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(false));
+  },
+);

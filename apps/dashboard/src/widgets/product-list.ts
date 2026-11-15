@@ -5,6 +5,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import {
   baseStyles,
+  belongsToComposition,
   currentContentLanguages,
   visuallyHiddenStyles,
   type DataTableColumn,
@@ -794,6 +795,7 @@ export class ProductList extends LitElement {
         this.#nameValue = event.detail.value;
       }}
       @keydown=${(event: KeyboardEvent) => {
+        if (belongsToComposition(event)) return;
         if (event.key === "Enter") {
           event.preventDefault();
           this.#commitName();

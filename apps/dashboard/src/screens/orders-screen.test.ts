@@ -292,6 +292,39 @@ describe("dashboard Orders", () => {
     );
   });
 
+  it.each([
+    ["table", "5"],
+    ["q", "Lunch"],
+  ] as const)(
+    "leaves the %s filter unapplied on an Enter that confirms an input method's text (key code 229), and applies it on the next Enter",
+    async (name, typed) => {
+      const { el, api } = await loaded();
+      // Reads after the first go through the passive API.
+      const calls = vi.mocked(api.background.listOrderPages).mock.calls;
+      const before = calls.length;
+      const box = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
+        `wt-input[name=${name}]`,
+      )!;
+      box.value = typed;
+      const enter = (keyCode?: number) => {
+        const event = new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          composed: true,
+          cancelable: true,
+        });
+        if (keyCode !== undefined) Object.defineProperty(event, "keyCode", { value: keyCode });
+        box.shadowRoot!.querySelector("input")!.dispatchEvent(event);
+      };
+      enter(229);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await el.updateComplete;
+      expect(calls).toHaveLength(before);
+      enter();
+      await vi.waitFor(() => expect(calls.at(-1)![0][name]).toBe(typed));
+    },
+  );
+
   it("refreshes changed bills through the passive API", async () => {
     const { api } = await loaded();
     api.liveData.invalidate([{ type: "working_orders", id: ROW.id }]);

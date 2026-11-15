@@ -690,6 +690,25 @@ test("shows its footer actions' message in the footer, on its own line above the
   expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
 });
 
+test("on a browser without custom states, still shows its footer actions' message in the footer", async () => {
+  const saved = Object.getOwnPropertyDescriptor(ElementInternals.prototype, "states")!;
+  delete (ElementInternals.prototype as unknown as Record<string, unknown>).states;
+  onTestFinished(() => {
+    Object.defineProperty(ElementInternals.prototype, "states", saved);
+  });
+  const el = (await mount(`<wt-dialog heading="Rename">
+    <wt-form-actions slot="footer"><button>Save</button></wt-form-actions>
+  </wt-dialog>`)) as Openable;
+  el.open = true;
+  await el.updateComplete;
+  const actions = el.querySelector("wt-form-actions")!;
+  actions.error = "Correct the highlighted fields to continue.";
+  const message = (await formMessageOf(actions))!;
+
+  expect(message.textContent).toBe("Correct the highlighted fields to continue.");
+  expect(message.parentElement).toBe(el.shadowRoot!.querySelector(".footer"));
+});
+
 test.each([
   ["a field", '<label>Passkey name <input name="passkey-name" /></label>'],
   ["a wt-input", '<wt-input name="passkey-name" label="Passkey name"></wt-input>'],
@@ -1945,17 +1964,49 @@ test("does not ask a guarded dialog on a page-body Escape the page has already h
   expect(decide).not.toHaveBeenCalled();
 });
 
-test("does not ask a guarded dialog on a page-body Escape that ends a text composition", async () => {
-  const { decide } = await openThenDisableFocusedField("wt-modal", true);
-  const escape = (isComposing: boolean) =>
-    document.body.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Escape", isComposing, bubbles: true, cancelable: true }),
-    );
-  escape(true);
-  expect(decide).not.toHaveBeenCalled();
-  escape(false);
-  expect(decide).toHaveBeenCalledExactlyOnceWith("escape");
-});
+/** An Escape keydown, flagged as ending a text composition, or carrying key code 229 alone as
+ * Safari can send it, or neither. */
+function escapeKey(how: "isComposing" | "keyCode 229" | "plain"): KeyboardEvent {
+  const event = new KeyboardEvent("keydown", {
+    key: "Escape",
+    isComposing: how === "isComposing",
+    bubbles: true,
+    composed: true,
+    cancelable: true,
+  });
+  if (how === "keyCode 229") Object.defineProperty(event, "keyCode", { value: 229 });
+  return event;
+}
+
+test.each(["isComposing", "keyCode 229"] as const)(
+  "does not ask a guarded dialog on a page-body Escape that ends a text composition (%s)",
+  async (how) => {
+    const { decide } = await openThenDisableFocusedField("wt-modal", true);
+    document.body.dispatchEvent(escapeKey(how));
+    expect(decide).not.toHaveBeenCalled();
+    document.body.dispatchEvent(escapeKey("plain"));
+    expect(decide).toHaveBeenCalledExactlyOnceWith("escape");
+  },
+);
+
+test.each(["isComposing", "keyCode 229"] as const)(
+  "does not ask a guarded dialog on an Escape in its field that ends a text composition (%s)",
+  async (how) => {
+    const el = (await mount(
+      '<wt-dialog heading="Edit"><input name="note" /></wt-dialog>',
+    )) as WtDialog;
+    const decide = vi.fn(async () => false);
+    el.beforeClose = decide;
+    el.open = true;
+    await el.updateComplete;
+    const field = el.querySelector("input")!;
+    field.focus();
+    field.dispatchEvent(escapeKey(how));
+    expect(decide).not.toHaveBeenCalled();
+    field.dispatchEvent(escapeKey("plain"));
+    expect(decide).toHaveBeenCalledExactlyOnceWith("escape");
+  },
+);
 
 /** The keydown listeners added to the document from now on and not yet removed. */
 function documentKeydownListeners(): Set<unknown> {

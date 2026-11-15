@@ -3,6 +3,7 @@ import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import { uniqueId } from "../interactive.js";
 import { modalClosed, modalOpened } from "../modal-layer.js";
+import { belongsToComposition } from "@waitron/ui-core/submit-on-enter";
 import type { LeaveReason } from "@waitron/ui-core/unsaved-changes";
 import {
   type FormErrorEvent,
@@ -212,7 +213,7 @@ export class WtDialog extends LitElement {
    * takes Escape. A bubbling listener on the document, so a handler on the body has had its say. */
   private static escapeFromPageBody(event: KeyboardEvent): void {
     if (event.key !== "Escape" || event.target !== document.body) return;
-    if (event.defaultPrevented || event.isComposing) return;
+    if (event.defaultPrevented || belongsToComposition(event)) return;
     let top: WtDialog | undefined;
     for (const each of WtDialog.openDialogs) if (!top || each.openedAt > top.openedAt) top = each;
     if (!top?.beforeClose || WtDialog.surfaceAbove(top)) return;
@@ -627,7 +628,12 @@ export class WtDialog extends LitElement {
   }
 
   private onKeydown(event: KeyboardEvent): void {
-    if (!this.beforeClose || event.key !== "Escape" || event.defaultPrevented || event.isComposing)
+    if (
+      !this.beforeClose ||
+      event.key !== "Escape" ||
+      event.defaultPrevented ||
+      belongsToComposition(event)
+    )
       return;
     if (event.composedPath().find((node) => node instanceof HTMLDialogElement) !== this.dialog)
       return;
