@@ -1806,6 +1806,9 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const body = await readJsonBody<TillSaleRequest>(c);
+      if (!Array.isArray(body.lines)) throw invalid("lines");
+      if (body.tender === null || typeof body.tender !== "object" || Array.isArray(body.tender))
+        throw invalid("tender");
       if (body.workingOrderId !== undefined) {
         requireUuidParam(body.workingOrderId, "WorkingOrderId");
       }
@@ -2817,6 +2820,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       await gateZones(deps, session, [{ orderId: id }]);
       const body = await readJsonBody<{ reason: string; override?: unknown }>(c);
+      if (typeof body.reason !== "string")
+        throw new AppError("working_order.reason_required", { workingOrderId: id });
       const override = parseOverrideField(body.override);
       await cancelPlacedOrder(
         {

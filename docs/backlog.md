@@ -1019,12 +1019,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Qualify printer identity at enrolment.** The device enrolment design's separate printer track remains. [Detail](backlog/till.md#bundle-printer-identity-at-enrolment)
 
-- **Malformed sale and cancellation bodies answer 500.** With an authenticated, permitted till,
-  `POST /api/sales` with `{}` or `{"lines": []}`, and
-  `POST /api/working-orders/:id/cancel` with `{}`, answered `500 server.internal` in A941's
-  HTTP probe. Validate the missing fields and assert the domain refusal.
-  [Detail](backlog/till.md#malformed-sale-and-cancellation-bodies)
-
 - **Nothing covers the order screen's bar** (bundle of 2, size S, needs the owner). Holds A1211, A1212. [Detail](backlog/till.md#bundle-nothing-covers-the-order-screens-bar)
 
 - **Each browser tab as its own device, in Demo too (A271, owner 2026-10-04) — OPEN, after A268.**
