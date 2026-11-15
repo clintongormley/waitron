@@ -138,7 +138,7 @@ const SERVER_FIELDS: Record<string, string> = {
   unitId: "unit",
   unitPrice: "unit-price",
   vatClass: "tax",
-  takeawayVatClass: "takeawayTax",
+  takeawayVatClass: "takeaway-tax",
   primaryCategoryId: "primary",
   color: "product-color",
   active: "active",
@@ -175,7 +175,7 @@ const DRAFT_ERROR_KEYS: Partial<Record<keyof ProductEditorDraft, string>> = {
   unitId: "unit",
   unitPrice: "unit-price",
   vatClass: "tax",
-  takeawayVatClass: "takeawayTax",
+  takeawayVatClass: "takeaway-tax",
   primaryCategoryId: "primary",
   color: "product-color",
   modifiers: "modifier",
@@ -955,7 +955,7 @@ export class ProductEditor extends LitElement {
       errors.tax = t("editor.tax_required");
     const takeaway = this.draft.takeawayVatClass;
     if (this.takeawayVat && takeaway !== null && !this.taxes.some((tax) => tax.id === takeaway))
-      errors.takeawayTax = t("editor.takeaway_vat_gone");
+      errors["takeaway-tax"] = t("editor.takeaway_vat_gone");
     if (!(variantPage && blankPrice) && !isProductPrice(this.draft.unitPrice ?? ""))
       errors["unit-price"] = t("editor.price_invalid");
     for (const [index, variant] of this.draft.variants.entries()) {
@@ -1436,7 +1436,7 @@ export class ProductEditor extends LitElement {
         : fill("editor.takeaway_vat_same", { tax: this.taxText(own!) });
     const taxes = this.taxes.map((tax) => ({ value: tax.id, label: this.taxLabel(tax) }));
     return html`<wt-combobox
-      name="takeawayTax"
+      name="takeaway-tax"
       label=${t("editor.takeaway_vat")}
       search="auto"
       searchPlaceholder=${t("categories.combobox_search")}
@@ -1444,7 +1444,7 @@ export class ProductEditor extends LitElement {
       placeholder=${empty}
       .options=${[{ value: "", label: empty }, ...taxes]}
       .value=${this.draft.takeawayVatClass ?? ""}
-      error=${this.error("takeawayTax")}
+      error=${this.error("takeaway-tax")}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
         const value = event.detail.value;

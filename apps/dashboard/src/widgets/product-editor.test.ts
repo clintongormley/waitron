@@ -5333,7 +5333,7 @@ it("words the takeaway field as staff read it", () => {
 
 it("draws a product's takeaway VAT class, its empty choice naming the class served here", async () => {
   const el = await mountTakeaway(saved);
-  const takeaway = combobox(el, "takeawayTax")!;
+  const takeaway = combobox(el, "takeaway-tax")!;
   expect(takeaway).not.toBeNull();
   expect(takeaway.label).toBe(t("editor.takeaway_vat"));
   expect(takeaway.required).toBe(false);
@@ -5344,24 +5344,24 @@ it("draws a product's takeaway VAT class, its empty choice naming the class serv
     { value: "general", label: "General (21%)" },
   ]);
   expect(takeaway.value).toBe("");
-  expect(await shownIn(el, "takeawayTax")).toBe(same("Reduced (10%)"));
+  expect(await shownIn(el, "takeaway-tax")).toBe(same("Reduced (10%)"));
   await chooseOption(combobox(el, "tax")!, "general");
   await el.updateComplete;
-  expect(combobox(el, "takeawayTax")!.placeholder).toBe(same("General (21%)"));
+  expect(combobox(el, "takeaway-tax")!.placeholder).toBe(same("General (21%)"));
 });
 
 it("saves General as general and the empty choice as null, and either alone enables Save", async () => {
   const el = await mountTakeaway(saved);
   expect(saveButton(el).hasAttribute("disabled")).toBe(true);
-  await chooseOption(combobox(el, "takeawayTax")!, "general");
+  await chooseOption(combobox(el, "takeaway-tax")!, "general");
   await el.updateComplete;
   expect(saveButton(el).hasAttribute("disabled")).toBe(false);
   expect(submittedValue(el).takeawayVatClass).toBe("general");
 
   const stored = await mountTakeaway({ ...saved, takeawayVatClass: "general" });
-  expect(combobox(stored, "takeawayTax")!.value).toBe("general");
+  expect(combobox(stored, "takeaway-tax")!.value).toBe("general");
   expect(saveButton(stored).hasAttribute("disabled")).toBe(true);
-  await chooseOption(combobox(stored, "takeawayTax")!, "");
+  await chooseOption(combobox(stored, "takeaway-tax")!, "");
   await stored.updateComplete;
   expect(saveButton(stored).hasAttribute("disabled")).toBe(false);
   expect(submittedValue(stored).takeawayVatClass).toBeNull();
@@ -5373,7 +5373,7 @@ it("names a variant's own served class as its empty takeaway choice when it has 
     vatClass: "general",
     inherited: { ...parentValues, takeawayVatClass: "reduced" },
   });
-  expect(combobox(el, "takeawayTax")!.placeholder).toBe(same("General (21%)"));
+  expect(combobox(el, "takeaway-tax")!.placeholder).toBe(same("General (21%)"));
 });
 
 it("names the product's takeaway class as a variant's empty takeaway choice when it has no served class", async () => {
@@ -5382,13 +5382,13 @@ it("names the product's takeaway class as a variant's empty takeaway choice when
     vatClass: null,
     inherited: { ...parentValues, vatClass: "reduced", takeawayVatClass: "general" },
   });
-  const takeaway = combobox(el, "takeawayTax")!;
+  const takeaway = combobox(el, "takeaway-tax")!;
   expect(takeaway.placeholder).toBe("General (21%)");
   expect(takeaway.options[0]).toEqual({ value: "", label: "General (21%)" });
 });
 
 it("refuses a takeaway class the venue does not offer, and points a server refusal at the field", async () => {
-  expect(productEditorField("takeawayVatClass", "en")).toBe("takeawayTax");
+  expect(productEditorField("takeawayVatClass", "en")).toBe("takeaway-tax");
   const el = await mountTakeaway({ ...saved, takeawayVatClass: "retired" as never });
   await edit(el);
   const submit = vi.fn();
@@ -5396,15 +5396,15 @@ it("refuses a takeaway class the venue does not offer, and points a server refus
   save(el);
   await el.updateComplete;
   expect(submit).not.toHaveBeenCalled();
-  expect(combobox(el, "takeawayTax")!.error).toBe(t("editor.takeaway_vat_gone"));
-  await chooseOption(combobox(el, "takeawayTax")!, "");
+  expect(combobox(el, "takeaway-tax")!.error).toBe(t("editor.takeaway_vat_gone"));
+  await chooseOption(combobox(el, "takeaway-tax")!, "");
   await el.updateComplete;
-  expect(combobox(el, "takeawayTax")!.error).toBe("");
+  expect(combobox(el, "takeaway-tax")!.error).toBe("");
 });
 
 it("draws no takeaway field where the region does not charge it, and saves the stored class unchanged", async () => {
   const el = await mountTakeaway({ ...saved, takeawayVatClass: "general" }, false);
-  expect(combobox(el, "takeawayTax")).toBeNull();
+  expect(combobox(el, "takeaway-tax")).toBeNull();
   await edit(el);
   expect(submittedValue(el).takeawayVatClass).toBe("general");
 });

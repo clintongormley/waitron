@@ -815,7 +815,7 @@ it("a change to the takeaway VAT class alone is unsaved and asks before leaving"
   const { app, editor } = await mount();
   editor.takeawayVat = true;
   await editor.updateComplete;
-  await change(editor, "[name=takeawayTax]", "general");
+  await change(editor, "[name=takeaway-tax]", "general");
   expect(app.leave.coordinator.isDirty()).toBe(true);
   await userEvent.keyboard("{Escape}");
   expect(app.cancelled).toBe(0);
