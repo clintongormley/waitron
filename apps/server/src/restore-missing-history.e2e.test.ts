@@ -41,8 +41,8 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
 }));
 // Stands in for the start's internet time check (`resume` in hosted-hour-recovery.ts); the rest
 // of the journey runs with no network.
-vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: async () => ({
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
+  observeTimeServiceHourClock: async () => ({
     source: "internet",
     result: "usable",
     instantMs: Date.now(),

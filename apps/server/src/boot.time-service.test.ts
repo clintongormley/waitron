@@ -1,9 +1,10 @@
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedModuleSettings } from "../test/module-settings.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
 import type { BoxHostClient } from "./box-host-client.js";
@@ -43,10 +44,7 @@ it("a trading start's first-setup and live-operation hosts ask its own box host,
         recursive: true,
       });
     }
-    await writeFile(
-      join(scratch, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
+    await seedModuleSettings(suite.db, { "fiscal-none": false });
     const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
     const env = {
       WAITRON_HTTP_LANDING_PORT: "0",
