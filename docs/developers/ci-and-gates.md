@@ -306,7 +306,7 @@ hosted recovery markers, retries and work assigned or completed before cancellat
 A full server is reported before diagnostic reads; every old unassigned planning job
 seen there gets only `server full`, including marked runs and retries. Failed diagnostic
 reads on these skipped paths are reported without enabling recovery or failing the pass.
-A cancelled run keeps its existing outcome report instead of a skip reason.
+Skip lines describe decisions before cancellation.
 
 An absent line does not establish that a job could be recovered. Only owned PR runs in
 the queued/running CI inventory and queued unassigned self-hosted `changes` jobs are

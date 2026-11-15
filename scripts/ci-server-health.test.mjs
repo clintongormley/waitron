@@ -1571,7 +1571,7 @@ describe("scheduled PR planner recovery", () => {
     ["missing-age", "job age unknown"],
     ["created-age", "waiting 60000 ms from created_at; five minutes required"],
     ["label", "planning label mismatch"],
-    ["marked", "already sent to GitHub"],
+    ["marked", "run marked for hosted recovery"],
     ["retry", "retry run"],
     ["changed-run", "run identity changed or completed"],
     ["assigned-later", "planning job no longer queued unassigned and old"],
@@ -1689,8 +1689,12 @@ describe("scheduled PR planner recovery", () => {
         { ...f.options, hostedAttempts: kind === "marked" ? { 12: 2 } : {}, request: read },
         { report: (line) => reports.push(line) },
       );
-      expect(reports[0]).toContain("Planner diagnostics unavailable: run=12");
-      expect(reports).toContain("Retried PR run 13 on GitHub.");
+      expect(reports).toEqual([
+        `Planner diagnostics unavailable: run=12 attempt=${kind === "retry" ? 2 : 1}; diagnostic refused`,
+        "Recovering PR run 13; cancellation/retry pending. If this pass stops, intervention is needed.",
+        "Retried PR run 13 on GitHub.",
+        "SERVER STUCK: cancelled and retried runs 13 after five minutes without assigned work.",
+      ]);
       expect(reports.some((line) => /Preserved|Recovering PR run 12/.test(line))).toBe(false);
       expect(writes).toEqual([
         "/repos/fixture/waitron/actions/runs/13/force-cancel",
@@ -1718,6 +1722,27 @@ describe("scheduled PR planner recovery", () => {
       "No stalled server run needed recovery.",
     ]);
   });
+  it.each(["incomplete", "refused"])(
+    "retains the ordinary planner failure for a %s job read",
+    async (kind) => {
+      const f = planner(),
+        reports = [];
+      replyJobs(f, () => {
+        if (kind === "refused") throw new Error("read refused");
+        return { total_count: 2, jobs: [] };
+      });
+      const command = health.healthCommand("recover-planners", f.options, {
+        report: (line) => reports.push(line),
+      });
+      if (kind === "refused") await expect(command).rejects.toThrow("read refused");
+      else {
+        await command;
+        expect(reports).toHaveLength(1);
+        expect(reports[0]).toMatch(/^Server inventory unavailable; planner recovery stopped:/);
+      }
+      expect(f.calls.filter(([, options]) => options.method)).toEqual([]);
+    },
+  );
   it("explains the fresh full-capacity skip", async () => {
     const f = planner(),
       reports = [];

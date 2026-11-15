@@ -158,7 +158,7 @@ export async function serverHealth(options, unavailable) {
           if (old(job, now)) reason = options.plannerSkipReason;
         } else if (excluded) {
           if (old(job, now))
-            reason = run.run_attempt !== 1 ? "retry run" : "already sent to GitHub";
+            reason = run.run_attempt !== 1 ? "retry run" : "run marked for hosted recovery";
         } else if (
           !job.labels.includes(
             `${options.prefix || "dt"}-${repositoryId}-${run.id}-${run.run_attempt}-changes-1`,
