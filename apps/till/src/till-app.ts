@@ -2542,6 +2542,7 @@ export class TillApp extends LitElement {
     // Its own event kind, not `nav`: `#setScreen` below records the nav.
     diag.record("info", "server-switch", { from, to });
     this.#switchGeneration++;
+    this.cloudEmergency = undefined;
     this.operatorPersonId = "";
     this.#tabPerson = null;
     this.operatorName = "";
@@ -3079,6 +3080,7 @@ export class TillApp extends LitElement {
   #switchedTimer?: ReturnType<typeof setTimeout>;
   /** The issuer identity printed on the ticket (venue name + NIF), from `getTill` (`#applyVenueSetup`). */
   @state() private issuer?: TicketIssuer;
+  @state() cloudEmergency?: TillInfo["cloudEmergency"];
   /** Offers available in the counter's current service zone. Each carries a distinct menu-item ID,
    * even when two menus offer the same product. Table ordering keeps its own zone-specific set. */
   @state() private products: TillProduct[] = [];
@@ -11066,6 +11068,7 @@ export class TillApp extends LitElement {
     this.onboardingIntent = till.onboardingIntent;
     this.issuer = { venueName: till.venueName, nif: till.nif };
     this.courses = till.courses;
+    this.cloudEmergency = till.cloudEmergency;
     this.cardProvider = till.cardProvider;
     this.tipsEnabled = till.tipsEnabled;
     // A server too old to send it sets no limit.

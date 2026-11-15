@@ -50,7 +50,7 @@ export function readEmergencyCode(
     !/^[A-HJ-NP-Z2-9]{4}(?:-[A-HJ-NP-Z2-9]{4}){5}$/.test(value.code) ||
     !instant(value.codeIssuedAt) ||
     value.codeIssuedAt > value.asOf ||
-    !addressValid(value.address, expected.cloudOrigin, expected.staffOrigin)
+    !validEmergencyAddress(value.address, expected.cloudOrigin, expected.staffOrigin)
   )
     unavailable();
   return value as unknown as EmergencyCode;
@@ -125,10 +125,14 @@ export interface EmergencyDisplay {
   emergency: EmergencyFacts;
   prices: BillingPrices;
 }
-const instant = (v: unknown): v is string =>
+export const instant = (v: unknown): v is string =>
   typeof v === "string" && Number.isFinite(Date.parse(v)) && new Date(v).toISOString() === v;
 const host = (origin: string) => new URL(origin).hostname.toLowerCase().replace(/\.$/, "");
-function addressValid(value: unknown, cloudOrigin: string, staffOrigin: string): value is string {
+export function validEmergencyAddress(
+  value: unknown,
+  cloudOrigin: string,
+  staffOrigin: string,
+): value is string {
   if (typeof value !== "string" || value.length > 2048) return false;
   try {
     const url = new URL(value),
@@ -187,7 +191,7 @@ export function readEmergencyDisplay(
             e.closedReason as string,
           )) ||
       (e.address !== null &&
-        !addressValid(e.address, expected.cloudOrigin, expected.staffOrigin)) ||
+        !validEmergencyAddress(e.address, expected.cloudOrigin, expected.staffOrigin)) ||
       (e.codeIssuedAt !== null && (!instant(e.codeIssuedAt) || e.codeIssuedAt > value.asOf))
     )
       unavailable();

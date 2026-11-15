@@ -285,6 +285,7 @@ import {
 } from "./zone-access.js";
 
 export interface TillApiDeps {
+  cloudEmergency?: () => { address: string } | null;
   paymentsEnabled?: boolean;
   exporter?: ModuleTimeRecordExport;
   admission: TradingAdmission;
@@ -1489,6 +1490,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const held = await readNodeMembership(deps.db);
       const setup = completeTillSetup(
         await deps.db.withWriteLock(() => readTillSetup(deps.db, deps, device)),
+        deps.cloudEmergency?.() ?? null,
       );
       return c.json({
         ...setup,
@@ -1666,7 +1668,12 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           setupRead: await readTillSetup(tx, deps, device),
         };
       });
-      return c.json({ ...state, setupRevision: setupRevisionOf(completeTillSetup(setupRead)) });
+      return c.json({
+        ...state,
+        setupRevision: setupRevisionOf(
+          completeTillSetup(setupRead, deps.cloudEmergency?.() ?? null),
+        ),
+      });
     }),
   );
 

@@ -30,7 +30,7 @@ import { deploymentEnvironment } from "../config.js";
 import { DEVICE_COOKIE } from "../device-session.js";
 import { ALL_MODULES } from "../modules.js";
 import { systemClock } from "../till-backend.js";
-import { mountTillApi } from "../till-api.js";
+import { mountTillApi, type TillApiDeps } from "../till-api.js";
 
 import { SESSION_COOKIE } from "../till-session.js";
 import { enrolDeviceForTest } from "./enrol.js";
@@ -66,6 +66,7 @@ export async function provisionSignedInTill<S extends TillSeed>(
     dayCutover: string;
     seed: (tx: Transaction, cfg: TradingContext) => Promise<S>;
     simulatorCard?: boolean;
+    cloudEmergency?: TillApiDeps["cloudEmergency"];
   },
 ): Promise<SignedInTill & S> {
   const venue = await applyVenue(
@@ -170,6 +171,7 @@ export async function provisionSignedInTill<S extends TillSeed>(
       cfg,
       secureCookies: false,
       venueLocale: SIGNED_IN_TILL_LOCALE,
+      cloudEmergency: options.cloudEmergency,
       ...(options.simulatorCard === true ? { cardProvider: new SimulatorPaymentProvider(db) } : {}),
     },
     () => {},

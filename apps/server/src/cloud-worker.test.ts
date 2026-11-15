@@ -1,4 +1,5 @@
 import { expect, it, onTestFinished } from "vitest";
+import { emergencyReply } from "../test/cloud-emergency-fixture.js";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
 import { runCloudConnectionForTest } from "./testing/cloud-connection-job.js";
 it("refreshes a real installation without a manager session, waits between ticks and stops on abort", async () => {
@@ -108,7 +109,15 @@ it.each(["guest", "certificate"] as const)(
 );
 
 it("skips guest delivery when the box steps down during connection refresh", async () => {
-  const f = await installationFixture();
+  const f = await installationFixture(undefined, {
+    emergency: async (_v, saved, _q, res) => {
+      const r = (saved.view as { registration: { installationId: string; venueId: string } })
+        .registration;
+      res.end(
+        JSON.stringify(emergencyReply(r.installationId, r.venueId, new Date().toISOString())),
+      );
+    },
+  });
   onTestFinished(() => f.close());
   const controller = new AbortController();
   let primary = true,
@@ -118,6 +127,7 @@ it("skips guest delivery when the box steps down during connection refresh", asy
   });
   await runCloudConnectionForTest({
     connection: f.client,
+    managementOrigin: "https://staff.test",
     signal: controller.signal,
     isPrimary: () => primary,
     onGuestMenu: async () => {
@@ -126,4 +136,50 @@ it("skips guest delivery when the box steps down during connection refresh", asy
     sleep: async () => controller.abort(),
   });
   expect(deliveries).toBe(0);
+  expect(f.requests.filter((v) => v[2] === "emergency-hosting-display")).toHaveLength(0);
 });
+
+it.each([true, false])(
+  "A1188 refreshes entrance hints without stopping other services (ready=%s)",
+  async (ready) => {
+    const f = await installationFixture(undefined, {
+      emergency: async (_v, saved, _q, res) => {
+        const r = (saved.view as { registration: { installationId: string; venueId: string } })
+          .registration;
+        res.writeHead(ready ? 200 : 503);
+        res.end(
+          JSON.stringify(
+            ready
+              ? emergencyReply(r.installationId, r.venueId, new Date().toISOString())
+              : { error: "temporarily_unavailable" },
+          ),
+        );
+      },
+    });
+    onTestFinished(() => f.close());
+    const controller = new AbortController(),
+      seen: string[] = [],
+      errors: unknown[] = [];
+    await runCloudConnectionForTest({
+      connection: { ...f.client, staffCertificate: async () => true },
+      managementOrigin: "https://staff.test",
+      staffHostname: "staff.test",
+      signal: controller.signal,
+      isPrimary: () => true,
+      onGuestMenu: () => seen.push("guest"),
+      onStaffCertificate: () => seen.push("staff"),
+      onError: (error) => {
+        throw error;
+      },
+      onEmergencyError: (error, level) => errors.push({ error, level }),
+      sleep: async () => controller.abort(),
+    });
+    expect(f.requests.filter((v) => v[2] === "emergency-hosting-display")).toHaveLength(1);
+    expect(f.client.emergencyHints("https://staff.test")).toEqual(
+      ready ? { address: "https://emergency.example.test/" } : null,
+    );
+    expect(seen).toEqual(["guest", "staff"]);
+    if (ready) expect(errors).toEqual([]);
+    else expect(errors).toMatchObject([{ error: { code: "cloud.unavailable" }, level: "info" }]);
+  },
+);

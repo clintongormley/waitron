@@ -62,8 +62,12 @@ export async function installationFixture(
       await options.emergencyCode(values, saved, req, res, sent);
       return;
     }
-    if (values[2] === "emergency-hosting-display" && options.emergency) {
-      await options.emergency(values, saved, req, res, sent);
+    if (values[2] === "emergency-hosting-display") {
+      if (options.emergency) await options.emergency(values, saved, req, res, sent);
+      else {
+        res.writeHead(503);
+        res.end(JSON.stringify({ error: "unavailable" }));
+      }
       return;
     }
     if (values[2] === "tunnel-provision") {

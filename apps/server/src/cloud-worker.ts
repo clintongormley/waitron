@@ -1,3 +1,4 @@
+import { codeOf } from "@waitron/server-kit";
 import type { CloudConnection } from "./cloud-client.js";
 import type { JobDefinition } from "./job-runner.js";
 
@@ -5,8 +6,10 @@ export function cloudConnectionJob(options: {
   connection: CloudConnection;
   isPrimary: () => boolean;
   onError?: (error: unknown) => void;
+  onEmergencyError?: (error: unknown, level: "info" | "warn") => void;
   onGuestMenu?: (signal: AbortSignal) => unknown;
   onGuestMenuError?: (error: unknown) => void;
+  managementOrigin?: string;
   staffHostname?: string;
   onStaffCertificate?: (signal: AbortSignal) => unknown;
 }): JobDefinition {
@@ -20,6 +23,22 @@ export function cloudConnectionJob(options: {
       try {
         if (options.isPrimary()) {
           const status = await options.connection.refresh(signal);
+          if (
+            options.managementOrigin &&
+            status.installation?.state === "active" &&
+            !signal.aborted &&
+            options.isPrimary()
+          ) {
+            try {
+              await options.connection.emergency(options.managementOrigin, signal);
+            } catch (error) {
+              if (!signal.aborted)
+                options.onEmergencyError?.(
+                  error,
+                  codeOf(error) === "cloud.unavailable" ? "info" : "warn",
+                );
+            }
+          }
           if (status.installation?.state === "active" && !signal.aborted && options.isPrimary()) {
             try {
               await options.onGuestMenu?.(signal);

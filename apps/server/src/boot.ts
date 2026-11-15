@@ -1509,6 +1509,7 @@ async function bootServer(
 
   // Setup and recovery must answer unavailable before their HTML catch-all can handle this path.
   let cloudServing = () => false;
+  let readCloudEmergency: () => { address: string } | null = () => null;
   mountCloudPublic(app, () => cloudServing());
   mountPublicGuestMenu(
     app,
@@ -2866,6 +2867,7 @@ async function bootServer(
       invoiceEmailAvailable,
       workforceEnabled,
       attendanceResponsesEnabled: isSingletonPrimary,
+      cloudEmergency: () => readCloudEmergency(),
       attendance: attendanceRecorder,
       boxClock: {
         correction,
@@ -3987,6 +3989,11 @@ async function bootServer(
   const cloudConnection = cloudOrigin
     ? createCloudConnection({
         stateDir: config.stateDir,
+        onEmergencyHintsError: (error) =>
+          log("warn", "cloud.emergency_state_failed", {
+            errorCode: codeOf(error),
+            errno: errnoOf(error) ?? null,
+          }),
         tunnelDir: config.tunnelControlDir,
         origin: cloudOrigin,
         readVenueId: () => readCloudVenueId(db),
@@ -3994,6 +4001,14 @@ async function bootServer(
         environment: config.environment === "production" ? "production" : "test",
       })
     : undefined;
+  if (cloudConnection) {
+    readCloudEmergency = () => cloudConnection.emergencyHints(config.managementOrigin);
+    await cloudConnection
+      .status()
+      .catch((error: unknown) =>
+        log("warn", "cloud.emergency_state_failed", { errorCode: codeOf(error) }),
+      );
+  }
   const cloudReplacement =
     cloudConnection && cloudOrigin && config.environment !== "production"
       ? createCloudReplacement({
@@ -4595,6 +4610,9 @@ async function bootServer(
     jobRunner.add(
       cloudConnectionJob({
         connection: cloudConnection,
+        managementOrigin: config.managementOrigin,
+        onEmergencyError: (error, level) =>
+          log(level, "cloud.emergency_read_failed", { errorCode: codeOf(error) }),
         isPrimary: cloudPrimary,
         onGuestMenu: (signal) => guestMenuDelivery!.reconcile(signal),
         onGuestMenuError: (error) =>

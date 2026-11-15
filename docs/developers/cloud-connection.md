@@ -220,6 +220,30 @@ When the read fails, the screen clears the values it showed and says the details
 available. The signing vector is `apps/server/test/billing-display-vector.json`, a copy of the
 contract's.
 
+## Emergency entrance facts
+
+The box saves the emergency address, whether the entrance is open and the reply's `asOf`
+in `cloud/connection.json`, tied to its registration and management origin. Emergency refresh replaces them
+when the address or open state changes; lifecycle saves retain them. The saved time prevents an older reply replacing those
+facts after restart. Prices and the emergency code are not saved; the dashboard still needs
+Cloud after restart. The minute worker refreshes emergency facts separately from other services.
+
+Before serving tills, boot warms a memory projection through a local state read. Invalid optional
+hints are discarded. Invalid Cloud state leaves the projection empty and the till can still load.
+`/api/till` and `/api/menu-state` use that projection without reading the credential file or asking
+Cloud. An open entrance adds only its address and the roles holding `node.manage` to setup;
+unchanged facts leave its revision unchanged. A loaded till keeps these values through failed
+reads and sign-out, and clears them when its server changes. The PIN-screen poll adds no setup read.
+
+The till's outage link and dialog are A1188 part 2b. Cloud's display endpoint and hosting are
+still required before a real venue receives an open entrance. Saved hints do not start a venue.
+
+Unchanged facts take no write turn. Changed facts take the existing shared turn only to recheck
+registration and save; its wait for that turn honours caller cancellation. Those short writes can still cause
+`cloud.busy` for another Cloud action. An optional file-write failure does not reject the live Cloud facts; the projection continues to follow the stored hints. Emergency read failures use `cloud.emergency_read_failed`
+(`info` for unavailable Cloud), separate from connection-refresh failures; local warm-up and optional-write failures
+use `cloud.emergency_state_failed`.
+
 ## A951-S tunnel configuration writer
 
 To use the optional tunnel container from PR #2533, set `WAITRON_TUNNEL_CONTROL_DIR` to its
