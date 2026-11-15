@@ -1122,7 +1122,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
     expect(new Set(sent().map((request) => request.submissionId)).size).toBe(3);
     expect(api.recordSale).not.toHaveBeenCalled();
     const paid = tableOrder(el).shadowRoot!.querySelector("[data-line-paid]");
-    expect(text(paid)).toBe(t("bill_pay.paid"));
+    expect(text(paid)).toBe(t("table.pick_payment_stays"));
   });
 
   it("leaves all the change as a tip when the guest says so, and takes it", async () => {
@@ -5188,7 +5188,7 @@ describe("till-app: the owner's split after a contribution", () => {
 });
 
 describe("till-app: a guest leaving early pays for a held dish", () => {
-  it("pays for one held Tiramisu on the table's own bill, which stays held in Sent, marked paid in its window, and is not offered again", async () => {
+  it("pays for one held Tiramisu on the table's own bill, which stays held in Sent, marked with a payment in its window, and is not offered again", async () => {
     const tiramisu = line({
       lineNo: 6,
       name: "Tiramisu",
@@ -5298,7 +5298,7 @@ describe("till-app: a guest leaving early pays for a held dish", () => {
     const order = tableOrder(el);
     const dish = await openSentDish(order, tiramisu.id, "held");
     expect(text(dish.querySelector("[data-sent-line-status]"))).toBe(t("table.group_held"));
-    expect(text(dish.querySelector("[data-line-paid]"))).toBe(t("bill_pay.paid"));
+    expect(text(dish.querySelector("[data-line-paid]"))).toBe(t("table.pick_payment_stays"));
     const closed = new Promise<void>((resolve) =>
       dish.addEventListener("wt-close", () => resolve(), { once: true }),
     );
