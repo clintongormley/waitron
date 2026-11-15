@@ -2,7 +2,15 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status:** revision 2, 2026-11-15 (lane A). Revision 2 takes a fresh-context Claude plan read
+**Status:** revision 3, 2026-11-15 (lane A). Revision 3 takes the five changes the campaign
+watcher set when it cleared this plan at 01:15 (`~/waitron-campaign/questions.md`, "WATCHER
+2026-11-15 01:15 — A947-4d plan"; its second read is saved in
+`~/waitron-campaign/receipts/a947-4d-plan-verdict-*.txt`): D4's answer once the main server is back
+is a short page at the venue's name, not a redirect to the main server's own address; D9's proof is
+a new signed-message kind; Task 7a's tests test each refusal once; the test that the trust,
+certificate, help and legal pages stay open moves to `boot.mirror-surface.test.ts`; and Task 4's
+guide says that any main-server restart longer than about 20 seconds also brings the switch page up.
+Revision 2 took a fresh-context Claude plan read
 (`~/waitron-campaign/receipts/a947-4d-plan-review.md`: 2 Critical, 9 Important, 11 Minor; every
 Critical and Important taken, the Minors as noted at their steps). Queued by the campaign watcher on
 2026-11-15 at 00:36 (`~/waitron-campaign/queue.md`, "A947-4d-plan"): plan only, no build until 4c
@@ -108,7 +116,13 @@ Read on `main` at 4ffb0fe9bb, plus #3219's branch (4b) and the 4c plan.
     reloaded dashboard (4c's (1)) and a browser on the box itself pointed at the venue's name reach
     the switch;
   - while the watch is not silent, the same request (a device with the spare's address still
-    cached) gets `302` to the main box's own address, from the held chart.
+    cached) gets a short page at the venue's name: "The main server is answering again. This page
+    reloads in a few seconds." / «El servidor principal vuelve a responder. Esta página se recarga en
+    unos segundos.», which reloads the same address after about 5 seconds (`<meta
+    http-equiv="refresh" content="5">`, no script). It never sends the device to the main box's own
+    address: a till left there could not find the spare at its next reload. The reload reaches the
+    main box once the device drops the spare's withdrawn answer (D3); until then it sees this page
+    again.
   Every other path behaves as today, at either name: `/ca.crt`, `/setup/trust`, `/help/*` and
   `/legal/*` stay open, which a phone needs to trust the venue's certificate (Task 8, item 4); other
   reads keep `node.spare`. No new error code.
@@ -154,6 +168,10 @@ Read on `main` at 4ffb0fe9bb, plus #3219's branch (4b) and the 4c plan.
     reload and the take's restart, and the page's own scripts cannot read it;
   - the proof is a statement `{ personId, nodeId, expiresAtMs }` signed with this box's node key
     (`signAsThisBox`, `handover-signing.ts`), so nothing is stored and no `node.db` table is added.
+    It is a new signed-message kind, `switch-proof`: the kinds are closed lists, `HANDOVER_KINDS` in
+    `packages/handover/src/envelope.ts` and `HandoverKind` in
+    `packages/shared/src/handover-envelope-types.ts` (`envelope.test.ts:82` holds the two equal),
+    and the check refuses any other kind, so a status or query message the same box signed is never a proof.
     Each use checks the signature with this box's own key, the expiry, that this box is still in mode
     `mirror`, and, against the venue database the request reads, that the person is active and holds
     `node.manage`. A proof that fails any of them is refused as `password.invalid` would be, and the
@@ -186,7 +204,13 @@ Read on `main` at 4ffb0fe9bb, plus #3219's branch (4b) and the 4c plan.
 
 ## Questions
 
-None. The passkey was the owner's answer to the design's question 2; D9 is the mechanism.
+None blocks the build. The passkey was the owner's answer to the design's question 2; D9 is the
+mechanism.
+
+**For the owner (the watcher puts it to them, 2026-11-15 01:15; the build goes on meanwhile):**
+during an ordinary main-server restart longer than about 20 seconds, an update for example, a till
+or phone that reloads sees the switch page until the main server is back. If the owner wants that
+avoided, it is a small addition to PR 4d-1, not a redesign.
 
 ## Global constraints
 
@@ -194,6 +218,9 @@ None. The passkey was the owner's answer to the design's question 2; D9 is the m
   - spare page, silent: "The main server has not answered for {duration}." / «El servidor principal
     no responde desde hace {duration}.», then the link "Open the switch page" / «Abrir la página de
     cambio».
+  - the venue's name, main server back (D4): "The main server is answering again. This page reloads
+    in a few seconds." / «El servidor principal vuelve a responder. Esta página se recarga en unos
+    segundos.»
   - spare page, never reached: "This spare cannot reach the main server, so it could not take over if
     the main server failed. Check the network cable of each server." / «Este servidor de reserva no
     llega al principal, así que no podría sustituirlo si fallara. Revisa el cable de red de cada
@@ -295,7 +322,8 @@ None. The passkey was the owner's answer to the design's question 2; D9 is the m
 ### Task 3: the venue's name leads to the switch page, and the page tries the main server
 
 **Files:**
-- Modify: `apps/server/src/spare-read-gate.ts` (D4: `spareReadGate(deps: { silent: () => boolean; mainUrl: () => Promise<string | null> })`)
+- Modify: `apps/server/src/spare-read-gate.ts` (D4: `spareReadGate(deps: { silent: () => boolean })`;
+  the main server's address is read only by the new route below)
   and `apps/server/src/spare-read-gate.test.ts`
 - Create: the `GET /api/node/main` route, mounted on a mirror boot only (put it beside `mountNodeApi`,
   `apps/server/src/node-api.ts`), let through by `spareReadGate`
@@ -309,11 +337,15 @@ None. The passkey was the owner's answer to the design's question 2; D9 is the m
   - `spare-read-gate.test.ts`:
     - `"at the venue's name a silent main server's spare sends pages to the switch page"`: `/`,
       `/manage`, `/manage/servers` → 302 `/handover/emergency`.
-    - `"at the venue's name, with the main server answering, pages go to the main server"`: 302 to
-      `https://box-aaaa.waitron.local/` (the stubbed `mainUrl`).
+    - `"at the venue's name, with the main server answering, pages say it is back and reload"`:
+      200, the page's words, a 5-second refresh of the same path, and no `box-aaaa` address in the
+      body or a `Location` header.
     - `"at the box's own name the closed page is served as before"`, silent or not.
-    - `"certificate, trust, help and legal pages stay open at the venue's name"`.
     - `"other reads keep node.spare"`.
+  - `boot.mirror-surface.test.ts` (whether these stay open depends on the order `boot.ts` registers
+    routes in, which the gate's own test cannot see): `"certificate, trust, help and legal pages stay
+    open at the venue's name"` — `/ca.crt`, `/setup/trust`, `/help/*` and `/legal/*` asked for with
+    `Host: waitron.local` on a mirror boot whose watch is silent answer as at the box's own name.
   - the route: `{ mainUrl }` is the held chart's `serving-primary` `contactUrl`, `null` with none.
   - `handover-screen.emergency.test.ts`, `fetch` stubbed per URL:
     - `"when the main server answers, the page refuses and links to it"`; the first step's button is
@@ -340,8 +372,10 @@ None. The passkey was the owner's answer to the design's question 2; D9 is the m
   and `apps/server/src/i18n/spare.ts`
 - Modify: `apps/server/src/guide/en/servers.md`, `apps/server/src/guide/es/servers.md` (the
   emergency section: a reloaded till, phone or dashboard at the usual address lands on the switch page
-  once the main server has been silent for about half a minute; the spare's own page says so; print a
-  label for each server from Servers, Task 5)
+  once the main server has been silent for about half a minute; a main-server restart longer than
+  about 20 seconds, an update for example, also brings the switch page up on a device that reloads
+  until the main server is back; the spare's own page says so; print a label for each server from
+  Servers, Task 5)
 - Test: `apps/server/src/spare-read-gate.test.ts`
 
 - [ ] **Step 1: tests first:** silent → the duration line and a link to `/handover/emergency`;
@@ -350,9 +384,9 @@ None. The passkey was the owner's answer to the design's question 2; D9 is the m
 - [ ] **Step 2:** FAIL, implement, PASS. Then run
   `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts` and
   `pnpm exec vitest run scripts/guide-links.test.ts scripts/english-only.test.ts`.
-- [ ] **Step 3:** LOOK: the page is a string, so write each of the three renderings to a file and open
-  it in the workspace's Playwright Chromium, light and dark, 1280 and 390, English and Spanish
-  (CLAUDE.md §4).
+- [ ] **Step 3:** LOOK: the pages are strings, so write each of the three renderings, and D4's "main
+  server back" page, to a file and open it in the workspace's Playwright Chromium, light and dark,
+  1280 and 390, English and Spanish (CLAUDE.md §4).
 - [ ] **Step 4:** commit: "A947 4d: the spare's page says when the main server is silent or out of
   reach".
 
@@ -413,6 +447,10 @@ None. The passkey was the owner's answer to the design's question 2; D9 is the m
 **Files:**
 - Modify: `packages/identity/src/passkey.ts` (`verifyPasskeyAssertion`, D9: reads the credential and
   person, verifies against a given challenge and origin list, writes nothing) and its test
+- Modify: `packages/handover/src/envelope.ts` (`HANDOVER_KINDS` gains `switch-proof`) and
+  `packages/shared/src/handover-envelope-types.ts` (`HandoverKind` gains it); and
+  `packages/handover/src/envelope.test.ts`, which pins the whole list (`:65`) and holds it equal to
+  the type (`:82`): the pin gains the new kind, recorded under "Changed test checks"
 - Create: `apps/server/src/handover-switch-proof.ts` (make and check the signed proof; the cookie) and
   its test
 - Modify: `apps/server/src/handover-emergency-api.ts` (the challenge route, kept in memory; the take,
@@ -429,9 +467,14 @@ None. The passkey was the owner's answer to the design's question 2; D9 is the m
   - `webauthn_challenges` holds no new row after a challenge and a take (read the table);
   - a request that passes with a passkey sets the cookie with each listed attribute, and the answer's
     body does not carry the proof;
-  - the proof is accepted by preview, declaration, preparation and activation; refused after 15
-    minutes, on a box no longer in mode `mirror`, when signed by the other box, on a controlled
-    handover's routes, and for a person who lost `node.manage` in the copy;
+  - `handover-switch-proof.test.ts` tests each refusal once, at the check: a proof past its 15
+    minutes, one signed by the other box, one checked on a box no longer in mode `mirror`, one for a
+    person who lost `node.manage` in the copy, and a message of the wrong kind (a `status` and a
+    `query` message signed by this same box are each refused as a proof);
+  - each emergency route (take, preview, backup, declaration, preparation, activation) then has one
+    case with an accepted proof and one with a refused proof (any one refusal; the check's own test
+    owns which);
+  - each controlled-handover route has one case refusing a valid proof;
   - a challenge older than two minutes is refused.
   Control, recorded in the commit message: drop the expiry check; the 15-minute case fails.
 - [ ] **Step 2:** FAIL; implement; PASS. Run `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/personal-log-params.test.ts`
