@@ -4143,9 +4143,23 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.server_probe }}
     runs-on: ${{ github.run_attempt == 1 && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-server-probe-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     timeout-minutes: 2
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
     steps:
-      - name: Verify server pickup
-        run: node -e 'require("node:assert/strict").equal(2 + 2, 4); console.log("Server pickup probe executed")'
+      - name: Read capacity with the existing workflow token
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          status=$(curl --silent --show-error --connect-timeout 10 --max-time 30 \
+            --output "$RUNNER_TEMP/capacity-read.json" --write-out '%{http_code}' \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/variables/DISPOSABLE_TESTS_CAPACITY")
+          echo "WORKFLOW_CAPACITY_READ_HTTP=$status"
+          cat "$RUNNER_TEMP/capacity-read.json"
+          test "$status" = 200
 
   # The aggregate gate. This file's header covers what branch protection requires and why the job
   # ids above are free to change; what follows is only how this job itself works.
