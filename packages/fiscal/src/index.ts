@@ -46,6 +46,8 @@ export type {
   DrainResult,
   FiscalBackend,
   ReturnedInvoiceRecord,
+  ReturnedInvoicesQuery,
+  ReturnedInvoicesPage,
   FiledFigures,
   FiledReceipt,
   FiledInvoiceEvidence,

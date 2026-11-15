@@ -417,7 +417,7 @@ export class VerifactuBackend implements FiscalBackend {
     return hasReturnedInvoices(tx);
   }
 
-  returnedInvoices(tx: Transaction, page: { offset: number; limit: number }) {
+  returnedInvoices(tx: Transaction, page: Parameters<typeof returnedInvoices>[1]) {
     return returnedInvoices(tx, page);
   }
 

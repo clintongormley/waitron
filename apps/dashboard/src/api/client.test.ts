@@ -3318,17 +3318,29 @@ it("reads the warning through a passive existence GET", async () => {
   expect(active).not.toHaveBeenCalled();
 });
 
-it("reads returned invoices by offset without extending an unattended session", async () => {
-  const reply = { records: [], nextOffset: null, timeZone: "Europe/Madrid" };
+it("reads returned invoice pages without extending an unattended session", async () => {
+  const reply = { rows: [], total: 0, page: 0, pageSize: 50, timeZone: "Europe/Madrid" };
   const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(reply));
   const active = vi.fn();
   const api = new DashboardApi("", fetchImpl, undefined, active);
-  expect(await api.listReturnedInvoices(100)).toEqual(reply);
+  expect(
+    await api.listReturnedInvoices({
+      search: "A/42 ",
+      page: 2,
+      sortKey: "receivedAt",
+      sortDirection: "ascending",
+    }),
+  ).toEqual(reply);
   const [path, init] = fetchImpl.mock.calls[0]!;
   expect(new URL(path, "http://localhost").pathname).toBe(
     "/management-api/reports/returned-invoices",
   );
-  expect(new URL(path, "http://localhost").searchParams.get("offset")).toBe("100");
+  expect(Object.fromEntries(new URL(path, "http://localhost").searchParams)).toEqual({
+    search: "A/42 ",
+    page: "2",
+    sortKey: "receivedAt",
+    sortDirection: "ascending",
+  });
   expect(init.method).toBe("GET");
   expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
   expect(active).not.toHaveBeenCalled();

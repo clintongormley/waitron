@@ -320,6 +320,19 @@ export interface ReturnedInvoiceRecord {
   receivedAt: string;
 }
 
+export interface ReturnedInvoicesQuery {
+  search: string;
+  page: number;
+  sortKey: "" | "receivedAt";
+  sortDirection: "ascending" | "descending";
+}
+export interface ReturnedInvoicesPage {
+  rows: ReturnedInvoiceRecord[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 /**
  * The sale-path boundary between the POS and a fiscal regime. It names no regime mechanism; the
  * guard is ./no-regime-vocabulary.test.ts. The submission pass (`drain`) is not on it: that runs
@@ -327,10 +340,7 @@ export interface ReturnedInvoiceRecord {
  */
 export interface FiscalBackend {
   hasReturnedInvoices?(tx: Transaction): Promise<boolean>;
-  returnedInvoices?(
-    tx: Transaction,
-    page: { offset: number; limit: number },
-  ): Promise<ReturnedInvoiceRecord[]>;
+  returnedInvoices?(tx: Transaction, query: ReturnedInvoicesQuery): Promise<ReturnedInvoicesPage>;
   /**
    * What `sales.fiscal_backend` records, and the `backend` field of every
    * `NodeRegistration`/`FiscalRecordRef` it returns.

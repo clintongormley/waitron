@@ -165,8 +165,7 @@ export const en = {
   "returned_invoices.kind_replacement": "Replacement invoice",
   "returned_invoices.kind_correction": "Corrective invoice",
   "returned_invoices.refresh": "Refresh invoices",
-  "returned_invoices.previous": "Previous",
-  "returned_invoices.next": "Next",
+  "returned_invoices.search": "Search returned invoices",
   "returned_invoices.empty": "No tracked returned invoices.",
   "returned_invoices.loading": "Loading returned invoices…",
 
@@ -4486,8 +4485,7 @@ export const es: Record<StringKey, string> = {
   "returned_invoices.kind_replacement": "Factura de sustitución",
   "returned_invoices.kind_correction": "Factura rectificativa",
   "returned_invoices.refresh": "Actualizar facturas",
-  "returned_invoices.previous": "Anterior",
-  "returned_invoices.next": "Siguiente",
+  "returned_invoices.search": "Buscar facturas devueltas",
   "returned_invoices.empty": "No hay facturas devueltas registradas en esta lista.",
   "returned_invoices.loading": "Cargando facturas devueltas…",
 

@@ -210,7 +210,7 @@ to reset it.
 Below the intervals, **Returned invoices** shows each newly received invoice with its source
 box, generating installation, original issue date and recorded amounts. Invoice rows show a
 readable kind beside their original type code. Corrections and cancellations appear separately.
-**Not recorded** means that amount is absent from the record. Use **Next** and **Previous** to
+**Not recorded** means that amount is absent from the record. Use the search box to find returned invoices, sort by **First received**, and use the page buttons to
 read more; **Refresh invoices** returns to the first page.
 
 Tracking starts with this feature. Invoices already held in a copy are not added, so an empty

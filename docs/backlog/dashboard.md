@@ -165,9 +165,9 @@ After A760, decide whether to remove the redundant column and read the provider 
 
 ## Shared database-backed table paging, search and sorting
 
-- **Move the remaining dashboard tables onto shared database-backed requests.** Users and Orders now use
+- **Move the remaining dashboard tables onto shared database-backed requests.** Users, Orders and returned invoices now use
   `TableRequestController`, 50-row server pages, whole-dataset search/sort and passive live reads.
-  The handover screen's table of returned invoices is the next adopter. Find a bill retains its existing request state until its own adoption.
+  Find a bill retains its existing request state until its own adoption.
   Large datasets keep SQL sorting or need a measurement before using Users' in-memory key sort.
 
 ## Typed values are only partly checked — a generic phone-format check landed, a country-specific one has not.

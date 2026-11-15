@@ -1442,3 +1442,28 @@ it("refreshes Users pages passively and watches all inputs to their displayed so
   expect(new Headers(fetchImpl.mock.calls[0]![1]?.headers).has("x-waitron-live")).toBe(false);
   expect(new Headers(fetchImpl.mock.calls[1]![1]?.headers).get("x-waitron-live")).toBe("1");
 });
+
+it("refreshes returned invoice pages passively every minute and watches their venue inputs", async () => {
+  const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
+    async () =>
+      new Response(
+        JSON.stringify({ rows: [], page: 0, pageSize: 50, total: 0, timeZone: "Europe/Madrid" }),
+      ),
+  );
+  const active = vi.fn();
+  const query = dashboardQuery(
+    new DashboardApi("", fetchImpl, undefined, active),
+    "listReturnedInvoices",
+    [{ search: "", page: 0, sortKey: "", sortDirection: "descending" }],
+  );
+  expect(query.dependencies).toEqual(
+    ["nodes", "settings.venue", "settings.business_day", "day_cutover_changes"].map((type) => ({
+      type,
+    })),
+  );
+  expect(query.refreshMs).toBe(60_000);
+  expect(query.quietWhileConnected).toBe(false);
+  await query.read();
+  expect(new Headers(fetchImpl.mock.calls[0]![1]?.headers).get("x-waitron-live")).toBe("1");
+  expect(active).not.toHaveBeenCalled();
+});

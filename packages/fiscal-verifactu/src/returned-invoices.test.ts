@@ -1,7 +1,9 @@
 import { appendOriginalForReturn } from "./testing/returned-invoice.js";
 import type { CanonicalValue } from "@waitron/membership";
 import { sql } from "drizzle-orm";
-import { expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
+import { expect, it, onTestFinished, vi } from "vitest";
+
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -9,6 +11,7 @@ import { appendToChain } from "./chain.js";
 import { altaFor, anulacionFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 import {
   readReturnedOriginals,
+  makeReturnedBatches,
   receiveReturnedOriginals,
   type ReturnRow,
 } from "./handover-return.js";
@@ -17,8 +20,14 @@ import { VERIFACTU_HANDOVER } from "./handover-summary.js";
 import { VerifactuBackend } from "./backend.js";
 import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
+vi.mock("node:crypto", async (original) => {
+  const actual = await original<typeof import("node:crypto")>();
+  return { ...actual, randomUUID: vi.fn(actual.randomUUID) };
+});
+
 const source = useVenueDb({ migrations: TEST_MIGRATIONS });
 const receiver = useVenueDb({ migrations: TEST_MIGRATIONS });
+const request = { search: "", page: 0, sortKey: "", sortDirection: "descending" } as const;
 const receivedAt = new Date("2026-07-20T18:00:00.000Z");
 async function fixture() {
   const node = await seedNode(source.db, "Returning");
@@ -138,10 +147,8 @@ it("reads only marked invoices with stored bases and separate record kinds", asy
   const node = await fixture();
   const id = await append(node, 1);
   await receive(node, await inventory(node));
-  const rows = await withTransaction(receiver.db, (tx) =>
-    returnedInvoices(tx, { offset: 0, limit: 101 }),
-  );
-  expect(rows).toEqual([
+  const rows = await withTransaction(receiver.db, (tx) => returnedInvoices(tx, request));
+  expect(rows.rows).toEqual([
     {
       recordId: id,
       saleId: (await inventory(node)).records[0]!.sale_id,
@@ -164,8 +171,8 @@ it("reads only marked invoices with stored bases and separate record kinds", asy
     },
   ]);
   expect(
-    await withTransaction(receiver.db, (tx) => returnedInvoices(tx, { offset: 1, limit: 101 })),
-  ).toEqual([]);
+    await withTransaction(receiver.db, (tx) => returnedInvoices(tx, { ...request, page: 1 })),
+  ).toMatchObject({ rows: rows.rows, page: 0, total: 1, pageSize: 50 });
 });
 
 it("keeps cancellations separate and orders receipt time before chain position", async () => {
@@ -181,9 +188,9 @@ it("keeps cancellations separate and orders receipt time before chain position",
   await withTransaction(source.db, (tx) => appendToChain(tx, node.nodeId, pending));
   const second = await append(node, 2);
   await receive(node, await inventory(node), new Date("2026-07-21T18:00:00Z"));
-  const read = (offset: number, limit: number) =>
-    withTransaction(receiver.db, (tx) => returnedInvoices(tx, { offset, limit }));
-  const rows = await read(0, 3);
+  const read = (page: number) =>
+    withTransaction(receiver.db, (tx) => returnedInvoices(tx, { ...request, page }));
+  const { rows } = await read(0);
   expect(
     rows.map((row) => [row.sequence, row.kind, row.category, row.taxable, row.gross, row.tax]),
   ).toEqual([
@@ -192,8 +199,7 @@ it("keeps cancellations separate and orders receipt time before chain position",
     [1, "F2", "simplified", "102.02", "123.45", "21.43"],
   ]);
   expect(rows.map((row) => row.recordId)).toEqual([expect.any(String), second, id]);
-  expect(await read(1, 1)).toEqual([rows[1]]);
-  expect(await read(3, 101)).toEqual([]);
+  expect(await read(3)).toEqual({ rows, page: 0, total: 3, pageSize: 50 });
 });
 
 it("sums the stored bases exactly instead of subtracting totals, and retains correction references", async () => {
@@ -220,15 +226,18 @@ it("sums the stored bases exactly instead of subtracting totals, and retains cor
     appendToChain(tx, node.nodeId, { ...pending, correctsRegistroId: original }),
   );
   expect(await receive(node, await inventory(node))).toBe(true);
-  const rows = await withTransaction(receiver.db, (tx) =>
-    returnedInvoices(tx, { offset: 0, limit: 101 }),
-  );
-  expect(rows[1]).toMatchObject({
+  const rows = await withTransaction(receiver.db, (tx) => returnedInvoices(tx, request));
+  expect(rows.rows[1]).toMatchObject({
     correctsRecordId: original,
     taxable: "0.30",
     gross: "0.34",
     tax: "0.03",
   });
+  const matched = await withTransaction(receiver.db, (tx) =>
+    returnedInvoices(tx, { ...request, search: original }),
+  );
+  expect(matched.total).toBe(2);
+  expect(matched.rows.map((row) => row.recordId)).toEqual([original, rows.rows[1]!.recordId]);
 });
 
 it.each([
@@ -267,11 +276,9 @@ it.each([
   }
   await withTransaction(source.db, (tx) => appendToChain(tx, node.nodeId, pending));
   expect(await receive(node, await inventory(node))).toBe(true);
-  const rows = await withTransaction(receiver.db, (tx) =>
-    returnedInvoices(tx, { offset: 0, limit: 101 }),
-  );
-  expect(rows[0]!.recordId).toBe(original);
-  expect(rows[1]).toMatchObject({ kind, category });
+  const rows = await withTransaction(receiver.db, (tx) => returnedInvoices(tx, request));
+  expect(rows.rows[0]!.recordId).toBe(original);
+  expect(rows.rows[1]).toMatchObject({ kind, category });
 });
 
 it.each(["[{}]", '[{"BaseImponibleOimporteNoSujeto":7}]'])(
@@ -307,10 +314,96 @@ it("answers the returned invoice through the backend's own methods", async () =>
   await receive(node, await inventory(node));
 
   expect(await withTransaction(receiver.db, (tx) => backend.hasReturnedInvoices(tx))).toBe(true);
-  const rows = await withTransaction(receiver.db, (tx) =>
-    backend.returnedInvoices(tx, { offset: 0, limit: 101 }),
-  );
-  expect(rows.map((row) => [row.recordId, row.invoiceNumber, row.sourceNodeId])).toEqual([
+  const rows = await withTransaction(receiver.db, (tx) => backend.returnedInvoices(tx, request));
+  expect(rows.rows.map((row) => [row.recordId, row.invoiceNumber, row.sourceNodeId])).toEqual([
     [id, "A/1", node.nodeId],
   ]);
+});
+
+it("counts only marked rows, bounds pages and sorts receipt batches before stable positions", async () => {
+  const actual = await vi.importActual<typeof import("node:crypto")>("node:crypto");
+  let nextId = 0;
+  vi.mocked(randomUUID).mockImplementation(() => {
+    const suffix = (nextId++)
+      .toString(6)
+      .padStart(12, "0")
+      .replace(/[0-5]/g, (digit) => "abcdef"[Number(digit)]!);
+    return `cccccccc-cccc-4ccc-8ccc-${suffix}` as ReturnType<typeof randomUUID>;
+  });
+  onTestFinished(() => {
+    vi.mocked(randomUUID).mockImplementation(actual.randomUUID);
+  });
+  const node = await fixture();
+  // This weaker inside-word match keeps the invoice search wider than one page.
+  await withTransaction(receiver.db, (tx) =>
+    tx.execute(sql`update nodes set name = 'Node Returning a106' where id = ${node.nodeId}`),
+  );
+  for (let i = 1; i <= 102; i++) await append(node, i);
+  for (const batch of makeReturnedBatches(await inventory(node))) await receive(node, batch);
+  const latest = await append(node, 103);
+  for (const batch of makeReturnedBatches(await inventory(node)))
+    await receive(node, batch, new Date("2026-07-21T18:00:00Z"));
+  await append(node, 104);
+  const unmarked = await inventory(node);
+  for (const batch of makeReturnedBatches(unmarked))
+    await withTransaction(receiver.db, (tx) =>
+      receiveReturnedOriginals(tx, node.nodeId, batch, receivedAt),
+    );
+  async function read(page = 0, sortDirection: "ascending" | "descending" = "descending") {
+    return withTransaction(receiver.db, (tx) =>
+      returnedInvoices(tx, { ...request, page, sortKey: "receivedAt", sortDirection }),
+    );
+  }
+  const first = await read();
+  expect(first).toMatchObject({ total: 103, page: 0, pageSize: 50 });
+  expect(first.rows).toHaveLength(50);
+  expect(first.rows.map((row) => row.sequence)).toEqual([
+    103,
+    ...Array.from({ length: 49 }, (_, i) => i + 1),
+  ]);
+  const last = await read(999);
+  expect(last).toMatchObject({ total: 103, page: 2, pageSize: 50 });
+  expect(last.rows.map((row) => row.sequence)).toEqual([100, 101, 102]);
+  expect((await read(0, "ascending")).rows.map((row) => row.sequence)).toEqual(
+    Array.from({ length: 50 }, (_, i) => i + 1),
+  );
+  // The shared rank breaks this source-name tie by invoice text length before receipt time.
+  for (const sortDirection of ["ascending", "descending"] as const) {
+    const ranked = await withTransaction(receiver.db, (tx) =>
+      returnedInvoices(tx, {
+        ...request,
+        search: "Node Returning",
+        sortKey: "receivedAt",
+        sortDirection,
+      }),
+    );
+    expect(ranked.total).toBe(103);
+    expect(ranked.rows.slice(0, 9).map((row) => row.sequence)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  }
+  const search = (search: string, page = 0) =>
+    withTransaction(receiver.db, (tx) => returnedInvoices(tx, { ...request, search, page }));
+  expect(await search("A/102 ", 99)).toMatchObject({
+    page: 0,
+    total: 1,
+    rows: [{ invoiceNumber: "A/102" }],
+  });
+  expect(await search("missing-invoice", 99)).toEqual({
+    page: 0,
+    total: 0,
+    pageSize: 50,
+    rows: [],
+  });
+  expect((await search("A/10")).rows.slice(0, 5).map((row) => row.invoiceNumber)).toEqual([
+    "A/10",
+    "A/103",
+    "A/100",
+    "A/101",
+    "A/102",
+  ]);
+  expect((await search("A/10 ")).rows.map((row) => row.invoiceNumber)).toEqual(["A/10"]);
+  for (const value of ["Node Returning", node.nodeId, node.sifId])
+    expect((await search(value)).total).toBe(103);
+  expect((await search(first.rows[0]!.installation)).total).toBe(103);
+  for (const value of [latest, first.rows[0]!.saleId])
+    expect((await search(value)).rows.some((row) => row.recordId === latest)).toBe(true);
 });

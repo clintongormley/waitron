@@ -46,9 +46,18 @@ export interface ReturnedInvoiceRecord {
   receivedAt: string;
 }
 
+export interface ReturnedInvoicesQuery {
+  search: string;
+  page: number;
+  sortKey: "" | "receivedAt";
+  sortDirection: "ascending" | "descending";
+}
+
 export interface ReturnedInvoices {
-  records: ReturnedInvoiceRecord[];
-  nextOffset: number | null;
+  rows: ReturnedInvoiceRecord[];
+  total: number;
+  page: number;
+  pageSize: number;
   timeZone: string;
 }
 
@@ -4789,9 +4798,10 @@ export class DashboardApi {
     );
   }
 
-  listReturnedInvoices(offset = 0): Promise<ReturnedInvoices> {
+  listReturnedInvoices(query: ReturnedInvoicesQuery): Promise<ReturnedInvoices> {
+    const params = new URLSearchParams({ ...query, page: String(query.page) });
     return this.#request<ReturnedInvoices>(
-      `/management-api/reports/returned-invoices?offset=${encodeURIComponent(offset)}`,
+      `/management-api/reports/returned-invoices?${params}`,
       "GET",
       undefined,
       { passive: true },
