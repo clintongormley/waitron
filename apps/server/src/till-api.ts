@@ -2132,8 +2132,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/invoice-delivery-options", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);
-      const printer = await withTransaction(deps.db, (tx) =>
-        resolveInvoicePrinter(tx, requestCfg(deps.cfg, session).origin),
+      const printer = await deps.db.withWriteLock(() =>
+        resolveInvoicePrinter(deps.db, requestCfg(deps.cfg, session).origin),
       );
       // Only an A4 invoice printer is offered at payment; a receipt one is reached from the sale.
       const invoicePrinter = printer?.kind === "a4" ? { id: printer.id, name: printer.name } : null;
@@ -2227,10 +2227,10 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("station.not_found", { stationId: id });
-      const queue = await withTransaction(deps.db, async (tx) => ({
-        items: await listStationQueue(tx, id),
-        notices: await VENUE_SERVICE.listStationNotices(tx, id),
-        printersDown: (await stationPrintersDown(tx, new Date(), [id])).map(
+      const queue = await deps.db.withWriteLock(async () => ({
+        items: await listStationQueue(deps.db, id),
+        notices: await VENUE_SERVICE.listStationNotices(deps.db, id),
+        printersDown: (await stationPrintersDown(deps.db, new Date(), [id])).map(
           ({ printerId, printerName, since }) => ({ printerId, printerName, since }),
         ),
       }));
@@ -2345,7 +2345,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
-      const ticket = await withTransaction(deps.db, async (tx) => {
+      const ticket = await deps.db.withWriteLock(async () => {
+        const tx = deps.db;
         await checkZones(tx, session, [{ orderId: id }]);
         const [sale] = await tx
           .select({ id: sales.id })
@@ -2363,7 +2364,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
-      const status = await withTransaction(deps.db, async (tx) => {
+      const status = await deps.db.withWriteLock(async () => {
+        const tx = deps.db;
         await checkZones(tx, session, [{ orderId: id }]);
         const [sale] = await tx
           .select({ id: sales.id, recipient: sales.counterpartyTaxId })

@@ -3089,6 +3089,8 @@ and "the equipment read answers with the red notice on a full disk with a change
 on macOS through `hdiutil` and in CI on a tmpfs, and skip on a Linux machine without
 `WAITRON_FULL_DISK_ROOT` (see [testing-guide.md](testing-guide.md#the-full-disk-start-tests-run-on-a-small-filesystem)).
 
+**2026-11-15 read audit.** The public theme, language, identity and till setup reads, open-bill and basket readers, menu/zone reads, kitchen displays, station queues, paid-sale/receipt reads and staff schedule reads use write-lock turns without a change-log drain. These are explicit exceptions to the usual draining transaction per route. The theme list and logo preview retain ordinary session activity on a healthy disk; only after `storage.disk_full` do they repeat their authorization with `touch: false` inside a no-drain turn. Floor-state reconciliation and invoice-delivery claim expiry keep their original transactions. The real small-filesystem cases in `start-full-disk.e2e.test.ts` check pending rows, overdue stamps, permissions, a populated bill, a paid receipt and an actual logo image; they do not qualify every GET route.
+
 **The dashboard's full-disk reads (A798-B slice 7).** Measured for the slice
 ([plan](../superpowers/plans/2026-10-22-a798-7-box-status-page.md#measured-for-this-plan)), on the
 small real filesystem: the existing `GET /api/box/status` answered `507 storage.disk_full` on a

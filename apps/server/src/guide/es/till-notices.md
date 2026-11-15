@@ -31,7 +31,7 @@ alimentación y la conexión de la impresora y pulsa **Abrir cajón** si aún ne
 se te pide, elige a alguien que pueda autorizar la apertura e introduce su PIN.
 
 **No se puede guardar nada: el servidor no tiene espacio · Avisa al encargado** es rojo. El servidor
-no tiene espacio en disco, así que no se pueden guardar pedidos, pagos ni otros cambios. El
+no tiene espacio en disco, así que no se pueden guardar pedidos, pagos ni otros cambios. Puedes seguir consultando los menús, las cuentas abiertas y los recibos de ventas cobradas mientras esperas a que se libere espacio. El
 encargado tiene que liberar espacio en el servidor, en la
 [página Estado del servidor](box-status.md#free-space). Si el servidor tuvo que usar su espacio de
 reserva para arrancar, el aviso sigue, también tras reiniciar, hasta que vuelven a quedar libres

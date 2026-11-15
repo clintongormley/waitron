@@ -590,7 +590,8 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
       return c.json(
-        await withTransaction(deps.db, async (tx) => {
+        await deps.db.withWriteLock(async () => {
+          const tx = deps.db;
           const { screen } = await kitchenScreenOf(tx, c, device, "pass");
           const board = await readScopedPassBoard(tx, passScopeOf(screen), {
             showNonPassStations: screen.showNonPassStations,
@@ -605,7 +606,8 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
       return c.json(
-        await withTransaction(deps.db, async (tx) => {
+        await deps.db.withWriteLock(async () => {
+          const tx = deps.db;
           const { screen } = await kitchenScreenOf(tx, c, device, "pass_monitor");
           const board = await readScopedPassBoard(tx, passScopeOf(screen), {
             release: false,
@@ -621,7 +623,8 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
   app.get("/api/device/station-screen", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
-      const stations = await withTransaction(deps.db, async (tx) => {
+      const stations = await deps.db.withWriteLock(async () => {
+        const tx = deps.db;
         const screen = await stationScreenOf(tx, c, device);
         const { slots, queues } = await stationScreenSlots(tx, screen);
         const live = [...queues.keys()];
@@ -753,7 +756,8 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
       if (device.formFactor !== "kds") throw new AppError("device.unauthorized", {});
       return c.json(
-        await withTransaction(deps.db, async (tx) => {
+        await deps.db.withWriteLock(async () => {
+          const tx = deps.db;
           await stationScreenOf(tx, c, device);
           return listStationsToday(tx);
         }),

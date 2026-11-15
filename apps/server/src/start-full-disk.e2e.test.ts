@@ -113,8 +113,11 @@ import {
   readStaffNoticesInTurns,
   type OwnedStaffNoticeSource,
 } from "./staff-notices.js";
-import { provisionBillVenue, seatedWith } from "./testing/bill-venue.js";
+import { provisionBillVenue, seatedWith, tabWith, send } from "./testing/bill-venue.js";
 import { parkOrder } from "./working-order.js";
+import { kitchenScreenDevice, profile as kitchenProfile } from "./testing/kitchen-screen-device.js";
+import sharp from "sharp";
+import { prepareImage, uploadImage } from "@waitron/media";
 import { freePorts } from "./testing/free-ports.js";
 import { REQUIRE_FULL_DISK, openSmallDisk, type SmallDisk } from "./testing/full-disk.js";
 import { systemClock } from "./till-backend.js";
@@ -616,6 +619,42 @@ describe("the Box status read and free-space deletion on a real full disk", () =
     }
   });
 
+  it("the theme logo preview reads an actual image on a full disk with a stamp due", async (ctx) => {
+    const small = needDisk(ctx);
+    const image = await prepareImage(
+      new Uint8Array(
+        await sharp({
+          create: { width: 32, height: 16, channels: 3, background: { r: 0, g: 0, b: 0 } },
+        })
+          .png()
+          .toBuffer(),
+      ),
+      { maxUploadBytes: MiB },
+    );
+    const saved = await withTransaction(db, (tx) =>
+      uploadImage(tx, { image, names: { en: "Receipt logo" } }),
+    );
+    const stamp = seenAMinuteAgo();
+    db.run(
+      sql`insert into change_log (id, payload) values ('logo-pending', '{"resources":[{"type":"persons","id":"pending"}]}')`,
+    );
+    db.all(sql`pragma wal_checkpoint(truncate)`);
+    small.fill(0);
+    for (const passive of [true, false]) {
+      const response = await bootstrapApp.request(
+        `/management-api/theme-logo-print?image=${saved.image.filename}`,
+        { headers: { cookie: manager.cookie, ...(passive ? { "x-waitron-live": "1" } : {}) } },
+      );
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.address).toContain(saved.image.filename);
+      expect(body.papers["58mm"].blackDots).toBeGreaterThan(0);
+      expect(body.papers["80mm"].blackDots).toBeGreaterThan(0);
+    }
+    expect(lastSeen()).toBe(stamp);
+    expect(db.all(sql`select id from change_log`)).toEqual([{ id: "logo-pending" }]);
+  });
+
   it.each([
     ["ended", 401, "management_session.required"],
     ["expired", 401, "management_session.expired"],
@@ -641,11 +680,16 @@ describe("the Box status read and free-space deletion on a real full disk", () =
       );
       db.all(sql`pragma wal_checkpoint(truncate)`);
       small.fill(0);
-      const response = await bootstrapApp.request("/management-api/themes", {
-        headers: { cookie: person.cookie },
-      });
-      expect(response.status).toBe(status);
-      expect(await response.json()).toMatchObject({ error: { code } });
+      for (const path of [
+        "/management-api/themes",
+        `/management-api/theme-logo-print?image=${"a".repeat(64)}.png`,
+      ]) {
+        const response = await bootstrapApp.request(path, {
+          headers: { cookie: person.cookie },
+        });
+        expect(response.status).toBe(status);
+        expect(await response.json()).toMatchObject({ error: { code } });
+      }
       expect(db.all(sql`select id from change_log`)).toEqual([{ id: "theme-authority" }]);
     },
   );
@@ -1542,6 +1586,51 @@ describe("a start on a real full disk", () => {
         operatorId: venue.operatorId,
       });
       const party = await seatedWith(venue, "Steak");
+      const paidId = await tabWith(venue, "Steak");
+      const paid = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/working-orders/${paidId}/payments`,
+        {
+          submissionId: randomUUID(),
+          kind: "contribution",
+          amount: "25.00",
+          method: "cash",
+          tendered: "25.00",
+          applied: "25.00",
+          tip: "0.00",
+        },
+      );
+      expect(paid.status).toBe(200);
+      const stationId = db.all<{ id: string }>(
+        sql`select id from kitchen_stations where active = 1 order by id limit 1`,
+      )[0]!.id;
+      const kitchenReads: { path: string; cookie: string }[] = [];
+      for (const kind of ["station", "pass", "pass_monitor"] as const) {
+        const deviceProfileId = await kitchenProfile(db, "kds");
+        const deviceId = await kitchenScreenDevice(
+          db,
+          {
+            label: `Kitchen ${kind}`,
+            deviceProfileId,
+            tokenHash: hashDeviceToken("kitchen-read"),
+            lastSeenAt: "2020-01-01T00:00:00.000Z",
+          },
+          { kind, stationIds: null, zoneIds: null },
+        );
+        const cookie = `waitron_device=${deviceId}.kitchen-read`;
+        kitchenReads.push({
+          path:
+            kind === "station"
+              ? "/api/device/station-screen"
+              : kind === "pass"
+                ? "/api/device/pass-board"
+                : "/api/device/pass-monitor-board",
+          cookie,
+        });
+        if (kind === "station") kitchenReads.push({ path: "/api/device/stations", cookie });
+      }
       const paths = [
         "/api/staff",
         "/api/till",
@@ -1571,15 +1660,23 @@ describe("a start on a real full disk", () => {
         `/api/parties/${party.partyId}/current-orders`,
         `/api/parties/${party.partyId}/drafts`,
         `/api/parties/${party.partyId}/split-sources`,
+        `/api/stations/${stationId}/queue`,
+        `/api/sales/${paidId}`,
+        `/api/sales/${paidId}/receipt`,
+        `/api/sales/${paidId}/deliveries`,
+        "/api/invoice-delivery-options",
       ];
-      const read = async (path: string) => {
+      const read = async (path: string, cookie = venue.cookie) => {
         const res = await venue.app.request(path, {
-          headers: { cookie: venue.cookie, [PERSON_HEADER]: venue.operatorId },
+          headers: { cookie, [PERSON_HEADER]: venue.operatorId },
         });
         return { path, status: res.status, body: await res.json() };
       };
       const before = [];
       for (const path of paths) before.push(await read(path));
+      const kitchenBefore = [];
+      for (const { path, cookie } of kitchenReads) kitchenBefore.push(await read(path, cookie));
+      expect(kitchenBefore.map(({ status }) => status)).toEqual([200, 200, 200, 200]);
       db.run(
         sql`update devices set last_seen_at = '2020-01-01T00:00:00.000Z' where id = ${venue.deviceId}`,
       );
@@ -1590,13 +1687,21 @@ describe("a start on a real full disk", () => {
       small.fill(0);
       const full = [];
       for (const path of paths) full.push(await read(path));
+      const kitchenFull = [];
+      for (const { path, cookie } of kitchenReads) kitchenFull.push(await read(path, cookie));
+      expect(kitchenFull.map(({ status }) => status)).toEqual([200, 200, 200, 200]);
       expect(before.map(({ path, status }) => ({ path, status }))).toEqual(
         paths.map((path) => ({ path, status: path === "/api/device/stations" ? 401 : 200 })),
       );
       expect(full.map(({ path, status }) => ({ path, status }))).toEqual(
         paths.map((path) => ({
           path,
-          status: path === "/api/tables/state" ? 507 : path === "/api/device/stations" ? 401 : 200,
+          status:
+            path === "/api/tables/state" || path.endsWith("/deliveries")
+              ? 507
+              : path === "/api/device/stations"
+                ? 401
+                : 200,
         })),
       );
       expect(full.find(({ path }) => path === "/api/working-orders")!.body).toEqual(

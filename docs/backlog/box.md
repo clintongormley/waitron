@@ -1354,15 +1354,9 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
   with no word of the full disk.**
   Open: should that page also say the disk is full and show the free space?
   [Detail](box.md#on-a-full-disk-a-box-whose-kept-certificates-cannot-be-used-shows-the-connection-set-up-page-with-no-word-of-the-full-disk)
-- **The dashboard shell's other first reads were not checked on a full disk.** Slice 7 made the
-  Box status read and the bell's alert reads answer there; the shell's other reads at sign-in were
-  not tried. Left open by A798-B slice 7.
 - **Till write surfaces other than the draft save, the unpaid departure and the station screen were
   not checked for a full-disk refusal's words**
   [Detail](box.md#till-write-surfaces-not-checked-for-a-full-disk-refusals-words)
-- **On a full disk, a till read whose route opens a `withTransaction` is refused while a change
-  waits.**
-  [Detail](box.md#on-a-full-disk-a-till-read-whose-route-opens-a-withtransaction-is-refused-while-a-change-waits)
 - **The strip draws no tinted background and no coloured words, unlike picture 2.** No token is
   named for the tints and `color-mix()` is refused; tint tokens with their contrast checks would let
   it. Left open by A798-B slice 6 (#1977).
@@ -1458,6 +1452,8 @@ except the last, added 2026-11-14.
   record's time is true in every case the notice shows. It is the same record time the bell's
   delayed-sending alert and Fiscal filing's "Oldest waiting" read, though over more records: stopped
   and held ones count too. Open to the owner.
+
+Full-disk reads that reconcile state keep their writes: the floor-state read can reset today’s layout, and invoice-delivery status expires delivery claims. They can still answer `507 storage.disk_full`. The read audit leaves those transactions in place; the watcher explicitly retained invoice expiry on 15 November 2026 at 06:10 in Lane K’s `questions.md`. New sign-ins also need to save their sessions.
 
 ### Retry after a full-disk stop
 
@@ -1956,21 +1952,6 @@ kitchen display and on a till's Station tab. The rest were not checked: audit th
 `apps/till/src` that do not fall back to `codeMessage(code)`. The pass screens on a kitchen display,
 which has no strip, were not checked either.
 
-## On a full disk, a till read whose route opens a withTransaction is refused while a change waits
-
-Left open by A798-B slice 6 (#1977). `withTransaction` ends every body with the
-change-log drain (`delete from change_log returning payload`, `packages/db/src/change-log.ts`),
-which is a write. Measured 2026-10-22 on a migrated venue on a small full disk, with one
-`change_log` row waiting: a read-only `withTransaction` was refused `storage.disk_full`, a write-lock
-turn holding the same read answered, and a turn holding only the drain's statement was refused. So
-the equipment read, which reads in turns, answers; `GET /api/till`, which opens its own
-`withTransaction` around `readTillSetup`, and the session-checked till reads (`GET
-/api/working-orders` among them) answered `507` with a change waiting — with no change waiting, and
-since slice 6 even with a last-seen stamp due, they answer 200. For `GET /api/working-orders`, the 507 came
-from the route's own `withTransaction` (`listHeldOrders`) after `requireSession` had caught its own
-drain's refusal; for `GET /api/till` it was not isolated
-([conventions-data.md](../developers/conventions-data.md#a-read-on-a-full-disk-must-not-fail-on-its-own-housekeeping-write)). PIN sign-in is refused on a full disk in every case, with no session
-written.
 
 ## Backup data verification and Cloud release
 
