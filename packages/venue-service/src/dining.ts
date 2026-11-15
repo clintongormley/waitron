@@ -3,12 +3,17 @@ import { chargesTakeawayVat } from "@waitron/country-packs";
 import {
   departments,
   floorZones,
+  orderDiningLocked,
   orderServiceContexts,
   readTaxpayer,
   readVenueSettings,
+  workingOrderLines,
+  workingOrders,
   type Transaction,
 } from "@waitron/db";
+import type { ServiceMode } from "@waitron/module";
 import { AppError, type Dining, type DiningPolicy } from "@waitron/shared";
+import { readLunchLineIds } from "./operations.js";
 import "./errors.js";
 
 /** Whether the venue's region charges a different VAT class on food taken away. */
@@ -91,4 +96,45 @@ export async function resolveOrderDining(
   }
   const atTable = (zone.zoneOrderStart ?? zone.departmentOrderStart) === "table";
   return requested ?? (atTable ? "eat_in" : (zone.startsAs ?? "eat_in"));
+}
+
+/**
+ * The way an existing order sells once its department becomes `to.departmentId` (A1522, Decision 6).
+ * An order whose way is fixed (sent or paid) keeps it, and a takeaway order moved to a table stays
+ * takeaway. Otherwise a department fixed one way gives the order that way, and a till-choice
+ * department leaves it for staff to switch; becoming takeaway with a set lunch is refused. A region
+ * without takeaway VAT changes nothing. The caller calls this only when the department changes.
+ */
+export async function applyDepartmentDining(
+  tx: Transaction,
+  workingOrderId: string,
+  to: { departmentId: string; serviceMode: ServiceMode },
+): Promise<void> {
+  if (!(await venueChargesTakeawayVat(tx))) return;
+  if ((await orderDiningLocked(tx, workingOrderId)) !== null) return;
+  const [order] = await tx
+    .select({ dining: workingOrders.dining })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, workingOrderId));
+  if (order === undefined) throw new AppError("working_order.not_found", { workingOrderId });
+  if (order.dining === "takeaway" && to.serviceMode === "table_tab") return;
+  // No row (seedZone's test departments): eaten here, as `resolveOrderDining` reads it.
+  const [policy] = await tx
+    .select({ dining: departmentSalePolicies.dining })
+    .from(departmentSalePolicies)
+    .where(eq(departmentSalePolicies.departmentId, to.departmentId));
+  const dining = policy?.dining ?? "eat_in";
+  if (dining === "till_choice" || dining === order.dining) return;
+  if (dining === "takeaway") {
+    const lines = await tx
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, workingOrderId));
+    const lunches = await readLunchLineIds(
+      tx,
+      lines.map((line) => line.id),
+    );
+    if (lunches.size > 0) throw new AppError("order.set_lunch_takeaway", { canSwitch: false });
+  }
+  await tx.update(workingOrders).set({ dining }).where(eq(workingOrders.id, workingOrderId));
 }

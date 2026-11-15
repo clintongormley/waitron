@@ -17,6 +17,7 @@ import {
   type ServiceStepInput,
 } from "./service-steps.js";
 import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
+import { applyDepartmentDining } from "./dining.js";
 import { and, asc, desc, eq, inArray, isNotNull, ne, sql, type SQL } from "drizzle-orm";
 import {
   menus,
@@ -1046,8 +1047,10 @@ export async function retargetOrderServiceContext(
 ): Promise<void> {
   const context = await resolveZoneContext(tx, zoneId);
   const previous = await getOrderServiceContext(tx, workingOrderId);
-  if (previous.departmentId !== context.departmentId)
+  if (previous.departmentId !== context.departmentId) {
     await withdrawPendingDepartmentTransfers(tx, [workingOrderId]);
+    await applyDepartmentDining(tx, workingOrderId, context);
+  }
   const updated = await tx
     .update(orderServiceContexts)
     .set({

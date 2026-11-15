@@ -36,6 +36,7 @@ import {
   getOrderServiceContext,
   setProfileServiceScope,
   setDepartmentTransferSettings,
+  setDepartmentSalePolicyField,
   departmentTransferRequests,
   departments,
   workingLineContexts,
@@ -311,6 +312,36 @@ describe("department transfer till writes", () => {
       status: 409,
       body: { error: { code: "department_transfer.not_pending" } },
     });
+  });
+  it("keeps a sent takeaway order takeaway when a department selling only eaten here accepts it (A1522)", async () => {
+    const f = await ready();
+    await withTransaction(suite.db, async (tx) => {
+      await setDepartmentSalePolicyField(tx, f.b, "dining", "eat_in");
+      await setDepartmentSalePolicyField(tx, f.b, "orderStart", "counter");
+      await tx.update(workingOrders).set({ dining: "takeaway" }).where(eq(workingOrders.id, f.tab));
+      await tx.insert(workingOrderLines).values({
+        workingOrderId: f.tab,
+        lineNo: 1,
+        name: "Croquettes",
+        descriptions: { "es-ES": "Croquettes" },
+        quantity: 1000,
+        unitPriceGross: 600,
+        vatClass: "reduced",
+        takeawayVatClass: "reduced",
+        lineTotal: 600,
+        sentAt: "2026-11-14T12:00:00.000Z",
+      });
+    });
+    const id = await pending(f);
+    const accepted = await post(f.desk.cookie, resolutionPath(id, "accept"), {
+      revision: 0,
+      zoneId: f.bz,
+      tableId: null,
+    });
+    expect(accepted.status).toBe(200);
+    const after = await state(f.tab);
+    expect(after.context).toMatchObject({ departmentId: f.b, serviceMode: "prepay" });
+    expect(after.tab!.dining).toBe("takeaway");
   });
   it("declines with the receiver's reason while keeping source responsibility", async () => {
     const f = await ready();

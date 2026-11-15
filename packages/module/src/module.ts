@@ -869,6 +869,13 @@ export interface VenueServiceContribution {
     tx: Transaction,
     workingOrderIds: readonly string[],
   ): Promise<ReadonlySet<string>>;
+  /** An existing order's way once its department becomes `to.departmentId`; called only when the
+   *  department changes. Refuses `order.set_lunch_takeaway` when it would take a set lunch away. */
+  applyDepartmentDining(
+    tx: Transaction,
+    workingOrderId: string,
+    to: { departmentId: string; serviceMode: ServiceMode },
+  ): Promise<void>;
   recordSaleReceiptHeader(tx: Transaction, saleId: string, zoneId: string | null): Promise<void>;
   readDepartmentReceiptPolicy(
     tx: Transaction,

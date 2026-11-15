@@ -547,9 +547,9 @@ declare module "@waitron/shared" {
      */
     "order.payment_in_flight": { workingOrderId: string };
     /**
-     * A set lunch is sold only eaten here. `canSwitch`: staff may still switch this order to eaten
-     * here (its department leaves the way to the till, the region charges takeaway VAT, and nothing
-     * is sent or paid).
+     * Declared by `@waitron/venue-service` too, with the same params. A set lunch is sold only eaten
+     * here. `canSwitch`: staff may still switch this order to eaten here (its department leaves the
+     * way to the till, the region charges takeaway VAT, and nothing is sent or paid).
      */
     "order.set_lunch_takeaway": { canSwitch: boolean };
     /**
