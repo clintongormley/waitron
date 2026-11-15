@@ -383,6 +383,43 @@ it("a press 31 seconds after the first comparison compares again and is accepted
   });
 });
 
+it.each([
+  { code: "promotion.break_glass_invalid", reason: undefined, then: "inspect" },
+  { code: "sif.allocation_invalid", reason: "old_machine_active", then: "compare" },
+  { code: "sif.allocation_invalid", reason: "parallel_recovery", then: "compare" },
+  { code: "sif.allocation_invalid", reason: "uncertain_prior_activation", then: "inspect" },
+])(
+  "a Confirm the time press refused with $code/$reason drops the times shown for confirmation",
+  async ({ code, reason, then }) => {
+    const box = deviceOnly();
+    let challenges = 0;
+    const { screen } = await mount(async (body) => {
+      if (
+        body.command.kind === "prepare" &&
+        body.command.proposal.action === "clock-challenge" &&
+        ++challenges === 2
+      )
+        throw { code, ...(reason === undefined ? {} : { params: { reason } }) };
+      return box(body);
+    });
+    await inspect(screen);
+    await compare(screen);
+    await vi.waitFor(() =>
+      expect(screen.shadowRoot!.querySelector("[data-confirm-time]")).not.toBeNull(),
+    );
+    await click(screen, "confirm-time");
+    await vi.waitFor(() =>
+      expect(
+        (screen.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string })
+          .error,
+      ).not.toBe(""),
+    );
+    expect(screen.shadowRoot!.querySelector("[data-confirm-time]")).toBeNull();
+    expect(screen.shadowRoot!.querySelector("[data-action=confirm-time]")).toBeNull();
+    expect(screen.shadowRoot!.querySelector(`[data-action=${then}]`)).not.toBeNull();
+  },
+);
+
 it("with the internet's time among the clocks, selects by itself and never sends confirmed", async () => {
   const { screen, calls } = await mount(async (body) =>
     body.command.kind === "status"

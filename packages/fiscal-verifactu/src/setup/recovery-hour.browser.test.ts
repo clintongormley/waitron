@@ -1996,6 +1996,12 @@ const differing = {
   ],
   disagreement: true,
 };
+/** Only this device's clock agrees with the box's; the internet's time is unavailable. */
+const deviceOnly = {
+  ...clock,
+  usable: clock.usable.filter((r) => r.source !== "internet"),
+  unavailable: [{ source: "internet", result: "unavailable" as const, reason: "offline" }],
+};
 /** Mounts with `scripted`'s double, gives the key and both statements and presses Proceed. */
 async function pressed(answers?: unknown[], decision: typeof clock = clock) {
   const { state, prepare } = scripted(answers);
@@ -2151,6 +2157,19 @@ it.each<[string, string | undefined, boolean, () => Promise<Entry>]>([
     async () => {
       const { el } = await pressed(undefined, noSecondClock);
       await vi.waitFor(() => expect(text(el)).toContain(RESTORE_OPEN));
+      return el;
+    },
+  ],
+  [
+    "only this device agrees, with no internet time, and both times are shown for Confirm the time",
+    undefined,
+    false,
+    async () => {
+      const { el } = await pressed(undefined, deviceOnly);
+      await vi.waitFor(() =>
+        expect(button(el, "confirm-time").textContent?.trim()).toBe("Confirm the time"),
+      );
+      expect(detailRows(el, "clock-times")).toHaveLength(2);
       return el;
     },
   ],
@@ -2589,11 +2608,7 @@ it("a handover start sets the spare's clock from This device and carries on to t
 });
 it("when only this device agrees, Confirm the time compares again and selects with confirmed", async () => {
   const { state, prepare } = scripted();
-  state.decision = {
-    ...clock,
-    usable: clock.usable.filter((r) => r.source !== "internet"),
-    unavailable: [{ source: "internet", result: "unavailable" as const, reason: "offline" }],
-  };
+  state.decision = deviceOnly;
   const { el } = await mount(prepare);
   await ready(el);
   await vi.waitFor(() =>
@@ -2613,11 +2628,7 @@ it("when only this device agrees, Confirm the time compares again and selects wi
 it("Compare the clocks again with no internet time, once the clocks agree, offers Confirm the time and sends no select until it is pressed", async () => {
   const { el, prepare, state } = await pressed(undefined, differing);
   await vi.waitFor(() => expect(action(el)).toBe("Compare the clocks again"));
-  state.decision = {
-    ...clock,
-    usable: clock.usable.filter((r) => r.source !== "internet"),
-    unavailable: [{ source: "internet", result: "unavailable" as const, reason: "offline" }],
-  };
+  state.decision = deviceOnly;
   await userEvent.click(button(el, "compare"));
   await vi.waitFor(() =>
     expect(button(el, "confirm-time").textContent?.trim()).toBe("Confirm the time"),
@@ -2632,4 +2643,40 @@ it("Compare the clocks again with no internet time, once the clocks agree, offer
     ]),
   );
   await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
+});
+it("a wait after a Proceed with the internet's time that ends with only this device agreeing shows both times and stops for Confirm the time", async () => {
+  const { state, prepare } = scripted([
+    { status: "waiting", targetMs: instant + 90_000, remainingMs: 90_000 },
+    selected,
+  ]);
+  const { el } = await mount(prepare);
+  fakeClock();
+  try {
+    await ready(el);
+    await vi.waitFor(() => expect(remaining(el)).toBeDefined());
+    vi.advanceTimersByTime(0);
+    await el.updateComplete;
+    expect(remaining(el)).toBe("1:30");
+    expect(selects(prepare)).toEqual([{ action: "select", comparisonId: "comparison-1" }]);
+    state.decision = deviceOnly;
+    vi.advanceTimersByTime(90_000);
+    await vi.waitFor(() =>
+      expect(button(el, "confirm-time").textContent?.trim()).toBe("Confirm the time"),
+    );
+    expect(detailRows(el, "clock-times")).toHaveLength(2);
+    expect(action(el)).toBeUndefined();
+    expect(actionsOf(prepare).filter((a) => a === "compare-clocks")).toHaveLength(2);
+    expect(selects(prepare)).toHaveLength(1);
+    expect(el.readCredentials()).toBeNull();
+    await userEvent.click(button(el, "confirm-time"));
+    await vi.waitFor(() =>
+      expect(selects(prepare)).toEqual([
+        { action: "select", comparisonId: "comparison-1" },
+        { action: "select", comparisonId: "comparison-3", confirmed: true },
+      ]),
+    );
+    await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
+  } finally {
+    vi.useRealTimers();
+  }
 });

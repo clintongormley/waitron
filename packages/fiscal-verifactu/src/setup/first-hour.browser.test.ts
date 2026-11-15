@@ -2078,6 +2078,34 @@ it.each<[string, string | undefined, boolean, () => Promise<LitElement>]>([
     },
   ],
   [
+    "only this device agrees on load, with no internet time, and both times are shown above Proceed",
+    "Proceed",
+    false,
+    async () => {
+      const { el } = await mount({ decision: deviceOnly });
+      await ready(el);
+      await vi.waitFor(() => expect(text(el)).toContain(CONFIRM_PROCEED));
+      expect(detailRows(el, "clock-times")).toHaveLength(2);
+      return el;
+    },
+  ],
+  [
+    "a press finds only this device agreeing, with no internet time, and both times are shown for another Proceed",
+    "Proceed",
+    false,
+    async () => {
+      let decision: typeof clock = clock;
+      const { el } = await mount({ decision: () => decision });
+      await ready(el);
+      decision = deviceOnly;
+      await proceed(el);
+      await shows(el, "clock-confirm");
+      expect(text(el)).toContain(CONFIRM_PROCEED);
+      expect(detailRows(el, "clock-times")).toHaveLength(2);
+      return el;
+    },
+  ],
+  [
     "the series are made",
     undefined,
     false,
@@ -2404,12 +2432,7 @@ it.each([["internet", "matches the internet time"]] as [string, string][])(
   },
 );
 it("when only this device agrees, the step shows both times above Proceed, and Proceed confirms them", async () => {
-  const decision = {
-    ...clock,
-    usable: clock.usable.filter((r) => r.source !== "internet"),
-    unavailable: [{ source: "internet", result: "unavailable" as const, reason: "offline" }],
-  };
-  const { el, calls } = await mount({ decision });
+  const { el, calls } = await mount({ decision: deviceOnly });
   await ready(el);
   await vi.waitFor(() =>
     expect(text(el)).toContain(
@@ -2496,6 +2519,47 @@ it("a wait the box recorded before the page loaded that ends with only this devi
     await vi.waitFor(() =>
       expect(calls.filter((c) => c.action === "candidates").map((c) => c.value)).toEqual([
         { comparisonId: "comparison", confirmed: true },
+      ]),
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("a wait after a Proceed with the internet's time that ends with only this device agreeing shows both times and stops for Proceed", async () => {
+  let decision: typeof clock = clock;
+  fakeClock();
+  try {
+    const { el, calls } = await mount({
+      decision: () => decision,
+      select: async () => ({
+        status: "waiting",
+        targetMs: instant + 90_000,
+        remainingMs: 90_000,
+      }),
+    });
+    const candidates = () => calls.filter((c) => c.action === "candidates").map((c) => c.value);
+    await ready(el);
+    await proceed(el);
+    await vi.waitFor(() => expect(remaining(el)).toBe("1:30"));
+    expect(candidates()).toEqual([{ comparisonId: "comparison-2" }]);
+    expect(el.shadowRoot!.querySelector("[data-test=clock-times]")).toBeNull();
+    decision = deviceOnly;
+    vi.advanceTimersByTime(90_000);
+    await shows(el, "clock-confirm");
+    expect(text(el)).toContain(CONFIRM_PROCEED);
+    expect(detailRows(el, "clock-times")).toEqual([
+      ["Server time", "18 October 2026 at 14:30:00"],
+      ["This device", "18 October 2026 at 14:30:00"],
+    ]);
+    expect(actionsOf(calls).filter((a) => a === "compare-clocks")).toHaveLength(3);
+    expect(action(el)).toBe("Proceed");
+    expect(button(el, "compare").disabled).toBe(false);
+    expect(candidates()).toHaveLength(1);
+    await proceed(el);
+    await vi.waitFor(() =>
+      expect(candidates()).toEqual([
+        { comparisonId: "comparison-2" },
+        { comparisonId: "comparison-4", confirmed: true },
       ]),
     );
   } finally {

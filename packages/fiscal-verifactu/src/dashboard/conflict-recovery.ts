@@ -233,9 +233,11 @@ export class ConflictRecovery extends LitElement {
         this.key = "";
         this.active = null;
         this.selection = null;
+        this.toConfirm = null;
         this.refusal = this.t("conflict_recovery.key_refused");
       } else if (code === "sif.allocation_invalid" && reason === "uncertain_prior_activation") {
         this.selection = null;
+        this.toConfirm = null;
         this.uncertain = true;
         this.refusal = this.t("conflict_recovery.uncertain");
       } else if (
@@ -245,6 +247,7 @@ export class ConflictRecovery extends LitElement {
         this.offline = false;
         this.noParallel = false;
         this.selection = null;
+        this.toConfirm = null;
         this.refusal = this.t("conflict_recovery.confirm");
       } else
         this.refusal = this.t(
