@@ -14,7 +14,7 @@ import {
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { mkdtemp, rm } from "node:fs/promises";
-import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
@@ -506,6 +506,34 @@ describe("dev-setup run as a command", () => {
       join(workDir, "venue"),
     );
   }, 180_000);
+
+  it("--reset under production refuses before removing the venue folder", () => {
+    const venueDir = join(workDir, "production-venue");
+    mkdirSync(venueDir);
+    writeFileSync(join(venueDir, "sentinel"), "keep me");
+    const settingsFile = join(workDir, "production-settings.env");
+    const result = spawnSync(
+      process.execPath,
+      ["--import", "tsx", fileURLToPath(new URL("./dev-setup.ts", import.meta.url)), "--reset"],
+      {
+        cwd: fileURLToPath(new URL("..", import.meta.url)),
+        encoding: "utf8",
+        timeout: 60_000,
+        env: {
+          ...process.env,
+          WAITRON_ENV: "production",
+          WAITRON_STATE_DIR: join(workDir, "production-state"),
+          WAITRON_VENUE_DIR: venueDir,
+          WAITRON_DEV_ENV_FILE: settingsFile,
+        },
+      },
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("deployment.demo_data_refused");
+    expect(result.stdout).not.toContain("removed");
+    expect(readFileSync(join(venueDir, "sentinel"), "utf8")).toBe("keep me");
+    expect(existsSync(settingsFile)).toBe(false);
+  }, 90_000);
 });
 
 describe("devSetup under WAITRON_ENV=production", () => {
