@@ -101,6 +101,40 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
     expect(index?.sql).toMatch(/WHERE "kitchen_courses"\."active" = 1$/);
   });
 
+  it("keeps a starter link through rename, allows unlinked courses and reuses a retired link", async () => {
+    const add = (name: string, starterKey: string | null) =>
+      inTx((tx) => tx.insert(kitchenCourses).values({ name, starterKey }).returning());
+    const [first] = await add("Preset main", "mains");
+    await inTx((tx) =>
+      tx.update(kitchenCourses).set({ name: "House main" }).where(eq(kitchenCourses.id, first!.id)),
+    );
+    const collision = await captureError(() => add("Another main", "mains"));
+    expect(isRefusal(collision, UNIQUE_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(collision)).toBe(
+      "UNIQUE constraint failed: kitchen_courses.starter_key",
+    );
+    await add("Unlinked first", null);
+    await add("Unlinked second", null);
+    await inTx((tx) =>
+      tx.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, first!.id)),
+    );
+    const [replacement] = await add("Replacement main", "mains");
+    expect(replacement!.id).not.toBe(first!.id);
+    const linked = await inTx((tx) =>
+      tx
+        .select({ id: kitchenCourses.id, name: kitchenCourses.name, active: kitchenCourses.active })
+        .from(kitchenCourses)
+        .where(eq(kitchenCourses.starterKey, "mains")),
+    );
+    expect(linked).toEqual(
+      expect.arrayContaining([
+        { id: first!.id, name: "House main", active: false },
+        { id: replacement!.id, name: "Replacement main", active: true },
+      ]),
+    );
+    expect(linked).toHaveLength(2);
+  });
+
   it("maps display_order and name through the Drizzle export, with the active default", async () => {
     const id = await seedCourse("Mains", 1);
     await inTx((tx) =>

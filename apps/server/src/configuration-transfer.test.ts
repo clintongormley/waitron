@@ -7040,6 +7040,10 @@ it("round-trips deleted kitchen configuration and preserves archived products an
     await deleteCourse(tx, course.id);
     await deleteStation(tx, station.id);
     const live = await createCourse(tx, { name: "Live starters", displayOrder: 0 });
+    await tx
+      .update(kitchenCourses)
+      .set({ starterKey: "mains" })
+      .where(eq(kitchenCourses.id, live.id));
     return {
       course: course.id,
       station: station.id,
@@ -7057,8 +7061,13 @@ it("round-trips deleted kitchen configuration and preserves archived products an
     versions,
   );
   expect(
-    transferred.tables.kitchen_courses!.map(({ id, name, active }) => ({ id, name, active })),
-  ).toEqual([{ id: ids.live, name: "Live starters", active: 1 }]);
+    transferred.tables.kitchen_courses!.map(({ id, name, active, starter_key }) => ({
+      id,
+      name,
+      active,
+      starter_key,
+    })),
+  ).toEqual([{ id: ids.live, name: "Live starters", active: 1, starter_key: "mains" }]);
   expect(transferred.tables.kitchen_stations!.some((row) => row.id === ids.station)).toBe(false);
   const archived = transferred.tables.products!.find((row) => row.id === ids.product)!;
   expect(archived).toBeDefined();
@@ -7121,8 +7130,10 @@ it("round-trips deleted kitchen configuration and preserves archived products an
       (row) => row.screens.station !== undefined,
     ),
   }));
-  expect(imported.courses.map(({ id, name, active }) => ({ id, name, active }))).toEqual([
-    { id: imported.courses[0]!.id, name: "Live starters", active: true },
+  expect(
+    imported.courses.map(({ id, name, active, starterKey }) => ({ id, name, active, starterKey })),
+  ).toEqual([
+    { id: imported.courses[0]!.id, name: "Live starters", active: true, starterKey: "mains" },
   ]);
   expect(imported.courses[0]!.id).not.toBe(ids.live);
   expect(imported.stations.some((row) => row.name === "Retired pastry")).toBe(false);

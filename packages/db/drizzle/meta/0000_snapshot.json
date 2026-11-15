@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "01177cf4-dc99-4919-920e-1d3910e5eb52",
+  "id": "17512c1e-d5e9-46a8-808c-ae176cfc6b7a",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -4309,6 +4309,13 @@
           "notNull": true,
           "autoincrement": false
         },
+        "starter_key": {
+          "name": "starter_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "display_order": {
           "name": "display_order",
           "type": "integer",
@@ -4346,6 +4353,14 @@
           "name": "kitchen_courses_name_key",
           "columns": [
             "name"
+          ],
+          "isUnique": true,
+          "where": "\"kitchen_courses\".\"active\" = 1"
+        },
+        "kitchen_courses_starter_key": {
+          "name": "kitchen_courses_starter_key",
+          "columns": [
+            "starter_key"
           ],
           "isUnique": true,
           "where": "\"kitchen_courses\".\"active\" = 1"

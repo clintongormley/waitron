@@ -631,6 +631,7 @@ CREATE UNIQUE INDEX `kitchen_stations_default_key` ON `kitchen_stations` (`is_de
 CREATE TABLE `kitchen_courses` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
+	`starter_key` text,
 	`display_order` integer DEFAULT 0 NOT NULL,
 	`active` integer DEFAULT true NOT NULL,
 	`held_until_fired` integer DEFAULT true NOT NULL,
@@ -638,6 +639,7 @@ CREATE TABLE `kitchen_courses` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `kitchen_courses_name_key` ON `kitchen_courses` (`name`) WHERE "kitchen_courses"."active" = 1;--> statement-breakpoint
+CREATE UNIQUE INDEX `kitchen_courses_starter_key` ON `kitchen_courses` (`starter_key`) WHERE "kitchen_courses"."active" = 1;--> statement-breakpoint
 CREATE TABLE `ticket_items` (
 	`id` text PRIMARY KEY NOT NULL,
 	`working_order_line_id` text NOT NULL,

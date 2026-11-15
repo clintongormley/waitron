@@ -65,8 +65,9 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
             taxpayer === null ? [] : (getCountryPack(taxpayer.country)?.starterCourses ?? []);
           if (courses.length > 0) {
             await tx.insert(kitchenCourses).values(
-              courses.map(({ name, heldUntilFired }, displayOrder) => ({
+              courses.map(({ name, heldUntilFired, starterKey }, displayOrder) => ({
                 name: starterName(STARTER_COURSE_NAMES, name, staffLanguage),
+                starterKey: starterKey ?? null,
                 displayOrder,
                 heldUntilFired,
               })),

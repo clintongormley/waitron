@@ -10,6 +10,7 @@ import {
   withTransaction,
   menus,
   kitchenStations,
+  kitchenCourses,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -86,13 +87,20 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
         "en-GB",
         ["Sharing plates", "Starters", "Mains", "Desserts"],
         [false, false, true, true],
+        [null, null, "mains", "desserts"],
       ],
-      ["ES", "es-ES", null, [false, false, true, true]],
-      ["GB", "en-GB", ["Starters", "Mains", "Desserts"], [false, true, true]],
-      ["ZZ", "en-GB", [], []],
+      ["ES", "es-ES", null, [false, false, true, true], [null, null, "mains", "desserts"]],
+      [
+        "GB",
+        "en-GB",
+        ["Starters", "Mains", "Desserts"],
+        [false, true, true],
+        [null, "mains", "desserts"],
+      ],
+      ["ZZ", "en-GB", [], [], []],
     ] as const)(
       "seeds %s courses in %s with their firing defaults",
-      async (country, locale, english, held) => {
+      async (country, locale, english, held, keys) => {
         await seedVenue(db, { invoiceLocales: [locale] });
         await db.execute(sql`update taxpayer set country = ${country}`);
         const node = { nodeId: await seedNode(db) };
@@ -113,6 +121,9 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
             active: 1,
           })),
         );
+        expect(
+          await db.select().from(kitchenCourses).orderBy(kitchenCourses.displayOrder),
+        ).toMatchObject(keys.map((starterKey) => ({ starterKey })));
       },
     );
 
