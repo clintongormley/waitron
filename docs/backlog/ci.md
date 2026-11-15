@@ -177,6 +177,17 @@ sighting, not a diagnosed cause or a repair. Preserve the timing and event-loop 
 a clean rerun of unrelated work does not close it. Receipts: `~/waitron-campaign-k/receipts/b3-wifi-controls/ci-server17.log`,
 `server-failure-history.json` and `timer-probe-linux.jsonl`.
 
+15 November 2026: PR #3399's `root-guards` job
+([run 43766044951, attempt 1](https://github.com/clintongormley/waitron/actions/runs/43766044951/job/132972347897))
+failed `scripts/action-menu-styles.test.ts:140` "screens leave action item appearance to the shared
+components" with "Test timed out in 30000ms"; the file took 50,509 ms. The branch changes no
+dashboard, till or menu code. On attempt 2 the same file passed in 12,230 ms; locally on main it
+takes 2.23 s (12 passed). So on CI's runner the guard runs at several times its local time and came
+within its 30-second limit's reach once; no earlier kept log names it. The likely root cause — the
+case walking `apps` and `packages` and parsing every non-test source file under `apps/*/src` (the
+server's included) and the modules' `src/dashboard` folders with the TypeScript compiler
+(`scripts/action-menu-styles.test.ts:140-157`) — is read, not measured. The log is kept at `~/waitron-campaign-b/ci-logs/pr3399-run43766044951-attempt1-root-guards.log`.
+
 ## Server shard 2 stalled once on a hosted runner (PR #2664, 2026-11-09)
 
 Run [42690313010](https://github.com/clintongormley/waitron/actions/runs/42690313010), job
