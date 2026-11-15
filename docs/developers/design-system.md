@@ -2119,7 +2119,7 @@ in-memory key sort. The shared request controller makes no assumption about the 
 
 Orders uses the same controller with SQL sorting by Opened, Invoice or Total, after word-search
 rank. Returned invoices uses it with 50-row SQL pages, matching totals, word-search rank and
-Received sorting; its saved view is `waitron.returned-invoices.table`.
+First received sorting; its saved view is `waitron.returned-invoices.table`.
 
 Put a date range or another screen-owned filter in `filters-start`, and its visible chips in
 `toolbar-bottom`. In server mode, add its active count through `externalFilterCount`; this also

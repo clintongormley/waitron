@@ -502,8 +502,8 @@ export const QUERY_DEPENDENCIES = {
   getLocales: ["taxpayer"],
   getGoogleConfig: ["google_config", "settings.venue"],
   getEmailInbox: ["email_inbox"],
-  // `removable` reads whether the machine has a `nodes` row here, so a new row moves it too.
   listReturnedInvoices: ["nodes", "settings.venue", "settings.business_day", "day_cutover_changes"],
+  // `removable` reads whether the machine has a `nodes` row here, so a new row moves it too.
   listServers: ["node_membership", "nodes"],
   getBackupStatus: ["backup_status", "settings.backup"],
   getStreamSettings: ["backup_status", "settings.backup"],

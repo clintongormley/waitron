@@ -226,6 +226,11 @@ it("sums the stored bases exactly instead of subtracting totals, and retains cor
     gross: "0.34",
     tax: "0.03",
   });
+  const matched = await withTransaction(receiver.db, (tx) =>
+    returnedInvoices(tx, { ...request, search: original }),
+  );
+  expect(matched.total).toBe(2);
+  expect(matched.rows.map((row) => row.recordId)).toEqual([original, rows.rows[1]!.recordId]);
 });
 
 it.each([
@@ -310,6 +315,9 @@ it("answers the returned invoice through the backend's own methods", async () =>
 
 it("counts only marked rows, bounds pages and sorts receipt batches before stable positions", async () => {
   const node = await fixture();
+  await withTransaction(receiver.db, (tx) =>
+    tx.execute(sql`update nodes set name = 'Node Returning a106' where id = ${node.nodeId}`),
+  );
   for (let i = 1; i <= 102; i++) await append(node, i);
   for (const batch of makeReturnedBatches(await inventory(node))) await receive(node, batch);
   const latest = await append(node, 103);
@@ -339,14 +347,19 @@ it("counts only marked rows, bounds pages and sorts receipt batches before stabl
   expect((await read(0, "ascending")).rows.map((row) => row.sequence)).toEqual(
     Array.from({ length: 50 }, (_, i) => i + 1),
   );
-  const search = (search: string) =>
-    withTransaction(receiver.db, (tx) => returnedInvoices(tx, { ...request, search, page: 99 }));
-  expect(await search("A/102 ")).toMatchObject({
+  const search = (search: string, page = 0) =>
+    withTransaction(receiver.db, (tx) => returnedInvoices(tx, { ...request, search, page }));
+  expect(await search("A/102 ", 99)).toMatchObject({
     page: 0,
     total: 1,
     rows: [{ invoiceNumber: "A/102" }],
   });
-  expect(await search("missing-invoice")).toEqual({ page: 0, total: 0, pageSize: 50, rows: [] });
+  expect(await search("missing-invoice", 99)).toEqual({
+    page: 0,
+    total: 0,
+    pageSize: 50,
+    rows: [],
+  });
   expect((await search("A/10")).rows.slice(0, 5).map((row) => row.invoiceNumber)).toEqual([
     "A/10",
     "A/103",

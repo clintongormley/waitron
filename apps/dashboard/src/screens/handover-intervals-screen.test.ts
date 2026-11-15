@@ -306,6 +306,20 @@ it("retries a refused move and keeps live refresh on the server-corrected page a
   liveData.refresh();
   await vi.waitFor(() => expect(read.mock.calls.map(([q]) => q.page)).toEqual([0, 2, 2, 2, 0, 0]));
   expect(table.serverPaging?.page).toBe(0);
+  table.dispatchEvent(new CustomEvent("wt-page-change", { detail: { page: 1 } }));
+  await vi.waitFor(() => expect(table.serverPaging?.page).toBe(1));
+  vi.useFakeTimers();
+  try {
+    const input = table.shadowRoot!.querySelector<HTMLInputElement>('input[type="search"]')!;
+    input.value = "A/42 ";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await table.updateComplete;
+    table.dispatchEvent(new CustomEvent("wt-page-change", { detail: { page: 2 } }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(read.mock.lastCall![0]).toMatchObject({ page: 0, search: "A/42 " });
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it("flushes a pending search on Enter without a second debounced request", async () => {
