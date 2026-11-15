@@ -263,7 +263,7 @@ export type FiscalReadinessResult =
 
 export interface ApiError {
   code: string;
-  /** `setup.request_invalid` names the refused field in `params.field`. */
+  /** `setup.request_invalid` and `venue.detail_invalid` name the refused field in `params.field`. */
   params?: Record<string, unknown>;
   /**
    * Set only when the server answered: `fetch` rejects when nothing is reachable. The wizard uses

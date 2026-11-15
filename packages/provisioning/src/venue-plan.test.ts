@@ -307,6 +307,30 @@ describe("planVenue", () => {
     expect(short).toMatchObject({ dayCutover: "06:00:00" });
   });
 
+  it.each(["24:00", "99:99", "5:00", "04:00garbage", "04:00:01"])(
+    "refuses the impossible day cutover %j",
+    (dayCutover) => {
+      try {
+        planVenue(request({ dayCutover }), MODULES);
+        expect.unreachable("should have refused the day cutover");
+      } catch (error) {
+        expect(isAppError(error) && error.code).toBe("venue.detail_invalid");
+        if (isAppError(error))
+          expect(error.params).toEqual({ field: "dayCutover", reason: "cutover" });
+      }
+    },
+  );
+
+  it.each([
+    ["23:59", "23:59:00"],
+    ["00:00:00", "00:00:00"],
+  ])("accepts the day cutover %j as %j", (dayCutover, stored) => {
+    const venue = planVenue(request({ dayCutover }), MODULES).find(
+      (action) => action.kind === "create-venue",
+    );
+    expect(venue).toMatchObject({ dayCutover: stored });
+  });
+
   it("emits distinct standard, full and rectificative series with the requested codes", () => {
     const series = planVenue(request(), MODULES).filter((a) => a.kind === "create-series");
     expect(series).toEqual([

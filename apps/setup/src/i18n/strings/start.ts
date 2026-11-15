@@ -120,6 +120,8 @@ export const startEn = {
     "Keep the name to 120 characters or fewer, and remove any hidden characters the tax agency's records cannot carry — typing the name out instead of pasting it usually clears them.",
   "server_fields.tax_id": "Check the tax ID. A new business needs its own.",
   "server_fields.taxpayer_domicile": "Enter the full registered business address.",
+  "server_fields.day_cutover":
+    "That is not a time of day. Enter one from 00:00 to 23:59, such as 04:00.",
   "server_fields.series_code":
     "Use letters, numbers, and the characters / _ . and - only, up to 21 characters.",
 } as const;
@@ -245,6 +247,8 @@ export const startEs: Record<keyof typeof startEn, string> = {
     "Usa 120 caracteres como máximo y quita los caracteres ocultos que los registros de la Agencia Tributaria no admiten; suele bastar con escribir el nombre en lugar de pegarlo.",
   "server_fields.tax_id": "Revisa el NIF. Un negocio nuevo necesita el suyo.",
   "server_fields.taxpayer_domicile": "Introduce el domicilio fiscal completo del negocio.",
+  "server_fields.day_cutover":
+    "Esa no es una hora del día. Introduce una entre las 00:00 y las 23:59, por ejemplo las 04:00.",
   "server_fields.series_code":
     "Usa solo letras, números y los caracteres / _ . y - (hasta 21 caracteres).",
 };
