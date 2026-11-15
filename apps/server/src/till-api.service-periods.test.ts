@@ -489,7 +489,7 @@ const marksOf = (workingOrderId: string) =>
     )
     .where(eq(workingOrderLines.workingOrderId, workingOrderId));
 
-/** A Spreads list offering Butter at 0.50 on the Midday Toast, published. */
+/** A Spreads list offering Butter at 0.50 on the Midday Toast, published as `versionId`. */
 async function butterOnMiddayToast(v: Venue) {
   const read = await sendAsTill(v, "GET", `/api/service-zones/${v.diningZone}/offers`);
   const dish = (read.body.offers as { id: string; productId: string }[]).find(
@@ -517,10 +517,60 @@ async function butterOnMiddayToast(v: Venue) {
       SIGNED_IN_TILL_LOCALE,
     );
     await writeProductModifiers(tx, dish.productId, [{ kind: "extras", id: list.id }]);
-    await publishWorkingMenu(tx, v.menus["Midday menu"]);
-    return { dish, extraId: extra.id, listId: list.id };
+    const versionId = await publishWorkingMenu(tx, v.menus["Midday menu"]);
+    return { dish, extraId: extra.id, listId: list.id, versionId };
   });
 }
+
+/**
+ * A table seated, with the Midday Toast saved on its draft as of `middayVersionId`, and how to
+ * submit that draft.
+ */
+const savedTableDraft = async (v: Venue, middayVersionId = v.versions["Midday menu"]) => {
+  await suite.db
+    .update(departments)
+    .set({ orderStart: "table" })
+    .where(eq(departments.id, v.restaurant));
+  const { id: tableId } = await withTransaction(suite.db, (tx) =>
+    createTable(tx, v.cfg, { label: "Late table", zoneId: v.diningZone }),
+  );
+  const seated = await sendAsTill(v, "POST", `/api/tables/${tableId}/seat`, { guestCount: 2 });
+  expect(seated.status).toBe(200);
+  const { partyId, tabId } = seated.body as { partyId: string; tabId: string };
+  const saved = await sendAsTill(v, "PUT", `/api/parties/${partyId}/drafts`, {
+    billId: tabId,
+    draftId: null,
+    revision: 0,
+    lines: [
+      {
+        clientLineId: randomUUID(),
+        menuItemId: v.toast.midday,
+        quantity: "1",
+        menuVersionId: middayVersionId,
+      },
+    ],
+  });
+  expect(saved.status).toBe(200);
+  const { draft } = saved.body as {
+    draft: { id: string; revision: number; lines: { id: string }[] };
+  };
+  const [party] = await suite.db
+    .select({ revision: parties.revision })
+    .from(parties)
+    .where(eq(parties.id, partyId));
+  return {
+    partyId,
+    tabId,
+    submitUrl: `/api/parties/${partyId}/drafts/${draft.id}/submit`,
+    submit: (submissionId: string) => ({
+      submissionId,
+      draftRevision: draft.revision,
+      expectedPartyRevision: party!.revision,
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+      groups: [{ lineIds: draft.lines.map((line) => line.id), release: "fire" }],
+    }),
+  };
+};
 
 describe("service periods gate only added dishes and added stored quantities", () => {
   it("after Lunch ends, a fresh Lunch line and a stored increase are both refused and nothing changes", async () => {
@@ -553,52 +603,6 @@ describe("service periods gate only added dishes and added stored quantities", (
     expect(await sendAsTill(v, "GET", `/api/working-orders/${held.id}`)).toEqual(before);
     expect((await editMealLine(v, held.id, { note: "No salt" })).status).toBe(200);
   });
-
-  const savedTableDraft = async (v: Venue) => {
-    await suite.db
-      .update(departments)
-      .set({ orderStart: "table" })
-      .where(eq(departments.id, v.restaurant));
-    const { id: tableId } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, v.cfg, { label: "Late table", zoneId: v.diningZone }),
-    );
-    const seated = await sendAsTill(v, "POST", `/api/tables/${tableId}/seat`, { guestCount: 2 });
-    expect(seated.status).toBe(200);
-    const { partyId, tabId } = seated.body as { partyId: string; tabId: string };
-    const saved = await sendAsTill(v, "PUT", `/api/parties/${partyId}/drafts`, {
-      billId: tabId,
-      draftId: null,
-      revision: 0,
-      lines: [
-        {
-          clientLineId: randomUUID(),
-          menuItemId: v.toast.midday,
-          quantity: "1",
-          menuVersionId: v.versions["Midday menu"],
-        },
-      ],
-    });
-    expect(saved.status).toBe(200);
-    const { draft } = saved.body as {
-      draft: { id: string; revision: number; lines: { id: string }[] };
-    };
-    const [party] = await suite.db
-      .select({ revision: parties.revision })
-      .from(parties)
-      .where(eq(parties.id, partyId));
-    return {
-      partyId,
-      tabId,
-      submitUrl: `/api/parties/${partyId}/drafts/${draft.id}/submit`,
-      submit: (submissionId: string) => ({
-        submissionId,
-        draftRevision: draft.revision,
-        expectedPartyRevision: party!.revision,
-        allergy: { party: { answer: "none", guests: [] }, ticks: [] },
-        groups: [{ lineIds: draft.lines.map((line) => line.id), release: "fire" }],
-      }),
-    };
-  };
 
   it("a table draft saved during Lunch is refused at 14:05 and writes no line", async () => {
     at(mondayAt("13:50"));
@@ -1582,55 +1586,19 @@ describe("a dish whose period ended earlier today", () => {
   });
 
   describe("an extra added to a stored dish", () => {
-    /** The Midday Toast sent from a table's draft at 13:50, its bill's id. */
-    const sentToast = async (v: Venue) => {
-      await suite.db
-        .update(departments)
-        .set({ orderStart: "table" })
-        .where(eq(departments.id, v.restaurant));
-      const { id: tableId } = await withTransaction(suite.db, (tx) =>
-        createTable(tx, v.cfg, { label: "Toast table", zoneId: v.diningZone }),
-      );
-      const seated = await sendAsTill(v, "POST", `/api/tables/${tableId}/seat`, {
-        guestCount: 2,
-      });
-      expect(seated.status).toBe(200);
-      const { partyId, tabId, revision } = seated.body as {
-        partyId: string;
-        tabId: string;
-        revision: number;
-      };
-      const saved = await sendAsTill(v, "PUT", `/api/parties/${partyId}/drafts`, {
-        billId: tabId,
-        draftId: null,
-        revision: 0,
-        lines: [{ menuItemId: v.toast.midday, quantity: "1" }],
-      });
-      expect(saved.status).toBe(200);
-      const { draft } = saved.body as {
-        draft: { id: string; revision: number; lines: { id: string }[] };
-      };
-      const sent = await sendAsTill(
-        v,
-        "POST",
-        `/api/parties/${partyId}/drafts/${draft.id}/submit`,
-        {
-          submissionId: randomUUID(),
-          draftRevision: draft.revision,
-          expectedPartyRevision: revision,
-          allergy: { party: { answer: "none", guests: [] }, ticks: [] },
-          groups: [{ lineIds: draft.lines.map((line) => line.id), release: "fire" }],
-        },
-      );
+    /** The Midday Toast, as of `versionId`, sent from a table's draft at 13:50; its bill's id. */
+    const sentToast = async (v: Venue, versionId: string) => {
+      const { tabId, submitUrl, submit } = await savedTableDraft(v, versionId);
+      const sent = await sendAsTill(v, "POST", submitUrl, submit(randomUUID()));
       expect(sent.status).toBe(200);
       return tabId;
     };
     const butterOnToast = async (sent: boolean) => {
       at(mondayAt("13:50"));
       const v = await mealVenue();
-      const { extraId, listId } = await butterOnMiddayToast(v);
+      const { extraId, listId, versionId } = await butterOnMiddayToast(v);
       let id: string;
-      if (sent) id = await sentToast(v);
+      if (sent) id = await sentToast(v, versionId);
       else {
         const held = await park(v, v.diningZone, v.toast.midday);
         expect(held.status).toBe(200);
