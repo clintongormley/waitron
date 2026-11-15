@@ -50,6 +50,7 @@ import { mountPrintApi } from "./print-api.js";
 import { reprintJobOn } from "./print-job-reprint.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { deliverDemoPrinterJobs } from "./demo-printer.js";
+import { insertCorrective } from "./testing/replacement-fixture.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const clock: TrustedClock = {
@@ -663,6 +664,33 @@ async function manager(ctx: Awaited<ReturnType<typeof setup>>) {
 }
 
 describe("management invoice receipt resends", () => {
+  it("resends a replacement of a full invoice plainly, opening no delivery", async () => {
+    const ctx = await setup();
+    const replacement = await withTransaction(suite.db, (tx) =>
+      insertCorrective(tx, ctx.sale.saleId, { replaces: true }),
+    );
+    const original = await withTransaction(suite.db, (tx) =>
+      enqueuePrintJob(tx, ctx.printer.id, new Uint8Array([27, 64]), "document", {
+        saleId: replacement,
+        receiptCopy: false,
+      }),
+    );
+    await suite.db
+      .update(printJobs)
+      .set({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS })
+      .where(eq(printJobs.id, original.jobId));
+    const { jobId } = await withTransaction(suite.db, (tx) =>
+      resendInvoicePrintJob(tx, original.jobId, "staff", ctx.now()),
+    );
+    expect(jobId).not.toBe(original.jobId);
+    expect(
+      await suite.db
+        .select()
+        .from(invoiceDeliveries)
+        .where(eq(invoiceDeliveries.saleId, replacement)),
+    ).toEqual([]);
+  });
+
   it("retains pending invoice bytes while releasing an audited finished copy", async () => {
     const ctx = await setup();
     const copy = await withTransaction(suite.db, (tx) =>

@@ -10,6 +10,7 @@ import {
   type JobOutcome,
 } from "@waitron/printing";
 import type { InvoicePrintClaim } from "@waitron/print-agent";
+import { deliversAsFullInvoice } from "./invoice-selection.js";
 import {
   claimInvoiceDelivery,
   expireInvoiceDeliveryClaims,
@@ -45,16 +46,18 @@ export async function resendInvoicePrintJob(
   const [invoice] = await tx
     .select({
       saleId: sales.id,
-      recipient: sales.counterpartyTaxId,
+      counterpartyTaxId: sales.counterpartyTaxId,
+      correctsSaleId: sales.correctsSaleId,
       receiptCopy: printJobs.receiptCopy,
     })
     .from(printJobs)
     .innerJoin(sales, eq(sales.id, printJobs.saleId))
     .where(eq(printJobs.id, jobId));
-  if (invoice === undefined || (invoice.recipient === null && invoice.receiptCopy !== false))
+  const full = invoice !== undefined && deliversAsFullInvoice(invoice);
+  if (invoice === undefined || (!full && invoice.receiptCopy !== false))
     return resendPrintJob(tx, jobId, to);
   await expireInvoiceDeliveryClaims(tx, now);
-  if (invoice.recipient === null) {
+  if (!full) {
     const emails = await tx
       .select({ status: invoiceDeliveries.status, designation: invoiceDeliveries.designation })
       .from(invoiceDeliveries)

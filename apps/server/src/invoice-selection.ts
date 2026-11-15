@@ -1,10 +1,10 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, type SQL } from "drizzle-orm";
 import {
   getCountryPack,
   normalizeRecipientCountryCode,
   recipientIdentifierResult,
 } from "@waitron/country-packs";
-import { readLiveSeriesIdTx, workingOrders } from "@waitron/db";
+import { readLiveSeriesIdTx, sales, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { refuseOverSimplifiedLimit } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
@@ -28,6 +28,23 @@ export function storedRecipientIdentifier(
   return type === null
     ? {}
     : { identifierType: type as RecipientIdentifierType, identifierCountryCode: country! };
+}
+
+/**
+ * Whether a stored sale is delivered as a full invoice: it names a customer and is not a
+ * corrective. A replacement of a full invoice names its customer too, but is only reprinted on the
+ * receipt printer, as any corrective is.
+ */
+export function deliversAsFullInvoice(row: {
+  counterpartyTaxId: string | null;
+  correctsSaleId: string | null;
+}): boolean {
+  return row.counterpartyTaxId !== null && row.correctsSaleId === null;
+}
+
+/** {@link deliversAsFullInvoice} as a filter on `sales`. */
+export function deliversAsFullInvoiceSql(): SQL {
+  return and(isNotNull(sales.counterpartyTaxId), isNull(sales.correctsSaleId))!;
 }
 
 export function checkedInvoiceRecipient(

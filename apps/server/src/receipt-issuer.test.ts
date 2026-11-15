@@ -25,6 +25,7 @@ import { enqueueReceiptCopy } from "./receipt-print.js";
 import { printedCommands } from "./testing/decode-ticket.js";
 import { previewPrintJob } from "./print-job-preview.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
+import { deliversAsFullInvoice, deliversAsFullInvoiceSql } from "./invoice-selection.js";
 
 const AT = "2026-10-14T23:30:00.000Z";
 let v: BillVenue;
@@ -242,22 +243,45 @@ describe("the invoice a corrective names", () => {
     const sale = await issue(false);
     const other = await issue(false);
     const [later, sameDay, plain] = await withTransaction(v.db, async (tx) => [
-        await readTransactionReceipt(
-          v.backend,
-          tx,
-          v.cfg,
-          await insertCorrective(tx, sale.saleId, { replaces: true, supplyDay: "2026-10-10" }),
-        ),
-        await readTransactionReceipt(
-          v.backend,
-          tx,
-          v.cfg,
-          await insertCorrective(tx, other.saleId, { replaces: true, supplyDay: "2026-10-14" }),
-        ),
+      await readTransactionReceipt(
+        v.backend,
+        tx,
+        v.cfg,
+        await insertCorrective(tx, sale.saleId, { replaces: true, supplyDay: "2026-10-10" }),
+      ),
+      await readTransactionReceipt(
+        v.backend,
+        tx,
+        v.cfg,
+        await insertCorrective(tx, other.saleId, { replaces: true, supplyDay: "2026-10-14" }),
+      ),
       await readTransactionReceipt(v.backend, tx, v.cfg, sale.saleId),
     ]);
     expect(later.saleDay).toBe("2026-10-10");
     expect(sameDay).not.toHaveProperty("saleDay");
     expect(plain).not.toHaveProperty("saleDay");
+  });
+});
+
+describe("deliversAsFullInvoice", () => {
+  it("answers as its SQL form does for every kind of stored sale", async () => {
+    const simplified = await issue(false);
+    const full = await issue(false, true);
+    const other = await issue(false);
+    await withTransaction(v.db, async (tx) => {
+      await insertCorrective(tx, simplified.saleId, { replaces: true });
+      await insertCorrective(tx, full.saleId, { replaces: true });
+      await insertCorrective(tx, other.saleId, { total: "-2.00" });
+    });
+    const rows = await v.db
+      .select({
+        counterpartyTaxId: sales.counterpartyTaxId,
+        correctsSaleId: sales.correctsSaleId,
+        inSql: sql<number>`case when ${deliversAsFullInvoiceSql()} then 1 else 0 end`,
+      })
+      .from(sales);
+    expect(rows).toHaveLength(6);
+    expect(rows.filter((row) => row.inSql === 1)).toHaveLength(1);
+    for (const row of rows) expect(deliversAsFullInvoice(row)).toBe(row.inSql === 1);
   });
 });

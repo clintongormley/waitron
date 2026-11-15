@@ -24,6 +24,7 @@ import type {
 } from "@waitron/shared";
 import type { TradingContext } from "./trading-context.js";
 import type { DeviceProof } from "./device-session.js";
+import { deliversAsFullInvoice } from "./invoice-selection.js";
 export type RoutingOriginSource = { current(): RoutingOrigin };
 export type RoutingDeps = {
   backend: FiscalBackend;
@@ -115,7 +116,8 @@ export async function readDocumentOffers(
   const [sale] = await tx
     .select({
       id: sales.id,
-      recipient: sales.counterpartyTaxId,
+      counterpartyTaxId: sales.counterpartyTaxId,
+      correctsSaleId: sales.correctsSaleId,
       locale: sales.locale,
       code: invoiceSeries.code,
       number: sales.invoiceNumber,
@@ -124,7 +126,7 @@ export async function readDocumentOffers(
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
     .where(eq(sales.id, authorized.saleId));
   if (sale === undefined) throw new AppError("sale.not_found", { saleId });
-  const full = sale.recipient !== null;
+  const full = deliversAsFullInvoice(sale);
   if (!full && document !== "receipt")
     throw new AppError("management.request_invalid", { field: "document" });
   const thermal = await tx

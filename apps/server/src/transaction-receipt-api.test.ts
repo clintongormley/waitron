@@ -42,6 +42,8 @@ import {
 import type { TillSaleResult } from "./till-sale.js";
 import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { DEVICE_COOKIE } from "./device-session.js";
+import { invoiceDeliveryAlertSource } from "./alert-sources.js";
+import { createPageTestPages } from "./page-test-pages.js";
 const store = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let venue: OrderVenue;
 beforeEach(async () => {
@@ -1026,4 +1028,43 @@ it("still prints a refund corrective that never printed as a copy", async () => 
   const { prints, reprints } = await jobs();
   expect(prints).toEqual([expect.objectContaining({ saleId: refund.id, receiptCopy: true })]);
   expect(reprints).toEqual([expect.objectContaining({ saleId: refund.id })]);
+});
+it("raises no undelivered-invoice alert when a replacement of a full invoice's original print fails", async () => {
+  const customer = {
+    counterpartyTaxId: "B00000000",
+    counterpartyLegalName: "Stored recipient",
+    counterpartyCountryCode: "ES",
+    counterpartyAddress: "2 Main Street, 28013 Madrid, Madrid",
+  };
+  const original = await projectionInvoice(customer);
+  const [series] = await inTx(venue, (tx) =>
+    tx
+      .select({ id: invoiceSeries.id })
+      .from(invoiceSeries)
+      .where(
+        and(eq(invoiceSeries.nodeId, venue.cfg.nodeId), eq(invoiceSeries.purpose, "rectificative")),
+      ),
+  );
+  const replacement = await projectionInvoice({
+    ...customer,
+    seriesId: series!.id,
+    correctsSaleId: original.id,
+    replacesOriginal: true,
+  });
+  expect((await reprint(replacement.id)).status).toBe(200);
+  const [printed] = (await jobs()).prints;
+  expect(printed).toMatchObject({ saleId: replacement.id, receiptCopy: false });
+  await inTx(venue, (tx) =>
+    tx
+      .update(printJobs)
+      .set({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS })
+      .where(eq(printJobs.id, printed!.id)),
+  );
+  const alerts = await inTx(venue, (tx) =>
+    invoiceDeliveryAlertSource({ testPages: createPageTestPages(() => new Date()) }).read({
+      tx,
+      now: new Date(),
+    }),
+  );
+  expect(alerts).toEqual([]);
 });

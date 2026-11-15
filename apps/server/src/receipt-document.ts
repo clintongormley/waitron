@@ -154,7 +154,7 @@ export function buildReceiptDocument({
   const issuer = result.issuer ?? currentIssuer;
   const locale = invoiceLocale;
   const label = receiptLabelsFor(locale);
-  const simplified = result.invoiceType === "F2" || result.invoiceType === "R5";
+  const simplified = result.invoiceType !== "F1" && result.invoiceType !== "R4";
   const itemAmount = (value: string): string =>
     simplified ? formatAmount(value, locale) : formatMoney(value, locale);
   const elements: ReceiptElement[] = [];

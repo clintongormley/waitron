@@ -46,6 +46,7 @@ import { readInvoiceEmailPrivacy } from "./invoice-email.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as documentFixture } from "./testing/full-invoice-fixture.js";
 import type { InvoiceDeliveryOutcome } from "./invoice-delivery.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
+import { insertCorrective } from "./testing/replacement-fixture.js";
 import {
   reserveInvoiceDelivery,
   claimInvoiceDelivery,
@@ -455,6 +456,28 @@ describe("invoice delivery reservation", () => {
           personId: "staff-one",
           medium: "a4",
           pagePrinterId: randomUUID(),
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "invoice_delivery.full_invoice_required" });
+    expect(await rows()).toHaveLength(0);
+  });
+});
+
+describe("a replacement of a full invoice", () => {
+  it.each([
+    ["an A4", { medium: "a4" as const, pagePrinterId: randomUUID() }],
+    ["a receipt", { medium: "receipt" as const, printJobId: randomUUID() }],
+  ])("refuses %s delivery, as for any corrective", async (_name, medium) => {
+    const sale = await issue();
+    const replacement = await withTransaction(suite.db, (tx) =>
+      insertCorrective(tx, sale.saleId, { replaces: true }),
+    );
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        reserveInvoiceDelivery(tx, replacement, {
+          requestKey: randomUUID(),
+          personId: "staff-one",
+          ...medium,
         }),
       ),
     ).rejects.toMatchObject({ code: "invoice_delivery.full_invoice_required" });

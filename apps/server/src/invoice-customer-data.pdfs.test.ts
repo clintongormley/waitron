@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { invoiceSeries } from "@waitron/db";
-import { getCountryPack } from "@waitron/country-packs";
+import { getCountryPack, receiptLabelsFor } from "@waitron/country-packs";
 import { recordSale } from "@waitron/core";
 import {
   AppError,
@@ -27,6 +27,7 @@ import {
   type InvoiceCustomerVenue,
 } from "./testing/invoice-customer-fixture.js";
 import { parked } from "./testing/order-venue.js";
+import { insertCorrective } from "./testing/replacement-fixture.js";
 
 let fixture: InvoiceCustomerVenue;
 const suite = useVenueDb({
@@ -223,6 +224,23 @@ describe("buildInvoiceCustomerFiles' PDFs", () => {
     const names = ["invoices/fa-1.pdf", "invoices/FA-1-2.pdf"];
     expect(invoicesFile(built.files).invoices.map((invoice) => invoice.pdf)).toEqual(names);
     expect([...pdfsOf(built.files).keys()]).toEqual(names);
+  });
+
+  it("includes a replacement of the customer's full invoice, as the corrective it is", async () => {
+    const taxId = "11223344B";
+    const original = await jordiInvoiceIn(fixture.fullSeriesId, taxId);
+    await inTx(fixture.venue, (tx) => insertCorrective(tx, original, { replaces: true }));
+    const found = await search(taxId);
+    expect(found).toHaveLength(2);
+    const built = await buildInvoiceCustomerFiles(deps(), taxId, found);
+    const pdfs = [...pdfsOf(built.files).values()];
+    expect(pdfs).toHaveLength(2);
+    const texts = await Promise.all(pdfs.map(pdfText));
+    const label = receiptLabelsFor(fixture.venue.cfg.locale);
+    const replacement = texts.filter((text) => text.includes(label.correctiveInvoice));
+    expect(replacement).toHaveLength(1);
+    expect(replacement[0]).toContain("Jordi Puig");
+    expect(replacement[0]).toContain(label.replacesInvoiceInFull);
   });
 
   describe("an invoice that cannot be made", () => {

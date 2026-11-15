@@ -74,9 +74,10 @@ export function createInvoiceEmailSender(config: SmtpConnection): InvoiceEmailSe
   return async ({ recipient, document, privacy }) => {
     const pdf = await renderInvoicePdf(document);
     const labels = receiptLabelsFor(document.invoiceLocale);
-    const simplified = document.result.invoiceType !== "F1";
+    const { invoiceType } = document.result;
+    const simplified = invoiceType !== "F1" && invoiceType !== "R4";
     const title =
-      document.result.invoiceType === "R5"
+      invoiceType === "R4" || invoiceType === "R5"
         ? labels.correctiveInvoice
         : simplified
           ? labels.simplifiedInvoice
