@@ -1691,6 +1691,8 @@ stays on the box's own disk. The Servers screen lists each archive with its date
 
 ## 8. Offsite copies with two boxes
 
+> **15 November 2026:** this copy-up (slice 5e) is dropped; see §11's dated block.
+
 When the venue has a bucket, the spare copies its store up to it, **mirroring rather than
 accumulating** — deletions travel too. The prototype's S3 showed why: an additive copy into a place
 holding another node's files restored that other node's ledger, with Litestream exiting 0
@@ -1787,6 +1789,14 @@ adopts W41s-10b's format when it lands rather than inventing one.
 >   (`stream-host.ts:329`), and a venue streaming to a bucket is refused when a spare joins
 >   (`mirror-bundle-api.ts:343`, `mirror.bucket_stream_active`). Whether a two-box venue needs a
 >   live copy off site as well as scheduled backups is with the campaign watcher.
+>
+> **Decision, 15 November 2026: 5e is dropped** (lane A's recommendation, cleared by the campaign
+> watcher at 19:44, not the owner). Under the owner's one-backup-service decision, the main box's
+> service already sends a two-box venue's scheduled backups off site, so a copy from the spare
+> would add nothing. A two-box venue keeps no live copy in a bucket: joining still refuses while
+> the venue streams to one. §8 and the 5e line in the slice list below record what was planned.
+> A947's build is done until the owner's rehearsal on two real boxes (the paragraph after the
+> slice list).
 
 Each line is one pull request. **Fiscal** ones wait for the owner to land (lanes land their own
 pull requests except truly fiscal ones, owner 2026-10-21). Every slice adds its step to the stream
@@ -1947,8 +1957,9 @@ loop test (`apps/server/src/stream-loop.e2e.test.ts`), which grows into the two-
 - **5d. Becoming the spare by itself.** The three checks of §7.2, the archive and its 90-day expiry,
   the guarded wipe, a fresh dormant spare, the screens for a failed check and the manager's
   override of check 2 only (mock-up 4). **Fiscal** (it wipes a filing node's database).
-- **5e. Copy-up.** The spare mirrors its store to the owner's bucket, deletions included, generation
-  and pointer rules (§8); joining stops refusing a venue with a bucket. Not fiscal.
+- **5e. Copy-up — dropped 15 November 2026** (the decision in the dated block at the top of this
+  section). As planned: the spare mirrors its store to the owner's bucket, deletions included,
+  generation and pointer rules (§8); joining stops refusing a venue with a bucket. Not fiscal.
 
 **Before the first venue goes live on two boxes:** a rehearsal on two real boxes on one switch —
 pull the main box's plug mid-sale, switch from a reloaded handheld, sell, power the first box back,
