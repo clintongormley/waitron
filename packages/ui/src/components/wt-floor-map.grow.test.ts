@@ -380,6 +380,45 @@ async function dragAnL(el: WtFloorMap): Promise<{ x: number; y: number }> {
   return end;
 }
 
+// One move 3 right and 2 down grows the 12 × 8 crop to 15 × 10: the same ratio, so the host keeps
+// its size, and the grown crop fits at 24 px a square.
+it("a drag that grows the plan without changing its shape fits the grown plan", async () => {
+  const el = await growingMap([t1]);
+  await holdAndMove(el, "t1", 3, 2);
+  expect(Number(ratioOf(el))).toBe(12 / 8);
+  expect(heightOfHost(el)).toBe(240);
+  expect(widthOf(el, "t1")).toBe(192);
+  expect(drawnInside(el, "t1")).toBe(true);
+});
+
+it("in a host of fixed size, a drag that grows the plan without changing its shape fits the grown plan", async () => {
+  const el = await map([t1]);
+  expect(widthOf(el, "t1")).toBe(300);
+  await holdAndMove(el, "t1", 3, 2);
+  expect(widthOf(el, "t1")).toBe(240);
+  expect(drawnInside(el, "t1")).toBe(true);
+});
+
+it("a drag that grew the plan without changing its shape fits the tables the parent sets", async () => {
+  const el = await growingMap([t1]);
+  const { to } = await holdAndMove(el, "t1", 3, 2);
+  // The till sets the pending place in its drop handler and re-renders the map a microtask later.
+  document.addEventListener(
+    "wt-table-drag-end",
+    () =>
+      queueMicrotask(() => {
+        el.tables = [{ ...t1, placement: { ...t1.placement, x: 13, y: 7 } }];
+      }),
+    { once: true },
+  );
+  up(el, to.x, to.y);
+  await settled(el);
+  expect(drops).toEqual([{ tableId: "t1", x: 13, y: 7, targetId: null }]);
+  expect(widthOf(el, "t1")).toBe(240);
+  expect(await leftOf(el, "t1")).toBe(60);
+  expect(drawnInside(el, "t1")).toBe(true);
+});
+
 it("an L-shaped drag released on the same tables returns to the tables' fit", async () => {
   const el = await growingMap([t1]);
   const end = await dragAnL(el);
@@ -525,6 +564,18 @@ it("a move while the host is hidden leaves the drag's travel as it was", async (
   await settled(el);
   pointer(window, "pointerup", client);
   expect(drops).toEqual([{ tableId: "t1", x: 12, y: 5, targetId: null }]);
+});
+
+it("a pan while the host is hidden leaves the map to refit when it is shown", async () => {
+  const el = await map([t1]);
+  el.style.display = "none";
+  await settled(el);
+  el.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 20 }));
+  await settled(el);
+  el.style.display = "block";
+  await settled(el);
+  expect(await leftOf(el, "t1")).toBe(150);
+  expect(widthOf(el, "t1")).toBe(300);
 });
 
 it("a hold released on a view kept over new tables keeps that view", async () => {

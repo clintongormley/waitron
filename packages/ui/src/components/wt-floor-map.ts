@@ -206,6 +206,15 @@ function linksOf(groups: readonly Group[]): Group[][] {
   return links;
 }
 
+const sameRect = (a: PlanRect | null, b: PlanRect | null): boolean =>
+  a === b ||
+  (a !== null &&
+    b !== null &&
+    a.x === b.x &&
+    a.y === b.y &&
+    a.width === b.width &&
+    a.height === b.height);
+
 const px = (value: number): string => `${value}px`;
 
 /** A box's centre in host px, moved by (dx, dy) squares. */
@@ -266,7 +275,7 @@ export class WtFloorMap extends LitElement {
       }
 
       button[part="table"]:focus-visible {
-        z-index: 1;
+        z-index: 3;
       }
 
       [part="shape"] {
@@ -321,11 +330,11 @@ export class WtFloorMap extends LitElement {
         pointer-events: none;
       }
 
-      /* Above every table that is neither held nor focused, so a moving table is not hidden under the
-         one it is dragged onto and a held table's rings are not cut by a table touching it; the allergy
-         mark (z-index 2) of a table that is neither held nor focused still paints over them. */
+      /* Above every table that is neither held nor focused, and above that table's allergy mark
+         (z-index 2), as a focused table is, so a moving table is not hidden under the one it is dragged
+         onto and a held table's ring is not cut by such a table or its mark. */
       [part="table"][data-held] {
-        z-index: 1;
+        z-index: 3;
       }
 
       [part="ghost"],
@@ -483,6 +492,10 @@ export class WtFloorMap extends LitElement {
   /** Set by a fit to a drag's crop, cleared by the next fit. Ending a hold then refits an untouched
    * view: the tables' crop can have the same ratio, so no resize would. */
   #fittedToDrag = false;
+
+  /** Set by a move that grew the drag's crop, cleared by the next update and by `tables` restarting
+   * the crop. */
+  #dragGrew = false;
 
   #refitFrame = 0;
 
@@ -674,7 +687,11 @@ export class WtFloorMap extends LitElement {
       return;
     }
     this.#drag = { tableId: first.id, dx: movedX, dy: movedY, x, y, targetId };
-    if (!this.#touched) this.#dragCrop = this.#grownCrop(this.#dragCrop);
+    if (!this.#touched) {
+      const before = this.#crop();
+      this.#dragCrop = this.#grownCrop(this.#dragCrop);
+      if (!sameRect(before, this.#crop())) this.#dragGrew = true;
+    }
     this.requestUpdate();
   };
 
@@ -754,11 +771,12 @@ export class WtFloorMap extends LitElement {
 
   /**
    * Scales the view by `ratio` about (mx, my), host px, then moves it by (dx, dy); the scale stays
-   * within MIN_ZOOM to MAX_ZOOM of the fit, and the crop's centre within the host.
+   * within MIN_ZOOM to MAX_ZOOM of the fit, and the crop's centre within the host. Does nothing while
+   * the view's scale is not above 0, as on a hidden host the map has refitted, so showing it refits.
    */
   #moveView(ratio: number, mx: number, my: number, dx: number, dy: number): void {
     const view = this.#view;
-    if (view === null) return;
+    if (view === null || !(view.scale > 0)) return;
     const fit = this.#fit!;
     const scale = Math.min(
       fit.scale * MAX_ZOOM,
@@ -902,14 +920,24 @@ export class WtFloorMap extends LitElement {
       this.#tablesCrop = cropToTables(this.tables.map((t) => t.placement));
       if (this.#held !== null && !this.#groupOf.has(this.#held.dataset["tableId"]!))
         this.#endDrag();
-      else if (this.#drag !== null && !this.#touched) this.#dragCrop = this.#grownCrop(null);
+      else if (this.#drag !== null && !this.#touched) {
+        this.#dragCrop = this.#grownCrop(null);
+        this.#dragGrew = false;
+      }
     }
     const crop = this.#crop();
-    // A host whose CSS reads this is resized when it changes; the observer refits an untouched view.
-    this.style.setProperty(
-      "--floor-map-ratio",
-      String(crop === null ? 1 : crop.width / crop.height),
-    );
+    const ratio = String(crop === null ? 1 : crop.width / crop.height);
+    // A host whose CSS reads the ratio is resized when it changes, and the observer refits an
+    // untouched view; a move that grows the crop to the same ratio resizes nothing, so it fits here.
+    if (
+      this.#dragGrew &&
+      this.#drag !== null &&
+      !this.#touched &&
+      ratio === this.style.getPropertyValue("--floor-map-ratio")
+    )
+      this.#needsFit = true;
+    this.#dragGrew = false;
+    this.style.setProperty("--floor-map-ratio", ratio);
     if (changed.has("fitKey")) this.#needsFit = true;
     if (this.#needsFit) this.#fitView();
   }

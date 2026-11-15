@@ -1387,20 +1387,6 @@ queued before the counter leaves the page does not observe it again" in
 before slice 14.
 
 
-## The floor map draws a neighbouring table's allergy mark over a held table's rings.
-
-`[part="allergy"]` has `z-index: 2` and hangs half outside its table's top-left corner; a table
-button that is neither held nor focused has no `z-index` and so makes no stacking context of its
-own, so its mark stacks above a held table (`z-index: 1`) and covers that table's selected ring
-where the two overlap (`packages/ui/src/components/wt-floor-map.ts`). Found by A1182's review
-with a scratch browser probe: table `a` held, table `b` touching its right edge with an allergy
-mark, the pixel 4 px right of `a`'s edge read the danger colour instead of the ring's. A focused
-table's ring is covered the same way. `isolation: isolate` on each table button would contain the
-mark, but a scratch probe showed it then lets a table later in the page cover an earlier one's
-mark where it overhangs; decide which gives way. The design system's floor-map paragraph states
-the gap.
-
-
 ## A841 slice 6 wording to confirm (2026-10-23).
 
 For the owner: Advanced's heading and opening
@@ -2111,25 +2097,6 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
 - **An English "Goes with" list of three stations gets a serial comma (left open by A773-2 PR D's
   look).** "Grill, Fryer, and Pastry"; Spanish has none («Grill, Fryer y Pastry»).
 
-## Bundle: Floor map drag, hidden map, allergy mark
-
-4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A drag that grows the till's plan in proportion refits nothing** — left open by A766 (#1824).
-  When no move of a drag changes the plan's ratio, say 12 × 8 squares straight to 15 × 10 in one
-  move, nothing resizes or refits the map, during the drag or at release, and the held table can
-  be drawn past the map's edge.
-- **After the till's map rescales mid-drag, the drawn table lags the finger** — left open by A766
-  (#1824); seen on the demo stack (`~/waitron-campaign-b/a766-shots`). A refit during a drag moves
-  the drawn table out from under a still finger.
-- **A pan or zoom on a hidden till map is believed to divide by zero** — raised by A766's review
-  (#1824), not run. A hidden map refits to a scale of 0, and `#moveView`
-  (`packages/ui/src/components/wt-floor-map.ts`) divides by the view's scale; `git blame` puts that
-  code before A766. A766 guarded only a drag's move at scale 0.
-- **The floor map draws a neighbouring table's allergy mark over a held table's rings.** The design
-  system's floor-map paragraph states the gap.
-  [Detail](till.md#the-floor-map-draws-a-neighbouring-tables-allergy-mark-over-a-held-tables-rings)
-
 ## Bundle: Guest-facing QR, online ordering, delivery, online booking
 
 4 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -2340,6 +2307,12 @@ except that it no longer waits on the retired split and transfer routes (A1196).
   [Detail](till.md#a1212-the-order-screens-bar-height-may-be-read-before-the-bars-buttons-are-drawn)
 
 ## Decisions and deliberate limits
+
+- **A dragged table keeps its square when the map refits mid-drag (A766 decision 4, kept by the
+  watcher 2026-11-16, not the owner).** After a refit the drawn table is no longer under the
+  finger, and later moves do not close the gap. A766's first draft "kept the grabbed point under
+  the finger; a model of it ran the table out to x 999 once the finger neared the edge".
+  [Plan](../superpowers/plans/2026-10-17-a766-till-floor-grows-on-drag.md)
 
 - **One person check for every till request that needs a signed-in person (owner, 2026-11-07,
   A1380).** "The till's API client adds the tab's person to every request in one place, and the box

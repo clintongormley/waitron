@@ -1275,13 +1275,16 @@ past them) is scaled to fit and centred, with no grid lines. Its size is its par
 till sizes it with `aspect-ratio: var(--floor-map-ratio)`, the shape the map publishes. It fits
 when it first draws tables, when `fitKey` changes and on a double tap on empty space (both taps
 there), whatever the view; it fits when it is resized only if there has been no pan, pinch or
-wheel event since its last fit, even one at a limit that moved nothing; a new `tables` alone keeps
+wheel event since its last fit, even one at a limit that moved nothing, though one while the view's
+scale is 0 (a hidden host the map has refitted) does not count; a new `tables` alone keeps
 the view. While a movable table is dragged on a view not panned or zoomed since its last fit (by
 gesture, wheel or keyboard), what it fits and the ratio it publishes are the tables' crop united
 with the crop of the tables as the drag has drawn them at each move so far: the plan only grows
-during a drag unless `tables` is replaced, and a drag back inward does not shrink it. A move does not refit the view itself: a
-changed ratio resizes a host whose CSS reads it, and the resize refits the view, so a host of fixed
-size keeps its view through a drag unless `fitKey` changes. A `tables` replaced during the drag restarts that union from
+during a drag unless `tables` is replaced, and a drag back inward does not shrink it. A move that changes the ratio does not refit the view itself: the
+changed ratio resizes a host whose CSS reads it, and the resize refits the view. A move that grows the
+crop and leaves the ratio as it was resizes no host, so the map fits the grown crop itself. A host of
+fixed size therefore keeps its view through a drag, unless `fitKey` changes or a move grows the crop
+to the ratio it already had. A `tables` replaced during the drag restarts that union from
 the new tables. A pan or zoom during the drag stops the growth and keeps the shape grown so far
 until the drag ends; a drag that starts on a panned or zoomed view never grows it, nor does a fixed
 table's drag. When the drag ends the ratio is the tables' again, and if the view was last fitted to
@@ -1332,8 +1335,7 @@ it. A press held 500 ms marks its table `data-held`. Each of its shapes' edges i
 `--wt-color-primary`, except that a `clearing` outline keeps its `--wt-color-warning` dashes with a
 1 px `--wt-color-primary` line inside them. `--wt-selected-ring` is drawn `--wt-focus-offset` outside
 a single table's edge, or once around a merge's whole box, and the held table is drawn above every
-table that is neither held nor showing keyboard focus, though the allergy mark of a table that is
-neither held nor showing keyboard focus is still drawn over it where they overlap. When the held table, single or merged, also
+table that is neither held nor showing keyboard focus. When the held table, single or merged, also
 shows keyboard focus, its focus ring moves out to twice `--wt-focus-offset`, outside the selected
 ring; the two stay apart only while the selected ring is no wider than `--wt-focus-offset`. The
 press's release sends `wt-table-details`; a second finger or a cancelled pointer clears the mark and
@@ -1365,9 +1367,9 @@ is prevented, pans the target into view by the least distance (a table wider tha
 moved only to close a gap at one edge; within the pan limit, and counting as a pan, so a resize then
 keeps the view) and focuses it with `focus({ preventScroll: true })`, because the map
 cannot scroll and a focus left to scroll moves the page around it instead (the "arrowing to a
-table below the edge…" case in `wt-floor-map.keys.test.ts`). A focused table is drawn above every
-table beside it that is neither held nor focused, though such a table's allergy mark is still drawn
-over its ring where they overlap. The host has no
+table below the edge…" case in `wt-floor-map.keys.test.ts`). A focused or held table is drawn above every
+table beside it that is neither held nor focused, and above such a table's allergy mark, so the mark
+does not cover its ring where they overlap; the drag's ghost and line are drawn above it. The host has no
 `delegatesFocus`, unlike "Adding a primitive" item 4, and clips its overflow (`overflow: clip`)
 rather than hiding it. Probed in headless Chromium 153: a click on empty space in a `delegatesFocus`
 host focused its first button, and with `overflow: hidden` the browser scrolled the host when an
