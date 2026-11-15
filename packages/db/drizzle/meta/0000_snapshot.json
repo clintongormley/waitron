@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c19d6edb-4b5a-4031-bf09-26603efe0bdc",
+  "id": "6dee7f1a-d377-4f7d-a325-d43de74e29c8",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -6501,10 +6501,46 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "parent_id": {
+          "name": "parent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "color": {
+          "name": "color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
-      "indexes": {},
-      "foreignKeys": {},
+      "indexes": {
+        "categories_parent_idx": {
+          "name": "categories_parent_idx",
+          "columns": [
+            "parent_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "categories_parent_fk": {
+          "name": "categories_parent_fk",
+          "tableFrom": "categories",
+          "tableTo": "categories",
+          "columnsFrom": [
+            "parent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
@@ -6542,14 +6578,6 @@
           "autoincrement": false,
           "default": false
         },
-        "version": {
-          "name": "version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 1
-        },
         "created_at": {
           "name": "created_at",
           "type": "text",
@@ -6563,6 +6591,54 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "handheld_columns": {
+          "name": "handheld_columns",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 3
+        },
+        "handheld_tiles": {
+          "name": "handheld_tiles",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'colours'"
+        },
+        "handheld_order": {
+          "name": "handheld_order",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'home_first'"
+        },
+        "till_columns": {
+          "name": "till_columns",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 6
+        },
+        "till_tiles": {
+          "name": "till_tiles",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'colours'"
+        },
+        "till_order": {
+          "name": "till_order",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'home_first'"
         }
       },
       "indexes": {
@@ -6578,7 +6654,32 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "menus_handheld_columns_ck": {
+          "name": "menus_handheld_columns_ck",
+          "value": "\"menus\".\"handheld_columns\" between 2 and 3"
+        },
+        "menus_till_columns_ck": {
+          "name": "menus_till_columns_ck",
+          "value": "\"menus\".\"till_columns\" between 4 and 10"
+        },
+        "menus_handheld_tiles_ck": {
+          "name": "menus_handheld_tiles_ck",
+          "value": "\"menus\".\"handheld_tiles\" in ('colours', 'thumbnails')"
+        },
+        "menus_handheld_order_ck": {
+          "name": "menus_handheld_order_ck",
+          "value": "\"menus\".\"handheld_order\" in ('home_first', 'menu_first')"
+        },
+        "menus_till_tiles_ck": {
+          "name": "menus_till_tiles_ck",
+          "value": "\"menus\".\"till_tiles\" in ('colours', 'thumbnails')"
+        },
+        "menus_till_order_ck": {
+          "name": "menus_till_order_ck",
+          "value": "\"menus\".\"till_order\" in ('home_first', 'menu_first')"
+        }
+      }
     },
     "products": {
       "name": "products",
@@ -12431,133 +12532,6 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "menu_details": {
-      "name": "menu_details",
-      "columns": {
-        "menu_id": {
-          "name": "menu_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "root_section_id": {
-          "name": "root_section_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "default_home_layout_id": {
-          "name": "default_home_layout_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "handheld_columns": {
-          "name": "handheld_columns",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 3
-        },
-        "handheld_tiles": {
-          "name": "handheld_tiles",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'colours'"
-        },
-        "handheld_order": {
-          "name": "handheld_order",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'home_first'"
-        },
-        "till_columns": {
-          "name": "till_columns",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 6
-        },
-        "till_tiles": {
-          "name": "till_tiles",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'colours'"
-        },
-        "till_order": {
-          "name": "till_order",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'home_first'"
-        }
-      },
-      "indexes": {
-        "menu_details_root_uq": {
-          "name": "menu_details_root_uq",
-          "columns": [
-            "root_section_id"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "menu_details_menu_fk": {
-          "name": "menu_details_menu_fk",
-          "tableFrom": "menu_details",
-          "tableTo": "menus",
-          "columnsFrom": [
-            "menu_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "menu_details_root_fk": {
-          "name": "menu_details_root_fk",
-          "tableFrom": "menu_details",
-          "tableTo": "sections",
-          "columnsFrom": [
-            "root_section_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "menu_details_default_layout_fk": {
-          "name": "menu_details_default_layout_fk",
-          "tableFrom": "menu_details",
-          "tableTo": "sections",
-          "columnsFrom": [
-            "default_home_layout_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "menu_items": {
       "name": "menu_items",
       "columns": {
@@ -12644,72 +12618,6 @@
           "value": "\"menu_items\".\"gross_price\" >= 0"
         }
       }
-    },
-    "category_details": {
-      "name": "category_details",
-      "columns": {
-        "category_id": {
-          "name": "category_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "parent_id": {
-          "name": "parent_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "color": {
-          "name": "color",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "category_details_parent_idx": {
-          "name": "category_details_parent_idx",
-          "columns": [
-            "parent_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "category_details_category_fk": {
-          "name": "category_details_category_fk",
-          "tableFrom": "category_details",
-          "tableTo": "categories",
-          "columnsFrom": [
-            "category_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "category_details_parent_fk": {
-          "name": "category_details_parent_fk",
-          "tableFrom": "category_details",
-          "tableTo": "categories",
-          "columnsFrom": [
-            "parent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
     },
     "units": {
       "name": "units",
@@ -13589,6 +13497,15 @@
         }
       },
       "indexes": {
+        "sections_one_root_per_menu_uq": {
+          "name": "sections_one_root_per_menu_uq",
+          "columns": [
+            "owner_menu_id",
+            "role"
+          ],
+          "isUnique": true,
+          "where": "\"sections\".\"role\" in ('menu_root','home_layout')"
+        },
         "sections_owner_menu_idx": {
           "name": "sections_owner_menu_idx",
           "columns": [
