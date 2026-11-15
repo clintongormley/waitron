@@ -476,11 +476,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   not to be built yet (owner: "we just mustn't forget it"); needs a spec before queueing.
   [Detail](backlog/setup.md#a-guided-tutorial-for-demo-and-preparation-a250-owner-2026-10-03)
 
-- **`pnpm dev:reset` deletes the venue folder before it refuses `WAITRON_ENV=production`.**
-  `apps/server/scripts/dev-setup.ts`'s `main()` calls `resetVenueDir` under `--reset` before
-  `devSetup` reaches `demoSeedEnvironment`, against the file's header. Fix: the same check at the
-  top of `main()` that `dev-onboard.ts` has. Found by A680.
-
 - **A fresh Demo venue opens its dashboard on a red tax-filing alert** (`fiscal.submission_delayed`
   over the demo seed's back-dated sales). Found by A680.
   [Detail](backlog/setup.md#a-fresh-demo-venue-opens-its-dashboard-on-a-red-tax-filing-alert)

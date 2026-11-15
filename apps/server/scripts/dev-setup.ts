@@ -405,6 +405,7 @@ export function resetVenueDir(venueDir: string): void {
 
 /** `--reset` removes the venue directory first. `WAITRON_DEV_ENV_FILE` moves the settings file. */
 async function main(): Promise<void> {
+  demoSeedEnvironment(process.env);
   const envPath =
     process.env.WAITRON_DEV_ENV_FILE?.trim() || fileURLToPath(new URL("../.env", import.meta.url));
 
