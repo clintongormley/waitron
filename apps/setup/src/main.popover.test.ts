@@ -32,7 +32,7 @@ test("no app shadow roots mount until Popover startup releases them", async () =
     expect.objectContaining({
       level: "error",
       event: "ui.popover_load_failed",
-      fields: { name: "TypeError" },
+      fields: { errorType: "TypeError" },
     }),
   );
   expect(gate.start).toBeTypeOf("function");

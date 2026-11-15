@@ -47,7 +47,7 @@ startWithPopover(
   },
   (error) =>
     diag.record("error", "ui.popover_load_failed", {
-      name: error instanceof Error ? error.name : "Unknown",
+      errorType: error instanceof Error ? error.name : "Unknown",
     }),
 );
 
