@@ -85,6 +85,7 @@ export interface CloudChoice {
   legalBusinessId: string;
 }
 export interface CloudConnectionOptions {
+  onEmergencyHintsError?: (error: unknown) => void;
   stateDir: string;
   tunnelDir?: string;
   origin: string;
@@ -316,6 +317,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     } catch (error) {
       // Optional entrance hints must not turn a successful Cloud read into a storage failure.
       if (!optionalHints) throw error;
+      options.onEmergencyHintsError?.(error);
       return;
     }
     heldEmergencyHints = state.emergencyHints;

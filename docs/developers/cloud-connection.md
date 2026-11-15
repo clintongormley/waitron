@@ -241,7 +241,7 @@ still required before a real venue receives an open entrance. Saved hints do not
 Unchanged facts take no write turn. Changed facts take the existing shared turn only to recheck
 registration and save; its wait for that turn honours caller cancellation. Those short writes can still cause
 `cloud.busy` for another Cloud action. An optional file-write failure does not reject the live Cloud facts; the projection continues to follow the stored hints. Emergency read failures use `cloud.emergency_read_failed`
-(`info` for unavailable Cloud), separate from connection-refresh failures; local warm-up failures
+(`info` for unavailable Cloud), separate from connection-refresh failures; local warm-up and optional-write failures
 use `cloud.emergency_state_failed`.
 
 ## A951-S tunnel configuration writer

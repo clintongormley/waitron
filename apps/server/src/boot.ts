@@ -3989,6 +3989,11 @@ async function bootServer(
   const cloudConnection = cloudOrigin
     ? createCloudConnection({
         stateDir: config.stateDir,
+        onEmergencyHintsError: (error) =>
+          log("warn", "cloud.emergency_state_failed", {
+            errorCode: codeOf(error),
+            errno: errnoOf(error) ?? null,
+          }),
         tunnelDir: config.tunnelControlDir,
         origin: cloudOrigin,
         readVenueId: () => readCloudVenueId(db),

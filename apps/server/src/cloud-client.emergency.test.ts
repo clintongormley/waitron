@@ -336,26 +336,33 @@ it("A1188 still returns live facts when the optional hint write fails", async ()
   });
   onTestFinished(() => f.close());
   await f.client.refresh();
+  const failures: unknown[] = [];
+  const client = createCloudConnection({
+    ...f.options,
+    onEmergencyHintsError: (error) => failures.push(error),
+  });
   const file = join(f.options.stateDir, "cloud/connection.json"),
     before = await readFile(file, "utf8");
   const write = vi
     .spyOn(provisioning, "writeFileDurable")
     .mockRejectedValueOnce(Object.assign(new Error("write refused"), { code: "EACCES" }));
   onTestFinished(() => write.mockRestore());
-  await expect(f.client.emergency("https://staff.test")).resolves.toMatchObject({
+  await expect(client.emergency("https://staff.test")).resolves.toMatchObject({
     stale: false,
     emergency: { open: true },
   });
-  expect(f.client.emergencyHints("https://staff.test")).toBeNull();
-  await f.client.status();
-  expect(f.client.emergencyHints("https://staff.test")).toBeNull();
+  expect(client.emergencyHints("https://staff.test")).toBeNull();
+  await client.status();
+  expect(client.emergencyHints("https://staff.test")).toBeNull();
   expect(await readFile(file, "utf8")).toBe(before);
+  expect(failures).toMatchObject([{ code: "EACCES" }]);
   write.mockRejectedValueOnce(
     Object.assign(new Error("required write refused"), { code: "EACCES" }),
   );
-  await expect(f.client.setRemoteAccess(false, async () => {})).rejects.toMatchObject({
+  await expect(client.setRemoteAccess(false, async () => {})).rejects.toMatchObject({
     code: "EACCES",
   });
+  expect(failures).toHaveLength(1);
 });
 
 it.each(["unchanged", "cancel", "revoke", "newer"] as const)(
