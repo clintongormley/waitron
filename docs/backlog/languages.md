@@ -54,23 +54,6 @@ when the variant or its product is archived (`packages/media/src/images.ts`, the
 label predates A886, which only renamed it. Decide whether a variant gets its own label ("Archived
 variant", "Variante archivada") and, if so, update the content-and-images guides in both languages.
 
-## The adjustment-reason and venue delete windows still use older wording
-
-The A1014 retrospective review of A831 (#1974) found two other windows outside A831's prep-station
-and staff-role scope. Source checks on 22 October 2026 at `d0f65694f` found:
-
-- `packages/adjustments/src/dashboard/strings.ts:70-74` still uses "Settings removed" and
-  "Checking whether this reason can be deleted…"; its Spanish `adjustments.delete_ends`,
-  `adjustments.delete_removes` and `adjustments.delete_loading` also differ from the device window.
-- `packages/venue-service/src/dashboard/strings.ts:8-12` still uses "Work ended", "Settings removed"
-  and "Checking deletion impact…"; the Spanish `venue.delete_*` twins differ too.
-
-Next, compare these windows' three fields with `devices.delete_ends`, `devices.delete_removes` and
-`devices.delete_loading` in `apps/dashboard/src/i18n/strings.ts`, and align them in both languages.
-Keep the windows' refusal and impact details. A831's prep-station and staff-role fields are covered
-separately by `apps/dashboard/src/i18n/delete-dialog-wording.test.ts`; that comparison does not
-audit these two windows.
-
 ## Future-tense lines outside the delete windows
 
 The Remove-standby explanation (`servers.remove_explanation`, "It will be marked removed…"), the
@@ -89,7 +72,7 @@ among them «PIN de gerente») say «gerente». Pick one word and use it everywh
 
 ## Bundle: Ui wording sweep
 
-5 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **Not covered: empty sentences outside a `wt-data-table` (floor, kitchen, devices and others)
   still use "Aún no hay" and other shapes.** Left open by A177 (one fixed "nothing matches"
@@ -98,9 +81,6 @@ among them «PIN de gerente») say «gerente». Pick one word and use it everywh
   [Detail](languages.md#spanish-calls-the-manager-role-gerente-in-the-guide-and-readme-and-encargado-on-screen)
 - **The image library calls an archived variant an "Archived product".**
   [Detail](languages.md#the-image-library-calls-an-archived-variant-an-archived-product)
-- **The adjustment-reason and venue delete windows still use older settings, work and loading
-  wording.**
-  [Detail](languages.md#the-adjustment-reason-and-venue-delete-windows-still-use-older-wording)
 - **Future-tense lines outside the delete windows were left alone.**
   [Detail](languages.md#future-tense-lines-outside-the-delete-windows)
 
