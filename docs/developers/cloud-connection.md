@@ -238,6 +238,12 @@ reads and sign-out, and clears them when its server changes. The PIN-screen poll
 The till's outage link and dialog are A1188 part 2b. Cloud's display endpoint and hosting are
 still required before a real venue receives an open entrance. Saved hints do not start a venue.
 
+Unchanged facts take no write turn. Changed facts take the existing shared turn only to recheck
+registration and save; its wait for that turn honours caller cancellation. Those short writes can still cause
+`cloud.busy` for another Cloud action. An optional file-write failure does not reject the live Cloud facts. Emergency read failures use `cloud.emergency_read_failed`
+(`info` for unavailable Cloud), separate from connection-refresh failures; local warm-up failures
+use `cloud.emergency_state_failed`.
+
 ## A951-S tunnel configuration writer
 
 To use the optional tunnel container from PR #2533, set `WAITRON_TUNNEL_CONTROL_DIR` to its

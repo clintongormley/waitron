@@ -1,3 +1,4 @@
+import * as provisioning from "@waitron/provisioning";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, expect, it, onTestFinished, vi } from "vitest";
@@ -322,3 +323,140 @@ it("A1188 drops optional hints rather than making valid credentials exceed the f
   expect(Buffer.byteLength(bytes)).toBeLessThanOrEqual(65536);
   await expect(f.client.status()).resolves.toMatchObject({ state: "complete" });
 });
+
+it("A1188 still returns live facts when the optional hint write fails", async () => {
+  const f = await installationFixture(undefined, {
+    emergency: async (_v, saved, _q, res) => {
+      const r = (saved.view as { registration: { installationId: string; venueId: string } })
+        .registration;
+      res.end(
+        JSON.stringify(emergencyReply(r.installationId, r.venueId, new Date().toISOString())),
+      );
+    },
+  });
+  onTestFinished(() => f.close());
+  await f.client.refresh();
+  const file = join(f.options.stateDir, "cloud/connection.json"),
+    before = await readFile(file, "utf8");
+  const write = vi
+    .spyOn(provisioning, "writeFileDurable")
+    .mockRejectedValueOnce(Object.assign(new Error("write refused"), { code: "EACCES" }));
+  onTestFinished(() => write.mockRestore());
+  await expect(f.client.emergency("https://staff.test")).resolves.toMatchObject({
+    stale: false,
+    emergency: { open: true },
+  });
+  expect(f.client.emergencyHints("https://staff.test")).toEqual({
+    address: "https://emergency.example.test/",
+  });
+  expect(await readFile(file, "utf8")).toBe(before);
+  write.mockRejectedValueOnce(
+    Object.assign(new Error("required write refused"), { code: "EACCES" }),
+  );
+  await expect(f.client.setRemoteAccess(false, async () => {})).rejects.toMatchObject({
+    code: "EACCES",
+  });
+});
+
+it.each(["unchanged", "cancel", "revoke", "newer"] as const)(
+  "A1188 pending entrance save handles %s while another Cloud turn runs",
+  async (mode) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const gate = () => {
+      let release = () => {};
+      const promise = new Promise<void>((r) => {
+        release = r;
+      });
+      return { promise, release };
+    };
+    const lock = gate(),
+      locked = gate(),
+      afterReply = gate(),
+      next = gate(),
+      nextEntered = gate();
+    let replied = false,
+      requests = 0;
+    const f = await installationFixture(undefined, {
+      emergency: async (_v, saved, _q, res) => {
+        const number = ++requests;
+        if (mode === "newer" && number === 2) {
+          nextEntered.release();
+          await next.promise;
+        }
+        const r = (saved.view as { registration: { installationId: string; venueId: string } })
+          .registration;
+        const value = emergencyReply(r.installationId, r.venueId, new Date().toISOString());
+        if (mode === "newer" && number === 2)
+          Object.assign(value.emergency, { open: false, closedReason: "setting_off" });
+        replied = true;
+        res.end(JSON.stringify(value));
+      },
+    });
+    const tasks: Promise<unknown>[] = [];
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    onTestFinished(async () => {
+      lock.release();
+      next.release();
+      clearTimeout(timer);
+      await Promise.allSettled(tasks);
+      await f.close();
+    });
+    await f.client.refresh();
+    if (mode === "unchanged") {
+      await f.client.emergency("https://staff.test");
+      vi.setSystemTime(Date.now() + 60000);
+      replied = false;
+    }
+    const client = createCloudConnection({
+      ...f.options,
+      readVenueId: async () => {
+        const id = await f.options.readVenueId();
+        if (replied) afterReply.release();
+        return id;
+      },
+    });
+    await client.status();
+    const authorize = async () => {
+      locked.release();
+      await lock.promise;
+    };
+    const turn =
+      mode === "revoke" ? f.client.revoke(authorize) : f.client.setRemoteAccess(false, authorize);
+    tasks.push(turn);
+    await locked.promise;
+    const controller = new AbortController(),
+      read = client.emergency("https://staff.test", controller.signal);
+    tasks.push(read);
+    const outcome = read.then(
+      () => "resolved",
+      (error: { code: string }) => error.code,
+    );
+    await afterReply.promise;
+    if (mode === "newer") {
+      vi.setSystemTime(Date.now() + 60000);
+      const newer = client.emergency("https://staff.test");
+      tasks.push(newer);
+      await nextEntered.promise;
+    }
+    if (mode === "cancel" || mode === "unchanged") {
+      if (mode === "cancel") controller.abort();
+      const deadline = new Promise<string>((r) => {
+        timer = setTimeout(() => r("still waiting"), 500);
+      });
+      expect(await Promise.race([outcome, deadline])).toBe(
+        mode === "cancel" ? "cloud.unavailable" : "resolved",
+      );
+    }
+    lock.release();
+    await turn;
+    if (mode === "revoke" || mode === "newer") {
+      expect(await outcome).toBe(mode === "revoke" ? "cloud.not_configured" : "cloud.unavailable");
+      expect(
+        JSON.parse(await readFile(join(f.options.stateDir, "cloud/connection.json"), "utf8"))
+          .emergencyHints,
+      ).toBeUndefined();
+    }
+    next.release();
+    await Promise.allSettled(tasks);
+  },
+);

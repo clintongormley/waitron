@@ -5,6 +5,7 @@ export function cloudConnectionJob(options: {
   connection: CloudConnection;
   isPrimary: () => boolean;
   onError?: (error: unknown) => void;
+  onEmergencyError?: (error: unknown) => void;
   onGuestMenu?: (signal: AbortSignal) => unknown;
   onGuestMenuError?: (error: unknown) => void;
   managementOrigin?: string;
@@ -30,7 +31,7 @@ export function cloudConnectionJob(options: {
             try {
               await options.connection.emergency(options.managementOrigin, signal);
             } catch (error) {
-              if (!signal.aborted) options.onError?.(error);
+              if (!signal.aborted) options.onEmergencyError?.(error);
             }
           }
           if (status.installation?.state === "active" && !signal.aborted && options.isPrimary()) {

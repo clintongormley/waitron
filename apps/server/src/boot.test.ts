@@ -1,3 +1,5 @@
+import * as cloudWorkerModule from "./cloud-worker.js";
+import * as cloudSnapshotModule from "./cloud-snapshot-loop.js";
 import * as cloudClientModule from "./cloud-client.js";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
 import { emergencyReply } from "../test/cloud-emergency-fixture.js";
@@ -609,6 +611,13 @@ describe("startServer, against a migrated venue directory", () => {
       const factory = vi
         .spyOn(cloudClientModule, "createCloudConnection")
         .mockReturnValue(restarted);
+      const job = cloudWorkerModule.cloudConnectionJob;
+      const worker = vi
+        .spyOn(cloudWorkerModule, "cloudConnectionJob")
+        .mockImplementation((options) => ({ ...job(options), applies: () => false }));
+      const snapshots = vi
+        .spyOn(cloudSnapshotModule, "runCloudSnapshotLoop")
+        .mockResolvedValue(undefined);
       const port = await freePort();
       let server: StartedServer | undefined;
       try {
@@ -630,6 +639,8 @@ describe("startServer, against a migrated venue directory", () => {
       } finally {
         await server?.close();
         factory.mockRestore();
+        worker.mockRestore();
+        snapshots.mockRestore();
       }
     },
   );

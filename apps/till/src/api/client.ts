@@ -174,16 +174,16 @@ export interface TillClockState {
   firstClockIn: boolean;
 }
 
-/**
- * `GET /api/till` — the public boot info the app reads before login. `cardProvider`/`tipsEnabled` decide whether the
- * integrated-card pay control renders at all and whether it prompts for a tip (`cardProvider: "none"`
- * for a till with no integrated reader).
- */
 export interface TillCloudEmergency {
   address: string;
   roles: { builtInKey: "staff" | "supervisor" | "manager" | "admin" | null; name: string | null }[];
 }
 
+/**
+ * `GET /api/till` — the public boot info the app reads before login. `cardProvider`/`tipsEnabled` decide whether the
+ * integrated-card pay control renders at all and whether it prompts for a tip (`cardProvider: "none"`
+ * for a till with no integrated reader).
+ */
 export interface TillInfo {
   cloudEmergency?: TillCloudEmergency;
   locale: string;

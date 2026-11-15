@@ -109,7 +109,15 @@ it.each(["guest", "certificate"] as const)(
 );
 
 it("skips guest delivery when the box steps down during connection refresh", async () => {
-  const f = await installationFixture();
+  const f = await installationFixture(undefined, {
+    emergency: async (_v, saved, _q, res) => {
+      const r = (saved.view as { registration: { installationId: string; venueId: string } })
+        .registration;
+      res.end(
+        JSON.stringify(emergencyReply(r.installationId, r.venueId, new Date().toISOString())),
+      );
+    },
+  });
   onTestFinished(() => f.close());
   const controller = new AbortController();
   let primary = true,
@@ -119,6 +127,7 @@ it("skips guest delivery when the box steps down during connection refresh", asy
   });
   await runCloudConnectionForTest({
     connection: f.client,
+    managementOrigin: "https://staff.test",
     signal: controller.signal,
     isPrimary: () => primary,
     onGuestMenu: async () => {
@@ -127,6 +136,7 @@ it("skips guest delivery when the box steps down during connection refresh", asy
     sleep: async () => controller.abort(),
   });
   expect(deliveries).toBe(0);
+  expect(f.requests.filter((v) => v[2] === "emergency-hosting-display")).toHaveLength(0);
 });
 
 it.each([true, false])(
@@ -158,7 +168,10 @@ it.each([true, false])(
       isPrimary: () => true,
       onGuestMenu: () => seen.push("guest"),
       onStaffCertificate: () => seen.push("staff"),
-      onError: (error) => errors.push(error),
+      onError: (error) => {
+        throw error;
+      },
+      onEmergencyError: (error) => errors.push(error),
       sleep: async () => controller.abort(),
     });
     expect(f.requests.filter((v) => v[2] === "emergency-hosting-display")).toHaveLength(1);

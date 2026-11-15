@@ -217,8 +217,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
   function readHints(state: SavedCloudState): SavedEmergencyHints | undefined {
     const value = state.emergencyHints;
     const registration = registrationOf(state);
-    if (!registration || !record(value) || Buffer.byteLength(JSON.stringify(value)) > 16384)
-      return undefined;
+    if (!registration || !record(value)) return undefined;
     if (
       Object.keys(value).length !== 5 ||
       value.registration !== registration ||
@@ -300,7 +299,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       throw new AppError("cloud.state_invalid", {});
     }
   }
-  async function save(state: SavedCloudState) {
+  async function save(state: SavedCloudState, optionalHints = false) {
     const venueId = state.view?.registration?.venueId;
     if (venueId) {
       const heldId = await options.readVenueId();
@@ -311,8 +310,13 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     cleanHints(state);
     if (state.emergencyHints && Buffer.byteLength(JSON.stringify(state)) > 65536)
       delete state.emergencyHints;
-    await mkdirDurable(join(options.stateDir, CLOUD_DIR), 0o700);
-    await writeFileDurable(path, JSON.stringify(state), 0o600);
+    try {
+      await mkdirDurable(join(options.stateDir, CLOUD_DIR), 0o700);
+      await writeFileDurable(path, JSON.stringify(state), 0o600);
+    } catch (error) {
+      // Optional entrance hints must not turn a successful Cloud read into a storage failure.
+      if (!optionalHints) throw error;
+    }
     heldEmergencyHints = state.emergencyHints;
   }
   function project(state: SavedCloudState | undefined): CloudConnectionStatus {
@@ -571,30 +575,40 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         (!emergencyFacts || display.asOf >= emergencyFacts.display.asOf)
       ) {
         emergencyFacts = { registration, display };
-        const facts = display.emergency;
-        const asOf = display.asOf;
-        await run(async () => {
-          const state = await read();
-          if (!state || registrationOf(state) !== registration || emergencyRead !== entry) return;
-          const hints: SavedEmergencyHints = {
-            registration,
-            staffOrigin,
-            address: facts.address,
-            open: facts.open,
-            asOf,
-          };
-          const previous = state.emergencyHints;
-          if (
-            !previous ||
-            previous.registration !== registration ||
-            previous.staffOrigin !== staffOrigin ||
-            previous.address !== hints.address ||
-            previous.open !== hints.open
-          ) {
-            state.emergencyHints = hints;
-            await save(state);
+        const hints: SavedEmergencyHints = {
+          registration,
+          staffOrigin,
+          address: display.emergency.address,
+          open: display.emergency.open,
+          asOf: display.asOf,
+        };
+        const changed = (previous: SavedEmergencyHints | undefined) =>
+          !previous ||
+          previous.registration !== registration ||
+          previous.staffOrigin !== staffOrigin ||
+          previous.address !== hints.address ||
+          previous.open !== hints.open;
+        if (changed(heldEmergencyHints)) {
+          try {
+            await run(
+              async () => {
+                const state = await read(),
+                  current = registrationOf(state);
+                if (!state || current !== registration || emergencyRead !== entry)
+                  throw new AppError(current ? "cloud.unavailable" : "cloud.not_configured", {});
+                if (changed(state.emergencyHints)) {
+                  state.emergencyHints = hints;
+                  await save(state, true);
+                }
+              },
+              true,
+              signal,
+            );
+          } catch (error) {
+            if (signal?.aborted) throw new AppError("cloud.unavailable", {});
+            throw error;
           }
-        }, true);
+        }
         return { ...display, stale: false };
       }
       if (emergencyFacts) return { ...emergencyFacts.display, stale: true };
