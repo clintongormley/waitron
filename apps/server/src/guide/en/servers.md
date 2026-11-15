@@ -232,3 +232,15 @@ Cloud services stay in place. Choose **Turn on remote access** to let the box re
 
 The status beside this button is your saved choice. Open your staff address to check whether
 you can connect; this page does not test that connection. If a change fails, check the saved choice and choose **Refresh status** to retry the connection. **Stop Cloud access** is the separate permanent stop for all Cloud services.
+
+## Check emergency start in Cloud {#cloud-emergency}
+
+Open **System → Cloud services** on the main box to check **Emergency start in Cloud**.
+The card shows the emergency address, when the details were checked and when the current code
+was issued.
+
+If emergency start is switched off, your Connected plan is inactive or a payment method is
+missing, open the Cloud account to put it right. **Cloud cannot start this venue yet** means the
+hosting path is not available for this venue. Earlier details are labelled as such; Cloud checks
+again before starting. The daily price is an estimate excluding VAT. This card shows details
+only; it does not start the venue or reveal its emergency code.

@@ -258,3 +258,15 @@ servidor vuelva a conectarse.
 El estado junto al botón es la opción que has guardado. Abre la dirección del personal para
 comprobar si puedes conectarte; esta página no prueba esa conexión. Si un cambio falla, revisa la opción guardada y elige **Actualizar estado** para volver a intentar la conexión. **Detener el acceso a Cloud** es la opción aparte
 que detiene permanentemente todos los servicios de Cloud.
+
+## Consultar el inicio de emergencia en Cloud {#cloud-emergency}
+
+Abre **Sistema → Servicios Cloud** en el servidor principal y consulta **Inicio de emergencia
+en Cloud**. La tarjeta muestra la dirección de emergencia, cuándo se consultaron los datos
+y cuándo se emitió el código actual.
+
+Si el inicio está desactivado, el plan Conectado no está activo o falta un método de pago,
+abre la cuenta de Cloud para corregirlo. **Cloud aún no puede iniciar este local** indica que el
+alojamiento no está disponible para este local. Los datos anteriores se indican como tales;
+Cloud los comprueba de nuevo antes de iniciar el local. El precio diario es aproximado y no
+incluye IVA. La tarjeta solo muestra los datos; no inicia el local ni revela su código.

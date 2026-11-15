@@ -2,6 +2,8 @@ import { createPublicKey, verify, type KeyObject } from "node:crypto";
 import { isPairingUuid } from "./pairing-proof.js";
 
 export type MachineAction =
+  | "emergency-hosting-display"
+  | "emergency-hosting-code"
   | "billing-display"
   | "renew"
   | "configuration"
@@ -134,6 +136,8 @@ export function readMachineClaims(value: unknown): MachineClaims {
       v[0] !== "waitron-cloud-machine-v1" ||
       !originValid(v[1]) ||
       ![
+        "emergency-hosting-display",
+        "emergency-hosting-code",
         "billing-display",
         "renew",
         "configuration",

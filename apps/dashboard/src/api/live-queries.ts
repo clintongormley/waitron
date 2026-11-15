@@ -540,6 +540,7 @@ export const QUERY_DEPENDENCIES = {
   getCloudStatus: [],
   // Read from Cloud, which no table change reports; the server lets one read a minute through.
   getCloudBilling: [],
+  getCloudEmergency: [],
   // Mostly the box's disk, clock and processes, which no table change reports, so the timer
   // refreshes it; its sales, printer and reader rows wait for the timer too.
   getBoxHealth: [],

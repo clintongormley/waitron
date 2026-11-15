@@ -9,6 +9,7 @@ export async function installationFixture(
     cloudBeforeVersion2?: boolean;
     translation?: MachineHandler;
     billing?: MachineHandler;
+    emergency?: MachineHandler;
     staffCertificate?: MachineHandler;
     guestMenu?: MachineHandler;
     tunnel?: MachineHandler;
@@ -56,6 +57,10 @@ export async function installationFixture(
   ];
   const f = await cloudFixture(async (values, saved, req, res, sent) => {
     requests.push(values);
+    if (values[2] === "emergency-hosting-display" && options.emergency) {
+      await options.emergency(values, saved, req, res, sent);
+      return;
+    }
     if (values[2] === "tunnel-provision") {
       if (options.tunnel) await options.tunnel(values, saved, req, res, sent);
       else {

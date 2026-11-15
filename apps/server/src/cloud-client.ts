@@ -17,6 +17,7 @@ import {
   type CloudInstallationStatus,
   type CloudObservation,
 } from "./cloud-installation.js";
+import { fetchEmergencyDisplay, type EmergencyDisplay } from "./cloud-emergency.js";
 import { fetchBillingDisplay, type BillingDisplay, type BillingRefusal } from "./cloud-billing.js";
 import {
   collectTranslation,
@@ -415,7 +416,85 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     state?.view?.registration && !state.lifecycle?.revoked
       ? `${state.publicKey} ${state.view.registration.installationId}`
       : undefined;
+  let emergencyRead:
+    | {
+        registration: string;
+        staffOrigin: string;
+        notBefore: number;
+        outcome: Promise<EmergencyDisplay>;
+      }
+    | undefined;
+  let emergencyFacts: { registration: string; display: EmergencyDisplay } | undefined;
   return {
+    async emergency(
+      staffOrigin: string,
+      signal?: AbortSignal,
+    ): Promise<EmergencyDisplay & { stale: boolean }> {
+      const registration = registrationOf(await read());
+      if (emergencyFacts?.registration !== registration) emergencyFacts = undefined;
+      if (!registration) throw new AppError("cloud.not_configured", {});
+      const startedAt = Date.now();
+      if (
+        !emergencyRead ||
+        emergencyRead.registration !== registration ||
+        emergencyRead.staffOrigin !== staffOrigin ||
+        startedAt >= emergencyRead.notBefore
+      ) {
+        let sentAt: number | undefined;
+        const outcome = (async () => {
+          const state = await leaseState();
+          if (registrationOf(state) !== registration) throw new AppError("cloud.unavailable", {});
+          sentAt = Date.now();
+          return fetchEmergencyDisplay(state, staffOrigin, { onRefusal: recordRefusal });
+        })();
+        const entry = { registration, staffOrigin, notBefore: Infinity, outcome };
+        emergencyRead = entry;
+        const settle = (error?: BillingRefusal) => {
+          entry.notBefore = Math.max(
+            (sentAt ?? startedAt) + 60000,
+            error?.retryAfterMs ? Date.now() + Math.min(error.retryAfterMs, 3600000) : 0,
+          );
+        };
+        outcome.then(() => settle(), settle);
+      }
+      const entry = emergencyRead;
+      let display: EmergencyDisplay | undefined;
+      let remove = () => {};
+      try {
+        display = await (signal
+          ? Promise.race([
+              entry.outcome,
+              new Promise<never>((_resolve, reject) => {
+                const abort = () => reject(new AppError("cloud.unavailable", {}));
+                if (signal.aborted) abort();
+                else signal.addEventListener("abort", abort, { once: true });
+                remove = () => signal.removeEventListener("abort", abort);
+              }),
+            ])
+          : entry.outcome);
+      } catch (error) {
+        if (signal?.aborted || !(error instanceof AppError) || error.code !== "cloud.unavailable")
+          throw error;
+      } finally {
+        remove();
+      }
+      const current = registrationOf(await read());
+      if (current !== registration) {
+        emergencyFacts = undefined;
+        throw new AppError(current ? "cloud.unavailable" : "cloud.not_configured", {});
+      }
+      if (
+        display?.emergency.status === "ready" &&
+        emergencyRead === entry &&
+        (!emergencyFacts || display.asOf >= emergencyFacts.display.asOf)
+      ) {
+        emergencyFacts = { registration, display };
+        return { ...display, stale: false };
+      }
+      if (emergencyFacts) return { ...emergencyFacts.display, stale: true };
+      if (display) return { ...display, stale: false };
+      throw new AppError("cloud.unavailable", {});
+    },
     async setRemoteAccess(enabled: boolean, authorize: () => Promise<void>) {
       return run(async () => {
         const state = await read();

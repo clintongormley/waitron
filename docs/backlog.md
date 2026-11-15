@@ -1859,7 +1859,8 @@ Not in any track until the standalone primary is done.
   A947's strip and Cloud's half. Local selected-backup placement groundwork keeps the spare's own
   identity; since A947 3b-F (#3172) a spare of a Veri*Factu venue can join as well:
   [A1188 design](superpowers/specs/2026-10-29-a1188-cloud-emergency-start-design.md).
-  [Part 1 plan](superpowers/plans/2026-11-14-a1188-part1-emergency-card.md) pins Cloud’s agreed contract values; watcher 2026-11-15 05:46 resumed the card, with a post-agreement plan read before build. Hosted runtime remains outside part 1.
+  The emergency-card adapter is built; its facts need Cloud’s display endpoint. Code reveal/readiness (part 1b), saved till facts (part 2) and hosted runtime remain open.
+  [Part 1 plan](superpowers/plans/2026-11-14-a1188-part1-emergency-card.md).
   [Detail](backlog/replication-cloud.md#a1188-someone-at-the-venue-can-start-the-venue-in-the-cloud-when-the-box-has-died-owner-2026-10-29)
 
 - **The till's theme fetch does not follow a server move (A841 slice 3).** The till fetches

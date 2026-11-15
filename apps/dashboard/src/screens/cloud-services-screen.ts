@@ -7,11 +7,28 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import { QueryController } from "@waitron/dashboard-kit";
 import { centsToDecimal, formatMoney } from "@waitron/shared";
-import type { CloudBilling, CloudConnectionStatus, DashboardApi } from "../api/client.js";
+import type {
+  CloudBilling,
+  CloudEmergency,
+  CloudConnectionStatus,
+  DashboardApi,
+} from "../api/client.js";
 import { dashboardQuery } from "../api/live-queries.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { lastIncludedDay } from "./cloud-billing-day.js";
+
+function priceDisplay(prices: CloudBilling["prices"] | undefined) {
+  const locale = currentLocale();
+  const money = (cents: number) => formatMoney(String(centsToDecimal(cents)), locale);
+  const vat =
+    prices?.status === "published"
+      ? new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 2 }).format(
+          prices.vatRateBasisPoints / 10000,
+        )
+      : "";
+  return { money, vat };
+}
 
 /** Billing is read only where the server answers it: a live connection, on the primary. */
 const readsBilling = (s: CloudConnectionStatus | undefined) =>
@@ -99,6 +116,39 @@ export class CloudServicesScreen extends LitElement {
       this.billingUnavailable = true;
     },
   );
+  @state() private emergency: CloudEmergency | undefined;
+  @state() private emergencyUnavailable = false;
+  #emergencyKey: string | undefined;
+  readonly #emergencyQueries = new QueryController(
+    this,
+    () => this.api.liveData,
+    () => {
+      this.emergency = undefined;
+      this.emergencyUnavailable = true;
+    },
+  );
+  #stopEmergency() {
+    this.#emergencyQueries.release("getCloudEmergency");
+    this.#emergencyKey = undefined;
+    this.emergency = undefined;
+    this.emergencyUnavailable = false;
+  }
+  #watchEmergency() {
+    if (!this.isConnected) return;
+    const key = readsBilling(this.status) ? JSON.stringify(this.status?.registration) : undefined;
+    if (key === this.#emergencyKey) return;
+    this.#stopEmergency();
+    if (key === undefined) return;
+    this.#emergencyKey = key;
+    const query = dashboardQuery(this.api, "getCloudEmergency", []);
+    void this.#emergencyQueries
+      .watch("getCloudEmergency", { ...query, key: `${query.key}:${key}` }, (value) => {
+        if (key !== this.#emergencyKey) return;
+        this.emergency = value;
+        this.emergencyUnavailable = false;
+      })
+      .catch(() => undefined);
+  }
   override connectedCallback() {
     super.connectedCallback();
     this.busy = false;
@@ -131,9 +181,11 @@ export class CloudServicesScreen extends LitElement {
     clearTimeout(this.#clock);
     this.#generation++;
     this.#stopBilling();
+    this.#stopEmergency();
     super.disconnectedCallback();
   }
   protected override willUpdate() {
+    this.#watchEmergency();
     // Watched once while billing applies: `watch` would replace the slot and read again. A
     // detached screen's last update must not start a watch nobody releases.
     if (!this.isConnected || readsBilling(this.status) === this.#billingWatched) return;
@@ -209,6 +261,39 @@ export class CloudServicesScreen extends LitElement {
       }),
     );
   }
+  #emergency(s: CloudConnectionStatus) {
+    const answer = this.emergency,
+      facts = answer?.emergency,
+      prices = answer?.prices;
+    const { money, vat } = priceDisplay(prices);
+    const time = (value: string) =>
+      html`<time datetime=${value}>${new Date(value).toLocaleString(currentLocale())}</time>`;
+    return html`<section data-test="cloud-emergency" aria-labelledby="cloud-emergency-heading">
+      <h2 id="cloud-emergency-heading">${t("cloud.emergency")}</h2>
+      ${this.emergencyUnavailable || facts?.status === "unavailable" ? html`<p>${t("cloud.emergency_unavailable")}</p>` : nothing}
+      ${answer?.stale ? html`<p>${t("cloud.emergency_stale")}</p>` : nothing}
+      ${
+        facts?.status === "ready"
+          ? html` <p>
+                ${facts.open ? t("cloud.emergency_open") : t(`cloud.emergency_${facts.closedReason!}`)}
+              </p>
+              ${facts.address ? html`<p><a href=${facts.address} target="_blank" rel="noopener noreferrer">${facts.address}</a></p>` : nothing}
+              <dl>
+                <dt>${t("cloud.emergency_checked")}</dt>
+                <dd>${time(answer!.asOf)}</dd>
+                ${
+                  facts.codeIssuedAt
+                    ? html`<dt>${t("cloud.emergency_issued")}</dt>
+                        <dd>${time(facts.codeIssuedAt)}</dd>`
+                    : nothing
+                }
+              </dl>`
+          : nothing
+      }
+      ${prices?.status === "published" ? html`<p>${fill("cloud.emergency_daily", { amount: money(Number((BigInt(prices.hostedMonthlyCents) + 15n) / 30n)), vat })}</p>` : prices?.status === "unavailable" ? html`<p>${t("cloud.billing_prices_unpublished")}</p>` : nothing}
+      ${s.accountUrl ? html`<a href=${s.accountUrl} target="_blank" rel="noopener noreferrer">${t("cloud.account")}</a>` : nothing}
+    </section>`;
+  }
   #billing(s: CloudConnectionStatus) {
     const answer = this.billing;
     const locale = currentLocale();
@@ -216,13 +301,7 @@ export class CloudServicesScreen extends LitElement {
       t(`cloud.billing_level_${value}` as "cloud.billing_level_hosted");
     const facts = answer?.billing;
     const prices = answer?.prices;
-    const money = (cents: number) => formatMoney(String(centsToDecimal(cents)), locale);
-    const vat =
-      prices?.status === "published"
-        ? new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 2 }).format(
-            prices.vatRateBasisPoints / 10000,
-          )
-        : "";
+    const { money, vat } = priceDisplay(prices);
     return html`<section data-test="cloud-billing" aria-labelledby="cloud-billing-heading">
       <h2 id="cloud-billing-heading">${t("cloud.billing")}</h2>
       ${
@@ -543,7 +622,8 @@ export class CloudServicesScreen extends LitElement {
                     : s.state === "complete"
                       ? html`<p role="status">${t("cloud.connected")}</p>
                           <p>${s.legalBusinessName}</p>
-                          ${this.#installation(s)} ${readsBilling(s) ? this.#billing(s) : nothing}`
+                          ${this.#installation(s)}
+                          ${readsBilling(s) ? html`${this.#billing(s)}${this.#emergency(s)}` : nothing}`
                       : html`
                           ${
                             s.state === "awaiting_cloud"

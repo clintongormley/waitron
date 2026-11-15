@@ -1151,3 +1151,64 @@ it("identifies the actual staff entrance in Cloud status and action replies", as
     await f.close();
   }
 });
+
+it("returns only emergency display facts and rechecks permission and primary after Cloud waits", async () => {
+  const f = await installationFixture();
+  try {
+    const manager = await person("manager");
+    let primary = true;
+    let beforeReturn = async () => {};
+    const connection = {
+      ...f.client,
+      emergency: async () => {
+        await beforeReturn();
+        return {
+          version: 1 as const,
+          installationId: "hidden",
+          venueId: "hidden",
+          countryCode: "ES" as const,
+          asOf: "2026-11-10T12:00:00.000Z",
+          emergency: { status: "unavailable" as const, reason: "state_not_ready" as const },
+          prices: { status: "unavailable" as const, reason: "not_published" as const },
+          stale: false,
+        };
+      },
+    };
+    const app = new Hono();
+    mountCloudApi(
+      app,
+      {
+        db: suite.db,
+        connection,
+        managementOrigin: "https://venue.test",
+        isPrimary: () => primary,
+      },
+      () => {},
+    );
+    const request = () =>
+      app.request("/management-api/cloud/emergency", { headers: { cookie: manager.cookie } });
+    const success = await request();
+    expect(success.status).toBe(200);
+    expect(success.headers.get("cache-control")).toBe("no-store");
+    expect(await success.json()).toEqual({
+      asOf: "2026-11-10T12:00:00.000Z",
+      emergency: { status: "unavailable", reason: "state_not_ready" },
+      prices: { status: "unavailable", reason: "not_published" },
+      stale: false,
+    });
+    beforeReturn = async () => {
+      primary = false;
+    };
+    expect(await (await request()).json()).toEqual({
+      error: { code: "cloud.not_primary", params: {} },
+    });
+    primary = true;
+    beforeReturn = () => setBuiltInRoleForTest(suite.db, manager.id, "staff");
+    expect(await (await request()).json()).toEqual({
+      error: { code: "authorization.not_permitted", params: { permission: "system.manage" } },
+    });
+    expect((await app.request("/management-api/cloud/emergency")).status).toBe(401);
+  } finally {
+    await f.close();
+  }
+});

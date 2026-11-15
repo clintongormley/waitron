@@ -1755,6 +1755,22 @@ export interface CloudConnectionStatus {
   accountUrl?: string;
 }
 
+export interface CloudEmergency {
+  asOf: string;
+  stale: boolean;
+  emergency:
+    | {
+        status: "ready";
+        open: boolean;
+        closedReason:
+          null | "setting_off" | "level_inactive" | "no_payment_method" | "not_provisioned";
+        address: string | null;
+        codeIssuedAt: string | null;
+      }
+    | { status: "unavailable"; reason: "state_not_ready" };
+  prices: CloudBilling["prices"];
+}
+
 type CloudLevel = "registered" | "connected" | "hosted";
 /** `GET /management-api/cloud/billing`: Cloud's "Venue billing display, version 1", checked by
  * the server (`apps/server/src/cloud-billing.ts`). Display only. */
@@ -4808,6 +4824,9 @@ export class DashboardApi {
   }
   getCloudStatus(): Promise<CloudConnectionStatus> {
     return this.#request("/management-api/cloud/status", "GET");
+  }
+  getCloudEmergency(): Promise<CloudEmergency> {
+    return this.#request("/management-api/cloud/emergency", "GET");
   }
   getCloudBilling(): Promise<CloudBilling> {
     return this.#request("/management-api/cloud/billing", "GET");

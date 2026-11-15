@@ -625,6 +625,25 @@ export const en = {
   "cloud.billing_monthly": "{price} a month + {vat} VAT",
   "cloud.billing_daily": "{price} per 30 days, charged by the day + {vat} VAT",
   "cloud.account": "Open Cloud account",
+  "cloud.emergency": "Emergency start in Cloud",
+  "cloud.emergency_open":
+    "Cloud reports that emergency start is available. Cloud checks again before starting the venue.",
+  "cloud.emergency_setting_off":
+    "Emergency start is switched off. The Cloud account owner can switch it on in the Cloud account.",
+  "cloud.emergency_level_inactive":
+    "Emergency start needs an active Connected plan. Check the plan in the Cloud account.",
+  "cloud.emergency_no_payment_method":
+    "Emergency start needs a payment method. The Cloud account owner can add one in the Cloud account.",
+  "cloud.emergency_not_provisioned":
+    "Cloud cannot start this venue yet. Check availability in the Cloud account.",
+  "cloud.emergency_unavailable":
+    "Emergency-start details are not available. Cloud may not provide emergency hosting for this venue yet. Open the Cloud account to check availability, or try again later.",
+  "cloud.emergency_stale":
+    "These details may have changed. Cloud checks again before starting the venue.",
+  "cloud.emergency_checked": "Last checked",
+  "cloud.emergency_issued": "Current code issued",
+  "cloud.emergency_daily": "About {amount} per day, excluding VAT ({vat})",
+
   "cloud.signup": "Create a Cloud account",
 
   "categories.combobox_search": "Search",
@@ -4878,6 +4897,25 @@ export const es: Record<StringKey, string> = {
   "cloud.billing_monthly": "{price} al mes + {vat} de IVA",
   "cloud.billing_daily": "{price} cada 30 días, cobrado por día + {vat} de IVA",
   "cloud.account": "Abrir la cuenta de Cloud",
+  "cloud.emergency": "Inicio de emergencia en Cloud",
+  "cloud.emergency_open":
+    "Cloud indica que el inicio de emergencia está disponible. Cloud lo comprueba de nuevo antes de iniciar el local.",
+  "cloud.emergency_setting_off":
+    "El inicio de emergencia está desactivado. El titular de la cuenta de Cloud puede activarlo en su cuenta.",
+  "cloud.emergency_level_inactive":
+    "El inicio de emergencia necesita un plan Conectado activo. Consulta el plan en la cuenta de Cloud.",
+  "cloud.emergency_no_payment_method":
+    "El inicio de emergencia necesita un método de pago. El titular puede añadirlo en la cuenta de Cloud.",
+  "cloud.emergency_not_provisioned":
+    "Cloud aún no puede iniciar este local. Consulta la disponibilidad en la cuenta de Cloud.",
+  "cloud.emergency_unavailable":
+    "Los datos del inicio de emergencia no están disponibles. Es posible que Cloud aún no ofrezca alojamiento de emergencia para este local. Consulta la disponibilidad en la cuenta de Cloud o vuelve a intentarlo más tarde.",
+  "cloud.emergency_stale":
+    "Estos datos pueden haber cambiado. Cloud los comprueba de nuevo antes de iniciar el local.",
+  "cloud.emergency_checked": "Última consulta",
+  "cloud.emergency_issued": "Emisión del código actual",
+  "cloud.emergency_daily": "Aproximadamente {amount} al día, sin IVA ({vat})",
+
   "cloud.signup": "Crear una cuenta de Cloud",
 
   "categories.combobox_search": "Buscar",
