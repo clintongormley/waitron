@@ -12,7 +12,7 @@ import { menuChangeAction, menuChangeActions, type MenuUndoInput } from "./menu-
 
 function document(menuName: string): MenuDocument {
   return {
-    format: 3,
+    format: 4,
     menuId: "menu-dinner",
     menuName,
     root: { members: [] },

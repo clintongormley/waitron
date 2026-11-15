@@ -13,7 +13,7 @@ import {
 } from "@waitron/ui/src/test-helpers.js";
 import { allergenStateName, vatClassName } from "../i18n/domain.js";
 import type { Course, Product, Unit } from "../api/client.js";
-import type { ListedVariant } from "@waitron/shared";
+import type { ListedVariant, VatClass } from "@waitron/shared";
 import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 import { ProductList, ROOT_KEY } from "./product-list.js";
 import { registerIcons, setHelpMode, type WtHelpTooltip } from "@waitron/ui";
@@ -211,6 +211,7 @@ function product(
     pricingUnit: "each",
     unitPrice: "8.50",
     vatClass: "reduced",
+    takeawayVatClass: "reduced",
     active: true,
     available: true,
     ordering: "public",
@@ -231,6 +232,7 @@ function product(
         allergens: base.allergens,
         unitPrice: variant.unitPrice ?? base.unitPrice,
         vatClass: base.vatClass,
+        takeawayVatClass: base.takeawayVatClass ?? base.vatClass,
         primaryCategoryId: base.primaryCategoryId,
         courseId: variant.courseId ?? base.courseId,
       },
@@ -1171,6 +1173,7 @@ describe("product-list", () => {
           name: "Wine by the glass",
           unitPrice: "4.00",
           vatClass: "reduced",
+          takeawayVatClass: "reduced",
           primaryCategoryId: "food",
           variants: [
             {
@@ -1185,6 +1188,7 @@ describe("product-list", () => {
                 allergens: null,
                 unitPrice: "4.75",
                 vatClass: "general",
+                takeawayVatClass: "general",
                 primaryCategoryId: "food",
                 courseId: null,
               },
@@ -1216,6 +1220,7 @@ describe("product-list", () => {
           id: "wine",
           unitPrice: "4.00",
           vatClass: "reduced",
+          takeawayVatClass: "reduced",
           variants: [
             {
               ...bunVariant,
@@ -1229,6 +1234,7 @@ describe("product-list", () => {
                 allergens: null,
                 unitPrice: "4.75",
                 vatClass: "general",
+                takeawayVatClass: "general",
                 primaryCategoryId: "category-1",
                 courseId: null,
               },
@@ -1275,6 +1281,60 @@ describe("product-list", () => {
       getComputedStyle(cellUnder(root, "wine:w175", t("product.price"))).color,
     );
   });
+
+  it.each([true, false])(
+    "notes a variant's takeaway VAT under its price only where it differs from its product's and the region charges it (%s)",
+    async (takeawayVat) => {
+      const variant = (id: string, vatClass: VatClass, takeawayVatClass: VatClass) => ({
+        ...bunVariant,
+        id,
+        name: id,
+        effective: {
+          allergens: null,
+          unitPrice: "4.00",
+          vatClass,
+          takeawayVatClass,
+          primaryCategoryId: "category-1",
+          courseId: null,
+        },
+      });
+      const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+        takeawayVat,
+        products: [
+          product({
+            id: "wine",
+            unitPrice: "4.00",
+            vatClass: "reduced",
+            // Empty: taken away it charges its served class, Reduced.
+            takeawayVatClass: null,
+            variants: [
+              variant("served", "general", "reduced"),
+              variant("away", "reduced", "zero"),
+              variant("both", "general", "super_reduced"),
+              variant("same", "reduced", "reduced"),
+            ],
+          }),
+        ],
+      });
+      const table = el.shadowRoot!.querySelector("wt-data-table")!;
+      const root = await tableRoot(el);
+      root.querySelector<HTMLElement>('tr[data-row-key="wine"] .tree-toggle')!.click();
+      await table.updateComplete;
+      const notes = (rowKey: string) =>
+        [
+          ...cellUnder(root, rowKey, t("product.price")).querySelectorAll<HTMLElement>(
+            '[part="vat-note"]',
+          ),
+        ].map((note) => note.textContent!.trim());
+      const served = `${t("product.vat")}: ${vatClassName("general")}`;
+      const away = (tax: string) => `${t("editor.takeaway_vat")}: ${vatClassName(tax)}`;
+      expect(notes("wine:served")).toEqual([served]);
+      expect(notes("wine:away")).toEqual(takeawayVat ? [away("zero")] : []);
+      expect(notes("wine:both")).toEqual(takeawayVat ? [served, away("super_reduced")] : [served]);
+      expect(notes("wine:same")).toEqual([]);
+      expect(notes("wine")).toEqual([]);
+    },
+  );
 
   it.each([
     [
@@ -6319,6 +6379,7 @@ describe("A668 effective allergen cells", () => {
                 effective: {
                   unitPrice: "1.00",
                   vatClass: "reduced",
+                  takeawayVatClass: "reduced",
                   primaryCategoryId: null,
                   allergens: {},
                   courseId: null,
@@ -6362,6 +6423,7 @@ describe("A668 effective allergen cells", () => {
       effective: {
         unitPrice: "1.00",
         vatClass: "reduced",
+        takeawayVatClass: "reduced",
         primaryCategoryId: null,
         allergens,
         courseId: null,

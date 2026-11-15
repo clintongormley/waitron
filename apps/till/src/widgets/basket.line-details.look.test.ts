@@ -43,6 +43,7 @@ const dish: TillProduct = {
           kitchenName: "Kitchen cheese",
           price: "1.25",
           vatClass: "general",
+          takeawayVatClass: "general",
           portion: "1",
           unit: {
             id: "each",

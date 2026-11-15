@@ -231,7 +231,7 @@ describe("media backup evidence", () => {
   });
   it("checks a blob referenced only by a historical menu version", async () => {
     const document: MenuDocument = {
-      format: 3,
+      format: 4,
       menuId: menu,
       menuName: "Old menu",
       root: {

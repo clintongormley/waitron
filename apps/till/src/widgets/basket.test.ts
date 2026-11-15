@@ -51,6 +51,7 @@ function offeredItem(
     kitchenName: `${staff} KDS`,
     price,
     vatClass: "general",
+    takeawayVatClass: "general",
     maxQuantity: 3,
     preselected: false,
     addAllergens: null,

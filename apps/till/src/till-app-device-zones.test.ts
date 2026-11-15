@@ -134,6 +134,7 @@ const zoneOffers = (id: string): ZoneOffers => ({
         hardwareUnit: null,
       },
       vatClass: "general",
+      takeawayVatClass: "general",
       category: null,
       allergens: null,
       diet: null,

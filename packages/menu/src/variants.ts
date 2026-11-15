@@ -69,7 +69,8 @@ function validateFlag(value: unknown, field: string): void {
 }
 
 /**
- * Every inherited field `written` does not set, stored blank so it reads the parent's. Explicitly
+ * Every inherited field `written` does not set, stored blank so it reads the parent's (a blank
+ * takeaway class reads the variant's own VAT class first). Explicitly
  * null rather than omitted: a column default (`dietary_declarations`' is `[]`) would be a value of
  * the variant's own.
  */
@@ -490,6 +491,7 @@ export interface SellingValues<
 > {
   unit: Unit;
   vatClass: Vat;
+  takeawayVatClass: Vat;
   category: string | null;
   courseId: string | null;
 }
@@ -544,6 +546,7 @@ export function selectMenuVariant<Unit, Vat extends string>(
       unitPrice: offer.unitPrice,
       unit: offer.unit,
       vatClass: offer.vatClass,
+      takeawayVatClass: offer.takeawayVatClass,
       category: offer.category,
       courseId: offer.courseId,
     };
@@ -559,6 +562,7 @@ export function selectMenuVariant<Unit, Vat extends string>(
     unitPrice: variant.unitPrice,
     unit: variant.unit,
     vatClass: variant.vatClass,
+    takeawayVatClass: variant.takeawayVatClass,
     category: variant.category,
     courseId: variant.courseId,
   };

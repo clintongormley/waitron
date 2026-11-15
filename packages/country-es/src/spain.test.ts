@@ -140,6 +140,14 @@ describe("Spanish postcodes and provinces", () => {
       expect(resolveFiscalJurisdiction(SPAIN, code), code).toBe(matching[0]);
     }
   });
+
+  it("charges takeaway at a different VAT class in the common territory only", () => {
+    expect(
+      SPAIN.fiscalJurisdictions
+        .filter(({ takeawayVat }) => takeawayVat === true)
+        .map(({ id }) => id),
+    ).toEqual(["ES-common"]);
+  });
 });
 
 describe("regional content languages", () => {

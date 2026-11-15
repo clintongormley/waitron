@@ -59,6 +59,7 @@ function offer(id: string, name: string, courseId: string | null = null): TillMe
     kitchenName: null,
     unit,
     vatClass: "general",
+    takeawayVatClass: "general",
     category: null,
     allergens: null,
     diet: null,

@@ -37,6 +37,7 @@ function offeredItem(productId: string, staff: string, price: string, maxQuantit
     kitchenName: `${staff} KDS`,
     price,
     vatClass: "general" as const,
+    takeawayVatClass: "general" as const,
     maxQuantity,
     preselected: false,
     addAllergens: null,

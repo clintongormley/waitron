@@ -129,6 +129,7 @@ const products: Product[] = [
     pricingUnit: "each",
     unitPrice: "8.50",
     vatClass: "reduced",
+    takeawayVatClass: "reduced",
     active: true,
     available: true,
     ordering: "public",
@@ -156,6 +157,7 @@ const value: ProductEditorValue = {
   available: true,
   ordering: "public",
   vatClass: "reduced",
+  takeawayVatClass: null,
   variants: [],
   primaryCategoryId: "c1",
   color: null,
@@ -2760,6 +2762,7 @@ describe("menu-screen", () => {
               allergens: null,
               unitPrice: "8.50",
               vatClass: "reduced",
+              takeawayVatClass: "reduced",
               primaryCategoryId: "c1",
               courseId: null,
             },
@@ -2789,6 +2792,7 @@ describe("menu-screen", () => {
         image: null,
         unitPrice: "8.50",
         vatClass: "reduced",
+        takeawayVatClass: "reduced",
         unitId: "u1",
         primaryCategoryId: "c1",
         courseId: null,
@@ -3568,8 +3572,16 @@ it("closing a guarded linked product retires its field query before opening anot
 });
 
 it("waits for the venue's VAT default before enabling Add product", async () => {
-  let resolve!: (value: { defaultProductVatClass: "reduced"; defaultColor: null }) => void;
-  const pending = new Promise<{ defaultProductVatClass: "reduced"; defaultColor: null }>((yes) => {
+  let resolve!: (value: {
+    defaultProductVatClass: "reduced";
+    defaultColor: null;
+    takeawayVat: false;
+  }) => void;
+  const pending = new Promise<{
+    defaultProductVatClass: "reduced";
+    defaultColor: null;
+    takeawayVat: false;
+  }>((yes) => {
     resolve = yes;
   });
   const api = stubApi({ getMenuSettings: vi.fn(() => pending) });
@@ -3585,7 +3597,7 @@ it("waits for the venue's VAT default before enabling Add product", async () => 
   (await add()).click();
   await el.updateComplete;
   expect(editor(el).open).toBe(false);
-  resolve({ defaultProductVatClass: "reduced", defaultColor: null });
+  resolve({ defaultProductVatClass: "reduced", defaultColor: null, takeawayVat: false });
   await pending;
   await flush(el);
   expect((await add()).disabled).toBe(false);
@@ -3644,6 +3656,7 @@ it("paints All products' square, an uncategorised product and a new product's in
   vi.mocked(api.getMenuSettings).mockResolvedValue({
     defaultProductVatClass: "general",
     defaultColor: "#256bb1",
+    takeawayVat: false,
   });
   liveData.refresh();
   await expect.poll(fills).toEqual(["rgb(37, 107, 177)", "rgb(37, 107, 177)"]);
@@ -3680,6 +3693,7 @@ it("reads the venue's default into a new editor without replacing an open draft"
   vi.mocked(api.getMenuSettings).mockResolvedValue({
     defaultProductVatClass: "reduced",
     defaultColor: null,
+    takeawayVat: false,
   });
   liveData.refresh();
   await expect.poll(() => vi.mocked(api.getMenuSettings).mock.calls.length).toBe(2);
@@ -3693,6 +3707,20 @@ it("reads the venue's default into a new editor without replacing an open draft"
   await editor(el).updateComplete;
   expect(tax().value).toBe("reduced");
 });
+
+it.each([true, false])(
+  "hands the editor whether the venue's region charges a takeaway VAT class (%s)",
+  async (takeawayVat) => {
+    const api = stubApi({
+      getMenuSettings: vi
+        .fn()
+        .mockResolvedValue({ defaultProductVatClass: "general", defaultColor: null, takeawayVat }),
+    });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+    await flush(el);
+    expect(editor(el).takeawayVat).toBe(takeawayVat);
+  },
+);
 
 describe("archived product entry", () => {
   it("reads archived details passively from the existing background client", async () => {
@@ -3737,6 +3765,7 @@ describe("archived product entry", () => {
                   allergens: null,
                   unitPrice: "8.50",
                   vatClass: "reduced",
+                  takeawayVatClass: "reduced",
                   primaryCategoryId: "c1",
                 },
               },
@@ -3848,3 +3877,27 @@ it.each(["allergen.kinds_required", "allergen.invalid_kind"])(
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   },
 );
+
+it("tells the product list, details and editor whether the region charges a takeaway class", async () => {
+  const api = stubApi({
+    getMenuSettings: vi.fn().mockResolvedValue({
+      defaultProductVatClass: "reduced",
+      defaultColor: null,
+      takeawayVat: true,
+    }),
+  });
+  const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+  await flush(el);
+  await list(el).updateComplete;
+  const details = el.shadowRoot!.querySelector<HTMLElement & { takeawayVat: boolean }>(
+    "dashboard-product-details",
+  )!;
+  const productList = list(el).shadowRoot!.querySelector<HTMLElement & { takeawayVat: boolean }>(
+    "dashboard-product-list",
+  )!;
+  expect([productList.takeawayVat, details.takeawayVat, editor(el).takeawayVat]).toEqual([
+    true,
+    true,
+    true,
+  ]);
+});

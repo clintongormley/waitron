@@ -173,7 +173,7 @@ const PRODUCT_KEYS = {
   unit: ["unit", "pricingUnit"],
   allergens: ["allergens"],
   diet: ["diet", "dietOverride", "dietaryDeclarations"],
-  vat: ["vatClass"],
+  vat: ["vatClass", "takeawayVatClass"],
   ordering: ["ordering"],
   set_lunch: ["setLunch"],
 } as const;
@@ -351,10 +351,10 @@ function extraFields(
 ): Fields {
   const result: Fields = { before: [], after: [] };
   const keys = {
-    image: "image",
-    allergens: "addAllergens",
-    diet: "suitableFor",
-    vat: "vatClass",
+    image: ["image"],
+    allergens: ["addAllergens"],
+    diet: ["suitableFor"],
+    vat: ["vatClass", "takeawayVatClass"],
   } as const;
   for (const field of fields) {
     if (field === "names") {
@@ -363,7 +363,7 @@ function extraFields(
       result.after.push(...changed.after);
     } else if (
       field in keys &&
-      !same(before[keys[field as keyof typeof keys]], after[keys[field as keyof typeof keys]])
+      keys[field as keyof typeof keys].some((key) => !same(before[key], after[key]))
     ) {
       result.before.push({ kind: field as keyof typeof keys });
       result.after.push({ kind: field as keyof typeof keys });

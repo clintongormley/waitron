@@ -6,7 +6,9 @@ import {
   CORE_MIGRATIONS,
   settings as settingsTable,
   categories,
+  personRoles,
   products,
+  roles,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -1620,6 +1622,7 @@ describe("unique category and product names", () => {
       available: true,
       ordering: "public",
       vatClass: "general",
+      takeawayVatClass: null,
       variants: [variant(name), variant(name.toLowerCase())],
       primaryCategoryId: null,
       modifiers: [],
@@ -1872,6 +1875,7 @@ describe("mountMenuApi — products", () => {
       available: true,
       ordering: "public",
       vatClass: "general",
+      takeawayVatClass: null,
       variants: [
         {
           name: "Double",
@@ -2099,6 +2103,7 @@ describe("mountMenuApi — products", () => {
       available: true,
       ordering: "public",
       vatClass: "general",
+      takeawayVatClass: null,
       variants: [],
       primaryCategoryId: null,
       modifiers: [],
@@ -2663,6 +2668,7 @@ describe("mountMenuApi — products", () => {
           allergens: { milk: {} },
           unitPrice: "2.40",
           vatClass: "general",
+          takeawayVatClass: "general",
           primaryCategoryId: categoryId,
           courseId: null,
         },
@@ -2676,6 +2682,7 @@ describe("mountMenuApi — products", () => {
           allergens: { milk: {} },
           unitPrice: "2.00",
           vatClass: "reduced",
+          takeawayVatClass: "reduced",
           primaryCategoryId: categoryId,
           courseId: null,
         },
@@ -3048,6 +3055,55 @@ describe("mountMenuApi — products", () => {
     });
     expect(res.status).toBe(201);
     expect(await res.json()).toMatchObject({ active: true, available: false });
+  });
+
+  it("POST /management-api/products stores a takeaway class, and none when it is omitted", async () => {
+    const app = mountApp();
+    const menuId = await createMenuVia(app, "Takeaway class menu");
+    const create = (name: string, extra: Record<string, unknown>) =>
+      send(app, "POST", "/management-api/products", {
+        body: {
+          menuId,
+          categoryId: null,
+          name,
+          pricingUnit: "each",
+          unitPrice: "1.50",
+          vatClass: "reduced",
+          ...extra,
+        },
+      });
+    const res = await create("Cola", { takeawayVatClass: "general" });
+    expect(res.status).toBe(201);
+    const product = (await res.json()) as { id: string; takeawayVatClass: string | null };
+    expect(product.takeawayVatClass).toBe("general");
+    const stored = await suite.db.execute<{ takeaway_vat_class: string | null }>(
+      sql`select takeaway_vat_class from products where id = ${product.id}`,
+    );
+    expect(stored.rows[0]!.takeaway_vat_class).toBe("general");
+
+    const omitted = await create("Water", {});
+    expect(omitted.status).toBe(201);
+    expect(((await omitted.json()) as { takeawayVatClass: unknown }).takeawayVatClass).toBeNull();
+  });
+
+  it("POST /management-api/products refuses a takeaway class that is not a VAT class", async () => {
+    const app = mountApp();
+    const menuId = await createMenuVia(app, "Bad takeaway class menu");
+    const res = await send(app, "POST", "/management-api/products", {
+      body: {
+        menuId,
+        categoryId: null,
+        name: "Cola",
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "reduced",
+        takeawayVatClass: "nope",
+      },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "product.invalid", params: { field: "takeawayVatClass" } },
+    });
   });
 
   it("POST /management-api/products with active:true (and with it omitted) → an active product", async () => {
@@ -5073,6 +5129,7 @@ describe("menu routes that already refused a negative price", () => {
       available: true,
       ordering: "public",
       vatClass: "general",
+      takeawayVatClass: null,
       variants: [variant("A", "2.00"), variant("B", "3.00")],
       primaryCategoryId: null,
       modifiers: [],
@@ -6615,6 +6672,48 @@ describe("menu settings routes", () => {
     expect((await send(app, "GET", "/management-api/menu-settings")).status).toBe(200);
   });
 
+  it("answers whether the venue's region charges a takeaway VAT class (A1522)", async () => {
+    const app = mountApp();
+    const takeawayVat = async () =>
+      (await (await send(app, "GET", "/management-api/menu-settings")).json()).takeawayVat;
+    expect(await takeawayVat()).toBe(true);
+    await suite.db.execute(sql`update taxpayer set country = 'GB'`);
+    await suite.db.execute(
+      sql`update settings set doc = json_set(doc, '$.fiscalTerritory', 'GB-vat') where module = 'venue'`,
+    );
+    try {
+      expect(await takeawayVat()).toBe(false);
+    } finally {
+      await suite.db.execute(sql`update taxpayer set country = 'ES'`);
+      await suite.db.execute(
+        sql`update settings set doc = json_set(doc, '$.fiscalTerritory', 'ES-common') where module = 'venue'`,
+      );
+    }
+    expect(await takeawayVat()).toBe(true);
+  });
+
+  it("answers takeawayVat to a role holding menu.manage without venue.view (A1522)", async () => {
+    const cookie = await withTransaction(suite.db, async (tx) => {
+      const [person] = await seedPersons(tx, {
+        displayName: "Menu Editor",
+        pinHash: hashPin("1234"),
+        role: "staff",
+      });
+      const [role] = await tx
+        .insert(roles)
+        .values({ name: "Menu only", nameFolded: "menu only", permissions: ["menu.manage"] })
+        .returning({ id: roles.id });
+      await tx.insert(personRoles).values({ personId: person!.id, roleId: role!.id });
+      const session = await startManagementSession(tx, { personId: person!.id });
+      return `${MANAGEMENT_COOKIE}=${session.token}`;
+    });
+    const app = mountWithVenueDefaults();
+    expect((await send(app, "GET", "/management-api/venue-defaults", { cookie })).status).toBe(403);
+    const read = await send(app, "GET", "/management-api/menu-settings", { cookie });
+    expect(read.status).toBe(200);
+    expect((await read.json()).takeawayVat).toBe(true);
+  });
+
   it("saves and reloads the venue's new-product VAT class", async () => {
     const app = mountWithVenueDefaults();
     for (const defaultProductVatClass of ["general", "reduced", "super_reduced", "zero"]) {
@@ -6625,7 +6724,11 @@ describe("menu settings routes", () => {
       expect((await saved.json()).defaultProductVatClass).toBe(defaultProductVatClass);
       const loaded = await send(app, "GET", "/management-api/menu-settings");
       expect(loaded.status).toBe(200);
-      expect(await loaded.json()).toEqual({ defaultProductVatClass, defaultColor: null });
+      expect(await loaded.json()).toEqual({
+        defaultProductVatClass,
+        defaultColor: null,
+        takeawayVat: true,
+      });
     }
     expect(
       (
@@ -6675,6 +6778,7 @@ describe("menu settings routes", () => {
     expect(await loaded.json()).toEqual({
       defaultProductVatClass: "reduced",
       defaultColor: "#b12525",
+      takeawayVat: true,
     });
 
     expect(
@@ -6694,6 +6798,7 @@ describe("menu settings routes", () => {
     expect(await reloaded.json()).toEqual({
       defaultProductVatClass: "reduced",
       defaultColor: null,
+      takeawayVat: true,
     });
   });
 

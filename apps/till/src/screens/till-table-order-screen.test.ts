@@ -2878,6 +2878,7 @@ describe("till-table-order-screen", () => {
       kitchenName: `${name} KDS`,
       price: "1.00",
       vatClass: "general" as const,
+      takeawayVatClass: "general" as const,
       maxQuantity: 3,
       preselected,
       addAllergens: null,

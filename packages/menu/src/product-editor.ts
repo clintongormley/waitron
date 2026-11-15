@@ -35,6 +35,7 @@ const columns = {
   active: products.active,
   available: products.available,
   vatClass: products.vatClass,
+  takeawayVatClass: products.takeawayVatClass,
   allergens: products.manualAllergens,
   dietaryDeclarations: products.dietaryDeclarations,
   courseId: products.courseId,
@@ -55,6 +56,7 @@ async function readStored(tx: Transaction, productId: string) {
       ...stored,
       unitPrice: priceOrNull(stored.unitPrice),
       vatClass: stored.vatClass as VatClass | null,
+      takeawayVatClass: stored.takeawayVatClass as VatClass | null,
       dietaryDeclarations:
         stored.dietaryDeclarations === null
           ? null
@@ -74,6 +76,7 @@ async function readInherited(tx: Transaction, parentId: string): Promise<Inherit
     image: parent.image,
     unitPrice: parent.unitPrice!,
     vatClass: parent.vatClass!,
+    takeawayVatClass: parent.takeawayVatClass ?? parent.vatClass!,
     unitId: parent.unitId,
     primaryCategoryId: parent.primaryCategoryId,
     courseId: parent.courseId,
@@ -186,6 +189,7 @@ export async function saveProductEditor(
       // The parser refuses a blank on a product with no parent, which every created one is.
       unitPrice: value.unitPrice!,
       vatClass: value.vatClass!,
+      takeawayVatClass: value.takeawayVatClass,
       active: value.active,
       available: value.available ?? true,
       ordering: value.ordering,
@@ -204,6 +208,7 @@ export async function saveProductEditor(
       unitId: value.unitId,
       unitPrice: value.unitPrice,
       vatClass: value.vatClass,
+      takeawayVatClass: value.takeawayVatClass,
       active: value.active,
       ...(value.available === undefined ? {} : { available: value.available }),
       ordering: value.ordering,

@@ -362,6 +362,8 @@ export class ProductList extends LitElement {
   @property({ attribute: false }) courses: Course[] = [];
   @property({ attribute: false }) categories: CategorySummary[] = [];
   @property({ attribute: false }) defaultColor: string | null = null;
+  /** Whether the venue's region charges a separate class taken away. */
+  @property({ attribute: false }) takeawayVat = false;
   @property({ attribute: false }) unroutedFolderIds: string[] = [];
   @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
@@ -1092,12 +1094,20 @@ export class ProductList extends LitElement {
         // its price, since nothing else on the row would show it.
         cell: (row) => {
           const vat = row.variant?.effective.vatClass;
+          const takeaway = this.takeawayVat ? row.variant?.effective.takeawayVatClass : undefined;
+          const productTakeaway = row.product.takeawayVatClass ?? row.product.vatClass;
           return html`<span data-test="price">${this.#price(row)}</span>
             <span part="price-unit" data-test="price-unit">${this.#unitWord(row.product)}</span>${
               vat === undefined || vat === row.product.vatClass
                 ? nothing
                 : html`<span part="vat-note" data-test="vat-note"
                     >${t("product.vat")}: ${vatClassName(vat)}</span
+                  >`
+            }${
+              takeaway === undefined || takeaway === productTakeaway
+                ? nothing
+                : html`<span part="vat-note" data-test="takeaway-vat-note"
+                    >${t("editor.takeaway_vat")}: ${vatClassName(takeaway)}</span
                   >`
             }`;
         },

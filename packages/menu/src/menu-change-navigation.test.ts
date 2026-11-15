@@ -97,6 +97,7 @@ function offer(id = "soup"): FrozenOffer {
     color: null,
     unit,
     vatClass: "general",
+    takeawayVatClass: "general",
     allergens: null,
     diet: null,
     dietOverride: null,
@@ -124,7 +125,7 @@ function section(
 function document(): MenuDocument {
   const drinks = section("drinks", [{ kind: "product", menuItemId: "mi-soup", productId: "soup" }]);
   return {
-    format: 3,
+    format: 4,
     menuId: "lunch",
     menuName: "Lunch",
     root: { members: [drinks, section("favourites", [drinks])] },
@@ -436,6 +437,7 @@ function variant(id: string): FrozenOfferVariant {
     unit,
     pricingUnit: "each",
     vatClass: "general",
+    takeawayVatClass: "general",
     allergens: null,
     diet: null,
     dietOverride: null,
@@ -470,6 +472,7 @@ function extras(id: string): Extract<FrozenOfferedModifier, { kind: "extras" }> 
         unit,
         price: "0.50",
         vatClass: "general",
+        takeawayVatClass: "general",
         maxQuantity: null,
         preselected: false,
         addAllergens: null,
@@ -694,6 +697,34 @@ describe("nested change subjects", () => {
       ],
       after: [],
     });
+  });
+  it("addresses a takeaway-class-only change as VAT on the dish and on an extra", () => {
+    const live = document(),
+      proposed = document();
+    soup(live).offeredModifiers = [extras("citrus")];
+    soup(proposed).offeredModifiers = [extras("citrus")];
+    soup(proposed).takeawayVatClass = "reduced";
+    const [dish] = navigateMenuChanges(live, proposed, [
+      change({ kind: "product_changed", productId: "soup", name: "Same", fields: ["vat"] }),
+    ]);
+    expect(dish!.targets).toEqual({
+      before: atOccurrences([{ field: { kind: "vat" } }]),
+      after: atOccurrences([{ field: { kind: "vat" } }]),
+    });
+    const extra = soup(proposed).offeredModifiers[0]!;
+    if (extra.kind !== "extras") throw new Error("extras");
+    extra.items[0]!.takeawayVatClass = "zero";
+    const [item] = navigateMenuChanges(live, proposed, [
+      {
+        kind: "product_changed",
+        productId: "lemon",
+        name: "Same",
+        fields: ["vat"],
+        source: "shared_product",
+      },
+    ]);
+    const expected = repeated({ kind: "vat" }, { listId: "citrus", extraProductId: "lemon" });
+    expect(item!.targets).toEqual({ before: expected, after: expected });
   });
   it("addresses an extra-only translated name edit at its parent, never as a phantom dish", () => {
     const live = document(),

@@ -23,6 +23,7 @@ const product: ProductEditorDraft = {
   available: true,
   ordering: "public",
   vatClass: "reduced",
+  takeawayVatClass: null,
   variants: [],
   primaryCategoryId: null,
   color: null,

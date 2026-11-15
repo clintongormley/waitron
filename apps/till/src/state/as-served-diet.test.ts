@@ -29,6 +29,7 @@ function item(productId: string): OfferedExtraItem {
     kitchenName: `${productId} KDS`,
     price: "0.00",
     vatClass: "general",
+    takeawayVatClass: "general",
     maxQuantity: 1,
     preselected: false,
     addAllergens: null,

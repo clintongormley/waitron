@@ -23,6 +23,7 @@ const offer: FrozenOffer = {
   grossPrice: "99.00",
   unit,
   vatClass: "general",
+  takeawayVatClass: "general",
   allergens: null,
   diet: null,
   dietOverride: null,
@@ -35,7 +36,7 @@ const offer: FrozenOffer = {
 };
 function document(dish: FrozenOffer = offer): MenuDocument {
   return {
-    format: 3,
+    format: 4,
     menuId: "private-menu",
     menuName: "Lunch",
     includedMenuHashes: { secret: "hash" },
@@ -178,6 +179,7 @@ it("keeps separately priced extras and option names with their own declarations"
             kitchenName: "KITCHEN",
             price: "1.50",
             vatClass: "general",
+            takeawayVatClass: "general",
             maxQuantity: 2,
             preselected: false,
             addAllergens: { nuts: { kinds: ["almonds"] } },

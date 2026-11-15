@@ -193,6 +193,7 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
       kitchenName: "Bacon KDS",
       price: "1.50",
       vatClass: "general" as const,
+      takeawayVatClass: "general" as const,
       maxQuantity: 3,
       preselected: false,
       addAllergens: { milk: {} },

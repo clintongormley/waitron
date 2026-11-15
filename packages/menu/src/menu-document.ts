@@ -90,7 +90,7 @@ export type {
   MenuState,
 } from "@waitron/shared";
 
-export const MENU_DOCUMENT_FORMAT = 3;
+export const MENU_DOCUMENT_FORMAT = 4;
 
 export interface OmittedShortcut {
   ref: TileRef;
@@ -800,7 +800,7 @@ const PRODUCT_FACTS: readonly [ProductChangeField, readonly string[]][] = [
   ["unit", ["unit", "pricingUnit"]],
   ["allergens", ["allergens"]],
   ["diet", ["diet", "dietOverride", "dietaryDeclarations"]],
-  ["vat", ["vatClass"]],
+  ["vat", ["vatClass", "takeawayVatClass"]],
 ];
 
 const EXTRA_FACTS: readonly [ProductChangeField, readonly string[]][] = [
@@ -808,7 +808,7 @@ const EXTRA_FACTS: readonly [ProductChangeField, readonly string[]][] = [
   ["image", ["image"]],
   ["allergens", ["addAllergens"]],
   ["diet", ["suitableFor"]],
-  ["vat", ["vatClass"]],
+  ["vat", ["vatClass", "takeawayVatClass"]],
 ];
 
 function changedFacts(

@@ -72,6 +72,8 @@ export class ProductDetails extends LitElement {
   @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
   @property({ attribute: false }) units: UnitChoice[] = [];
+  /** Whether the venue's region charges a separate class taken away. */
+  @property({ attribute: false }) takeawayVat = false;
 
   #close(): void {
     if (!this.open) return;
@@ -105,6 +107,9 @@ export class ProductDetails extends LitElement {
     const price = value.unitPrice ?? parent?.unitPrice ?? null;
     const unitId = parent ? parent.unitId : value.unitId;
     const tax = value.vatClass ?? parent?.vatClass ?? null;
+    // An empty takeaway class charges the item's own served class, else, on a variant, its
+    // product's takeaway class (packages/menu/src/variant-fallback.ts).
+    const takeaway = value.takeawayVatClass ?? value.vatClass ?? parent?.takeawayVatClass ?? null;
     const categoryId = parent ? parent.primaryCategoryId : value.primaryCategoryId;
     const category = this.categories.find(({ id }) => id === categoryId);
     const allergens = value.allergens ?? parent?.allergens ?? null;
@@ -124,6 +129,11 @@ export class ProductDetails extends LitElement {
       ${this.#field(t("editor.kitchen_name"), value.kitchenName)}
       ${this.#field(t("product.price"), this.#price(price, unitId))}
       ${this.#field(t("product.vat"), tax === null ? null : vatClassName(tax))}
+      ${
+        this.takeawayVat
+          ? this.#field(t("editor.takeaway_vat"), takeaway === null ? null : vatClassName(takeaway))
+          : nothing
+      }
       ${this.#field(t("editor.classification"), categoryId === null ? null : (category?.name ?? t("editor.missing_choice")))}
       ${this.#field(
         t("editor.variants"),

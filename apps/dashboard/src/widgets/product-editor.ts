@@ -138,6 +138,7 @@ const SERVER_FIELDS: Record<string, string> = {
   unitId: "unit",
   unitPrice: "unit-price",
   vatClass: "tax",
+  takeawayVatClass: "takeaway-tax",
   primaryCategoryId: "primary",
   color: "product-color",
   active: "active",
@@ -174,6 +175,7 @@ const DRAFT_ERROR_KEYS: Partial<Record<keyof ProductEditorDraft, string>> = {
   unitId: "unit",
   unitPrice: "unit-price",
   vatClass: "tax",
+  takeawayVatClass: "takeaway-tax",
   primaryCategoryId: "primary",
   color: "product-color",
   modifiers: "modifier",
@@ -194,6 +196,7 @@ function emptyDraft(defaultVatClass: VatClass = "general"): ProductEditorDraft {
     available: true,
     ordering: "public",
     vatClass: defaultVatClass,
+    takeawayVatClass: null,
     variants: [],
     primaryCategoryId: null,
     color: null,
@@ -383,6 +386,9 @@ export class ProductEditor extends LitElement {
   @property({ type: Boolean }) childOpen = false;
   @property({ attribute: false }) locales: string[] = [];
   @property({ attribute: false }) defaultVatClass: VatClass = "general";
+  /** Whether the venue's region charges a second VAT class when a product is taken away. Off, the
+   * field is not drawn and a save sends the stored class as it was read. */
+  @property({ attribute: false }) takeawayVat = false;
   @property({ attribute: false }) newCategoryId: string | null = null;
   @property({ attribute: false }) value: ProductEditorDraft | null = null;
   @property({ attribute: false }) units: UnitChoice[] = [];
@@ -947,6 +953,9 @@ export class ProductEditor extends LitElement {
       !this.taxes.some((tax) => tax.id === this.draft.vatClass)
     )
       errors.tax = t("editor.tax_required");
+    const takeaway = this.draft.takeawayVatClass;
+    if (this.takeawayVat && takeaway !== null && !this.taxes.some((tax) => tax.id === takeaway))
+      errors["takeaway-tax"] = t("editor.takeaway_vat_gone");
     if (!(variantPage && blankPrice) && !isProductPrice(this.draft.unitPrice ?? ""))
       errors["unit-price"] = t("editor.price_invalid");
     for (const [index, variant] of this.draft.variants.entries()) {
@@ -1410,32 +1419,66 @@ export class ProductEditor extends LitElement {
     ></wt-segmented-control>`;
   }
 
+  private taxText(id: VatClass): string {
+    const tax = this.taxes.find((tax) => tax.id === id);
+    return tax ? this.taxLabel(tax) : id;
+  }
+
+  /** Empty resolves to the item's own served class, else, on a variant, its product's takeaway class
+   * (packages/menu/src/variant-fallback.ts). */
+  private renderTakeawayTax() {
+    const parent = this.inherited;
+    const own = this.draft.vatClass;
+    // Only a variant may leave its served class empty; a product's is required.
+    const empty =
+      own === null && parent !== null
+        ? this.taxText(parent.takeawayVatClass)
+        : fill("editor.takeaway_vat_same", { tax: this.taxText(own!) });
+    const taxes = this.taxes.map((tax) => ({ value: tax.id, label: this.taxLabel(tax) }));
+    return html`<wt-combobox
+      name="takeaway-tax"
+      label=${t("editor.takeaway_vat")}
+      search="auto"
+      searchPlaceholder=${t("categories.combobox_search")}
+      noResultsLabel=${t("categories.combobox_no_results")}
+      placeholder=${empty}
+      .options=${[{ value: "", label: empty }, ...taxes]}
+      .value=${this.draft.takeawayVatClass ?? ""}
+      error=${this.error("takeaway-tax")}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+        event.stopPropagation();
+        const value = event.detail.value;
+        this.change("takeawayVatClass", value === "" ? null : (value as VatClass));
+      }}
+    ></wt-combobox>`;
+  }
+
   private renderTax() {
     const parent = this.inherited;
     const parentTax = parent && this.taxes.find((tax) => tax.id === parent.vatClass);
     const inheritedTax = parent ? (parentTax ? this.taxLabel(parentTax) : parent.vatClass) : null;
     const taxes = this.taxes.map((tax) => ({ value: tax.id, label: this.taxLabel(tax) }));
     return html`<wt-combobox
-      name="tax"
-      label=${t("product.vat")}
-      ?required=${!parent}
-      search="auto"
-      searchPlaceholder=${t("categories.combobox_search")}
-      noResultsLabel=${t("categories.combobox_no_results")}
-      placeholder=${inheritedTax ?? t("editor.choose")}
-      .options=${inheritedTax === null ? taxes : [{ value: "", label: inheritedTax }, ...taxes]}
-      .value=${this.draft.vatClass ?? ""}
-      error=${this.error("tax")}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-        event.stopPropagation();
-        const value = event.detail.value;
-        this.change(
-          "vatClass",
-          parent && value === "" ? null : (value as NonNullable<ProductEditorDraft["vatClass"]>),
-        );
-      }}
-      >${this.help(t("product.vat"), "help.products.vat", "products.vat")}</wt-combobox
-    >`;
+        name="tax"
+        label=${t("product.vat")}
+        ?required=${!parent}
+        search="auto"
+        searchPlaceholder=${t("categories.combobox_search")}
+        noResultsLabel=${t("categories.combobox_no_results")}
+        placeholder=${inheritedTax ?? t("editor.choose")}
+        .options=${inheritedTax === null ? taxes : [{ value: "", label: inheritedTax }, ...taxes]}
+        .value=${this.draft.vatClass ?? ""}
+        error=${this.error("tax")}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          const value = event.detail.value;
+          this.change(
+            "vatClass",
+            parent && value === "" ? null : (value as NonNullable<ProductEditorDraft["vatClass"]>),
+          );
+        }}
+        >${this.help(t("product.vat"), "help.products.vat", "products.vat")}</wt-combobox
+      >${this.takeawayVat ? this.renderTakeawayTax() : nothing}`;
   }
 
   /** The unit dropdown and Add unit, drawn only while the chooser is open. */
@@ -1516,6 +1559,9 @@ export class ProductEditor extends LitElement {
   private pricingSummary(amount: string, unitLabel: string) {
     const price = amount.trim();
     const tax = this.taxes.find((tax) => tax.id === this.draft.vatClass);
+    const takeaway = this.takeawayVat
+      ? this.taxes.find((tax) => tax.id === this.draft.takeawayVatClass)
+      : undefined;
     return [
       ...(price
         ? [
@@ -1528,6 +1574,7 @@ export class ProductEditor extends LitElement {
           ]
         : []),
       ...(tax ? [{ label: t("product.vat"), value: this.taxLabel(tax) }] : []),
+      ...(takeaway ? [{ label: t("editor.takeaway_vat"), value: this.taxLabel(takeaway) }] : []),
     ];
   }
 

@@ -8,6 +8,9 @@ import type { PlanPlacement, VenueThemeAnswer } from "@waitron/ui";
 import type { ThemeChoices, ThemeWarning } from "@waitron/ui-core/theme";
 import type { MenuDefaults } from "@waitron/menu/src/settings-types.js";
 export type { MenuDefaults };
+/** The menu-settings read: the menu's defaults, and whether the venue's region charges a product a
+ * second VAT class when it is taken away. */
+export type MenuSettingsAnswer = MenuDefaults & { takeawayVat: boolean };
 import type { Setting, CombinedOffer, ValueSource, Place } from "@waitron/shared";
 export type { Setting, CombinedOffer, ValueSource, Place };
 import type { ContentLanguageRules, ContentLanguages, DeleteImpact } from "@waitron/shared";
@@ -3077,8 +3080,8 @@ export class DashboardApi {
     return this.#request<MenuSummary[]>("/management-api/menus", "GET");
   }
 
-  getMenuSettings(): Promise<MenuDefaults> {
-    return this.#request<MenuDefaults>("/management-api/menu-settings", "GET");
+  getMenuSettings(): Promise<MenuSettingsAnswer> {
+    return this.#request<MenuSettingsAnswer>("/management-api/menu-settings", "GET");
   }
 
   saveMenuDefaultColor(color: string | null): Promise<MenuDefaults> {

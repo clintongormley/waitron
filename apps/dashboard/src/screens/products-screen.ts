@@ -1,5 +1,5 @@
 import type { ProductEditorSaveBody } from "@waitron/shared";
-import type { MenuDefaults } from "../api/client.js";
+import type { MenuSettingsAnswer } from "../api/client.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { ContentLanguages } from "@waitron/shared";
@@ -87,7 +87,7 @@ export class ProductsScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
-  @state() private menuSettings: MenuDefaults | null = null;
+  @state() private menuSettings: MenuSettingsAnswer | null = null;
   @state() private contentLanguages: ContentLanguages | null = null;
   @state() private menus: MenuSummary[] = [];
   @state() private categories: CategorySummary[] = [];
@@ -726,6 +726,7 @@ export class ProductsScreen extends LitElement {
               .canAddProduct=${this.menuSettings !== null && locales.length > 0 && this.units.length > 0}
               .loaded=${this.productsLoaded}
               .defaultColor=${this.menuSettings?.defaultColor ?? null}
+              .takeawayVat=${this.menuSettings?.takeawayVat ?? false}
               @add-product=${(event: CustomEvent<{ categoryId: string | null }>) => {
                 event.stopPropagation();
                 this.#addFrom = event.detail.categoryId;
@@ -754,6 +755,7 @@ export class ProductsScreen extends LitElement {
         .units=${this.units}
         .extraLists=${this.extraLists}
         .optionLists=${this.optionLists}
+        .takeawayVat=${this.menuSettings?.takeawayVat ?? false}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
           this.#closeEditor();
@@ -770,6 +772,7 @@ export class ProductsScreen extends LitElement {
         .value=${this.editorValue}
         .initialField=${this.editorInitialField}
         .defaultVatClass=${this.menuSettings?.defaultProductVatClass ?? "general"}
+        .takeawayVat=${this.menuSettings?.takeawayVat ?? false}
         .defaultColor=${this.menuSettings?.defaultColor ?? null}
         .newCategoryId=${this.newCategoryId}
         .fieldErrors=${this.editorFieldErrors}

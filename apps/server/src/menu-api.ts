@@ -14,7 +14,15 @@ import {
   type ContentLanguageRules,
   type Decimal,
 } from "@waitron/shared";
-import { readVenueClock, withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  readTaxpayer,
+  readVenue,
+  readVenueClock,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
+import { chargesTakeawayVat } from "@waitron/country-packs";
 import {
   moveProductItems,
   deleteProductItems,
@@ -26,6 +34,7 @@ import {
   menuExists,
   readMenuSettings,
   saveMenuDefaultColor,
+  type MenuDefaults,
   readContentLanguages,
   listTranslationGapCounts,
   writeContentLanguages,
@@ -117,6 +126,20 @@ import { setProductCourse } from "./kitchen.js";
 
 import type { Logger } from "./logger.js";
 import { activationInstant, checkedTimeZone, localTimeOf } from "./menu-publication-time.js";
+
+/** The menu's defaults, and whether the venue's region charges a product a second VAT class when
+ * it is taken away: it travels here so anyone who may edit products reads it. */
+async function readMenuSettingsAnswer(
+  tx: Transaction,
+): Promise<MenuDefaults & { takeawayVat: boolean }> {
+  return {
+    ...(await readMenuSettings(tx)),
+    takeawayVat: chargesTakeawayVat(
+      (await readTaxpayer(tx))?.country ?? "",
+      (await readVenue(tx)).fiscalTerritory,
+    ),
+  };
+}
 
 /** Menu and content-language routes. One taxpayer per database, so nothing filters by one. */
 export interface MenuApiDeps {
@@ -816,7 +839,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
   app.get("/management-api/menu-settings", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      return c.json(await gated(c, sessionId, (tx) => readMenuSettings(tx)));
+      return c.json(await gated(c, sessionId, readMenuSettingsAnswer));
     }),
   );
   app.put("/management-api/menu-settings/default-color", (c) =>
@@ -1444,6 +1467,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
         pricingUnit?: unknown;
         unitPrice?: unknown;
         vatClass?: unknown;
+        takeawayVatClass?: unknown;
         allergens?: unknown;
         dietOverride?: unknown;
         image?: unknown;
@@ -1508,6 +1532,8 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
           : { unitId: body.unitId as string }),
         unitPrice: body.unitPrice,
         vatClass: body.vatClass as never,
+        // `createProduct` refuses a value that is not a VAT class.
+        takeawayVatClass: (body.takeawayVatClass ?? null) as never,
         ...(body.allergens === undefined ? {} : { allergens: body.allergens as ProductAllergens }),
         ...(body.dietOverride === undefined
           ? {}

@@ -783,14 +783,18 @@ it("does not subscribe a Structure-only shared read to unrelated publication tab
   ]);
 });
 
-it("subscribes menu defaults to their stored settings", async () => {
+it("subscribes menu defaults to their stored settings and the rows that decide takeaway VAT", async () => {
   const api = new DashboardApi(
     "",
-    async () => new Response('{"defaultProductVatClass":"reduced"}'),
+    async () => new Response('{"defaultProductVatClass":"reduced","takeawayVat":true}'),
   );
   const query = dashboardQuery(api, "getMenuSettings", []);
-  expect(query.dependencies).toEqual([{ type: "settings.menu" }]);
-  expect(await query.read()).toEqual({ defaultProductVatClass: "reduced" });
+  expect(query.dependencies).toEqual([
+    { type: "settings.menu" },
+    { type: "settings.venue" },
+    { type: "taxpayer" },
+  ]);
+  expect(await query.read()).toEqual({ defaultProductVatClass: "reduced", takeawayVat: true });
 });
 
 it("subscribes the venue defaults to the clock document, venue document and menu settings", () => {

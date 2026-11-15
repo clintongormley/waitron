@@ -47,6 +47,7 @@ function variant(id: string, name: string): FrozenOfferVariant {
     unit: {} as FrozenOfferVariant["unit"],
     pricingUnit: {} as FrozenOfferVariant["pricingUnit"],
     vatClass: "reduced",
+    takeawayVatClass: "reduced",
     allergens: null,
     diet: null,
     dietOverride: null,
@@ -65,6 +66,7 @@ function extra(productId: string, name: string): FrozenExtraItem {
     kitchenName: null,
     price: "1.00",
     vatClass: "reduced",
+    takeawayVatClass: "reduced",
     maxQuantity: null,
     preselected: false,
     addAllergens: null,
@@ -503,6 +505,101 @@ it("stages a kitchen name, a VAT class and a picture", async () => {
   expect(form(el).querySelector("dashboard-image-upload")!.image).toBe("media:soup");
 });
 
+/** Lunch with Soup charged Reduced served here and No tax taken away. */
+function takeawayLunch(): MenuDocument {
+  const document = lunch();
+  document.offers["mi-soup"]!.takeawayVatClass = "zero";
+  return document;
+}
+
+async function mountTakeaway(api: DashboardApi = stubApi()): Promise<MenuPatchDialog> {
+  const { el } = await mountWidget<MenuPatchDialog>("dashboard-menu-patch-dialog", {
+    api,
+    menuId: "menu-lunch",
+    menuName: "Lunch Menu",
+    takeawayVat: true,
+    open: true,
+  });
+  await flush(el);
+  return el;
+}
+
+const combobox = (el: MenuPatchDialog, name: string) =>
+  form(el).querySelector<HTMLElementTagNameMap["wt-combobox"]>(`wt-combobox[name="${name}"]`)!;
+
+it.each([
+  ["a dish", "Soup"],
+  ["a variant", "Large"],
+  ["an extras item", "Bread"],
+] as const)(
+  "shows %s's two VAT classes as the values the live menu holds, with no same-as choice, where the region charges a takeaway class",
+  async (_kind, label) => {
+    const el = await mountTakeaway(
+      stubApi({ getLiveMenu: vi.fn(async () => live(3, takeawayLunch())) }),
+    );
+    await pick(el, label);
+    expect(fieldNames(el).slice(-2)).toEqual(["tax", "takeaway-tax"]);
+    const served = combobox(el, "tax");
+    const away = combobox(el, "takeaway-tax");
+    expect(away.label).toBe("VAT when taken away");
+    expect(away.required).toBe(true);
+    expect([served.value, away.value]).toEqual(
+      label === "Soup" ? ["reduced", "zero"] : ["reduced", "reduced"],
+    );
+    expect(away.options.map(({ value }) => value)).toEqual(
+      served.options.map(({ value }) => value),
+    );
+    expect(away.options.some(({ label }) => label.includes("Same as"))).toBe(false);
+  },
+);
+
+it("stages a change to the served class alone, leaving the takeaway class as the live menu holds it", async () => {
+  const el = await mountTakeaway(
+    stubApi({ getLiveMenu: vi.fn(async () => live(3, takeawayLunch())) }),
+  );
+  await pick(el, "Soup");
+  await chooseOption(combobox(el, "tax"), "general");
+  await el.updateComplete;
+  expect(el.changes).toEqual([{ target: soup, field: "vatClass", value: "general" }]);
+  expect(combobox(el, "takeaway-tax").value).toBe("zero");
+});
+
+it("stages the takeaway class and lists each changed class under its own label for review", async () => {
+  const el = await mountTakeaway(
+    stubApi({ getLiveMenu: vi.fn(async () => live(3, takeawayLunch())) }),
+  );
+  await pick(el, "Soup");
+  await chooseOption(combobox(el, "takeaway-tax"), "super_reduced");
+  await el.updateComplete;
+  expect(el.changes).toEqual([{ target: soup, field: "takeawayVatClass", value: "super_reduced" }]);
+  expect(combobox(el, "tax").value).toBe("reduced");
+  await chooseOption(combobox(el, "tax"), "general");
+  await el.updateComplete;
+  await press(el, "review");
+  expect(reviewLines(el)).toEqual([
+    "Soup: VAT when taken away No tax → Super-reduced",
+    "Soup: VAT Reduced → General",
+  ]);
+});
+
+it("shows a takeaway class the patch refuses under its field", async () => {
+  const el = await mountTakeaway();
+  await pick(el, "Soup");
+  await chooseOption(combobox(el, "takeaway-tax"), "standard");
+  await el.updateComplete;
+  await press(el, "review");
+  expect(combobox(el, "takeaway-tax").error).toBe("Check this value.");
+  expect(combobox(el, "tax").error).toBe("");
+  expect(el.changes).toEqual([]);
+});
+
+it("shows one VAT class field where the region charges no takeaway class", async () => {
+  const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, takeawayLunch())) }));
+  await pick(el, "Soup");
+  expect(form(el).querySelectorAll("wt-combobox")).toHaveLength(1);
+  expect(fieldNames(el).at(-1)).toBe("tax");
+});
+
 it("hands the picture chooser the venue's image library and no more", async () => {
   const api = stubApi();
   const el = await mount(api);
@@ -630,6 +727,39 @@ it("lists each variant with its price and VAT class beside its link, as a patch 
   await el.updateComplete;
   expect(variantRows(el)[1]).toEqual({ link: "Large", values: "2,50 € · General" });
 });
+
+it.each([true, false])(
+  "adds a variant's takeaway class beside its link only where it differs and the region charges one (%s)",
+  async (takeawayVat) => {
+    const document = lunch();
+    // Small charges Reduced either way; Large charges General here and Reduced taken away.
+    document.offers["mi-lemonade"]!.variants[1]!.vatClass = "general";
+    const api = stubApi({ getLiveMenu: vi.fn(async () => live(3, document)) });
+    const el = takeawayVat ? await mountTakeaway(api) : await mount(api);
+    await pick(el, "Lemonade");
+    expect(variantRows(el)).toEqual([
+      { link: "Small", values: "€2.00 · Reduced" },
+      {
+        link: "Large",
+        values: takeawayVat ? "€2.00 · General · VAT when taken away: Reduced" : "€2.00 · General",
+      },
+    ]);
+    if (!takeawayVat) return;
+    await pick(el, "Small");
+    await chooseOption(combobox(el, "takeaway-tax"), "zero");
+    await pick(el, "Lemonade");
+    expect(variantRows(el)[0]).toEqual({
+      link: "Small",
+      values: "€2.00 · Reduced · VAT when taken away: No tax",
+    });
+    setLocale("es");
+    await el.updateComplete;
+    expect(variantRows(el)[0]).toEqual({
+      link: "Small",
+      values: "2,00\u00a0€ · Reducido · IVA para llevar: Sin impuestos",
+    });
+  },
+);
 
 it(`fits a dish's variants and their values in the form at 390 px`, async () => {
   const before = { width: window.innerWidth, height: window.innerHeight };

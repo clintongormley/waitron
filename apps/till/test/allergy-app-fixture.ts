@@ -53,6 +53,7 @@ export function offer(id: string, name: string, courseId: string | null = null):
     kitchenName: null,
     unit,
     vatClass: "general",
+    takeawayVatClass: "general",
     category: null,
     allergens: null,
     diet: null,

@@ -21,6 +21,7 @@ const coffee: ProductEditorDraft = {
   unitId: "each",
   unitPrice: "3.00",
   vatClass: "reduced",
+  takeawayVatClass: null,
   active: true,
   available: true,
   ordering: "public",
@@ -97,6 +98,7 @@ const variantPage: ProductEditorDraft = {
     image: "coffee.png",
     unitPrice: "3.00",
     vatClass: "reduced",
+    takeawayVatClass: "reduced",
     unitId: "each",
     primaryCategoryId: "drinks",
     courseId: "starters",
@@ -155,6 +157,8 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
     "color-category-none",
     "color-own",
     "color-refused",
+    "takeaway",
+    "takeaway-refused",
   ])("renders %s", async (state) => {
     const { el, host } = await mountWidget<ProductEditor>(
       "dashboard-product-editor",
@@ -215,7 +219,10 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
               ? { image: "The photo is gone." }
               : state === "color-refused"
                 ? { "product-color": "The server rejected this value." }
-                : {},
+                : state === "takeaway-refused"
+                  ? { "takeaway-tax": "The server rejected this value." }
+                  : {},
+        takeawayVat: state.startsWith("takeaway"),
         ...(state.startsWith("photo")
           ? { api: { imageLibraryRequest: vi.fn().mockResolvedValue({}) } as never }
           : {}),
@@ -322,6 +329,15 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
       expect(group.querySelector("#product-color-error")!.textContent!.trim() !== "").toBe(
         state === "color-refused",
       );
+    }
+    if (state.startsWith("takeaway")) {
+      // Without these the scan could pass on an editor that drew no takeaway field or no refusal.
+      const field = el.shadowRoot!.querySelector<
+        HTMLElement & { error: string; updateComplete: Promise<unknown> }
+      >("wt-combobox[name=takeaway-tax]")!;
+      await field.updateComplete;
+      expect(field.checkVisibility()).toBe(true);
+      expect(field.error !== "").toBe(state === "takeaway-refused");
     }
     if (state === "inactive") {
       // The retired controls must stay absent in this state.

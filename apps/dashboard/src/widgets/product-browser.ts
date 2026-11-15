@@ -108,6 +108,7 @@ export class ProductBrowser extends LitElement {
   @property({ type: Boolean }) canAddProduct = false;
   @property({ type: Boolean }) loaded = false;
   @property({ attribute: false }) defaultColor: string | null = null;
+  @property({ attribute: false }) takeawayVat = false;
   @state() private search = "";
   @state() private nameDraft: CategoryNameDraft | null = null;
   @state() private nameError = "";
@@ -935,6 +936,7 @@ export class ProductBrowser extends LitElement {
           this.colorTarget = { kind: "default" };
         }}
         .defaultColor=${this.defaultColor}
+        .takeawayVat=${this.takeawayVat}
         .nameColor=${boxColor}
         .choosingColor=${this.colorTarget?.kind === "box"}
         @name-color=${(event: Event) => {

@@ -34,6 +34,7 @@ export interface MenuOffer extends MenuItem {
   setLunch?: true;
   unit: SellableUnit;
   vatClass: VatClass;
+  takeawayVatClass: VatClass;
   category: string | null;
   allergens: ProductAllergens | null;
   diet: DietProfile | null;
@@ -66,6 +67,7 @@ export interface MenuOfferVariant {
   unit: SellableUnit;
   pricingUnit: PricingUnit;
   vatClass: VatClass;
+  takeawayVatClass: VatClass;
   category: string | null;
   allergens: ProductAllergens | null;
   diet: DietProfile | null;
@@ -115,6 +117,7 @@ export interface AvailableProduct {
   pricingUnit: PricingUnit;
   unitPrice: string;
   vatClass: VatClass;
+  takeawayVatClass: VatClass;
   category: string | null;
   allergens: ProductAllergens | null;
   /** The PUBLISHED diet profile (`products.diet`) — vegan/vegetarian labels, contains-tags, and any
@@ -173,6 +176,7 @@ export interface OfferedExtraItem {
   price: string;
   /** Always the extra PRODUCT's effective rate, never the dish's. */
   vatClass: VatClass;
+  takeawayVatClass: VatClass;
   maxQuantity: number | null;
   preselected: boolean;
   addAllergens: ProductAllergens | null;

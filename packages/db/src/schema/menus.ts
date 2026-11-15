@@ -76,6 +76,9 @@ export const products = table(
     /* v8 ignore stop */
     unitPrice: money("unit_price"),
     vatClass: label("vat_class"),
+    // The class charged when the product is taken away; how a blank resolves:
+    // `effectiveProductColumns`.
+    takeawayVatClass: label("takeaway_vat_class"),
     // `active` is whether the product exists for the venue — deleting makes it false and removes no
     // row — and `available` is "sold out for now". The till sells a product only when both are
     // true. `available` is never inherited by a variant.
@@ -135,6 +138,10 @@ export const products = table(
     check(
       "products_vat_class_ck",
       sql`${t.vatClass} in ('general','reduced','super_reduced','zero')`,
+    ),
+    check(
+      "products_takeaway_vat_class_ck",
+      sql`${t.takeawayVatClass} in ('general','reduced','super_reduced','zero')`,
     ),
   ],
 );

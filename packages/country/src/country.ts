@@ -52,6 +52,8 @@ export interface FiscalJurisdiction {
   readonly areaCodes: readonly string[];
   readonly supported: boolean;
   readonly modules?: FiscalModules;
+  /** Food and drink taken away may be charged at a different VAT class from eaten in. */
+  readonly takeawayVat?: true;
 }
 
 /** The fixed words a printed receipt carries, one set per receipt language. */

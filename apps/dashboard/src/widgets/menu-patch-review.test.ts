@@ -208,6 +208,25 @@ it("writes money and VAT in the screen language", () => {
   ).toEqual(["Soup: Precio 3,00\u00a0€ → 3,50\u00a0€", "Soup: IVA Reducido → General"]);
 });
 
+it.each([
+  ["en", ["Soup: VAT Reduced → General", "Soup: VAT when taken away Reduced → No tax"]],
+  ["es", ["Soup: IVA Reducido → General", "Soup: IVA para llevar Reducido → Sin impuestos"]],
+] as const)("words each VAT class under its own label (%s)", (locale, expected) => {
+  setLocale(locale);
+  const document = lunch();
+  document.offers["mi-soup"]!.takeawayVatClass = "reduced";
+  expect(
+    changeLines(
+      document,
+      [
+        { target: soup, field: "vatClass", value: "general" },
+        { target: soup, field: "takeawayVatClass", value: "zero" },
+      ],
+      languages,
+    ),
+  ).toEqual(expected);
+});
+
 it("always notes open orders and the products, and names each queued version by its date", () => {
   const openOrders = "Lines already on open orders keep their old price and VAT class.";
   const products =

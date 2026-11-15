@@ -53,6 +53,7 @@ beforeEach(async () => {
     active: true,
     available: false,
     vatClass: "reduced",
+    takeawayVatClass: "general",
     image: null,
     variants: [
       {
@@ -225,6 +226,22 @@ it("saves and reads the canonical editor shape with independent content and vari
     allergens: {},
     dietaryDeclarations: [],
   });
+});
+
+it("saves a product's takeaway class and clears it to none", async () => {
+  const saved = await withTransaction(fx.db, (tx) =>
+    saveProductEditor(tx, null, menuId, input, "en"),
+  );
+  expect(saved.takeawayVatClass).toBe("general");
+  const cleared = await withTransaction(fx.db, (tx) =>
+    saveProductEditor(tx, saved.id, menuId, { ...saved, takeawayVatClass: null }, "en"),
+  );
+  expect(cleared.takeawayVatClass).toBeNull();
+  const [row] = await fx.db
+    .select({ takeawayVatClass: products.takeawayVatClass })
+    .from(products)
+    .where(eq(products.id, saved.id));
+  expect(row!.takeawayVatClass).toBeNull();
 });
 
 it("saves a product's own colour, lists it, and clears it", async () => {
@@ -692,6 +709,7 @@ describe("a variant's own page", () => {
       unitId: null,
       unitPrice: "2.00",
       vatClass: null,
+      takeawayVatClass: null,
       primaryCategoryId: null,
       color: null,
       allergens: null,
@@ -705,6 +723,7 @@ describe("a variant's own page", () => {
         image: libraryImageName("coffee.webp"),
         unitPrice: "9.00",
         vatClass: "reduced",
+        takeawayVatClass: "general",
         unitId: kgUnitId,
         primaryCategoryId: categories.parent,
         courseId: routing.courseId,
@@ -715,6 +734,32 @@ describe("a variant's own page", () => {
     const parent = await read(parentId);
     expect(parent.parentId).toBeNull();
     expect(parent.inherited).toBeNull();
+  });
+
+  it("reads its parent's main class as the takeaway class it inherits when the parent has none", async () => {
+    await withTransaction(fx.db, (tx) => updateProduct(tx, parentId, { takeawayVatClass: null }));
+    expect((await read(variantId)).inherited).toMatchObject({
+      vatClass: "reduced",
+      takeawayVatClass: "reduced",
+    });
+  });
+
+  it("stores a variant's own takeaway class, and a blank clears it", async () => {
+    const value = await read(variantId);
+    expect(await save(variantId, { ...value, takeawayVatClass: "zero" })).toMatchObject({
+      takeawayVatClass: "zero",
+      inherited: value.inherited,
+    });
+    const stored = async () =>
+      (
+        await fx.db
+          .select({ takeawayVatClass: products.takeawayVatClass })
+          .from(products)
+          .where(eq(products.id, variantId))
+      )[0]!.takeawayVatClass;
+    expect(await stored()).toBe("zero");
+    expect(await save(variantId, value)).toEqual(value);
+    expect(await stored()).toBeNull();
   });
 
   it("reads the parent's current staff name after a rename", async () => {

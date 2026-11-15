@@ -83,6 +83,7 @@ export interface ListedVariant extends ProductVariant {
     allergens: ProductAllergens | null;
     unitPrice: string;
     vatClass: VatClass;
+    takeawayVatClass: VatClass;
     primaryCategoryId: string | null;
     courseId: string | null;
   };
@@ -120,6 +121,8 @@ export interface Product {
   /** GROSS (VAT-inclusive): per selected unit. */
   unitPrice: string;
   vatClass: VatClass;
+  /** The class charged taken away, as stored; null charges `vatClass` either way. */
+  takeawayVatClass: VatClass | null;
   /** Whether the product exists for the venue; deleting it makes it Inactive. */
   active: boolean;
   /** Whether it can be sold right now: false is "sold out for now", and hides nothing in the
@@ -172,6 +175,9 @@ export interface ProductEditorInput {
   /** Writes `products.available`: "sold out for now". */
   available: boolean;
   vatClass: VatClass | null;
+  /** Required in the body; null is empty, on a product or a variant. How an empty one is charged:
+   * `effectiveProductColumns` in `@waitron/menu`. */
+  takeawayVatClass: VatClass | null;
   /** Empty on a variant, which has no variants of its own. */
   variants: ProductVariantInput[];
   /** The main reporting category: any category, or null for Uncategorised. Always null on a variant,
@@ -210,6 +216,9 @@ export interface InheritedValues {
   image: string | null;
   unitPrice: string;
   vatClass: VatClass;
+  /** The parent's takeaway class, or its `vatClass` when it has none. A variant's own `vatClass`
+   * takes precedence over this when the variant has no takeaway class of its own. */
+  takeawayVatClass: VatClass;
   /** The parent's unit, which is always the variant's. */
   unitId: string | null;
   /** The parent's category, which is always the variant's. */

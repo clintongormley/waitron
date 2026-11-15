@@ -2119,6 +2119,7 @@ describe("till-menu-browser", () => {
         kitchenName: null,
         price: "1.00",
         vatClass: "general" as const,
+        takeawayVatClass: "general" as const,
         maxQuantity: 1,
         preselected: false,
         addAllergens: null,
