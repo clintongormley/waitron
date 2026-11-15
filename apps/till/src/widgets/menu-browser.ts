@@ -1,7 +1,15 @@
 import type { ChangeAvailability, ChangeOptionAvailability } from "./product-info.js";
 import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { orderableMenus, EMPTY_MENU_FILTERS, type MenuFilters } from "../menu-filter.js";
-import { LitElement, css, html, nothing, unsafeCSS, type TemplateResult } from "lit";
+import {
+  LitElement,
+  css,
+  html,
+  nothing,
+  unsafeCSS,
+  type PropertyValues,
+  type TemplateResult,
+} from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   ContentLanguageController,
@@ -541,6 +549,22 @@ export class TillMenuBrowser extends LitElement {
   #open(path: SectionStep[]): void {
     this.notFound = false;
     this.path = path;
+  }
+
+  override updated(changed: PropertyValues): void {
+    if (changed.has("path")) void this.#revealTrail();
+  }
+
+  /** Waits for the section's buttons to draw: scrolled before they have their height, the trail
+   * ends above view once they grow and the browser's scroll anchoring moves the page. */
+  async #revealTrail(): Promise<void> {
+    const trail = this.renderRoot.querySelector("nav.breadcrumb");
+    if (trail === null) return;
+    const buttons = this.renderRoot.querySelectorAll<LitElement>(
+      '[data-region="section"] wt-button',
+    );
+    await Promise.all([...buttons].map((button) => button.updateComplete));
+    if (trail.isConnected) trail.scrollIntoView({ block: "nearest" });
   }
 
   #pick(product: TillProduct): void {

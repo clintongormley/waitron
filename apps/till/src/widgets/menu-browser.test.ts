@@ -7,7 +7,7 @@ import { formatMoney, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import type { DocumentMember, DocumentTile, HomeDevice, HomeDisplay } from "@waitron/shared";
 import { countText, currentLocale, setLocale } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";
-import { cleanupWidgets, mountWidget, type Theme } from "./test-helpers.js";
+import { cleanupWidgets, measured, mountWidget, type Theme } from "./test-helpers.js";
 import { TillMenuBrowser } from "./menu-browser.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
 import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/client.js";
@@ -893,6 +893,75 @@ describe("till-menu-browser", () => {
       const current = root(el).querySelector("nav.breadcrumb [aria-current]")!;
       expect(current.textContent!.trim()).toBe("Drinks (EN)");
       expect(current.tagName).not.toBe("WT-BUTTON");
+    });
+
+    it("brings the breadcrumb into view when a section is opened from lower down", async () => {
+      const { el, host } = await mount();
+      Object.assign(host.style, { width: "200px", height: "160px", overflow: "auto" });
+      const tile = entry(el, "structure", "Drinks (EN)");
+      tile.scrollIntoView({ block: "end" });
+      expect(host.scrollTop).toBeGreaterThan(0);
+
+      await tap(el, tile);
+      await measured();
+
+      const view = host.getBoundingClientRect();
+      const crumb = root(el).querySelector("nav.breadcrumb")!.getBoundingClientRect();
+      expect(crumb.top).toBeGreaterThanOrEqual(view.top);
+      expect(crumb.bottom).toBeLessThanOrEqual(view.bottom);
+    });
+
+    it("leaves the page where it is when a section opens with its breadcrumb already in view", async () => {
+      const { el, host } = await mount();
+      Object.assign(host.style, { width: "200px", height: "160px", overflow: "auto" });
+      await tap(el, entry(el, "structure", "Drinks (EN)"));
+      await measured();
+      const crumb = () => root(el).querySelector("nav.breadcrumb")!.getBoundingClientRect();
+      host.scrollTop = 0;
+      const below = crumb().top - host.getBoundingClientRect().top;
+      expect(below).toBeGreaterThan(0);
+      host.scrollTop = below / 2;
+      const scrolled = host.scrollTop;
+      expect(scrolled).toBeGreaterThan(0);
+      const view = host.getBoundingClientRect();
+      expect(crumb().top).toBeGreaterThanOrEqual(view.top);
+      expect(crumb().bottom).toBeLessThanOrEqual(view.bottom);
+
+      await tap(el, entry(el, "section", "Beer (EN)"));
+      await measured();
+
+      expect(breadcrumb(el)).toBe("Home › Drinks (EN) › Beer (EN)");
+      expect(host.scrollTop).toBe(scrolled);
+    });
+
+    it("does not scroll on a later update: not after a search, nor after a detached tile re-opens the section already shown", async () => {
+      const { el, host } = await mount();
+      Object.assign(host.style, { width: "200px", height: "160px", overflow: "auto" });
+      const drinks = entry(el, "structure", "Drinks (EN)");
+      await tap(el, drinks);
+      await measured();
+      const away = () => {
+        host.scrollTop = host.scrollHeight;
+        expect(host.scrollTop).toBeGreaterThan(0);
+        return host.scrollTop;
+      };
+
+      let scrolled = away();
+      await tap(el, drinks);
+      el.products = [...el.products];
+      await el.updateComplete;
+      await measured();
+      expect(host.scrollTop).toBe(scrolled);
+
+      await search(el, "cola");
+      await search(el, "");
+      await measured();
+      expect(breadcrumb(el)).toBe("Home › Drinks (EN)");
+      scrolled = away();
+      el.products = [...el.products];
+      await el.updateComplete;
+      await measured();
+      expect(host.scrollTop).toBe(scrolled);
     });
 
     it("opens a nested section a tile names directly", async () => {
