@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
@@ -49,12 +49,19 @@ export async function menuRoots(
   tx: Transaction,
   menuIds: readonly string[],
 ): Promise<Map<string, string>> {
+  // Keep the partial index’s literal predicate alongside the role equality.
   const roots = new Map<string, string>();
   for (const batch of batches(menuIds)) {
     const rows = await tx
       .select({ menuId: sections.ownerMenuId, rootSectionId: sections.id })
       .from(sections)
-      .where(and(inArray(sections.ownerMenuId, batch), eq(sections.role, "menu_root")));
+      .where(
+        and(
+          inArray(sections.ownerMenuId, batch),
+          eq(sections.role, "menu_root"),
+          sql`${sections.role} in ('menu_root','home_layout')`,
+        ),
+      );
     for (const row of rows) roots.set(row.menuId, row.rootSectionId);
   }
   return roots;
@@ -65,7 +72,13 @@ export async function menuRoot(tx: Transaction, menuId: string): Promise<string 
   const [row] = await tx
     .select({ rootSectionId: sections.id })
     .from(sections)
-    .where(and(eq(sections.ownerMenuId, menuId), eq(sections.role, "menu_root")));
+    .where(
+      and(
+        eq(sections.ownerMenuId, menuId),
+        eq(sections.role, "menu_root"),
+        sql`${sections.role} in ('menu_root','home_layout')`,
+      ),
+    );
   return row?.rootSectionId;
 }
 
@@ -73,7 +86,13 @@ export async function menuHome(tx: Transaction, menuId: string): Promise<string 
   const [row] = await tx
     .select({ id: sections.id })
     .from(sections)
-    .where(and(eq(sections.ownerMenuId, menuId), eq(sections.role, "home_layout")));
+    .where(
+      and(
+        eq(sections.ownerMenuId, menuId),
+        eq(sections.role, "home_layout"),
+        sql`${sections.role} in ('menu_root','home_layout')`,
+      ),
+    );
   return row?.id;
 }
 

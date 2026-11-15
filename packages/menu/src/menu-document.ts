@@ -1,7 +1,7 @@
 import { alias } from "drizzle-orm/sqlite-core";
 import { navigateMenuChanges, pathKey } from "./menu-navigation.js";
 import { createHash } from "node:crypto";
-import { and, eq, inArray, type SQL } from "drizzle-orm";
+import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { menus, categories, optionLabels, products, sections, type Transaction } from "@waitron/db";
 import { AppError, effectiveColor, HOME_DEVICES, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { batches } from "./batches.js";
@@ -138,6 +138,7 @@ export async function buildMenuDocuments(
 ): Promise<BuiltMenus> {
   const root = alias(sections, "root");
   const home = alias(sections, "home");
+  // Keep the partial index’s literal predicate alongside each role equality.
   const readDetails = (where?: SQL) =>
     tx
       .select({
@@ -153,8 +154,22 @@ export async function buildMenuDocuments(
         menuName: menus.name,
       })
       .from(menus)
-      .innerJoin(root, and(eq(root.ownerMenuId, menus.id), eq(root.role, "menu_root")))
-      .innerJoin(home, and(eq(home.ownerMenuId, menus.id), eq(home.role, "home_layout")))
+      .innerJoin(
+        root,
+        and(
+          eq(root.ownerMenuId, menus.id),
+          eq(root.role, "menu_root"),
+          sql`${root.role} in ('menu_root','home_layout')`,
+        ),
+      )
+      .innerJoin(
+        home,
+        and(
+          eq(home.ownerMenuId, menus.id),
+          eq(home.role, "home_layout"),
+          sql`${home.role} in ('menu_root','home_layout')`,
+        ),
+      )
       .where(where)
       .orderBy(menus.createdAt, menus.id);
   const loaded = graph ?? (await loadSectionGraph(tx));

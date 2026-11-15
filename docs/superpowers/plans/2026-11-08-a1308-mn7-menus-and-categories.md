@@ -51,6 +51,12 @@ fold helper combines the captured side tables afterward. Frozen captures remain 
 The measured 1,330 counted lines were cleared as consumer and check ports of the planned removals.
 Keep the retired-version fixture cleanup; add no new table, route or screen.
 
+**Review correction (watcher, 2026-11-15 12:56; not an owner approval):**
+Keep the combined role index. Root/Home lookups spell its literal `IN` predicate alongside their
+role equality so SQLite can use it. Prove index use with the real emitted SQL on `node:26-slim`;
+add no index or permanent timing test. The proposed missing-Home guard is dropped under the lane's
+unlikely-event rule. One fresh read of the fixes follows the completed review wave.
+
 ## What it builds
 
 1. **`menus` gains** `handheld_columns`, `handheld_tiles`, `handheld_order`, `till_columns`,
