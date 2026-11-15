@@ -115,7 +115,7 @@ close the day, then A947 and its handover bundles.
 - [Check everything at the offer, while the old box still sells](backlog/replication-cloud.md#bundle-check-everything-at-the-offer-while-the-old-box-still-sells)
 - [Query plans and indexes, measured on a year of data](backlog/architecture.md#bundle-query-plans-and-indexes-measured-on-a-year-of-data)
 - [The spare's wait loop: back-off, reasons, stop signals](backlog/replication-cloud.md#bundle-the-spares-wait-loop-back-off-reasons-stop-signals)
-- [Re-read old failover lists after 3b, delete what it retired](backlog/replication-cloud.md#bundle-re-read-old-failover-lists-after-3b-delete-what-it-retired)
+- [Remaining setup and failover gaps](backlog/replication-cloud.md#bundle-remaining-setup-and-failover-gaps)
 - [Joined-table writers keep their rows right](backlog/till.md#bundle-joined-table-writers-keep-their-rows-right)
 - [Everything needing a third box or a Cloud peer](backlog/replication-cloud.md#bundle-everything-needing-a-third-box-or-a-cloud-peer)
 - [After A760: A877's one helper first](backlog/service-periods.md#bundle-after-a760-a877s-one-helper-first)
@@ -1756,10 +1756,10 @@ Not in any track until the standalone primary is done.
 
 - **Recheck that a spare gets later charts** (bundle of 2, 1 important, size S, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-recheck-that-a-spare-gets-later-charts)
 
-- **Re-read old failover lists after 3b, delete what it retired** (bundle of 6, 3 important, size M, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-re-read-old-failover-lists-after-3b-delete-what-it-retired)
+- **Remaining setup and failover gaps** (bundle, size M). [Detail](backlog/replication-cloud.md#bundle-remaining-setup-and-failover-gaps)
 
-**The on-prem mirror.** Read this section as requirements slices 3–5 must meet, not as work
-outstanding on code that exists.
+**The on-prem mirror.** Joining and local takeover are built and exercised on separate databases;
+this section records the remaining build and real-box qualification.
 
 - **A947. Go-live on two local boxes.** The owner approved the revised design. Slice 3b's build
   plan is written (eleven pull requests, all landed); 3b-1, 3b-2 ([#2742](https://github.com/clintongormley/waitron/pull/2742)),
@@ -2420,7 +2420,7 @@ while it holds decisions still open.
 | [Handheld app store and kiosk](superpowers/specs/2026-09-08-handheld-app-store-and-kiosk-findings.md)                                                                                             | reference; its own-phones decision reversed 2026-09-18                                                                                                                     | —                                                                         |
 | [Box maintenance and remote support](superpowers/specs/2026-09-11-box-maintenance-and-remote-support.md)                                                                                          | discussion record; not started                                                                                                                                             | _The box: backups, upgrades and recovery_                                 |
 | [Failover prototype](superpowers/specs/2026-09-16-sqlite-failover-prototype-design.md) and its plan                                                                                               | done (#425); `bench/sqlite-failover` points at it                                                                                                                          | _Replication, failover and the cloud_                                     |
-| [SQLite + Litestream topologies](superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md)                                                                                               | slices 1 and 2 built; 3 to 5 not started                                                                                                                                   | _Replication, failover and the cloud_                                     |
+| [SQLite + Litestream topologies](superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md)                                                                                               | slices 1–2 and A947 local joining/takeover built; real-box qualification and Cloud work remain                                                                                                                                   | _Replication, failover and the cloud_                                     |
 | [Handheld and till hardware decisions](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md)                                                                                      | decisions; the reader dropdown exists                                                                                                                                      | _Payments and card readers_ (Slice 2)                                     |
 | [Menus, sections and home layouts](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md) and its plan                                                                         | built (#729 last); owner decisions still open; its home layouts superseded by W93's [Device Home Page design](superpowers/specs/2026-10-05-w93-device-home-page-design.md) | _Menus and the menu_ (_Sales classification and the menus plan — what they left open_) |
 | [Service, ordering and billing](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) and its plan                                                                                 | all 18 tasks landed (Task 17 last, #991); what they left open is under The till, devices and table service                                                                 | The till, devices and table service                                       |

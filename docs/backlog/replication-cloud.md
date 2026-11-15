@@ -203,90 +203,61 @@ and Cloud's resource journal bound to the same operation. No local slice waits f
 Wire formats for a Cloud placement, Cloud authorisation mapping and joint behavioural/adverse
 controls remain open; no provider work is authorised.
 
-## A completed provision or adopt operation replayed on a later request still answers 200 without restarting and keeps the setup lock set
+## Setup replay, incomplete adoption and membership trust
 
-- The Cloud restore's replay does restart. After a refused resend of a half-finished adopt (A50, #685),
-  what the first identity leaves behind on the primary and on this node is still not measured.
-  The standby's reset page does not show this server's machine id, so an operator cannot tell
-  which row on the primary's Servers screen is this server's (left for the owner from A70's
-  review). Removing a standby that "never finished joining" (A61, #708) reads that as
-  `serving-secondary` with no `nodes` row in the primary's database.
-  **Still open after A63 (#712):** (i) a removed trust anchor (a machine whose key sits in the
-  receiver's own `nodes` table) can still make up a key for a machine in good standing that is not
-  an anchor, vouch for it, and sign as that machine — unless that machine signed the receiver's
-  held chart and the chart carries the endorsement its signature verifies under, so a standby is
-  not covered, nor a primary the receiver holds no chart signed by (after the former primary's own
-  retirement chart, for one) (stated at `resolveSignerKey`); (ii) boot reconciliation's peer fetch
-  sends no credential (`boot.ts` gives `fetchPeerMembershipDocument` the URL, the venue's authority and a time limit, but no credential) and
-  `GET /management-api/membership` refuses a request without one, so in production that path
-  accepts no chart today and the receiver checks above never run there (read, not run); (iii) a
-  cleared machine is refused its own promotion only if its own held chart contains the clearing,
-  and a standby that never finished joining never receives it; (iv) so, of these guards, only
-  those that run where a chart is made or a join is served work in production today: the
-  primary's join refusals (`mirror.standby_removed` for a removed or cleared id,
-  `mirror.membership_full` for a full chart) and the mint's size refusals; (v) a receiver whose
-  held chart predates a removal accepts the removed machine's charts until it learns of the
-  removal; (vi) a joining standby refused for a removed id (`mirror.standby_removed`) or a full chart
-  (`mirror.membership_full`) sees `mirror.bundle_fetch_failed` rather than the primary's reason,
-  because `apps/server/src/mirror-bundle-fetch.ts` passes on only a refused login
-  (`password.invalid`), a refusal of too many sign-in attempts (`password.throttled`, with its wait) and the codes in `JOIN_REFUSALS` (`apps/server/src/mirror-bundle-api.ts`),
-  and turns every other refusal into that code (C95); (vii) if A61's removal ever mis-classifies a live
-  standby that an operator later promotes, the old primary refuses the new primary's charts
-  (`signer_removed`) and keeps selling; the refusal is logged at warn and raises no alert. No adopt
-  can finish today (`finish-adoption.ts`), so no such standby exists yet.
-  A56's open items (the "Reset this server" path for a half-finished adopt, #694): (2) An adopt
-  saved before that change carries no proof, so the reset refuses it (`password.invalid`). (3) The
-  proof shows the login the primary accepted at join time, not that the admin is still active
-  there, and the one-time code is not asked again. (4) A join that failed after writing
-  `trading.env` boots the trading branch, where no setup route is mounted, so this reset cannot
-  reach it.
-  Also open from A42's review (#674), read and not run: if `operation.complete()` throws after
-  `execute` has scheduled the restart, the lock is now released while that restart is pending.
-  Stale wording outside f2: "a device with no profile" in `apps/server/src/till-api.test.ts` (near
-  lines 1377–1395) and `apps/till/src/till-app.test.ts` (near line 5765), though a device's
-  profile column is NOT NULL; `config.ts`'s "minted once and reused" for the box certificate, which a
-  restore re-issues; and `errors.ts` describing `setup.already_provisioning` as a persistent-lease
-  refusal, when it mostly comes from the in-memory lock. Test titles carrying history, left
-  because titles are code: "(SP-A.2 §16, device-profile §5)" in `device-session.test.ts`, and
-  "(SP-1b fiscal gate)" and "(unchanged)" in `setup-api.test.ts`. Read, not run: `cookieDomainFor`
-  (`device-session.ts`) lowercases the request's host but not the configured tenant domain
-  (whether configuration normalises it is unchecked), and `DeviceBinding`'s `deviceProfileId` is
-  typed `string | null` for a column that cannot be null.
+From source reading, a completed provision or adopt replay returns the recorded success without scheduling
+another restart and leaves the setup latch set. `setup-api.test.ts` checks the adoption replay
+and the successful-adoption latch separately; neither closes the restart gap. After a refused
+resend of a half-finished adopt, the identity reserved on the primary and the local leftovers
+remain unmeasured. The reset page still needs a way to identify this box in the primary's list.
 
-## `docs/developers/conventions-data.md`'s `busy_timeout` receipt … should carry the date and Node version the deleted comment had
+The following remain source-reading findings unless a test is named.
 
-- `recovery-lock.ts` now points at this receipt; the missing date and version are
-  2026-09-24, Node v26.7.0. Tests and code, read not run unless stated: three `adopt.test.ts`
-  titles say "before any mutation", but by then the primary has reserved an identity for the
-  standby and added it to its membership list (the tests assert only on the mirror's own
-  database); `adoptFromPrimary` (`adopt.ts`) spreads one adoption across several transactions with
-  file writes between and no commented decision (CLAUDE.md §3), so a failure partway could leave a
-  stamped `venue.db` with none of the box's `node.db` rows (since A947 slice 3a its mode, signing
-  key, link, recovery-key check and pinned key share one `node.db` transaction); the restore guard's repeated-destination check
-  compares resolved path text, so two names reaching one file through a symlink may pass;
-  `MirrorBundle.wireguardPublicKey` is set by no production caller and read by
-  nothing outside tests; `recovery-race.test.ts`'s header has no "weaker than its name" hedge
-  though CLAUDE.md describes the guard that way. Test titles #625 could not touch:
-  "…even when the retired variable is set" (`backup-config.test.ts`, still sets a `postgres://`
-  URL), "…without copying the obsolete media directory" (`backup-sweep.test.ts`), "(C2b Task 9)"
-  (`mirror-bundle-fetch.test.ts`), "(swap S2)" (`mirror-bundle.test.ts`) and "as a file from before
-  the field existed" (`recovery-state.test.ts`).
+**Still open after A63 (#712):** (i) a removed trust anchor can vouch for a non-anchor machine
+unless the receiver's held chart supplies that machine's verifiable endorsement (see
+`resolveSignerKey`); (ii) boot reconciliation's peer fetch sends no credential, while
+`GET /management-api/membership` requires one, so that fetch cannot obtain a real box's chart
+from this route. The HTTPS and boot tests supply a peer fixture; they do not qualify this
+credential-free production path. (iii) A cleared machine is refused promotion by its own held
+chart only once that chart contains the clearing. (iv) The primary's join and mint paths refuse
+removed ids and full charts; the credential-free fetch in (ii) does not deliver those changes.
+(v) A receiver with an older chart may accept a removed machine until it learns of the removal.
+(vi) Bundle fetch passes only login refusals and `JOIN_REFUSALS`; removal and full-chart refusals
+still become `mirror.bundle_fetch_failed`. (vii) Removing a live standby as though it never
+finished joining could leave its later charts refused as `signer_removed`, logged without an
+alert. That removal/promotion sequence on started boxes remains unmeasured. A spare can now
+finish joining, so the former “no such standby exists” reassurance no longer applies.
 
-## The boot-time fetch is given only the URL … and boot never reads the `superseded` that `reconcileMembershipOnBoot` returns
+Incomplete-adoption reset still accepts the email/password proof recorded at join time without
+rechecking that account or requesting another one-time code. A record without that proof is
+refused. Whether a failure after `trading.env` was written leaves this reset reachable remains
+unmeasured. Also unmeasured: `operation.complete()` failing after the restart was scheduled can
+release the setup latch while that restart is pending.
 
-- (Read, not run.) The fetch is item (ii) of **Still open after A63** above;
-  `reconcileMembershipOnBoot` is called in `apps/server/src/boot.ts`.
-  `shouldFenceRestart` (`membership-fence.ts`) has no caller outside its test (`git grep`);
-  `enrol-rate-limit.ts` keeps
-  one global limit whose stated reason (snitun) is gone;
-  `provision.ts` stamps the deployment in its own transaction before `applyVenue`, a split with no
-  commented decision (believed to predate #617, not checked); and `setup-operation.ts` (around
-  lines 128–133) may treat a lock written by a different store as a previous boot's, so a live
-  process's lock could be taken over (a belief, not verified). `node-entry.test.ts` fixtures are
-  still PostgreSQL-shaped (a `Failed query` wrapper, code `42703`).
-  Test titles #617 could not touch: "(SP-A.2 §16, device-profile §5)" in `device-session.test.ts`;
-  "since Task 7" and "this tenant's devices" in `device-api.test.ts`; "(R1 behaviour preserved)"
-  in `membership-mint.test.ts`.
+Remaining wording: the no-profile explanation in `apps/server/src/till-api.test.ts`, and the
+history tags in `device-session.test.ts` and `setup-api.test.ts`. From source reading,
+`cookieDomainFor` lowercases the request host but not the configured venue domain; whether the
+configuration normalizes that domain remains unchecked.
+
+## Adoption transaction boundaries and remaining fixture wording
+
+From source reading, adoption writes files and the deployment stamp before its single `node.db`
+transaction. A failure partway through those steps remains unqualified. The optional
+`MirrorBundle.wireguardPublicKey` still has no production supplier or consumer beyond bundle
+assembly. `recovery-race.test.ts`'s header still lacks the house rule's “weaker than its name”
+qualification. Remaining test wording: the obsolete media-directory title in `backup-sweep`,
+“C2b Task 9” in `mirror-bundle-fetch`, “swap S2” in `mirror-bundle`, and the historical-file
+wording in `recovery-state`. No assertions or fixtures in those files were changed by this audit.
+
+## Boot membership fetch and remaining entry fixtures
+
+The credential-free fetch remains item (ii) of **Still open after A63** above. Boot re-reads the
+saved chart after reconciliation, so ignoring the helper's `superseded` return does not by itself
+mean the persisted fence is ignored. The helper and boot fixture tests exercise those separate
+steps; the authenticated production fetch remains unqualified.
+
+`node-entry.test.ts` still uses PostgreSQL-shaped failure fixtures (`Failed query`, `42703`).
+The history tag in `device-api.test.ts` remains. These are source-reading findings.
 
 ## Fiscal-certificate distribution
 
@@ -344,9 +315,9 @@ Cloud's production store still needs its own run.
 
 - A fencing document the peer serves later at that same term reads as not
   newer, so the box is never fenced (reproduced with a temporary two-boot case in
-  `apps/server/src/boot.reconcile.test.ts`). I believe it cannot happen today — the only writer of
-  `node_mirror_link` (in `node.db`), which the peer check needs, is `apps/server/src/adopt.ts`, for a
-  standby that never finishes adoption — from reading, not a run. Recorded, not redesigned.
+  `apps/server/src/boot.reconcile.test.ts`). Adoption now finishes and writes the mirror link.
+  Whether this two-start sequence affects two started boxes remains unmeasured; the old
+  never-finishes-adoption reassurance is retired. Recorded, not redesigned.
 
 ## The restored membership row's check (`assertRestoredMembershipValid`, #678) trusts the keys the restored copy holds
 
@@ -377,83 +348,38 @@ Cloud's production store still needs its own run.
 
 ## Replication, membership & failover — residuals (Afterwards)
 
-**Slices 3 and 4 rebuild failover**
-([the topology design](../superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md)). **Until
-slice 3 a venue has ONE node and no failover at all.** **Owner, 2026-10-21 (A947): "For go live I want one box with
-failover to another local box"**, with the Cloud shortly after. A second box is a choice for
-every later venue (the owner's answer to the A947 design's question 4). Slices 3–5 as re-cut by
-[the A947 design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md) meet it. What stayed: `packages/membership` whole (documents, signing,
-canonicalisation, verification, trust), node enrolment and its rate limiting
-(`apps/server/src/node-enrol-api.ts`, `enrol-rate-limit.ts`), node retirement, and the
-`ledger` / `state` / `local` classification — which no longer chooses a database file: every table
-was put in `venue.db` (#548), and since A947 slice 3a only a box's own tables are in `node.db`. Read the residuals below as requirements for what failover is
-rebuilt INTO, not as descriptions of code that exists today.
+A spare can join a Veri*Factu venue and take over. `handover-two-boxes.test.ts` exercises the
+handover and the reset old box's later emergency switch on separate databases, without real
+box restarts. Real hardware, disconnected internet and power-loss qualification remain open in
+[A947](#a947-go-live-on-two-local-boxes). The owner's 2026-10-21 request, “For go live I want one
+box with failover to another local box”, remains the target of the
+[A947 design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md).
 
-The streaming and stored-primary-key decisions are under
-[Decisions and deliberate limits](#decisions-and-deliberate-limits). Before enabling a second venue
-node, settle [provider cancellation ownership](payments.md#decisions-and-deliberate-limits) (A764).
+- **Retirement and rejoin still lack a drain confirmation.** From source reading, `retireSelf`
+  checks membership before self-eviction, and `rejoinAsSecondary` checks fencing and a carrier
+  before wiping. Neither proves the old box's tail was carried forward. `rejoin --accept-loss`
+  logs an acknowledgement but waives no drain check. Return handling belongs with A1342/A1418;
+  do not treat successful joining or a handover test as qualification of these wipe paths.
+- **Re-admission and chart capacity.** A returned `sell-only` box occupies a chart slot until it
+  retires; an administrator can clear an `evicted` entry. Re-admission must settle reuse versus
+  retirement rather than append indefinitely to the bounded chart.
+- **Chart addresses.** A post-setup `WAITRON_MANAGEMENT_ORIGIN` change is not republished.
+  The separate [empty-contactUrl entry](#a-promoting-standby-may-list-itself-with-an-empty-contacturl)
+  keeps the missing-self fallback concern.
+- **Restore restart and promotion.** A persistent wiped-state marker and in-process mirror
+  promotion remain open. Role repair from a committed chart is tested by `promoted-role.test.ts`;
+  it does not qualify a power cut between publishing `trading.env` and committing promotion.
+- **Fiscal-certificate distribution.** The old distribution design was reverted. The spare gets
+  the shared ring at join, but later ring changes, restore onto Cloud and the dormant certificate's
+  protection still need the [distribution work](#fiscal-certificate-distribution).
+- **Remaining operator surfaces.** A dashboard promote UI and a break-glass-panel accessibility
+  test remain on this list; no screen or accessibility qualification was performed by the audit.
+- **Split-brain and payments.** Examine selling, the fiscal chain, pending card payments and
+  printing together (owner, 2026-08-26), including the till's timed-out-card choices. Settle
+  [provider cancellation ownership](payments.md#decisions-and-deliberate-limits) (A764).
 
-Two of those keepers came through CHANGED, not untouched, and the change is a real loss of safety
-that slice 3 has to restore:
-
-- **`retireSelf` and `rejoinAsSecondary` lost their drain confirmations.** Both used to prove, before
-  an irreversible step, that every row this node originated had reached the carrier.
-  `node.retire_carrier_changed`, `node.retire_carrier_attached`, `node.retire_not_drained`,
-  `rejoin.carrier_attached` and `rejoin.not_drained` were deleted with it. What survives is
-  membership-only: `retire_not_fenced`, `retire_no_carrier` (now a direct `servingPrimaryNodeId`
-  check), `retire_superseded`, `rejoin.not_fenced` and `rejoin.no_carrier`. So a fenced node can now
-  self-evict, and a returned box can now be wiped, without any proof its tail was carried forward.
-- **`rejoin --accept-loss` waives nothing today.** The flag and its `rejoin.accept_loss` warning are
-  kept so the operator's acknowledgement survives the switch, but the drain confirmation it used to
-  waive is gone.
-- **OWNER DECISION, open since #443: should the setup wizard still OFFER "Add a mirror node"?** The
-  wizard still offers the option. For a venue that does not file with Veri*Factu, the primary accepts
-  the join without a relay, and the joining server takes a copy of the restaurant's data, puts it in
-  place at its next start and finishes joining there. Since 3b-F a venue that files with Veri*Factu
-  joins the same way, with nothing fiscal written at the join. The wizard's role and connect
-  wording says a mirror keeps a copy of the restaurant's data and, once joined, can take over by a
-  handover or an emergency switch, and points to restore to recover a restaurant whose server is
-  gone; each refusal's wording says what
-  happened and either what to fix before pressing Connect again or to choose Back.
-  Removing or disabling the option is a product call, not a wording one. Whoever takes it should decide for
-  `apps/setup/src/screens/mode-screen.ts`'s Join or recover row and the `role-screen` row together.
-
-- **Re-admission `sell-only → serving-secondary`** — the primary-minted un-fence that makes a rejoined
-  box sell again. Must retire the node's previous chart entry and delete its live `fiscal.aeat` row.
-- **The membership chart fills up, and not every entry can be cleared.** It APPENDS, every
-  wipe-and-re-adopt mints a fresh nodeId, and `MAX_NODES = 8` (`packages/membership/src/verify.ts`)
-  caps it. A full chart is refused at the mint (`membership.chart_too_large`) and at the join
-  (`mirror.membership_full`), and an admin can clear a REMOVED (`evicted`) machine to free its place,
-  from the Servers screen (A63). What stays open: only an `evicted` entry can be cleared. A `sell-only` former primary keeps
-  its place until that box retires itself (`apps/server/src/retire.ts` marks it `evicted`).
-  Re-admission must retire, not add.
-- **Chart hygiene:** a post-setup change to `WAITRON_MANAGEMENT_ORIGIN` is never re-published, and a
-  node that promotes while absent from the chart appends itself address-less, which `routableServers`
-  drops.
-- **Resume-at-restore marker** — a persisted wiped-state marker to tell a wiped-mid-restore box from
-  a never-provisioned one.
-- **Worker-lifecycle manager** (promote Slice 3) — in-process promotion without the restart; the
-  node-role collapse decides.
-- **Power-loss ordering and the selling gate.** Check how a power cut between publishing
-  `trading.env` and committing a promotion affects the node's role and series. Selling must wait
-  until the reboot has completed.
-- **Getting the AEAT certificate onto a promoted standby needs a new design.** The
-  [2026-09-07 design](../superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md) landed as #279
-  and was reverted by #281, and the replication it was rebuilt against was itself removed on
-  2026-09-19 — so the design and its plan describe a mechanism that no longer exists. Redesign it with
-  slice 3. Installing or renewing the certificate on the primary, on the dashboard's AEAT certificate
-  card (A795), does not wait for this (A9).
-- **Still owed after the cert-distribution rebuild:** the restore-onto-cloud re-encrypt; a dashboard
-  promote UI; an a11y test for the break-glass panel.
-- **Carry-ins, accepted or to be stated in a threat model:** the primary burns an installation number
-  per bundle fetch; provision and adopt are assumed mutually exclusive per box; `establishNodeIdentity`
-  must run once per node before any document is signed; on the first boot after returning, a node runs as its
-  stale-held-doc primary until the reconciliation restarts it; restart-based fencing leaves a one-tick
-  window for one more fiscal pass on the superseded chain.
-- **Split-brain** — the promoted node's side while partitioned spans selling, the fiscal chain,
-  payments (`resolvePending`) and printing — **examine in detail, not scoped to printing** (owner,
-  2026-08-26).
-- **Till UX for the timed-out card case** — retry, alternative tender, or wait.
+The streaming and stored-primary-key decisions remain under
+[Decisions and deliberate limits](#decisions-and-deliberate-limits).
 
 ## A1205: more than one spare box at a venue, after go-live (owner, 2026-10-29)
 
@@ -717,29 +643,23 @@ Only an answer or a thread exit ends its wait. The controlled-handover deadline 
   after the swap with `accepted.db` then lost, two faults, entry's open has changed the digest, so
   the start refuses `handover.accepted_copy_missing` (run). Left open by A1018 Slice 5 (Ruling R53).
 
-## Bundle: Re-read old failover lists after 3b, delete what it retired
+## Bundle: Remaining setup and failover gaps
 
-6 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A completed provision or adopt operation replayed on a later request still answers 200 without
-  restarting and keeps the setup lock set.**
-  [Detail](replication-cloud.md#a-completed-provision-or-adopt-operation-replayed-on-a-later-request-still-answers-200-without-restarting-and-keeps-the-setup-lock-set)
-- **`docs/developers/conventions-data.md`'s `busy_timeout` receipt … should carry the date and Node
-  version the deleted comment had.**
-  [Detail](replication-cloud.md#docsdevelopersconventions-datamds-busy_timeout-receipt--should-carry-the-date-and-node-version-the-deleted-comment-had)
-- **The boot-time fetch is given only the URL … and boot never reads the `superseded` that
-  `reconcileMembershipOnBoot` returns.**
-  [Detail](replication-cloud.md#the-boot-time-fetch-is-given-only-the-url--and-boot-never-reads-the-superseded-that-reconcilemembershiponboot-returns)
-- **Replication, membership & failover — residuals.** Until slice 3 a venue has ONE node and no
-  failover at all. Read the residuals as requirements for what failover is rebuilt INTO, not as
-  descriptions of code that exists today.
+- **Setup replay, incomplete adoption and membership trust.** Replay restart, reset reachability,
+  removal and stale-trust qualification remain open.
+  [Detail](replication-cloud.md#setup-replay-incomplete-adoption-and-membership-trust)
+- **Adoption transaction boundaries and remaining fixture wording.** Partial-write qualification,
+  the optional WireGuard field and named wording notes remain.
+  [Detail](replication-cloud.md#adoption-transaction-boundaries-and-remaining-fixture-wording)
+- **Boot membership fetch and remaining entry fixtures.** The credential-free chart read and
+  PostgreSQL-shaped fixtures remain.
+  [Detail](replication-cloud.md#boot-membership-fetch-and-remaining-entry-fixtures)
+- **Replication, membership & failover residuals.** Retirement, re-admission, restore/promotion,
+  certificates and payment qualification remain.
   [Detail](replication-cloud.md#replication-membership--failover--residuals-afterwards)
-- **Task 1a** — Deny's delete is the one join-request node filter no test fails without. Holders
-  torn by a concurrent promotion, credential sealing and scheduler takeover remain unverified.
-  [Detail](replication-cloud.md#task-1a--node-filters-and-unverified-concurrency-claims)
-- **Loose ends left by SQLite slice 2 Task 9a.** A node row holding no endorsement still signs
-  `endorsements: []`, and no first-start case asserts it. Restore fencing, membership trust and
-  signature checks, curated refusals and promotion with a pending first start remain open.
+- **Task 1a: unverified concurrency claims.** Promotion, sealing and scheduler takeover.
+  [Detail](replication-cloud.md#task-1a--unverified-concurrency-claims)
+- **SQLite slice 2 Task 9a.** First-start coverage, restore fencing, trust and deferred promotion.
   [Detail](replication-cloud.md#loose-ends-left-by-sqlite-slice-2-task-9a)
 
 ## Bundle: Everything needing a third box or a Cloud peer
@@ -1219,11 +1139,10 @@ Receipts in
   wrapper are driven by no scenario, and the runner's own `main()` is undriven — a later task
   should pin them or delete them.
 
-## Task 1a — node filters and unverified concurrency claims
+## Task 1a — unverified concurrency claims
 
-Deny's delete is the one join-request node filter no test fails without (the `requirePending`
-read before it already refuses another node's row). Holders torn by a concurrent promotion,
-credential sealing and scheduler takeover remain unverified.
+Holders torn by a concurrent promotion, credential sealing and scheduler takeover remain
+unverified. The sequential promotion and sealed-row tests do not qualify those concurrent cases.
 
 ## Loose ends left by SQLite slice 2 Task 9a
 
