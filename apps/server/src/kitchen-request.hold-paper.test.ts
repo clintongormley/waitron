@@ -588,7 +588,6 @@ describe("A773 hold paper: extras off and moves", () => {
     station,
     ...cancelledBurger.slice(2),
   ];
-  const sorted = (found: string[][]) => [...found].sort((a, b) => a.join().localeCompare(b.join()));
 
   it.each(["held", "fired"] as const)(
     "a %s group's burger moved Grill to Fryer and back is cancelled on Grill's HOLD paper, then listed there again, and its cancel cancels it once",
@@ -649,7 +648,7 @@ describe("A773 hold paper: extras off and moves", () => {
         const kitchen = [holdSlip("Kitchen", "Grill"), holdSlip("Kitchen", "Fryer")];
         expect(moved("grill")).toEqual([cancelledBurger]);
         expect(moved("pass")).toEqual([cancelledBurger]);
-        expect(sorted(moved("kitchen"))).toEqual(sorted(kitchen));
+        expect(moved("kitchen")).toEqual(kitchen);
         for (const name of ["fryer", "bar"]) expect(moved(name)).toEqual([]);
 
         const cancelled = await printedBy(tx, venue, () =>
