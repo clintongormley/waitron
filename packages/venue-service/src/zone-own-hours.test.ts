@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  closuresInHours,
-  joinPlacedRanges,
-  zoneOwnHours,
-} from "./zone-own-hours.js";
+import { closuresInHours, joinPlacedRanges, zoneOwnHours } from "./zone-own-hours.js";
 
 const day = { dayCutover: "06:00", endMinute: 1440 };
 const range = (periodId: string, startsAt: string, endsAt: string) => ({
