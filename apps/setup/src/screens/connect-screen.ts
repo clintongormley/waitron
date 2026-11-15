@@ -348,6 +348,9 @@ export class SetupConnectScreen extends LitElement {
       ?readonly=${readonly}
       label=${t(text.label)}
       name=${key}
+      autocapitalize="none"
+      autocorrect="off"
+      spellcheck="false"
       autocomplete=${key === "password" ? "current-password" : key === "email" ? "username" : key === "totp" ? "one-time-code" : "off"}
       ?required=${key !== "totp" && !readonly}
       hint=${t(text.hint)}

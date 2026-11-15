@@ -1530,6 +1530,9 @@ export class LoginScreen extends LitElement {
                           <wt-input
                             class="field"
                             name="one-time-code"
+                            autocapitalize="none"
+                            autocorrect="off"
+                            spellcheck="false"
                             autocomplete="one-time-code"
                             required
                             label=${

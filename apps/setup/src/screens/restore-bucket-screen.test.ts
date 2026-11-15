@@ -204,12 +204,14 @@ describe("SetupRestoreBucketScreen", () => {
     expect({
       spellcheck: control.spellcheck,
       autocapitalize: control.getAttribute("autocapitalize"),
+      autocorrect: control.getAttribute("autocorrect"),
       autocomplete: control.getAttribute("autocomplete"),
       font: getComputedStyle(control).fontFamily,
       size: getComputedStyle(control).fontSize,
     }).toEqual({
       spellcheck: false,
-      autocapitalize: "off",
+      autocapitalize: "none",
+      autocorrect: "off",
       autocomplete: "off",
       font: "fantasy",
       size: "16px",

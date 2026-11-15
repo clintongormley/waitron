@@ -376,7 +376,8 @@ export class SetupRestoreBucketScreen extends LitElement {
         hint=${t("restore_bucket.kit_hint")}
         required
         rows="6"
-        autocapitalize="off"
+        autocapitalize="none"
+        autocorrect="off"
         autocomplete="off"
         .spellcheck=${false}
         data-test="kit"

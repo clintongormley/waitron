@@ -1907,6 +1907,18 @@ describe("login-screen: password and second factor", () => {
     expect(events).toHaveLength(0);
   });
 
+  it("turns off autocorrect, the capital first letter and spellcheck on the code step's field", async () => {
+    const { el } = await signInWithPassword({
+      login: vi.fn().mockRejectedValueOnce({ code: "totp.required" }),
+    });
+    const code = field(el, "one-time-code");
+    await code.updateComplete;
+    const input = code.shadowRoot!.querySelector("input")!;
+    expect(
+      ["autocapitalize", "autocorrect", "spellcheck"].map((name) => input.getAttribute(name)),
+    ).toEqual(["none", "off", "false"]);
+  });
+
   it("says a refused authenticator code failed the login above the action and keeps the code step", async () => {
     const login = vi
       .fn()
