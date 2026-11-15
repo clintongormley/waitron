@@ -779,6 +779,22 @@ describe("stream settings routes", () => {
     },
   );
 
+  it("does not present an unexpected credential-read failure as repairable settings", async () => {
+    await withTransaction(suite.db, (tx) => writeStreamSettings(tx, RING, BUCKET, null));
+    const { app } = harness();
+    const cookie = await login(app);
+    credentialWrites.afterGet = async () => {
+      throw new Error("unexpected read failure");
+    };
+    try {
+      const response = await app.request("/api/backup/stream", { headers: { cookie } });
+      expect(response.status).toBe(500);
+      expect(await response.json()).toEqual({ error: { code: "server.internal" } });
+    } finally {
+      credentialWrites.afterGet = async () => {};
+    }
+  });
+
   it("two Saves at once set one recovery key and both succeed", async () => {
     await clearBucket();
     let release!: () => void;

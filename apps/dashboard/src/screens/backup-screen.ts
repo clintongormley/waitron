@@ -335,7 +335,6 @@ export class BackupScreen extends LitElement {
   @state() private exportingConfiguration = false;
 
   @state() private oldKey: string | null = null;
-  @state() private oldKeyUnavailable = false;
   @state() private needsNewKey = false;
   @state() private mintFailed = false;
   @state() private streamPermissionRefused = false;
@@ -502,7 +501,6 @@ export class BackupScreen extends LitElement {
     this.#configureUsesHeldKey = false;
     this.mintedKey = null;
     this.oldKey = null;
-    this.oldKeyUnavailable = false;
     this.needsNewKey = false;
     this.mintFailed = false;
     this.streamPermissionRefused = false;
@@ -665,11 +663,7 @@ export class BackupScreen extends LitElement {
 
   get #rotateWaiting(): boolean {
     // Give the person a chance to record a usable old key before replacing it.
-    return (
-      !this.savedIt ||
-      this.#effectiveKey === "" ||
-      (this.oldKey === null && !this.oldKeyUnavailable)
-    );
+    return !this.savedIt || this.#effectiveKey === "" || this.oldKey === null;
   }
 
   get #rotateDisabled(): boolean {
@@ -854,7 +848,6 @@ export class BackupScreen extends LitElement {
         scope?.commit(this.#archiveValue());
       }
       this.oldKey = null;
-      this.oldKeyUnavailable = false;
       await this.#mint();
     } finally {
       if (generation === this.#generation) this.submitting = false;
@@ -941,14 +934,12 @@ export class BackupScreen extends LitElement {
     this.#disarmTurnOff();
     const generation = this.#generation;
     this.errorKey = null;
-    this.oldKeyUnavailable = false;
     try {
       const { key } = await this.api.getBackupRecoveryKey();
       if (generation === this.#generation) this.oldKey = key;
     } catch (error) {
       if (generation === this.#generation) {
-        if (codeOf(error) === "backup.recovery_key_too_short") this.oldKeyUnavailable = true;
-        else this.errorKey = codeOf(error);
+        this.errorKey = codeOf(error);
       }
     }
   }
@@ -1007,21 +998,21 @@ export class BackupScreen extends LitElement {
     }
   }
 
-  async #cancelEdit(): Promise<void> {
+  async #leaveSettings(reason: "cancel" | "navigation"): Promise<void> {
     const proceed = () => {
       this.editSettings = false;
       this.secretVisible = false;
       this.errorKey = null;
       this.formRefusal = null;
     };
-    if (this.#leave) await this.#leave.request({ scopes: [this], reason: "cancel", proceed });
+    if (this.#leave) await this.#leave.request({ scopes: [this], reason, proceed });
     else proceed();
   }
 
   async #focusKeyStep(): Promise<void> {
     if (!this.status?.isPrimary) return;
     if (this.editSettings) {
-      await this.#cancelEdit();
+      await this.#leaveSettings("navigation");
       if (this.editSettings) return;
     }
     if (!this.status.enabled) {
@@ -1214,7 +1205,7 @@ export class BackupScreen extends LitElement {
       ${this.canManage ? html`<div class="card"><dashboard-recovery-pack-card .api=${this.api} .canManage=${this.canManage} @recovery-pack-make=${() => this.#disarmTurnOff()}></dashboard-recovery-pack-card></div>` : nothing}
       ${this.#renderConfigurationExport()} ${s === undefined ? nothing : this.#renderBody(s)}
       ${alertKey ? html`<p class="error" role="alert">${codeMessage(alertKey)}</p>` : nothing}
-      ${alertKey === "permission.denied" || this.formRefusal?.code === "permission.denied" || this.streamPermissionRefused ? html`<wt-button variant="primary" data-test="backup-admin-sign-in" @click=${() => this.dispatchEvent(new CustomEvent("admin-sign-in", { bubbles: true, composed: true }))}>${t("staff.sign_in_as_admin")}</wt-button>` : nothing}
+      ${alertKey === "permission.denied" && !this.streamPermissionRefused && !this.#formNeedsAdmin ? this.#adminAction() : nothing}
       <dashboard-backup-settings-evidence
         .api=${this.api}
         .open=${this.evidenceOpen}
@@ -1228,8 +1219,22 @@ export class BackupScreen extends LitElement {
           @stream-permission-refused=${(event: CustomEvent<{ refused: boolean }>) => (this.streamPermissionRefused = event.detail.refused)}
           .archivesEnabled=${s?.enabled}
         ></dashboard-stream-settings>
+        ${this.streamPermissionRefused && !this.#formNeedsAdmin ? this.#adminAction() : nothing}
       </div>
     `;
+  }
+
+  get #formNeedsAdmin(): boolean {
+    return this.formRefusal?.code === "permission.denied";
+  }
+
+  #adminAction(): TemplateResult {
+    return html`<wt-button
+      variant="secondary"
+      data-test="backup-admin-sign-in"
+      @click=${() => this.dispatchEvent(new CustomEvent("admin-sign-in", { bubbles: true, composed: true }))}
+      >${t("staff.sign_in_as_admin")}</wt-button
+    >`;
   }
 
   #renderConfigurationExport(): TemplateResult {
@@ -1655,6 +1660,7 @@ export class BackupScreen extends LitElement {
       <h2>${t("backup.schedule.title")}</h2>
       ${this.#renderPolicy()} ${this.#recoveryKeyAction()}
       <wt-form-actions data-test="apply-actions" .error=${this.#policyBottom()}>
+        ${this.#formNeedsAdmin ? this.#adminAction() : nothing}
         <wt-button
           variant=${s.variant}
           data-test="apply"
@@ -1679,11 +1685,12 @@ export class BackupScreen extends LitElement {
       <h2>${t("backup.schedule.title")}</h2>
       ${this.#renderPolicy()} ${this.#recoveryKeyAction()}
       <wt-form-actions data-test="settings-actions" .error=${this.#policyBottom()}>
+        ${this.#formNeedsAdmin ? this.#adminAction() : nothing}
         <wt-button
           slot="cancel"
           variant="ghost"
           data-test="cancel-edit"
-          @click=${() => this.#cancelEdit()}
+          @click=${() => this.#leaveSettings("cancel")}
           >${t("backup.edit.cancel")}</wt-button
         >
         <wt-button
@@ -1943,7 +1950,6 @@ export class BackupScreen extends LitElement {
               </div>`
           : nothing
       }
-      ${this.oldKeyUnavailable ? html`<p class="hint" data-test="old-key-unavailable">${t("backup.rotate.old_unavailable")}</p>` : nothing}
       <h2>${t("backup.rotate.new_title")}</h2>
       ${this.#renderKeyStep()}
 

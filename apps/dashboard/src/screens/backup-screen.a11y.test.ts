@@ -150,42 +150,22 @@ const q = (el: BackupScreen, sel: string) => el.shadowRoot!.querySelector<HTMLEl
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (theme) => {
-  it.each(["mint", "permission", "short-key"])(
-    "renders the %s recovery action accessibly",
-    async (problem) => {
-      const overrides: Partial<DashboardApi> =
-        problem === "mint"
-          ? { mintBackupKey: vi.fn().mockRejectedValue({ code: "connection.failed" }) }
-          : problem === "permission"
-            ? { getBackupStatus: vi.fn().mockRejectedValue({ code: "permission.denied" }) }
-            : {
-                getBackupRecoveryKey: vi
-                  .fn()
-                  .mockRejectedValue({ code: "backup.recovery_key_too_short" }),
-              };
-      const { el, host } = await mountWidget<BackupScreen>(
-        "dashboard-backup-screen",
-        { api: stubApi(problem === "short-key" ? ENABLED : OFF, overrides) },
-        theme,
-      );
-      await flush(el);
-      if (problem === "short-key") {
-        q(el, "[data-test=show-old-key]")!.click();
-        await flush(el);
-      }
-      expect(
-        q(
-          el,
-          problem === "mint"
-            ? "[data-test=retry-key]"
-            : problem === "permission"
-              ? "[data-test=backup-admin-sign-in]"
-              : "[data-test=old-key-unavailable]",
-        ),
-      ).not.toBeNull();
-      await expectNoA11yViolations(host);
-    },
-  );
+  it.each(["mint", "permission"])("renders the %s recovery action accessibly", async (problem) => {
+    const overrides: Partial<DashboardApi> =
+      problem === "mint"
+        ? { mintBackupKey: vi.fn().mockRejectedValue({ code: "connection.failed" }) }
+        : { getBackupStatus: vi.fn().mockRejectedValue({ code: "permission.denied" }) };
+    const { el, host } = await mountWidget<BackupScreen>(
+      "dashboard-backup-screen",
+      { api: stubApi(OFF, overrides) },
+      theme,
+    );
+    await flush(el);
+    expect(
+      q(el, problem === "mint" ? "[data-test=retry-key]" : "[data-test=backup-admin-sign-in]"),
+    ).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
 
   it("renders only usable archive destination choices accessibly", async () => {
     const { el, host } = await mountWidget<BackupScreen>(

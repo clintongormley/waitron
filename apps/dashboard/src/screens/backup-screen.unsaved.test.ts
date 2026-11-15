@@ -848,3 +848,41 @@ it("Cancel does not carry a hidden edited folder into Turn on backups", async ()
   await screen.updateComplete;
   expect(field(screen, "destination").value).toBe("");
 });
+
+for (const source of ["settings", "stream"] as const)
+  it(`the ${source} recovery-key shortcut asks before leaving settings edits`, async () => {
+    const { app, screen } = await mount(on, {
+      applyBackup: async () => {
+        throw { code: "backup.recovery_key_too_short" };
+      },
+    });
+    await edit(screen);
+    await change(screen, "destination", "/mnt/dirty");
+    if (source === "settings") {
+      await click(screen, "save-settings");
+      await expect
+        .poll(() => screen.shadowRoot!.querySelector("[data-test=recovery-key-action]"))
+        .not.toBeNull();
+    }
+    const request = () =>
+      source === "settings"
+        ? field(screen, "recovery-key-action").click()
+        : screen
+            .shadowRoot!.querySelector("dashboard-stream-settings")!
+            .dispatchEvent(
+              new CustomEvent("recovery-key-needed", { bubbles: true, composed: true }),
+            );
+    request();
+    await choose(app, "keep");
+    expect(field(screen, "destination").value).toBe("/mnt/dirty");
+    expect(unload()).toBe(true);
+    request();
+    await choose(app, "discard");
+    await expect
+      .poll(() => screen.shadowRoot!.querySelector("[data-test=save-settings]"))
+      .toBeNull();
+    await expect
+      .poll(() => field(screen, "show-old-key")?.shadowRoot!.activeElement?.tagName)
+      .toBe("BUTTON");
+    expect(unload()).toBe(false);
+  });

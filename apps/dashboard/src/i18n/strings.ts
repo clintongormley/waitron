@@ -2370,8 +2370,6 @@ export const en = {
   "backup.rotate.warning":
     "Backups taken before now still need the OLD key — keep it safe too. Changing the key does not re-encrypt older backups.",
   "backup.rotate.show_old": "Show the current key",
-  "backup.rotate.old_unavailable":
-    "The current key is too short to show. You can replace it. Older backups still need the previous key if you have it written down elsewhere.",
   "backup.key.retry": "Retry",
   "backup.rotate.old_label": "Current key (still needed for older backups)",
   "backup.rotate.new_title": "New recovery key",
@@ -6743,8 +6741,6 @@ export const es: Record<StringKey, string> = {
   "backup.rotate.warning":
     "Las copias hechas antes de ahora siguen necesitando la clave ANTIGUA; guárdala también. Cambiar la clave no vuelve a cifrar las copias anteriores.",
   "backup.rotate.show_old": "Mostrar la clave actual",
-  "backup.rotate.old_unavailable":
-    "La clave actual es demasiado corta para mostrarla. Puedes sustituirla. Las copias anteriores siguen necesitando la clave anterior si la tienes anotada en otro lugar.",
   "backup.key.retry": "Reintentar",
   "backup.rotate.old_label": "Clave actual (aún necesaria para las copias anteriores)",
   "backup.rotate.new_title": "Nueva clave de recuperación",

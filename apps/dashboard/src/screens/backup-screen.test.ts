@@ -1330,10 +1330,13 @@ describe("backup-screen failures and edit-mode prefill", () => {
     );
     const el = await mountLoaded(api);
 
+    tickCheckbox(el, "[data-test=saved-it]");
+    await el.updateComplete;
     q(el, "[data-test=show-old-key]")!.click();
 
     await vi.waitFor(() => expect(alertText(el)).toBe(codeMessage("connection.failed")));
     expect(q(el, "[data-test=old-key]")).toBeNull();
+    expect(q(el, "[data-test=rotate-confirm]")!.hasAttribute("disabled")).toBe(true);
   });
 
   it("copies the re-shown old key to the clipboard", async () => {
@@ -2767,25 +2770,6 @@ it("retries a failed mint only on Retry and keeps the resulting key on refresh",
   expect(q(el, "[data-test=minted-key]")?.textContent).toBe("RETRIED-KEY-0123456789");
 });
 
-it("can change a key that cannot be shown because it is too short", async () => {
-  const api = stubApi(
-    { getBackupRecoveryKey: vi.fn().mockRejectedValue({ code: "backup.recovery_key_too_short" }) },
-    ENABLED,
-  );
-  const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
-  await flush(el);
-  q(el, "[data-test=show-old-key]")!.click();
-  await vi.waitFor(() => expect(q(el, "[data-test=old-key-unavailable]")).not.toBeNull());
-  expect(q(el, "[data-test=old-key]")).toBeNull();
-  tickCheckbox(el, "[data-test=saved-it]");
-  await el.updateComplete;
-  expect(q(el, "[data-test=rotate-confirm]")!.hasAttribute("disabled")).toBe(false);
-  q(el, "[data-test=rotate-confirm]")!.click();
-  await vi.waitFor(() =>
-    expect(api.rotateBackupKey).toHaveBeenCalledWith({ recoveryKey: "MINTED-KEY-abcdef012345" }),
-  );
-});
-
 it("offers one administrator sign-in for permission refusals", async () => {
   const api = stubApi({
     getBackupStatus: vi.fn().mockRejectedValue({ code: "permission.denied" }),
@@ -2867,4 +2851,22 @@ it("a settings short-key refusal leads to the existing key-change action", async
   );
   expect(q(el, "[data-test=save-settings]")).toBeNull();
   expect(api.applyBackup).toHaveBeenCalledOnce();
+});
+
+it("offers administrator sign-in beside a refused settings Save", async () => {
+  const api = stubApi(
+    { applyBackup: vi.fn().mockRejectedValue({ code: "permission.denied" }) },
+    ENABLED,
+  );
+  const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+  await flush(el);
+  q(el, "[data-test=edit-settings]")!.click();
+  await vi.waitFor(() => expect(q(el, "[data-test=save-settings]")).not.toBeNull());
+  await editDestination(el);
+  q(el, "[data-test=save-settings]")!.click();
+  await vi.waitFor(() =>
+    expect(q(el, "[data-test=settings-actions] [data-test=backup-admin-sign-in]")).not.toBeNull(),
+  );
+  expect(q(el, "[data-test=backup-admin-sign-in]")!.getAttribute("variant")).toBe("secondary");
+  expect(el.shadowRoot!.querySelectorAll("[data-test=backup-admin-sign-in]")).toHaveLength(1);
 });

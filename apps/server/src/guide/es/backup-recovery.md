@@ -145,7 +145,6 @@ acabas de guardar. Al cambiar una clave, aún puedes copiar o descargar ambas cl
 tras este rechazo. No sigas cambiando claves y sal de la página sin volver a enviar. Esta página
 no puede diagnosticar el conflicto de configuración ni confirmar qué clave abre una copia concreta;
 no sustituyas ninguno de los dos registros de claves basándote en este mensaje.
-Las copias anteriores siguen necesitando la clave de recuperación anterior si la tienes anotada en otro lugar.
 
 Si las copias programadas están desactivadas porque no se pueden usar sus ajustes guardados, abre
 **Copias de seguridad** y lee el error junto al estado de las copias. Elige de nuevo los destinos

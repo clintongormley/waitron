@@ -17,3 +17,5 @@
 **Bounds:** One PR within three build hours. Exclude failed-save/reload retries, unrelated repair/provider qualification and speculative clashes. Preserve environment restrictions/old-key recovery; expose no credentials. No new tables, protocols or frameworks. Forecast production +220/−170, tests +300/−35, support 0, docs including plan +90/−55: 870 changed lines; outside-opinion stop 1,305. Material growth or changed key policy returns to the watcher before build.
 
 Watcher clearance, 2026-11-15 22:37: both key choices cleared; no Retry/administrator guide additions because the screen handles them. No owner design approval claimed.
+
+Watcher 2026-11-15 23:08 supersedes Choice 2: keep only the server’s loaded-key fallback and existing Turn on recovery; cut the old-key-unavailable state, strings, gate, accessibility case and guide sentence. Keep required FormFeedback adoption. Recovery shortcuts ask before discarding settings. The administrator return destination is left as a PR-thread observation.
