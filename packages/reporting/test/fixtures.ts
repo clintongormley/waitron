@@ -411,6 +411,10 @@ export async function seedFiredLine(
     /** An explicit ISO timestamp for `ticket_items.queued_at`, overriding `ageMinutes`, so two lines
      *  can share one exactly; two calls each backdating from their own clock reading need not tie. */
     queuedAt?: string;
+    /** Leaves the dish held: neither `fired_at` nor `requested_at` is set. */
+    held?: boolean;
+    /** Makes the dish pass-controlled and requested this many minutes ago, with `fired_at` unset. */
+    requestedAgeMinutes?: number;
   },
 ): Promise<void> {
   // One clock reading for this line's three stamps, so they agree.
@@ -444,7 +448,11 @@ export async function seedFiredLine(
     workingOrderLineId: line!.id,
     stationId: seed.stationId,
     queuedAt: opts.queuedAt ?? new Date(firedAtMs - opts.ageMinutes * 60_000).toISOString(),
-    firedAt,
+    firedAt: opts.held || opts.requestedAgeMinutes !== undefined ? null : firedAt,
+    ...(opts.requestedAgeMinutes !== undefined && {
+      passControlled: true,
+      requestedAt: new Date(firedAtMs - opts.requestedAgeMinutes * 60_000).toISOString(),
+    }),
   });
 }
 

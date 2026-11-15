@@ -724,12 +724,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Supervisor station read** (bundle of 2, size S, needs the owner). Holds A1079. [Detail](backlog/kitchen.md#bundle-supervisor-station-read)
 
-- **A930. The manager's overdue report counts a held dish as late (left open by A757 slice 3).**
-  `computeOverdueOrders` (`packages/reporting/src/overdue-orders.ts`) never checks `fired_at`, so a
-  dish held 20 minutes is listed Forgotten while the floor counts only fired dishes (A757 Q17). It
-  also ages a dish waiting for the pass from its insert, where the pass ages it from its request.
-  Decide whether the report leaves held dishes out too. [Detail](backlog/kitchen.md#a930-the-managers-overdue-report-counts-a-held-dish-as-late)
-
 - **A1092. The kitchen screen once showed only some orders after a switch to Spanish.** Seen,
   2026-10-25 (A789 slice 4's look, `60` and `61` in `~/waitron-campaign-c/a789-4-shots/`): it showed
   orders #2 and #4 while the station's queue also held #1 and #7; a reload brought them back and a

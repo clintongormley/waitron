@@ -128,20 +128,6 @@ and now records its stations. Left open by A756 PR 6's review.
   `apps/server/src/sent-order-number.test.ts` relies on this behaviour and will fail if it
   changes. Decide: should extras keep their earlier choice, as the dish does?
 
-## A930. The manager's overdue report counts a held dish as late
-
-Left open by A757 slice 3. The manager overview's "orders taking too long" list
-(`computeOverdueOrders`, `packages/reporting/src/overdue-orders.ts`) reads every unserved ticket item
-of its node that is not made here, on an order neither abandoned nor collected; its `where` has no
-`fired_at` test, so a dish waiting in a held group ages from when it was taken. Since A757 slice 3
-`timingBand`, like the `long_wait` signal before it, counts only fired dishes (`ticket_items.fired_at`
-set; A757 Q17). The report also ages a dish waiting for the pass from `queued_at`, which is still its
-insert until the pass fires it, while the pass's board ages it from `requested_at` (A773-2 B4a, its
-plan's D68).
-
-Next: decide whether the report leaves held dishes out, as the floor does. If it does, add a
-`fired_at is not null` test to its `where` and a case beside `overdue-orders.test.ts`'s.
-
 ## Supervisors have no dashboard path to a prep station's times
 
 - **Supervisors have no dashboard path to a prep station's times** (ASK A1 of A506-12). The times
