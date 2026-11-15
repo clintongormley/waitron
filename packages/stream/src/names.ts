@@ -1,4 +1,5 @@
-import { AppError } from "@waitron/shared";
+import { AppError, normalisePrefix } from "@waitron/shared";
+export { normalisePrefix } from "@waitron/shared";
 import "./errors.js";
 
 /** One key segment: letters, digits and hyphens, not starting with a hyphen. A node id is a UUID. */
@@ -56,15 +57,6 @@ export function parseGenerationName(
   // The engine accepts 2026-09-31 as 1 October; only a round trip proves the date is real.
   if (Number.isNaN(openedAt.getTime()) || openedAt.toISOString() !== iso) return null;
   return { term, nodeId, openedAt };
-}
-
-export function normalisePrefix(prefix: string): string {
-  let start = 0;
-  let end = prefix.length;
-  while (start < end && prefix[start] === "/") start++;
-  while (end > start && prefix[end - 1] === "/") end--;
-  const trimmed = prefix.slice(start, end);
-  return trimmed === "" ? "" : `${trimmed}/`;
 }
 
 /**

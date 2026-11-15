@@ -132,6 +132,7 @@ saved. While changing a key, you can still copy or download both displayed keys 
 refusal. Stop changing keys and leave the page without another submission. This page cannot
 diagnose conflicting backup-key settings or confirm which key opens a particular backup; do not
 replace either key record on the strength of this message.
+Older backups still need the previous recovery key if you have it written down elsewhere.
 
 If scheduled backups are off because their saved settings cannot be used, open **Backups** and
 read the error beside the backup status. Choose the destinations and schedule again.

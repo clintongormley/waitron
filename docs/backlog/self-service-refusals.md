@@ -843,15 +843,6 @@ memory, so a restart empties the list (design decision 1):
 [design](../superpowers/specs/2026-10-29-a1089-backup-settings-evidence-design.md),
 [plan](../superpowers/plans/2026-10-29-a1089-backup-settings-evidence.md).
 
-### backups-admin-sign-in
-
-**Backups offers no administrator sign-in when it refuses for lack of `system.manage`.** It says
-"You don't have permission to do that" twice and names no next step, against the refusal rule.
-The screen's `admin-sign-in` event is already routed (`apps/dashboard/src/dashboard-app.ts`), so
-the fix is to offer the button there. Normally unreachable: the Backups entry is shown to the
-manager and admin roles only; it appears when the dashboard's role and the session's permissions
-disagree.
-
 ### backup-stream
 
 **2026-10-25 settings-refusal wording:** the alert explains **Change bucket**, **Test**,

@@ -10,7 +10,7 @@ import {
 import { credentialRevision, type KeyRing } from "@waitron/credentials";
 import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
 import { readPairLink } from "@waitron/node-db";
-import { AppError, hasCode, isAppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import {
   readBucketConfig,
@@ -36,6 +36,7 @@ import {
   deleteStreamSettings,
   type StreamHost,
 } from "./stream-host.js";
+import { UNREADABLE_CREDENTIAL } from "./credentials.js";
 import "./errors.js";
 
 export interface StreamApiDeps {
@@ -174,7 +175,7 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
         bucket = (await readStreamSettingsIn(tx, deps.ring))?.bucket ?? null;
         configured = bucket !== null;
       } catch (error) {
-        if (!isAppError(error) || !hasCode(error, "server.credential_unusable")) throw error;
+        if (!isAppError(error) || !UNREADABLE_CREDENTIAL.has(error.code)) throw error;
         bucket = null;
         configured = true;
       }

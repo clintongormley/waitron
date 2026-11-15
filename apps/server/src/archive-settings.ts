@@ -474,7 +474,7 @@ function customBucket(
   ctx: { held: ArchiveSettings | null },
 ): BucketConfig {
   if (!Object.keys(body).every((key) => CUSTOM_FIELDS.includes(key))) {
-    throw requestInvalid("destination");
+    throw requestInvalid("destinations");
   }
   const offered = body.secretAccessKey;
   const keepHeld = offered === undefined || offered === "";
@@ -509,10 +509,10 @@ export function resolveArchiveChoice(
   destination: unknown,
   ctx: { stream: StreamSettings | null; held: ArchiveSettings | null },
 ): BackupDestination {
-  if (!isRecord(destination)) throw requestInvalid("destination");
+  if (!isRecord(destination)) throw requestInvalid("destinations");
   switch (destination.kind) {
     case "local-fs": {
-      if (!hasExactKeys(destination, ["kind", "dir"])) throw requestInvalid("destination");
+      if (!hasExactKeys(destination, ["kind", "dir"])) throw requestInvalid("destinations");
       const { dir } = destination;
       if (typeof dir !== "string" || dir.trim() === "" || CONTROL.test(dir)) {
         throw requestInvalid("dir");
@@ -523,7 +523,7 @@ export function resolveArchiveChoice(
       return { kind: "local-fs", id: LOCAL_ID, dir: resolve(dir) };
     }
     case "stream-bucket": {
-      if (!hasExactKeys(destination, ["kind"])) throw requestInvalid("destination");
+      if (!hasExactKeys(destination, ["kind"])) throw requestInvalid("destinations");
       if (ctx.stream === null) throw new AppError("backup.stream_not_configured", {});
       const bucket = { ...ctx.stream.bucket };
       refuseStreamOverlap(archivePlace(bucket), ctx.stream);
@@ -535,7 +535,7 @@ export function resolveArchiveChoice(
       return { kind: "s3", id: BUCKET_ID, bucket };
     }
     default:
-      throw requestInvalid("destination");
+      throw requestInvalid("destinations");
   }
 }
 

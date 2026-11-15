@@ -544,3 +544,4 @@ export { isSqlIdentifier } from "./sql-identifier.js";
 export { BUILT_IN_ROLE_NAMES } from "./i18n/access-role-names.js";
 
 export { PERSON_STATUS_NAMES, NO_ACCESS_ROLE_NAMES } from "./i18n/person-list-labels.js";
+export { normalisePrefix } from "./bucket-prefix.js";

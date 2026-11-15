@@ -232,26 +232,6 @@ Test titles #653 could not touch in `boot.test.ts` carry the history tags
   `packages/credentials/src/bin.test.ts` that states the empty-folder behaviour still does (a
   title is code, so a pruning PR cannot rename it).
 
-## A too-short recovery key: the refusals do not link to the button they name, and Change the recovery key cannot finish
-
-**Task 2a** (#557, a recovery key that does not need an archive destination; A538-6d). Open:
-
-- The bucket copy panel's refusal for a too-short key names a button ("Turn on backups" with
-  archives off, "Change the recovery key" with them on) but does not link or scroll to it
-  (`#failureText` in `apps/dashboard/src/screens/stream-settings-panel.ts`).
-- With archives on and a key hand-edited too short in `backup.env`, the panel's refusal names
-  "Change the recovery key", but that form waits for "Show the current key"
-  (`#rotateWaiting`, `apps/dashboard/src/screens/backup-screen.ts`), and
-  `GET /api/backup/recovery-key` refuses a too-short key with `backup.recovery_key_too_short`
-  (`apps/server/src/backup-api.ts`; the case "reports a too-short key in backup.env as set…" in
-  `apps/server/src/backup-api.route.test.ts`), so the form cannot finish. The server's rotate
-  replaces a too-short key ("rotate replaces a too-short key held with no destination", same
-  file). Both cases run with no destination.
-  Decision needed: may the key change skip showing the old key when the held key is too
-  short, given archives made under the key loaded at start need that key?
-- With archives off, until the next status read reports the key too short, "Turn on backups" sends
-  no new key (it reuses the held one); after that read the screen makes one.
-
 ## Every synchronous `deriveKey` caller still blocks the event loop while it derives
 
 - Remaining synchronous request paths include everything reaching `decryptArtifact`
@@ -372,14 +352,6 @@ Live path has it today;
 A987's design does not change the route
 ([§7](../superpowers/specs/2026-10-22-a987-prepare-venue-email-design.md#7-security)).
 
-## The bucket copy's settings screen cannot repair a stored record that cannot be decrypted.
-
-`GET /api/backup/stream` (`readStored`, called by `view`, in `apps/server/src/stream-api.ts`) tolerates only
-`server.credential_unusable`; `credentials.decrypt_failed`, `credentials.malformed_payload` and
-`credentials.key_version_unknown` fail the read (400 with the raw code), so the panel shows an
-error and no form, although the bucket copy's Save would replace the record. Treat all four the
-way `UNREADABLE_CREDENTIAL` (`apps/server/src/credentials.ts`) groups them. Predates A538-4.
-
 ## Authenticated server-certificate recovery
 
 The public connection page can retry managed certificate repair, reread its inspection and stop
@@ -412,13 +384,6 @@ match the replacement's address. Local certificate repair and authenticated rest
 have surfaces; Cloud tunnel and staff-certificate installation remain under the Cloud integration
 loose ends below. Coordinate naming with A917 and failover addressing with A947.
 [Tested steps and remaining limits](../developers/cold-restore-surfaces.md).
-
-## Loose ends left by SQLite slice 2 Task 2a (#557, a recovery key that does not need an archive destination).
-
-- The status watcher does not retry its own failed mint (the mint is a POST, never passive
-  session activity), so the screen then offers no key until it is reopened.
-- The edit-settings form can meet `backup.recovery_key_exists` when a rotate (from another tab
-  or admin) lands after it fetched the key.
 
 ## Loose ends left by SQLite slice 2 Task 5 (#569, `@waitron/stream`).
 
@@ -524,14 +489,6 @@ bucket reported `stream.bucket_unusable` with reason `write_failed`, without sta
 A listing with an unknown access key returned HTTP 404, named `XAdminUserNotFound` by versitygw;
 the client retained `other` as the fixed-list error name. These observations qualify those two
 loopback responses only; other providers and the remaining log paths above remain unqualified.
-
-## The Backups screen's bucket fields copy the bucket copy panel's.
-
-The field table, the
-required checks and the reveal button exist in both `apps/dashboard/src/screens/backup-screen.ts`
-(`CUSTOM_FIELDS`) and `stream-settings-panel.ts` (`FIELDS`), and `normalisePrefix` in
-`backup-destination-model.ts` copies the stream package's (`packages/stream/src/names.ts`). Share
-them. Left open by A538-6.
 
 ## Till changes do not check which page sent them
 
@@ -1400,22 +1357,10 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
 
 ## Bundle: Backups screen leftovers
 
-6 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06),
-except the last, added 2026-11-14.
+2 entries, size S.
 
-- **Two small leftovers in the Backups destination form, reported by A639's review and not fixed
-  there (#1695).** Neither was reproduced outside the reviewer's run.
-  [Detail](box.md#two-small-leftovers-in-the-backups-destination-form-a639-1695)
-- **The bucket copy's settings screen cannot repair a stored record that cannot be decrypted.**
-  [Detail](box.md#the-bucket-copys-settings-screen-cannot-repair-a-stored-record-that-cannot-be-decrypted)
-- **A too-short recovery key's refusals do not link to the button they name**
-  [Detail](box.md#a-too-short-recovery-key-the-refusals-do-not-link-to-the-button-they-name-and-change-the-recovery-key-cannot-finish)
-- **The Backups screen's bucket fields copy the bucket copy panel's.**
-  Share them. Left open by A538-6.
-  [Detail](box.md#the-backups-screens-bucket-fields-copy-the-bucket-copy-panels)
-- **Loose ends left by SQLite slice 2 Task 2a (#557, a recovery key that does not need an archive
-  destination).**
-  [Detail](box.md#loose-ends-left-by-sqlite-slice-2-task-2a-557-a-recovery-key-that-does-not-need-an-archive-destination)
+- **A cancelled folder in the Backups destination form (A639, #1695)** remains unreproduced.
+  [Detail](box.md#a-cancelled-folder-in-the-backups-destination-form-a639-1695)
 - **After a save whose reload fails, Turn on backups stays greyed out until a field changes**, so
   the only retries are changing a setting or the box's next start. Letting it send the same settings
   again is an exception to the Forms rule that a save stays quiet until the draft changes (A331), so
@@ -1677,15 +1622,13 @@ step-name checks compare against hand-written lists, so a step added later is no
 (4) the bucket-settings setup and the setup/teardown block are repeated across the four
 `*.aws-rehearsal.test.ts` files and the local loop and pause tests — share them.
 
-## Two small leftovers in the Backups destination form (A639, #1695)
+## A cancelled folder in the Backups destination form (A639, #1695)
 
-(1) A folder typed in the settings editor and then cancelled can reappear in the
-"Turn on backups" form later; it is never sent and never counts as a change. (2) A refusal of the
-other bucket's secret that arrives after the owner switched the bucket choice away from "Another
-S3-compatible bucket" is dropped, so the next Save asks again. Neither was reproduced outside the
-reviewer's run. Separately, an entry of the Save's `destinations` list with an unknown kind is
-refused under field `destination`, a name the request no longer has; the dashboard never sends one
-(`resolveArchiveChoice`, `apps/server/src/archive-settings.ts`).
+A639's reviewer reported a folder typed in settings and then cancelled reappearing in Turn on
+backups, without being sent or counting as a change. It remains unreproduced. On 2026-11-15,
+`backup-screen.unsaved.test.ts`'s “Cancel does not carry a hidden edited folder into Turn on
+backups” passed against the current stored-settings flow without a cancellation fix. The original
+report's trigger remains unknown.
 
 ## 2026-10-23 A799 build authority and history selection
 

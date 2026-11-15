@@ -1,3 +1,5 @@
+import { normalisePrefix } from "@waitron/shared";
+export { normalisePrefix } from "@waitron/shared";
 import type { ArchiveChoice, BackupDestinationView, BackupStatusView } from "../api/client.js";
 
 export type BucketChoice = "none" | "custom-s3";
@@ -22,16 +24,6 @@ export const EMPTY_CUSTOM: CustomBucket = {
   accessKeyId: "",
   secretAccessKey: "",
 };
-
-/** Mirrors `normalisePrefix` in `packages/stream/src/names.ts`. */
-export function normalisePrefix(prefix: string): string {
-  let start = 0;
-  let end = prefix.length;
-  while (start < end && prefix[start] === "/") start++;
-  while (end > start && prefix[end - 1] === "/") end--;
-  const trimmed = prefix.slice(start, end);
-  return trimmed === "" ? "" : `${trimmed}/`;
-}
 
 export function hasUnusableFolder(prefix: string): boolean {
   const root = normalisePrefix(prefix);

@@ -1717,14 +1717,12 @@ describe("a status read that began before a write answers after it", () => {
   });
 });
 
-describe("an Edit whose key arrives while Turn off is out", () => {
+describe("Turn off after leaving settings", () => {
   it("does not open the editor, and the usual actions are back once backups are turned on again", async () => {
-    let answerKey!: (value: { key: string }) => void;
     let answerOff!: (value: BackupStatusView) => void;
     const getBackupStatus = vi.fn().mockResolvedValue(LOCAL_ONLY);
     const { el, api } = await mount(LOCAL_ONLY, {
       getBackupStatus,
-      getBackupRecoveryKey: vi.fn().mockReturnValue(new Promise((r) => (answerKey = r))),
       disableBackup: vi.fn().mockReturnValue(new Promise((r) => (answerOff = r))),
       applyBackup: vi.fn(() => {
         getBackupStatus.mockResolvedValue(LOCAL_ONLY);
@@ -1732,11 +1730,12 @@ describe("an Edit whose key arrives while Turn off is out", () => {
       }),
     });
     await press(el, "edit-settings");
-    await vi.waitFor(() => expect(api.getBackupRecoveryKey).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(q(el, "[data-test=save-settings]")).not.toBeNull());
+    expect(api.getBackupRecoveryKey).not.toHaveBeenCalled();
+    await press(el, "cancel-edit");
     await press(el, "turn-off");
     await press(el, "turn-off");
     await vi.waitFor(() => expect(api.disableBackup).toHaveBeenCalledOnce());
-    answerKey({ key: "OLD-KEY-xyz789012345" });
     await arrive(el);
     expect(q(el, "[data-test=edit-title]"), "the editor, while the turn-off is out").toBeNull();
     getBackupStatus.mockResolvedValue(storedOff(LOCAL_ONLY));
@@ -1838,11 +1837,13 @@ describe("a field refusal that answers after its field was hidden", () => {
   );
 
   it.each([
-    ["the settings editor", settingsEditor],
-    ["turning backups on", turnOn],
+    ["the settings editor", settingsEditor, "region"],
+    ["the settings editor (secret)", settingsEditor, "secretAccessKey"],
+    ["turning backups on", turnOn, "region"],
+    ["turning backups on (secret)", turnOn, "secretAccessKey"],
   ] as const)(
     "on %s, a refused bucket field left for a local folder while the save was out is said once at the bottom, marking nothing",
-    async (_where, open) => {
+    async (_where, open, field) => {
       const held = heldRefusal();
       const { el, action, actions } = await open(held.applyBackup);
       await typeCustom(el, "region", "eu-west-9");
@@ -1852,7 +1853,7 @@ describe("a field refusal that answers after its field was hidden", () => {
       await choose(el, "none");
       await setFolder(el, true);
       await typeFolder(el, "/mnt/usb/other");
-      held.refuse("region");
+      held.refuse(field);
       await arrive(el);
       expect(await bottomOf(el, actions)).toBe("Check the backup settings and try again");
       expect(await buttonState(el, action)).toEqual(["primary", false]);

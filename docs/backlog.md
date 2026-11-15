@@ -1470,7 +1470,7 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
 
 - **There is no Backups guide page**, so the Backups screen and its Recovery pack card link to none.
 
-- **Backups screen leftovers** (bundle of 6, 1 important, size M). [Detail](backlog/box.md#bundle-backups-screen-leftovers)
+- **Backups screen leftovers** (bundle of 2, 1 important, size S). [Detail](backlog/box.md#bundle-backups-screen-leftovers)
 
 - **A1089: authenticated server-certificate recovery is missing from the public connection page.**
   [Detail](backlog/box.md#authenticated-server-certificate-recovery)
@@ -1500,10 +1500,6 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
   Explaining or reconciling key numbers, restoring an old credentials key and rewriting the record
   remain open; left open by A1089's settings-evidence panel (#2244).
   [Detail](backlog/self-service-refusals.md#backup-settings)
-
-- **Backups offers no administrator sign-in when it refuses for lack of `system.manage`.** It says
-  "You don't have permission to do that" twice and names no next step.
-  [Detail](backlog/self-service-refusals.md#backups-admin-sign-in)
 
 - **Public TLS repair refuses linked layouts.** Healthy linked `tls/` folders still serve HTTPS,
   but a damaged linked folder or managed file cannot be repaired through the public guide. The

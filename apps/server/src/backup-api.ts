@@ -344,7 +344,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     (await deps.readRecoveryKey()) ?? deps.supervisor.current().recoveryKey;
 
   // Presence, not validity: a key under the length floor still counts as held, so `rotate` can
-  // replace it. `GET recovery-key` keeps refusing such a key.
+  // replace it.
   const keyPresent = async (): Promise<boolean> => (await readHeldKey(heldKey)).held;
 
   // One read of the box env gives the held key, its fingerprint and its rotation time. With no
@@ -536,8 +536,15 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     run(c, log, async () => {
       await authorize(c);
       await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
-      const key = (await heldKey()) ?? null;
-      return c.json({ key });
+      let key: string | undefined;
+      try {
+        key = await heldKey();
+      } catch (error) {
+        if (!isAppError(error) || error.code !== "backup.recovery_key_too_short") throw error;
+        key = deps.supervisor.current().recoveryKey;
+        if (key === undefined || key.length < MIN_RECOVERY_KEY_LENGTH) throw error;
+      }
+      return c.json({ key: key ?? null });
     }),
   );
 

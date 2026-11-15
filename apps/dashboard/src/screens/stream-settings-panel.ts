@@ -1,4 +1,5 @@
-import { LitElement, type TemplateResult, css, html, nothing, svg } from "lit";
+import { BUCKET_FIELDS, missingBucketField, renderBucketField } from "./backup-bucket-fields.js";
+import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { isPlainWebAddress } from "@waitron/shared";
 import {
@@ -35,36 +36,6 @@ const EMPTY: StreamBucketBody = {
   accessKeyId: "",
   secretAccessKey: "",
 };
-
-/** The server names a refused setting by its `BucketConfig` key, which is also this form's key. */
-const FIELDS: { field: Field; name: string; labelKey: StringKey; requiredKey?: StringKey }[] = [
-  { field: "endpoint", name: "bucket-endpoint", labelKey: "stream.form.endpoint" },
-  {
-    field: "region",
-    name: "bucket-region",
-    labelKey: "stream.form.region",
-    requiredKey: "stream.form.region_required",
-  },
-  {
-    field: "bucket",
-    name: "bucket-name",
-    labelKey: "stream.form.bucket",
-    requiredKey: "stream.form.bucket_required",
-  },
-  { field: "prefix", name: "bucket-prefix", labelKey: "stream.form.prefix" },
-  {
-    field: "accessKeyId",
-    name: "bucket-access-key-id",
-    labelKey: "stream.form.access_key_id",
-    requiredKey: "stream.form.access_key_id_required",
-  },
-  {
-    field: "secretAccessKey",
-    name: "bucket-secret-access-key",
-    labelKey: "stream.form.secret_access_key",
-    requiredKey: "stream.form.secret_access_key_required",
-  },
-];
 
 /** `ProbeFailure` in `packages/stream/src/probe.ts`. */
 const PROBE_REASON_KEYS: Readonly<Record<string, StringKey>> = {
@@ -283,6 +254,22 @@ export class StreamSettingsPanel extends LitElement {
     else proceed();
   }
 
+  protected override updated(changed: PropertyValues): void {
+    if (changed.has("failure") || changed.has("readFailure")) {
+      this.dispatchEvent(
+        new CustomEvent("stream-permission-refused", {
+          bubbles: true,
+          composed: true,
+          detail: {
+            refused:
+              this.failure?.code === "permission.denied" ||
+              this.readFailure?.code === "permission.denied",
+          },
+        }),
+      );
+    }
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
@@ -347,9 +334,8 @@ export class StreamSettingsPanel extends LitElement {
 
   #validate(): Partial<Record<Field, string>> {
     const errors: Partial<Record<Field, string>> = {};
-    for (const f of FIELDS) {
-      if (f.requiredKey !== undefined && this.draft[f.field].trim() === "")
-        errors[f.field] = t(f.requiredKey);
+    for (const f of BUCKET_FIELDS) {
+      if (missingBucketField(this.draft, f, true)) errors[f.field] = t(f.requiredKey!);
     }
     const endpoint = this.draft.endpoint.trim();
     if (endpoint !== "" && !isPlainWebAddress(endpoint)) {
@@ -515,6 +501,22 @@ export class StreamSettingsPanel extends LitElement {
     return reasonKey === undefined ? message : `${message} ${t(reasonKey)}`;
   }
 
+  #keyAction(): TemplateResult | typeof nothing {
+    if (
+      this.archivesEnabled === undefined ||
+      !this.settings?.isPrimary ||
+      (this.failure?.code !== "backup.recovery_key_too_short" &&
+        this.readFailure?.code !== "backup.recovery_key_too_short")
+    )
+      return nothing;
+    return html`<wt-button
+      variant="secondary"
+      data-test="recovery-key-action"
+      @click=${() => this.dispatchEvent(new CustomEvent("recovery-key-needed", { bubbles: true, composed: true }))}
+      >${t(this.archivesEnabled ? "backup.rotate.title" : "backup.apply")}</wt-button
+    >`;
+  }
+
   override render(): TemplateResult {
     const s = this.settings;
     return html`
@@ -536,6 +538,7 @@ export class StreamSettingsPanel extends LitElement {
                 ${this.#failureText(this.readFailure)}
               </p>`
         }
+        ${this.#keyAction()}
       </section>
     `;
   }
@@ -630,12 +633,12 @@ export class StreamSettingsPanel extends LitElement {
     const save = () => this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]");
     const checked = this.#feedback.attempted ? this.#validate() : {};
     const errors = { ...this.#feedback.remaining(this.refused), ...checked };
-    const marked = FIELDS.some((f) => errors[f.field] !== undefined);
+    const marked = BUCKET_FIELDS.some((f) => errors[f.field] !== undefined);
     const invalid = Object.keys(checked).length > 0;
     const saveAction = saveActionState(this.#scope);
     return html`
       <div class="form" @keydown=${(event: KeyboardEvent) => submitOnEnter(event, save())}>
-        ${FIELDS.map((f) => this.#renderField(f, errors[f.field] ?? ""))}
+        ${BUCKET_FIELDS.map((f) => this.#renderField(f, errors[f.field] ?? ""))}
         ${
           this.testPassed
             ? html`<p class="passed" data-test="test-passed" role="status">
@@ -676,44 +679,22 @@ export class StreamSettingsPanel extends LitElement {
     `;
   }
 
-  #renderField(f: (typeof FIELDS)[number], error: string): TemplateResult {
-    const secret = f.field === "secretAccessKey";
-    const toggleLabel = t(
-      this.secretVisible ? "stream.form.hide_secret" : "stream.form.show_secret",
-    );
-    return html`<wt-input
-      name=${f.name}
-      label=${t(f.labelKey)}
-      .required=${f.requiredKey !== undefined}
-      type=${secret && !this.secretVisible ? "password" : "text"}
-      autocomplete=${secret ? "new-password" : "off"}
-      .value=${this.draft[f.field]}
-      .error=${error}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-        event.stopPropagation();
-        this.draft = { ...this.draft, [f.field]: event.detail.value };
+  #renderField(f: (typeof BUCKET_FIELDS)[number], error: string): TemplateResult {
+    return renderBucketField(f, {
+      namePrefix: "bucket-",
+      toggleTest: "toggle-secret",
+      value: this.draft[f.field],
+      error,
+      required: f.requiredKey !== undefined,
+      visible: this.secretVisible,
+      change: (value) => {
+        this.draft = { ...this.draft, [f.field]: value };
         this.#scope?.changed();
         this.#feedback.dismiss(f.field);
         this.testPassed = false;
-      }}
-      >${
-        secret
-          ? html`<wt-button
-              slot="end"
-              variant="ghost"
-              class="secret-toggle"
-              data-test="toggle-secret"
-              aria-label=${toggleLabel}
-              @click=${() => (this.secretVisible = !this.secretVisible)}
-              ><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                <path d="M1 8s2.5-4 7-4 7 4 7 4-2.5 4-7 4-7-4-7-4Z"></path>
-                <circle cx="8" cy="8" r="2"></circle>
-                ${this.secretVisible ? svg`<path d="m2 2 12 12"></path>` : nothing}
-              </svg></wt-button
-            >`
-          : nothing
-      }</wt-input
-    >`;
+      },
+      toggle: () => (this.secretVisible = !this.secretVisible),
+    });
   }
 }
 

@@ -829,8 +829,8 @@ describe("backup-screen", () => {
     expect(q(el, "[data-test=destination]")).toBeNull();
     q(el, "[data-test=edit-settings]")!.click();
     await flush(el);
-    // Entering edit fetched the current key and prefilled the destination from status.
-    expect(api.getBackupRecoveryKey).toHaveBeenCalled();
+    // Editing prefills the destination without reading or resubmitting the key.
+    expect(api.getBackupRecoveryKey).not.toHaveBeenCalled();
     expect((q(el, "[data-test=destination]") as HTMLElement & { value: string }).value).toBe(
       "/mnt/usb/waitron",
     );
@@ -841,7 +841,6 @@ describe("backup-screen", () => {
     // Re-applied under the SAME (current) key — the running schedule/retention are preserved.
     expect(api.applyBackup).toHaveBeenCalledWith({
       destinations: [{ kind: "local-fs", dir: "/mnt/usb/waitron-2" }],
-      recoveryKey: "OLD-KEY-xyz789012345",
       schedule: { kind: "wall-clock", days: "daily", at: "auto" },
       retention: { count: 7, days: 30 },
     });
@@ -1273,7 +1272,7 @@ describe("the status watcher's key requests and read alerts", () => {
     expect(alertText(el)?.trim()).toBe(codeMessage("connection.failed"));
     q(el, "[data-test=show-old-key]")!.click();
     await flush(el);
-    expect(api.getBackupRecoveryKey).toHaveBeenCalledTimes(2);
+    expect(api.getBackupRecoveryKey).toHaveBeenCalledTimes(1);
     expect(alertText(el)?.trim()).toBe(codeMessage("connection.failed"));
   });
 
@@ -1401,31 +1400,19 @@ describe("backup-screen failures and edit-mode prefill", () => {
     expect(key.error).toBe(codeMessage("backup.recovery_key_too_short"));
   });
 
-  it("refuses to edit settings when the box reports no current key", async () => {
-    const api = stubApi(
-      { getBackupRecoveryKey: vi.fn().mockResolvedValue({ key: null }) },
-      ENABLED,
+  it("opens settings without reading a key and explains a missing key at Save", async () => {
+    const { el, api } = await enterEdit(ENABLED);
+    expect(api.getBackupRecoveryKey).not.toHaveBeenCalled();
+    vi.mocked(api.applyBackup).mockRejectedValue({
+      code: "backup.request_invalid",
+      params: { field: "recoveryKey" },
+    });
+    await editDestination(el);
+    q(el, "[data-test=save-settings]")!.click();
+    await vi.waitFor(() =>
+      expect(archiveAlertText(el)).toBe(codeMessage("backup.recovery_key_missing")),
     );
-    const el = await mountLoaded(api);
-
-    q(el, "[data-test=edit-settings]")!.click();
-
-    await vi.waitFor(() => expect(alertText(el)).toBe(codeMessage("backup.recovery_key_missing")));
-    expect(q(el, "[data-test=edit-title]")).toBeNull();
-    expect(q(el, "[data-test=edit-settings]")).not.toBeNull();
-  });
-
-  it("shows a localized alert when entering edit mode fails", async () => {
-    const api = stubApi(
-      { getBackupRecoveryKey: vi.fn().mockRejectedValue({ code: "connection.failed" }) },
-      ENABLED,
-    );
-    const el = await mountLoaded(api);
-
-    q(el, "[data-test=edit-settings]")!.click();
-
-    await vi.waitFor(() => expect(alertText(el)).toBe(codeMessage("connection.failed")));
-    expect(q(el, "[data-test=edit-title]")).toBeNull();
+    expect(q(el, "[data-test=edit-title]")).not.toBeNull();
   });
 
   it("keeps the edit form open with a localized alert when saving settings is rejected", async () => {
@@ -1470,7 +1457,7 @@ describe("backup-screen failures and edit-mode prefill", () => {
     await editDestination(el);
     q(el, "[data-test=save-settings]")!.click();
     await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledTimes(2));
-    expect(vi.mocked(api.applyBackup).mock.calls[1]![0].recoveryKey).toBe("OLD-KEY-xyz789012345");
+    expect(vi.mocked(api.applyBackup).mock.calls[1]![0]).not.toHaveProperty("recoveryKey");
   });
 
   it("prefills picked weekdays and a fixed time, and re-applies them unchanged beside an edit", async () => {
@@ -1497,7 +1484,6 @@ describe("backup-screen failures and edit-mode prefill", () => {
     await vi.waitFor(() =>
       expect(api.applyBackup).toHaveBeenCalledExactlyOnceWith({
         destinations: [{ kind: "local-fs", dir: "/mnt/usb/waitron" }],
-        recoveryKey: "OLD-KEY-xyz789012345",
         schedule: { kind: "wall-clock", days: [0, 3], at: { hour: 2, minute: 5 } },
         retention: { count: 8, days: 30 },
       }),
@@ -1520,7 +1506,6 @@ describe("backup-screen failures and edit-mode prefill", () => {
     await vi.waitFor(() =>
       expect(api.applyBackup).toHaveBeenCalledWith({
         destinations: [{ kind: "local-fs", dir: "/mnt/usb/new" }],
-        recoveryKey: "OLD-KEY-xyz789012345",
         schedule: { kind: "wall-clock", days: "daily", at: "auto" },
         retention: { count: 7, days: 30 },
       }),
@@ -2757,4 +2742,129 @@ describe("an archive form's action row in a short scroller", () => {
       expect(box.bottom).toBeLessThanOrEqual(view.bottom + 0.5);
     },
   );
+});
+
+it("retries a failed mint only on Retry and keeps the resulting key on refresh", async () => {
+  const api = stubApi({
+    mintBackupKey: vi
+      .fn()
+      .mockRejectedValueOnce({ code: "connection.failed" })
+      .mockResolvedValue({ key: "RETRIED-KEY-0123456789" }),
+  });
+  const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+  await vi.waitFor(() => expect(alertText(el)).toBe(codeMessage("connection.failed")));
+  const retry = q(el, "[data-test=retry-key]");
+  expect(retry).not.toBeNull();
+  retry!.click();
+  await vi.waitFor(() =>
+    expect(q(el, "[data-test=minted-key]")?.textContent).toBe("RETRIED-KEY-0123456789"),
+  );
+  expect(alertText(el)).toBeUndefined();
+  api.liveData.invalidate([{ type: "backup_status" }]);
+  await vi.waitFor(() => expect(api.getBackupStatus).toHaveBeenCalledTimes(2));
+  await flush(el);
+  expect(api.mintBackupKey).toHaveBeenCalledTimes(2);
+  expect(q(el, "[data-test=minted-key]")?.textContent).toBe("RETRIED-KEY-0123456789");
+});
+
+it("can change a key that cannot be shown because it is too short", async () => {
+  const api = stubApi(
+    { getBackupRecoveryKey: vi.fn().mockRejectedValue({ code: "backup.recovery_key_too_short" }) },
+    ENABLED,
+  );
+  const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+  await flush(el);
+  q(el, "[data-test=show-old-key]")!.click();
+  await vi.waitFor(() => expect(q(el, "[data-test=old-key-unavailable]")).not.toBeNull());
+  expect(q(el, "[data-test=old-key]")).toBeNull();
+  tickCheckbox(el, "[data-test=saved-it]");
+  await el.updateComplete;
+  expect(q(el, "[data-test=rotate-confirm]")!.hasAttribute("disabled")).toBe(false);
+  q(el, "[data-test=rotate-confirm]")!.click();
+  await vi.waitFor(() =>
+    expect(api.rotateBackupKey).toHaveBeenCalledWith({ recoveryKey: "MINTED-KEY-abcdef012345" }),
+  );
+});
+
+it("offers one administrator sign-in for permission refusals", async () => {
+  const api = stubApi({
+    getBackupStatus: vi.fn().mockRejectedValue({ code: "permission.denied" }),
+    getStreamSettings: vi.fn().mockRejectedValue({ code: "permission.denied" }),
+  });
+  const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+  await flush(el);
+  const buttons = el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=backup-admin-sign-in]");
+  expect(buttons).toHaveLength(1);
+  expect(buttons[0]!.textContent!.trim()).toBe(t("staff.sign_in_as_admin"));
+  const heard = vi.fn();
+  document.body.addEventListener("admin-sign-in", heard);
+  try {
+    buttons[0]!.click();
+    expect(heard).toHaveBeenCalledOnce();
+  } finally {
+    document.body.removeEventListener("admin-sign-in", heard);
+  }
+});
+
+it("recovers a stale held-key Apply refusal by making a key before another Apply", async () => {
+  const api = stubApi(
+    { applyBackup: vi.fn().mockRejectedValue({ code: "backup.recovery_key_too_short" }) },
+    { ...OFF, recoveryKeySet: true },
+  );
+  const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+  await flush(el);
+  await editDestination(el);
+  q(el, "[data-test=apply]")!.click();
+  await vi.waitFor(() => expect(q(el, "[data-test=recovery-key-action]")).not.toBeNull());
+  expect(api.mintBackupKey).not.toHaveBeenCalled();
+  q(el, "[data-test=recovery-key-action]")!.click();
+  await vi.waitFor(() => expect(q(el, "[data-test=minted-key]")).not.toBeNull());
+  expect(api.applyBackup).toHaveBeenCalledOnce();
+  await vi.waitFor(() =>
+    expect(q(el, "[data-test=copy-key]")!.shadowRoot!.activeElement?.tagName).toBe("BUTTON"),
+  );
+  expect(q(el, "[data-test=apply]")!.hasAttribute("disabled")).toBe(true);
+  tickCheckbox(el, "[data-test=saved-it]");
+  await el.updateComplete;
+  q(el, "[data-test=apply]")!.click();
+  await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledTimes(2));
+  expect(vi.mocked(api.applyBackup).mock.calls[1]![0].recoveryKey).toBe("MINTED-KEY-abcdef012345");
+});
+
+it("offers administrator sign-in when only the stream panel refuses permission", async () => {
+  const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+    api: stubApi(
+      { getStreamSettings: vi.fn().mockRejectedValue({ code: "permission.denied" }) },
+      ENABLED,
+    ),
+  });
+  await flush(el);
+  expect(q(el, "[data-test=backup-admin-sign-in]")).not.toBeNull();
+});
+it("does not offer administrator sign-in for a connection failure", async () => {
+  const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+    api: stubApi({ getBackupStatus: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+  });
+  await flush(el);
+  expect(q(el, "[data-test=backup-admin-sign-in]")).toBeNull();
+});
+
+it("a settings short-key refusal leads to the existing key-change action", async () => {
+  const api = stubApi(
+    { applyBackup: vi.fn().mockRejectedValue({ code: "backup.recovery_key_too_short" }) },
+    ENABLED,
+  );
+  const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+  await flush(el);
+  q(el, "[data-test=edit-settings]")!.click();
+  await vi.waitFor(() => expect(q(el, "[data-test=save-settings]")).not.toBeNull());
+  await editDestination(el);
+  q(el, "[data-test=save-settings]")!.click();
+  await vi.waitFor(() => expect(q(el, "[data-test=recovery-key-action]")).not.toBeNull());
+  q(el, "[data-test=recovery-key-action]")!.click();
+  await vi.waitFor(() =>
+    expect(q(el, "[data-test=show-old-key]")?.shadowRoot!.activeElement?.tagName).toBe("BUTTON"),
+  );
+  expect(q(el, "[data-test=save-settings]")).toBeNull();
+  expect(api.applyBackup).toHaveBeenCalledOnce();
 });

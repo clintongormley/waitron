@@ -748,6 +748,37 @@ describe("stream settings routes", () => {
     expect(await turnedOff.json()).toMatchObject({ configured: false, bucket: null });
   });
 
+  it.each(["decrypt", "version", "payload"])(
+    "reads repairable %s credentials without exposing secrets",
+    async (broken) => {
+      await withTransaction(suite.db, (tx) => writeStreamSettings(tx, RING, BUCKET, null));
+      const iv = randomBytes(12);
+      const cipher = createCipheriv("aes-256-gcm", RING_KEY, iv);
+      cipher.setAAD(Buffer.from(STREAM_PURPOSE, "utf8"));
+      const ciphertext = Buffer.concat([cipher.update("not json", "utf8"), cipher.final()]);
+      await withTransaction(suite.db, (tx) =>
+        tx
+          .update(venueCredentials)
+          .set(
+            broken === "version"
+              ? { keyVersion: 99 }
+              : broken === "decrypt"
+                ? { ciphertext: Buffer.alloc(16) }
+                : { ciphertext, iv, authTag: cipher.getAuthTag() },
+          )
+          .where(eq(venueCredentials.purpose, STREAM_PURPOSE)),
+      );
+      const { app } = harness();
+      const cookie = await login(app);
+      const response = await app.request("/api/backup/stream", { headers: { cookie } });
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body).toMatchObject({ configured: true, bucket: null });
+      expect(body.revision).toEqual(expect.any(String));
+      expect(JSON.stringify(body)).not.toContain(BUCKET.secretAccessKey);
+    },
+  );
+
   it("two Saves at once set one recovery key and both succeed", async () => {
     await clearBucket();
     let release!: () => void;
