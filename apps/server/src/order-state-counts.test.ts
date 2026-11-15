@@ -154,12 +154,11 @@ useVenueDb({
       );
       octopusLarge = large!.id;
       const cake = await productOf(tx, "Tarta");
-      const [{ menuId, categoryId }] = await tx
-        .select({ menuId: products.menuId, categoryId: products.categoryId })
+      const [{ categoryId }] = await tx
+        .select({ categoryId: products.categoryId })
         .from(products)
         .where(eq(products.id, cake));
       const sauce = await createProduct(tx, {
-        menuId,
         categoryId: categoryId!,
         name: "Pepper sauce",
         customerName: { "es-ES": "Pepper sauce" },

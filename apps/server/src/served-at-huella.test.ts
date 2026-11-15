@@ -185,7 +185,6 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
     const cat = await createMenu(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: "Bebidas" });
     const agua = await createProduct(tx, {
-      menuId: cat.id,
       categoryId: bebidas.id,
       name: "Agua mineral",
       pricingUnit: "each",
@@ -193,7 +192,6 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
       vatClass: "general",
     });
     const cafe = await createProduct(tx, {
-      menuId: cat.id,
       categoryId: bebidas.id,
       name: "Café solo",
       pricingUnit: "each",
@@ -463,7 +461,6 @@ async function attachExtra(
 ): Promise<{ listId: string; productId: string }> {
   return withTransaction(shop.db, async (tx) => {
     const panecillo = await createProduct(tx, {
-      menuId: shop.menuId,
       categoryId: null,
       name: EXTRA_PRODUCT_NAME,
       pricingUnit: "each",

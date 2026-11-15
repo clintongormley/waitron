@@ -99,7 +99,6 @@ beforeEach(async () => {
     menuId = menu.id;
     for (const [key, fields] of Object.entries(products)) {
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         unitId: null,
         ...fields,
@@ -490,7 +489,6 @@ describe("a variant offered as an extras item", () => {
       const parent = async (name: string, vatClass: "reduced" | "zero", takeaway?: "general") =>
         (
           await createProduct(tx, {
-            menuId,
             categoryId: null,
             unitId: null,
             name,
@@ -509,7 +507,6 @@ describe("a variant offered as an extras item", () => {
         tx
           .insert(productRows)
           .values({
-            menuId,
             parentId,
             name,
             unitPrice: null,

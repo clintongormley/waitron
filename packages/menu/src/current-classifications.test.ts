@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { withTransaction, type Transaction } from "@waitron/db";
 import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
-import { createMenu, createProduct } from "./operations.js";
+import { createProduct } from "./operations.js";
 import { createCategory, setMainReportingCategory, updateCategory } from "./categories.js";
 import { setProductVariants } from "./variants.js";
 import { writeContentLanguages } from "./content-languages.js";
@@ -17,7 +17,6 @@ async function fixture() {
   await seedTaxpayer(fx.db);
   await seedLegacySellingUnits(fx.db);
   return app(async (tx) => {
-    const menu = await createMenu(tx, { name: "Bar" });
     const drinks = await createCategory(tx, { name: "Drinks" });
     const softs = await createCategory(tx, {
       name: "Softs",
@@ -26,7 +25,6 @@ async function fixture() {
     const spirits = await createCategory(tx, { name: "Spirits" });
     const product = (name: string, categoryId: string | null) =>
       createProduct(tx, {
-        menuId: menu.id,
         categoryId,
         name,
         pricingUnit: "each",

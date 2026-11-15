@@ -43,7 +43,6 @@ async function fixture(tx: Transaction, names: Record<string, string> | null) {
   const root = roots.find((row) => row.menuId === menu.id)!.rootSectionId;
   const childRoot = roots.find((row) => row.menuId === child.id)!.rootSectionId;
   const product = await createProduct(tx, {
-    menuId: menu.id,
     categoryId: null,
     name: "STAFF Product",
     customerName: null,
@@ -56,7 +55,6 @@ async function fixture(tx: Transaction, names: Record<string, string> | null) {
   const [variant] = await tx
     .insert(products)
     .values({
-      menuId: menu.id,
       parentId: product.id,
       name: "STAFF Variant",
       customerName: names,

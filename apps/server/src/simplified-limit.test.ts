@@ -54,7 +54,6 @@ useVenueDb({
         ["Gratis", "0.00"],
       ] as const) {
         const created = await createProduct(tx, {
-          menuId: cat.id,
           categoryId: category.id,
           name,
           pricingUnit: "each",

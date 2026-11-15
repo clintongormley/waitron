@@ -393,7 +393,7 @@ it("counts sent items with nothing usable as failed", async () => {
 it("drops a name returned for a context head and does not count the head as failed", async () => {
   const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const { beer, pint } = await app(async (tx) => {
-    const beer = await addProduct(tx, venue.menuId, "Beer", {
+    const beer = await addProduct(tx, "Beer", {
       ca: "CLIENT-CA Cervesa",
       es: "CLIENT-ES Cerveza",
       en: "CLIENT-EN Beer",
@@ -467,9 +467,7 @@ it("records a cap-stopped partly done job's failure as limit", async () => {
 it("chains the next job of the run, never including an item the run already sent", async () => {
   const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
-  const olives = await app((tx) =>
-    addProduct(tx, venue.menuId, "Olives", { ca: "CLIENT-CA Olives" }),
-  );
+  const olives = await app((tx) => addProduct(tx, "Olives", { ca: "CLIENT-CA Olives" }));
   await store(job.id, {
     state: "partly_done",
     cursor: 0,
@@ -510,7 +508,7 @@ it("ends the run with what it sent when the next job would hold no item", async 
   await app(async (tx) => {
     // Under 200 languages water has gaps too, and as a product it would come before the variant.
     await deactivateProduct(tx, venue.water);
-    await addOversizedFamily(tx, venue.menuId);
+    await addOversizedFamily(tx);
   });
   await store(job.id, done(translateAll(job.sent)));
   const jobs = await app(allJobs);
@@ -789,9 +787,7 @@ it("a page before the last stores its suggestions and keeps the job running at t
 it("only the last page finishes the job, counts it and chains the next", async () => {
   const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
-  const olives = await app((tx) =>
-    addProduct(tx, venue.menuId, "Olives", { ca: "CLIENT-CA Olives" }),
-  );
+  const olives = await app((tx) => addProduct(tx, "Olives", { ca: "CLIENT-CA Olives" }));
   await store(job.id, page(0, 1, [result(ref(venue.bread), breadNames("CLIENT-EN Bread"))]));
   expect(await app(allJobs)).toHaveLength(1);
   expect(

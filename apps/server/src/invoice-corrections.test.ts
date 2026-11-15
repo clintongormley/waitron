@@ -81,7 +81,6 @@ useVenueDb({
       const [category] = db.all<{ id: string }>(
         sql`select id from categories where name = 'Platos'`,
       );
-      const [menu] = db.all<{ id: string }>(sql`select id from menus limit 1`);
       const ids = new Map<string, string>();
       for (const [name, price] of [
         ["Rib steak", "12.10"],
@@ -89,7 +88,6 @@ useVenueDb({
         ["Rice platter", "10.00"],
       ] as const) {
         const product = await createProduct(tx, {
-          menuId: menu!.id,
           categoryId: category!.id,
           name,
           customerName: { [venue.cfg.locale]: `House ${name}` },
@@ -101,7 +99,6 @@ useVenueDb({
         ids.set(name, product.id);
       }
       const soup = await createProduct(tx, {
-        menuId: menu!.id,
         categoryId: category!.id,
         name: "Cold soup",
         customerName: { [venue.cfg.locale]: "House Cold soup" },

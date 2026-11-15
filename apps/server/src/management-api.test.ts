@@ -24,7 +24,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, registerModulePermissions } from "@waitron/identity";
-import { createMenu, createCategory, createProduct } from "@waitron/menu";
+import { createCategory, createProduct } from "@waitron/menu";
 import { stationStates } from "@waitron/venue-service";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
@@ -2787,10 +2787,8 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     const used = await createCourse(unique("Used"));
     const unused = await createCourse(unique("Unused"));
     const productId = await withTransaction(suite.db, async (tx) => {
-      const menu = await createMenu(tx, { name: unique("Menu") });
       const category = await createCategory(tx, { name: unique("Cat") });
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: category.id,
         name: unique("Prod"),
         pricingUnit: "each",
@@ -2935,14 +2933,10 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
   it("PUT /products/:id/course sets + clears the product's default course; bad body → 400; a bad/retired course → 400; a malformed product → 404 product.not_found", async () => {
     const courseId = await createCourse(unique("Course"));
     const { productId } = await withTransaction(suite.db, async (tx) => {
-      const menu = await createMenu(tx, {
-        name: unique("Menu"),
-      });
       const category = await createCategory(tx, {
         name: unique("Cat"),
       });
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: category.id,
         name: unique("Prod"),
         pricingUnit: "each",
@@ -3001,9 +2995,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
   it("PUT /products/:id/course on an unknown or a variant's :id → 404 product.not_found", async () => {
     const courseId = await createCourse(unique("Course"));
     const { variantId } = await withTransaction(suite.db, async (tx) => {
-      const menu = await createMenu(tx, { name: unique("Menu") });
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: unique("Prod"),
         pricingUnit: "each",
@@ -3012,7 +3004,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
       });
       const [variant] = await tx
         .insert(products)
-        .values({ menuId: menu.id, parentId: product.id, name: unique("Variant") })
+        .values({ parentId: product.id, name: unique("Variant") })
         .returning({ id: products.id });
       return { variantId: variant!.id };
     });
@@ -3030,9 +3022,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
   it("PUT /products/:id/course refuses an archived product with 409 product.archived and retains its course", async () => {
     const courseId = await createCourse(unique("Archive course"));
     const productId = await withTransaction(suite.db, async (tx) => {
-      const menu = await createMenu(tx, { name: unique("Archive menu") });
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: unique("Archived dish"),
         pricingUnit: "each",

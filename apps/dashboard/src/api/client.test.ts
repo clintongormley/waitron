@@ -699,7 +699,7 @@ describe("DashboardApi", () => {
     ]);
   });
 
-  it("listProducts GETs the addressed menu's products with credentials", async () => {
+  it("listProducts GETs all products with credentials", async () => {
     const products = [
       {
         id: "p1",
@@ -718,8 +718,8 @@ describe("DashboardApi", () => {
     ];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(products));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.listProducts("c1")).toEqual(products);
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/menus/c1/products", {
+    expect(await api.listProducts()).toEqual(products);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/products", {
       method: "GET",
       credentials: "include",
       signal: expect.any(AbortSignal),

@@ -1030,10 +1030,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   with repeated kinds.
 - **Menu names (W72): there is no unique index, and no backfill.**
   [Detail](menu.md#menu-no-two-categories-with-one-parent-and-no-two-active-products-share-a-name-w72-to-w72h-left-open)
-- **The menu picker was deleted and nothing replaced it.** `selectedMenuId`
-  (`products-screen.ts`) takes the first menu in the list, which is also the one every new
-  product is created in; with two, the second becomes unreachable from the dashboard. **Next
-  action:** decide whether more than one menu is a case Waitron supports.
 - **A backup setting in `trading.env` or `secrets.env` is not compared at a handover.** Only a hand
   edit puts one there (the writers read, not run). Two such boxes pass and can differ in a hidden recovery key. Left open by A1018 Slice 5 (Ruling R21).
 - **If a later slice moves `local` tables into `node.db`**, that slice decides again how the drain

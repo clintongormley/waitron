@@ -2766,7 +2766,6 @@ describe("startServer, against a migrated venue directory", () => {
         const menu = await createMenu(tx, { name: "Carta" });
         const food = await createCategory(tx, { name: "Comida" });
         const soup = await createProduct(tx, {
-          menuId: menu.id,
           categoryId: food.id,
           name: "Soup",
           pricingUnit: "each",

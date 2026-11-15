@@ -189,7 +189,6 @@ async function setupVenue(): Promise<{
       select id, seed_key from units where seed_key = 'kg'`);
     const kgId = seededUnits.rows.find((unit) => unit.seed_key === "kg")!.id;
     const ham = await createProduct(tx, {
-      menuId: cat.id,
       categoryId: foodCategory.id,
       name: "Jamón cortado",
       unitId: kgId,
@@ -197,7 +196,6 @@ async function setupVenue(): Promise<{
       vatClass: "reduced",
     });
     const water = await createProduct(tx, {
-      menuId: cat.id,
       categoryId: drinkCategory.id,
       name: "Agua mineral",
       unitId: null, // Each (no unit).
@@ -2596,7 +2594,6 @@ it("files an extras pick and an options answer through cash checkout and reprint
       // The extra is a PRODUCT of its own, taxed at its OWN class — `reduced`, where the dish is
       // `general`, so the filed VAT breakdown has to carry two bands.
       const cheese = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Queso",
         pricingUnit: "each",
@@ -3550,7 +3547,6 @@ describe("a sale cannot hand over settled extras or options", () => {
     const product = available.find((item) => item.pricingUnit === "each")!;
     const lists = await withTransaction(suite.db, async (tx) => {
       const cheese = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Queso",
         pricingUnit: "each",

@@ -196,7 +196,6 @@ async function setupVenue(countryCourses = false): Promise<Venue> {
     const productId = {} as Record<Dish, string>;
     for (const [dish, names] of Object.entries(DISHES) as [Dish, (typeof DISHES)[Dish]][]) {
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: category.id,
         name: names.staff,
         customerName: { en: names.customer },
@@ -4362,7 +4361,7 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
     const v = await setupVenue();
     const sold = await inTx(async (tx) => {
       const [steak] = await tx
-        .select({ menuId: products.menuId, categoryId: products.categoryId })
+        .select({ categoryId: products.categoryId })
         .from(products)
         .where(eq(products.id, v.productId.steak));
       // As the venue seed makes it (`packages/menu/src/provisioning.ts`): whole grams only.
@@ -4522,7 +4521,7 @@ describe("advance HOLD tickets (Task 6)", () => {
   async function tunaWithDoneness(v: Venue) {
     return inTx(async (tx) => {
       const [steak] = await tx
-        .select({ menuId: products.menuId, categoryId: products.categoryId })
+        .select({ categoryId: products.categoryId })
         .from(products)
         .where(eq(products.id, v.productId.steak));
       const tuna = await createProduct(tx, {

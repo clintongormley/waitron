@@ -310,7 +310,7 @@ describe("archiving", () => {
     await app((tx) => updateProduct(tx, f.burger, { active: false }));
     const value = await app((tx) => readProductEditor(tx, f.burger));
     await expect(
-      app((tx) => saveProductEditor(tx, f.burger, f.dinner, { ...value, active: true }, "en")),
+      app((tx) => saveProductEditor(tx, f.burger, { ...value, active: true }, "en")),
     ).rejects.toMatchObject(archived(f.burger));
     expect(await app((tx) => readProductEditor(tx, f.burger))).toEqual(value);
   });
@@ -321,7 +321,6 @@ describe("archiving", () => {
       saveProductEditor(
         tx,
         f.lemonade,
-        f.dinner,
         {
           ...value,
           active: false,
@@ -374,9 +373,10 @@ describe("archiving", () => {
   it("preserves each caller's missing-product refusal", async () => {
     const f = await menusFixture(fx.db);
     const value = await app((tx) => readProductEditor(tx, f.burger));
-    await expect(
-      app((tx) => saveProductEditor(tx, "missing", f.dinner, value, "en")),
-    ).rejects.toMatchObject({ code: "product.not_found", params: { productId: "missing" } });
+    await expect(app((tx) => saveProductEditor(tx, "missing", value, "en"))).rejects.toMatchObject({
+      code: "product.not_found",
+      params: { productId: "missing" },
+    });
     await expect(
       app((tx) => deleteProductItems(tx, { productIds: ["missing"], categoryIds: [] }, "delete")),
     ).rejects.toMatchObject({ code: "product.not_found", params: { productId: "missing" } });

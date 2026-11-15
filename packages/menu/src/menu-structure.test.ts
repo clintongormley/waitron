@@ -77,7 +77,6 @@ async function fixture(): Promise<Fixture> {
     const make = async (name: string, unitPrice: string) =>
       (
         await createProduct(tx, {
-          menuId: lunch.id,
           categoryId: null,
           name: `${name} (staff)`,
           customerName: { en: `${name} (customer)` },
@@ -940,7 +939,6 @@ describe("a menu's prices", () => {
     const cheese = await app(async (tx) => {
       const category = await createCategory(tx, { name: "Cheese" });
       const created = await createProduct(tx, {
-        menuId: f.lunch,
         categoryId: category.id,
         name: "Manchego (staff)",
         customerName: { en: "Manchego (customer)" },

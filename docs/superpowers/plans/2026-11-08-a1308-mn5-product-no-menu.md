@@ -38,6 +38,24 @@ line is priced from the offer's menu (`menu_items`), and the till's `menuId` is 
 **Pull request's first line:** "Every venue is reset: core; backups and exports from before this
 cannot be restored or imported." (rules §2)
 
+## Dated implementation corrections
+
+The watcher cleared these corrections in Lane E's `questions.md` on 15 November 2026:
+01:37 permits all active, available top-level products regardless of menu state, ordered by creation
+time and id, and the single scripted `menuId: menu.id` setup-property deletion in the fiscal golden
+suite. At 04:10 the watcher cleared the matching list, missing-menu refusal, retired-route and
+no-menu prompt assertion ports. Other category, money, variant and offer-menu checks stay.
+At 04:40 the watcher cleared about 1,900 counted lines: the compiler exposed more existing fixture
+arguments and callers than the estimate allowed. This adds no product behaviour. The Madrid adapter
+reuses the existing dropped-column helper, removing historical product ownership before comparing
+added rows; the frozen captures stay unchanged. The old cross-menu variant refusal becomes the
+plain parent key's missing-parent refusal, with its legitimate parent control retained.
+The owner's build authority is the build order's 9 November “build all of it as planned”;
+the watcher cleared these detailed corrections.
+At 05:50 the watcher also cleared the rebase ports for A1522’s newly landed takeaway VAT tests:
+505 scripted field removals, the editor/SQL/HTTP fixture ports with VAT expectations unchanged,
+and a new stop at about 2,000 counted lines. No new review wave was requested for those ports.
+
 ## What it builds
 
 1. **`products.menu_id` goes**, with `products_id_menu_key`, `products_menu_id_idx` and the

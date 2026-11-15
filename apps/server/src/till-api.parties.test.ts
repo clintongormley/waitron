@@ -238,7 +238,6 @@ describe("POST /api/tables/:id/seat", () => {
       const menu = await createMenu(tx, { name: "Daily menu" });
       const drinks = await createCategory(tx, { name: "Drinks" });
       const coffee = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: drinks.id,
         name: "Café",
         pricingUnit: "each",

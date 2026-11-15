@@ -157,7 +157,6 @@ function seededWith(
     unit_price: 180,
     pricing_unit: "each",
     category_id: drinksCategory,
-    catalogue_id: menu,
     image: "cola.webp",
     parent_id: null,
   });

@@ -51,7 +51,6 @@ async function fixture() {
       names: { es: "CLIENT root", en: "CLIENT root" },
     });
     const product = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       unitId: null,
       name: "STAFF bread",
@@ -63,7 +62,6 @@ async function fixture() {
     const [variant] = await tx
       .insert(products)
       .values({
-        menuId: menu.id,
         parentId: product.id,
         name: "STAFF small",
         kitchenName: "KITCHEN small",

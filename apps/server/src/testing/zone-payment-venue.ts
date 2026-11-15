@@ -27,7 +27,6 @@ export async function zonePaymentVenue(db: Database) {
   const prepared = await withTransaction(db, async (tx) => {
     const category = await createCategory(tx, { name: "Worker checks" });
     const product = await createProduct(tx, {
-      menuId: tx.all<{ id: string }>(sql`select id from menus limit 1`)[0]!.id,
       categoryId: category.id,
       name: "Worker dish",
       customerName: { "en-GB": "Customer dish" },

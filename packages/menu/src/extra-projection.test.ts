@@ -46,7 +46,6 @@ beforeEach(async () => {
     const menu = await createMenu(tx, { name: "Deli" });
     for (const [key, unitPrice] of Object.entries(unitPrices)) {
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: key,
         unitId: null,
@@ -110,7 +109,6 @@ describe("what a product's own extras lists offer", () => {
         "en",
       );
       const weighted = await createProduct(tx, {
-        menuId: (await createMenu(tx, { name: "Weight" })).id,
         categoryId: null,
         name: "Olives by weight",
         unitId: kg.id,

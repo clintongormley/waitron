@@ -90,8 +90,7 @@ export interface ListedVariant extends ProductVariant {
 }
 
 /**
- * The slice of one product row the dashboard reads out of `GET /management-api/menus/:id/products`
- * — the whole `Product` menu's `operations.ts` returns. `unitPrice` is a GROSS (VAT-inclusive)
+ * `unitPrice` is a GROSS (VAT-inclusive)
  * two-place decimal STRING, never a number; `image` holds the photo's original hash filename as a
  * stable reference, or null. Media resolves the current picture separately.
  */
@@ -99,7 +98,6 @@ export interface Product {
   id: string;
   /** The ordered extras and options lists attached to this product. */
   modifiers: ProductModifierRef[];
-  menuId: string;
   /** The main reporting category, or null for Uncategorised. `primaryCategoryId` is the same value. */
   categoryId: string | null;
   primaryCategoryId: string | null;

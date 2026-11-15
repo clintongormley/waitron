@@ -59,7 +59,7 @@ beforeEach(async () => {
       dietaryDeclarations: [],
       color: null,
     };
-    productId = (await saveProductEditor(tx, null, menu.id, body, "en")).id;
+    productId = (await saveProductEditor(tx, null, body, "en")).id;
     await addProductToMenu(tx, {
       menuId: menu.id,
       productId,
@@ -70,14 +70,14 @@ beforeEach(async () => {
 });
 
 async function save(flags: { active: boolean; available: boolean }) {
-  return run((tx) => saveProductEditor(tx, productId, menuId, { ...body, ...flags }, "en"));
+  return run((tx) => saveProductEditor(tx, productId, { ...body, ...flags }, "en"));
 }
 
 /** What the editor, the product list, the menu's offers and the sellable list say of the one product. */
 async function reads() {
   return run(async (tx) => {
     const editor = await readProductEditor(tx, productId);
-    const [listed] = await listProducts(tx, menuId);
+    const [listed] = await listProducts(tx);
     return {
       editor: { active: editor.active, available: editor.available },
       listed: { active: listed!.active, available: listed!.available },
@@ -139,7 +139,7 @@ describe("Active and Available", () => {
 
   it("a product created Unavailable is created Active", async () => {
     const created = await run((tx) =>
-      saveProductEditor(tx, null, menuId, { ...body, name: "Croquette", available: false }, "en"),
+      saveProductEditor(tx, null, { ...body, name: "Croquette", available: false }, "en"),
     );
 
     expect({ active: created.active, available: created.available }).toEqual({
@@ -152,7 +152,7 @@ describe("Active and Available", () => {
   // offer carries the setting, and the till and the order path act on it.
   it("offers an Active, Available product the till whatever its ordering, and says which", async () => {
     for (const ordering of ["public", "staff_only", "not_sold_separately"] as const) {
-      await run((tx) => saveProductEditor(tx, productId, menuId, { ...body, ordering }, "en"));
+      await run((tx) => saveProductEditor(tx, productId, { ...body, ordering }, "en"));
       const offers = await run((tx) => listMenuOffers(tx, [menuId]));
       expect(offers.map((offer) => offer.ordering)).toEqual([ordering]);
       expect(offers.map((offer) => offer.productId)).toEqual([productId]);

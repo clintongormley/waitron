@@ -70,10 +70,9 @@ async function mealVenue(weekdays: readonly number[] = [1]) {
         drinks: await menu("Drinks"),
         coffee: await menu("Coffee"),
       };
-      const product = async (menuId: string, name: string, unitPrice: string) =>
+      const product = async (name: string, unitPrice: string) =>
         (
           await createProduct(tx, {
-            menuId,
             categoryId: null,
             name,
             pricingUnit: "each",
@@ -81,8 +80,8 @@ async function mealVenue(weekdays: readonly number[] = [1]) {
             vatClass: "general",
           })
         ).id;
-      const toastId = await product(menus.brunch, "Toast", "3.00");
-      const saladId = await product(menus.setLunch, "Salad", "8.00");
+      const toastId = await product("Toast", "3.00");
+      const saladId = await product("Salad", "8.00");
       const offer = async (menuId: string, productId: string, grossPrice: string) =>
         (await addProductToMenu(tx, { menuId, productId, grossPrice })).id;
       const toast = {
@@ -90,7 +89,7 @@ async function mealVenue(weekdays: readonly number[] = [1]) {
         setLunch: await offer(menus.setLunch, toastId, "4.00"),
       };
       const salad = await offer(menus.setLunch, saladId, "8.00");
-      const avocadoId = await product(menus.setLunch, "Avocado", "1.50");
+      const avocadoId = await product("Avocado", "1.50");
       const avocadoList = (
         await createExtraList(
           tx,
@@ -108,8 +107,8 @@ async function mealVenue(weekdays: readonly number[] = [1]) {
         ...carried.map((each) => ({ kind: each.kind, id: each.id })),
         { kind: "extras", id: avocadoList },
       ]);
-      const beer = await offer(menus.drinks, await product(menus.drinks, "Beer", "2.00"), "2.00");
-      const juiceId = await product(menus.setLunch, "Juice", "3.00");
+      const beer = await offer(menus.drinks, await product("Beer", "2.00"), "2.00");
+      const juiceId = await product("Juice", "3.00");
       const variant = (name: string, unitPrice: string) => ({
         name,
         customerName: null,

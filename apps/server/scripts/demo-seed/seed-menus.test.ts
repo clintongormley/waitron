@@ -340,6 +340,10 @@ describe("seedMenus", () => {
         out,
         menus,
         products,
+        offers: await listMenuOffers(
+          tx,
+          menus.map((menu) => menu.id),
+        ),
         contentLanguages,
         stations,
         drinksRoute,
@@ -366,7 +370,7 @@ describe("seedMenus", () => {
     });
 
     expect(res.products.length).toBeGreaterThan(35);
-    const menuNames = new Set(res.products.map((p) => p.menuName));
+    const menuNames = new Set(res.offers.map((offer) => offer.menuName));
     expect(menuNames).toEqual(new Set(["Casa Delgado", "Set lunch", "Deli takeaway", "Drinks"]));
 
     expect(res.products.some((p) => p.name === "Iberian ham")).toBe(true);

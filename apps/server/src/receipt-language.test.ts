@@ -25,7 +25,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  createMenu,
   createCategory,
   createOptionList,
   createProduct,
@@ -166,11 +165,9 @@ async function venueWith(
       defaultContentLanguage: "es",
       contentLanguages: ["es", "ca", "gl"],
     });
-    const menu = await createMenu(tx, { name: `Receipt language menu` });
     const category = await createCategory(tx, { name: "Tapas" });
     // The staff, customer-facing and kitchen names all differ (docs/developers/products.md).
     const product = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: category.id,
       name: "STAFF Pan",
       customerName: {
@@ -794,7 +791,6 @@ describe("a sale prints its goods in the default content language its lines stor
         defaultContentLanguage: defaultLanguage,
         contentLanguages: languages,
       });
-      const menu = await createMenu(tx, { name: "Racions" });
       const unit = await createUnit(
         tx,
         {
@@ -807,7 +803,6 @@ describe("a sale prints its goods in the default content language its lines stor
         defaultLanguage,
       );
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: "STAFF Torrada",
         customerName: wording((words) => words.name),

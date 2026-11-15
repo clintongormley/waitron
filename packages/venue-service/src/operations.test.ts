@@ -582,7 +582,6 @@ describe("venue service routing", () => {
       await expect(listVenueReadiness(tx)).resolves.toEqual([menuEmpty]);
 
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: "Lemonade",
         pricingUnit: "each",
@@ -744,10 +743,9 @@ describe("venue service routing", () => {
           serviceMode: "table_tab",
         },
       ]);
-      const menu = await createMenu(tx, { name: "Drinks" });
+      await createMenu(tx, { name: "Drinks" });
       const category = await createCategory(tx, { name: "Cocktails" });
       const negroni = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: category.id,
         name: "Negroni",
         pricingUnit: "each",
@@ -800,7 +798,6 @@ describe("venue service routing", () => {
       const menu = await createMenu(tx, { name: "Deli takeaway" });
       const category = await createCategory(tx, { name: "Cold cuts" });
       const ham = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: category.id,
         name: "Sliced ham",
         pricingUnit: "weight",
@@ -986,7 +983,6 @@ describe("venue service routing", () => {
       const menu = await createMenu(tx, { name: "Deli takeaway" });
       // Clearing its stored unit makes the offer read resolve it to the synthetic Each unit.
       const sweets = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: "Loose sweets",
         pricingUnit: "each",
@@ -1143,13 +1139,11 @@ async function insertStation(tx: Transaction, name: string): Promise<string> {
 
 async function productWithCategory(
   tx: Transaction,
-  menuId: string,
   name: string,
   withCategory = true,
 ): Promise<{ id: string; categoryId: string }> {
   const category = withCategory ? await createCategory(tx, { name: `${name} category` }) : null;
   const product = await createProduct(tx, {
-    menuId: menuId,
     categoryId: category?.id ?? null,
     name,
     pricingUnit: "each",
@@ -1177,8 +1171,8 @@ describe("routing outcomes and menu readiness", () => {
     await scoped(async (tx) => {
       const kitchen = await insertStation(tx, "Kitchen");
       const bar = await insertStation(tx, "Bar");
-      const menu = await createMenu(tx, { name: "Drinks" });
-      const cocktail = await productWithCategory(tx, menu.id, "Cocktail");
+      await createMenu(tx, { name: "Drinks" });
+      const cocktail = await productWithCategory(tx, "Cocktail");
       await setRoutingCell(
         tx,
         { row: { kind: "category", categoryId: cocktail.categoryId }, zoneId: null },
@@ -1210,9 +1204,8 @@ describe("routing outcomes and menu readiness", () => {
       const closedGrill = await insertStation(tx, "Closed grill");
       const parent = await createCategory(tx, { name: "Food" });
       const child = await createCategory(tx, { name: "Grilled", parentId: parent.id });
-      const menu = await createMenu(tx, { name: "Menu" });
+      await createMenu(tx, { name: "Menu" });
       const steak = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: child.id,
         name: "Steak",
         pricingUnit: "each",
@@ -1246,7 +1239,6 @@ describe("routing outcomes and menu readiness", () => {
     await scoped(async (tx) => {
       const menu = await createMenu(tx, { name: "Tapas" });
       const croquette = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: "Croquetas",
         pricingUnit: "each",
@@ -1807,7 +1799,6 @@ async function seedSellingVenue() {
     await configureZone(tx, { zoneId: barZone, departmentId: bar.id, orderStart: "counter" });
     const menu = await createMenu(tx, { name: "All day" });
     const product = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Tortilla",
       pricingUnit: "each",
@@ -2355,7 +2346,6 @@ async function seedTwoMenuVenue() {
     const make = async (name: string, unitPrice: string) =>
       (
         await createProduct(tx, {
-          menuId: dinner.id,
           categoryId: null,
           name,
           pricingUnit: "each",
@@ -2971,7 +2961,6 @@ describe("each served menu's structure and Device Home Page", () => {
     return scoped(async (tx) => {
       const cola = (
         await createProduct(tx, {
-          menuId: venue.dinner,
           categoryId: null,
           name: "Cola",
           pricingUnit: "each",
@@ -3734,7 +3723,6 @@ describe("products a zone's listed menus offer", () => {
     await scoped(async (tx) => {
       const barMenu = await createMenu(tx, { name: "Bar specials" });
       const nuts = await createProduct(tx, {
-        menuId: barMenu.id,
         categoryId: null,
         name: "Bar nuts",
         pricingUnit: "each",

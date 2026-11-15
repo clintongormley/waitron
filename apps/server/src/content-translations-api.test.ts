@@ -168,7 +168,6 @@ async function fixture() {
     const root = roots.find((row) => row.menuId === menu.id)!.rootSectionId;
     const childRoot = roots.find((row) => row.menuId === child.id)!.rootSectionId;
     const product = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       unitId: null,
       name: "STAFF Bread",

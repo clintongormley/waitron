@@ -130,7 +130,16 @@ describe("demo seed end-to-end", () => {
         timeZone: "Europe/Madrid",
         dayCutover: "05:00",
       });
-      return { menus, products, publishedOffers, image: imageRows[0]?.image ?? null, close };
+      return {
+        menus,
+        products,
+        memberships: await tx
+          .select({ productId: menuItems.productId, menuId: menuItems.menuId })
+          .from(menuItems),
+        publishedOffers,
+        image: imageRows[0]?.image ?? null,
+        close,
+      };
     });
 
     expect(read.close.vat.byRate.length).toBeGreaterThan(0);
@@ -188,8 +197,14 @@ describe("demo seed end-to-end", () => {
       });
     }
 
-    const casaProducts = read.products.filter((p) => p.menuName === "Casa Delgado");
-    const diaProducts = read.products.filter((p) => p.menuName === "Set lunch");
+    const casaMenu = read.menus.find((menu) => menu.name === "Casa Delgado")!.id;
+    const diaMenu = read.menus.find((menu) => menu.name === "Set lunch")!.id;
+    const casaProducts = read.products.filter((product) =>
+      read.memberships.some((item) => item.productId === product.id && item.menuId === casaMenu),
+    );
+    const diaProducts = read.products.filter((product) =>
+      read.memberships.some((item) => item.productId === product.id && item.menuId === diaMenu),
+    );
     expect(casaProducts.length).toBeGreaterThan(0);
     expect(diaProducts.length).toBeGreaterThan(0);
 
@@ -197,6 +212,9 @@ describe("demo seed end-to-end", () => {
     // selections is valid: an active options list, or an extras list with `minPicks > 0`, must be
     // answered.
     const optionFree = (p: (typeof read.products)[number]): boolean =>
+      !read.publishedOffers.some(
+        (offer) => offer.productId === p.id && offer.variants.length > 0,
+      ) &&
       !p.offeredModifiers.some(
         (entry) => entry.kind === "options" || (entry.kind === "extras" && entry.minPicks > 0),
       );
@@ -224,17 +242,17 @@ describe("demo seed end-to-end", () => {
         .select({ zoneId: floorZones.id })
         .from(floorZones)
         .where(and(eq(floorZones.isCounterDefault, true)));
-      const offerOf = async (product: { id: string; menuId: string }) => {
+      const offerOf = async (product: { id: string }, menuId: string) => {
         const [item] = await tx
           .select({ id: menuItems.id })
           .from(menuItems)
-          .where(and(eq(menuItems.menuId, product.menuId), eq(menuItems.productId, product.id)));
+          .where(and(eq(menuItems.menuId, menuId), eq(menuItems.productId, product.id)));
         return item!.id;
       };
       return {
         zoneId: counter!.zoneId,
-        casaOffer: await offerOf(casaProduct),
-        diaOffer: await offerOf(diaProduct),
+        casaOffer: await offerOf(casaProduct, casaMenu),
+        diaOffer: await offerOf(diaProduct, diaMenu),
       };
     });
     // 14:00 in Madrid: Lunch is the period that serves both menus.

@@ -1,5 +1,4 @@
 import { cancelItemForTest } from "./testing/cancel-line.js";
-import { readDefaultMenuId } from "@waitron/menu";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { setImmediate as yieldTurn } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
@@ -50,11 +49,9 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     ids = await inTx(venue, async (tx) => {
-      const menuId = (await readDefaultMenuId(tx))!;
       const product = async (name: string, price: string) =>
         (
           await createProduct(tx, {
-            menuId: menuId,
             categoryId: null,
             name,
             customerName: { [venue.cfg.locale]: `${name} (customer)` },
@@ -67,7 +64,6 @@ useVenueDb({
       const burger = await product("Burger", "9.50");
       const ham = (
         await createProduct(tx, {
-          menuId: menuId,
           categoryId: null,
           name: "Ham",
           customerName: { [venue.cfg.locale]: "Ham (customer)" },

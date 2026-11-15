@@ -96,7 +96,6 @@ export async function setupVenue(db: Database): Promise<Venue> {
     const cat = await createMenu(tx, { name: `Delicatessen ${venue.nodeId}` });
     const drinks = await createCategory(tx, { name: "Drinks" });
     const coffee = await createProduct(tx, {
-      menuId: cat.id,
       categoryId: drinks.id,
       name: "Coffee",
       pricingUnit: "each",
@@ -104,7 +103,6 @@ export async function setupVenue(db: Database): Promise<Venue> {
       vatClass: "general",
     });
     const water = await createProduct(tx, {
-      menuId: cat.id,
       categoryId: drinks.id,
       name: "Water",
       pricingUnit: "each",

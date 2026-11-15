@@ -136,7 +136,6 @@ async function setupVenue(): Promise<SeededVenue> {
     const cat = await createMenu(tx, { name: "Delicatessen" });
     const drinksCategory = await createCategory(tx, { name: "Bebidas" });
     await createProduct(tx, {
-      menuId: cat.id,
       categoryId: drinksCategory.id,
       name: "Café",
       pricingUnit: "each",
@@ -144,7 +143,6 @@ async function setupVenue(): Promise<SeededVenue> {
       vatClass: "general",
     });
     await createProduct(tx, {
-      menuId: cat.id,
       categoryId: drinksCategory.id,
       name: "Agua",
       pricingUnit: "each",

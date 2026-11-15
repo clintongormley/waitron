@@ -302,7 +302,6 @@ describe("A803 portions: recording portions", () => {
   let cfg: DeviceRequestConfig;
   let offers: ZoneOffers;
   let ids: { burger: string; cheese: string; toppings: string; wine: string };
-  let menuId: string;
 
   beforeAll(() => {
     db = suite.db;
@@ -312,13 +311,11 @@ describe("A803 portions: recording portions", () => {
   beforeEach(async () => {
     const venue = await setupVenue();
     cfg = venue.cfg;
-    menuId = venue.menuId;
     ids = await withTransaction(db, async (tx) => {
       const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
       const product = async (name: string, price: string) =>
         (
           await createProduct(tx, {
-            menuId: venue.menuId,
             categoryId: null,
             name,
             customerName: { [defaultLanguage]: `${name} (customer)` },
@@ -507,7 +504,6 @@ describe("A803 portions: recording portions", () => {
       const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
       const bacon = (
         await createProduct(tx, {
-          menuId,
           categoryId: null,
           name: "Bacon",
           customerName: { [defaultLanguage]: "Bacon (customer)" },

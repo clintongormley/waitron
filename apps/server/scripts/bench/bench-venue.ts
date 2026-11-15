@@ -9,7 +9,6 @@ import {
   staffRoles,
   personStaffRoles,
   deviceProfileAdmissionRoles,
-  menus,
   devices,
   deviceProfiles,
   diningTables,
@@ -370,7 +369,6 @@ async function seed(
       for (let n = 1; n <= count; n++) {
         const label = `${course.name} ${String(made + n).padStart(3, "0")}`;
         await createProduct(tx, {
-          menuId: menu.id,
           categoryId: category.id,
           name: label,
           customerName: { [LOCALE]: `House ${label.toLowerCase()}` },
@@ -561,8 +559,6 @@ async function readSeeded(db: Database, cookies: Record<string, string>) {
     .select({ productId: products.id, menuItemId: menuItems.id })
     .from(menuItems)
     .innerJoin(products, eq(products.id, menuItems.productId))
-    .innerJoin(menus, eq(menus.id, products.menuId))
-    .where(eq(menus.name, MENU_NAME))
     .orderBy(asc(products.name));
   const zoneRows = db.all<{ id: string; departmentId: string }>(
     sql`select z.id as id, z.department_id as departmentId from floor_zones z

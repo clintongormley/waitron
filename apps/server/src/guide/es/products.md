@@ -4,7 +4,7 @@ Un producto describe lo que vendes. Una carta decide si ese producto se vende en
 y a qué precio. Al mantener separadas las dos tareas, puedes usar el mismo café en varias cartas sin
 copiar su nombre de estación de preparación, sus declaraciones dietéticas ni sus opciones.
 
-Abre **Productos** en el panel de gestión y elige **Añadir producto**. Ponle un nombre al producto e
+Puedes añadir productos antes de crear una carta. Abre **Productos** en el panel de gestión y elige **Añadir producto**. Ponle un nombre al producto e
 introduce su precio.
 
 El editor deja a la vista los campos que cambias a menudo y pliega el resto bajo un encabezado que

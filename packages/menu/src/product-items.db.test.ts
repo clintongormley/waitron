@@ -24,11 +24,9 @@ beforeEach(async () => {
     d = (await createCategory(tx, { name: "Drinks" })).id;
     b = (await createCategory(tx, { name: "Beer", parentId: d })).id;
     f = (await createCategory(tx, { name: "Food" })).id;
-    const menu = await createMenu(tx, { name: "Menu" });
     const make = async (name: string, categoryId: string) =>
       (
         await createProduct(tx, {
-          menuId: menu.id,
           categoryId,
           name,
           pricingUnit: "each",
@@ -262,9 +260,8 @@ describe("deleteProductItems with the counts the client read before deleting", (
       }),
     );
   const addProduct = (tx: Transaction, categoryId: string) =>
-    createMenu(tx, { name: "Later" }).then((menu) =>
+    createMenu(tx, { name: "Later" }).then(() =>
       createProduct(tx, {
-        menuId: menu.id,
         categoryId,
         name: "Stout",
         pricingUnit: "each",
@@ -393,9 +390,7 @@ describe("summariseFolders", () => {
   it("counts active products across the whole subtree, leaving out an inactive one two levels down", async () => {
     await app(async (tx) => {
       const stouts = (await createCategory(tx, { name: "Stout", parentId: b })).id;
-      const bar = await createMenu(tx, { name: "Bar" });
       const { id } = await createProduct(tx, {
-        menuId: bar.id,
         categoryId: stouts,
         name: "Porter",
         pricingUnit: "each",

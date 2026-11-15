@@ -8,7 +8,6 @@ import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import {
   contentSuggestionJobs,
   contentSuggestions,
-  createMenu,
   createProduct,
   readActiveSuggestionJob,
   readSuggestionRun,
@@ -55,14 +54,9 @@ async function venue(staffNames: readonly string[]): Promise<string[]> {
   await seedVenueSettings(suite.db);
   return inTx(async (tx) => {
     await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en"] });
-    const menu = await createMenu(tx, {
-      name: "STAFF Lunch",
-      names: { es: "CLIENT-es Almuerzo", en: "CLIENT-en Lunch" },
-    });
     const ids: string[] = [];
     for (const name of staffNames) {
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         unitId: null,
         name,
@@ -941,8 +935,7 @@ it("an empty job, past Cloud's 20 languages, ends failed as a request Cloud refu
     await seedTaxpayer(suite.db);
     await seedVenueSettings(suite.db);
     await inTx(async (tx) => {
-      const menu = await createMenu(tx, { name: "STAFF Lunch" });
-      await addOversizedFamily(tx, menu.id);
+      await addOversizedFamily(tx);
     });
     await inTx((tx) => startSuggestionRun(tx, context));
 

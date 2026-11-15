@@ -273,7 +273,6 @@ it("A964 language boundaries preserve saved receipt-language card bytes and fisc
   const offers = await inTx(v, async (tx) => {
     const cat = await createMenu(tx, { name: "Boundary menu" });
     const product = await createProduct(tx, {
-      menuId: cat.id,
       categoryId: null,
       name: "Boundary dish",
       kitchenName: "Pass boundary",

@@ -175,9 +175,6 @@ export class ModifiersScreen extends LitElement {
           this.locales = value;
           setContentLanguages(value);
         }),
-        this.#queries.watch("listMenus", [], (value) => {
-          this.#menuIds = value.map((menu) => menu.id);
-        }),
       ]);
       await this.#loadProducts();
       this.#openLinkedList();
@@ -188,20 +185,10 @@ export class ModifiersScreen extends LitElement {
       this.loading = false;
     }
   }
-  #menuIds: string[] = [];
   async #loadProducts(): Promise<void> {
-    if (this.#menuIds.length === 0) {
-      this.products = [];
-      this.#queries.release("listProducts");
-      return;
-    }
-    await this.#queries.watchGroup(
-      "listProducts",
-      this.#menuIds.map((id) => [id] as [string]),
-      (lists) => {
-        this.products = [...new Map(lists.flat().map((product) => [product.id, product])).values()];
-      },
-    );
+    await this.#queries.watch("listProducts", [], (products) => {
+      this.products = products;
+    });
   }
   /** An id the tab does not hold opens nothing, and leaves the path rather than sitting in it. */
   #openLinkedList(): void {

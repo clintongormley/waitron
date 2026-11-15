@@ -139,7 +139,6 @@ async function setupVenue(): Promise<Seeded> {
     const cat = await createMenu(tx, { name: "Daily menu" });
     const drinks = await createCategory(tx, { name: "ES drinks" });
     const coffeeProduct = await createProduct(tx, {
-      menuId: cat.id,
       categoryId: drinks.id,
       name: "ES coffee",
       pricingUnit: "each",
@@ -147,7 +146,6 @@ async function setupVenue(): Promise<Seeded> {
       vatClass: "general",
     });
     const waterProduct = await createProduct(tx, {
-      menuId: cat.id,
       categoryId: drinks.id,
       name: "Agua",
       pricingUnit: "each",
@@ -3538,7 +3536,6 @@ describe("the kitchen screen and the expo board are told which lines were sold i
       await updateUnit(tx, seededEach!.id, { abbreviation: { es: "pz" } }, "es");
       const dish = (name: string, unitId: string | null, unitPrice: string) =>
         createProduct(tx, {
-          menuId: seeded.menuId,
           categoryId: null,
           name,
           unitId,

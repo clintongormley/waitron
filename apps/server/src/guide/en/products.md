@@ -4,7 +4,7 @@ A product describes what you sell. A menu decides whether that product is sold i
 service, and at what price. Keeping those jobs separate lets you reuse one coffee on several menus
 without copying its prep station name, dietary declarations or choices.
 
-Open **Products** in the management dashboard and choose **Add product**. Give the product a name
+You can add products before creating a menu. Open **Products** in the management dashboard and choose **Add product**. Give the product a name
 and enter its price.
 
 The editor keeps the fields you change often on screen and folds the rest away behind a heading that

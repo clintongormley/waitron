@@ -99,7 +99,6 @@ export class ProductsScreen extends LitElement {
   @state() private routing: RoutingModel | null = null;
   @state() private routingFailed = false;
   @state() private courses: Course[] = [];
-  @state() private selectedMenuId = "";
   @state() private editorOpen = false;
   @state() private detailsOpen = false;
   @state() private editorValue: ProductEditorValue | null = null;
@@ -276,8 +275,6 @@ export class ProductsScreen extends LitElement {
           this.courses = value;
         }),
       ]);
-      if (!this.menus.some(({ id }) => id === this.selectedMenuId))
-        this.selectedMenuId = this.menus[0]?.id ?? "";
       await this.#reloadProducts();
       this.productsLoaded = true;
     } catch (error) {
@@ -298,18 +295,9 @@ export class ProductsScreen extends LitElement {
   }
 
   async #reloadProducts(): Promise<void> {
-    if (!this.menus.length) {
-      this.products = [];
-      this.#queries.release("listProducts");
-      return;
-    }
-    await this.#queries.watchGroup(
-      "listProducts",
-      this.menus.map(({ id }) => [id]),
-      (lists) => {
-        this.products = [...new Map(lists.flat().map((product) => [product.id, product])).values()];
-      },
-    );
+    await this.#queries.watch("listProducts", [], (products) => {
+      this.products = products;
+    });
     await this.#openLinkedProduct();
   }
 
@@ -466,7 +454,7 @@ export class ProductsScreen extends LitElement {
     try {
       let created: ProductEditorValue | null = null;
       if (this.editorValue === null)
-        created = await this.api.createProductEditor(this.selectedMenuId, event.detail.body);
+        created = await this.api.createProductEditor(event.detail.body);
       else await this.api.updateProductEditor(this.editorValue.id, event.detail.body);
       written = true;
       this.#editor()?.closeSaved(event.detail.value);
@@ -706,47 +694,43 @@ export class ProductsScreen extends LitElement {
       <div class="header">
         <h1>${t("nav.products")}</h1>
       </div>
-      ${
-        this.menus.length
-          ? html`<dashboard-product-browser
-              .api=${this.api}
-              .categoryId=${this.categoryId}
-              @open-category=${(event: CustomEvent<{ categoryId: string | null }>) => {
-                event.stopPropagation();
-                this.categoryId = event.detail.categoryId;
-                this.#url.write({ category: this.categoryId }, true);
-              }}
-              .products=${this.products}
-              .courses=${this.courses}
-              .routing=${this.routing}
-              .routingFailed=${this.routingFailed}
-              .categories=${this.categories}
-              .extraLists=${this.extraLists}
-              .optionLists=${this.optionLists}
-              .canAddProduct=${this.menuSettings !== null && locales.length > 0 && this.units.length > 0}
-              .loaded=${this.productsLoaded}
-              .defaultColor=${this.menuSettings?.defaultColor ?? null}
-              .takeawayVat=${this.menuSettings?.takeawayVat ?? false}
-              @add-product=${(event: CustomEvent<{ categoryId: string | null }>) => {
-                event.stopPropagation();
-                this.#addFrom = event.detail.categoryId;
-                this.#openCreate(event.detail.categoryId);
-              }}
-              @edit-product=${(event: CustomEvent<{ productId: string; field?: string }>) => {
-                event.stopPropagation();
-                void this.#openProduct(event.detail.productId, event.detail.field);
-              }}
-              @view-product=${(event: CustomEvent<{ productId: string }>) => {
-                event.stopPropagation();
-                void this.#openProduct(event.detail.productId);
-              }}
-              @delete-product=${(event: CustomEvent<{ productId: string }>) => {
-                event.stopPropagation();
-                this.#openDelete(event.detail.productId);
-              }}
-            ></dashboard-product-browser>`
-          : html`<p data-test="no-menu">${t("products.empty_prompt")}</p>`
-      }
+      <dashboard-product-browser
+        .api=${this.api}
+        .categoryId=${this.categoryId}
+        @open-category=${(event: CustomEvent<{ categoryId: string | null }>) => {
+          event.stopPropagation();
+          this.categoryId = event.detail.categoryId;
+          this.#url.write({ category: this.categoryId }, true);
+        }}
+        .products=${this.products}
+        .courses=${this.courses}
+        .routing=${this.routing}
+        .routingFailed=${this.routingFailed}
+        .categories=${this.categories}
+        .extraLists=${this.extraLists}
+        .optionLists=${this.optionLists}
+        .canAddProduct=${this.menuSettings !== null && locales.length > 0 && this.units.length > 0}
+        .loaded=${this.productsLoaded}
+        .defaultColor=${this.menuSettings?.defaultColor ?? null}
+        .takeawayVat=${this.menuSettings?.takeawayVat ?? false}
+        @add-product=${(event: CustomEvent<{ categoryId: string | null }>) => {
+          event.stopPropagation();
+          this.#addFrom = event.detail.categoryId;
+          this.#openCreate(event.detail.categoryId);
+        }}
+        @edit-product=${(event: CustomEvent<{ productId: string; field?: string }>) => {
+          event.stopPropagation();
+          void this.#openProduct(event.detail.productId, event.detail.field);
+        }}
+        @view-product=${(event: CustomEvent<{ productId: string }>) => {
+          event.stopPropagation();
+          void this.#openProduct(event.detail.productId);
+        }}
+        @delete-product=${(event: CustomEvent<{ productId: string }>) => {
+          event.stopPropagation();
+          this.#openDelete(event.detail.productId);
+        }}
+      ></dashboard-product-browser>
       ${this.errorKey ? html`<p class="error" role="alert">${errorText}</p>` : nothing}
       <dashboard-product-details
         .open=${this.detailsOpen}

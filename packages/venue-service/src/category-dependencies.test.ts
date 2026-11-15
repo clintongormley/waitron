@@ -44,12 +44,11 @@ it("deleting a category removes its own and its subtree's category cells and kee
         .values([{ name: "Kitchen" }, { name: "Bar" }])
         .returning({ id: kitchenStations.id })
     ).map((row) => row.id);
-    const menu = await createMenu(tx, { name: "Menu" });
+    await createMenu(tx, { name: "Menu" });
     const food = await createCategory(tx, { name: "Food" });
     const drinks = await createCategory(tx, { name: "Drinks", parentId: food.id });
     const cocktails = await createCategory(tx, { name: "Cocktails", parentId: drinks.id });
     const negroni = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: cocktails.id,
       name: "Negroni",
       pricingUnit: "each",
@@ -115,7 +114,7 @@ it("deleting a category removes its own and its subtree's category cells and kee
 it("an open order keeps its copied category label after the category is deleted", async () => {
   await venue();
   await withTransaction(suite.db, async (tx) => {
-    const menu = await createMenu(tx, { name: "Menu" });
+    await createMenu(tx, { name: "Menu" });
     const category = await createCategory(tx, { name: "Bakery" });
     const unit = await createUnit(
       tx,
@@ -129,7 +128,6 @@ it("an open order keeps its copied category label after the category is deleted"
       "en",
     );
     const product = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: category.id,
       name: "Bread",
       unitId: unit.id,

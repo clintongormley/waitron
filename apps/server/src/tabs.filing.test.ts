@@ -14,7 +14,7 @@ import {
   createProduct,
   listAvailableProducts,
 } from "@waitron/menu";
-import { menus, ticketItems, workingOrderLines } from "@waitron/db";
+import { ticketItems, workingOrderLines } from "@waitron/db";
 import type { AvailableProduct } from "@waitron/menu";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -126,7 +126,6 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
     const cat = await createMenu(tx, { name: "Delicatessen" });
     const drinks = await createCategory(tx, { name: "Bebidas" });
     await createProduct(tx, {
-      menuId: cat.id,
       categoryId: drinks.id,
       name: "Café",
       pricingUnit: "each",
@@ -134,7 +133,6 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
       vatClass: "general",
     });
     await createProduct(tx, {
-      menuId: cat.id,
       categoryId: drinks.id,
       name: "Agua",
       pricingUnit: "each",
@@ -492,12 +490,7 @@ describe("a sent line is payable after archival; an archived unsent one is not",
     const { cfg, tables } = await setupVenue();
     const deps = { db: suite.db, backend, clock };
     const { burgerId, beerId, offers, courseId } = await withTransaction(suite.db, async (tx) => {
-      const [carta] = await tx
-        .select({ id: menus.id })
-        .from(menus)
-        .where(eq(menus.name, "Delicatessen"));
       const burger = await createProduct(tx, {
-        menuId: carta!.id,
         categoryId: null,
         name: "Burger staff",
         customerName: { es: "Hamburguesa cliente" },
@@ -507,7 +500,6 @@ describe("a sent line is payable after archival; an archived unsent one is not",
         vatClass: "reduced",
       });
       const beer = await createProduct(tx, {
-        menuId: carta!.id,
         categoryId: null,
         name: "Bottled beer staff",
         customerName: { es: "Cerveza cliente" },

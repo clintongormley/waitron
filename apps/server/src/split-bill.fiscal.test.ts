@@ -132,7 +132,6 @@ async function setupVenue(): Promise<Seeded> {
     const food = await createCategory(tx, { name: "Comida" });
     const drinks = await createCategory(tx, { name: "Bebidas" });
     const ham = await createProduct(tx, {
-      menuId: cat.id,
       categoryId: food.id,
       name: "Jamón cortado",
       pricingUnit: "weight",
@@ -140,7 +139,6 @@ async function setupVenue(): Promise<Seeded> {
       vatClass: "reduced",
     });
     const water = await createProduct(tx, {
-      menuId: cat.id,
       categoryId: drinks.id,
       name: "Agua mineral",
       pricingUnit: "each",

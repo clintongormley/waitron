@@ -5,7 +5,6 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
-  menus,
   kitchenCourses,
   kitchenStations,
   products,
@@ -692,12 +691,10 @@ async function productCourse(productId: string): Promise<string | null> {
   return rows[0]!.course_id;
 }
 async function seedProduct(): Promise<string> {
-  const [cat] = await db.insert(menus).values({ name: "Menu" }).returning({ id: menus.id });
   // `unit_price` counts whole cents: 1.00 EUR.
   const [row] = await db
     .insert(products)
     .values({
-      menuId: cat!.id,
       name: "Routed product",
 
       unitPrice: 100,
@@ -709,12 +706,9 @@ async function seedProduct(): Promise<string> {
 
 /** A variant of `parentId`: a `products` row with a parent, inheriting every routing column. */
 async function seedVariant(parentId: string): Promise<string> {
-  const { rows } = await db.execute<{ menu_id: string }>(
-    sql`select menu_id from products where id = ${parentId}`,
-  );
   const [row] = await db
     .insert(products)
-    .values({ menuId: rows[0]!.menu_id, parentId, name: "Routed variant" })
+    .values({ parentId, name: "Routed variant" })
     .returning({ id: products.id });
   return row!.id;
 }

@@ -30,7 +30,6 @@ const products: Product[] = [
   {
     id: "p1",
     modifiers: [],
-    menuId: "cat-a",
     categoryId: "c1",
     primaryCategoryId: "c1",
     name: "Ham croquettes",

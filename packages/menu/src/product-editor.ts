@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { menus, now, products, type Transaction } from "@waitron/db";
+import { now, products, type Transaction } from "@waitron/db";
 import { AppError, validateDietaryDeclarations } from "@waitron/shared";
 import { readCategory } from "./categories.js";
 import { readContentLanguages } from "./content-languages.js";
@@ -117,7 +117,6 @@ export async function readProductEditor(
 export async function saveProductEditor(
   tx: Transaction,
   productId: string | null,
-  menuId: string,
   input: unknown,
   fallbackLanguage: string,
 ): Promise<ProductEditorValue> {
@@ -164,10 +163,6 @@ export async function saveProductEditor(
     customerName: (body.variants as Record<string, unknown>[])[index]!.customerName as
       Record<string, string> | null | undefined,
   }));
-  if (productId === null) {
-    const [menu] = await tx.select({ id: menus.id }).from(menus).where(eq(menus.id, menuId));
-    if (!menu) throw new AppError("menu.not_found", { menuId });
-  }
   // A variant's own save changes one row, which `updateProduct` checks. A product's save is checked
   // here, whole, before anything is written, and the writes below skip their own row-by-row check.
   if (!isVariant)
@@ -179,7 +174,6 @@ export async function saveProductEditor(
     );
   if (productId === null) {
     const created = await createProductSkippingNameCheck(tx, {
-      menuId,
       categoryId: null,
       name: value.name,
       customerName: value.customerName,

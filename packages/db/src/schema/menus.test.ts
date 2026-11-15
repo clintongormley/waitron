@@ -10,7 +10,6 @@ import { isRefusal } from "../unique-violation.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { menus } from "./menus.js";
 import { UNIQUE_VIOLATION } from "../sql-state.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -67,9 +66,8 @@ describe("menu — menu, taxonomy and priced items", () => {
   });
 
   it("rejects a bad vat_class on its own CHECK", async () => {
-    const [menu] = await db.insert(menus).values({ name: "Deli" }).returning({ id: menus.id });
     const insertProduct = (vatClass: string): ReturnType<typeof sql> =>
-      sql`insert into products (id, menu_id, name, unit_price, vat_class, created_at, updated_at) values (${randomUUID()}, ${menu.id}, 'Fixture', 100, ${vatClass}, ${AT}, ${AT})`;
+      sql`insert into products (id, name, unit_price, vat_class, created_at, updated_at) values (${randomUUID()}, 'Fixture', 100, ${vatClass}, ${AT}, ${AT})`;
     const vatError = await captureError(() => db.execute(insertProduct("bogus")));
     expect(isRefusal(vatError, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(vatError)).toBe("CHECK constraint failed: products_vat_class_ck");
@@ -77,9 +75,8 @@ describe("menu — menu, taxonomy and priced items", () => {
   });
 
   it("rejects a bad takeaway_vat_class on its own CHECK, and accepts a valid or blank one", async () => {
-    const [menu] = await db.insert(menus).values({ name: "Deli" }).returning({ id: menus.id });
     const insertProduct = (takeawayVatClass: string | null): ReturnType<typeof sql> =>
-      sql`insert into products (id, menu_id, name, unit_price, vat_class, takeaway_vat_class, created_at, updated_at) values (${randomUUID()}, ${menu.id}, 'Fixture', 100, 'reduced', ${takeawayVatClass}, ${AT}, ${AT})`;
+      sql`insert into products (id, name, unit_price, vat_class, takeaway_vat_class, created_at, updated_at) values (${randomUUID()}, 'Fixture', 100, 'reduced', ${takeawayVatClass}, ${AT}, ${AT})`;
 
     const error = await captureError(() => db.execute(insertProduct("nope")));
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);

@@ -172,7 +172,7 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
  *  against. */
 async function setupVenue(): Promise<{
   cfg: TradingContext;
-  each: AvailableProduct & { menuItemId: string };
+  each: AvailableProduct & { menuItemId: string; menuId: string };
   operatorId: string;
   supervisorId: string;
 }> {
@@ -213,7 +213,6 @@ async function setupVenue(): Promise<{
     const cat = await createMenu(tx, { name: "Delicatessen" });
     const drinksCategory = await createCategory(tx, { name: "Bebidas" });
     const product = await createProduct(tx, {
-      menuId: cat.id,
       categoryId: drinksCategory.id,
       name: "Agua mineral",
       pricingUnit: "each",
@@ -256,7 +255,11 @@ async function setupVenue(): Promise<{
         })
         .onConflictDoNothing({ target: departmentReceipts.departmentId });
     return {
-      each: { ...available.find((p) => p.pricingUnit === "each")!, menuItemId: menuItem.id },
+      each: {
+        ...available.find((p) => p.pricingUnit === "each")!,
+        menuItemId: menuItem.id,
+        menuId: menuItem.menuId,
+      },
       operatorId: staff!.id,
       supervisorId: supervisor!.id,
     };

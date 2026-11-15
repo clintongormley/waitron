@@ -411,7 +411,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 34,
+  version: 35,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -883,7 +883,6 @@ describe("configuration transfer database path", () => {
       await tx.insert(products).values({
         id: "22222222-aaaa-aaaa-aaaa-222222222222",
         unitId: sourceUnit!.id,
-        menuId: "11111111-aaaa-aaaa-aaaa-111111111111",
         name: "Coffee",
 
         unitPrice: 150,
@@ -1285,9 +1284,7 @@ describe("configuration transfer database path", () => {
     });
     await withTransaction(suite.db, async (tx) => {
       const category = await createCategory(tx, { name: "Sweets", color: "#b12525" });
-      const menu = await createMenu(tx, { name: "Colour menu" });
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: category.id,
         name: "Flan",
         pricingUnit: "each",
@@ -1328,9 +1325,8 @@ describe("configuration transfer database path", () => {
     });
     await withTransaction(suite.db, async (tx) => {
       const category = await createCategory(tx, { name: "Cakes", color: "#b12525" });
-      const menu = await createMenu(tx, { name: "Painted menu", color: "#aabbcc" });
+      await createMenu(tx, { name: "Painted menu", color: "#aabbcc" });
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: category.id,
         name: "Cake",
         pricingUnit: "each",
@@ -1488,7 +1484,6 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
   const original = await withTransaction(suite.db, async (tx) => {
     const menu = await createMenu(tx, { name: "Modifier menu" });
     const product = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Coffee",
       pricingUnit: "each",
@@ -1497,7 +1492,6 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
     });
     // The extra is a product in its own right, and not sold on its own.
     const shot = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Coffee extra",
       pricingUnit: "each",
@@ -1566,7 +1560,6 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
 
     // A menu that sets no price of its own: blank has to arrive blank, not as zero.
     const tea = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Tea",
       pricingUnit: "each",
@@ -1655,7 +1648,6 @@ it("transfers sections and their members, remapping ids, with a section's image"
     const { image } = await uploadImage(tx, { image: photo, names: { es: "Bebidas" } }, {});
     const menu = await createMenu(tx, { name: "Sections menu" });
     const water = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Still water",
       pricingUnit: "each",
@@ -1867,7 +1859,6 @@ it.each([3, 2])(
       const { image } = await uploadImage(tx, { image: photo, names: { es: "Limonada" } }, {});
       const menu = await createMenu(tx, { name: "Published menu" });
       const lemonade = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: "Lemonade",
         pricingUnit: "each",
@@ -3747,7 +3738,6 @@ it("round-trips missing home slots alongside live tiles with fresh ids and uncha
     const root = (await readMenuStructure(tx, menu.id)).rootSectionId;
     const beer = await createSectionIn(tx, root, { internalName: "Beer" });
     const water = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Water",
       pricingUnit: "each",
@@ -3791,7 +3781,7 @@ it("round-trips missing home slots alongside live tiles with fresh ids and uncha
     const [water] = await tx
       .select({ id: products.id })
       .from(products)
-      .where(and(eq(products.menuId, menu!.id), eq(products.name, "Water")));
+      .where(eq(products.name, "Water"));
     expect(preview.warnings).toEqual([
       { kind: "shortcut_missing", name: "Missing slots › Beer" },
       {
@@ -3834,10 +3824,9 @@ it("gives each imported product the folded key of its own name, whatever the bun
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const imported = await targetSuite.db
-    .select({ name: products.name, nameKey: products.nameKey, menuId: products.menuId })
+    .select({ name: products.name, nameKey: products.nameKey })
     .from(products)
-    .innerJoin(menus, eq(menus.id, products.menuId))
-    .where(eq(menus.name, "Keys"));
+    .where(inArray(products.name, [" Café Solo ", idShaped]));
   expect(imported.map(({ name, nameKey }) => ({ name, nameKey }))).toEqual(
     expect.arrayContaining([
       { name: " Café Solo ", nameKey: "café solo" },
@@ -3845,12 +3834,10 @@ it("gives each imported product the folded key of its own name, whatever the bun
     ]),
   );
   expect(imported).toHaveLength(2);
-  const menuId = imported[0]!.menuId;
   for (const name of ["café solo", idShaped]) {
     await expect(
       withTransaction(targetSuite.db, (tx) =>
         createProduct(tx, {
-          menuId,
           categoryId: null,
           name,
           pricingUnit: "each",
@@ -4032,7 +4019,6 @@ it("keeps a name that equals another row's id, while the ids that point at rows 
     const menu = await createMenu(tx, { name: "Ids" });
     const category = await createCategory(tx, { name: menu.id });
     const product = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: category.id,
       name: category.id,
       pricingUnit: "each",
@@ -4087,7 +4073,7 @@ it("keeps a name that equals another row's id, while the ids that point at rows 
     .from(categories)
     .where(eq(categories.name, sourceIds.menu));
   const [product] = await targetSuite.db
-    .select({ id: products.id, menuId: products.menuId, categoryId: products.categoryId })
+    .select({ id: products.id, categoryId: products.categoryId })
     .from(products)
     .where(eq(products.name, sourceIds.category));
   const [variant] = await targetSuite.db
@@ -4098,7 +4084,6 @@ it("keeps a name that equals another row's id, while the ids that point at rows 
   expect(category).toBeDefined();
   expect(product).toEqual({
     id: expect.any(String),
-    menuId: menu!.id,
     categoryId: category!.id,
   });
   expect(variant).toEqual({ parentId: product!.id });
@@ -4130,10 +4115,8 @@ it("refuses a bundle holding duplicate names whole, at staging and at import", a
     modules: ALL_MODULES,
   });
   await withTransaction(suite.db, async (tx) => {
-    const menu = await createMenu(tx, { name: "Duplicates" });
     const category = await createCategory(tx, { name: "Drinks" });
     await createProduct(tx, {
-      menuId: menu.id,
       categoryId: category.id,
       name: "Water",
       pricingUnit: "each",
@@ -4201,7 +4184,6 @@ it("refuses an Inactive product in a menu list and a menu price for an Inactive 
   const ids = await withTransaction(suite.db, async (tx) => {
     const menu = await createMenu(tx, { name: "Inactive rows" });
     const gin = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Gin",
       pricingUnit: "each",
@@ -4280,9 +4262,7 @@ it("counts an exported product with no Active flag as Active, as the column stor
     modules: ALL_MODULES,
   });
   await withTransaction(suite.db, async (tx) => {
-    const menu = await createMenu(tx, { name: "Flagless" });
     await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Water",
       pricingUnit: "each",
@@ -5495,7 +5475,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(34);
+  expect(exported.version).toBe(35);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)
@@ -5643,9 +5623,7 @@ it("exports and imports all seven cell classes into another venue, remapping eve
       .values([{ name: "Routes bar" }, { name: "Routes griddle" }])
       .returning();
     const category = await createCategory(tx, { name: "Routes drinks" });
-    const menu = await createMenu(tx, { name: "Routes menu" });
     const product = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: category.id,
       name: "Routes mojito",
       pricingUnit: "each",
@@ -5752,9 +5730,7 @@ it("carries a cell's period choices with their cell, including a period whose me
       .values([{ name: "Periods bar" }, { name: "Periods griddle" }])
       .returning();
     const category = await createCategory(tx, { name: "Periods drinks" });
-    const menu = await createMenu(tx, { name: "Periods menu" });
     const product = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: category.id,
       name: "Periods mojito",
       pricingUnit: "each",
@@ -7019,9 +6995,7 @@ it("round-trips deleted kitchen configuration and preserves archived products an
     await tx.delete(kitchenCourses);
     const course = await createCourse(tx, { name: "Retired dessert", displayOrder: 2 });
     const station = await createStation(tx, { name: "Retired pastry" });
-    const menu = await createMenu(tx, { name: "Archive menu" });
     const product = await createProduct(tx, {
-      menuId: menu.id,
       name: "Archived flan",
       categoryId: null,
       pricingUnit: "each",

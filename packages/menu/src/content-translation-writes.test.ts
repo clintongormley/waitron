@@ -52,7 +52,6 @@ async function fixture(tx: Transaction) {
   await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "ca", "en"] });
   const menu = await createMenu(tx, { name: "Lunch" });
   const product = await createProduct(tx, {
-    menuId: menu.id,
     categoryId: null,
     unitId: null,
     name: "STAFF Bread",
@@ -106,7 +105,6 @@ async function fixture(tx: Transaction) {
     "es",
   );
   const extraProduct = await createProduct(tx, {
-    menuId: menu.id,
     categoryId: null,
     unitId: null,
     name: "STAFF Butter",
@@ -175,7 +173,7 @@ async function existingWrite(
 ) {
   if (kind === "product" || kind === "variant") {
     const value = await readProductEditor(tx, ids[kind]);
-    return saveProductEditor(tx, ids[kind], ids.menuId, { ...value, customerName: names }, "en");
+    return saveProductEditor(tx, ids[kind], { ...value, customerName: names }, "en");
   }
   if (kind === "option_list" || kind === "option_label") {
     const { id, ...value } = await getOptionList(tx, ids.option_list);

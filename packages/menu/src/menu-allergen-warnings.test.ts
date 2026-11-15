@@ -92,7 +92,6 @@ describe("unreviewed offered allergens", () => {
       await app(async (tx) => {
         await updateProduct(tx, f.soup, { allergens: null, ordering });
         await createProduct(tx, {
-          menuId: f.lunch,
           categoryId: null,
           name: "Unplaced",
           pricingUnit: "each",

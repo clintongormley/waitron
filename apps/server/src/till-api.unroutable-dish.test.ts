@@ -66,7 +66,6 @@ const noopLog: Logger = () => {};
 let v: PartyVenue;
 let app: Hono;
 let session: string;
-let menuId: string;
 
 async function enrolTill(): Promise<string> {
   const [profile] = await seedDeviceProfiles(suite.db, {
@@ -114,13 +113,6 @@ beforeEach(async () => {
   });
   expect(login.status).toBe(200);
   session = `${login.headers.get("set-cookie")!.split(";")[0]!}; ${deviceCookie}`;
-  const [burger] = await inTx(v, (tx) =>
-    tx
-      .select({ menuId: products.menuId })
-      .from(products)
-      .where(eq(products.id, v.productId("Burger"))),
-  );
-  menuId = burger!.menuId;
 });
 
 async function station(name: string): Promise<string> {
@@ -152,7 +144,6 @@ async function dish(name: string, categoryId: string | null = null): Promise<Dis
   return inTx(v, async (tx) => {
     const staffName = `${name} ${randomUUID().slice(0, 8)}`;
     const product = await createProduct(tx, {
-      menuId,
       categoryId,
       name: staffName,
       customerName: { [v.cfg.locale]: `Customer ${name}` },

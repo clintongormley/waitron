@@ -27,7 +27,6 @@ async function fixture(tx: Transaction) {
     names: { es: "CLIENT ES Menu", en: "CLIENT Menu", ca: "CLIENT Carta" },
   });
   const product = await createProduct(tx, {
-    menuId: menu.id,
     categoryId: null,
     name: "STAFF Bread",
     customerName: { es: "CLIENT ES bread", en: "CLIENT Bread", ca: "UNPROJECTED Bread" },

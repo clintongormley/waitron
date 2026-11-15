@@ -6,7 +6,7 @@ import { Hono } from "hono";
 import { mountSetup } from "./setup-api.js";
 import type { WaitronModule } from "@waitron/module";
 import { sql } from "drizzle-orm";
-import { createMenu, createCategory, createProduct } from "@waitron/menu";
+import { createCategory, createProduct } from "@waitron/menu";
 import { loadKeyRing } from "@waitron/credentials";
 import { kitchenStations, products, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -44,7 +44,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 34,
+  version: 35,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -180,6 +180,7 @@ describe("staged configuration import", () => {
     ["pre-menu-rename export", { version: 31 }],
     ["pre-product-unit-column export", { version: 32 }],
     ["pre-option-default-flag export", { version: 33 }],
+    ["pre-menu-free-product export", { version: 34 }],
     ["future version", { version: bundle.version + 1 }],
     ["format-9 export", { version: 9, venue: bundle.venue }],
   ])("refuses %s through setup before replacing staged files", async (_label, change) => {
@@ -658,11 +659,7 @@ describe("routing cells in a staged import", () => {
         });
         const [station] = await tx.insert(kitchenStations).values({ name: "Bar" }).returning();
         const category = await createCategory(tx, { name: "Drinks" });
-        const menu = await createMenu(tx, {
-          name: `Configuration import menu`,
-        });
         const product = await createProduct(tx, {
-          menuId: menu.id,
           categoryId: category.id,
           name: "Mojito",
           pricingUnit: "each",
@@ -671,7 +668,7 @@ describe("routing cells in a staged import", () => {
         });
         const [large] = await tx
           .insert(products)
-          .values({ menuId: menu.id, parentId: product.id, name: "Large", categoryId: null })
+          .values({ parentId: product.id, name: "Large", categoryId: null })
           .returning();
         await setRoutingCell(
           tx,

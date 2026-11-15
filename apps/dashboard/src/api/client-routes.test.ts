@@ -319,12 +319,12 @@ describe("DashboardApi routes", () => {
     const api = new DashboardApi("", fetchImpl);
 
     await expect(api.getProductEditor("prod-9")).resolves.toEqual(stored);
-    await expect(api.createProductEditor("cat-1", input)).resolves.toEqual(stored);
+    await expect(api.createProductEditor(input)).resolves.toEqual(stored);
     await expect(api.updateProductEditor("prod-9", input)).resolves.toEqual(stored);
 
     expect(callsOf(fetchImpl)).toEqual([
       ["/management-api/products/prod-9/editor", "GET", undefined],
-      ["/management-api/menus/cat-1/product-editor", "POST", input],
+      ["/management-api/products/editor", "POST", input],
       ["/management-api/products/prod-9/editor", "PUT", input],
     ]);
   });

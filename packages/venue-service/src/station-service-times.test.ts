@@ -60,7 +60,6 @@ async function fixture(db: Transaction) {
   const category = (await createCategory(db, { name: randomUUID() })).id;
   const product = (
     await createProduct(db, {
-      menuId: menu,
       name: randomUUID(),
       categoryId: category,
       unitPrice: "3",
@@ -384,7 +383,7 @@ it("reads products from staff menus and routes a variant by its parent's categor
     const empty = (await createMenu(db, { name: randomUUID() })).id;
     const [variant] = await db
       .insert(products)
-      .values({ menuId: f.menu, parentId: f.product, name: randomUUID(), categoryId: null })
+      .values({ parentId: f.product, name: randomUUID(), categoryId: null })
       .returning();
     const variantMenu = (await createMenu(db, { name: randomUUID() })).id;
     await addProductToMenu(db, { menuId: variantMenu, productId: f.product });

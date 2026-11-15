@@ -16,7 +16,6 @@ import type { DeviceId, NodeId, SaleId, SaleLineClassification, SeriesId } from 
 import {
   billPaymentRefunds,
   billPayments,
-  menus,
   diningTables,
   invoiceSeries,
   parties,
@@ -417,11 +416,9 @@ export async function seedFiredLine(
   // One clock reading for this line's three stamps, so they agree.
   const firedAtMs = Date.now();
   const firedAt = new Date(firedAtMs).toISOString();
-  const [menu] = await db.insert(menus).values({ name: "Test menu" }).returning({ id: menus.id });
   const [product] = await db
     .insert(products)
     .values({
-      menuId: menu!.id,
       name: "Item",
 
       unitPrice: stringToCents("1.00"),

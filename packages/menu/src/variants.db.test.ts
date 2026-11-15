@@ -71,7 +71,6 @@ async function fixture() {
       "en",
     );
     const parent = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Wine by the glass",
       customerName: { en: "House wine" },
@@ -82,7 +81,6 @@ async function fixture() {
       vatClass: "reduced",
     });
     const other = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Cider",
       unitId: glass.id,
@@ -107,7 +105,7 @@ async function fixture() {
 /** The variant rows of `parentId` as the table stores them, flags as the 0/1 this engine keeps. */
 async function storedVariants(parentId: string) {
   const { rows } = await suite.db.execute<Record<string, unknown>>(sql`
-    select id, parent_id, menu_id, variant_order, active, available, ordering, unit_price,
+    select id, parent_id, variant_order, active, available, ordering, unit_price,
       vat_class, unit_id, dietary_declarations, diet, description, category_id,
       course_id, image, allergens, manual_allergens,
       diet_override
@@ -142,7 +140,6 @@ describe("setProductVariants stores each variant as a product under its parent",
     ]);
     const common = {
       parent_id: f.parentId,
-      menu_id: f.menuId,
       active: 1,
       available: 1,
       ordering: "public",
@@ -427,7 +424,7 @@ describe("the product editor", () => {
       { id: w175!.id, active: false },
     ]);
 
-    await app((tx) => saveProductEditor(tx, f.parentId, f.menuId, value, "en"));
+    await app((tx) => saveProductEditor(tx, f.parentId, value, "en"));
     expect((await storedVariants(f.parentId)).map(({ id, active }) => ({ id, active }))).toEqual([
       { id: w125!.id, active: 1 },
       { id: w175!.id, active: 0 },
@@ -459,7 +456,6 @@ describe("a variant's id is not a product's id to the product-by-id functions bu
         saveProductEditor(
           tx,
           f.variantId,
-          f.menuId,
           { ...parent, unitId: null, vatClass: "general", variants: [] },
           "en",
         ),
@@ -467,13 +463,11 @@ describe("a variant's id is not a product's id to the product-by-id functions bu
     ).rejects.toMatchObject({ code: "product.invalid", params: { field: "parentId" } });
     expect((await storedVariants(f.parentId))[0]).toMatchObject({ vat_class: null });
     await expect(
-      app((tx) =>
-        saveProductEditor(tx, f.variantId, f.menuId, { ...value, vatClass: "general" }, "en"),
-      ),
+      app((tx) => saveProductEditor(tx, f.variantId, { ...value, vatClass: "general" }, "en")),
     ).resolves.toMatchObject({ id: f.variantId, vatClass: "general" });
     expect((await storedVariants(f.parentId))[0]).toMatchObject({ vat_class: "general" });
     await expect(
-      app((tx) => saveProductEditor(tx, f.parentId, f.menuId, parent, "en")),
+      app((tx) => saveProductEditor(tx, f.parentId, parent, "en")),
     ).resolves.toMatchObject({ id: f.parentId });
   });
 

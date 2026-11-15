@@ -64,14 +64,12 @@ export async function plantStoredSiblingCategory(
  * that already share a staff name. */
 export async function plantStoredProduct(
   tx: Transaction,
-  menuId: string,
   name: string,
   parentId: string | null = null,
 ): Promise<string> {
   const [row] = await tx
     .insert(products)
     .values({
-      menuId,
       ...nameColumns(name),
       parentId,
       ...(parentId === null
@@ -166,7 +164,6 @@ export async function seedMenuFixture(tx: Transaction): Promise<SeededMenu> {
     )
   ).id;
   const slicedHam = await createProduct(tx, {
-    menuId: menu.id,
     categoryId: food.id,
     name: "sliced ham",
     unitId: kgUnitId,
@@ -174,7 +171,6 @@ export async function seedMenuFixture(tx: Transaction): Promise<SeededMenu> {
     vatClass: "reduced",
   });
   const water = await createProduct(tx, {
-    menuId: menu.id,
     categoryId: drinks.id,
     name: "water",
     unitId: eachUnitId,

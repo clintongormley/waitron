@@ -3530,8 +3530,8 @@ export class DashboardApi {
     );
   }
 
-  listProducts(menuId: string): Promise<Product[]> {
-    return this.#request<Product[]>(`/management-api/menus/${menuId}/products`, "GET");
+  listProducts(): Promise<Product[]> {
+    return this.#request<Product[]>("/management-api/products", "GET");
   }
 
   getFolderRouting(): Promise<RoutingView> {
@@ -3546,12 +3546,8 @@ export class DashboardApi {
     return this.#request<ExtraOfferUsage[]>(`/management-api/products/${id}/extra-usage`, "GET");
   }
 
-  createProductEditor(menuId: string, input: ProductEditorSaveBody): Promise<ProductEditorValue> {
-    return this.#request<ProductEditorValue>(
-      `/management-api/menus/${menuId}/product-editor`,
-      "POST",
-      input,
-    );
+  createProductEditor(input: ProductEditorSaveBody): Promise<ProductEditorValue> {
+    return this.#request<ProductEditorValue>("/management-api/products/editor", "POST", input);
   }
 
   updateProductEditor(id: string, input: ProductEditorSaveBody): Promise<ProductEditorValue> {

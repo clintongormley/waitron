@@ -137,7 +137,6 @@ async function setupVenue(): Promise<{
     const cat = await createMenu(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: "Bebidas" });
     const created = await createProduct(tx, {
-      menuId: cat.id,
       categoryId: bebidas.id,
       name: "Agua mineral",
       pricingUnit: "each",

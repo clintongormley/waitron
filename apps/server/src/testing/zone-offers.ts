@@ -165,7 +165,6 @@ async function topLevelProducts(tx: Transaction): Promise<string[]> {
   const rows = await tx
     .select({ id: products.id })
     .from(products)
-    .innerJoin(menus, and(eq(menus.id, products.menuId), eq(menus.active, true)))
     .where(isNull(products.parentId))
     .orderBy(products.id);
   return rows.map((row) => row.id);

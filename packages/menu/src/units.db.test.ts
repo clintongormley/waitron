@@ -1,6 +1,6 @@
 import { eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { menus, CORE_MIGRATIONS, products, units, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, products, units, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import {
@@ -30,12 +30,10 @@ const app = <T>(action: (tx: Parameters<typeof getUnit>[0]) => Promise<T>) =>
  * `id` is supplied only where a test needs the rows' key order to be predictable.
  */
 async function product(id: string | null = null): Promise<string> {
-  const [menu] = await suite.db.insert(menus).values({ name: "Menu" }).returning({ id: menus.id });
   const [row] = await suite.db
     .insert(products)
     .values({
       ...(id === null ? {} : { id }),
-      menuId: menu!.id,
       name: "Soup",
       unitPrice: 1,
       vatClass: "general",
@@ -319,13 +317,9 @@ it("reassigning to null returns the products to each-priced and leaves products 
 
 /** A variant of `parent`, with no unit of its own. */
 async function variantOf(parent: string): Promise<string> {
-  const [parentRow] = await suite.db
-    .select({ menuId: products.menuId })
-    .from(products)
-    .where(inArray(products.id, [parent]));
   const [variantRow] = await suite.db
     .insert(products)
-    .values({ menuId: parentRow!.menuId, parentId: parent, name: "Small" })
+    .values({ parentId: parent, name: "Small" })
     .returning({ id: products.id });
   return variantRow!.id;
 }

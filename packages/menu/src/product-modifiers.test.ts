@@ -15,7 +15,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
-import { createMenu, createProduct } from "./operations.js";
+import { createProduct } from "./operations.js";
 import { createExtraList } from "./extras.js";
 import { createOptionList } from "./options.js";
 import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
@@ -44,11 +44,9 @@ const options: { doneness: string; dressing: string } = { doneness: "", dressing
 beforeEach(async () => {
   await seedTaxpayer(fx.db);
   await run(async (tx) => {
-    const menu = await createMenu(tx, { name: "Deli" });
     const product = async (name: string, unitPrice: string) =>
       (
         await createProduct(tx, {
-          menuId: menu.id,
           categoryId: null,
           name,
           unitId: null,

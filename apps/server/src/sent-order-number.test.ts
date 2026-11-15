@@ -3,7 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setRoutingCell } from "@waitron/venue-service";
-import { parties, products, workingOrderLines } from "@waitron/db";
+import { parties, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { cutParts, mergeBills, splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import { readFormerNumbers } from "./former-numbers.js";
@@ -40,12 +40,8 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     v = await setupPartyVenue(db);
-    const [drinkProduct] = await db
-      .select({ menuId: products.menuId })
-      .from(products)
-      .where(eq(products.id, v.productId("Caña")));
     const { listId, productIds } = await inTx(v, (tx) =>
-      addExtras(tx, v.cfg, drinkProduct!.menuId, v.productId("Caña"), [
+      addExtras(tx, v.cfg, v.productId("Caña"), [
         { name: "Cheese", customerName: "Queso extra", kitchenName: "QUESO", maxQuantity: 2 },
       ]),
     );

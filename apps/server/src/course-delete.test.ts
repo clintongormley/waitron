@@ -29,15 +29,11 @@ describe("permanent course deletion", () => {
     const initialCourses = await inTx(v, (tx) => listCourses(tx));
     const { id } = await inTx(v, (tx) => createCourse(tx, { name: "Desserts" }));
     const parentId = v.productId("Flan");
-    const [parent] = await inTx(v, (tx) =>
-      tx.select().from(products).where(eq(products.id, parentId)),
-    );
     const variantId = randomUUID();
     await inTx(v, async (tx) => {
       await tx.update(products).set({ courseId: id }).where(eq(products.id, parentId));
       await tx.insert(products).values({
         id: variantId,
-        menuId: parent!.menuId,
         parentId,
         name: "Small",
         courseId: id,

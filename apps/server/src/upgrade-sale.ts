@@ -81,7 +81,6 @@ async function prepareSale(config: ServerConfig) {
       const venue = await readVenue(tx);
       const menu = await createMenu(tx, { name });
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         unitId: null,
         name: `${name} item`,

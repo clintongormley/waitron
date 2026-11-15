@@ -441,9 +441,7 @@ describe("readDishFacts", () => {
     await seedTaxpayer(fx.db);
     await seedLegacySellingUnits(fx.db);
     ({ productId, variantId } = await app(async (tx) => {
-      const menu = await createMenu(tx, { name: "Menu" });
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: "Wine",
         pricingUnit: "each",

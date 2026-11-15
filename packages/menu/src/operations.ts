@@ -113,7 +113,6 @@ export interface Menu {
 }
 
 export interface CreateProductInput {
-  menuId: string;
   categoryId: string | null;
   name: string;
   /** Customer-facing translated name; omitted or null falls back to `name`. */
@@ -190,7 +189,6 @@ const MENU_COLUMNS = {
  * has `.leftJoin(parentProducts, parentJoin)` (`variant-fallback.ts`). */
 const PRODUCT_BASE_COLUMNS = {
   id: products.id,
-  menuId: products.menuId,
   categoryId: effective.categoryId,
   color: effective.color,
   name: products.name,
@@ -226,7 +224,6 @@ const PRODUCT_COLUMNS = {
 
 interface RawProduct {
   id: string;
-  menuId: string;
   categoryId: string | null;
   color: string | null;
   name: string;
@@ -917,26 +914,21 @@ async function republishOverlays(
 }
 
 export async function createProduct(tx: Transaction, input: CreateProductInput): Promise<Product> {
-  return insertProduct(tx, input, { checkNames: true, checkMenu: true });
+  return insertProduct(tx, input, true);
 }
 
-/**
- * {@link createProduct} without the unique-name check or the menu check, for
- * `saveProductEditor`, which checks every name its whole save leaves before writing any of it, and
- * has already read its path's menu in the same transaction. Left out of the package's exports
- * (`index.ts`).
- */
+/** Skips the row's name check because the editor checks the whole family before writing. */
 export async function createProductSkippingNameCheck(
   tx: Transaction,
   input: CreateProductInput,
 ): Promise<Product> {
-  return insertProduct(tx, input, { checkNames: false, checkMenu: false });
+  return insertProduct(tx, input, false);
 }
 
 async function insertProduct(
   tx: Transaction,
   input: CreateProductInput,
-  { checkNames, checkMenu }: { checkNames: boolean; checkMenu: boolean },
+  checkNames: boolean,
 ): Promise<Product> {
   if (input.unitId === undefined && input.pricingUnit === undefined) {
     throw new AppError("product.invalid", { field: "unitId" });
@@ -961,7 +953,6 @@ async function insertProduct(
   const allergens = input.allergens === undefined ? null : validateAllergens(input.allergens);
   const dietOverride = validateDietOverride(input.dietOverride ?? null);
   const values = {
-    menuId: input.menuId,
     categoryId: input.categoryId,
     ...nameColumns(input.name),
     customerName: input.customerName ?? null,
@@ -981,7 +972,6 @@ async function insertProduct(
     diet: overlayDietProfile(UNDECLARED_DIET, dietOverride),
     image: input.image ?? null,
   };
-  if (checkMenu) await assertMenuExists(tx, input.menuId);
   if (input.categoryId !== null) await readCategory(tx, input.categoryId);
   if (checkNames)
     await assertFamilyNamesFree(tx, null, { name: input.name, active: values.active }, []);
@@ -996,13 +986,13 @@ async function insertProduct(
   return toProduct(created!);
 }
 
-export async function listProducts(tx: Transaction, menuId?: string): Promise<Product[]> {
+export async function listProducts(tx: Transaction): Promise<Product[]> {
   const rows = await tx
     .select(PRODUCT_COLUMNS)
     .from(products)
     .leftJoin(parentProducts, parentJoin)
     .leftJoin(units, unitOwnerJoin)
-    .where(and(isTopLevelProduct, menuId === undefined ? undefined : eq(products.menuId, menuId)))
+    .where(isTopLevelProduct)
     .orderBy(products.createdAt, products.id);
   if (rows.length === 0) return [];
   const modifiers = await readProductModifiers(
@@ -1257,18 +1247,14 @@ export async function listAvailableProducts(
       dietOverride: effective.dietOverride,
       dietaryDeclarations: effective.dietaryDeclarations,
       courseId: effective.courseId,
-      menuId: menus.id,
-      menuName: menus.name,
       unitMeasure: units.measure,
     })
     .from(products)
-    .innerJoin(menus, eq(menus.id, products.menuId))
     .leftJoin(parentProducts, parentJoin)
     .leftJoin(units, unitOwnerJoin)
     .leftJoin(categories, eq(categories.id, effective.categoryId))
     .where(
       and(
-        eq(menus.active, true),
         eq(products.active, true),
         eq(products.available, true),
         // A variant is sold only through its parent's menu offer, never as a product in its own
@@ -1276,7 +1262,7 @@ export async function listAvailableProducts(
         isTopLevelProduct,
       ),
     )
-    .orderBy(menus.name, products.createdAt, products.id);
+    .orderBy(products.createdAt, products.id);
 
   // No menu offer is in this read at all, so each extras list is the one the product itself
   // carries, priced without an offer's overrides (the chain minus the menu step).
@@ -1309,8 +1295,6 @@ export async function listAvailableProducts(
     dietOverride: row.dietOverride as DietOverride | null,
     dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
     courseId: row.courseId,
-    menuId: row.menuId,
-    menuName: row.menuName,
     offeredModifiers: offeredByProduct.get(row.id) ?? [],
   }));
   return { products: available, invoiceLocales };

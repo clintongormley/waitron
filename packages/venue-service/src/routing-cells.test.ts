@@ -78,11 +78,10 @@ async function fixture(tx: Transaction) {
   const v = await venue(tx);
   const drinks = (await createCategory(tx, { name: "Drinks" })).id;
   const food = (await createCategory(tx, { name: "Food" })).id;
-  const menu = await createMenu(tx, { name: "Menu" });
+  await createMenu(tx, { name: "Menu" });
   const product = async (name: string) =>
     (
       await createProduct(tx, {
-        menuId: menu.id,
         name,
         categoryId: drinks,
         pricingUnit: "each",
@@ -94,7 +93,7 @@ async function fixture(tx: Transaction) {
   const beer = await product("Beer");
   const [variant] = await tx
     .insert(products)
-    .values({ menuId: menu.id, parentId: mojito, name: "Large", categoryId: null })
+    .values({ parentId: mojito, name: "Large", categoryId: null })
     .returning();
   return { ...v, drinks, food, mojito, beer, variant: variant!.id };
 }

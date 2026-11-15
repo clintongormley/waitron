@@ -21,7 +21,6 @@ const products: Product[] = [
   {
     id: "p1",
     modifiers: [],
-    menuId: "c1",
     categoryId: "cat-1",
     primaryCategoryId: "cat-1",
     name: "Ham croquettes",
@@ -56,7 +55,6 @@ const products: Product[] = [
   {
     id: "p2",
     modifiers: [],
-    menuId: "c1",
     categoryId: null,
     primaryCategoryId: null,
     name: "Bottled mineral water",
@@ -91,7 +89,6 @@ const products: Product[] = [
   {
     id: "p3",
     modifiers: [],
-    menuId: "c1",
     categoryId: "cat-2",
     primaryCategoryId: "cat-2",
     name: "Traditional cheesecake",
@@ -132,7 +129,6 @@ const products: Product[] = [
   {
     id: "p4",
     modifiers: [],
-    menuId: "c1",
     categoryId: "cat-1",
     primaryCategoryId: "cat-1",
     name: "Wine by the glass",

@@ -21,7 +21,7 @@ import {
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { createMenu, createCategory, createProduct } from "@waitron/menu";
+import { createCategory, createProduct } from "@waitron/menu";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
@@ -141,12 +141,8 @@ async function venue(db: Database): Promise<Venue> {
     freeItemId,
     tableFreeItemId,
   } = await withTransaction(db, async (tx) => {
-    const menu = await createMenu(tx, {
-      name: `Receipt guests routes menu`,
-    });
     const category = await createCategory(tx, { name: "Tapas" });
     const product = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: category.id,
       name: "Pan",
       pricingUnit: "each",
@@ -154,7 +150,6 @@ async function venue(db: Database): Promise<Venue> {
       vatClass: "general",
     });
     const free = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: category.id,
       name: "Agua del grifo",
       pricingUnit: "each",

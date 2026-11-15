@@ -4,7 +4,7 @@ import { products, withTransaction, type Transaction } from "@waitron/db";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
 import { BATCH_SIZE } from "./batches.js";
-import { createMenu, createProduct, updateProduct } from "./operations.js";
+import { createProduct, updateProduct } from "./operations.js";
 import { saveProductEditor, type ProductEditorInput } from "./product-editor.js";
 import { storeProductNameKeys } from "./product-names.js";
 import { setProductVariants, type VariantWrite } from "./variants.js";
@@ -13,17 +13,14 @@ import { setProductVariants, type VariantWrite } from "./variants.js";
 const suite = useMenuDb();
 const app = <T>(action: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, action);
 
-let menu: string;
 beforeEach(async () => {
   await seedTaxpayer(suite.db);
   await seedLegacySellingUnits(suite.db);
-  menu = (await app((tx) => createMenu(tx, { name: "Lunch" }))).id;
 });
 
 const make = (name: string) =>
   app((tx) =>
     createProduct(tx, {
-      menuId: menu,
       categoryId: null,
       name,
       pricingUnit: "each",
@@ -97,7 +94,7 @@ describe("the stored name key", () => {
       dietaryDeclarations: [],
       color: null,
     } satisfies ProductEditorInput;
-    const saved = await app((tx) => saveProductEditor(tx, null, menu, input, "en"));
+    const saved = await app((tx) => saveProductEditor(tx, null, input, "en"));
     expect(await keyOf(saved.id)).toBe("omelette");
     expect(await keyOf(saved.variants[0]!.id)).toBe("media ración");
   });

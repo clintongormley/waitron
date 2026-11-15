@@ -84,7 +84,6 @@ async function seedVenueWithMenuAndTill(db: Database): Promise<Venue> {
     await assignMenuToVenue(tx, menu.id);
     const product = (name: string, unitPrice: string) =>
       createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name,
         pricingUnit: "each",

@@ -116,11 +116,9 @@ describe("folder selection routes", () => {
       // straight into the tables, as data stored before the rule.
       const withActive = await plantFolder("Mains");
       const withInactive = await plantFolder("Mains");
-      const menu = await createMenuVia(app, "Mains menu");
       const make = async (name: string, categoryId: string) => {
         const created = await send(app, "POST", "/management-api/products", {
           body: {
-            menuId: menu,
             categoryId,
             name,
             pricingUnit: "each",
@@ -213,7 +211,6 @@ describe("folder selection routes", () => {
     async function addProduct(app: Hono, categoryId: string, name: string) {
       const created = await send(app, "POST", "/management-api/products", {
         body: {
-          menuId: await createMenuVia(app, `${name} menu`),
           categoryId,
           name,
           pricingUnit: "each",
@@ -351,10 +348,8 @@ describe("folder selection routes", () => {
     const app = mountApp();
     const parent = await folder(app, "Drinks");
     const child = await folder(app, "Beer", parent);
-    const menu = await createMenuVia(app, "Folder refusal");
     const created = await send(app, "POST", "/management-api/products", {
       body: {
-        menuId: menu,
         categoryId: parent,
         name: "Cola",
         pricingUnit: "each",
@@ -718,10 +713,8 @@ describe("content-language configuration", () => {
 
   it("switches the default over a partial customer name without copying staff or kitchen text", async () => {
     const app = mountApp("en-GB");
-    const menuId = await createMenuVia(app, "Default switch menu");
     const created = await send(app, "POST", "/management-api/products", {
       body: {
-        menuId,
         categoryId: null,
         name: "ES potatoes",
         kitchenName: "KITCHEN POTATOES",
@@ -771,9 +764,7 @@ describe("content-language configuration", () => {
 
   it("saves a new product without customer text in the configured default", async () => {
     const app = mountApp("en-GB");
-    const menuId = await createMenuVia(app, "Lunch");
     const product = {
-      menuId,
       categoryId: null,
       name: "Bread roll",
       customerName: { fr: "Pain" },
@@ -806,14 +797,12 @@ describe("content-language configuration", () => {
     "creates optional customer maps through the direct product API: %j",
     async (customerName, expected) => {
       const app = mountApp("es-ES");
-      const menuId = await createMenuVia(app, "Lunch");
       const configured = await send(app, "PUT", "/management-api/content-languages", {
         body: { defaultLanguage: "es", languages: ["es", "en"] },
       });
       expect(configured.status).toBe(204);
       const response = await send(app, "POST", "/management-api/products", {
         body: {
-          menuId,
           categoryId: null,
           name: "ES potatoes",
           customerName,
@@ -840,11 +829,9 @@ describe("content-language configuration", () => {
     "refuses malformed or oversized direct product maps atomically",
     async (customerName) => {
       const app = mountApp("en-GB");
-      const menuId = await createMenuVia(app, "Lunch");
       const before = (await suite.db.execute(sql`select * from products`)).rows;
       const response = await send(app, "POST", "/management-api/products", {
         body: {
-          menuId,
           categoryId: null,
           name: "ES potatoes",
           customerName,
@@ -947,7 +934,6 @@ describe("the missing-translations report", () => {
     expect(
       (await send(app, "PUT", "/management-api/content-languages", { body: settings })).status,
     ).toBe(204);
-    const menu = await createMenuVia(app, "Gap report");
     const beforeCountResponse = await send(app, "GET", PATH);
     expect(beforeCountResponse.status).toBe(200);
     const beforeCounts = (await beforeCountResponse.json()) as {
@@ -956,7 +942,6 @@ describe("the missing-translations report", () => {
     }[];
     const created = await send(app, "POST", "/management-api/products", {
       body: {
-        menuId: menu,
         categoryId: null,
         name: "STAFF Bread gap report",
         customerName: { es: "CLIENT-ES Bread con tomate" },
@@ -1066,12 +1051,9 @@ async function createCategoryVia(app: Hono, name: string): Promise<string> {
   return ((await res.json()) as { id: string }).id;
 }
 
-/** A named product with no main category, in a menu of its own. */
 async function createNamedProductVia(app: Hono, name: string): Promise<string> {
-  const menuId = await createMenuVia(app, `Menu for ${name}`);
   const res = await send(app, "POST", "/management-api/products", {
     body: {
-      menuId,
       categoryId: null,
       name: name,
       pricingUnit: "each",
@@ -1562,9 +1544,7 @@ describe("unique category and product names", () => {
     const app = mountApp();
     const name = `ES coffee ${tag()}`;
     await createNamedProductVia(app, name);
-    const menuId = await createMenuVia(app, `Second menu ${tag()}`);
     const body = {
-      menuId,
       categoryId: null,
       name: name.toLowerCase(),
       pricingUnit: "each",
@@ -1597,7 +1577,6 @@ describe("unique category and product names", () => {
     const app = mountApp();
     const name = `Water ${tag()}`;
     await createNamedProductVia(app, name);
-    const menuId = await createMenuVia(app, `Editor menu ${tag()}`);
     const unitId = (
       await suite.db.execute<{ id: string }>(sql`select id from units where seed_key = 'each'`)
     ).rows[0]!.id;
@@ -1629,7 +1608,7 @@ describe("unique category and product names", () => {
       allergens: null,
       dietaryDeclarations: [],
     };
-    const path = `/management-api/menus/${menuId}/product-editor`;
+    const path = `/management-api/products/editor`;
     await refused(await send(app, "POST", path, { body }), "product.name_taken", {
       field: "variants.1.name",
       name: name.toLowerCase(),
@@ -1682,22 +1661,24 @@ describe("mountMenuApi — labels", () => {
 });
 
 describe("mountMenuApi — products", () => {
-  it("GET /management-api/menus/:id/products → 200 (empty for a fresh menu)", async () => {
+  it("GET /management-api/products lists all top-level products", async () => {
     const app = mountApp();
-    const menuId = await createMenuVia(app, "Empty menu");
-    const res = await send(app, "GET", `/management-api/menus/${menuId}/products`);
+    const res = await send(app, "GET", `/management-api/products`);
     expect(res.status).toBe(200);
-    expect((await res.json()) as unknown[]).toEqual([]);
+    const stored = suite.db.all<{ id: string }>(
+      sql`select id from products where parent_id is null order by id`,
+    );
+    expect(((await res.json()) as { id: string }[]).map(({ id }) => id).sort()).toEqual(
+      stored.map(({ id }) => id),
+    );
   });
 
   it("offers one product on two menus with independent section and price", async () => {
     const app = mountApp();
-    const productsMenuId = await createMenuVia(app, "Products");
     const upstairsMenuId = await createMenuVia(app, "Upstairs drinks");
     const downstairsMenuId = await createMenuVia(app, "Downstairs drinks");
     const createdProduct = await send(app, "POST", "/management-api/products", {
       body: {
-        menuId: productsMenuId,
         categoryId: null,
         name: "Negroni",
         customerName: { en: "Negroni", es: "Negroni" },
@@ -1736,20 +1717,46 @@ describe("mountMenuApi — products", () => {
     ]);
   });
 
-  it("GET /management-api/menus/:id/products for a menu that does not exist → 404 menu.not_found", async () => {
-    const missing = crypto.randomUUID();
-    const res = await send(mountApp(), "GET", `/management-api/menus/${missing}/products`);
-    expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({
-      error: { code: "menu.not_found", params: { menuId: missing } },
+  it("creates a product with no menu through the editor", async () => {
+    const app = mountApp();
+    const response = await send(app, "POST", "/management-api/products/editor", {
+      body: await editorBody(app, { name: "Menu-free tea" }),
     });
+    expect(response.status).toBe(201);
+    const saved = await response.json();
+    expect(saved).toMatchObject({ name: "Menu-free tea" });
+    const listed = await send(app, "GET", "/management-api/products");
+    expect(await listed.json()).toContainEqual(expect.objectContaining({ id: saved.id }));
   });
 
-  it("POST /management-api/products naming a menu that does not exist → 400 menu.not_found", async () => {
-    const missing = crypto.randomUUID();
+  it("POST /management-api/menus/:id/product-editor answers 404", async () => {
+    const response = await send(
+      mountApp(),
+      "POST",
+      `/management-api/menus/${crypto.randomUUID()}/product-editor`,
+      { body: {} },
+    );
+    expect(response.status).toBe(404);
+  });
+
+  it("GET /management-api/menus/:id/products answers 404", async () => {
+    const app = mountApp();
+    const menuId = await createMenuVia(app, "Former product owner");
+    expect((await send(app, "GET", `/management-api/menus/${menuId}/products`)).status).toBe(404);
+  });
+
+  it("GET /management-api/menus/:id/products for a missing menu also answers 404", async () => {
+    const res = await send(
+      mountApp(),
+      "GET",
+      `/management-api/menus/${crypto.randomUUID()}/products`,
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("POST /management-api/products creates a product without a menu", async () => {
     const res = await send(mountApp(), "POST", "/management-api/products", {
       body: {
-        menuId: missing,
         categoryId: null,
         name: "Stray",
         pricingUnit: "each",
@@ -1757,19 +1764,15 @@ describe("mountMenuApi — products", () => {
         vatClass: "general",
       },
     });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "menu.not_found", params: { menuId: missing } },
-    });
+    expect(res.status).toBe(201);
+    expect(await res.json()).toMatchObject({ name: "Stray", unitPrice: "3.00" });
   });
 
   it("POST /management-api/products naming a category that does not exist → 400 category.not_found", async () => {
     const app = mountApp();
-    const menuId = await createMenuVia(app, "Stray category menu");
     const missing = crypto.randomUUID();
     const res = await send(app, "POST", "/management-api/products", {
       body: {
-        menuId,
         categoryId: missing,
         name: "Stray",
         pricingUnit: "each",
@@ -1783,18 +1786,14 @@ describe("mountMenuApi — products", () => {
     });
   });
 
-  it("GET /management-api/menus/:id/products with a non-uuid id → shared.invalid_id 400", async () => {
+  it("GET /management-api/menus/:id/products with a non-uuid id answers 404", async () => {
     const res = await send(mountApp(), "GET", "/management-api/menus/not-a-uuid/products");
-    expect(res.status).toBe(400);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "shared.invalid_id" },
-    });
+    expect(res.status).toBe(404);
   });
 
   it("POST /management-api/products creates one and lists it back (201 → the Product shape)", async () => {
     const app = mountApp();
     await seedLibraryImages(suite.db, "abc.png");
-    const menuId = await createMenuVia(app, "Product menu");
     const catRes = await send(app, "POST", "/management-api/categories", {
       body: { name: "ES coffees" },
     });
@@ -1802,7 +1801,6 @@ describe("mountMenuApi — products", () => {
 
     const res = await send(app, "POST", "/management-api/products", {
       body: {
-        menuId,
         categoryId,
         name: "ES black coffee",
         customerName: { es: "ES coffee con leche" },
@@ -1816,7 +1814,6 @@ describe("mountMenuApi — products", () => {
     expect(res.status).toBe(201);
     const product = (await res.json()) as {
       id: string;
-      menuId: string;
       categoryId: string | null;
       primaryCategoryId: string | null;
       name: string;
@@ -1829,7 +1826,6 @@ describe("mountMenuApi — products", () => {
       image: string | null;
     };
     expect(product).toMatchObject({
-      menuId,
       categoryId,
       primaryCategoryId: categoryId,
       name: "ES black coffee",
@@ -1842,7 +1838,7 @@ describe("mountMenuApi — products", () => {
       image: libraryImageName("abc.png"),
     });
 
-    const list = await send(app, "GET", `/management-api/menus/${menuId}/products`);
+    const list = await send(app, "GET", `/management-api/products`);
     expect(list.status).toBe(200);
     const rows = (await list.json()) as { id: string }[];
     expect(rows.some((r) => r.id === product.id)).toBe(true);
@@ -1901,7 +1897,7 @@ describe("mountMenuApi — products", () => {
       allergens: {},
       dietaryDeclarations: ["vegetarian", "halal"],
     };
-    const created = await send(app, "POST", `/management-api/menus/${menuId}/product-editor`, {
+    const created = await send(app, "POST", `/management-api/products/editor`, {
       body: value,
     });
     expect(created.status).toBe(201);
@@ -2118,7 +2114,6 @@ describe("mountMenuApi — products", () => {
   // that names nothing.
   it("refuses a variant's id on every product-by-id route but its own page, and accepts its parent's", async () => {
     const app = mountApp("es-ES");
-    const menuId = await createMenuVia(app, "Variant ids");
     const variant = {
       name: "Wine glass",
       customerName: null,
@@ -2128,7 +2123,7 @@ describe("mountMenuApi — products", () => {
       available: true,
       active: true,
     };
-    const created = await send(app, "POST", `/management-api/menus/${menuId}/product-editor`, {
+    const created = await send(app, "POST", `/management-api/products/editor`, {
       body: await editorBody(app, { name: "Wine", vatClass: "reduced", variants: [variant] }),
     });
     expect(created.status).toBe(201);
@@ -2181,10 +2176,9 @@ describe("mountMenuApi — products", () => {
     categoryId: string;
     ownCategoryId: string;
   }> {
-    const menuId = await createMenuVia(app, "Variant page");
     const categoryId = await createCategoryVia(app, `ES coffees ${crypto.randomUUID()}`);
     const ownCategoryId = await createCategoryVia(app, `Singles ${crypto.randomUUID()}`);
-    const created = await send(app, "POST", `/management-api/menus/${menuId}/product-editor`, {
+    const created = await send(app, "POST", `/management-api/products/editor`, {
       body: await editorBody(app, {
         name: "ES coffee",
         customerName: { es: "ES coffee de la casa" },
@@ -2692,10 +2686,9 @@ describe("mountMenuApi — products", () => {
 
   it("lists a product's course, and each variant's own course beside the course it is fired in", async () => {
     const app = mountApp("es-ES");
-    const menuId = await createMenuVia(app, "Course list");
     const { courseId: parentCourseId } = await seedRouting();
     const { courseId: variantCourseId } = await seedRouting();
-    const created = await send(app, "POST", `/management-api/menus/${menuId}/product-editor`, {
+    const created = await send(app, "POST", `/management-api/products/editor`, {
       body: await editorBody(app, {
         name: "Soup",
         unitPrice: "5.00",
@@ -2718,7 +2711,7 @@ describe("mountMenuApi — products", () => {
       (await saveEditorFixture(app, overridingId!, { courseId: variantCourseId })).status,
     ).toBe(200);
 
-    const listed = await send(app, "GET", `/management-api/menus/${menuId}/products`);
+    const listed = await send(app, "GET", `/management-api/products`);
     expect(listed.status).toBe(200);
     const row = ((await listed.json()) as { id: string; courseId: string | null }[]).find(
       (product) => product.id === parent.id,
@@ -2798,8 +2791,7 @@ describe("mountMenuApi — products", () => {
       expect(refused.status).toBe(400);
       expect(await refused.json()).toMatchObject(invalidParent);
     }
-    const menuId = await createMenuVia(app, "Variant create");
-    const create = await send(app, "POST", `/management-api/menus/${menuId}/product-editor`, {
+    const create = await send(app, "POST", `/management-api/products/editor`, {
       body: await editorBody(app, { parentId }),
     });
     expect(create.status).toBe(400);
@@ -2825,8 +2817,7 @@ describe("mountMenuApi — products", () => {
   // two to DIFFERENT values, so a route that writes one flag into the other column fails.
   it("writes Active and Available as two states through the editor routes", async () => {
     const app = mountApp("es-ES");
-    const menuId = await createMenuVia(app, "Two states");
-    const created = await send(app, "POST", `/management-api/menus/${menuId}/product-editor`, {
+    const created = await send(app, "POST", `/management-api/products/editor`, {
       body: await editorBody(app, { active: true, available: false }),
     });
     expect(created.status).toBe(201);
@@ -2856,17 +2847,17 @@ describe("mountMenuApi — products", () => {
     expect(await updated.json()).toMatchObject({ active: false, available: true });
     const read = await send(app, "GET", `/management-api/products/${saved.id}/editor`);
     expect(await read.json()).toMatchObject({ active: false, available: true });
-    const listed = await send(app, "GET", `/management-api/menus/${menuId}/products`);
-    expect(await listed.json()).toEqual([
+    const listed = await send(app, "GET", `/management-api/products`);
+    expect(await listed.json()).toContainEqual(
       expect.objectContaining({ id: saved.id, active: false, available: true }),
-    ]);
+    );
   });
 
   it("keeps an Unavailable product on the menu's price list, and takes an Inactive one off it", async () => {
     const app = mountApp("es-ES");
     const menuId = await createMenuVia(app, "Management offers");
     const create = async (name: string): Promise<string> => {
-      const created = await send(app, "POST", `/management-api/menus/${menuId}/product-editor`, {
+      const created = await send(app, "POST", `/management-api/products/editor`, {
         body: await editorBody(app, { name }),
       });
       return ((await created.json()) as { id: string }).id;
@@ -2903,9 +2894,8 @@ describe("mountMenuApi — products", () => {
 
   it("creates a product with its kitchen course in one save", async () => {
     const app = mountApp("es-ES");
-    const menuId = await createMenuVia(app, "Routing menu");
     const { courseId } = await seedRouting();
-    const created = await send(app, "POST", `/management-api/menus/${menuId}/product-editor`, {
+    const created = await send(app, "POST", `/management-api/products/editor`, {
       body: await editorBody(app, { courseId }),
     });
     expect(created.status).toBe(201);
@@ -2914,9 +2904,8 @@ describe("mountMenuApi — products", () => {
 
   it("saves the kitchen course on the editor PUT and reads it back", async () => {
     const app = mountApp("es-ES");
-    const menuId = await createMenuVia(app, "Routing menu");
     const { courseId } = await seedRouting();
-    const created = await send(app, "POST", `/management-api/menus/${menuId}/product-editor`, {
+    const created = await send(app, "POST", `/management-api/products/editor`, {
       body: await editorBody(app),
     });
     const productId = ((await created.json()) as { id: string }).id;
@@ -2932,8 +2921,7 @@ describe("mountMenuApi — products", () => {
 
   it("rolls the whole product back when the save names an absent course", async () => {
     const app = mountApp("es-ES");
-    const menuId = await createMenuVia(app, "Routing menu");
-    const created = await send(app, "POST", `/management-api/menus/${menuId}/product-editor`, {
+    const created = await send(app, "POST", `/management-api/products/editor`, {
       body: await editorBody(app),
     });
     const productId = ((await created.json()) as { id: string }).id;
@@ -2950,15 +2938,14 @@ describe("mountMenuApi — products", () => {
     expect(await after.json()).toEqual(beforeValue);
   });
 
-  it("answers 400 when an editor body names a folder or course that does not exist, and 404 when the path names a missing menu or product", async () => {
+  it("answers 400 when an editor body names a folder or course that does not exist, and 404 when the path names a missing product", async () => {
     const app = mountApp("es-ES");
-    const menuId = await createMenuVia(app, "Editor ids");
-    const created = await send(app, "POST", `/management-api/menus/${menuId}/product-editor`, {
+    const created = await send(app, "POST", `/management-api/products/editor`, {
       body: await editorBody(app),
     });
     expect(created.status).toBe(201);
     const productId = ((await created.json()) as { id: string }).id;
-    const create = `/management-api/menus/${menuId}/product-editor`;
+    const create = `/management-api/products/editor`;
     const update = `/management-api/products/${productId}/editor`;
     const folder = crypto.randomUUID();
     const course = crypto.randomUUID();
@@ -2997,14 +2984,6 @@ describe("mountMenuApi — products", () => {
         { courseId: "not-a-course" },
       ],
       [
-        "POST",
-        `/management-api/menus/${course}/product-editor`,
-        {},
-        404,
-        "menu.not_found",
-        { menuId: course },
-      ],
-      [
         "PUT",
         `/management-api/products/${course}/editor`,
         {},
@@ -3023,10 +3002,8 @@ describe("mountMenuApi — products", () => {
 
   it("POST /management-api/products with active:false → 201 and the created product is inactive", async () => {
     const app = mountApp();
-    const menuId = await createMenuVia(app, "Create-inactive menu");
     const res = await send(app, "POST", "/management-api/products", {
       body: {
-        menuId,
         categoryId: null,
         name: "No sellable yet",
         pricingUnit: "each",
@@ -3041,10 +3018,8 @@ describe("mountMenuApi — products", () => {
 
   it("POST /management-api/products with available:false → 201, a sold-out product that stays active", async () => {
     const app = mountApp();
-    const menuId = await createMenuVia(app, "Create-unavailable menu");
     const res = await send(app, "POST", "/management-api/products", {
       body: {
-        menuId,
         categoryId: null,
         name: "Sold out",
         pricingUnit: "each",
@@ -3059,11 +3034,9 @@ describe("mountMenuApi — products", () => {
 
   it("POST /management-api/products stores a takeaway class, and none when it is omitted", async () => {
     const app = mountApp();
-    const menuId = await createMenuVia(app, "Takeaway class menu");
     const create = (name: string, extra: Record<string, unknown>) =>
       send(app, "POST", "/management-api/products", {
         body: {
-          menuId,
           categoryId: null,
           name,
           pricingUnit: "each",
@@ -3088,10 +3061,8 @@ describe("mountMenuApi — products", () => {
 
   it("POST /management-api/products refuses a takeaway class that is not a VAT class", async () => {
     const app = mountApp();
-    const menuId = await createMenuVia(app, "Bad takeaway class menu");
     const res = await send(app, "POST", "/management-api/products", {
       body: {
-        menuId,
         categoryId: null,
         name: "Cola",
         pricingUnit: "each",
@@ -3108,10 +3079,8 @@ describe("mountMenuApi — products", () => {
 
   it("POST /management-api/products with active:true (and with it omitted) → an active product", async () => {
     const app = mountApp();
-    const menuId = await createMenuVia(app, "Create-active menu");
     const explicit = await send(app, "POST", "/management-api/products", {
       body: {
-        menuId,
         categoryId: null,
         name: "Explicitly active",
         pricingUnit: "each",
@@ -3125,7 +3094,6 @@ describe("mountMenuApi — products", () => {
     // Omitting `active` creates an active product.
     const omitted = await send(app, "POST", "/management-api/products", {
       body: {
-        menuId,
         categoryId: null,
         name: "Active by default",
         pricingUnit: "each",
@@ -3139,10 +3107,8 @@ describe("mountMenuApi — products", () => {
 
   it("POST /management-api/products carries ordering, defaulting to public", async () => {
     const app = mountApp();
-    const menuId = await createMenuVia(app, "Ordering menu");
     const referenced = await send(app, "POST", "/management-api/products", {
       body: {
-        menuId,
         categoryId: null,
         name: "Ingredient only",
         pricingUnit: "each",
@@ -3157,7 +3123,6 @@ describe("mountMenuApi — products", () => {
     // Omitting ordering preserves the column default.
     const omitted = await send(app, "POST", "/management-api/products", {
       body: {
-        menuId,
         categoryId: null,
         name: "Sellable by default",
         pricingUnit: "each",
@@ -3174,10 +3139,8 @@ describe("mountMenuApi — products", () => {
     (method, template) => {
       async function sendOrdering(fields: Record<string, unknown>) {
         const app = mountApp();
-        const menuId = await createMenuVia(app, `Bad-ordering ${method} menu`);
         const created = await send(app, "POST", "/management-api/products", {
           body: {
-            menuId,
             categoryId: null,
             name: "Base",
             pricingUnit: "each",
@@ -3190,7 +3153,6 @@ describe("mountMenuApi — products", () => {
         const body =
           method === "POST"
             ? {
-                menuId,
                 categoryId: null,
                 name: "Malformed",
                 pricingUnit: "each",
@@ -3199,24 +3161,26 @@ describe("mountMenuApi — products", () => {
                 ...fields,
               }
             : fields;
+        const before = await (await send(app, "GET", "/management-api/products")).json();
+        expect(before).toContainEqual(
+          expect.objectContaining({ id: productId, name: "Base", ordering: "public" }),
+        );
         const res = await send(app, method, path, { body });
-        const list = await send(app, "GET", `/management-api/menus/${menuId}/products`);
-        return { res, products: (await list.json()) as { name: string; ordering: string }[] };
+        const list = await send(app, "GET", "/management-api/products");
+        return { res, products: await list.json(), before };
       }
 
       it.each(["secret", "Public", "", true, null, 1])(
         "rejects the ordering %j → management.request_invalid 400, writing nothing",
         async (ordering) => {
-          const { res, products } = await sendOrdering({ ordering });
+          const { res, products, before } = await sendOrdering({ ordering });
           expect(res.status).toBe(400);
           expect(
             (await res.json()) as { error: { code: string; params: { field: string } } },
           ).toMatchObject({
             error: { code: "management.request_invalid", params: { field: "ordering" } },
           });
-          expect(products.map(({ name, ordering }) => ({ name, ordering }))).toEqual([
-            { name: "Base", ordering: "public" },
-          ]);
+          expect(products).toEqual(before);
         },
       );
 
@@ -3238,10 +3202,8 @@ describe("mountMenuApi — products", () => {
 
   it("POST /management-api/products with a missing required field → management.request_invalid 400", async () => {
     const app = mountApp();
-    const menuId = await createMenuVia(app, "Missing-field menu");
     const res = await send(app, "POST", "/management-api/products", {
       body: {
-        menuId,
         categoryId: null,
         name: "No price",
         pricingUnit: "each",
@@ -3265,10 +3227,8 @@ describe("mountMenuApi — products", () => {
     "POST /management-api/products with a bad allergen (%s) → %s 400",
     async (_label, allergens, code) => {
       const app = mountApp();
-      const menuId = await createMenuVia(app, `Allergen menu ${_label}`);
       const res = await send(app, "POST", "/management-api/products", {
         body: {
-          menuId,
           categoryId: null,
           name: "Bad allergen",
           pricingUnit: "each",
@@ -3286,10 +3246,8 @@ describe("mountMenuApi — products", () => {
 
   it("POST /management-api/products with a valid dietOverride → 201", async () => {
     const app = mountApp();
-    const menuId = await createMenuVia(app, "Diet menu");
     const res = await send(app, "POST", "/management-api/products", {
       body: {
-        menuId,
         categoryId: null,
         name: "Falafel",
         pricingUnit: "each",
@@ -3301,9 +3259,14 @@ describe("mountMenuApi — products", () => {
     expect(res.status).toBe(201);
     // The management product read exposes the staff override distinctly (the diet twin of
     // `manualAllergens`), so the dashboard's diet-override editor can seed from it.
-    const list = await send(app, "GET", `/management-api/menus/${menuId}/products`);
-    const products = (await list.json()) as { dietOverride: unknown }[];
-    expect(products[0]!.dietOverride).toEqual({ vegan: "no", halal: "yes", addContains: ["meat"] });
+    const list = await send(app, "GET", `/management-api/products`);
+    const { id } = await res.json();
+    const products = (await list.json()) as { id: string; dietOverride: unknown }[];
+    expect(products.find((product) => product.id === id)!.dietOverride).toEqual({
+      vegan: "no",
+      halal: "yes",
+      addContains: ["meat"],
+    });
   });
 
   it.each([
@@ -3319,10 +3282,8 @@ describe("mountMenuApi — products", () => {
     "POST /management-api/products with %s in dietOverride → %s 400",
     async (_label, dietOverride, code) => {
       const app = mountApp();
-      const menuId = await createMenuVia(app, `Diet menu ${code} ${_label}`);
       const res = await send(app, "POST", "/management-api/products", {
         body: {
-          menuId,
           categoryId: null,
           name: "x",
           pricingUnit: "each",
@@ -3338,10 +3299,8 @@ describe("mountMenuApi — products", () => {
 
   it("POST /management-api/products with a non-object dietOverride → management.request_invalid 400", async () => {
     const app = mountApp();
-    const menuId = await createMenuVia(app, "Diet shape menu");
     const res = await send(app, "POST", "/management-api/products", {
       body: {
-        menuId,
         categoryId: null,
         name: "x",
         pricingUnit: "each",
@@ -3359,13 +3318,8 @@ describe("mountMenuApi — products", () => {
   });
 });
 
-const DUMMY_UUID = "00000000-0000-0000-0000-000000000000";
-
 describe("mountMenuApi — product request-shape screens", () => {
-  // The screens run BEFORE the transaction, so these need no real rows — a uuid-shaped id and a
-  // string menuId pass their own checks and the target field throws first.
   const productBase = {
-    menuId: DUMMY_UUID,
     categoryId: null,
     name: "x",
     pricingUnit: "each",
@@ -3374,7 +3328,6 @@ describe("mountMenuApi — product request-shape screens", () => {
   };
 
   it.each([
-    ["menuId", { ...productBase, menuId: 123 }],
     ["categoryId", { ...productBase, categoryId: 123 }],
     ["name", { ...productBase, name: 123 }],
     ["name", { ...productBase, name: "   " }],
@@ -3430,7 +3383,7 @@ describe("mountMenuApi — null request bodies map to the route's own 4xx, never
     expect(
       (await res.json()) as { error: { code: string; params: { field: string } } },
     ).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "menuId" } },
+      error: { code: "management.request_invalid", params: { field: "categoryId" } },
     });
   });
 
@@ -3449,7 +3402,7 @@ describe("mountMenuApi — null request bodies map to the route's own 4xx, never
     expect(
       (await post.json()) as { error: { code: string; params: { field: string } } },
     ).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "menuId" } },
+      error: { code: "management.request_invalid", params: { field: "categoryId" } },
     });
   });
 });
@@ -3462,10 +3415,9 @@ async function saveEditorFixture(app: Hono, productId: string, changes: Record<s
   });
 }
 
-async function createProductVia(app: Hono, menuId: string): Promise<string> {
+async function createProductVia(app: Hono): Promise<string> {
   const res = await send(app, "POST", "/management-api/products", {
     body: {
-      menuId,
       categoryId: null,
       name: "Dish with lists",
       pricingUnit: "each",
@@ -3490,8 +3442,8 @@ describe("mountMenuApi — attaching extras and options lists to products", () =
     return ((await res.json()) as { optionList: OptionList }).optionList;
   }
 
-  async function createExtrasListVia(app: Hono, menuId: string, name: string): Promise<ExtraList> {
-    const productId = await createProductVia(app, menuId);
+  async function createExtrasListVia(app: Hono, name: string): Promise<ExtraList> {
+    const productId = await createProductVia(app);
     const res = await send(app, "POST", "/management-api/modifiers/extras", {
       body: { name, items: [{ productId }] },
     });
@@ -3500,8 +3452,8 @@ describe("mountMenuApi — attaching extras and options lists to products", () =
   }
 
   /** The product's attachment list as the menu read hands it back. */
-  async function readModifiers(app: Hono, menuId: string, productId: string) {
-    const res = await send(app, "GET", `/management-api/menus/${menuId}/products`);
+  async function readModifiers(app: Hono, productId: string) {
+    const res = await send(app, "GET", `/management-api/products`);
     expect(res.status).toBe(200);
     const products = (await res.json()) as { id: string; modifiers: unknown }[];
     return products.find((product) => product.id === productId)?.modifiers;
@@ -3509,12 +3461,11 @@ describe("mountMenuApi — attaching extras and options lists to products", () =
 
   it("creates a product with an ordered mix of extras and options, and reads it back in order", async () => {
     const app = mountApp();
-    const menuId = await createMenuVia(app, "Menu with lists");
     const options = await createOptionsListVia(app, {
       name: "Steak doneness",
       labels: [{ name: "Rare" }],
     });
-    const extras = await createExtrasListVia(app, menuId, "Sauces");
+    const extras = await createExtrasListVia(app, "Sauces");
     // Options FIRST, so the read-back proves the stored order is the body's and not the two tables'.
     const modifiers = [
       { kind: "options", id: options.id },
@@ -3522,7 +3473,6 @@ describe("mountMenuApi — attaching extras and options lists to products", () =
     ];
     const createRes = await send(app, "POST", "/management-api/products", {
       body: {
-        menuId,
         categoryId: null,
         name: "Sirloin",
         pricingUnit: "each",
@@ -3534,7 +3484,7 @@ describe("mountMenuApi — attaching extras and options lists to products", () =
     expect(createRes.status).toBe(201);
     const created = (await createRes.json()) as { id: string; modifiers: unknown };
     expect(created.modifiers).toEqual(modifiers);
-    expect(await readModifiers(app, menuId, created.id)).toEqual(modifiers);
+    expect(await readModifiers(app, created.id)).toEqual(modifiers);
   });
 
   it("answers the 201 with the list as STORED, not as sent, when a list id arrives in upper case", async () => {
@@ -3542,7 +3492,6 @@ describe("mountMenuApi — attaching extras and options lists to products", () =
     // request would disagree with the caller's next read. The `expect(created).not.toEqual(sent)`
     // line is the control: it fails if the fixture stops being upper-cased.
     const app = mountApp();
-    const menuId = await createMenuVia(app, "Upper-case menu");
     const options = await createOptionsListVia(app, {
       name: "Cooking",
       labels: [{ name: "Rare" }],
@@ -3550,7 +3499,6 @@ describe("mountMenuApi — attaching extras and options lists to products", () =
     const sent = [{ kind: "options", id: options.id.toUpperCase() }];
     const createRes = await send(app, "POST", "/management-api/products", {
       body: {
-        menuId,
         categoryId: null,
         name: "Fillet steak",
         pricingUnit: "each",
@@ -3563,15 +3511,13 @@ describe("mountMenuApi — attaching extras and options lists to products", () =
     const created = (await createRes.json()) as { id: string; modifiers: unknown };
     expect(created.modifiers).not.toEqual(sent);
     expect(created.modifiers).toEqual([{ kind: "options", id: options.id }]);
-    expect(await readModifiers(app, menuId, created.id)).toEqual(created.modifiers);
+    expect(await readModifiers(app, created.id)).toEqual(created.modifiers);
   });
 
   it("POST /products refuses an attachment naming no stored list", async () => {
     const app = mountApp();
-    const menuId = await createMenuVia(app, "Missing list menu");
     const res = await send(app, "POST", "/management-api/products", {
       body: {
-        menuId,
         categoryId: null,
         name: "x",
         pricingUnit: "each",
@@ -3599,10 +3545,8 @@ describe("mountMenuApi — attaching extras and options lists to products", () =
     "POST /products rejects %s → management.request_invalid 400 naming modifiers",
     async (_label, extra) => {
       const app = mountApp();
-      const menuId = await createMenuVia(app, `Bad attach ${_label}`);
       const res = await send(app, "POST", "/management-api/products", {
         body: {
-          menuId,
           categoryId: null,
           name: "x",
           pricingUnit: "each",
@@ -3620,16 +3564,14 @@ describe("mountMenuApi — attaching extras and options lists to products", () =
     },
   );
 
-  it.each(["modifierIds", "optionGroupIds"])(
+  it.each(["modifierIds", "optionGroupIds", "menuId"])(
     "POST /products refuses the legacy %s field, naming it",
     async (legacy) => {
       // Naming the legacy field, not `modifiers`: a caller still on the old contract needs to be told
       // which of its fields is the one that went away.
       const app = mountApp();
-      const menuId = await createMenuVia(app, `Legacy ${legacy}`);
       const res = await send(app, "POST", "/management-api/products", {
         body: {
-          menuId,
           categoryId: null,
           name: "x",
           pricingUnit: "each",
@@ -3645,30 +3587,25 @@ describe("mountMenuApi — attaching extras and options lists to products", () =
     },
   );
 
-  it.each(["POST"])(
-    "%s /products rejects a malformed uuid in modifiers → shared.invalid_id 400",
-    async (method) => {
-      // Same treatment `requireUuidParam` gives a path id.
-      const app = mountApp();
-      const menuId = await createMenuVia(app, `Bad uuid attach ${method}`);
-      const modifiers = [{ kind: "extras", id: "not-a-uuid" }];
-      const res = await send(app, "POST", "/management-api/products", {
-        body: {
-          menuId,
-          categoryId: null,
-          name: "x",
-          pricingUnit: "each",
-          unitPrice: "1.00",
-          vatClass: "general",
-          modifiers,
-        },
-      });
-      expect(res.status).toBe(400);
-      expect((await res.json()) as { error: { code: string } }).toMatchObject({
-        error: { code: "shared.invalid_id" },
-      });
-    },
-  );
+  it("POST /products rejects a malformed uuid in modifiers → shared.invalid_id 400", async () => {
+    // Same treatment `requireUuidParam` gives a path id.
+    const app = mountApp();
+    const modifiers = [{ kind: "extras", id: "not-a-uuid" }];
+    const res = await send(app, "POST", "/management-api/products", {
+      body: {
+        categoryId: null,
+        name: "x",
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+        modifiers,
+      },
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "shared.invalid_id" },
+    });
+  });
 });
 
 /**
@@ -4166,8 +4103,7 @@ describe("mountMenuApi — extras lists", () => {
     const app = mountApp();
     const [aioli] = await twoProducts(app);
     const list = await createListVia(app, { ...sauces([aioli]), name: "List with dependants" });
-    const menuId = await createMenuVia(app, "Menu with extras");
-    const productId = await createProductVia(app, menuId);
+    const productId = await createProductVia(app);
     const attached = await saveEditorFixture(app, productId, {
       modifiers: [{ kind: "extras", id: list.id }],
     });
@@ -4426,7 +4362,6 @@ describe("a menu's prices", () => {
     const name = `Offered ${crypto.randomUUID()}`;
     const product = await send(app, "POST", "/management-api/products", {
       body: {
-        menuId: await createMenuVia(app, `Menu for ${name}`),
         categoryId: null,
         name,
         customerName: { en: `${name} (customer)`, es: `${name} (cliente)` },
@@ -4942,10 +4877,8 @@ it("authors a hierarchy and requires a session to read it", async () => {
   const cycle = await send(app, "PATCH", path, { body: { parentId: category.id } });
   expect(cycle.status).toBe(409);
   expect(await cycle.json()).toMatchObject({ error: { code: "category.parent_cycle" } });
-  const menuId = await createMenuVia(app, "Main category menu");
   const response = await send(app, "POST", "/management-api/products", {
     body: {
-      menuId,
       categoryId: null,
       name: "Toast",
       unitPrice: "2",
@@ -4986,22 +4919,21 @@ it("creates a category holding its colour, and refuses a colour of the wrong typ
 describe("a negative price is refused at the menu request boundary", () => {
   it("POST /management-api/products refuses a negative unitPrice and stores no row", async () => {
     const app = mountApp();
-    const menuId = await createMenuVia(app, "Negative price menu");
     const body = {
-      menuId,
       categoryId: null,
       name: "Negative price",
       pricingUnit: "each",
       unitPrice: "-1.00",
       vatClass: "general",
     };
+    const before = await (await send(app, "GET", "/management-api/products")).json();
     const res = await send(app, "POST", "/management-api/products", { body });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
       error: { code: "management.request_invalid", params: { field: "unitPrice" } },
     });
-    const stored = await send(app, "GET", `/management-api/menus/${menuId}/products`);
-    expect(await stored.json()).toEqual([]);
+    const stored = await send(app, "GET", `/management-api/products`);
+    expect(await stored.json()).toEqual(before);
     // The control that separates "refuses a negative" from "refuses a non-positive": zero is a
     // legitimate price and still creates the product.
     expect(
@@ -5065,12 +4997,10 @@ describe("a negative price is refused at the menu request boundary", () => {
 
   it("leaves a malformed price to the refusal it already had, so no shipped code changes meaning", async () => {
     const app = mountApp();
-    const menuId = await createMenuVia(app, "Malformed price menu");
     // The screen reads the SIGN and nothing else: a value `decimal()` cannot parse falls straight
     // through to the write's own `decimal()`, which is where `shared.invalid_decimal` comes from.
     const res = await send(app, "POST", "/management-api/products", {
       body: {
-        menuId,
         categoryId: null,
         name: "Decimal comma",
         pricingUnit: "each",
@@ -5084,7 +5014,6 @@ describe("a negative price is refused at the menu request boundary", () => {
     // as plain zero rather than refused.
     const zero = await send(app, "POST", "/management-api/products", {
       body: {
-        menuId,
         categoryId: null,
         name: "Signed zero",
         pricingUnit: "each",
@@ -5136,7 +5065,7 @@ describe("menu routes that already refused a negative price", () => {
       allergens: {},
       dietaryDeclarations: [],
     };
-    const editorPath = `/management-api/menus/${menuId}/product-editor`;
+    const editorPath = `/management-api/products/editor`;
 
     const badProductPrice = await send(app, "POST", editorPath, {
       body: { ...editor, unitPrice: "-1.00", variants: [] },
@@ -6842,10 +6771,8 @@ describe("menu settings routes", () => {
 
   it("still requires an explicit class on the product create API", async () => {
     const app = mountApp();
-    const menu = await createMenuVia(app, "Required class");
     const response = await send(app, "POST", "/management-api/products", {
       body: {
-        menuId: menu,
         categoryId: null,
         name: "Lemonade",
         pricingUnit: "each",
@@ -6873,7 +6800,7 @@ describe("menu settings routes", () => {
       allergens: null,
       dietaryDeclarations: [],
     };
-    const editorResponse = await send(app, "POST", `/management-api/menus/${menu}/product-editor`, {
+    const editorResponse = await send(app, "POST", `/management-api/products/editor`, {
       body: editorInput,
     });
     expect(editorResponse.status).toBe(400);

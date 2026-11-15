@@ -68,7 +68,6 @@ export async function menusFixture(db: Database): Promise<MenusFixture> {
     const make = async (name: string, unitPrice: string, image: string | null = null) =>
       (
         await createProduct(tx, {
-          menuId: lunch.id,
           categoryId: softDrinks,
           name,
           customerName: { en: `${name} for guests` },

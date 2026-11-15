@@ -119,10 +119,9 @@ async function sendWithHold(
 
 describe("sending split-off extras", () => {
   it("requires three distinct names for new split-extra products", async () => {
-    const { cfg, menuId } = await setupVenue();
+    const { cfg } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const burger = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Burger",
         customerName: { "es-ES": "Classic beef burger" },
@@ -131,11 +130,11 @@ describe("sending split-off extras", () => {
         unitPrice: "10.00",
         vatClass: "general",
       });
+      await expect(addExtras(tx, cfg, burger.id, [{ name: "Chips" } as never])).rejects.toThrow(
+        "three distinct names",
+      );
       await expect(
-        addExtras(tx, cfg, menuId, burger.id, [{ name: "Chips" } as never]),
-      ).rejects.toThrow("three distinct names");
-      await expect(
-        addExtras(tx, cfg, menuId, burger.id, [
+        addExtras(tx, cfg, burger.id, [
           { name: "Chips", customerName: "Chips", kitchenName: "CHIPS" },
         ]),
       ).rejects.toThrow("three distinct names");
@@ -358,11 +357,10 @@ describe("sending split-off extras", () => {
   });
 
   it("does not give an extra no cell decides a separate record", async () => {
-    const { cfg, menuId } = await setupVenue();
+    const { cfg } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const grill = await createStation(tx, { name: "Grill", isDefault: true });
       const burger = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Burger",
         customerName: { "es-ES": "Classic beef burger" },
@@ -374,7 +372,7 @@ describe("sending split-off extras", () => {
       const {
         listId,
         productIds: [cheese],
-      } = await addExtras(tx, cfg, menuId, burger.id, [
+      } = await addExtras(tx, cfg, burger.id, [
         { name: "Cheese", customerName: "Extra cheddar", kitchenName: "CHED" },
       ]);
       const orderId = await fireNewOrder(tx, cfg, [
@@ -391,7 +389,7 @@ describe("sending split-off extras", () => {
   });
 
   it("prints a claimed extra when its no-preparation dish has no kitchen record", async () => {
-    const { cfg, menuId } = await setupVenue();
+    const { cfg } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await createStation(tx, { name: "Kitchen", isDefault: true });
       const fryer = await createStation(tx, { name: "Fryer" });
@@ -413,7 +411,6 @@ describe("sending split-off extras", () => {
         printerId: printer.id,
       });
       const water = await createProduct(tx, {
-        menuId,
         categoryId: drinks.id,
         name: "Water",
         customerName: { "es-ES": "Still mineral water" },
@@ -425,7 +422,7 @@ describe("sending split-off extras", () => {
       const {
         listId,
         productIds: [chips],
-      } = await addExtras(tx, cfg, menuId, water.id, [
+      } = await addExtras(tx, cfg, water.id, [
         {
           name: "Chips",
           customerName: "Hand-cut fries",
@@ -453,7 +450,7 @@ describe("sending split-off extras", () => {
   });
 
   it("gives a no-preparation dish with an extra no cell decides no kitchen records", async () => {
-    const { cfg, menuId } = await setupVenue();
+    const { cfg } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await createStation(tx, { name: "Kitchen", isDefault: true });
       const drinks = await createCategory(tx, { name: "Drinks" });
@@ -463,7 +460,6 @@ describe("sending split-off extras", () => {
         { kind: "no_preparation" },
       );
       const water = await createProduct(tx, {
-        menuId,
         categoryId: drinks.id,
         name: "Water",
         customerName: { "es-ES": "Still mineral water" },
@@ -475,7 +471,7 @@ describe("sending split-off extras", () => {
       const {
         listId,
         productIds: [cheese],
-      } = await addExtras(tx, cfg, menuId, water.id, [
+      } = await addExtras(tx, cfg, water.id, [
         { name: "Cheese", customerName: "Extra cheddar", kitchenName: "CHED" },
       ]);
       const orderId = await fireNewOrder(tx, cfg, [
@@ -511,7 +507,7 @@ describe("sending split-off extras", () => {
   });
 
   it("releases an existing held extra when a no-preparation dish is sent again", async () => {
-    const { cfg, menuId } = await setupVenue();
+    const { cfg } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await createStation(tx, { name: "Kitchen", isDefault: true });
       const fryer = await createStation(tx, { name: "Fryer" });
@@ -533,7 +529,6 @@ describe("sending split-off extras", () => {
       );
       await routeCategoryTo(tx, sides.id, fryer.id);
       const water = await createProduct(tx, {
-        menuId,
         categoryId: drinks.id,
         name: "Water",
         customerName: { "es-ES": "Still mineral water" },
@@ -547,7 +542,7 @@ describe("sending split-off extras", () => {
       const {
         listId,
         productIds: [chips],
-      } = await addExtras(tx, cfg, menuId, water.id, [
+      } = await addExtras(tx, cfg, water.id, [
         {
           name: "Chips",
           customerName: "Hand-cut fries",
@@ -596,14 +591,13 @@ describe("sending split-off extras", () => {
   });
 
   it("opens one routing snapshot to decide both dish and extra, without the wrappers", async () => {
-    const { cfg, menuId } = await setupVenue();
+    const { cfg } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await createStation(tx, { name: "Kitchen", isDefault: true });
       const fryer = await createStation(tx, { name: "Fryer" });
       const sides = await createCategory(tx, { name: "Sides" });
       await routeCategoryTo(tx, sides.id, fryer.id);
       const burger = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Burger",
         customerName: { "es-ES": "Classic beef burger" },
@@ -615,7 +609,7 @@ describe("sending split-off extras", () => {
       const {
         listId,
         productIds: [chips],
-      } = await addExtras(tx, cfg, menuId, burger.id, [
+      } = await addExtras(tx, cfg, burger.id, [
         {
           name: "Chips",
           customerName: "Hand-cut fries",
@@ -644,7 +638,7 @@ describe("sending split-off extras", () => {
   });
 
   it("keeps an extra with its dish at the default, then sends it to today's chosen destination", async () => {
-    const { cfg, menuId } = await setupVenue();
+    const { cfg } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const grill = await createStation(tx, { name: "Grill", isDefault: true });
       const fryer = await createStation(tx, { name: "Fryer" });
@@ -654,7 +648,6 @@ describe("sending split-off extras", () => {
       await routeCategoryTo(tx, burgers.id, grill.id);
       await routeCategoryTo(tx, sides.id, fryer.id);
       const burger = await createProduct(tx, {
-        menuId,
         categoryId: burgers.id,
         name: "Burger",
         customerName: { "es-ES": "Classic beef burger" },
@@ -666,7 +659,7 @@ describe("sending split-off extras", () => {
       const {
         listId,
         productIds: [chips],
-      } = await addExtras(tx, cfg, menuId, burger.id, [
+      } = await addExtras(tx, cfg, burger.id, [
         {
           name: "Chips",
           customerName: "Hand-cut fries",
@@ -701,7 +694,7 @@ describe("sending split-off extras", () => {
   });
 
   it("uses the dish's chosen station when deciding whether chips split off", async () => {
-    const { cfg, menuId } = await setupVenue();
+    const { cfg } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await createStation(tx, { name: "Grill", isDefault: true });
       const fryer = await createStation(tx, { name: "Fryer" });
@@ -709,7 +702,6 @@ describe("sending split-off extras", () => {
       const sides = await createCategory(tx, { name: "Sides" });
       await routeCategoryTo(tx, sides.id, fryer.id);
       const burger = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Burger",
         customerName: { "es-ES": "Classic beef burger" },
@@ -721,7 +713,7 @@ describe("sending split-off extras", () => {
       const {
         listId,
         productIds: [chips],
-      } = await addExtras(tx, cfg, menuId, burger.id, [
+      } = await addExtras(tx, cfg, burger.id, [
         {
           name: "Chips",
           customerName: "Hand-cut fries",
@@ -758,14 +750,13 @@ describe("sending split-off extras", () => {
   });
 
   it("sets aside an unroutable dish with its otherwise routable extra", async () => {
-    const { cfg, menuId } = await setupVenue();
+    const { cfg } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const kitchen = await createStation(tx, { name: "Kitchen", isDefault: true });
       const fryer = await createStation(tx, { name: "Fryer" });
       const sides = await createCategory(tx, { name: "Sides" });
       await routeCategoryTo(tx, sides.id, fryer.id);
       const burger = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Burger",
         customerName: { "es-ES": "Classic beef burger" },
@@ -777,7 +768,7 @@ describe("sending split-off extras", () => {
       const {
         listId,
         productIds: [chips],
-      } = await addExtras(tx, cfg, menuId, burger.id, [
+      } = await addExtras(tx, cfg, burger.id, [
         {
           name: "Chips",
           customerName: "Hand-cut fries",
@@ -805,7 +796,7 @@ describe("sending split-off extras", () => {
   });
 
   it("refuses a dish with no replacement before writing its extra's record", async () => {
-    const { cfg, menuId } = await setupVenue();
+    const { cfg } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await createStation(tx, { name: "Kitchen", isDefault: true });
       const grill = await createStation(tx, { name: "Grill" });
@@ -815,7 +806,6 @@ describe("sending split-off extras", () => {
       await routeCategoryTo(tx, burgers.id, grill.id);
       await routeCategoryTo(tx, sides.id, fryer.id);
       const burger = await createProduct(tx, {
-        menuId,
         categoryId: burgers.id,
         name: "Burger",
         customerName: { "es-ES": "Classic beef burger" },
@@ -827,7 +817,7 @@ describe("sending split-off extras", () => {
       const {
         listId,
         productIds: [chips],
-      } = await addExtras(tx, cfg, menuId, burger.id, [
+      } = await addExtras(tx, cfg, burger.id, [
         {
           name: "Chips",
           customerName: "Hand-cut fries",
@@ -863,14 +853,10 @@ describe("sending split-off extras", () => {
       const fryer = await createStation(tx, { name: "Fryer" });
       const sides = await createCategory(tx, { name: "Sides" });
       await routeCategoryTo(tx, sides.id, fryer.id);
-      const [burger] = await tx
-        .select({ menuId: products.menuId })
-        .from(products)
-        .where(eq(products.id, venue.productId("Burger")));
       const {
         listId,
         productIds: [chips],
-      } = await addExtras(tx, venue.cfg, burger!.menuId, venue.productId("Burger"), [
+      } = await addExtras(tx, venue.cfg, venue.productId("Burger"), [
         {
           name: "Chips",
           customerName: "Hand-cut fries",
@@ -959,14 +945,13 @@ describe("sending split-off extras", () => {
   });
 
   it("makes a split-off extra here immediately even while its dish is held", async () => {
-    const { cfg, menuId } = await setupVenue();
+    const { cfg } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const grill = await createStation(tx, { name: "Grill", isDefault: true });
       const bar = await createStation(tx, { name: "Bar" });
       const sides = await createCategory(tx, { name: "Sides" });
       await routeCategoryTo(tx, sides.id, bar.id);
       const burger = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Burger",
         customerName: { "es-ES": "Classic beef burger" },
@@ -978,7 +963,7 @@ describe("sending split-off extras", () => {
       const {
         listId,
         productIds: [chips],
-      } = await addExtras(tx, cfg, menuId, burger.id, [
+      } = await addExtras(tx, cfg, burger.id, [
         {
           name: "Chips",
           customerName: "Hand-cut fries",

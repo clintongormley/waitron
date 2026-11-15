@@ -2135,7 +2135,6 @@ describe("previewMenu", () => {
       async (tx) =>
         (
           await createProduct(tx, {
-            menuId: f.lunch,
             categoryId: null,
             name: "Juice",
             customerName: { en: "Pressed juice" },

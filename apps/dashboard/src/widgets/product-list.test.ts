@@ -191,7 +191,6 @@ function product(
   const base: Omit<Product, "variants"> = {
     id: "prod-1",
     modifiers: [],
-    menuId: "cat-1",
     categoryId: "category-1",
     primaryCategoryId: "category-1",
     name: "Ham croquettes",

@@ -91,7 +91,6 @@ const suite = useVenueDb({
       const category = await createCategory(tx, { name: "Comida" });
       const mk = async (description: string): Promise<string> => {
         const p = await createProduct(tx, {
-          menuId: menu.id,
           categoryId: category.id,
           name: description,
           pricingUnit: "each",

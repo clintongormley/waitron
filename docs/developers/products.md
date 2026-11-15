@@ -8,6 +8,8 @@ model replaces.
 
 So a product carries up to three names, and so does each of its variants.
 
+You create a product independently of menus. `products` has no menu ownership; `menu_items` offers it on each menu, with that offer’s price.
+
 ## The three names
 
 | Name | Stored as | Who reads it |
@@ -515,7 +517,7 @@ two painted (dark and pale) sold-out tiles and a weighed product's tile, has no 
 
 A variant is a `products` row whose `parent_id` names its parent product — "125 ml" and
 "175 ml" under "Wine by the glass". There is no separate variant table. A variant's parent is a
-top-level product in the same menu, is fixed when the variant is created, and a variant has no
+top-level product, is fixed when the variant is created, and a variant has no
 variants of its own (the `products_variant_one_level_insert`, `products_variant_parent_fixed_update`
 and `products_id_fixed_update` triggers in `packages/db/drizzle/0000_baseline.sql`). A product
 may have any number of variants, one included.

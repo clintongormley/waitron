@@ -78,7 +78,6 @@ async function seedVenueWithMenu(db: Database): Promise<Venue> {
     const food = await createCategory(tx, { name: "Food" });
     const product = (name: string, unitPrice: string, categoryId: string | null) =>
       createProduct(tx, {
-        menuId: menu.id,
         categoryId,
         name,
         pricingUnit: "each",
@@ -404,7 +403,6 @@ describe("offerProducts", () => {
 
     const bread = await withTransaction(suite.db, (tx) =>
       createProduct(tx, {
-        menuId: venue.menuId,
         categoryId: null,
         name: "Bread",
         pricingUnit: "each",

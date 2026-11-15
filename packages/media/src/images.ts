@@ -64,7 +64,6 @@ export type ImageUsage =
   | {
       kind: "product";
       id: string;
-      menuId: string;
       /** The staff-facing product name (`products.name`) — plain text, not per-language. */
       name: string;
       active: boolean;
@@ -74,7 +73,6 @@ export type ImageUsage =
       /** The variant's own `products` row id; `productId` is its parent's. */
       id: string;
       productId: string;
-      menuId: string;
       /** The product and relative variant staff names. */
       name: string;
       /** The variant AND its product are Active. */
@@ -197,7 +195,6 @@ async function listImageUsagesForFilename(
     .select({
       id: products.id,
       parentId: products.parentId,
-      menuId: products.menuId,
       name: products.name,
       parentName: parentProducts.name,
       active: products.active,

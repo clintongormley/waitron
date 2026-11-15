@@ -149,7 +149,6 @@ async function fileOneSale(db: Database) {
     const anadidos = await createCategory(tx, { name: "Extras" });
     const product = (name: string, categoryId: string, unitPrice: string) =>
       createProduct(tx, {
-        menuId: menu.id,
         categoryId,
         name: `${name} staff`,
         customerName: { es: `${name} cliente` },

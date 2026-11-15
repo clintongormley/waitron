@@ -374,10 +374,8 @@ describe("seedDemoRestaurant", () => {
         ]),
       );
 
-      const [menu] = await venueMenus(tx);
       const folder = await createCategory(tx, { name: "Test-only packaged snacks" });
       const snack = await createProduct(tx, {
-        menuId: menu!.id,
         name: "Test-only packet of crisps",
         categoryId: folder.id,
         pricingUnit: "each",

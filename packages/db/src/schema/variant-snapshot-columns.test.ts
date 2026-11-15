@@ -9,7 +9,7 @@ import { VARIANT_LOCALES_REFUSAL } from "../trigger-refusals.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
-import { menus, products } from "./menus.js";
+import { products } from "./menus.js";
 import { workingOrderLines } from "./orders.js";
 
 /** An order opened from the dashboard, needing no device. */
@@ -36,11 +36,9 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger", () 
       invoiceLocales: [...LOCALES],
       operationDescription: "Hostelería",
     });
-    const [cat] = await db.insert(menus).values({ name: "Deli" }).returning({ id: menus.id });
     const [prod] = await db
       .insert(products)
       .values({
-        menuId: cat!.id,
         name: "Café solo",
 
         unitPrice: 130,

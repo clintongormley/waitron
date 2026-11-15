@@ -134,7 +134,6 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     });
     const drinks = await createCategory(tx, { name: "Drinks" });
     const beer = await createProduct(tx, {
-      menuId: cat.id,
       categoryId: drinks.id,
       name: "Draft beer",
       customerName: { [LOCALE]: "Caña de cerveza" },

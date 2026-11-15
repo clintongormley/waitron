@@ -375,7 +375,6 @@ async function seedCounterTill(venueDir: string, box: { nodeId: string }): Promi
       const menu = await createMenu(tx, { name: "Counter menu" });
       const category = await createCategory(tx, { name: "Drinks" });
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: category.id,
         name: "Coffee",
         customerName: { [LOCALE_M]: "Flat white" },

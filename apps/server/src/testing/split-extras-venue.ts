@@ -149,7 +149,6 @@ export async function setupSplitExtrasVenue() {
     ) =>
       (
         await createProduct(tx, {
-          menuId,
           categoryId,
           name,
           customerName: { [defaultLanguage]: customer },
@@ -294,7 +293,6 @@ type NamedExtraItem = ExtraItem & { customerName: string; kitchenName: string };
 export function addExtras(
   tx: Transaction,
   cfg: TradingContext,
-  menuId: string,
   dishId: string,
   items: NamedExtraItem[],
 ): Promise<{ listId: string; productIds: string[] }>;
@@ -302,7 +300,6 @@ export function addExtras(
 export function addExtras(
   tx: Transaction,
   cfg: TradingContext,
-  menuId: string,
   dishId: string,
   items: ExtraItem[],
   options: { staffNameOnly: true },
@@ -310,7 +307,6 @@ export function addExtras(
 export async function addExtras(
   tx: Transaction,
   cfg: TradingContext,
-  menuId: string,
   dishId: string,
   items: ExtraItem[],
   options?: { staffNameOnly: true },
@@ -326,7 +322,6 @@ export async function addExtras(
     )
       throw new Error("addExtras: three distinct names required");
     const { id } = await createProduct(tx, {
-      menuId,
       categoryId: item.categoryId ?? null,
       name: item.name,
       ...(item.customerName === undefined

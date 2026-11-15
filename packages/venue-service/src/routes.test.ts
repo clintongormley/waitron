@@ -2474,7 +2474,6 @@ describe("routing cell route", () => {
     return (
       await withTransaction(db, (tx) =>
         createProduct(tx, {
-          menuId: fx.menuId,
           name: "Lager",
           categoryId: fx.categoryId,
           pricingUnit: "each",
@@ -2871,7 +2870,6 @@ describe("routing cell route", () => {
     await lager(fx);
     const bread = await withTransaction(db, (tx) =>
       createProduct(tx, {
-        menuId: fx.menuId,
         name: "Bread",
         categoryId: null,
         pricingUnit: "each",
@@ -2954,7 +2952,6 @@ describe("routing cell route", () => {
     const fx = await fixture();
     const product = await withTransaction(db, (tx) =>
       createProduct(tx, {
-        menuId: fx.menuId,
         name: "Lager",
         categoryId: fx.categoryId,
         pricingUnit: "each",
@@ -2982,7 +2979,6 @@ describe("a routing cell's period choices on the routes", () => {
       });
       await configureZone(tx, { zoneId: fx.zoneId, departmentId: dining.id });
       const product = await createProduct(tx, {
-        menuId: fx.menuId,
         name: "Lager",
         categoryId: fx.categoryId,
         pricingUnit: "each",
@@ -3360,7 +3356,6 @@ it("the station planning route returns the configured period ranges for a non-de
     const departmentId = (await createDepartment(tx, { name: "Dining", orderStart: "table" })).id;
     await configureZone(tx, { zoneId: f.zoneId, departmentId });
     const product = await createProduct(tx, {
-      menuId: f.menuId,
       name: randomUUID(),
       categoryId: f.categoryId,
       pricingUnit: "each",
@@ -3883,7 +3878,6 @@ it("A724: the station planning route returns last orders at its period's own end
     const departmentId = (await createDepartment(tx, { name: "Dining", orderStart: "table" })).id;
     await configureZone(tx, { zoneId: f.zoneId, departmentId });
     const product = await createProduct(tx, {
-      menuId: f.menuId,
       name: randomUUID(),
       categoryId: f.categoryId,
       pricingUnit: "each",

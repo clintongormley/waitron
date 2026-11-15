@@ -40,7 +40,6 @@ import {
   updateHeldOrder,
   type TabRoundLine,
 } from "./working-order.js";
-import { readDefaultMenuId } from "@waitron/menu";
 
 afterEach(() => yieldTurn());
 
@@ -55,11 +54,9 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     ids = await inTx(venue, async (tx) => {
-      const menuId = (await readDefaultMenuId(tx))!;
       const product = async (name: string, price: string) =>
         (
           await createProduct(tx, {
-            menuId: menuId,
             categoryId: null,
             name,
             customerName: null,

@@ -22,14 +22,13 @@ async function configuredTaxpayer() {
 }
 
 it("a default switch waits for an authoring transaction and keeps its incomplete customer map", async () => {
-  const { menuId } = await configuredTaxpayer();
+  await configuredTaxpayer();
 
   const [write, change] = await racePair(
     suite.db,
     async (tx) => {
       await validateContentTranslations(tx, { en: "Bread" }, "es");
       await tx.insert(products).values({
-        menuId: menuId,
         name: "Bread",
         customerName: { en: "Bread" },
 

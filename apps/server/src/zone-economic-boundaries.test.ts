@@ -56,7 +56,6 @@ useVenueDb({
     offer = await withTransaction(db, async (tx) => {
       const category = await createCategory(tx, { name: "Zone boundary dishes" });
       const product = await createProduct(tx, {
-        menuId: tx.all<{ id: string }>(sql`select id from menus limit 1`)[0]!.id,
         categoryId: category.id,
         name: "Boundary dish",
         customerName: { "en-GB": "Customer dish" },

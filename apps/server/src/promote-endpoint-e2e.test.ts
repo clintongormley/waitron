@@ -300,7 +300,6 @@ async function seedSaleVenue(admin: Database): Promise<string> {
     const cat = await createMenu(tx, { name: "Delicatessen" });
     const drinks = await createCategory(tx, { name: "Bebidas" });
     const water = await createProduct(tx, {
-      menuId: cat.id,
       categoryId: drinks.id,
       name: "Mineral water",
       pricingUnit: "each",

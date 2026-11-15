@@ -131,7 +131,6 @@ async function lunchIncludingDrinks(app: Hono): Promise<Fixture> {
     .id;
   const productId = (
     await created(app, "/management-api/products", {
-      menuId: (await created(app, "/management-api/menus", { name: `Kitchen ${tag}` })).id,
       categoryId: null,
       name: `Soup ${tag}`,
       pricingUnit: "each",

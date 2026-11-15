@@ -52,7 +52,6 @@ function product(overrides: Partial<Product> = {}): Product {
   return {
     id: BREAD,
     modifiers: [],
-    menuId: "cat-1",
     categoryId: "category-1",
     primaryCategoryId: "category-1",
     name: "White bread",
@@ -1146,8 +1145,7 @@ it("opens a row's own list in the matching editor", async () => {
 it("hands the extras form the products the screen loaded", async () => {
   const client = api();
   const el = await mount(client);
-  expect(client.listMenus).toHaveBeenCalled();
-  expect(client.listProducts).toHaveBeenCalledWith("cat-1");
+  expect(client.listProducts).toHaveBeenCalledWith();
   expect(extraForm(el).products).toEqual(products);
 });
 
@@ -1453,7 +1451,7 @@ describe("after the server comes back", () => {
     client.liveData.refresh();
     await vi.waitFor(() => expect(loadError(el)).toBeNull());
     await vi.waitFor(() => expect(extraForm(el).products).toEqual(products));
-    expect(client.listProducts).toHaveBeenCalledWith("cat-1");
+    expect(client.listProducts).toHaveBeenCalledWith();
   });
 
   it("reads the products again when reattached while the lists' read fails, once it succeeds", async () => {
@@ -2038,25 +2036,11 @@ it("switches back to the Extras tab from Options", async () => {
 // ---------------------------------------------------------------------------
 // Products for the extras form
 
-it("offers the extras form no products once the venue has no menu left", async () => {
-  const client = api({
-    listMenus: vi.fn().mockResolvedValueOnce(menus).mockResolvedValue([]),
-  });
+it("offers the extras form every product when no menu exists", async () => {
+  const client = api({ listMenus: vi.fn().mockResolvedValue([]) });
   const el = await mount(client);
-  await vi.waitFor(() => expect(extraForm(el).products).toEqual(products));
-
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-extra-list"]')!.click();
-  await el.updateComplete;
-  extraForm(el).dispatchEvent(
-    new CustomEvent("wt-submit", {
-      detail: { value: { ...extraList, items: [] } },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  await vi.waitFor(() => expect(client.listMenus).toHaveBeenCalledTimes(2));
-  await vi.waitFor(() => expect(extraForm(el).products).toEqual([]));
-  expect(client.listProducts).toHaveBeenCalledTimes(1);
+  expect(extraForm(el).products).toEqual(products);
+  expect(client.listProducts).toHaveBeenCalledExactlyOnceWith();
 });
 
 // ---------------------------------------------------------------------------

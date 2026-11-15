@@ -8,7 +8,7 @@ import {
   useMenuDb,
 } from "../test/fixtures.js";
 import { createCategory } from "./categories.js";
-import { createMenu, createProduct, updateProduct } from "./operations.js";
+import { createProduct, updateProduct } from "./operations.js";
 import { readProductEditor, saveProductEditor, type ProductEditorInput } from "./product-editor.js";
 import { listProductVariants, setProductVariants, type VariantWrite } from "./variants.js";
 
@@ -19,26 +19,20 @@ const taken = (field: string, name: string) => ({
   params: { field, name },
 });
 
-let lunch: string, dinner: string, food: string, drinks: string, cola: string;
+let food: string, drinks: string, cola: string;
 beforeEach(async () => {
   await seedTaxpayer(suite.db);
   await seedLegacySellingUnits(suite.db);
   await app(async (tx) => {
-    lunch = (await createMenu(tx, { name: "Lunch" })).id;
-    dinner = (await createMenu(tx, { name: "Dinner" })).id;
     food = (await createCategory(tx, { name: "Food" })).id;
     drinks = (await createCategory(tx, { name: "Drinks" })).id;
   });
-  cola = await make("Cola", { menuId: lunch, categoryId: drinks });
+  cola = await make("Cola", { categoryId: drinks });
 });
 
-async function make(
-  name: string,
-  { menuId = dinner, categoryId = food, active = true } = {},
-): Promise<string> {
+async function make(name: string, { categoryId = food, active = true } = {}): Promise<string> {
   const created = await app((tx) =>
     createProduct(tx, {
-      menuId,
       categoryId,
       name,
       pricingUnit: "each",
@@ -128,11 +122,11 @@ describe("update", () => {
     await app((tx) => updateProduct(tx, cola, { name: "Cola", active: true, unitPrice: "3" }));
   });
   it("does not refuse a save that keeps a name two Active products already shared", async () => {
-    const twin = await plantStoredProduct(suite.db, dinner, "cola");
+    const twin = await plantStoredProduct(suite.db, "cola");
     await app((tx) => updateProduct(tx, twin, { name: "cola", unitPrice: "3" }));
   });
   it("does not refuse a new variant of a product whose name two Active products already shared", async () => {
-    await plantStoredProduct(suite.db, dinner, "cola");
+    await plantStoredProduct(suite.db, "cola");
     await variants(cola, [variant("Small")]);
   });
   it("refuses reactivating a product whose name became taken while it was Inactive", async () => {
@@ -294,7 +288,7 @@ describe("product editor save", () => {
       color: null,
     }) satisfies ProductEditorInput;
   const save = (productId: string | null, input: ProductEditorInput) =>
-    app((tx) => saveProductEditor(tx, productId, lunch, input, "en"));
+    app((tx) => saveProductEditor(tx, productId, input, "en"));
 
   it("refuses a new product named like another, beside its Name", async () => {
     await expect(save(null, body("cola"))).rejects.toMatchObject(taken("name", "cola"));
@@ -374,7 +368,6 @@ describe("product editor save", () => {
       saveProductEditor(
         tx,
         small,
-        lunch,
         {
           name: "cola",
           customerName: own.customerName,
@@ -438,7 +431,6 @@ describe("two writes started together", () => {
   it("lets one of two creates of one staff name through, and refuses the other", async () => {
     const create = (name: string) => (tx: Transaction) =>
       createProduct(tx, {
-        menuId: dinner,
         categoryId: null,
         name,
         pricingUnit: "each",

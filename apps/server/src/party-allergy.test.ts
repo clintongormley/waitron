@@ -129,7 +129,6 @@ async function nutritionProducts() {
     const category = await createCategory(tx, { name: `Dishes ${randomUUID().slice(0, 8)}` });
     const make = (name: string, allergens?: AllergenMap) =>
       createProduct(tx, {
-        menuId: menu.id,
         categoryId: category.id,
         name: `${name} ${randomUUID().slice(0, 8)}`,
         customerName: { es: `${name} customer` },

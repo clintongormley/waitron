@@ -996,7 +996,6 @@ CREATE TABLE `menus` (
 CREATE UNIQUE INDEX `menus_one_default_uq` ON `menus` (`is_default`) WHERE "menus"."is_default" = 1;--> statement-breakpoint
 CREATE TABLE `products` (
 	`id` text PRIMARY KEY NOT NULL,
-	`menu_id` text NOT NULL,
 	`parent_id` text,
 	`variant_order` integer DEFAULT 0 NOT NULL,
 	`set_lunch` integer DEFAULT false NOT NULL,
@@ -1023,21 +1022,18 @@ CREATE TABLE `products` (
 	`diet` text,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
-	FOREIGN KEY (`menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`course_id`) REFERENCES `kitchen_courses`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`unit_id`) REFERENCES `units`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`parent_id`,`menu_id`) REFERENCES `products`(`id`,`menu_id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`parent_id`) REFERENCES `products`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "products_top_level_owns_ck" CHECK("products"."parent_id" is not null or ("products"."vat_class" is not null and "products"."unit_price" is not null and "products"."dietary_declarations" is not null)),
 	CONSTRAINT "products_vat_class_ck" CHECK("products"."vat_class" in ('general','reduced','super_reduced','zero')),
 	CONSTRAINT "products_takeaway_vat_class_ck" CHECK("products"."takeaway_vat_class" in ('general','reduced','super_reduced','zero'))
 );
 --> statement-breakpoint
-CREATE INDEX `products_menu_id_idx` ON `products` (`menu_id`);--> statement-breakpoint
 CREATE INDEX `products_name_key_idx` ON `products` (`name_key`);--> statement-breakpoint
 CREATE INDEX `products_unit_idx` ON `products` (`unit_id`);--> statement-breakpoint
 CREATE INDEX `products_course_idx` ON `products` (`course_id`);--> statement-breakpoint
-CREATE UNIQUE INDEX `products_id_menu_key` ON `products` (`id`,`menu_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `products_parent_id_key` ON `products` (`parent_id`,`id`);--> statement-breakpoint
 CREATE TABLE `purchase_invoice_vat` (
 	`id` text PRIMARY KEY NOT NULL,

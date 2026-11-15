@@ -21,7 +21,6 @@ function product(id: string, name: string, image: string | null = null): Product
   return {
     id,
     modifiers: [],
-    menuId: "cat-1",
     categoryId: null,
     primaryCategoryId: null,
     name,

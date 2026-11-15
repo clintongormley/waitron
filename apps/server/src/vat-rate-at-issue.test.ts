@@ -173,7 +173,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     const menu = await createMenu(tx, { name: `Vat rate at issue menu ${cfg.nodeId}` });
     const product = (name: string, unitPrice: string, vatClass: "reduced" | "general") =>
       createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name,
         pricingUnit: "each",

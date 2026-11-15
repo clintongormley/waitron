@@ -39,15 +39,9 @@ export const products = table(
   "products",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    menuId: id("menu_id")
-      .notNull()
-      /* v8 ignore start */
-      .references(() => menus.id),
-    /* v8 ignore stop */
     // Set only on a VARIANT: the product it is a variant of. One level only, fixed when the row is
     // created, and the row's `id` never changes either — all enforced by triggers, which cannot be
-    // declared here (`triggers/core.sql`). Same menu as the parent: the composite key
-    // below.
+    // declared here (`triggers/core.sql`).
     parentId: id("parent_id"),
     // A variant's position among its parent's variants; unused with no parent.
     variantOrder: count("variant_order").notNull().default(0),
@@ -119,16 +113,14 @@ export const products = table(
     updatedAt: ts("updated_at").notNull().$defaultFn(now),
   },
   (t) => [
-    index("products_menu_id_idx").on(t.menuId),
     index("products_name_key_idx").on(t.nameKey),
     index("products_unit_idx").on(t.unitId),
     index("products_course_idx").on(t.courseId),
-    unique("products_id_menu_key").on(t.id, t.menuId),
     // Target of menu's `menu_item_variant_overrides` key `(product_id, variant_id)`.
     unique("products_parent_id_key").on(t.parentId, t.id),
     foreignKey({
-      columns: [t.parentId, t.menuId],
-      foreignColumns: [t.id, t.menuId],
+      columns: [t.parentId],
+      foreignColumns: [t.id],
     }).onDelete("restrict"),
     // A product with no parent owns every value a variant may inherit.
     check(

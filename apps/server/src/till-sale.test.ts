@@ -206,7 +206,6 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
     const food = await createCategory(tx, { name: "Food" });
     const drinks = await createCategory(tx, { name: "Drinks" });
     await createProduct(tx, {
-      menuId: cat.id,
       categoryId: food.id,
       name: "Jamón cortado",
       pricingUnit: "weight",
@@ -214,7 +213,6 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
       vatClass: "reduced",
     });
     const water = await createProduct(tx, {
-      menuId: cat.id,
       categoryId: drinks.id,
       name: "Agua mineral",
       pricingUnit: "each",
@@ -815,7 +813,6 @@ describe("priceOrderLines re-keys bare menu content to the venue invoice_locales
       const cat = await createMenu(tx, { name: "Delicatessen" });
       const drinks = await createCategory(tx, { name: "Drinks" });
       const product = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: drinks.id,
         name: "Bare staff name",
         customerName,
@@ -1076,7 +1073,6 @@ describe("ordering extras and options — parent + child lines", () => {
         pricingUnit: "each" | "weight" = "each",
       ) =>
         createProduct(tx, {
-          menuId: cat.id,
           categoryId: food.id,
           name,
           pricingUnit,
@@ -1087,7 +1083,6 @@ describe("ordering extras and options — parent + child lines", () => {
       // (CLAUDE.md §3).
       const extraProduct = (name: string, vatClass: "general" | "reduced") =>
         createProduct(tx, {
-          menuId: cat.id,
           categoryId: food.id,
           name: `${name} staff`,
           customerName: { [defaultLanguage]: `${name} customer` },
@@ -1535,14 +1530,9 @@ describe("ordering extras and options — parent + child lines", () => {
     const v = await setupModifierVenue();
     const workingOrderId = randomUUID();
     const seeded = await withTransaction(suite.db, async (tx) => {
-      const [bacon] = await tx
-        .select({ menuId: products.menuId })
-        .from(products)
-        .where(eq(products.id, v.baconId));
       const [variant] = await tx
         .insert(products)
         .values({
-          menuId: bacon!.menuId,
           parentId: v.baconId,
           name: `${own.stem} staff`,
           customerName: { [v.defaultLanguage]: `${own.stem} customer` },
@@ -1554,7 +1544,6 @@ describe("ordering extras and options — parent + child lines", () => {
         })
         .returning({ id: products.id });
       const dish = await createProduct(tx, {
-        menuId: bacon!.menuId,
         categoryId: null,
         name: "Tostada",
         pricingUnit: "each",

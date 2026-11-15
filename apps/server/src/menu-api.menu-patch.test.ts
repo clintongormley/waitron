@@ -97,7 +97,6 @@ async function created(app: Hono, path: string, body: unknown): Promise<string> 
 async function lunchWithSoup(app: Hono): Promise<{ menuId: string; itemId: string }> {
   const menuId = await created(app, "/management-api/menus", { name: "Lunch" });
   const productId = await created(app, "/management-api/products", {
-    menuId: await created(app, "/management-api/menus", { name: "Kitchen" }),
     categoryId: null,
     name: "Soup",
     pricingUnit: "each",

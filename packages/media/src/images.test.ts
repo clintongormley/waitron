@@ -192,17 +192,10 @@ describe("metadata and references", () => {
         { image: photo, names: { en: "Bread" } },
         { fallbackLanguage: "en" },
       );
-      // Through the table definitions, not raw SQL: `id`, `created_at` and `updated_at` are
-      // JavaScript generators (`$defaultFn`), never a column DEFAULT, so a raw insert that names
-      // neither is refused with `NOT NULL constraint failed`.
-      const [menu] = await tx.insert(menus).values({ name: "Lunch" }).returning({
-        id: menus.id,
-      });
       // `unit_price` counts whole cents, so 200 is the 2.00 this fixture means.
       const [inserted] = await tx
         .insert(products)
         .values({
-          menuId: menu!.id,
           name: "Bread",
 
           unitPrice: 200,
@@ -215,7 +208,7 @@ describe("metadata and references", () => {
         {
           kind: "product",
           id: inserted!.id,
-          menuId: menu!.id,
+
           name: "Bread",
           active: false,
         },
@@ -236,15 +229,11 @@ describe("metadata and references", () => {
         { image: photo, names: { en: "Large loaf" } },
         { fallbackLanguage: "en" },
       );
-      const [menu] = await tx.insert(menus).values({ name: "Lunch" }).returning({
-        id: menus.id,
-      });
       // The PRODUCT carries no photo; only its variant does, which is the case a product-only scan
       // misses — the variant photo would be deletable while the variant still points at it.
       const [product] = await tx
         .insert(products)
         .values({
-          menuId: menu!.id,
           name: "Bread",
 
           unitPrice: 200,
@@ -255,7 +244,6 @@ describe("metadata and references", () => {
       const [variant] = await tx
         .insert(products)
         .values({
-          menuId: menu!.id,
           parentId: product!.id,
           name: "Large",
           unitPrice: 300,
@@ -267,7 +255,7 @@ describe("metadata and references", () => {
           kind: "variant",
           id: variant!.id,
           productId: product!.id,
-          menuId: menu!.id,
+
           name: "Bread (Large)",
           active: true,
         },
@@ -291,13 +279,9 @@ describe("metadata and references", () => {
         { image: photo, names: { en: "Loaf" } },
         { fallbackLanguage: "en" },
       );
-      const [menu] = await tx.insert(menus).values({ name: "Lunch" }).returning({
-        id: menus.id,
-      });
       const [product] = await tx
         .insert(products)
         .values({
-          menuId: menu!.id,
           name: "Bread",
 
           unitPrice: 200,
@@ -306,12 +290,8 @@ describe("metadata and references", () => {
         })
         .returning({ id: products.id });
       // No photo of its own: it borrows the parent's, which is the parent's use, not its own.
-      await tx
-        .insert(products)
-        .values({ menuId: menu!.id, parentId: product!.id, name: "Large", unitPrice: 300 });
-      const uses = [
-        { kind: "product", id: product!.id, menuId: menu!.id, name: "Bread", active: true },
-      ];
+      await tx.insert(products).values({ parentId: product!.id, name: "Large", unitPrice: 300 });
+      const uses = [{ kind: "product", id: product!.id, name: "Bread", active: true }];
       expect(await listImageUsages(tx, image.id)).toEqual(uses);
       expect((await readImage(tx, image.id)).usageCount).toBe(1);
       expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
@@ -326,27 +306,21 @@ describe("metadata and references", () => {
         { image: photo, names: { en: "Loaf" } },
         { fallbackLanguage: "en" },
       );
-      const [menu] = await tx.insert(menus).values({ name: "Lunch" }).returning({
-        id: menus.id,
-      });
-      const menuId = menu!.id;
-      const top = { menuId, pricingUnit: "each", unitPrice: 200, vatClass: "general" };
+      const top = { pricingUnit: "each", unitPrice: 200, vatClass: "general" };
       await tx.insert(products).values([
         { ...top, id: "p-on", name: "Bread", image: image.filename },
         { ...top, id: "p-off", name: "Cake", active: false },
       ]);
       // Every variant id sorts BEFORE its product's, so the products-first order is the reader's.
       await tx.insert(products).values([
-        { menuId, id: "a-kept", parentId: "p-on", name: "Large", image: image.filename },
+        { id: "a-kept", parentId: "p-on", name: "Large", image: image.filename },
         {
-          menuId,
           id: "a-of-inactive",
           parentId: "p-off",
           name: "Slice",
           image: image.filename,
         },
         {
-          menuId,
           id: "a-removed",
           parentId: "p-on",
           name: "Small",
@@ -358,12 +332,12 @@ describe("metadata and references", () => {
         kind: "variant",
         id,
         productId,
-        menuId,
+
         name,
         active,
       });
       expect(await listImageUsages(tx, image.id)).toEqual([
-        { kind: "product", id: "p-on", menuId, name: "Bread", active: true },
+        { kind: "product", id: "p-on", name: "Bread", active: true },
         variant("a-kept", "p-on", "Bread (Large)", true),
         variant("a-of-inactive", "p-off", "Cake (Slice)", false),
         variant("a-removed", "p-on", "Bread (Small)", false),
@@ -916,7 +890,6 @@ it("protects an image only a live menu version names, and releases it once anoth
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Lemonade" } }, {});
     const menu = await createMenu(tx, { name: "Lunch Menu" });
     const lemonade = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Lemonade",
       pricingUnit: "each",
@@ -966,7 +939,6 @@ it("protects an image only a queued menu edition names, counts it as a use, and 
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Lemonade" } }, {});
     const menu = await createMenu(tx, { name: "Lunch Menu" });
     const lemonade = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Lemonade",
       pricingUnit: "each",
@@ -1026,7 +998,6 @@ it("lists a live version and a queued edition of one menu in number order, then 
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Lemonade" } }, {});
     const menu = await createMenu(tx, { name: "Lunch Menu" });
     const lemonade = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Lemonade",
       pricingUnit: "each",
@@ -1094,7 +1065,6 @@ it("protects the photo of a product a live menu version offers only as an extra"
     const menu = await createMenu(tx, { name: "Lunch Menu" });
     const make = (name: string, photoName: string | null) =>
       createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name,
         pricingUnit: "each",
@@ -1245,7 +1215,6 @@ describe("free default choice with incomplete menu and image text", () => {
         "en",
       );
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: "ES potatoes",
         kitchenName: "KITCHEN POTATOES",

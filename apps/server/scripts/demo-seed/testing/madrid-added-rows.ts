@@ -165,7 +165,6 @@ export function madridWithAddedRows(
         ["unitPrice", product.unitPrice, row.unit_price],
         ["pricingUnit", product.pricingUnit, row.pricing_unit],
         ["category", categoryKey, row.category_id],
-        ["menu", menu, row.catalogue_id],
         ["image", product.image, row.image],
       ];
       for (const [field, want, inRow] of facts)

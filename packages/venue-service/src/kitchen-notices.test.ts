@@ -569,7 +569,6 @@ describe("recordKitchenNotices", () => {
     const offer = await inTx(async (tx) => {
       const menu = await createMenu(tx, { name: "Snacks" });
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: "Small plate",
         pricingUnit: "each",
