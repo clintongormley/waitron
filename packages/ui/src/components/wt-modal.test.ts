@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { cleanup, formMessageOf, host, mount } from "../test-helpers.js";
 import { WtModal } from "./wt-modal.js";
 import "./wt-form-actions.js";
@@ -1381,3 +1381,66 @@ test("gives a form's action row in its body the raised surface it paints, and ke
   expect(getComputedStyle(body).backgroundColor).toBe("rgb(10, 11, 12)");
   expect(getComputedStyle(footer).backgroundColor).toBe("rgba(0, 0, 0, 0)");
 });
+
+test.each(["mouse", "keyboard"] as const)(
+  "returns row focus without pointer decoration after a typed editor (%s)",
+  async (opening) => {
+    const table = (await mount(
+      `<wt-data-table aria-label="Devices"></wt-data-table><wt-modal heading="Edit device"><input aria-label="Device name"><button>Save</button></wt-modal>`,
+    )) as WtDataTable<{ id: string; name: string }>;
+    const modal = host.querySelector<WtModal>("wt-modal")!;
+    table.columns = [{ key: "name", label: "Name", cell: (row) => row.name }];
+    table.rows = [
+      { id: "counter", name: "Counter" },
+      { id: "bar", name: "Bar" },
+    ];
+    table.rowKey = (row) => row.id;
+    table.rowClick = () => {
+      modal.open = true;
+    };
+    modal.querySelector("button")!.addEventListener("click", () => {
+      modal.open = false;
+    });
+    host.style.setProperty("--wt-color-surface-lifted", "rgb(30, 40, 50)");
+    await table.updateComplete;
+    await modal.updateComplete;
+    const [first, second] = [
+      ...table.shadowRoot!.querySelectorAll<HTMLButtonElement>(".row-activate"),
+    ];
+    const firstCell = first!.closest("td")!;
+    const secondCell = second!.closest("td")!;
+    const resting = getComputedStyle(firstCell).backgroundColor;
+    expect(resting).not.toBe("rgb(30, 40, 50)");
+    if (opening === "mouse") await userEvent.click(first!);
+    else {
+      await userEvent.keyboard("{Tab}");
+      first!.focus();
+      await userEvent.keyboard("{Enter}");
+    }
+    await modal.updateComplete;
+    await userEvent.click(modal.querySelector("input")!);
+    await userEvent.keyboard("Counter");
+    const closed = new Promise((resolve) =>
+      modal.addEventListener("wt-close", resolve, { once: true }),
+    );
+    await userEvent.keyboard("{Escape}");
+    await closed;
+    await commands.parkPointer();
+    await userEvent.hover(second!);
+    await vi.waitFor(() =>
+      expect(getComputedStyle(secondCell).backgroundColor).toBe("rgb(30, 40, 50)"),
+    );
+    expect({
+      returnedToOpener: table.shadowRoot!.activeElement === first,
+      openerBackground: getComputedStyle(firstCell).backgroundColor,
+      hoveredBackground: getComputedStyle(secondCell).backgroundColor,
+    }).toEqual({
+      returnedToOpener: true,
+      openerBackground: opening === "keyboard" ? "rgb(30, 40, 50)" : resting,
+      hoveredBackground: "rgb(30, 40, 50)",
+    });
+    await userEvent.keyboard("{Tab}");
+    expect(table.shadowRoot!.activeElement).toBe(second);
+    expect(second!.matches(":focus-visible")).toBe(true);
+  },
+);

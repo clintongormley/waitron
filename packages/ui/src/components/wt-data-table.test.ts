@@ -4285,15 +4285,15 @@ test("an in-cell control's click is not also wired to the row activator", async 
   expect(clicked).toEqual([]);
 });
 
-test("paints the focused clickable row from a token", async () => {
+test("paints the keyboard-focused clickable row from a token", async () => {
   const el = await table({ rowClick: (row: Row) => row.id });
   host.style.setProperty("--wt-color-surface-lifted", "rgb(30, 40, 50)");
   const activate = el.shadowRoot!.querySelector<HTMLButtonElement>(".row-activate")!;
   const cell = activate.closest("td")!;
   // Before focus, the cell paints no lifted background of its own.
   expect(getComputedStyle(cell).backgroundColor).not.toBe("rgb(30, 40, 50)");
+  await userEvent.keyboard("{Tab}");
   activate.focus();
-  // Via :focus-within, because getComputedStyle cannot force a hover state.
   expect(getComputedStyle(cell).backgroundColor).toBe("rgb(30, 40, 50)");
 });
 
@@ -5903,7 +5903,7 @@ test("a pinned column paints the row's background at rest and on hover, and draw
   expect(getComputedStyle(cell).backgroundColor).toBe("rgb(30, 40, 50)");
 });
 
-test("a pinned column in a clickable row paints the row's hover and focus background", async () => {
+test("a pinned column in a clickable row paints the row's hover and keyboard focus background", async () => {
   const { el } = await narrowTable("end", { rowClick: (row: Row) => row.id });
   host.style.setProperty("--wt-color-surface-lifted", "rgb(30, 40, 50)");
   const cell = el.shadowRoot!.querySelector("tbody tr td:last-child")!;
@@ -5912,6 +5912,7 @@ test("a pinned column in a clickable row paints the row's hover and focus backgr
   expect(getComputedStyle(cell).backgroundColor).toBe("rgb(30, 40, 50)");
   await commands.parkPointer();
   expect(getComputedStyle(cell).backgroundColor).not.toBe("rgb(30, 40, 50)");
+  await userEvent.keyboard("{Tab}");
   el.shadowRoot!.querySelector<HTMLButtonElement>(".row-activate")!.focus();
   expect(getComputedStyle(cell).backgroundColor).toBe("rgb(30, 40, 50)");
 });
@@ -6964,7 +6965,7 @@ test("while searching, a row that matches or sits under a match is not marked an
   expect(seen).toEqual({ food: false, break: false, eggs: false });
 });
 
-test("a clickable row, pinned cell included, takes the lifted surface while hovered or focused", async () => {
+test("a clickable row, pinned cell included, takes the lifted surface while hovered or keyboard-focused", async () => {
   const { el } = await narrowTable("end", { rowClick: (row: Row) => row.id });
   host.style.setProperty("--wt-color-surface", "rgb(7, 8, 9)");
   host.style.setProperty("--wt-color-surface-raised", "rgb(30, 40, 50)");
@@ -6979,6 +6980,7 @@ test("a clickable row, pinned cell included, takes the lifted surface while hove
   await commands.parkPointer();
   for (const cell of cells)
     expect(getComputedStyle(cell).backgroundColor).not.toBe("rgb(60, 70, 80)");
+  await userEvent.keyboard("{Tab}");
   el.shadowRoot!.querySelector<HTMLButtonElement>('tr[data-row-key="b"] .row-activate')!.focus();
   for (const cell of cells) expect(getComputedStyle(cell).backgroundColor).toBe("rgb(60, 70, 80)");
   el.shadowRoot!.querySelector<HTMLButtonElement>('button[aria-label="Edit Bea"]')!.focus();

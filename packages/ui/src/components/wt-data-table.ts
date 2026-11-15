@@ -826,7 +826,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       /* The raised surface equals the resting one in the light theme, so a row that opens something
          takes the lifted one. Last, and as specific as the pinned and joined rules, so it wins over
          both. */
-      tbody tr.clickable:is(:hover, :focus-within) td {
+      tbody tr.clickable:is(:hover, :has(:focus-visible)) td {
         background: var(--wt-color-surface-lifted);
         cursor: pointer;
       }

@@ -216,7 +216,7 @@ dark, 1.4:1 or more from both `--wt-color-bg` and `--wt-color-surface` with `--w
 `--wt-color-surface-lifted` is the background of something picked up and moving, or of a row being
 pointed at or focused — for example a table row while a pointer drags it
 (`packages/ui/src/reorder-table.ts`), a `wt-data-table` row that opens something while it is
-hovered or while anything in it has focus, and a `wt-choice-row` under the pointer. A dragged row
+hovered or while it contains visible keyboard focus, and a `wt-choice-row` under the pointer. A dragged row
 can sit inside a `wt-modal`, which is painted `--wt-color-surface-raised`, so the lifted surface
 differs from `--wt-color-bg`, `--wt-color-surface` and `--wt-color-surface-raised` in both themes,
 and keeps `--wt-color-text`, `--wt-color-text-muted` and `--wt-color-danger` at 4.5:1 or more, so an
@@ -1869,6 +1869,8 @@ the moves already made when a drag is cancelled, as they do on pointer cancellat
 only on release.
 
 ### Remembered, searchable, filterable tables
+
+A row opened with the pointer keeps its focus destination after an editor closes, without a focus ring or lifted focus background. Keyboard opening and later keyboard navigation keep visible focus. Dialogs record whether the opening control had visible keyboard focus before moving into their content.
 
 `wt-data-table` shows its empty message and `empty-action` slot alone when `rows` is empty.
 When the table has source rows, it draws a toolbar if `searchable` is set, a column carries a

@@ -2989,3 +2989,35 @@ test("gives a form's action row in its body the raised surface it paints, and ke
   expect(getComputedStyle(body).backgroundColor).toBe("rgb(10, 11, 12)");
   expect(getComputedStyle(footer).backgroundColor).toBe("rgba(0, 0, 0, 0)");
 });
+
+test.each(["mouse", "keyboard"] as const)(
+  "returns the opener's visible focus mode after typing (%s)",
+  async (opening) => {
+    const opener = await mount(
+      '<button>Open editor</button><wt-dialog heading="Edit device"><input aria-label="Device name"></wt-dialog>',
+    );
+    const dialog = host.querySelector<WtDialog>("wt-dialog")!;
+    opener.addEventListener("click", () => {
+      dialog.open = true;
+    });
+    if (opening === "mouse") await userEvent.click(opener);
+    else {
+      await userEvent.keyboard("{Tab}");
+      opener.focus();
+      await userEvent.keyboard("{Enter}");
+    }
+    await dialog.updateComplete;
+    await userEvent.click(dialog.querySelector("input")!);
+    await userEvent.keyboard("Counter");
+    const closed = new Promise((resolve) =>
+      dialog.addEventListener("wt-close", resolve, { once: true }),
+    );
+    await userEvent.keyboard("{Escape}");
+    await closed;
+    expect(deepActiveElement()).toBe(opener);
+    expect(
+      getComputedStyle(opener).outlineStyle !== "none" &&
+        parseFloat(getComputedStyle(opener).outlineWidth) > 0,
+    ).toBe(opening === "keyboard");
+  },
+);
