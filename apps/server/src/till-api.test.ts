@@ -2157,9 +2157,12 @@ describe("zone-offer menu routes", () => {
     }
   });
 
-  it.each(["default", "selected"] as const)(
+  it.each([
+    ["default", 409, "device_profile.no_service_zone"],
+    ["selected", 404, "service_zone.not_found"],
+  ] as const)(
     "refuses %s-zone offers while its department is inactive",
-    async (route) => {
+    async (route, status, code) => {
       const app = new Hono();
       mountTillApi(app, deps(suite.db), collect([]));
       const token = await openSession(suite.db);
@@ -2184,9 +2187,9 @@ describe("zone-offer menu routes", () => {
         const response = await app.request(path, {
           headers: { cookie: `${SESSION_COOKIE}=${token}` },
         });
-        expect(response.status).toBe(404);
+        expect(response.status).toBe(status);
         expect(await response.json()).toMatchObject({
-          error: { code: "service_zone.not_found" },
+          error: { code },
         });
       } finally {
         await suite.db

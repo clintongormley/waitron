@@ -182,6 +182,7 @@ describe("staged configuration import", () => {
     ["pre-option-default-flag export", { version: 33 }],
     ["pre-menu-free-product export", { version: 34 }],
     ["pre-product-declared-facts export", { version: 35 }],
+    ["pre-department-columns export", { version: 36 }],
     ["future version", { version: bundle.version + 1 }],
     ["format-9 export", { version: 9, venue: bundle.venue }],
   ])("refuses %s through setup before replacing staged files", async (_label, change) => {
