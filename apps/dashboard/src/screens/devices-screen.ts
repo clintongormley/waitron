@@ -1346,7 +1346,7 @@ export class DevicesScreen extends LitElement {
     role: (typeof PRINTER_ROLES)[number],
     profile: DeviceProfile | undefined,
     held: string | null,
-  ): { value: string; label: string; fixed?: boolean }[] {
+  ): { value: string; label: string; fixed?: boolean; muted?: true; description?: string }[] {
     const ids = profile?.[role.list] ?? [];
     const drawer = role.field === "drawer" || role.field === "invoice";
     const keep = this.editForm.profileId === this.editing?.deviceProfileId ? held : null;
@@ -1363,7 +1363,12 @@ export class DevicesScreen extends LitElement {
         ? null
         : printerLabel(fallback);
     return [
-      { value: "", label: resolved ?? t("equipment.none") },
+      {
+        value: "",
+        label: resolved ?? t("equipment.none"),
+        muted: true,
+        description: t("devices.from_profile"),
+      },
       ...listed.map((p) => ({ value: p.id, label: this.#printerChoiceLabel(p, drawer) })),
       ...(unlisted === undefined
         ? []
@@ -1394,7 +1399,7 @@ export class DevicesScreen extends LitElement {
     return this.#readerLabel(reader);
   }
 
-  #readerOptions(): { value: string; label: string }[] {
+  #readerOptions(): { value: string; label: string; muted?: true; description?: string }[] {
     const list = this.profileReaders.get(this.editForm.profileId);
     const listed = (list?.readerIds ?? []).flatMap((id) => {
       const reader = this.readers.find((r) => r.id === id);
@@ -1407,7 +1412,12 @@ export class DevicesScreen extends LitElement {
         ? null
         : this.#readerLabel(fallback);
     return [
-      { value: "", label: resolved ?? t("equipment.none") },
+      {
+        value: "",
+        label: resolved ?? t("equipment.none"),
+        muted: true,
+        description: t("devices.from_profile"),
+      },
       ...listed.map((reader) => ({ value: reader.id, label: this.#readerChoiceLabel(reader) })),
     ];
   }
@@ -1719,12 +1729,20 @@ export class DevicesScreen extends LitElement {
         choosable: "shown",
         label: t(column.label),
         sortValue: (d) => equipmentName(d, column.role, this.pagePrinters),
-        cell: (d) =>
-          html`<span
-            part=${d.equipment.find((entry) => entry.role === column.role)?.selection === "item" ? nothing : "inherited"}
-            data-test=${`device-${column.key}-${d.id}`}
-            >${equipmentName(d, column.role, this.pagePrinters)}</span
-          >`,
+        cell: (d) => {
+          const inherited =
+            d.equipment.find((entry) => entry.role === column.role)?.selection !== "item";
+          const name = equipmentName(d, column.role, this.pagePrinters);
+          return html`<span
+              part=${inherited ? "inherited" : nothing}
+              data-test=${`device-${column.key}-${d.id}`}
+              >${name}</span
+            >${
+              inherited && name !== ""
+                ? html`<span part="visually-hidden"> ${t("devices.from_profile")}</span>`
+                : nothing
+            }`;
+        },
       })),
       {
         key: "battery",
