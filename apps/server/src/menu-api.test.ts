@@ -1620,6 +1620,7 @@ describe("unique category and product names", () => {
       available: true,
       ordering: "public",
       vatClass: "general",
+      takeawayVatClass: null,
       variants: [variant(name), variant(name.toLowerCase())],
       primaryCategoryId: null,
       modifiers: [],
@@ -1872,6 +1873,7 @@ describe("mountMenuApi — products", () => {
       available: true,
       ordering: "public",
       vatClass: "general",
+      takeawayVatClass: null,
       variants: [
         {
           name: "Double",
@@ -2099,6 +2101,7 @@ describe("mountMenuApi — products", () => {
       available: true,
       ordering: "public",
       vatClass: "general",
+      takeawayVatClass: null,
       variants: [],
       primaryCategoryId: null,
       modifiers: [],
@@ -3050,6 +3053,55 @@ describe("mountMenuApi — products", () => {
     });
     expect(res.status).toBe(201);
     expect(await res.json()).toMatchObject({ active: true, available: false });
+  });
+
+  it("POST /management-api/products stores a takeaway class, and none when it is omitted", async () => {
+    const app = mountApp();
+    const menuId = await createMenuVia(app, "Takeaway class menu");
+    const create = (name: string, extra: Record<string, unknown>) =>
+      send(app, "POST", "/management-api/products", {
+        body: {
+          menuId,
+          categoryId: null,
+          name,
+          pricingUnit: "each",
+          unitPrice: "1.50",
+          vatClass: "reduced",
+          ...extra,
+        },
+      });
+    const res = await create("Cola", { takeawayVatClass: "general" });
+    expect(res.status).toBe(201);
+    const product = (await res.json()) as { id: string; takeawayVatClass: string | null };
+    expect(product.takeawayVatClass).toBe("general");
+    const stored = await suite.db.execute<{ takeaway_vat_class: string | null }>(
+      sql`select takeaway_vat_class from products where id = ${product.id}`,
+    );
+    expect(stored.rows[0]!.takeaway_vat_class).toBe("general");
+
+    const omitted = await create("Water", {});
+    expect(omitted.status).toBe(201);
+    expect(((await omitted.json()) as { takeawayVatClass: unknown }).takeawayVatClass).toBeNull();
+  });
+
+  it("POST /management-api/products refuses a takeaway class that is not a VAT class", async () => {
+    const app = mountApp();
+    const menuId = await createMenuVia(app, "Bad takeaway class menu");
+    const res = await send(app, "POST", "/management-api/products", {
+      body: {
+        menuId,
+        categoryId: null,
+        name: "Cola",
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "reduced",
+        takeawayVatClass: "nope",
+      },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "product.invalid", params: { field: "takeawayVatClass" } },
+    });
   });
 
   it("POST /management-api/products with active:true (and with it omitted) → an active product", async () => {
@@ -5075,6 +5127,7 @@ describe("menu routes that already refused a negative price", () => {
       available: true,
       ordering: "public",
       vatClass: "general",
+      takeawayVatClass: null,
       variants: [variant("A", "2.00"), variant("B", "3.00")],
       primaryCategoryId: null,
       modifiers: [],

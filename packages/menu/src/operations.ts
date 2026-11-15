@@ -19,6 +19,7 @@ import {
   type DietProfile,
   validateDietaryDeclarations,
   type DietaryLabel,
+  VAT_CLASSES,
 } from "@waitron/shared";
 import {
   menus,
@@ -123,6 +124,8 @@ export interface CreateProductInput {
   pricingUnit?: PricingUnit;
   unitPrice: string;
   vatClass: VatClass;
+  /** Omitted or null leaves it empty. */
+  takeawayVatClass?: VatClass | null;
   /** Omitted leaves it null (unreviewed). */
   allergens?: ProductAllergens;
   /** The staff diet override. Omitted or `null` leaves no override. */
@@ -150,6 +153,8 @@ export interface UpdateProductInput {
    * product with no parent, as it does a blank `vatClass` and `dietaryDeclarations`. */
   unitPrice?: string | null;
   vatClass?: VatClass | null;
+  /** `null` empties it, on a product or a variant. */
+  takeawayVatClass?: VatClass | null;
   /** `null` clears the unit (a product then reads as Each); a real id sets it, on a product with no
    * parent only; omitted leaves it unchanged unless the legacy `pricingUnit` is supplied. */
   unitId?: string | null;
@@ -950,6 +955,9 @@ async function insertProduct(
     // Any other legacy `pricingUnit` value is rejected at the boundary, not silently treated as weight.
     throw new AppError("product.invalid", { field: "pricingUnit" });
   }
+  const takeawayVatClass = input.takeawayVatClass ?? null;
+  if (takeawayVatClass !== null && !VAT_CLASSES.includes(takeawayVatClass))
+    throw new AppError("product.invalid", { field: "takeawayVatClass" });
   const allergens = input.allergens === undefined ? null : validateAllergens(input.allergens);
   const dietOverride = validateDietOverride(input.dietOverride ?? null);
   const values = {
@@ -962,6 +970,7 @@ async function insertProduct(
     dietaryDeclarations: validateDietaryDeclarations(input.dietaryDeclarations ?? []),
     unitPrice: stringToCents(input.unitPrice),
     vatClass: input.vatClass,
+    takeawayVatClass,
     active: input.active ?? true,
     available: input.available ?? true,
     ordering: input.ordering ?? "public",

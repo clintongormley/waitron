@@ -10,7 +10,7 @@ import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import type { Transaction } from "@waitron/db";
 import { priceBasket } from "./pricing.js";
 import type { PriceableProduct } from "./pricing.js";
-import type { PricingUnit } from "@waitron/shared";
+import type { PricingUnit, VatClass } from "@waitron/shared";
 import { customerPresentationText } from "@waitron/shared";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
 import { readDefaultMenuId } from "./operations.js";
@@ -534,6 +534,26 @@ describe("menu operations", () => {
       ).rejects.toMatchObject({
         code: "product.invalid",
         params: { field: "pricingUnit" },
+      });
+    });
+  });
+
+  it("rejects a create whose takeaway class is not a VAT class", async () => {
+    await asVenue(async (tx) => {
+      const cat = await createMenu(tx, { name: "Deli" });
+      await expect(
+        createProduct(tx, {
+          menuId: cat.id,
+          categoryId: null,
+          name: "cola",
+          pricingUnit: "each",
+          unitPrice: "1.50",
+          vatClass: "reduced",
+          takeawayVatClass: "nope" as VatClass,
+        }),
+      ).rejects.toMatchObject({
+        code: "product.invalid",
+        params: { field: "takeawayVatClass" },
       });
     });
   });

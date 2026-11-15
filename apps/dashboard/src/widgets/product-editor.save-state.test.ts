@@ -26,6 +26,7 @@ const full: ProductEditorDraft = {
   available: true,
   ordering: "public",
   vatClass: "reduced",
+  takeawayVatClass: null,
   variants: [
     {
       id: "small",
@@ -68,6 +69,7 @@ const variantPage: ProductEditorDraft = {
     image: null,
     unitPrice: "9.00",
     vatClass: "reduced",
+    takeawayVatClass: "reduced",
     unitId: "each",
     primaryCategoryId: "drinks",
     courseId: "starters",

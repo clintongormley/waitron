@@ -1444,6 +1444,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
         pricingUnit?: unknown;
         unitPrice?: unknown;
         vatClass?: unknown;
+        takeawayVatClass?: unknown;
         allergens?: unknown;
         dietOverride?: unknown;
         image?: unknown;
@@ -1508,6 +1509,8 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
           : { unitId: body.unitId as string }),
         unitPrice: body.unitPrice,
         vatClass: body.vatClass as never,
+        // `createProduct` refuses a value that is not a VAT class.
+        takeawayVatClass: (body.takeawayVatClass ?? null) as never,
         ...(body.allergens === undefined ? {} : { allergens: body.allergens as ProductAllergens }),
         ...(body.dietOverride === undefined
           ? {}

@@ -88,6 +88,7 @@ describe("the stored name key", () => {
       active: true,
       available: true,
       vatClass: "general",
+      takeawayVatClass: null,
       image: null,
       variants: [{ ...variant("Media Ración"), active: true }],
       primaryCategoryId: null,

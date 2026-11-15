@@ -194,6 +194,7 @@ function emptyDraft(defaultVatClass: VatClass = "general"): ProductEditorDraft {
     available: true,
     ordering: "public",
     vatClass: defaultVatClass,
+    takeawayVatClass: null,
     variants: [],
     primaryCategoryId: null,
     color: null,

@@ -161,6 +161,7 @@ export function parseProductEditorInput(
   // A variant's colour is always its parent's.
   if (isVariant && color !== null) invalid("color");
   const tax = inheritable(body.vatClass, "vatClass", isVariant, vatClass);
+  const takeawayTax = inheritable(body.takeawayVatClass, "takeawayVatClass", true, vatClass);
   if (!Array.isArray(body.variants)) invalid("variants");
   const listed = emptyOnVariant(body.variants, "variants", isVariant);
   const seen = new Set<string>();
@@ -209,6 +210,7 @@ export function parseProductEditorInput(
     active: boolean(body.active, "active"),
     ...(body.available === undefined ? {} : { available: boolean(body.available, "available") }),
     vatClass: tax,
+    takeawayVatClass: takeawayTax,
     variants,
     primaryCategoryId,
     color,
