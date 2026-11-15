@@ -3034,11 +3034,9 @@ describe("mountMenuApi — products", () => {
 
   it("POST /management-api/products stores a takeaway class, and none when it is omitted", async () => {
     const app = mountApp();
-    const menuId = await createMenuVia(app, "Takeaway class menu");
     const create = (name: string, extra: Record<string, unknown>) =>
       send(app, "POST", "/management-api/products", {
         body: {
-          menuId,
           categoryId: null,
           name,
           pricingUnit: "each",
@@ -3063,10 +3061,8 @@ describe("mountMenuApi — products", () => {
 
   it("POST /management-api/products refuses a takeaway class that is not a VAT class", async () => {
     const app = mountApp();
-    const menuId = await createMenuVia(app, "Bad takeaway class menu");
     const res = await send(app, "POST", "/management-api/products", {
       body: {
-        menuId,
         categoryId: null,
         name: "Cola",
         pricingUnit: "each",

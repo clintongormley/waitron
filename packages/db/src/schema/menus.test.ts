@@ -75,9 +75,8 @@ describe("menu — menu, taxonomy and priced items", () => {
   });
 
   it("rejects a bad takeaway_vat_class on its own CHECK, and accepts a valid or blank one", async () => {
-    const [menu] = await db.insert(menus).values({ name: "Deli" }).returning({ id: menus.id });
     const insertProduct = (takeawayVatClass: string | null): ReturnType<typeof sql> =>
-      sql`insert into products (id, menu_id, name, unit_price, vat_class, takeaway_vat_class, created_at, updated_at) values (${randomUUID()}, ${menu.id}, 'Fixture', 100, 'reduced', ${takeawayVatClass}, ${AT}, ${AT})`;
+      sql`insert into products (id, name, unit_price, vat_class, takeaway_vat_class, created_at, updated_at) values (${randomUUID()}, 'Fixture', 100, 'reduced', ${takeawayVatClass}, ${AT}, ${AT})`;
 
     const error = await captureError(() => db.execute(insertProduct("nope")));
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
