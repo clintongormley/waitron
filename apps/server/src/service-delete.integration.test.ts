@@ -36,7 +36,6 @@ import {
   createServiceZone,
   configureZone,
   departments,
-  departmentReceipts,
   addFloorPlanSet,
   menuPeriods,
   departmentTransferRequests,
@@ -855,7 +854,6 @@ const HISTORY_ROWS = [
   "sale_settlements",
   "bill_payments",
   "sale_receipt_headers",
-  "department_receipts",
   "registros_facturacion",
   "cadenas",
   "order_amendments",
@@ -1060,14 +1058,14 @@ it.each(["zone", "department"] as const)(
         resolvedAt: NOW.toISOString(),
       });
       await tx
-        .update(departmentReceipts)
+        .update(departments)
         .set({
-          receipt: {
+          receiptText: {
             operationDescription: "Restaurante",
             headerSubtitle: { "es-ES": "Retained table service" },
           },
         })
-        .where(eq(departmentReceipts.departmentId, f.departmentId));
+        .where(eq(departments.id, f.departmentId));
       const [timekeeper] = await tx
         .select()
         .from(persons)
@@ -1167,7 +1165,6 @@ it.each(["zone", "department"] as const)(
     for (const context of unaffectedLineContexts)
       expect(context).toMatchObject({ department_id: unaffectedContext.department_id });
     for (const name of [
-      "department_receipts",
       "bill_payments",
       "tenders",
       "sale_settlements",

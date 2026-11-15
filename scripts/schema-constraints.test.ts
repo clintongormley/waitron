@@ -79,7 +79,7 @@ const EXPECTED_FOREIGN_KEYS = [
   ["menu_periods", ["menu_id"], "menus"],
   ["menu_period_staff_menus", ["period_id", "department_id"], "menu_periods"],
   ["menu_period_staff_menus", ["menu_id"], "menus"],
-  ["department_receipts", ["department_id"], "departments"],
+  ["departments", ["receipt_logo_image_id"], "media_images"],
   ["special_day_dates", ["special_day_id"], "special_days"],
   ["department_days", ["department_id"], "departments"],
   ["department_days", ["season_id"], "seasons"],

@@ -4,6 +4,7 @@ import {
   CORE_MIGRATIONS,
   departments,
   invoiceSeries,
+  mediaImages,
   orderServiceContexts,
   saleReceiptHeaders,
   sales,
@@ -29,6 +30,9 @@ async function fixture(active = true) {
     invoiceLocales: ["es-ES"],
     operationDescription: "Hospitality",
   });
+  await suite.db
+    .insert(mediaImages)
+    .values({ id: "existing-logo", filename: `${"a".repeat(64)}.png`, names: {} });
   const cfg = {
     receiptLanguages: ["es-ES", "ca-ES"],
   };
@@ -47,12 +51,76 @@ function scoped<T>(body: (tx: Transaction) => Promise<T>) {
   return withTransaction(suite.db, body);
 }
 async function imported(id: string, receipt: string, rasters: string | null = null) {
+  let imageId: string | null = null;
+  try {
+    const parsed = JSON.parse(receipt);
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed) &&
+      parsed.logo === `${"a".repeat(64)}.png`
+    ) {
+      imageId = "existing-logo";
+      delete parsed.logo;
+      receipt = JSON.stringify(parsed);
+    }
+  } catch {
+    /* The malformed-document controls deliberately bypass the writer. */
+  }
   await suite.db.execute(
-    sql`insert into department_receipts (department_id, receipt, logo_rasters, updated_at) values (${id}, ${receipt}, ${rasters}, '2026-10-10T00:00:00Z') on conflict (department_id) do update set receipt = excluded.receipt, logo_rasters = excluded.logo_rasters`,
+    sql`update departments set receipt_text = ${receipt}, receipt_logo_image_id = ${imageId}, receipt_logo_rasters = ${rasters}, receipt_updated_at = '2026-10-10T00:00:00Z' where id = ${id}`,
   );
 }
 
 describe("department receipt storage", () => {
+  it("saves a logo by image id, reads its name, and leaves logo out of receipt text", async () => {
+    const f = await fixture();
+    const filename = `${"d".repeat(64)}.png`;
+    await suite.db.insert(mediaImages).values({ id: "receipt-image", filename, names: {} });
+    await scoped((tx) =>
+      receipts.writeDepartmentReceipt(tx, f.id, { logo: filename, phone: "+34911234567" }, pair),
+    );
+    expect(
+      (
+        await suite.db.execute(
+          sql`select receipt_logo_image_id, receipt_text from departments where id = ${f.id}`,
+        )
+      ).rows,
+    ).toEqual([
+      { receipt_logo_image_id: "receipt-image", receipt_text: '{"phone":"+34911234567"}' },
+    ]);
+    expect(await scoped((tx) => receipts.readDepartmentReceipt(tx, f.cfg, f.id))).toEqual({
+      logo: filename,
+      phone: "+34911234567",
+    });
+  });
+  it("refuses a receipt logo whose image does not exist", async () => {
+    const f = await fixture();
+    await expect(
+      scoped((tx) =>
+        receipts.writeDepartmentReceipt(tx, f.id, { logo: `${"d".repeat(64)}.png` }, pair),
+      ),
+    ).rejects.toMatchObject({
+      code: "receipt.invalid",
+      params: { reason: "image_not_found", field: "logo" },
+    });
+  });
+  it("the database protects a used logo and permits deleting it once cleared", async () => {
+    const f = await fixture();
+    const filename = `${"d".repeat(64)}.png`;
+    await suite.db.insert(mediaImages).values({ id: "receipt-image", filename, names: {} });
+    await scoped((tx) => receipts.writeDepartmentReceipt(tx, f.id, { logo: filename }, pair));
+    await expect(
+      (async () => {
+        await suite.db.execute(sql`delete from media_images where id = 'receipt-image'`);
+      })(),
+    ).rejects.toThrow(/FOREIGN KEY constraint failed/);
+    await scoped((tx) => receipts.writeDepartmentReceipt(tx, f.id, {}));
+    await suite.db.execute(sql`delete from media_images where id = 'receipt-image'`);
+    expect(
+      await suite.db.select().from(mediaImages).where(eq(mediaImages.id, "receipt-image")),
+    ).toEqual([]);
+  });
   it("reads an empty authored receipt without copying defaults", async () => {
     const f = await fixture();
     expect(await scoped((tx) => receipts.readDepartmentReceipt(tx, f.cfg, f.id))).toEqual({});
@@ -97,11 +165,7 @@ describe("department receipt storage", () => {
       footerMessage: { "es-ES": "Adiós" },
     });
     expect(await scoped((tx) => receipts.readDepartmentLogoRasters(tx, f.id))).toBeNull();
-    const rows = (
-      await suite.db.execute(
-        sql`select department_id from department_receipts where department_id = ${f.id}`,
-      )
-    ).rows;
+    const rows = (await suite.db.execute(sql`select id from departments where id = ${f.id}`)).rows;
     expect(rows).toHaveLength(1);
   });
   it("keeps recorded receipt settings internally while hiding deleted departments from management", async () => {
@@ -154,20 +218,6 @@ describe("department receipt storage", () => {
       await scoped((tx) => receipts.readPrintedDepartmentReceipt(tx, f.cfg, f.id, "58mm")),
     ).toEqual({ receipt: {}, logo: null, unreadable: true });
   });
-  it.each([7, `${"a".repeat(300)}.png`, "../secret.png", "", null])(
-    "marks a stored logo it cannot keep as unreadable, keeping the other fields: %s",
-    async (value) => {
-      const f = await fixture();
-      await imported(
-        f.id,
-        JSON.stringify({ logo: value, phone: "+34911234567" }),
-        JSON.stringify(pair),
-      );
-      expect(
-        await scoped((tx) => receipts.readPrintedDepartmentReceipt(tx, f.cfg, f.id, "58mm")),
-      ).toEqual({ receipt: { phone: "+34911234567" }, logo: null, unreadable: true });
-    },
-  );
   it("marks an unknown department as unreadable", async () => {
     const a = await fixture();
     const id = randomUUID();
@@ -241,7 +291,7 @@ describe("department receipt storage", () => {
       const all = query.all.bind(query);
       query.all = (...values) => {
         const result = all(...values);
-        if (JSON.stringify(args[0]).includes("department_receipts")) seen.push(result);
+        if (JSON.stringify(args[0]).includes("receipt_text")) seen.push(result);
         return result;
       };
       return query;
@@ -369,7 +419,7 @@ describe("department receipt storage", () => {
       const all = query.all.bind(query);
       query.all = (...values) => {
         const result = all(...values);
-        if (JSON.stringify(args[0]).includes("department_receipts")) seen.push(result);
+        if (JSON.stringify(args[0]).includes("receipt_text")) seen.push(result);
         return result;
       };
       return query;
@@ -637,7 +687,7 @@ describe("receipt and printing policy transaction", () => {
       receipts.writeDepartmentReceipt(tx, f.id, { operationDescription: "Old description" }),
     );
     await suite.db.execute(
-      sql`CREATE TRIGGER test_receipt_policy_refusal AFTER UPDATE OF receipt ON department_receipts BEGIN UPDATE departments SET active = 0 WHERE id = NEW.department_id; END`,
+      sql`CREATE TRIGGER test_receipt_policy_refusal AFTER UPDATE OF receipt_text ON departments BEGIN UPDATE departments SET active = 0 WHERE id = NEW.id; END`,
     );
     try {
       await expect(

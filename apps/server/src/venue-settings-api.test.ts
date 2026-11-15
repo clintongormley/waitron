@@ -1,7 +1,7 @@
 import { seedVenueSettings, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { eq } from "drizzle-orm";
-import { departments, departmentReceipts } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import { mountDepartmentReceiptSettingsApi } from "./department-receipt-api.js";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -37,14 +37,16 @@ const policy = { printTradingName: true } as const;
 const departmentPath = () => `/management-api/venue-service/departments/${departmentId}/receipt`;
 const resetDescription = () =>
   suite.db
-    .update(departmentReceipts)
-    .set({ receipt: { operationDescription: "Venta en establecimiento" } })
-    .where(eq(departmentReceipts.departmentId, departmentId));
+    .update(departments)
+    .set({ receiptText: { operationDescription: "Venta en establecimiento" } })
+    .where(eq(departments.id, departmentId));
 beforeAll(async () => {
   venue = await setupVenue(suite.db);
   const [department] = await suite.db.select().from(departments);
   departmentId = department!.id;
-  await seedDepartmentReceipt(suite.db, departmentId, { operationDescription: "Venta en establecimiento" });
+  await seedDepartmentReceipt(suite.db, departmentId, {
+    operationDescription: "Venta en establecimiento",
+  });
   offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
 });
 function app() {
@@ -156,9 +158,11 @@ describe("department invoice settings", () => {
     "with no default offered, a cash sale refuses missing department description %j before recording anything",
     async (description) => {
       await suite.db
-        .update(departmentReceipts)
-        .set({ receipt: description === undefined ? {} : { operationDescription: description } })
-        .where(eq(departmentReceipts.departmentId, departmentId));
+        .update(departments)
+        .set({
+          receiptText: description === undefined ? {} : { operationDescription: description },
+        })
+        .where(eq(departments.id, departmentId));
       const snapshot = async () =>
         (
           await suite.db.execute(sql`

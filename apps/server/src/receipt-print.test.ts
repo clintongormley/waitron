@@ -1,4 +1,8 @@
-import { seedDeviceProfiles, seedVenueSettings, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
+import {
+  seedDeviceProfiles,
+  seedVenueSettings,
+  seedDepartmentReceipt,
+} from "@waitron/db/testing/seed.js";
 import { writeContentLanguages } from "@waitron/menu";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { deletePrinter } from "./printer-delete.js";
@@ -28,6 +32,7 @@ import {
   drawerOpens,
   invoiceDeliveries,
   invoiceSeries,
+  mediaImages,
   tenders,
   pagePrinters,
   workingOrders,
@@ -45,12 +50,7 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  departments,
-  saleReceiptHeaders,
-  departmentReceipts,
-  createDepartment,
-} from "@waitron/venue-service";
+import { departments, saleReceiptHeaders, createDepartment } from "@waitron/venue-service";
 import {
   assignMenuToVenue,
   createMenu,
@@ -276,6 +276,13 @@ async function storeDepartmentReceipt(
   logoRasters: ReceiptLogoRasters | null = null,
 ) {
   const receipt = { operationDescription: "On-premises sale", ...decoration };
+  if (typeof decoration.logo === "string") {
+    const [image] = await suite.db
+      .select({ id: mediaImages.id })
+      .from(mediaImages)
+      .where(eq(mediaImages.filename, decoration.logo));
+    if (!image) await suite.db.insert(mediaImages).values({ filename: decoration.logo, names: {} });
+  }
   await seedDepartmentReceipt(suite.db, departmentId, receipt, logoRasters);
 }
 
@@ -2552,6 +2559,13 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     await withTransaction(suite.db, async (tx) => {
       const { logoRasters, ...decoration } = receipt;
       const authored = { operationDescription: "On-premises sale", ...decoration };
+      if (typeof decoration.logo === "string") {
+        const [image] = await tx
+          .select({ id: mediaImages.id })
+          .from(mediaImages)
+          .where(eq(mediaImages.filename, decoration.logo));
+        if (!image) await tx.insert(mediaImages).values({ filename: decoration.logo, names: {} });
+      }
       const rows = await tx.select({ id: departments.id }).from(departments);
       for (const row of rows)
         await seedDepartmentReceipt(tx, row.id, authored, logoRasters ?? null);
@@ -2659,11 +2673,16 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     const queued = await printJobsFor(cfg);
     const saved = await suite.db
       .select({
-        departmentId: departmentReceipts.departmentId,
-        receipt: departmentReceipts.receipt,
+        departmentId: departments.id,
+        receipt: departments.receiptText,
       })
-      .from(departmentReceipts);
-    const policies = await suite.db.select().from(departments);
+      .from(departments);
+    const policySnapshot = async () =>
+      (await suite.db.select().from(departments)).map(
+        ({ receiptText, receiptLogoImageId, receiptLogoRasters, receiptUpdatedAt, ...policy }) =>
+          policy,
+      );
+    const policies = await policySnapshot();
     const framing = { x: 7500, y: 5000, zoom: 200 };
     const blackRasters = await drawLogoRasters(
       await renderRendition(black.bytes, "display", framing),
@@ -2681,18 +2700,18 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     expect(
       await suite.db
         .select({
-          departmentId: departmentReceipts.departmentId,
-          receipt: departmentReceipts.receipt,
+          departmentId: departments.id,
+          receipt: departments.receiptText,
         })
-        .from(departmentReceipts),
+        .from(departments),
     ).toEqual(saved);
-    expect(await suite.db.select().from(departments)).toEqual(policies);
-    const retained = await suite.db.select().from(departmentReceipts);
+    expect(await policySnapshot()).toEqual(policies);
+    const retained = await suite.db.select().from(departments);
     expect(retained.length).toBeGreaterThanOrEqual(2);
     for (const row of retained)
       for (const paper of ["58mm", "80mm"] as const) {
-        expect(row.logoRasters![paper]).not.toEqual(whiteRasters[paper]);
-        expect(new Set(Buffer.from(row.logoRasters![paper].data, "base64"))).toEqual(
+        expect(row.receiptLogoRasters![paper]).not.toEqual(whiteRasters[paper]);
+        expect(new Set(Buffer.from(row.receiptLogoRasters![paper].data, "base64"))).toEqual(
           new Set([255]),
         );
       }
@@ -3514,9 +3533,9 @@ describe("department receipt presentation on thermal jobs", () => {
       const ticket = await sell();
       const saleId = await onlySaleId();
       await suite.db
-        .update(departmentReceipts)
-        .set({ receipt: {}, logoRasters: null })
-        .where(eq(departmentReceipts.departmentId, departmentId));
+        .update(departments)
+        .set({ receiptText: {}, receiptLogoImageId: null, receiptLogoRasters: null })
+        .where(eq(departments.id, departmentId));
       await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, saleId));
       const logoBytes = (await documents()).map((job) => logos(job.payload));
       expect(logoBytes).toEqual(
@@ -3561,7 +3580,7 @@ describe("department receipt presentation on thermal jobs", () => {
             const receipt = await read(tx, scope, id);
             expect(receipt.operationDescription).toBe("On-premises sale");
             await tx.execute(
-              sql`alter table department_receipts rename to test_hidden_department_receipts`,
+              sql`alter table departments rename column receipt_text to test_hidden_receipt_text`,
             );
             return receipt;
           });
@@ -3596,7 +3615,7 @@ describe("department receipt presentation on thermal jobs", () => {
       } finally {
         mandatoryRead?.mockRestore();
         await suite.db.execute(
-          sql`alter table test_hidden_department_receipts rename to department_receipts`,
+          sql`alter table departments rename column test_hidden_receipt_text to receipt_text`,
         );
         warning.mockRestore();
       }
@@ -3668,9 +3687,9 @@ describe("department receipt presentation on thermal jobs", () => {
     };
     expect(before.drawer).toHaveLength(1);
     await suite.db
-      .update(departmentReceipts)
-      .set({ receipt: { headerSubtitle: { "es-ES": "Current subtitle" } } })
-      .where(eq(departmentReceipts.departmentId, departmentId));
+      .update(departments)
+      .set({ receiptText: { headerSubtitle: { "es-ES": "Current subtitle" } } })
+      .where(eq(departments.id, departmentId));
     await seedVenueSettings(suite.db, { addressLine1: "Current street" });
     const replay = await recordTillSale(
       { ...deps(), admission: testTradingAdmission() },
@@ -3743,9 +3762,9 @@ describe("department receipt presentation on thermal jobs", () => {
       .set({ active: false, tradingName: "New mutable brand" })
       .where(eq(departments.id, departmentId));
     await suite.db
-      .update(departmentReceipts)
-      .set({ receipt: { headerSubtitle: { "es-ES": "After edit" }, printAddress: true } })
-      .where(eq(departmentReceipts.departmentId, departmentId));
+      .update(departments)
+      .set({ receiptText: { headerSubtitle: { "es-ES": "After edit" }, printAddress: true } })
+      .where(eq(departments.id, departmentId));
     await seedVenueSettings(suite.db, { addressLine1: "New current address" });
     await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, id));
     const text = (await documents()).map((job) => decodeTicket(job.payload));
@@ -3758,9 +3777,9 @@ describe("department receipt presentation on thermal jobs", () => {
     expect(text[1]).toContain("DUPLICADO");
     expect(await fiscalRecordCount(cfg)).toBe(1);
     await suite.db
-      .update(departmentReceipts)
-      .set({ receipt: { headerSubtitle: { "es-ES": "After edit" }, printAddress: false } })
-      .where(eq(departmentReceipts.departmentId, departmentId));
+      .update(departments)
+      .set({ receiptText: { headerSubtitle: { "es-ES": "After edit" }, printAddress: false } })
+      .where(eq(departments.id, departmentId));
     await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, id));
     expect(decodeTicket((await documents())[2]!.payload)).not.toContain("New current address");
   });
@@ -3899,7 +3918,7 @@ describe("the theme's logo on thermal receipts", () => {
       headerSubtitle: { "es-ES": "Retained own text" },
     });
     await suite.db.execute(
-      sql`update department_receipts set logo_rasters = ${JSON.stringify({ "58mm": { widthDots: 999999, heightDots: 1, data: "bad" }, "80mm": { widthDots: 8, heightDots: 1, data: "bad" } })} where department_id = ${departmentId}`,
+      sql`update departments set receipt_logo_rasters = ${JSON.stringify({ "58mm": { widthDots: 999999, heightDots: 1, data: "bad" }, "80mm": { widthDots: 8, heightDots: 1, data: "bad" } })} where id = ${departmentId}`,
     );
     await putThemeInUse(suite.db);
     await sell();

@@ -140,7 +140,7 @@ export function mountDepartmentReceiptSettingsApi(
         if (receipt.logo !== undefined) {
           const current = (await readPresentations(tx, [receipt.logo]))[receipt.logo];
           if (!current) throw logoNotFound();
-          if (current.revision !== prepared?.revision)
+          if (current.id !== prepared?.imageId || current.revision !== prepared?.revision)
             throw new AppError("image.changed", { imageId: current.id });
         }
         await VENUE_SERVICE.saveDepartmentReceiptSettings(tx, id, checked.input, rasters);

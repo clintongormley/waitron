@@ -3802,7 +3802,7 @@ describe("department description setup in the live model", () => {
       );
       if (receipt !== undefined)
         await db.execute(
-          sql`insert into department_receipts (department_id, receipt, updated_at) values (${department.id}, ${receipt}, ${"2026-10-12T12:00:00Z"})`,
+          sql`update departments set receipt_text = ${receipt}, receipt_updated_at = ${"2026-10-12T12:00:00Z"} where id = ${department.id}`,
         );
       const read = async () =>
         (
@@ -3816,7 +3816,7 @@ describe("department description setup in the live model", () => {
         departmentName: "Dining",
       });
       await db.execute(
-        sql`insert into department_receipts (department_id, receipt, updated_at) values (${department.id}, ${JSON.stringify({ operationDescription: "Deli meals" })}, ${"2026-10-12T12:00:00Z"}) on conflict (department_id) do update set receipt=excluded.receipt`,
+        sql`update departments set receipt_text = ${JSON.stringify({ operationDescription: "Deli meals" })}, receipt_updated_at = ${"2026-10-12T12:00:00Z"} where id = ${department.id}`,
       );
       expect(await read()).not.toContainEqual(
         expect.objectContaining({ code: "department.operation_description_required" }),
@@ -3840,7 +3840,7 @@ describe("department description setup in the live model", () => {
       );
       if (receipt !== undefined)
         await db.execute(
-          sql`insert into department_receipts (department_id, receipt, updated_at) values (${department.id}, ${receipt}, ${"2026-10-12T12:00:00Z"})`,
+          sql`update departments set receipt_text = ${receipt}, receipt_updated_at = ${"2026-10-12T12:00:00Z"} where id = ${department.id}`,
         );
       expect(
         (

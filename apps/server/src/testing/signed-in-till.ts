@@ -1,9 +1,13 @@
-import { ensureFixtureJobRole, seedDeviceProfiles, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
+import {
+  ensureFixtureJobRole,
+  seedDeviceProfiles,
+  seedDepartmentReceipt,
+} from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./trading-admission.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, isNull } from "drizzle-orm";
 import { Hono } from "hono";
 import {
   persons,
@@ -17,7 +21,14 @@ import { loginWithPin } from "@waitron/identity";
 import { SimulatorPaymentProvider } from "@waitron/payments";
 import { planVenue } from "@waitron/provisioning";
 import { nodeId as brandNodeId } from "@waitron/shared";
-import { createDepartment, departments, deletePeriod, menuPeriods, replaceMenuWeek, setProfileServiceAccess } from "@waitron/venue-service";
+import {
+  createDepartment,
+  departments,
+  deletePeriod,
+  menuPeriods,
+  replaceMenuWeek,
+  setProfileServiceAccess,
+} from "@waitron/venue-service";
 import { deploymentEnvironment } from "../config.js";
 import { DEVICE_COOKIE } from "../device-session.js";
 import { ALL_MODULES } from "../modules.js";
@@ -99,8 +110,13 @@ export async function provisionSignedInTill<S extends TillSeed>(
   };
   const seeded = await withTransaction(db, async (tx) => {
     const seed = await options.seed(tx, cfg);
-    for (const department of await tx.select({ id: departments.id }).from(departments))
-      await seedDepartmentReceipt(tx, department.id, { operationDescription: "Venta en establecimiento" });
+    for (const department of await tx
+      .select({ id: departments.id })
+      .from(departments)
+      .where(isNull(departments.receiptUpdatedAt)))
+      await seedDepartmentReceipt(tx, department.id, {
+        operationDescription: "Venta en establecimiento",
+      });
     const [person] = await seedPersons(tx, {
       displayName: "Anna",
       pinHash: fixturePinHash("5555"),

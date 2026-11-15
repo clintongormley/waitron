@@ -95,7 +95,7 @@ it("an unchanged live read leaves the receipt leave question open and its choice
   const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
   await question.updateComplete;
   const keep = question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!;
-  api.liveData.invalidate([{ type: "department_receipts" }]);
+  api.liveData.invalidate([{ type: "departments" }]);
   await expect.poll(() => api.getDepartmentReceipt.mock.calls.length).toBe(2);
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   expect(question.open).toBe(true);

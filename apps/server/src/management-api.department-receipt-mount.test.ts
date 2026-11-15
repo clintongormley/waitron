@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { departments, departmentReceipts } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import { mountManagementApi, type ManagementApiDeps } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
@@ -76,12 +76,7 @@ it("management supplies the installed description validator before writing", asy
     error: { code: "management.request_invalid", params: { field: "operationDescription" } },
   });
   expect(
-    (
-      await suite.db
-        .select()
-        .from(departmentReceipts)
-        .where(eq(departmentReceipts.departmentId, id))
-    )[0]!.receipt,
+    (await suite.db.select().from(departments).where(eq(departments.id, id)))[0]!.receiptText,
   ).toEqual({ operationDescription: "Meals" });
 });
 it.each(["/management-api/receipt", "/management-api/receipt-settings"])(

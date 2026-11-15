@@ -19,7 +19,12 @@ import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { ensureFixtureJobRole, seedDeviceProfiles, seedNode, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
+import {
+  ensureFixtureJobRole,
+  seedDeviceProfiles,
+  seedNode,
+  seedDepartmentReceipt,
+} from "@waitron/db/testing/seed.js";
 import {
   billPaymentLines,
   billPaymentRefunds,
@@ -58,12 +63,7 @@ import type { CollectParams, PaymentResult } from "@waitron/payments";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
 import { createPrinter } from "@waitron/printing";
-import {
-  createDepartment,
-  createServiceZone,
-  departmentReceipts,
-  departments,
-} from "@waitron/venue-service";
+import { createDepartment, createServiceZone, departments } from "@waitron/venue-service";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import {
@@ -2353,7 +2353,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     });
 
     async function withContact(body: () => Promise<void>) {
-      const original = await inTx((tx) => tx.select().from(departmentReceipts));
+      const original = await inTx((tx) => tx.select().from(departments));
       const receipt = { email: "dining@example.test", phone: "910000000" };
       try {
         await inTx(async (tx) => {
@@ -2365,8 +2365,16 @@ describe("the invoice at full payment (design §8 test 8)", () => {
         await body();
       } finally {
         await inTx(async (tx) => {
-          await tx.delete(departmentReceipts);
-          if (original.length > 0) await tx.insert(departmentReceipts).values(original);
+          await tx
+            .update(departments)
+            .set({
+              receiptText: null,
+              receiptLogoImageId: null,
+              receiptLogoRasters: null,
+              receiptUpdatedAt: null,
+            });
+          for (const row of original)
+            await tx.update(departments).set(row).where(eq(departments.id, row.id));
         });
       }
     }

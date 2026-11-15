@@ -1,11 +1,15 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { seedDeviceProfiles, seedVenueSettings, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
+import {
+  seedDeviceProfiles,
+  seedVenueSettings,
+  seedDepartmentReceipt,
+} from "@waitron/db/testing/seed.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, isNull } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   devices,
@@ -241,8 +245,13 @@ async function setupVenue(): Promise<{
       role: "supervisor",
     });
     const { products: available } = await listAvailableProducts(tx);
-    for (const department of await tx.select({ id: departments.id }).from(departments))
-      await seedDepartmentReceipt(tx, department.id, { operationDescription: "Venta en establecimiento" });
+    for (const department of await tx
+      .select({ id: departments.id })
+      .from(departments)
+      .where(isNull(departments.receiptUpdatedAt)))
+      await seedDepartmentReceipt(tx, department.id, {
+        operationDescription: "Venta en establecimiento",
+      });
     return {
       each: {
         ...available.find((p) => p.pricingUnit === "each")!,
@@ -2591,9 +2600,9 @@ it("duplicates use the filed issuer identity while optional trim follows the cur
     .innerJoin(sales, eq(sales.id, saleReceiptHeaders.saleId))
     .where(eq(sales.workingOrderId, id));
   await seedDepartmentReceipt(suite.db, header!.departmentId!, {
-        headerSubtitle: { "es-ES": "Current welcome" },
-        footerMessage: { "es-ES": "Current farewell" },
-      });
+    headerSubtitle: { "es-ES": "Current welcome" },
+    footerMessage: { "es-ES": "Current farewell" },
+  });
 
   const res = await app.request(`/api/sales/${id}/reprint`, {
     method: "POST",

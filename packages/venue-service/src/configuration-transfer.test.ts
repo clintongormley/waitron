@@ -1016,19 +1016,19 @@ it.each([0, false])(
   },
 );
 
-it.each([
-  ["floor_zones", "department_id", { id: "z-live", department_id: "missing" }],
-  ["department_receipts", "department_id", { department_id: "missing", receipt: {} }],
-])("refuses a deleted hierarchy child %s.%s with an absent parent", (table, field, row) => {
-  const tables = {
-    departments: [{ id: RESTAURANT, active: 1 }],
-    floor_zones: [{ id: "z-live", active: 1, department_id: RESTAURANT }],
-    [table]: [row],
-  };
-  expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables)).toThrowError(
-    refusal(`${table}.${field}`),
-  );
-});
+it.each([["floor_zones", "department_id", { id: "z-live", department_id: "missing" }]])(
+  "refuses a deleted hierarchy child %s.%s with an absent parent",
+  (table, field, row) => {
+    const tables = {
+      departments: [{ id: RESTAURANT, active: 1 }],
+      floor_zones: [{ id: "z-live", active: 1, department_id: RESTAURANT }],
+      [table]: [row],
+    };
+    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables)).toThrowError(
+      refusal(`${table}.${field}`),
+    );
+  },
+);
 
 describe("season weeks in a configuration bundle", () => {
   const { validate } = VENUE_SERVICE_CONFIGURATION_TRANSFER;
@@ -1270,12 +1270,25 @@ describe("season weeks in a configuration bundle", () => {
 });
 
 describe("department receipt configuration fields", () => {
+  it.each([{ logo: "old-name.png" }, { unknown: true }])(
+    "refuses keys that are not receipt text: %j",
+    (receipt_text) => {
+      expect(() =>
+        VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
+          departments: [{ id: RESTAURANT, active: 1, receipt_text }],
+        }),
+      ).toThrowError(refusal("departments.receipt_text"));
+    },
+  );
+
   function tables(receipt: unknown): Tables {
     return {
-      departments: [{ id: RESTAURANT, active: 1 }],
-      department_receipts: [{ department_id: RESTAURANT, receipt }],
+      departments: [{ id: RESTAURANT, active: 1, receipt_text: receipt }],
     };
   }
+  it("accepts a department with no saved receipt text", () => {
+    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables(null))).not.toThrow();
+  });
   it.each([
     {},
     { printAddress: false, operationDescription: "Dining service" },
@@ -1287,7 +1300,7 @@ describe("department receipt configuration fields", () => {
     ).not.toThrow();
   });
   it.each([
-    [null],
+    ["null"],
     [[]],
     ["{bad"],
     [3],
@@ -1300,7 +1313,7 @@ describe("department receipt configuration fields", () => {
     [{ operationDescription: "bad\u0000text" }],
   ])("refuses invalid receipt configuration %j", (receipt) => {
     expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables(receipt))).toThrowError(
-      refusal("department_receipts.receipt"),
+      refusal("departments.receipt_text"),
     );
   });
 });

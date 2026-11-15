@@ -8,7 +8,6 @@ export const QUERY_DEPENDENCIES = {
     "menu_publications",
     "menu_version_images",
     "menu_scheduled_publications",
-    "department_receipts",
     "departments",
     "custom_themes",
   ],

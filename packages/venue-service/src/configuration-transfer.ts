@@ -508,25 +508,38 @@ function validateServiceHierarchy(tables: Tables): void {
   const departments = ids(tables.departments);
   for (const row of tables.floor_zones ?? [])
     if (!departments.has(row.department_id)) refuse("floor_zones.department_id");
-  for (const row of tables.department_receipts ?? [])
-    if (!departments.has(row.department_id)) refuse("department_receipts.department_id");
 }
 
 function validateReceiptFields(tables: Tables): void {
-  for (const row of tables.department_receipts ?? []) {
-    let receipt = row.receipt;
+  for (const row of tables.departments ?? []) {
+    let receipt = row.receipt_text;
+    if (receipt === null || receipt === undefined) continue;
     if (typeof receipt === "string") {
       try {
         receipt = JSON.parse(receipt) as unknown;
       } catch {
-        refuse("department_receipts.receipt");
+        refuse("departments.receipt_text");
       }
     }
     if (typeof receipt !== "object" || receipt === null || Array.isArray(receipt))
-      refuse("department_receipts.receipt");
+      refuse("departments.receipt_text");
     const value = receipt as Record<string, unknown>;
+    if (
+      Object.keys(value).some(
+        (key) =>
+          ![
+            "printAddress",
+            "phone",
+            "email",
+            "headerSubtitle",
+            "footerMessage",
+            "operationDescription",
+          ].includes(key),
+      )
+    )
+      refuse("departments.receipt_text");
     if (value.printAddress !== undefined && typeof value.printAddress !== "boolean")
-      refuse("department_receipts.receipt");
+      refuse("departments.receipt_text");
     if (
       value.operationDescription !== undefined &&
       (typeof value.operationDescription !== "string" ||
@@ -535,7 +548,7 @@ function validateReceiptFields(tables: Tables): void {
           (character) => character < " " && !"\t\n\r".includes(character),
         ))
     )
-      refuse("department_receipts.receipt");
+      refuse("departments.receipt_text");
   }
 }
 
@@ -655,7 +668,6 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "departments", leaveBehindWhenFalse: "active" },
     { name: "service_steps" },
     { name: "department_courses" },
-    { name: "department_receipts" },
     { name: "device_profile_service_access" },
     { name: "device_profile_zones" },
     { name: "device_profile_kitchen_screens" },

@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   billPayments,
   invoiceSeries,
+  mediaImages,
   parties,
   sales,
   saleLines,
@@ -39,7 +40,7 @@ import {
 import { applyAdjustment } from "./adjustments-apply.js";
 
 import { completeBillPayment } from "./bill-payments.js";
-import { departments, departmentReceipts, saleReceiptHeaders } from "@waitron/venue-service";
+import { departments, saleReceiptHeaders } from "@waitron/venue-service";
 import { buildReceiptDocument } from "./receipt-document.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
 import { INVOICE_PAGE_WIDTH, layoutInvoicePages } from "./invoice-page.js";
@@ -548,10 +549,10 @@ describe("current department A4 document", () => {
 
     {
       await seedDepartmentReceipt(suite.db, department!.id, {
-          headerSubtitle: { "es-ES": "Department subtitle" },
-          phone: "+34911234567",
-          email: "dining@example.com",
-        });
+        headerSubtitle: { "es-ES": "Department subtitle" },
+        phone: "+34911234567",
+        email: "dining@example.com",
+      });
       await seedVenueSettings(suite.db, {
         addressLine1: "Current street differs from filed domicile",
       });
@@ -584,9 +585,9 @@ describe("current department A4 document", () => {
       });
       expect(document.logo).toBeNull();
       await suite.db
-        .update(departmentReceipts)
-        .set({ receipt: { footerMessage: { "es-ES": "Changed footer" } } })
-        .where(eq(departmentReceipts.departmentId, department!.id));
+        .update(departments)
+        .set({ receiptText: { footerMessage: { "es-ES": "Changed footer" } } })
+        .where(eq(departments.id, department!.id));
       const reprint = await read(backend, issued.saleId);
       expect(reprint.receipt).toEqual({ footerMessage: "Changed footer" });
       expect(reprint.receipt.phone).toBeUndefined();
@@ -630,28 +631,29 @@ describe("A4 current optional source matrix", () => {
     });
 
     const own = { logo: `${"c".repeat(64)}.png` };
+    await suite.db.insert(mediaImages).values({ filename: own.logo, names: {} });
     {
       await seedDepartmentReceipt(suite.db, department!.id, own, {
-          "58mm": { widthDots: 8, heightDots: 1, data: "gA==" },
-          "80mm": { widthDots: 8, heightDots: 1, data: "QA==" },
-        });
+        "58mm": { widthDots: 8, heightDots: 1, data: "gA==" },
+        "80mm": { widthDots: 8, heightDots: 1, data: "QA==" },
+      });
       expect(await read(backend, issued.saleId)).toMatchObject({
         logo: { bits: new Uint8Array([64]) },
       });
       await suite.db
-        .update(departmentReceipts)
+        .update(departments)
         .set({
-          logoRasters: {
+          receiptLogoRasters: {
             "58mm": { widthDots: 8, heightDots: 1, data: "gA==" },
             "80mm": { widthDots: 8, heightDots: 1, data: "broken" },
           },
         })
-        .where(eq(departmentReceipts.departmentId, department!.id));
+        .where(eq(departments.id, department!.id));
       expect((await read(backend, issued.saleId)).logo).toBeNull();
       await suite.db
-        .update(departmentReceipts)
-        .set({ receipt: {}, logoRasters: null })
-        .where(eq(departmentReceipts.departmentId, department!.id));
+        .update(departments)
+        .set({ receiptText: {}, receiptLogoRasters: null })
+        .where(eq(departments.id, department!.id));
       expect((await read(backend, issued.saleId)).logo).toBeNull();
     }
   });
@@ -671,21 +673,21 @@ describe("A4 current optional source matrix", () => {
 
     {
       await seedDepartmentReceipt(suite.db, department!.id, {
-          headerSubtitle: { "ca-ES": "Bon dia", "es-ES": "Buenos días" },
-          footerMessage: { "es-ES": "Gracias", "gl-ES": "Never third language" },
-        });
+        headerSubtitle: { "ca-ES": "Bon dia", "es-ES": "Buenos días" },
+        footerMessage: { "es-ES": "Gracias", "gl-ES": "Never third language" },
+      });
       const document = await read(backend, issued.saleId);
       expect(document.invoiceLocale).toBe("ca-ES");
       expect(document.receipt).toEqual({ headerSubtitle: "Bon dia", footerMessage: "Gracias" });
       await suite.db
-        .update(departmentReceipts)
+        .update(departments)
         .set({
-          receipt: {
+          receiptText: {
             headerSubtitle: { "es-ES": "Buenos días" },
             footerMessage: { "gl-ES": "Never third language" },
           },
         })
-        .where(eq(departmentReceipts.departmentId, department!.id));
+        .where(eq(departments.id, department!.id));
       expect((await read(backend, issued.saleId)).receipt).toEqual({
         headerSubtitle: "Buenos días",
       });
@@ -732,9 +734,9 @@ describe("A4 filed language outside the current pack choices", () => {
       printTradingName: true,
     });
     await seedDepartmentReceipt(suite.db, department!.id, {
-        headerSubtitle: { [printed]: "Printed subtitle", "es-ES": "Current subtitle" },
-        footerMessage: { [printed]: "Printed footer", "es-ES": "Current footer" },
-      });
+      headerSubtitle: { [printed]: "Printed subtitle", "es-ES": "Current subtitle" },
+      footerMessage: { [printed]: "Printed footer", "es-ES": "Current footer" },
+    });
     const { doc: venueDoc } = await readVenueSettings(suite.db);
     try {
       await seedVenueSettings(suite.db, { invoiceLocales: ["es-ES"] });
@@ -843,16 +845,22 @@ describe("A4 department-only decoration", () => {
       tradingName: "Recorded brand",
       printTradingName: true,
     });
-    await seedDepartmentReceipt(suite.db, department!.id, {
+    await suite.db.insert(mediaImages).values({ filename: `${"d".repeat(64)}.png`, names: {} });
+    await seedDepartmentReceipt(
+      suite.db,
+      department!.id,
+      {
         printAddress: true,
         operationDescription: "Never printed description",
         headerSubtitle: { "es-ES": "Own subtitle" },
         footerMessage: { "es-ES": "Own footer" },
         logo: `${"d".repeat(64)}.png`,
-      }, {
+      },
+      {
         "58mm": { widthDots: 8, heightDots: 1, data: "gA==" },
         "80mm": { widthDots: 8, heightDots: 1, data: "QA==" },
-      });
+      },
+    );
     const before = await read(backend, issued.saleId);
 
     {
@@ -968,10 +976,19 @@ describe("the theme's logo on the A4 invoice", () => {
   }
 
   async function ownLogo(departmentId: string): Promise<void> {
-    await seedDepartmentReceipt(suite.db, departmentId, { logo: `${"b".repeat(64)}.png` }, {
+    await suite.db
+      .insert(mediaImages)
+      .values({ filename: `${"b".repeat(64)}.png`, names: {} })
+      .onConflictDoNothing({ target: mediaImages.filename });
+    await seedDepartmentReceipt(
+      suite.db,
+      departmentId,
+      { logo: `${"b".repeat(64)}.png` },
+      {
         "58mm": { widthDots: 8, heightDots: 1, data: "gA==" },
         "80mm": { widthDots: 8, heightDots: 1, data: "QA==" },
-      });
+      },
+    );
   }
 
   /** `resolveReceiptTrim` keeps the logo's name; the document input's type does not name it. */

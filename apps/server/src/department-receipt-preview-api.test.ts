@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { printJobs, sales } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { departments, departmentReceipts } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import { ALL_MODULES } from "./modules.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { mountReceiptPreviewApi, type ReceiptPreviewResponse } from "./receipt-preview-api.js";
@@ -30,7 +30,9 @@ beforeEach(async () => {
     defaultContentLanguage: "es",
     contentLanguages: ["es", "ca", "en"],
   });
-  await seedDepartmentReceipt(suite.db, departmentId, { footerMessage: { "eu-ES": "Hidden Basque" } });
+  await seedDepartmentReceipt(suite.db, departmentId, {
+    footerMessage: { "eu-ES": "Hidden Basque" },
+  });
 });
 function ask(input: unknown, cookie = venue.managerCookie) {
   const app = new Hono();
@@ -64,7 +66,7 @@ function lines(answer: ReceiptPreviewResponse) {
 }
 async function snapshot() {
   return {
-    receipts: await suite.db.select().from(departmentReceipts),
+    receipts: await suite.db.select().from(departments),
     policies: await suite.db.select().from(departments),
 
     sales: await suite.db.select().from(sales),

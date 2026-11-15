@@ -22,7 +22,7 @@ import {
   sections,
   updateProduct,
 } from "@waitron/menu";
-import { departmentReceipts, departments } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import { saveImage, readCurrentImage } from "./image-edits.js";
 import { deleteImage, listImageUsages, readImage, readImageBytes, uploadImage } from "./images.js";
 import { samplePreparedImage } from "./testing/sample-image.js";
@@ -116,8 +116,8 @@ it("changes presentation without rewriting product, variant, section, folder, re
     live: await suite.db.select().from(menuPublications),
     queued: await suite.db.select().from(menuScheduledPublications),
     receipts: await suite.db
-      .select({ id: departmentReceipts.departmentId, receipt: departmentReceipts.receipt })
-      .from(departmentReceipts),
+      .select({ id: departments.id, receipt: departments.receiptText })
+      .from(departments),
   });
   const before = await snapshot();
   const framing = { x: 9000, y: 1000, zoom: 250 };

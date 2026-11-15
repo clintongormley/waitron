@@ -363,13 +363,7 @@ device rule. Spec: [A268 §4](../superpowers/specs/2026-10-04-add-a-device-desig
 
 ## Left open by #1261's review, not acted on (2026-10-05)
 
-- **Left open by #1261's review:** no database trigger protects the logo image; the app-level
-  department receipt usage refuses a library delete. The phone and email length limits (30 and
-  254) are copied into `apps/dashboard/src/screens/department-receipt-editor.ts`, separately
-  from `packages/layouts/src/validate.ts`.
-
-Since A841 slice 7, a theme's logo (`theme_logo` in `listImageUsages`) is a second logo use that
-only the app keeps from deletion; no trigger protects it either.
+- **Left open by #1261's review:** a theme's logo (`custom_themes`) is protected from library deletion only by the application. The phone and email length limits (30 and 254) are copied into `apps/dashboard/src/screens/department-receipt-editor.ts`, separately from `packages/layouts/src/validate.ts`.
 
 ## Loose ends left by #367
 
@@ -445,25 +439,6 @@ dish to zero as one «Descuento 100%» row, where the ticket prints them as two 
 50%» and «Descuento 100%» (A803 slice 1's decision, [till.md](till.md#decisions-and-deliberate-limits)).
 And a dish taken to zero by two comps of its own plus a bill comp prints «Descuento 100%» beside
 only its own part (the A758-4 plan's owner point 3). Owner to confirm.
-
-## A department's receipt logo save re-checks only the image's revision, not its id
-
-- **A department's receipt logo save re-checks only the image's revision, not its id** — found in
-  A841 slice 7's review, read, not run. The theme logo save compares both, because an image deleted
-  and uploaded again under the same name during a save is a different image
-  (`apps/server/src/theme-logo.ts`, `recheckThemeLogo`); `apps/server/src/department-receipt-api.ts`
-  compares `revision` alone.
-
-## A copied department receipt that names `logo` twice, or once more as `"logo\u0000"`, may split its two readers
-
-- **A copied department receipt that names `logo` twice, or once more as `"logo\u0000"`, may split
-  its two readers** — believed from A841 slice 7's review, not run through a receipt.
-  `packages/media/src/images.ts` reads a department's logo with SQLite's `json_extract`, which takes
-  the first of two equal keys, while JavaScript takes the last, and reads a key spelled `logo` plus
-  a NUL character as `$.logo` (measured: SQLite 3.54.0, `{"logo\u0000":"fake","logo":"real"}` gives
-  `fake` there and `real` in JavaScript), and `validateReceiptFields` (`packages/venue-service/src/configuration-transfer.ts`) does
-  not look at the logo. A copied theme with a repeated key is refused
-  (`packages/layouts/src/theme-configuration.ts`); a receipt is not.
 
 ## Bundle: One session at the real box: printers, paper, tax QR, the drawer
 

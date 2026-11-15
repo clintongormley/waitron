@@ -1041,16 +1041,8 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 - **`DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1** — left behind
   by the tenant-column removal (#378, 2026-09-16).
   [Detail](architecture.md#drainresulttenantswithwork-is-named-for-a-count-that-can-now-only-be-0-or-1)
-- **A department's receipt logo save re-checks only the image's revision, not its id** — found in
-  A841 slice 7's review, read, not run.
-  [Detail](printers.md#a-departments-receipt-logo-save-re-checks-only-the-images-revision-not-its-id)
-- **A copied department receipt that names `logo` twice, or once more as `"logo\u0000"`, may split
-  its two readers** — believed from A841 slice 7's review, not run through a receipt.
-  [Detail](printers.md#a-copied-department-receipt-that-names-logo-twice-or-once-more-as-logou0000-may-split-its-two-readers)
-- **Left open by #1261's review (W111):** database enforcement of logo retention remains open.
-  A theme's logo (A841 slice 7) is a second image whose deletion only the app refuses; this entry
-  covers it too.
-  [Detail](printers.md#left-open-by-1261s-review-not-acted-on-2026-10-05)
+- **Left open by #1261's review (W111):** database enforcement of theme-logo retention remains open, as do the receipt editor's copied phone and email limits. [Detail](printers.md#left-open-by-1261s-review-not-acted-on-2026-10-05).
+
 - **Drop `printers.ticket_scope` at the next reset — OPEN (3d, W20).** — left open by the product
   folders work. Printing no longer reads the column. Dropping it rebuilds `printers`, so leave it
   until the venue reset that permits the rebuild.

@@ -494,7 +494,7 @@ it("receipt changes refresh department description setup passively", async () =>
   );
   value(next);
   const count = reads(request);
-  liveData.invalidate([{ type: "department_receipts", id: "d1" }]);
+  liveData.invalidate([{ type: "departments", id: "d1" }]);
   await expect.poll(() => reads(request)).toBeGreaterThan(count);
   await expect
     .poll(() => shell.model.readiness)
@@ -509,7 +509,7 @@ it("receipt changes refresh department description setup passively", async () =>
     passive: true,
   });
   value(model());
-  liveData.invalidate([{ type: "department_receipts", id: "d1" }]);
+  liveData.invalidate([{ type: "departments", id: "d1" }]);
   await expect.poll(() => shell.model.readiness).toEqual([]);
 });
 

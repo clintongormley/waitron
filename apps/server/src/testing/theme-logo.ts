@@ -81,14 +81,12 @@ function storedDocument(name: string, receipt: string): UntrustedCase {
     name,
     async apply(db, at) {
       await db.execute(
-        sql`insert into department_receipts (department_id, receipt, logo_rasters, updated_at)
-            values (${at.departmentId}, ${receipt}, null, '2026-10-10T00:00:00Z')
-            on conflict (department_id) do update set receipt = excluded.receipt`,
+        sql`update departments set receipt_text = ${receipt}, receipt_logo_image_id = null, receipt_logo_rasters = null, receipt_updated_at = '2026-10-10T00:00:00Z' where id = ${at.departmentId}`,
       );
     },
     async undo(db, at) {
       await db.execute(
-        sql`delete from department_receipts where department_id = ${at.departmentId}`,
+        sql`update departments set receipt_text = null, receipt_updated_at = null where id = ${at.departmentId}`,
       );
     },
   };
@@ -99,12 +97,12 @@ export const UNTRUSTED_CASES: readonly UntrustedCase[] = [
     name: "the read throws",
     async apply(db) {
       await db.execute(
-        sql`alter table department_receipts rename to test_hidden_department_receipts`,
+        sql`alter table departments rename column receipt_text to test_hidden_receipt_text`,
       );
     },
     async undo(db) {
       await db.execute(
-        sql`alter table test_hidden_department_receipts rename to department_receipts`,
+        sql`alter table departments rename column test_hidden_receipt_text to receipt_text`,
       );
     },
   },
@@ -112,10 +110,4 @@ export const UNTRUSTED_CASES: readonly UntrustedCase[] = [
   storedDocument("null", "null"),
   storedDocument("[]", "[]"),
   storedDocument("42", "42"),
-  storedDocument("a numeric logo", `{"logo":7,"phone":"910111111"}`),
-  storedDocument(
-    "a logo longer than 255 bytes",
-    JSON.stringify({ logo: `${"a".repeat(256)}.png` }),
-  ),
-  storedDocument("a logo that is not a library name", JSON.stringify({ logo: "../secret.png" })),
 ];

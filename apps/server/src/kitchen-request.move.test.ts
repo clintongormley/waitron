@@ -1,3 +1,4 @@
+import { seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -23,7 +24,6 @@ import { AppError } from "@waitron/shared";
 import {
   createDepartment,
   createServiceZone,
-  departmentReceipts,
   retargetOrderServiceContext,
   setDepartmentTransferSettings,
   setProfileServiceScope,
@@ -166,12 +166,8 @@ async function transferredCounterOrder(
   const f = await withTransaction(db, async (tx) => {
     const a = await createDepartment(tx, { name: randomUUID(), orderStart: "table" });
     const b = await createDepartment(tx, { name: randomUUID(), orderStart: "table" });
-    await tx.insert(departmentReceipts).values(
-      [a, b].map((department) => ({
-        departmentId: department.id,
-        receipt: { operationDescription: "Restaurante" },
-      })),
-    );
+    for (const department of [a, b])
+      await seedDepartmentReceipt(tx, department.id, { operationDescription: "Restaurante" });
     const az = await createServiceZone(tx, { name: randomUUID(), departmentId: a.id });
     const bz = await createServiceZone(tx, { name: randomUUID(), departmentId: b.id });
     const profiles: string[] = [];

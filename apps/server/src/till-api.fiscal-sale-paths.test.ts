@@ -177,7 +177,9 @@ async function setupVenue(): Promise<{
 
   const cfg = tillConfigFromVenue(venue);
   const [department] = await suite.db.select().from(departments);
-  await seedDepartmentReceipt(suite.db, department!.id, { operationDescription: "Venta en establecimiento" });
+  await seedDepartmentReceipt(suite.db, department!.id, {
+    operationDescription: "Venta en establecimiento",
+  });
   const { menuId, available, operatorId } = await withTransaction(suite.db, async (tx) => {
     const cat = await createMenu(tx, { name: "Delicatessen" });
     const foodCategory = await createCategory(tx, { name: "Comida" });

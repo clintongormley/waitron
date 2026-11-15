@@ -1,3 +1,4 @@
+import { seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -28,7 +29,6 @@ import { hashPin, persons, setProfileAdmission, sessions } from "@waitron/identi
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import {
   createDepartment,
-  departmentReceipts,
   createServiceZone,
   configureZone,
   recordOrderServiceContext,
@@ -109,12 +109,8 @@ async function ready() {
       name: randomUUID(),
       orderStart: "table",
     });
-    await tx.insert(departmentReceipts).values(
-      [a, b].map((department) => ({
-        departmentId: department.id,
-        receipt: { operationDescription: "Restaurante" },
-      })),
-    );
+    for (const department of [a, b])
+      await seedDepartmentReceipt(tx, department.id, { operationDescription: "Restaurante" });
     const az = await createServiceZone(tx, { name: randomUUID(), departmentId: a.id });
     const hidden = await createServiceZone(tx, { name: randomUUID(), departmentId: a.id });
     const bz = await createServiceZone(tx, { name: randomUUID(), departmentId: b.id });

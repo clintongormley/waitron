@@ -1,6 +1,7 @@
-import type { AllergenMap } from "@waitron/shared";
+import type { AllergenMap, DepartmentReceiptConfig, ReceiptLogoRasters } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { check, foreignKey, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { mediaImages } from "../media/images.js";
 import { menuItems } from "../menu/menu.js";
 import { menuVersions } from "../menu/publication.js";
 import {
@@ -36,6 +37,10 @@ export const departments = table(
     collectionNumber: collectionNumber("collection_number").notNull().default("none"),
     printTradingName: flag("print_trading_name").notNull().default(true),
     transferDeskProfileId: id("transfer_desk_profile_id"),
+    receiptText: json<Omit<DepartmentReceiptConfig, "logo">>("receipt_text"),
+    receiptLogoImageId: id("receipt_logo_image_id"),
+    receiptLogoRasters: json<ReceiptLogoRasters>("receipt_logo_rasters"),
+    receiptUpdatedAt: tsString("receipt_updated_at"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
@@ -47,6 +52,11 @@ export const departments = table(
       foreignColumns: [deviceProfiles.id],
       name: "departments_transfer_desk_profile_fk",
     }).onDelete("set null"),
+    foreignKey({
+      columns: [t.receiptLogoImageId],
+      foreignColumns: [mediaImages.id],
+      name: "departments_receipt_logo_fk",
+    }).onDelete("restrict"),
     uniqueIndex("departments_name_key")
       .on(t.name)
       .where(sql`${t.active} = 1`),

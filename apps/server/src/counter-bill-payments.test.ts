@@ -1,3 +1,4 @@
+import { departments } from "@waitron/db";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
@@ -12,7 +13,6 @@ import {
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
-import { departmentReceipts } from "@waitron/venue-service";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { parkOrder } from "./working-order.js";
@@ -173,8 +173,8 @@ describe("Counter full invoice through the bill window", () => {
     async (invoiceType) => {
       const venue = await provisionBillVenue(suite.db);
       await suite.db.update(taxpayer).set({ taxpayerDomicile: "8 Fiscal Street, Madrid" });
-      await suite.db.update(departmentReceipts).set({
-        receipt: { operationDescription: "Restaurant", email: "dining@example.test" },
+      await suite.db.update(departments).set({
+        receiptText: { operationDescription: "Restaurant", email: "dining@example.test" },
       });
       const app = new Hono();
       mountTillApi(

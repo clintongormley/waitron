@@ -1,3 +1,4 @@
+import { seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { mountAlertsApi } from "../../src/alerts-api.js";
 import { createAlertRegistry } from "../../src/alerts.js";
 import { printingAlertSource } from "../../src/alert-sources.js";
@@ -41,7 +42,6 @@ import { nodeId as brandNodeId, type NodeId } from "@waitron/shared";
 import {
   configureZone,
   createDepartment,
-  departmentReceipts,
   departments,
   setProfileServiceAccess,
 } from "@waitron/venue-service";
@@ -502,11 +502,14 @@ async function benchDepartments(tx: Transaction): Promise<string[]> {
         })
       ).id,
     );
-  for (const departmentId of ids)
-    await tx
-      .insert(departmentReceipts)
-      .values({ departmentId, receipt: { operationDescription: "Restaurant" } })
-      .onConflictDoNothing({ target: departmentReceipts.departmentId });
+  for (const departmentId of ids) {
+    const [receipt] = await tx
+      .select({ saved: departments.receiptUpdatedAt })
+      .from(departments)
+      .where(eq(departments.id, departmentId));
+    if (receipt?.saved === null)
+      await seedDepartmentReceipt(tx, departmentId, { operationDescription: "Restaurant" });
+  }
   return ids.slice(0, BENCH_PROFILE.departments);
 }
 

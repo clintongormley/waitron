@@ -1,3 +1,4 @@
+import { departments } from "@waitron/db";
 import { seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
@@ -7,7 +8,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withTransaction, floorZones } from "@waitron/db";
-import { departmentReceipts, createDepartment, configureZone } from "@waitron/venue-service";
+import { createDepartment, configureZone } from "@waitron/venue-service";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
@@ -125,9 +126,9 @@ it("a counter sale sent without a zone records the selected zone and files that 
     const offers = await offerProducts(tx, venue.cfg, { zone: "counter" });
     const [zone] = await tx.select().from(floorZones).where(eq(floorZones.id, offers.zoneId));
     await tx
-      .update(departmentReceipts)
-      .set({ receipt: { operationDescription: "Counter drinks" } })
-      .where(eq(departmentReceipts.departmentId, zone!.departmentId));
+      .update(departments)
+      .set({ receiptText: { operationDescription: "Counter drinks" } })
+      .where(eq(departments.id, zone!.departmentId));
     return { ...offers, departmentId: zone!.departmentId };
   });
   const product = venue.db.all<{ id: string }>(

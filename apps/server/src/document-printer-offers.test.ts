@@ -1,3 +1,4 @@
+import { departments } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { claimInvoiceDelivery, reserveInvoiceDelivery } from "./invoice-delivery.js";
 import { eq } from "drizzle-orm";
@@ -22,7 +23,7 @@ import { emptyPrinterLists, setProfilePrinterLists } from "@waitron/layouts";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
-import { setProfileServiceScope, departmentReceipts } from "@waitron/venue-service";
+import { setProfileServiceScope } from "@waitron/venue-service";
 import { recordSale } from "@waitron/core";
 import {
   billlessSale,
@@ -300,8 +301,8 @@ it("two same-venue profiles have independent printer lists", async () => {
 });
 
 it("dashboard invoice email requires report export, even when the invoice is visible", async () => {
-  await suite.db.update(departmentReceipts).set({
-    receipt: { operationDescription: "Hospitality", email: "venue@example.test" },
+  await suite.db.update(departments).set({
+    receiptText: { operationDescription: "Hospitality", email: "venue@example.test" },
   });
   const id = await fullSale();
   const supervisor: DeliveryAuthority = {

@@ -5,11 +5,7 @@ import {
 } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { createStaffApp } from "./cloud-remote.js";
-import {
-  departments,
-  departmentReceipts,
-  readPrintedDepartmentReceipt,
-} from "@waitron/venue-service";
+import { departments, readPrintedDepartmentReceipt } from "@waitron/venue-service";
 /**
  * The dashboard's sign-in and staff-administration routes end to end — login, logout, the roster
  * and its gate, invitations, password reset, Google linking, degenerate bodies answering 4xx rather
@@ -22,7 +18,7 @@ import {
  */
 import { createHash, randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi, type Mock } from "vitest";
 import { outgoingMail, roles, withTransaction, type Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -1297,12 +1293,22 @@ async function libraryImage(width: number): Promise<string> {
 
 async function storedReceipt(): Promise<Record<string, unknown> | undefined> {
   const [row] = await suite.db
-    .select()
-    .from(departmentReceipts)
-    .where(eq(departmentReceipts.departmentId, await receiptDepartment()));
-  return row === undefined
+    .select({
+      receiptText: departments.receiptText,
+      receiptLogoRasters: departments.receiptLogoRasters,
+      receiptUpdatedAt: departments.receiptUpdatedAt,
+      logo: mediaImages.filename,
+    })
+    .from(departments)
+    .leftJoin(mediaImages, eq(mediaImages.id, departments.receiptLogoImageId))
+    .where(eq(departments.id, await receiptDepartment()));
+  return row === undefined || row.receiptUpdatedAt === null
     ? undefined
-    : { ...row.receipt, ...(row.logoRasters == null ? {} : { logoRasters: row.logoRasters }) };
+    : {
+        ...row.receiptText,
+        ...(row.logo === null ? {} : { logo: row.logo }),
+        ...(row.receiptLogoRasters == null ? {} : { logoRasters: row.receiptLogoRasters }),
+      };
 }
 
 /** Replaces a library image's bytes with some that will not decode. */
@@ -1533,15 +1539,14 @@ describe("Management API — receipt routes (Task 7)", () => {
     expect((await putReceiptOverHttp(app, cookie, { logo })).status).toBe(204);
     const drawn = (await storedReceipt())!.logoRasters as Record<string, unknown>;
     await suite.db
-      .update(departmentReceipts)
+      .update(departments)
       .set({
-        receipt: { logo },
-        logoRasters: {
+        receiptLogoRasters: {
           ...drawn,
           "80mm": { widthDots: 8, heightDots: 1, data: "" },
-        } as typeof departmentReceipts.$inferInsert.logoRasters,
+        } as typeof departments.$inferInsert.receiptLogoRasters,
       })
-      .where(eq(departmentReceipts.departmentId, await receiptDepartment()));
+      .where(eq(departments.id, await receiptDepartment()));
 
     expect((await putReceiptOverHttp(app, cookie, { logo })).status).toBe(204);
     expect(await storedReceipt()).toEqual({ logo, logoRasters: drawn });
@@ -1562,9 +1567,9 @@ describe("Management API — receipt routes (Task 7)", () => {
       () =>
         withTransaction(suite.db, async (tx) => {
           await tx
-            .update(departmentReceipts)
-            .set({ receipt: { footerMessage: { "es-ES": "Otra" } }, logoRasters: null })
-            .where(eq(departmentReceipts.departmentId, await receiptDepartment()));
+            .update(departments)
+            .set({ receiptText: { footerMessage: { "es-ES": "Otra" } }, receiptLogoRasters: null })
+            .where(eq(departments.id, await receiptDepartment()));
         }),
     );
     expect(res.status).toBe(204);
@@ -2434,8 +2439,8 @@ describe("independent department receipt routes", () => {
     expect(
       await suite.db
         .select()
-        .from(departmentReceipts)
-        .where(eq(departmentReceipts.departmentId, id)),
+        .from(departments)
+        .where(and(eq(departments.id, id), sql`${departments.receiptUpdatedAt} is not null`)),
     ).toEqual([]);
   });
 
@@ -2452,12 +2457,7 @@ describe("independent department receipt routes", () => {
       expect(response.status).toBe(200);
       expect((await response.json()).receipt).toEqual(receipt);
       expect(
-        (
-          await suite.db
-            .select()
-            .from(departmentReceipts)
-            .where(eq(departmentReceipts.departmentId, id))
-        )[0]?.receipt,
+        (await suite.db.select().from(departments).where(eq(departments.id, id)))[0]?.receiptText,
       ).toEqual(receipt);
     },
   );
@@ -2547,10 +2547,7 @@ describe("department logo ownership and route failure boundaries", () => {
     expect(
       (await putTrim(app, cookie, departmentReceiptPath(id), { receipt: { logo } })).status,
     ).toBe(204);
-    const [before] = await suite.db
-      .select()
-      .from(departmentReceipts)
-      .where(eq(departmentReceipts.departmentId, id));
+    const [before] = await suite.db.select().from(departments).where(eq(departments.id, id));
     await spoilImageBytes(logo);
     expect(
       (
@@ -2560,13 +2557,9 @@ describe("department logo ownership and route failure boundaries", () => {
       ).status,
     ).toBe(204);
     expect(
-      (
-        await suite.db
-          .select()
-          .from(departmentReceipts)
-          .where(eq(departmentReceipts.departmentId, id))
-      )[0]!.logoRasters,
-    ).toEqual(before!.logoRasters);
+      (await suite.db.select().from(departments).where(eq(departments.id, id)))[0]!
+        .receiptLogoRasters,
+    ).toEqual(before!.receiptLogoRasters);
     expect(
       (
         await putTrim(app, cookie, await receiptPath(), {
@@ -2579,28 +2572,23 @@ describe("department logo ownership and route failure boundaries", () => {
       204,
     );
     expect(
-      (
-        await suite.db
-          .select()
-          .from(departmentReceipts)
-          .where(eq(departmentReceipts.departmentId, id))
-      )[0]!.logoRasters,
+      (await suite.db.select().from(departments).where(eq(departments.id, id)))[0]!
+        .receiptLogoRasters,
     ).toBeNull();
     expect((await storedReceipt())!.logoRasters).toBeDefined();
     await suite.db
-      .update(departmentReceipts)
-      .set({ receipt: { logo }, logoRasters: before!.logoRasters })
-      .where(eq(departmentReceipts.departmentId, id));
+      .update(departments)
+      .set({
+        receiptLogoImageId: before!.receiptLogoImageId,
+        receiptLogoRasters: before!.receiptLogoRasters,
+      })
+      .where(eq(departments.id, id));
     expect((await putTrim(app, cookie, await receiptPath(), { receipt: {} })).status).toBe(204);
     expect((await storedReceipt())!.logoRasters).toBeUndefined();
     expect(
-      (
-        await suite.db
-          .select()
-          .from(departmentReceipts)
-          .where(eq(departmentReceipts.departmentId, id))
-      )[0]!.logoRasters,
-    ).toEqual(before!.logoRasters);
+      (await suite.db.select().from(departments).where(eq(departments.id, id)))[0]!
+        .receiptLogoRasters,
+    ).toEqual(before!.receiptLogoRasters);
   });
 
   it("does not borrow another department pair with the same filename", async () => {
@@ -2617,8 +2605,8 @@ describe("department logo ownership and route failure boundaries", () => {
     expect(
       await suite.db
         .select()
-        .from(departmentReceipts)
-        .where(eq(departmentReceipts.departmentId, id)),
+        .from(departments)
+        .where(and(eq(departments.id, id), sql`${departments.receiptUpdatedAt} is not null`)),
     ).toEqual([]);
   });
 
@@ -2643,8 +2631,8 @@ describe("department logo ownership and route failure boundaries", () => {
       expect(
         await suite.db
           .select()
-          .from(departmentReceipts)
-          .where(eq(departmentReceipts.departmentId, id)),
+          .from(departments)
+          .where(and(eq(departments.id, id), sql`${departments.receiptUpdatedAt} is not null`)),
       ).toEqual([]);
       expect(await storedReceipt()).toBeUndefined();
     },
@@ -2659,24 +2647,20 @@ describe("department logo ownership and route failure boundaries", () => {
     expect(
       (await putTrim(app, cookie, departmentReceiptPath(id), { receipt: { logo } })).status,
     ).toBe(204);
-    const [before] = await suite.db
-      .select()
-      .from(departmentReceipts)
-      .where(eq(departmentReceipts.departmentId, id));
-    await suite.db.update(departmentReceipts).set({
-      logoRasters: { ...before!.logoRasters!, "80mm": { widthDots: 8, heightDots: 1, data: "" } },
+    const [before] = await suite.db.select().from(departments).where(eq(departments.id, id));
+    await suite.db.update(departments).set({
+      receiptLogoRasters: {
+        ...before!.receiptLogoRasters!,
+        "80mm": { widthDots: 8, heightDots: 1, data: "" },
+      },
     });
     expect(
       (await putTrim(app, cookie, departmentReceiptPath(id), { receipt: { logo } })).status,
     ).toBe(204);
     expect(
-      (
-        await suite.db
-          .select()
-          .from(departmentReceipts)
-          .where(eq(departmentReceipts.departmentId, id))
-      )[0]!.logoRasters,
-    ).toEqual(before!.logoRasters);
+      (await suite.db.select().from(departments).where(eq(departments.id, id)))[0]!
+        .receiptLogoRasters,
+    ).toEqual(before!.receiptLogoRasters);
   });
 
   it.each(["department", "primary department"])(
@@ -2707,8 +2691,8 @@ describe("department logo ownership and route failure boundaries", () => {
       expect(
         await suite.db
           .select()
-          .from(departmentReceipts)
-          .where(eq(departmentReceipts.departmentId, id)),
+          .from(departments)
+          .where(and(eq(departments.id, id), sql`${departments.receiptUpdatedAt} is not null`)),
       ).toEqual([]);
       expect(await storedReceipt()).toBeUndefined();
     },
@@ -2778,9 +2762,9 @@ describe("optional receipt source failures within one transaction", () => {
             ...(failDepartment ? { unreadable: true } : {}),
           });
           await tx
-            .update(departmentReceipts)
-            .set({ updatedAt: "2026-10-10T02:00:00Z" })
-            .where(eq(departmentReceipts.departmentId, id));
+            .update(departments)
+            .set({ receiptUpdatedAt: "2026-10-10T02:00:00Z" })
+            .where(eq(departments.id, id));
         });
         expect(events).toEqual([
           ...(failDepartment
@@ -2794,9 +2778,9 @@ describe("optional receipt source failures within one transaction", () => {
             : []),
         ]);
         const [committed] = await suite.db
-          .select({ updatedAt: departmentReceipts.updatedAt })
-          .from(departmentReceipts)
-          .where(eq(departmentReceipts.departmentId, id));
+          .select({ updatedAt: departments.receiptUpdatedAt })
+          .from(departments)
+          .where(eq(departments.id, id));
         expect(committed!.updatedAt).toBe("2026-10-10T02:00:00Z");
       } finally {
         select.mockRestore();

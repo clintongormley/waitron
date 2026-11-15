@@ -1,7 +1,11 @@
 import { personStaffRoles, persons } from "@waitron/db";
 import { ADJUSTMENTS_PERMISSIONS } from "@waitron/adjustments";
 import { registerModulePermissions } from "@waitron/identity";
-import { ensureFixtureJobRole, seedDeviceProfiles, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
+import {
+  ensureFixtureJobRole,
+  seedDeviceProfiles,
+  seedDepartmentReceipt,
+} from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./trading-admission.js";
 import { observedClosingBody } from "./party-close-fixture.js";

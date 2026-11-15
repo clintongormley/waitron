@@ -199,7 +199,7 @@ describe("department-only on-screen receipt", () => {
       try {
         if (hiddenDepartment)
           await suite.db.execute(
-            sql`alter table department_receipts rename to test_hidden_department_receipts`,
+            sql`alter table departments rename column receipt_text to test_hidden_receipt_text`,
           );
         const presentation = await f.read();
         expect(presentation.receiptTrim).toEqual(
@@ -223,7 +223,7 @@ describe("department-only on-screen receipt", () => {
       } finally {
         if (hiddenDepartment)
           await suite.db.execute(
-            sql`alter table test_hidden_department_receipts rename to department_receipts`,
+            sql`alter table departments rename column test_hidden_receipt_text to receipt_text`,
           );
         warning.mockRestore();
       }

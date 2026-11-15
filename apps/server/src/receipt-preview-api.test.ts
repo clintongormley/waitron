@@ -18,7 +18,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { isAppError } from "@waitron/shared";
-import { departments, departmentReceipts } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { mountReceiptPreviewApi, type ReceiptPreviewResponse } from "./receipt-preview-api.js";
 import type { TradingContext } from "./trading-context.js";
@@ -768,7 +768,14 @@ describe("POST /management-api/receipt-preview", () => {
 
 describe("the receipt preview's top block", () => {
   afterEach(async () => {
-    await suite.db.delete(departmentReceipts);
+    await suite.db
+      .update(departments)
+      .set({
+        receiptText: null,
+        receiptLogoImageId: null,
+        receiptLogoRasters: null,
+        receiptUpdatedAt: null,
+      });
 
     await suite.db.delete(mediaImages);
   });
@@ -852,7 +859,12 @@ describe("the receipt preview's top block", () => {
       heightDots: 2,
       data: Buffer.from([1, 2, 3, 4]).toString("base64"),
     };
-    await seedDepartmentReceipt(suite.db, departmentId, { logo }, { "58mm": raster, "80mm": raster });
+    await seedDepartmentReceipt(
+      suite.db,
+      departmentId,
+      { logo },
+      { "58mm": raster, "80mm": raster },
+    );
     expect(sizes(await rendered({ logo }))).toEqual([[16, 2]]);
   });
 
@@ -967,15 +979,8 @@ describe("the receipt preview's top block", () => {
 
     const at = () => ({ departmentId });
     const readableNoLogo = () =>
-      suite.db
-        .insert(departmentReceipts)
-        .values({ departmentId, receipt: { phone: "910111111" } })
-        .onConflictDoUpdate({
-          target: departmentReceipts.departmentId,
-          set: { receipt: { phone: "910111111" } },
-        });
+      seedDepartmentReceipt(suite.db, departmentId, { phone: "910111111" });
 
-    /** Runs `fn` with the department's receipt read renaming its table after its first call. */
     async function hidingReceiptsAfterRead<T>(fn: () => Promise<T>): Promise<T> {
       const read = VENUE_SERVICE.readDepartmentReceipt;
       const hide = UNTRUSTED_CASES.find((c) => c.name === "the read throws")!;
@@ -994,18 +999,12 @@ describe("the receipt preview's top block", () => {
         spy.mockRestore();
         // A request that rolled back took the rename with it; undoing then would hide its failure.
         const stillHidden = await suite.db.all(
-          sql`select 1 from sqlite_master where type = 'table' and name = 'test_hidden_department_receipts'`,
+          sql`select 1 from pragma_table_info('departments') where name = 'test_hidden_receipt_text'`,
         );
         if (stillHidden.length > 0) await hide.undo(suite.db, at());
       }
     }
 
-    /**
-     * Runs `fn` with the department's receipts table renamed during each printed read, collecting
-     * each read's answer. The table comes back inside the same transaction: reading the image's
-     * current details (readCurrentImageMetadata) counts its uses, which reads department_receipts
-     * after the snapshot's transaction ends.
-     */
     async function hidingReceiptsDuringPrintedRead<T>(
       fn: () => Promise<T>,
     ): Promise<{ result: T; answers: unknown[] }> {
@@ -1132,7 +1131,12 @@ describe("the receipt preview's top block", () => {
         heightDots: 2,
         data: Buffer.from([1, 2, 3, 4]).toString("base64"),
       };
-      await seedDepartmentReceipt(suite.db, departmentId, { logo }, { "58mm": raster, "80mm": raster });
+      await seedDepartmentReceipt(
+        suite.db,
+        departmentId,
+        { logo },
+        { "58mm": raster, "80mm": raster },
+      );
       expect(sizes(await rendered({ logo }))).toEqual([[16, 2]]);
       const { result, answers } = await hidingReceiptsDuringPrintedRead(() => rendered({ logo }));
       expect(answers).toEqual([{ receipt: {}, logo: null, unreadable: true }]);

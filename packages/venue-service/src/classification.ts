@@ -6,7 +6,6 @@ export const VENUE_SERVICE_TABLES = [
   "department_courses",
   "service_steps",
   "service_step_completions",
-  "department_receipts",
   "department_transfer_destinations",
   "department_transfer_requests",
   "sale_receipt_headers",

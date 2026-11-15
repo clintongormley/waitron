@@ -21,7 +21,7 @@ import {
   mediaImageEdits,
   mediaImages,
 } from "@waitron/db";
-import { departmentReceipts, departments } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import {
   AppError,
   compareSearchRanks,
@@ -107,12 +107,6 @@ export type ImageUsage =
   | { kind: "department_receipt"; id: string; name: string; active: boolean }
   /** A theme naming the photo as its light or dark logo, or both: one use per theme. */
   | { kind: "theme_logo"; id: string; name: string };
-function storedLogo(receipt: typeof departmentReceipts.receipt) {
-  return sql<string | null>`case when json_valid(${receipt}) then
-    case when json_type(${receipt}) = 'object' and json_type(${receipt}, '$.logo') = 'text'
-    then json_extract(${receipt}, '$.logo') else null end else null end`;
-}
-const departmentLogo = storedLogo(departmentReceipts.receipt);
 /** The file name a theme's stored document gives its `side` logo, or NULL when it cannot be read. */
 export function themeLogoName(side: "light" | "dark") {
   const path = `$.logo.${side}`;
@@ -258,9 +252,9 @@ async function listImageUsagesForFilename(
     .orderBy(menus.name, menuVersions.menuId, menuVersions.number);
   const departmentRows = await tx
     .select({ id: departments.id, name: departments.name, active: departments.active })
-    .from(departmentReceipts)
-    .innerJoin(departments, eq(departments.id, departmentReceipts.departmentId))
-    .where(eq(departmentLogo, filename))
+    .from(departments)
+    .innerJoin(mediaImages, eq(mediaImages.id, departments.receiptLogoImageId))
+    .where(eq(mediaImages.filename, filename))
     .orderBy(departments.name, departments.id);
   const themeRows = await tx
     .select({ id: customThemes.id, name: customThemes.name })
@@ -613,10 +607,10 @@ async function countUsages(
     tally(row.image);
   }
   for (const row of await tx
-    .select({ image: departmentLogo })
-    .from(departmentReceipts)
-    .innerJoin(departments, eq(departments.id, departmentReceipts.departmentId))
-    .where(inArray(departmentLogo, wanted))) {
+    .select({ image: mediaImages.filename })
+    .from(departments)
+    .innerJoin(mediaImages, eq(mediaImages.id, departments.receiptLogoImageId))
+    .where(inArray(mediaImages.filename, wanted))) {
     tally(row.image);
   }
   for (const row of await tx
