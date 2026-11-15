@@ -44,10 +44,7 @@ it("resolves offered rows through passive lists and encodes device addresses", a
     label: "Pass",
     path: "/manage/devices/device/d%2F%2B",
   });
-  expect((await resolve("madeHereStationIds")).map((row) => row.id)).toEqual([
-    "d/+",
-    "empty",
-  ]);
+  expect((await resolve("madeHereStationIds")).map((row) => row.id)).toEqual(["d/+", "empty"]);
   expect((await resolve("name")).map((row) => row.id)).toEqual(["d/+", "kds", "gone", "empty"]);
   expect(await resolve("approvedProfileIds")).toEqual([]);
   for (const read of reads) expect(read).toHaveBeenCalledTimes(4);
