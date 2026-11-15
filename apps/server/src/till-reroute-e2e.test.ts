@@ -31,6 +31,11 @@ import { serverFixture } from "./testing/server-fixture.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { freePorts } from "./testing/free-ports.js";
+import { fakeMdnsSocket } from "./testing/fake-mdns-socket.js";
+import { peerCertificate, writeTlsSet } from "./testing/box-tls.js";
+import { boxHostnameFor } from "./box-name.js";
+import { X509Certificate } from "node:crypto";
+import { Agent } from "undici";
 
 const { beforeServerStarts, startServer } = serverFixture();
 
@@ -107,6 +112,14 @@ const DEVICE_TOKEN = "reroute-e2e-device-token";
 const TAB_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 
 const DEVICE_COOKIE_HEADER = `${DEVICE_COOKIE}=${DEVICE_ID}.${DEVICE_TOKEN}`;
+
+// The venue's authority and its leaf naming `waitron.local`: B's mirror link pins this authority,
+// and B's `tls/` holds it from its promotion restart on.
+const VENUE_TLS = mintSelfSignedServerCert({
+  hostnames: ["waitron.local"],
+  ipAddresses: [],
+  now: new Date(),
+});
 
 interface NodeProbeBody {
   nodeId: string;
@@ -292,11 +305,7 @@ beforeAll(async () => {
   await writeMirrorLink(storeB.node, NODE_B, {
     originUrl: "http://127.0.0.1:1/",
     boxHostname: "reroute-box.local",
-    boxCaPem: mintSelfSignedServerCert({
-      hostnames: ["reroute-box.local"],
-      ipAddresses: [],
-      now: new Date(),
-    }).caCertPem,
+    boxCaPem: VENUE_TLS.caCertPem,
     originNodeId: NODE_A,
   });
 
@@ -372,27 +381,55 @@ describe("till reroute — two instances, one venue", () => {
       await serverB.close();
       serverB = undefined;
 
-      const serverB2 = await startServer(primaryEnv(venueDirB, portB, NODE_B));
+      // A and B are both down, so B's `tls/` can be written in the state folder they share.
+      await writeTlsSet(STATE_ROOT, VENUE_TLS);
+      const mdns = fakeMdnsSocket();
+      const serverB2 = await startServer(
+        { ...primaryEnv(venueDirB, portB, NODE_B), WAITRON_HTTP_HOST: "0.0.0.0" },
+        {},
+        { mdnsSocket: () => mdns.socket },
+      );
+      const venueTls = new Agent({
+        connect: { ca: VENUE_TLS.caCertPem, servername: "waitron.local" },
+      });
+      const onB = (path: string, init: RequestInit = {}) =>
+        fetch(`https://127.0.0.1:${portB}${path}`, {
+          ...init,
+          dispatcher: venueTls,
+        } as RequestInit);
       try {
+        // A till looks the venue's name up and checks the certificate it is served (§6.3 step 4).
+        // FAILING CASE: a box still a mirror answers only its own name.
+        for (const name of ["waitron.local", boxHostnameFor(NODE_B)]) mdns.query(name);
+        expect(mdns.answered()).toContain("waitron.local");
+        const served = await peerCertificate({
+          port: portB,
+          ca: VENUE_TLS.caCertPem,
+          servername: "waitron.local",
+        });
+        expect(served?.subjectAltName).toContain("DNS:waitron.local");
+        expect(served?.checkIssued(new X509Certificate(VENUE_TLS.caCertPem))).toBe(true);
+
         // The promoted, restarted B now accepts sales — pinned to the fixture's `bPrimary` body.
-        expect(await probe(portB)).toEqual(FIXTURE.bPrimary);
+        expect(await (await onB("/api/node")).json()).toEqual(FIXTURE.bPrimary);
 
         // 6. The SAME device cookie authenticates on the promoted B, the till re-logs-in, and the venue's
         // open tab — tagged with the DEAD node's id — is returned by the now venue-wide read. FAILING
         // CASE: the pre-reroute own-node filter would hide NODE_A's tab from B (whose own node is NODE_B).
-        expect((await get(portB, "/api/device/me", DEVICE_COOKIE_HEADER)).status).toBe(200);
-        const loginB = await post(
-          portB,
-          "/api/session",
-          { personId: PERSON, pin: "5555" },
-          DEVICE_COOKIE_HEADER,
-        );
+        const me = await onB("/api/device/me", { headers: { cookie: DEVICE_COOKIE_HEADER } });
+        expect(me.status).toBe(200);
+        const loginB = await onB("/api/session", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: DEVICE_COOKIE_HEADER },
+          body: JSON.stringify({ personId: PERSON, pin: "5555" }),
+        });
         expect(loginB.status).toBe(200);
-        const held = await get(portB, "/api/working-orders", cookieOf(loginB));
+        const held = await onB("/api/working-orders", { headers: { cookie: cookieOf(loginB) } });
         expect(held.status).toBe(200);
         expect(((await held.json()) as { id: string }[]).map((o) => o.id)).toContain(TAB_ID);
       } finally {
         await serverB2.close();
+        await venueTls.close();
       }
     } finally {
       if (serverB !== undefined) await serverB.close().catch(() => undefined);
