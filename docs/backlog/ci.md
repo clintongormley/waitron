@@ -155,7 +155,14 @@ earlier failure of this case. The log is kept at
 second time on PR #3003 (2026-11-14, run 43585179122, `test-server` shard 1), a branch that also
 does not touch the diagnosis code: the child was sent SIGTERM about 1.65 s after it was spawned and
 the case again got `fiscal.certificate_diagnosis_unavailable`. That log is kept at
-`~/waitron-campaign-b/ci-logs/pr3003-run43585179122-test-server-1.log`.
+`~/waitron-campaign-b/ci-logs/pr3003-run43585179122-test-server-1.log`. A sibling case in the same
+diagnosis child handling failed on PR #3342 (2026-11-15, run 43717151594, attempt 1, `test-server`
+shard 5): `apps/server/src/fiscal-certificate-diagnosis-bundle.test.ts:250` "cancels held native
+cleanup and observes the child and TLS socket gone" found the child still alive
+(`process.kill(pid, 0)` did not throw) right after the cancel answered. The branch does not touch the
+diagnosis code; the shard passed on re-run and the file passed locally (7 of 7). None of the 39
+other most recent failed `ci.yml` runs' failed-job logs name this case. The log is kept at
+`~/waitron-campaign-l/ci-logs/pr3342-run43717151594-attempt1-test-server-5.log`.
 
 
 15 November 2026: PR #3309's unchanged restore integrity test, “keeps the main thread's timers
