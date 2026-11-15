@@ -27,7 +27,7 @@ power and connection, then use **Open drawer** if you still need it open. If ask
 who can authorise opening it and enter their PIN.
 
 **Nothing can be saved: the server is out of space · Tell a manager** is red. The server has no disk
-space left, so orders, payments and other changes cannot be saved. Stay signed in while space is
+space left, so orders, payments and other changes cannot be saved. Avoid signing out while space is
 freed: a new sign-in also needs disk space. A manager needs to free space on the server, on the [Box
 status page](box-status.md#free-space). If the server had to use its spare space to start, the
 notice stays, also after a restart, until about 24 MB is free again.

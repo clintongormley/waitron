@@ -1680,14 +1680,14 @@ describe("a start on a real full disk", () => {
       const kitchenBefore = [];
       for (const { path, cookie } of kitchenReads) kitchenBefore.push(await read(path, cookie));
       expect(kitchenBefore.map(({ status }) => status)).toEqual([200, 200, 200, 200]);
+      db.run(
+        sql`update devices set last_seen_at = '2020-01-01T00:00:00.000Z' where id = ${venue.deviceId}`,
+      );
       db.all(sql`pragma wal_checkpoint(truncate)`);
       small.fill(0);
       expect((await read("/api/tables/state")).status).toBe(200);
       expect((await read(`/api/sales/${paidId}/deliveries`)).status).toBe(200);
       small.unfill();
-      db.run(
-        sql`update devices set last_seen_at = '2020-01-01T00:00:00.000Z' where id = ${venue.deviceId}`,
-      );
       db.run(
         sql`insert into change_log (id, payload) values ('audit-pending', '{"resources":[{"type":"persons","id":"pending"}]}')`,
       );

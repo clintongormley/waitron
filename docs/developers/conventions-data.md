@@ -3151,6 +3151,8 @@ has already thrown (inferred, not isolated).
 
 **Still refused.**
 
+- Other routes that still use a draining `withTransaction` can also answer 507 while a change
+  waits, even if their bodies only read; this audit does not qualify those routes.
 - The floor-state read (`GET /api/tables/state`) and invoice-delivery status
   (`GET /api/sales/:id/deliveries`) retain write-capable transactions. Their closing change-log
   drains still answer 507 on a full disk with a pending row, even when no reconciliation is due.

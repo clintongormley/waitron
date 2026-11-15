@@ -1456,12 +1456,8 @@ except the last, added 2026-11-14.
   delayed-sending alert and Fiscal filing's "Oldest waiting" read, though over more records: stopped
   and held ones count too. Open to the owner.
 
-The full-disk read cut retains the floor-state and invoice-delivery status transactions, because
-their bodies can reset today’s layout or expire delivery claims. With a pending notification their
-closing drain still answers `507 storage.disk_full`, even when no reconciliation is due. Without a
-pending row, the real-disk control answers 200 for both. The watcher explicitly retained invoice
-expiry on 15 November 2026 at 06:10 in Lane K’s `questions.md`. New sign-ins also need to save their
-sessions.
+The watcher retained invoice-delivery status’s existing claim-expiry transaction and its 507 refusal
+on 15 November 2026 at 06:10 in Lane K’s `questions.md`.
 
 ### Retry after a full-disk stop
 
