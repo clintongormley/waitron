@@ -86,7 +86,7 @@ const TRANSLATION_READS = [
 export const QUERY_DEPENDENCIES = {
   getZoneDeleteImpact: HIERARCHY_DELETE_READS,
   getDepartmentDeleteImpact: HIERARCHY_DELETE_READS,
-  getMenuSettings: ["settings.menu"],
+  getMenuSettings: ["settings.menu", "settings.venue", "taxpayer"],
   getContentLanguages: ["settings.venue"],
   getVenueTheme: ["custom_themes", "media_images"],
   listThemes: ["custom_themes"],
