@@ -16,6 +16,7 @@ import {
   parseArchiveSettings,
   readArchiveSettings,
   readArchiveSettingsWithMeta,
+  readHeldArchiveSettings,
   resolveArchiveChoice,
   resolveArchiveChoices,
   writeArchiveSettings,
@@ -628,6 +629,53 @@ describe("stored archive settings", () => {
     expect(JSON.stringify(doc)).not.toContain("custom-secret");
     expect(await readArchiveSettings(suite.db, ring)).toEqual(written);
   });
+
+  it.each(["bucket without keys", "keys without a bucket"])(
+    "refuses %s as unreadable archive settings",
+    async (shape) => {
+      await withTransaction(suite.db, async (tx) => {
+        await saveSettings(tx, BACKUP_SETTINGS, {
+          doc: {
+            archive: {
+              ...settingsWith([]),
+              destinations:
+                shape === "bucket without keys"
+                  ? [
+                      {
+                        kind: "s3",
+                        id: "bucket",
+                        bucket: {
+                          endpoint: "https://other.example.test",
+                          region: "eu-west-1",
+                          bucket: "archive-bucket",
+                          prefix: "box",
+                        },
+                      },
+                    ]
+                  : [{ kind: "local-fs", id: "primary", dir: "/var/backups" }],
+              writtenAt: "2026-11-15T00:00:00.000Z",
+            },
+            stream: null,
+          },
+          expectedRevision: 0,
+          personId: null,
+        });
+        if (shape === "keys without a bucket")
+          await putCredential(tx, ring, {
+            purpose: ARCHIVE_PURPOSE,
+            value: { accessKeyId: "AKIACUSTOM", secretAccessKey: "custom-secret" },
+            personId: null,
+          });
+      });
+      await expect(readArchiveSettings(suite.db, ring)).rejects.toMatchObject({
+        code: "backup.archive_settings_invalid",
+        params: { reason: "keys" },
+      });
+      expect(await readHeldArchiveSettings(suite.db, ring)).toEqual({
+        unreadable: "backup.archive_settings_invalid",
+      });
+    },
+  );
 
   it("reads nothing before anything is stored", async () => {
     expect(await readArchiveSettings(suite.db, ring)).toBeNull();
