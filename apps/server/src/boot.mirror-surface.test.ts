@@ -9,9 +9,20 @@ import { dirname, join } from "node:path";
 import { sql } from "drizzle-orm";
 import type { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { invoiceSeries, nodes, stampDeployment, taxpayer, withNodeTransaction } from "@waitron/db";
+import {
+  invoiceSeries,
+  nodes,
+  stampDeployment,
+  taxpayer,
+  withNodeTransaction,
+  writeNodeMembership,
+} from "@waitron/db";
 import { loadKeyRing, sealNodeSigningKeyTx } from "@waitron/credentials";
-import { generateNodeKeyPair } from "@waitron/membership";
+import {
+  generateNodeKeyPair,
+  signDocumentBody,
+  type MembershipDocumentBody,
+} from "@waitron/membership";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { setNodeMode, writeMirrorLink } from "@waitron/node-db";
@@ -116,9 +127,10 @@ async function seedVenue(): Promise<void> {
  * from in place of the connection's address. */
 async function boot(
   start: Start,
-  options: { landing?: boolean; fromBox?: { current: boolean } },
+  options: { landing?: boolean; fromBox?: { current: boolean }; silentMain?: boolean },
 ): Promise<{ server: StartedServer; app: Hono; stateDir: string }> {
   await seedVenue();
+  if (options.silentMain === true) await holdChartNamingMainBox();
   const stateDir = await mkdtemp(join(tmpdir(), "waitron-surface-state-"));
   const own = mintSelfSignedServerCert({
     hostnames: ["waitron.local"],
@@ -169,7 +181,7 @@ async function boot(
 /** Starts the server on the venue already seeded and on `stateDir`, as a restart of the box does. */
 async function startOn(
   stateDir: string,
-  options: { landing?: boolean; fromBox?: { current: boolean } },
+  options: { landing?: boolean; fromBox?: { current: boolean }; silentMain?: boolean },
 ): Promise<{ server: StartedServer; app: Hono }> {
   const setupApp = join(stateDir, "setup");
   const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
@@ -184,6 +196,15 @@ async function startOn(
           requestProvenFromBox: () => options.fromBox!.current,
         }),
     mdnsSocket: () => mdns.socket,
+    ...(options.silentMain === true
+      ? {
+          mainSilence: {
+            intervalMs: 20,
+            silentAfterMs: 100,
+            ask: () => Promise.resolve("unreachable" as const),
+          },
+        }
+      : {}),
   };
   served.splice(0);
   const server = await startServer(
@@ -204,6 +225,23 @@ async function startOn(
     seams,
   );
   return { server, app: app! };
+}
+
+/** A held chart naming another box as serving primary, which the spare's watch asks. */
+async function holdChartNamingMainBox(): Promise<void> {
+  const body: MembershipDocumentBody = {
+    term: 1,
+    nodes: [
+      { nodeId: ORIGIN, contactUrl: "https://box-b800.waitron.local", standing: "serving-primary" },
+      { nodeId: NODE, contactUrl: "https://box-b801.waitron.local", standing: "serving-secondary" },
+    ],
+  };
+  await writeNodeMembership(suite.db, {
+    body,
+    signerNodeId: ORIGIN,
+    signature: signDocumentBody(body, generateNodeKeyPair().privateKey),
+    endorsements: [],
+  });
 }
 
 const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -270,6 +308,7 @@ const OPEN_READS: Record<string, Answer> = {
   "/public/menu": { status: 503 },
   "/public/menu/x": { status: 404 },
   "/api/node": { status: 200 },
+  "/api/node/main": { status: 200 },
   [`/api/node/handover/${MADE_UP}`]: { status: 404, code: "handover.operation_unknown" },
   "/": { status: 200 },
   "/manage": { status: 200 },
@@ -305,6 +344,7 @@ const MIRROR_WRITES: Record<string, Answer> = {
 
 const GATE_PASSES = (path: string) =>
   path === "/api/node" ||
+  path === "/api/node/main" ||
   /^\/api\/node\/handover\/[^/]+$/.test(path) ||
   /^\/handover\/[^/]+$/.test(path);
 
@@ -437,13 +477,45 @@ describe("a spare's network surface", () => {
     }
   }, 60_000);
 
+  it("certificate, trust, help and legal pages stay open at the venue's name", async () => {
+    const { server, app, stateDir } = await boot("mirror", {
+      fromBox: { current: false },
+      silentMain: true,
+    });
+    const atVenue = (path: string) =>
+      app.request(`https://waitron.local${path}`, { headers: { host: "waitron.local" } });
+    try {
+      await vi.waitFor(async () => expect((await atVenue("/")).status).toBe(302), {
+        timeout: 10_000,
+      });
+      for (const path of ["/ca.crt", "/setup/trust", "/help/en/products", "/legal/about"]) {
+        const venue = await atVenue(path);
+        const own = await app.request(`${OWN_ORIGIN}${path}`);
+        expect([path, venue.status, venue.headers.get("content-type")]).toEqual([
+          path,
+          own.status,
+          own.headers.get("content-type"),
+        ]);
+        expect([path, venue.status]).toEqual([path, 200]);
+        expect(await venue.text()).toBe(await own.text());
+      }
+    } finally {
+      await server.close();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("a mirror repairing its time zone serves the network no more than a full start", async () => {
     const { server, app, stateDir } = await boot("mirror-zone-repair", {
       fromBox: { current: false },
     });
     try {
       // The repair start's gate refuses these two before they reach the route a full start opens.
-      const stricter = new Set(["OPTIONS /api/node", "GET /handover/assets/app.js"]);
+      const stricter = new Set([
+        "OPTIONS /api/node",
+        "OPTIONS /api/node/main",
+        "GET /handover/assets/app.js",
+      ]);
       await walk(app, (method, path) =>
         stricter.has(`${method} ${path}`)
           ? { status: 409, code: "venue.time_zone_not_ready" }

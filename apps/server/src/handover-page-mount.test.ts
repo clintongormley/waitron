@@ -44,7 +44,7 @@ async function build(mirror = false, sells = false) {
     "destination",
   );
   const app = new Hono();
-  if (mirror) app.use("*", spareReadGate());
+  if (mirror) app.use("*", spareReadGate({ silent: () => false }));
   mountHandoverPage(app, { root: root!, node: suite.node, nodeId: NODE, sells }, () => {});
   mountSpa(app, { root: root!, basePath: "", navigationPath: "/tabs" }, () => {});
   return app;

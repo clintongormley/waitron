@@ -248,7 +248,7 @@ import { createDiskFullState, noteFullAtStart, watchForDiskFull } from "./disk-f
 import { mountDiskStopApi } from "./disk-stop-api.js";
 import { SPARE_SPACE_BYTES, spareReleased, spareRestorer } from "./spare-space.js";
 import { createFreeSpaceState, FREE_SPACE_CHECK_MS, freeSpaceJob } from "./free-space-watch.js";
-import { mountNodeApi } from "./node-api.js";
+import { mountMainServerApi, mountNodeApi } from "./node-api.js";
 import { restrictedPageRoute } from "./restricted-page.js";
 import { mountHandoverPage } from "./handover-page-mount.js";
 import { createPasswordThrottle } from "./password-throttle.js";
@@ -2472,7 +2472,8 @@ async function bootServer(
           log,
         });
   undoOnFailure.push(async () => mainSilence?.stop());
-  if (isMirror) app.use("*", spareReadGate());
+  if (isMirror) app.use("*", spareReadGate({ silent: () => mainSilence?.state().silent === true }));
+  if (isMirror) mountMainServerApi(app, { readMembership: () => readNodeMembership(db) }, log);
 
   // The node whose DATA the node-scoped read paths display. On a mirror it is the ORIGIN primary,
   // whose node_id the venue's sales carry; `config.node.nodeId` stays the node's own identity for

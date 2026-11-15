@@ -376,6 +376,11 @@ export class SetupApi {
     return ((await response.json()) as { body: HandoverStatus }).body;
   }
 
+  /** The main server's own address, from the chart this spare holds; `null` when it names none. */
+  mainServer(): Promise<{ mainUrl: string | null }> {
+    return this.#request("/api/node/main", "GET");
+  }
+
   previewEmergencyHandover(signIn: HandoverSignIn): Promise<EmergencyHandoverPreview> {
     return this.#request("/api/node/handover/emergency/preview", "POST", { signIn });
   }

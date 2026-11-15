@@ -6,7 +6,7 @@ import { SPARE_WORDS } from "./i18n/spare.js";
 import { readOnlyGate } from "./read-only-gate.js";
 import { isReadOnlyExempt } from "./read-only-exemptions.js";
 
-function fixture() {
+function fixture(watch = { silent: false }) {
   const mode = { mirror: true };
   const app = new Hono();
   app.use(
@@ -16,7 +16,7 @@ function fixture() {
       (c) => isReadOnlyExempt(c.req, { mirror: mode.mirror, fenced: false }),
     ),
   );
-  app.use("*", spareReadGate());
+  app.use("*", spareReadGate({ silent: () => watch.silent }));
   app.post("/management-api/promote", (c) => {
     mode.mirror = false;
     return c.json({ restarting: true });
@@ -136,3 +136,70 @@ it("serves the handover page and its built assets while private reads remain clo
     expect((await app.request(path)).status).toBe(403);
   }
 });
+
+const VENUE = "https://waitron.local";
+const OWN = "https://box-bbbb.waitron.local";
+
+it("at the venue's name a silent main server's spare sends pages to the switch page", async () => {
+  const app = fixture({ silent: true });
+  for (const path of ["/", "/manage", "/manage/servers"]) {
+    const response = await app.request(`${VENUE}${path}`, { headers: { accept: "text/html" } });
+    expect([response.status, response.headers.get("location")]).toEqual([
+      302,
+      "/handover/emergency",
+    ]);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+  }
+});
+
+it.each(["en-GB", "es-ES"] as const)(
+  "at the venue's name, with the main server answering, pages say it is back and reload: %s",
+  async (locale) => {
+    const app = fixture({ silent: false });
+    for (const path of ["/", "/manage", "/manage/servers"]) {
+      const response = await app.request(`${VENUE}${path}`, {
+        headers: { "accept-language": locale },
+      });
+      expect(response.status).toBe(200);
+      expect(response.headers.get("location")).toBeNull();
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      const body = await response.text();
+      expect(body).toContain(`<html lang="${locale}">`);
+      expect(body).toContain(SPARE_WORDS[locale].mainBack);
+      expect(body).toContain('<meta http-equiv="refresh" content="5">');
+      expect(body).not.toContain(SPARE_WORDS[locale].title);
+      expect(body).not.toContain("box-aaaa");
+      expect(body).not.toContain("<script");
+    }
+  },
+);
+
+it.each([true, false])(
+  "at the box's own name the closed page is served as before, silent: %s",
+  async (silent) => {
+    const app = fixture({ silent });
+    for (const path of ["/", "/manage", "/manage/servers"]) {
+      const response = await app.request(`${OWN}${path}`);
+      expect(response.status).toBe(200);
+      const body = await response.text();
+      expect(body).toContain(SPARE_WORDS["en-GB"].title);
+      expect(body).not.toContain(SPARE_WORDS["en-GB"].mainBack);
+    }
+  },
+);
+
+it.each([true, false])(
+  "other reads keep node.spare at the venue's name, silent: %s",
+  async (silent) => {
+    const app = fixture({ silent });
+    for (const path of ["/management-api/menus", "/api/box/status", "/media/images/image"]) {
+      const response = await app.request(`${VENUE}${path}`);
+      expect(response.status).toBe(403);
+      expect((await response.json()).error.code).toBe("node.spare");
+    }
+    for (const path of ["/api/node", "/api/node/main", "/handover/emergency"]) {
+      const response = await app.request(`${VENUE}${path}`);
+      expect([response.status, await response.json()]).toEqual([200, { reached: path }]);
+    }
+  },
+);

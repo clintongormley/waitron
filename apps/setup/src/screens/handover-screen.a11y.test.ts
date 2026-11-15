@@ -116,6 +116,9 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
             { api, emergency: true },
             theme,
           );
+          await vi.waitFor(() =>
+            expect(el.shadowRoot!.querySelector('[name="handover-email"]')).not.toBeNull(),
+          );
           for (const [name, value] of [
             ["email", "owner@example.com"],
             ["password", "synthetic-password"],

@@ -114,6 +114,8 @@ async function mount(
     /** The first preview gets no answer. */
     firstPreviewLost?: boolean;
     pageUrl?: string;
+    /** What `GET /api/node/main` answers; a string mounts without waiting for the first step. */
+    mainUrl?: string | null;
   } = {},
 ) {
   const posts: { path: string; body: Record<string, unknown> }[] = [];
@@ -132,6 +134,8 @@ async function mount(
   const later = [...(options.later ?? [])];
   const api = new SetupApi("", async (input, init) => {
     const path = String(input);
+    if (path === "/api/node/main")
+      return new Response(JSON.stringify({ mainUrl: options.mainUrl ?? null }));
     if (init?.method === "GET" && options.statusUnavailable)
       throw new TypeError("progress unavailable");
     if (init?.method === "GET")
@@ -336,7 +340,8 @@ async function mount(
     },
     options.theme,
   );
-  await vi.waitFor(() => expect(q(el, "[data-test=emergency-preview]")).not.toBeNull());
+  if (typeof options.mainUrl !== "string")
+    await vi.waitFor(() => expect(q(el, "[data-test=emergency-preview]")).not.toBeNull());
   return { el, host, posts };
 }
 async function authenticate(el: SetupHandoverScreen) {
@@ -1462,4 +1467,89 @@ it("a back that was ignored is not carried into the operation's address", async 
   expect(address.pathname).toBe(`/handover/${saved.operationId}`);
   expect(address.search).toBe("");
   expect(stop).toBe("/");
+});
+
+const MAIN = "https://box-aaaa.waitron.local";
+
+/** The page's own try of the main server, at `${MAIN}/api/node`; every other address is unexpected. */
+function mainServerAnswers(answer: () => Promise<Response>) {
+  return vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+    if (String(input) !== `${MAIN}/api/node`) throw new Error(`Unexpected fetch: ${String(input)}`);
+    return answer();
+  });
+}
+
+async function mainAnsweringRefusal(el: SetupHandoverScreen) {
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.main_answering")),
+  );
+  const link = [...el.shadowRoot!.querySelectorAll<HTMLAnchorElement>("a")].find(
+    (candidate) => candidate.getAttribute("href") === MAIN,
+  );
+  expect(link?.textContent).toBe(MAIN);
+  expect(q(el, "[data-test=emergency-preview]")).toBeNull();
+}
+
+it("when the main server answers, the page refuses and links to it", async () => {
+  const fetch = mainServerAnswers(() => Promise.resolve(new Response(null)));
+  const { el } = await mount({ mainUrl: MAIN });
+  await mainAnsweringRefusal(el);
+  expect(fetch).toHaveBeenCalledOnce();
+  expect(fetch.mock.calls[0]![1]).toMatchObject({ mode: "no-cors" });
+  expect(fetch.mock.calls[0]![1]!.signal).toBeInstanceOf(AbortSignal);
+  expect(q(el, "[data-test=main-check-again]").textContent).toContain(
+    t("handover.emergency.main_check_again"),
+  );
+});
+
+it("Check again after the main server stops answering lets the switch go on", async () => {
+  let answering = true;
+  mainServerAnswers(() =>
+    answering ? Promise.resolve(new Response(null)) : Promise.reject(new TypeError("no answer")),
+  );
+  const { el } = await mount({ mainUrl: MAIN });
+  await mainAnsweringRefusal(el);
+  answering = false;
+  q(el, "[data-test=main-check-again]").click();
+  await vi.waitFor(() => expect(q(el, "[data-test=emergency-preview]")).not.toBeNull());
+  expect(el.shadowRoot!.textContent).not.toContain(t("handover.emergency.main_answering"));
+});
+
+it("a main server that does not answer within 3 seconds lets the switch go on", async () => {
+  // vi.waitFor moves fake time on, so the wait for the try uses the real clock.
+  const realSetTimeout = globalThis.setTimeout.bind(globalThis);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const limits: number[] = [];
+  vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+    limits.push(ms);
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(new DOMException("timed out", "TimeoutError")), ms);
+    return controller.signal;
+  });
+  let signal: AbortSignal | undefined;
+  vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+    expect(String(input)).toBe(`${MAIN}/api/node`);
+    signal = init!.signal!;
+    return new Promise((_resolve, reject) =>
+      signal!.addEventListener("abort", () => reject(signal!.reason)),
+    );
+  });
+  const { el } = await mount({ mainUrl: MAIN });
+  for (let turn = 0; turn < 100 && signal === undefined; turn += 1)
+    await new Promise((resolve) => realSetTimeout(resolve, 20));
+  expect(limits).toEqual([3000]);
+  await vi.advanceTimersByTimeAsync(2999);
+  await el.updateComplete;
+  expect(q(el, "[data-test=emergency-preview]")).toBeNull();
+  expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.main_checking"));
+  await vi.advanceTimersByTimeAsync(1);
+  await vi.waitFor(() => expect(q(el, "[data-test=emergency-preview]")).not.toBeNull());
+  expect(el.shadowRoot!.textContent).not.toContain(t("handover.emergency.main_answering"));
+});
+
+it("no mainUrl lets the switch go on", async () => {
+  const fetch = vi.spyOn(globalThis, "fetch");
+  const { el } = await mount({ mainUrl: null });
+  expect(q(el, "[data-test=emergency-preview]")).not.toBeNull();
+  expect(fetch).not.toHaveBeenCalled();
 });

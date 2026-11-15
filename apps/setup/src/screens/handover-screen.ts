@@ -120,6 +120,9 @@ export class SetupHandoverScreen extends LitElement {
   @state() private refusalLink = "";
   @state() private copyRefused = false;
   @state() private declarationSaved = false;
+  /** The page's own try of the main server, before the switch is offered (4d plan, D5). */
+  @state() private mainChecking = false;
+  @state() private mainAnsweringAt = "";
   #pendingDeclaration?: Omit<EmergencyHandoverDeclaration, "signIn">;
   get #isEmergency(): boolean {
     return this.emergency || this.status?.scenario === "emergency";
@@ -168,6 +171,7 @@ export class SetupHandoverScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.#restartPolling();
+    if (this.emergency && !this.operationId) void this.#checkMain();
     window.addEventListener("pagehide", this.#leavePage);
     window.addEventListener("pageshow", this.#restorePage);
   }
@@ -226,6 +230,46 @@ export class SetupHandoverScreen extends LitElement {
     if (!controller.signal.aborted && !activated(this.status) && !closed(this.status)) {
       this.#timer = setTimeout(() => void this.#poll(controller), 2000);
     }
+  }
+  /**
+   * A fetch that resolves, even opaquely, is an answer. One that fails or times out lets the page go
+   * on: a device that cannot trust or resolve the main server always lands here, and the spare's
+   * own check still guards every step of the switch.
+   */
+  async #checkMain(): Promise<void> {
+    if (this.mainChecking) return;
+    this.mainChecking = true;
+    let answeringAt = "";
+    try {
+      const { mainUrl } = await this.api.mainServer();
+      if (typeof mainUrl === "string" && mainUrl !== "") {
+        await fetch(new URL("/api/node", mainUrl), {
+          mode: "no-cors",
+          signal: AbortSignal.timeout(3000),
+        });
+        answeringAt = mainUrl;
+      }
+    } catch {
+      answeringAt = "";
+    }
+    this.mainAnsweringAt = answeringAt;
+    this.mainChecking = false;
+  }
+  #mainAnswering() {
+    if (!this.mainAnsweringAt)
+      return html`<p role="status">${t("handover.emergency.main_checking")}</p>`;
+    return html`<p role="alert">${t("handover.emergency.main_answering")}</p>
+      <p><a href=${this.mainAnsweringAt}>${this.mainAnsweringAt}</a></p>
+      <wt-form-actions>
+        <wt-button
+          data-test="main-check-again"
+          .disabled=${this.mainChecking}
+          variant=${this.mainChecking ? "secondary" : "primary"}
+          @click=${() => void this.#checkMain()}
+          >${t("handover.emergency.main_check_again")}</wt-button
+        >
+      </wt-form-actions>
+      <p><a href=${this.#leaveHref}>${t("handover.emergency.stop")}</a></p>`;
   }
   #resetSelection(): void {
     this.entry?.clear();
@@ -928,12 +972,14 @@ export class SetupHandoverScreen extends LitElement {
               ? html`<p role="status">
                   ${t(this.backupRestarting ? "handover.emergency.backup_restarting" : this.followRestarting ? "handover.emergency.followed_restarting" : "handover.restarting")}
                 </p>`
-              : this.#isEmergency ||
-                  (status?.role === "destination" &&
-                    status.copyPlaced &&
-                    status.scenario === "controlled")
-                ? this.#fields()
-                : html`<p role="status">${t(status ? "handover.copy" : "handover.loading")}</p>`
+              : this.#isEmergency && (this.mainChecking || this.mainAnsweringAt)
+                ? this.#mainAnswering()
+                : this.#isEmergency ||
+                    (status?.role === "destination" &&
+                      status.copyPlaced &&
+                      status.scenario === "controlled")
+                  ? this.#fields()
+                  : html`<p role="status">${t(status ? "handover.copy" : "handover.loading")}</p>`
       }
       ${status?.waitingReason ? html`<p role="status">${t(status.waitingReason === "storage.disk_full" || status.waitingReason === "handover.no_room_to_place" ? "handover.space" : status.waitingReason === "handover.source_unreachable" ? "handover.source" : "handover.wait")}</p>` : nothing}
       ${this.readFailed && !this.restarting ? html`<p role="status">${t("handover.read_failed")}</p>` : nothing}

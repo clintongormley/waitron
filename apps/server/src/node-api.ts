@@ -59,3 +59,24 @@ export function mountNodeApi(app: Hono, deps: NodeApiDeps, log: Logger): void {
     }),
   );
 }
+
+/**
+ * `GET /api/node/main` — mounted on a spare only: the address its switch page tries before offering
+ * the switch, so a main server the spare cannot reach but the person's device can is not switched
+ * away from.
+ */
+export function mountMainServerApi(
+  app: Hono,
+  deps: Pick<NodeApiDeps, "readMembership">,
+  log: Logger,
+): void {
+  const run = createErrorBoundary(STATUS, "node.failed");
+  app.get("/api/node/main", (c) =>
+    run(c, log, async () => {
+      c.header("cache-control", "no-store");
+      const held = await deps.readMembership();
+      const main = held?.body.nodes.find((n) => n.standing === "serving-primary");
+      return c.json({ mainUrl: main?.contactUrl || null });
+    }),
+  );
+}
