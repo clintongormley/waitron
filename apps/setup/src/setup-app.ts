@@ -56,6 +56,7 @@ import type {
   SetupApi,
   CloudRecoveryView,
 } from "./api/client.js";
+import { PREVIEW_NULLABLE_VENUE_FIELDS } from "./api/client.js";
 import { dispatchSetupGoto } from "./events.js";
 import type {
   BucketRestoreRequestDetail,
@@ -234,14 +235,6 @@ const CLAIM_VENUE_FIELDS = [
   "timeZone",
   "dayCutover",
 ] as const satisfies readonly (keyof VenueDraft)[];
-/** Fields the preview may send as null but `VenueDraft` holds only as text, so a null stays out. */
-const PREVIEW_ONLY_NULLABLE: ReadonlySet<string> = new Set([
-  "addressLine1",
-  "postalCode",
-  "city",
-  "province",
-] satisfies (keyof VenueDraft)[]);
-
 const claimVenueFieldsComplete: [
   Exclude<
     keyof VenueDraft,
@@ -2109,9 +2102,10 @@ export class SetupApp extends LitElement {
       const venue: Partial<VenueDraft> = Object.fromEntries(
         (["country", ...TAXPAYER_FIELDS, ...CLAIM_VENUE_FIELDS] as const)
           .filter((key) => key in exported)
-          .filter((key) => exported[key] !== null || !PREVIEW_ONLY_NULLABLE.has(key))
           .map((key) => [key, exported[key]]),
       );
+      for (const key of PREVIEW_NULLABLE_VENUE_FIELDS)
+        if (key in exported) venue[key] = exported[key] ?? "";
       this.draft = deepMerge(this.draft, {
         configurationImport: true,
         venue,

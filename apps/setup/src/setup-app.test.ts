@@ -874,13 +874,18 @@ describe("setup-app", () => {
       expect(body.venue).toMatchObject(sixFields);
     });
 
-    it("leaves an export's empty address fields out of the draft, so the form shows them empty", async () => {
+    it("drafts an export's empty address fields as empty text, so the form shows them empty", async () => {
       const emptyAddress = { addressLine1: null, postalCode: null, city: null, province: null };
       const provision = vi.fn().mockResolvedValue({ provisioned: true, restarting: true });
       const el = await staged({ provision }, { ...exported, ...emptyAddress });
-      const drafted = readDraft(el).venue as Record<string, unknown>;
-      for (const key of Object.keys(emptyAddress)) expect(Object.hasOwn(drafted, key)).toBe(false);
-      expect(drafted).toMatchObject({ name: "Prepared", taxId: "B12345678" });
+      expect(readDraft(el).venue).toMatchObject({
+        name: "Prepared",
+        taxId: "B12345678",
+        addressLine1: "",
+        postalCode: "",
+        city: "",
+        province: "",
+      });
       await choose(el, false);
       goto(el, "venue");
       await el.updateComplete;
@@ -894,6 +899,31 @@ describe("setup-app", () => {
       const sent = body.venue as unknown as Record<string, unknown>;
       expect(Object.keys(emptyAddress).filter((key) => sent[key] === null)).toEqual([]);
       expect(body.venue.addressLine2).toBeNull();
+    });
+
+    it("clears an earlier export's address when the next export's address is empty", async () => {
+      const emptyAddress = { addressLine1: null, postalCode: null, city: null, province: null };
+      const stageConfiguration = vi
+        .fn()
+        .mockResolvedValueOnce({ venue: exported, counts: {}, reconnect: [] })
+        .mockResolvedValueOnce({
+          venue: { ...exported, ...emptyAddress },
+          counts: {},
+          reconnect: [],
+        });
+      const el = await staged({ stageConfiguration });
+      expect(readDraft(el).venue).toMatchObject({ addressLine1: "Calle 1", city: "Madrid" });
+      configurationRequest(el, new File(["encrypted"], "new.waitron-config"), "passphrase");
+      await flush(el);
+      const blank = { addressLine1: "", postalCode: "", city: "", province: "" };
+      expect(readDraft(el).venue).toMatchObject(blank);
+      await choose(el, false);
+      goto(el, "venue");
+      await el.updateComplete;
+      const venue = await screenHost(el, "venue");
+      expect(
+        Object.fromEntries(Object.keys(blank).map((key) => [key, venueValue(venue, key)])),
+      ).toEqual(blank);
     });
 
     it("sends no operation description from the export", async () => {
