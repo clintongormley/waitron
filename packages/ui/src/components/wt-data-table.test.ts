@@ -4297,6 +4297,31 @@ test("paints the keyboard-focused clickable row from a token", async () => {
   expect(getComputedStyle(cell).backgroundColor).toBe("rgb(30, 40, 50)");
 });
 
+test("keeps a clickable row lifted when Tab reaches a shared button inside it", async () => {
+  onTestFinished(() => commands.parkPointer());
+  const el = await table({
+    rowClick: (row: Row) => row.id,
+    columns: [
+      columns[0],
+      {
+        key: "actions",
+        label: "Actions",
+        pinned: "end",
+        cell: () => html`<wt-button>Edit</wt-button>`,
+      },
+    ],
+  });
+  host.style.setProperty("--wt-color-surface-lifted", "rgb(30, 40, 50)");
+  await commands.parkPointer();
+  await userEvent.keyboard("{Tab}");
+  el.shadowRoot!.querySelector<HTMLButtonElement>(".row-activate")!.focus();
+  await userEvent.keyboard("{Tab}");
+  const button = el.shadowRoot!.querySelector("tbody wt-button")!;
+  expect(button.shadowRoot!.activeElement?.matches(":focus-visible")).toBe(true);
+  for (const cell of button.closest("tr")!.querySelectorAll("td"))
+    expect(getComputedStyle(cell).backgroundColor).toBe("rgb(30, 40, 50)");
+});
+
 test("a real pointer click on an in-cell control does not fall through to the row activator", async () => {
   // The stretched activator overlays the whole row, so only a real pointer click, which hit-tests
   // on-screen position, shows whether the Edit button is lifted above it.
