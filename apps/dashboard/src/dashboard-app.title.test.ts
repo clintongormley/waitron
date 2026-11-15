@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import type { DashboardApi } from "./api/client.js";
 import { DashboardApp } from "./dashboard-app.js";
+import { es } from "./i18n/strings.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import { stubShellApi } from "./testing/venue-logo-fixture.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
@@ -29,7 +30,11 @@ async function mount(api: DashboardApi, path: string): Promise<DashboardApp> {
 
 it.each([
   { locale: "en-GB", diagnostics: "Diagnostics · Waitron", overview: "Overview · Waitron" },
-  { locale: "es-ES", diagnostics: "Diagnóstico · Waitron", overview: "Resumen · Waitron" },
+  {
+    locale: "es-ES",
+    diagnostics: `${es["nav.diagnostics"]} · Waitron`,
+    overview: `${es["nav.overview"]} · Waitron`,
+  },
 ] as const)(
   "the browser tab names the open screen in $locale and follows navigation",
   async ({ locale, diagnostics, overview }) => {
@@ -51,7 +56,7 @@ it("the browser tab's title changes language with the dashboard", async () => {
   await mount(stubShellApi(true, "en-GB"), "/manage/diagnostics");
   await vi.waitFor(() => expect(document.title).toBe("Diagnostics · Waitron"));
   setLocale("es-ES");
-  await vi.waitFor(() => expect(document.title).toBe("Diagnóstico · Waitron"));
+  await vi.waitFor(() => expect(document.title).toBe(`${es["nav.diagnostics"]} · Waitron`));
 });
 
 it.each([
