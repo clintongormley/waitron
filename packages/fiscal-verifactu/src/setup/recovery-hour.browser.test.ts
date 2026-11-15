@@ -2477,10 +2477,6 @@ it("a restore on clocks that differ sets the server's clock from This device and
 });
 it.each([
   [
-    "witnessed",
-    "The server has the tax agency's time and sets its clock from it by itself. If the times still differ in a minute, press This device again.",
-  ],
-  [
     "later",
     "The server's time was not changed: this device's time is earlier than a time already used for this venue's invoice series, so it is probably wrong. Correct the time on this device, reconnect to the server and choose which time is correct again.",
   ],

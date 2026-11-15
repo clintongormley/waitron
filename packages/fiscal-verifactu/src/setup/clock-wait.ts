@@ -1,5 +1,5 @@
 import { html, nothing, type ReactiveControllerHost } from "lit";
-import { AGREEMENT_MS, type HourClockDecision } from "../hour-clock.js";
+import type { HourClockDecision } from "../hour-clock.js";
 import "@waitron/ui/src/components/wt-button.js";
 import { createWaitCountdown, formatRemaining, type WaitCountdown } from "./wait-countdown.js";
 import { detailRow } from "./check-venue.js";
@@ -32,7 +32,6 @@ export interface ClockWords {
   newCodeIn: string;
   deviceSet: string;
   deviceSynchronised: string;
-  deviceWitnessed: string;
   deviceSameMachine: string;
   deviceLater: string;
   deviceFailed: string;
@@ -78,8 +77,6 @@ export const clockWaitStrings = {
     deviceSet: "The server's time is now set from this device.",
     deviceSynchronised:
       "The server keeps its time over the internet, so its time is right. Correct the time on this device, then reconnect to the server.",
-    deviceWitnessed:
-      "The server has the tax agency's time and sets its clock from it by itself. If the times still differ in a minute, press This device again.",
     deviceSameMachine:
       "This screen is on the server itself, so it cannot set the server's time. Open this page on a phone or computer.",
     deviceLater:
@@ -112,8 +109,6 @@ export const clockWaitStrings = {
     deviceSet: "La hora del servidor ya está puesta desde este dispositivo.",
     deviceSynchronised:
       "El servidor se pone en hora por internet, así que su hora es correcta. Corrige la hora de este dispositivo y vuelve a conectarte al servidor.",
-    deviceWitnessed:
-      "El servidor tiene la hora de Hacienda y se pone en hora con ella por sí solo. Si dentro de un minuto las horas siguen sin coincidir, vuelve a pulsar Este dispositivo.",
     deviceSameMachine:
       "Esta pantalla está en el propio servidor, así que no puede poner su hora. Abre esta página en un móvil o un ordenador.",
     deviceLater:
@@ -226,13 +221,11 @@ async function sendDeviceClock(
 const deviceRefusal = (words: ClockWords, reason: string): string =>
   reason === "synchronised" || reason === "not_stopped"
     ? words.deviceSynchronised
-    : reason === "witnessed"
-      ? words.deviceWitnessed
-      : reason === "same_machine"
-        ? words.deviceSameMachine
-        : reason === "later"
-          ? words.deviceLater
-          : words.deviceFailed;
+    : reason === "same_machine"
+      ? words.deviceSameMachine
+      : reason === "later"
+        ? words.deviceLater
+        : words.deviceFailed;
 
 /** Checks again every 15 seconds; starting it again while it runs keeps its rhythm. */
 function createRecheckPoll(host: ReactiveControllerHost, run: () => void) {
@@ -445,9 +438,7 @@ export function renderClockProblem(
     const device = choice.device;
     const choices = [
       ["server-correct", words.theServer, () => choice.answer()],
-      ...(device?.set && !onlyThisDeviceDiffers(clock)
-        ? ([["device-correct", words.thisDevice, device.set]] as const)
-        : []),
+      ...(device?.set ? ([["device-correct", words.thisDevice, device.set]] as const) : []),
       ["both-wrong", words.bothWrong, () => choice.answer()],
     ] as const;
     return html`<section data-test="clock-refused">
@@ -496,24 +487,9 @@ export function renderClockProblem(
 const middle = (reading: { lowerMs: number; upperMs: number }) =>
   (reading.lowerMs + reading.upperMs) / 2;
 
-/** The internet's time agrees with the server's and only this device's differs (A1482 Q3). */
-function onlyThisDeviceDiffers(clock: HourClockDecision | undefined): boolean {
-  const at = (source: string) => clock?.usable.find((r) => r.source === source);
-  const box = at("box"),
-    internet = at("internet"),
-    browser = at("browser");
-  return (
-    box !== undefined &&
-    internet !== undefined &&
-    browser !== undefined &&
-    Math.abs(middle(internet) - middle(box)) <= AGREEMENT_MS &&
-    Math.abs(middle(browser) - middle(box)) > AGREEMENT_MS
-  );
-}
-
 /**
- * The clock step's rows: the server's time and this device's. The box refuses clocks more than 30
- * seconds apart, so when another clock reads the server's minute the rows show seconds too.
+ * The clock step's rows: the server's time and this device's. When another clock reads the
+ * server's minute the rows show seconds too.
  */
 export function renderClockRows(
   clock: HourClockDecision,

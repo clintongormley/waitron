@@ -2647,19 +2647,3 @@ it.each([
     );
   },
 );
-it("offers no This device when the internet's time agrees with the server's", async () => {
-  const { el } = await mount({
-    decision: {
-      ...deviceAhead,
-      usable: [...deviceAhead.usable, { source: "internet", lowerMs: instant, upperMs: instant }],
-    },
-  });
-  await ready(el);
-  await proceed(el);
-  await vi.waitFor(() => expect(text(el)).toContain(DIFFER));
-  expect(
-    [...el.shadowRoot!.querySelectorAll("[data-test=clock-refused] wt-button")].map((b) =>
-      b.getAttribute("data-test"),
-    ),
-  ).toEqual(["server-correct", "both-wrong"]);
-});

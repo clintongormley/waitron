@@ -182,9 +182,7 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
           monotonicFinishedMs: received.monotonicFinishedMs,
         });
       } else observations.push({ source: "browser", result: "unavailable", reason: "challenge" });
-      observations.push(
-        structuredClone(await observeTimeServiceHourClock(timeService, { wall, monotonic })),
-      );
+      observations.push(await observeTimeServiceHourClock(timeService, { wall, monotonic }));
       if (sessions.get(key) !== state) return refuse("clock_stale");
       const sample = box();
       const clock = compareHourClocks([...observations, sample], release());

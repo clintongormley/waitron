@@ -668,24 +668,6 @@ describe("This device sets the server's clock", () => {
     ]);
   });
 
-  it("is not offered when the internet's time agrees with the server's and only this device differs", () => {
-    const internetAgrees = decision([
-      reading("box", at),
-      reading("browser", at + 5 * 60_000),
-      reading("internet", at + 10_000),
-    ]);
-    expect(buttons(draw(disagreeing(), () => undefined, internetAgrees))).toEqual([
-      ["server-correct", "The server"],
-      ["both-wrong", "Both times are wrong"],
-    ]);
-    const internetDiffers = decision([
-      reading("box", at),
-      reading("browser", at + 5 * 60_000),
-      reading("internet", at + 5 * 60_000),
-    ]);
-    expect(buttons(draw(disagreeing(), () => undefined, internetDiffers))).toHaveLength(3);
-  });
-
   it("takes a fresh challenge, sends this device's time, and on a set says so and asks for a new comparison", async () => {
     const wait = disagreeing();
     const { sent, send } = box({ status: "set" });
@@ -747,11 +729,6 @@ describe("This device sets the server's clock", () => {
   it.each([
     ["synchronised", ...INTERNET],
     ["not_stopped", ...INTERNET],
-    [
-      "witnessed",
-      "The server has the tax agency's time and sets its clock from it by itself. If the times still differ in a minute, press This device again.",
-      "El servidor tiene la hora de Hacienda y se pone en hora con ella por sí solo. Si dentro de un minuto las horas siguen sin coincidir, vuelve a pulsar Este dispositivo.",
-    ],
     [
       "same_machine",
       "This screen is on the server itself, so it cannot set the server's time. Open this page on a phone or computer.",
