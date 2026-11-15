@@ -50,7 +50,7 @@ export function renderGuestMenuPage(
     if (paper)
       return `<span>${glyph(code)}${paper.key === "inline" || kinds.length ? ` ${esc(name)}` : ""}</span>`;
     const id = `declaration-${sequence++}`;
-    return `<button type="button" popovertarget="${id}" aria-label="${esc(name)}">${glyph(code)}${esc(kinds.map(label).join(", "))}</button><div id="${id}" popover>${esc(name)}</div>`;
+    return `<details id="${id}"><summary aria-label="${esc(name)}">${glyph(code)}${esc(kinds.map(label).join(", "))}</summary><div>${esc(name)}</div></details>`;
   };
   const declarations = (value: GuestDeclarations) => {
     const allergens =
@@ -126,12 +126,14 @@ article{border-bottom:1px solid var(--wt-color-border);padding:var(--wt-space-4)
 .line>:first-child{min-width:0}.line>:last-child{flex-shrink:0}
 nav,.declarations{display:flex;flex-wrap:wrap;gap:var(--wt-space-2);margin:var(--wt-space-3) 0}
 a{color:var(--wt-color-primary-text)}
-button{font:inherit;color:inherit;background:transparent;border:1px solid var(--wt-color-border);border-radius:var(--wt-radius-md);padding:var(--wt-space-2);cursor:pointer;text-align:start;max-width:100%}
-button:focus-visible,a:focus-visible{outline:var(--wt-focus-ring);outline-offset:var(--wt-focus-offset)}
+summary{display:block;width:fit-content;list-style:none;font:inherit;color:inherit;background:transparent;border:1px solid var(--wt-color-border);border-radius:var(--wt-radius-md);padding:var(--wt-space-2);cursor:pointer;text-align:start;max-width:100%}
+summary:focus-visible,a:focus-visible{outline:var(--wt-focus-ring);outline-offset:var(--wt-focus-offset)}
 svg{width:var(--wt-space-4);height:var(--wt-space-4);fill:currentColor;vertical-align:middle}
 .choice{margin:var(--wt-space-3) 0 var(--wt-space-3) var(--wt-space-4)}
 small{color:var(--wt-color-text-muted)}
-[popover]{color:var(--wt-color-text);background:var(--wt-color-bg);padding:var(--wt-space-5);border:1px solid var(--wt-color-border);border-radius:var(--wt-radius-md);max-width:calc(100% - var(--wt-space-6))}
+details{max-width:100%}details[open]{flex-basis:100%}
+summary::-webkit-details-marker{display:none}
+details>div{margin-top:var(--wt-space-2);color:var(--wt-color-text);background:var(--wt-color-bg);padding:var(--wt-space-5);border:1px solid var(--wt-color-border);border-radius:var(--wt-radius-md);max-width:100%}
 footer{margin-top:var(--wt-space-6)}footer li{margin-bottom:var(--wt-space-2)}
 ${
   paper

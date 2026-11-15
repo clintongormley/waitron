@@ -7143,8 +7143,9 @@ The menu editor’s **Guest menu preview** opens an authenticated preview of its
 Its language choice uses the venue’s enabled content languages. The server renders one HTML page
 in an isolated frame; the guest page keeps fixed light styling while the surrounding dashboard
 follows its theme. Section links retain that page’s language. Allergen/diet symbols are native
-popover buttons: focus alone opens nothing, Enter or Space opens the explanation, and Escape
-dismisses it. Specific cereal/nut kinds remain written beside their symbol; the written key names
+`details` disclosures with a labelled `summary`: focus alone opens nothing, Enter or Space
+opens the explanation below its symbol on a full row, and activating that summary again closes
+it. The page needs no script or Popover support. Specific cereal/nut kinds remain written beside their symbol; the written key names
 the wording bundle’s language and asks guests to tell staff about allergies. No missing or empty
 declaration becomes an absence claim. EN/ES/CA/GL wording falls back as a whole bundle to the
 venue default, then English, independently of dish text.
