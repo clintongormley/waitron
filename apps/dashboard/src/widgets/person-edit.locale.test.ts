@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { useLocale } from "../testing/locale-setup.js";
 import type { DashboardApi, PersonEditDetails, PersonSummary } from "../api/client.js";
@@ -33,9 +34,9 @@ const picker = (el: PersonEdit) =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>('wt-combobox[name="locale"]')!;
 const save = (el: PersonEdit) =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
-async function mount(getLocales = vi.fn().mockResolvedValue(metadata)) {
+async function mount(getLocales = vi.fn().mockResolvedValue(metadata), savedPerson = person) {
   const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
-    person,
+    person: savedPerson,
     open: true,
     api: { getLocales } as unknown as DashboardApi,
   });
@@ -152,4 +153,17 @@ it("ignores an earlier editor's locale metadata after reopening for another pers
   await old;
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(picker(el).value).toBe("es-ES");
+});
+
+it("opens a saved preference ahead of the venue default and quiets a reverted choice", async () => {
+  const { el } = await mount(undefined, { ...person, locale: "es-ES" });
+  await ready(el);
+  expect(picker(el).value).toBe("es-ES");
+  expect(save(el).disabled).toBe(true);
+  await chooseOption(picker(el), "en-GB");
+  await el.updateComplete;
+  expect(save(el).disabled).toBe(false);
+  await chooseOption(picker(el), "es-ES");
+  await el.updateComplete;
+  expect(save(el).disabled).toBe(true);
 });
