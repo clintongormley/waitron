@@ -66,6 +66,13 @@ export function formatBusinessDate(day: string, locale: string = currentLocale()
   return `${p.weekday} ${p.day} ${p.month}`;
 }
 
+/** A `YYYY-MM-DD` date as its day and short month, "20 Nov", read in UTC like `formatBusinessDate`. */
+export function formatDayAndMonth(day: string, locale: string = currentLocale()): string {
+  return dateTimeFormat(locale, { timeZone: "UTC", day: "numeric", month: "short" }).format(
+    new Date(`${day}T00:00:00.000Z`),
+  );
+}
+
 export function formatDayLength(minutes: number): string {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;

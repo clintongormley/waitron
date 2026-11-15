@@ -203,7 +203,6 @@ authenticated route case first. The combined department editor preserves the off
 
 ## Loose ends left by A506-4 (#1597).
 
-- A special-day line in the Business day start dialog shows its date unformatted ("2026-11-03").
 - `assertOwnPeriods` names a refused slot by its sorted position, not its position in the request
   (`packages/venue-service/src/menu-timetable.ts`; read in the code, not run).
 - The clock-skip check runs before touching ranges are joined: two halves of one period meeting
