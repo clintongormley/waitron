@@ -510,7 +510,6 @@ describe("menu operations", () => {
       const cat = await createMenu(tx, { name: "Deli" });
       await expect(
         createProduct(tx, {
-          menuId: cat.id,
           categoryId: null,
           name: "cola",
           pricingUnit: "each",
@@ -882,7 +881,6 @@ describe("menu operations", () => {
     await asVenue(async (tx) => {
       const cat = await createMenu(tx, { name: "Deli" });
       const soup = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "soup",
         unitId: eachUnitId,
@@ -891,7 +889,6 @@ describe("menu operations", () => {
         takeawayVatClass: "general",
       });
       const bread = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "bread",
         unitId: eachUnitId,

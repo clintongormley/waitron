@@ -722,7 +722,6 @@ describe("a variant's takeaway VAT class", () => {
   it("reads its own, then its own main class, then the parent's takeaway class", async () => {
     const ids = await run(async (tx) => {
       const cola = await createProduct(tx, {
-        menuId: f.menuId,
         categoryId: f.bottles,
         name: "Cola",
         unitId: null,
@@ -737,7 +736,6 @@ describe("a variant's takeaway VAT class", () => {
         tx
           .insert(products)
           .values({
-            menuId: f.menuId,
             parentId: cola.id,
             name,
             unitPrice: null,
@@ -749,7 +747,6 @@ describe("a variant's takeaway VAT class", () => {
           .returning({ id: products.id })
           .then(([row]) => row!.id);
       const water = await createProduct(tx, {
-        menuId: f.menuId,
         categoryId: f.bottles,
         name: "Water",
         unitId: null,
