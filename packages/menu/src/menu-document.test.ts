@@ -157,6 +157,8 @@ it("hydrates guest declarations without changing published membership, names or 
     unitPrice: "3.00",
     allergens: { eggs: {} },
     dietaryDeclarations: ["vegetarian"],
+    dietOverride: { vegan: "no" },
+    diet: { vegan: "no" },
   });
   expect(offer.variants[0]).toMatchObject({
     allergens: { eggs: {} },

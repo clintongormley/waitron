@@ -1376,7 +1376,12 @@ describe("menuStatus", () => {
 
     it("keeps both menus current for declaration-only changes and preserves recorded versions", async () => {
       const f = await published();
-      const recorded = await fx.db.select().from(menuVersions);
+      const recorded = (
+        await fx.db.execute<{ document: string; content_hash: string }>(
+          sql`select document, content_hash from menu_versions order by id`,
+        )
+      ).rows;
+      expect(typeof recorded[0]!.document).toBe("string");
       await app(async (tx) => {
         await updateProduct(tx, f.lemonade, {
           allergens: { sulphites: {} },
@@ -1390,7 +1395,10 @@ describe("menuStatus", () => {
       expect(await states(f)).toEqual({ lunch: "current", dinner: "current" });
       for (const menuId of [f.lunch, f.dinner])
         expect((await app((tx) => previewMenu(tx, menuId))).changes).toEqual([]);
-      expect(await fx.db.select().from(menuVersions)).toEqual(recorded);
+      expect(
+        (await fx.db.execute(sql`select document, content_hash from menu_versions order by id`))
+          .rows,
+      ).toEqual(recorded);
     });
 
     // The published menu carries the setting (spec §9): a change flags the menu, and what is live

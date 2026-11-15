@@ -169,6 +169,7 @@ it("records the current counter declaration when placed and leaves a replay unch
     updateProduct(tx, v.productId("Burger"), {
       allergens: { eggs: {} },
       dietaryDeclarations: ["vegan"],
+      dietOverride: { vegan: "yes" },
     }),
   );
   await placeOrder({ ...v, admission: testTradingAdmission() }, v.cfg, id, OPERATOR);
