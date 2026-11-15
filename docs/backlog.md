@@ -924,7 +924,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   floor join that needs seats asks for them before its first request and sends once.
   [Detail](backlog/till.md#a666-a-floor-join-that-moves-tables-together-is-sent-once-without-seats)
 
-- **Do not offer a closed area as a destination** (bundle of 2, size S). [Detail](backlog/till.md#bundle-do-not-offer-a-closed-area-as-a-destination)
+- **Do not offer a closed area as a destination** (bundle of 1, size S). [Detail](backlog/till.md#bundle-do-not-offer-a-closed-area-as-a-destination)
 
 - **A730 — The floor's Rename window may keep comparing against the name it opened with after the
   name is changed on another till (2026-10-15; open; found by reading in A717's review, not probed).**
