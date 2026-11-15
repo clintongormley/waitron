@@ -1398,7 +1398,9 @@ the disabled pair. The till's pressed Cash or Card uses `loading` while sending;
 the alternative is secondary and disabled (`apps/till/src/widgets/tender-pay.ts`).
 
 `wt-button` has no `type` property — see "Forms" below. `wt-button loading` is how a button shows an
-action in progress: it disables the button, sets `aria-busy`, and leads the label with a decorative
+action in progress: it ignores clicks and key presses and marks itself `aria-disabled`, but stays
+focusable, so a person who pressed Save keeps their focus on it; it sets `aria-busy`, and leads the
+label with a decorative
 `wt-spinner` while keeping the label readable — swap the label to what is happening ("Scanning…" /
 "Buscando…"), which is then the one thing announced. Existing `?disabled=${busy}` buttons predate
 this and are not yet migrated. `wt-spinner` on its own is for a region that is loading; there it is a

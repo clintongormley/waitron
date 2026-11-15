@@ -41,12 +41,13 @@ export class WtButton extends LitElement {
         color: var(--wt-color-text);
       }
 
-      button:disabled {
+      button:disabled,
+      button[aria-disabled="true"] {
         ${disabledStyles}
       }
 
-      :host([variant="secondary"]) button:hover:not(:disabled),
-      :host([variant="ghost"]) button:hover:not(:disabled) {
+      :host([variant="secondary"]) button:hover:enabled:not([aria-disabled="true"]),
+      :host([variant="ghost"]) button:hover:enabled:not([aria-disabled="true"]) {
         border-color: var(--wt-color-primary-text);
       }
 
@@ -78,12 +79,12 @@ export class WtButton extends LitElement {
         color: var(--wt-color-on-danger);
       }
 
-      :host([variant="primary"]) button:hover:not(:disabled) {
+      :host([variant="primary"]) button:hover:enabled:not([aria-disabled="true"]) {
         background: var(--wt-color-primary-hover);
         opacity: 1;
       }
 
-      :host([variant="danger"]) button:hover:not(:disabled) {
+      :host([variant="danger"]) button:hover:enabled:not([aria-disabled="true"]) {
         background: var(--wt-color-danger-hover);
         opacity: 1;
       }
@@ -125,8 +126,8 @@ export class WtButton extends LitElement {
   @property({ reflect: true }) align: WtButtonAlign = "center";
   @property({ reflect: true }) shape: WtButtonShape = "default";
   @property({ type: Boolean, reflect: true }) disabled = false;
-  /** An in-progress action: the button is disabled, marked `aria-busy`, and a decorative spinner
-   * leads the label. The label stays visible — and is the one thing announced — so the caller swaps
+  /** An in-progress action: the button ignores presses, is marked `aria-busy`, and a decorative
+   * spinner leads the label. The label stays visible — and is the one thing announced — so the caller swaps
    * it for what is happening ("Scanning…" / "Buscando…") in the screen's own language. */
   @property({ type: Boolean, reflect: true }) loading = false;
 
@@ -146,18 +147,28 @@ export class WtButton extends LitElement {
   // control in `form.elements`. Forms are handled in JS via `wt-change`, not native submission.
   // Full form association via ElementInternals is out of scope for this component.
 
+  // Loading keeps the button focusable, unlike native disabled, so focus is not dropped to the page
+  // when a pressed Save starts working; the presses it would then pass on are stopped here.
+  private ignoreWhileLoading(event: Event): void {
+    if (!this.loading) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }
+
   override render() {
     return html`
       <button
         type="button"
         part="button"
-        ?disabled=${this.disabled || this.loading}
+        ?disabled=${this.disabled}
+        aria-disabled=${this.loading && !this.disabled ? "true" : nothing}
         aria-busy=${this.loading ? "true" : nothing}
         aria-label=${this.ariaLabel ?? nothing}
         aria-description=${this.ariaDescription ?? nothing}
         aria-haspopup=${this.ariaHasPopup ?? nothing}
         aria-expanded=${this.ariaExpanded ?? nothing}
         aria-invalid=${this.ariaInvalid ?? nothing}
+        @click=${this.ignoreWhileLoading}
       >
         ${this.loading ? html`<wt-spinner size="sm" decorative></wt-spinner>` : nothing}
         <slot></slot>

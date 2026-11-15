@@ -2311,9 +2311,9 @@ describe("printers-screen", () => {
       host: "192.168.20.247",
       port: 9100,
     });
-    expect(q(el, "[data-test=probe-printer]")!.shadowRoot!.querySelector("button")!.disabled).toBe(
-      true,
-    );
+    expect(
+      q(el, "[data-test=probe-printer]")!.shadowRoot!.querySelector("button")!.ariaDisabled,
+    ).toBe("true");
     reject({ code: "printer.probe_busy" });
     await flush(el);
     input.focus();
@@ -5682,8 +5682,8 @@ it("ignores a previous opening's pairing failure while the reopened dialog scans
   await flush(el);
   expect(q(el, "[role=alert]")).toBeNull();
   expect(await bottomOf(el, footerOf("new-agent-modal"))).toBe("");
-  expect(q(el, "[data-test=scan-agents]")!.shadowRoot!.querySelector("button")!.disabled).toBe(
-    true,
+  expect(q(el, "[data-test=scan-agents]")!.shadowRoot!.querySelector("button")!.ariaDisabled).toBe(
+    "true",
   );
 });
 
