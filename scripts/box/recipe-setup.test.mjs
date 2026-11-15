@@ -259,11 +259,29 @@ describe("installed boot evidence", () => {
       measuredUnchanged: true,
       startupCopy: true,
     },
+    networkMonitor: { created: true, changed: true, deleted: true },
     networkInterfaces: { eth0: [{ address: "192.0.2.8", internal: false }] },
   };
   it("accepts the installed services and a second boot keeping identity", async () => {
     const { installedFailures } = await import("./recipe-setup.mjs");
     expect(installedFailures(expected, "installed-root", first, first)).toEqual([]);
+  });
+  it("refuses missing or failed live network-copy evidence on either boot", async () => {
+    const { installedFailures } = await import("./recipe-setup.mjs");
+    for (const networkMonitor of [
+      undefined,
+      { ...first.networkMonitor, created: false },
+      { ...first.networkMonitor, changed: false },
+      { ...first.networkMonitor, deleted: false },
+    ]) {
+      const bad = { ...first, networkMonitor };
+      expect(installedFailures(expected, "installed-root", bad, first)).toContain(
+        "host-network-monitor",
+      );
+      expect(installedFailures(expected, "installed-root", first, bad)).toContain(
+        "host-network-monitor",
+      );
+    }
   });
   it("refuses missing or failed installed saved-network reconciliation evidence", async () => {
     const { installedFailures } = await import("./recipe-setup.mjs");
