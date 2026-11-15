@@ -1869,3 +1869,23 @@ it("a passkey answer that lapses while the spare catches up says so, and checkin
   await vi.waitFor(() => expect(q(el, "[data-test=emergency-copy]")).not.toBeNull());
   expect(get).toHaveBeenCalledTimes(3);
 });
+
+it("a passkey take the held copy refused, then sent to the held copy, keeps the take's explanation", async () => {
+  stubPasskey();
+  const proof = newProof();
+  proof.refusals = ["passkey.not_registered"];
+  const { el } = await mount({ proof, held: true, takes: ["handover.copy_predates_destination"] });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  await choosePasskey(el);
+  q(el, "[data-test=emergency-preview]").click();
+  await vi.waitFor(() =>
+    expect(actions(el)).toContain(t("handover.emergency.followed_not_admitted")),
+  );
+  await vi.advanceTimersByTimeAsync(2000);
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).not.toContain(t("handover.emergency.held_waiting")),
+  );
+  expect(proof.cookie).toBe(false);
+  expect(actions(el)).toContain(t("handover.emergency.followed_not_admitted"));
+  expect(actions(el)).not.toContain(t("handover.emergency.passkey_failed"));
+});

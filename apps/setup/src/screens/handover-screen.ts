@@ -658,6 +658,8 @@ export class SetupHandoverScreen extends LitElement {
         return;
       }
       this.heldWaiting = false;
+      // Without a proof cookie this read cannot sign in, so the take's explanation stands.
+      if (this.usePasskey && PROOF_REFUSALS.has(String((cause as { code: unknown }).code))) return;
       this.actionError = this.#emergencyError(cause);
     }
   }
