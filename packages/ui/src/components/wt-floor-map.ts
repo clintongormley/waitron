@@ -771,11 +771,12 @@ export class WtFloorMap extends LitElement {
 
   /**
    * Scales the view by `ratio` about (mx, my), host px, then moves it by (dx, dy); the scale stays
-   * within MIN_ZOOM to MAX_ZOOM of the fit, and the crop's centre within the host.
+   * within MIN_ZOOM to MAX_ZOOM of the fit, and the crop's centre within the host. Does nothing while
+   * the view's scale is not above 0, as on a hidden host the map has refitted, so showing it refits.
    */
   #moveView(ratio: number, mx: number, my: number, dx: number, dy: number): void {
     const view = this.#view;
-    if (view === null) return;
+    if (view === null || !(view.scale > 0)) return;
     const fit = this.#fit!;
     const scale = Math.min(
       fit.scale * MAX_ZOOM,

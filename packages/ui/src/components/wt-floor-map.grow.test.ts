@@ -566,6 +566,18 @@ it("a move while the host is hidden leaves the drag's travel as it was", async (
   expect(drops).toEqual([{ tableId: "t1", x: 12, y: 5, targetId: null }]);
 });
 
+it("a pan while the host is hidden leaves the map to refit when it is shown", async () => {
+  const el = await map([t1]);
+  el.style.display = "none";
+  await settled(el);
+  el.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: 20 }));
+  await settled(el);
+  el.style.display = "block";
+  await settled(el);
+  expect(await leftOf(el, "t1")).toBe(150);
+  expect(widthOf(el, "t1")).toBe(300);
+});
+
 it("a hold released on a view kept over new tables keeps that view", async () => {
   const el = await map([t1]);
   el.tables = [t1, t("t2", "T2", { x: 30, y: 5, width: 4, height: 4 })];

@@ -1275,7 +1275,8 @@ past them) is scaled to fit and centred, with no grid lines. Its size is its par
 till sizes it with `aspect-ratio: var(--floor-map-ratio)`, the shape the map publishes. It fits
 when it first draws tables, when `fitKey` changes and on a double tap on empty space (both taps
 there), whatever the view; it fits when it is resized only if there has been no pan, pinch or
-wheel event since its last fit, even one at a limit that moved nothing; a new `tables` alone keeps
+wheel event since its last fit, even one at a limit that moved nothing, though one while the view's
+scale is 0 (a hidden host the map has refitted) does not count; a new `tables` alone keeps
 the view. While a movable table is dragged on a view not panned or zoomed since its last fit (by
 gesture, wheel or keyboard), what it fits and the ratio it publishes are the tables' crop united
 with the crop of the tables as the drag has drawn them at each move so far: the plan only grows
