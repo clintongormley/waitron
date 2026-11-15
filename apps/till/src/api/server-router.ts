@@ -1,7 +1,9 @@
 export type ServerState = "unknown" | "unreachable" | "standby" | "primary";
+export type ServerStanding = "serving-primary" | "serving-secondary" | "sell-only";
 export interface ServerEntry {
   nodeId?: string;
   url: string;
+  standing?: ServerStanding;
 }
 export interface ServerStatus {
   url: string;
@@ -24,6 +26,9 @@ export interface RouterOptions {
 
 export const SERVERS_STORAGE_KEY = "waitron.servers";
 
+/** How long the main box stays silent before the till offers the spare. */
+export const MAIN_SILENT_MS = 20_000;
+
 /** Reading `localStorage` itself throws in a browser that blocks site data. */
 function defaultStorage(): Pick<Storage, "getItem" | "setItem"> | undefined {
   try {
@@ -33,12 +38,19 @@ function defaultStorage(): Pick<Storage, "getItem" | "setItem"> | undefined {
   }
 }
 
+const STANDINGS: readonly unknown[] = ["serving-primary", "serving-secondary", "sell-only"];
+
 interface Tracked {
   url: string;
   nodeId?: string;
+  standing?: ServerStanding;
   label: string;
   state: ServerState;
   term: number | null;
+  /** Whether the latest probe got any HTTP answer; `null` before the first. */
+  answered: boolean | null;
+  /** The first unanswered probe since the latest answered one. */
+  silentSince: number | null;
 }
 
 /** No failure count ends probing (owner decision, 2026-09-05). */
@@ -83,6 +95,43 @@ export class ServerRouter extends EventTarget {
   }
   get waiting(): boolean {
     return this.#waiting;
+  }
+
+  get mainSilentSince(): number | null {
+    const main = this.#withStanding("serving-primary");
+    return main === undefined || this.#hidden(main) ? null : main.silentSince;
+  }
+
+  get spare(): { url: string; answering: boolean } | undefined {
+    const spare = this.#withStanding("serving-secondary");
+    if (spare === undefined) return undefined;
+    return { url: spare.url, answering: this.#hidden(spare) || spare.answered === true };
+  }
+
+  /** One probe of the main box that leaves the router's states alone. */
+  async probeMain(): Promise<boolean> {
+    const main = this.#withStanding("serving-primary");
+    if (main === undefined) return false;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.#timeoutMs);
+    try {
+      const fetchImpl = this.#fetch;
+      await fetchImpl(`${main.url}/api/node`, { signal: controller.signal, cache: "no-store" });
+      return true;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  #withStanding(standing: ServerStanding): Tracked | undefined {
+    return this.#servers.find((s) => s.standing === standing);
+  }
+
+  /** A hidden entry is the node the page's origin just answered as. */
+  #hidden(s: Tracked): boolean {
+    return s.nodeId !== undefined && s.nodeId === this.#originNodeId;
   }
 
   statuses(): ServerStatus[] {
@@ -159,6 +208,8 @@ export class ServerRouter extends EventTarget {
       if (!probed.includes(s)) {
         s.state = "unknown";
         s.term = null;
+        s.answered = null;
+        s.silentSince = null;
       }
     }
     await Promise.all(probed.map((s) => this.#probe(s)));
@@ -191,6 +242,9 @@ export class ServerRouter extends EventTarget {
       statuses: this.statuses(),
       waiting: this.#waiting,
       current: this.#current,
+      standings: this.#servers.map((s) => s.standing ?? null),
+      mainSilentSince: this.mainSilentSince,
+      spare: this.spare ?? null,
     });
     if (signature === this.#stateSignature) return;
     this.#stateSignature = signature;
@@ -207,6 +261,7 @@ export class ServerRouter extends EventTarget {
   async #probe(s: Tracked): Promise<void> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.#timeoutMs);
+    let answered = false;
     try {
       // Call the injected fetch as a plain function. `this.#fetch(...)` would bind `this` to the router;
       // Chromium's native window.fetch rejects that receiver before sending the request.
@@ -215,6 +270,9 @@ export class ServerRouter extends EventTarget {
         signal: controller.signal,
         cache: "no-store",
       });
+      answered = true;
+      s.answered = true;
+      s.silentSince = null;
       if (!res.ok) {
         this.#forgetOriginNode(s);
         s.state = "unreachable";
@@ -236,6 +294,10 @@ export class ServerRouter extends EventTarget {
       this.#forgetOriginNode(s);
       s.state = "unreachable";
       s.term = null;
+      if (!answered) {
+        s.answered = false;
+        s.silentSince ??= Date.now();
+      }
     } finally {
       clearTimeout(timer);
     }
@@ -284,20 +346,29 @@ export class ServerRouter extends EventTarget {
       // has the literal origin "null".
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return;
       const url = parsed.origin;
-      if (next.some((n) => n.url === url)) return;
+      const standing = STANDINGS.includes(e.standing) ? e.standing : undefined;
+      const already = next.find((n) => n.url === url);
+      if (already !== undefined) {
+        already.standing ??= standing;
+        return;
+      }
       const prev = byUrl.get(url);
       if (prev !== undefined) {
         // A probe mutates this tracked object after its fetch resolves. Retain it when getTill refreshes
         // the same URL mid-probe so that successful result remains in the active list.
         prev.nodeId = e.nodeId;
+        prev.standing = standing;
         next.push(prev);
       } else {
         next.push({
           url,
           nodeId: e.nodeId,
+          standing,
           label: parsed.hostname,
           state: "unknown",
           term: null,
+          answered: null,
+          silentSince: null,
         });
       }
     };
