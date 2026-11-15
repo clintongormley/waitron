@@ -1093,7 +1093,17 @@ Its cost entry is 397.2 seconds: each original table run's three range costs wer
 the median of the two totals was rounded to one decimal. The six inputs are 70.2800, 160.6283
 and 101.4127 seconds in run 43159064593, and 58.9374, 218.9710 and 184.2398 in run 42963449689.
 These older range reports omit boundary-spanning mutants; their sum is a model input, not a
-measurement of a whole-file run. Every other committed cost-table entry remains unchanged.
+measurement of a whole-file run. At that point, every other cost-table entry remained unchanged.
+
+**15 November refresh.** Scheduled run `43679554218` cancelled db shard 9 at its
+25-minute job limit, after 839 of 848 mutants. The current weights use the medians
+from its twelve completed reports and all thirteen reports of successful run
+`43559793352`; both runs follow the whole-file change. `src/schema/menu/index.ts`
+has no sample under its current name and retains the byte fallback. The failed
+shard's phase had already run 1,350.217 seconds against 816.708 newly estimated
+seconds (at least 1.653 times); the roughly 716-second repacking estimate is not
+a measured finishing time. Verify it with a manual `mutation.yml` run on main
+using `packages=db`, retaining the slowest shard's job and mutation-phase times.
 
 **Refreshing the table.** Use reports only from runs after this whole-file change. Earlier runs
 split `sales.ts` into three reports, and `costTable` no longer excludes it: feeding those reports
