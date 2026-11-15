@@ -497,7 +497,8 @@ function parseProductModifiers(value: unknown): ProductModifierRef[] | undefined
   });
 }
 
-// Ignoring a retired field would answer success without saving what the caller asked for.
+// Products are shared; menu_items own their offers. Ignoring a retired field would answer success
+// without saving what the caller asked for.
 function refuseRetiredFields(body: Record<string, unknown>): void {
   for (const retired of ["modifierIds", "optionGroupIds", "soldAlone", "menuId"])
     if (body[retired] !== undefined)
@@ -1447,7 +1448,6 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
         available?: unknown;
         ordering?: unknown;
         modifiers?: unknown;
-        // Retired fields, declared so `refuseRetiredFields` can see them.
         soldAlone?: unknown;
         modifierIds?: unknown;
         optionGroupIds?: unknown;

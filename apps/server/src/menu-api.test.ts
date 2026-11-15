@@ -3591,28 +3591,25 @@ describe("mountMenuApi — attaching extras and options lists to products", () =
     },
   );
 
-  it.each(["POST"])(
-    "%s /products rejects a malformed uuid in modifiers → shared.invalid_id 400",
-    async () => {
-      // Same treatment `requireUuidParam` gives a path id.
-      const app = mountApp();
-      const modifiers = [{ kind: "extras", id: "not-a-uuid" }];
-      const res = await send(app, "POST", "/management-api/products", {
-        body: {
-          categoryId: null,
-          name: "x",
-          pricingUnit: "each",
-          unitPrice: "1.00",
-          vatClass: "general",
-          modifiers,
-        },
-      });
-      expect(res.status).toBe(400);
-      expect((await res.json()) as { error: { code: string } }).toMatchObject({
-        error: { code: "shared.invalid_id" },
-      });
-    },
-  );
+  it("POST /products rejects a malformed uuid in modifiers → shared.invalid_id 400", async () => {
+    // Same treatment `requireUuidParam` gives a path id.
+    const app = mountApp();
+    const modifiers = [{ kind: "extras", id: "not-a-uuid" }];
+    const res = await send(app, "POST", "/management-api/products", {
+      body: {
+        categoryId: null,
+        name: "x",
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+        modifiers,
+      },
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "shared.invalid_id" },
+    });
+  });
 });
 
 /**

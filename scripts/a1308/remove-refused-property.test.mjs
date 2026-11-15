@@ -138,6 +138,7 @@ it("runs from the checked package's directory and refuses an incomplete command"
   );
   expect(main(["--property", "menuId", "errors.txt"], root)).toEqual({ removed: 1 });
   expect(() => main([], root)).toThrow(/Usage:/);
+  expect(() => main(["--property", "menuId", "errors.txt", "extra"], root)).toThrow(/Usage:/);
   writeFileSync(join(root, "a.ts"), "const x = { menuId };");
   execFileSync(process.execPath, [script, "--property", "menuId", "errors.txt"], { cwd: root });
   expect(readFileSync(join(root, "a.ts"), "utf8")).toBe("const x = { };");
