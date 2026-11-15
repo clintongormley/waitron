@@ -6687,3 +6687,5 @@ Your department's receipt text, logo image id, raster cache and last-save time l
 and image edits refresh the department's cached pictures. A null `receipt_updated_at` means no
 receipt has been saved. Configuration format 39 carries these columns and rewrites the image key;
 format 38 is refused as outdated. The raster cache stays with the department until its separate removal change.
+
+> 2026-11-15: the watcher retained the department raster cache after the [write-lock timing](../superpowers/plans/2026-11-08-a1308-vb5-department-receipts.md#receipt-logo-cache-after-the-box-timing-2026-11-15); the separate removal mentioned above is retired.

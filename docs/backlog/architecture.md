@@ -913,13 +913,6 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
   from time to time, not per slice (owner, 2026-11-10;
   [when](../developers/testing-guide.md#when-the-bench-runs)). Next is
   [the build order](../superpowers/plans/2026-11-08-a1308-build-order.md).
-  Drop the department receipt raster cache and convert at print time in a separate PR after vb5,
-  before vb6 (watcher, 2026-11-15 13:48, Lane H `questions.md`: “the next PR after vb5, before vb6”).
-  The owner assigned Lane H the test-box timing: the Waitron wordmark took a median 16.886 ms over
-  11 warmed conversions, below [the spec’s approximate 20 ms criterion](../superpowers/specs/2026-11-02-rationalisation/tables-venuebox.md).
-  The first conversion took 155.131 ms; this sample does not measure every logo. The image was
-  `1129ca229bf6`, Node 26.13.0 x64, at 504 printer dots across. Exact samples and source remain in
-  `~/waitron-campaign-h/receipts/a1308-vb5/box-timing.json` and `box-timing-source.ts`.
   **Open:** the design does not cover A790's six tables, A802's eleven or A739's; each later slice
   must fold in the ones it touches. 246 tables become 145, or 144 once A1323 removes
   `recovery_packs`, in eight migration sets instead of sixteen. The job runner is built with scheduled
@@ -1210,6 +1203,8 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   [Detail](architecture.md#loose-ends-left-by-a435-steps-3-3b-and-4-1520-1524-1519)
 
 ## Decisions and deliberate limits
+
+- **Department receipt rasters stay cached** (watcher, 2026-11-15 16:45). On the designated test box, converting one wordmark inside a synthetic write transaction added 15.913 ms warm for decode/dither and 114.681 ms including rendition. The removal follow-up is retired. [Measurement and limits](../superpowers/plans/2026-11-08-a1308-vb5-department-receipts.md#receipt-logo-cache-after-the-box-timing-2026-11-15).
 
 **Venue identity (owner, 2026-11-02).** Cloud assigns its venue id; a box not connected to Cloud backs up where its owner chooses. A1308 slice 5 completes the removal of the old location object. The [venue-id design](../superpowers/specs/2026-11-04-a1301-venue-id-design.md) records the decision and its defaults.
 

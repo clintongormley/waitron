@@ -112,6 +112,38 @@ Delete from `docs/backlog/architecture.md` "What A1308 retires" (`:1291-1300`) a
 | The §8.4 timing on the reference micro PC, and dropping the cache if it shows under about 20 ms | the owner runs it, asked by the watcher when the lane reaches vb5 (owner, 2026-11-09); a drop is its own later PR |
 | "Half of an older receipt test can no longer fail" | 4a |
 
+### Receipt logo cache after the box timing (2026-11-15)
+
+The watcher retained `receipt_logo_rasters` and retired its removal follow-up at 16:45 in
+`~/waitron-campaign-h/questions.md`. The earlier 13:48 direction to remove it is superseded.
+Converting the logo inside the existing print transaction holds the venue's write lock, so other
+writes wait while it renders. The 16:42 conditional clearance required a stop above a few
+milliseconds of added warm hold. The pre-build probe exceeded that condition; no product code changed.
+
+The owner assigned Lane H the designated test box. Its image `1129ca229bf6` ran Node v26.13.0 x64,
+SQLite 3.54.0, STAT4 disabled. The original decode/dither-only sample measured 16.886 ms warmed
+median and 155.131 ms first conversion. A second probe measured `BEGIN IMMEDIATE` through `COMMIT`
+in a synthetic SQLite database, with four initial samples discarded and 11 warmed samples per path:
+
+| Path | Warm median hold | Added hold over cached read |
+| --- | ---: | ---: |
+| Cached SQL/JSON/base64 read | 0.121 ms | baseline |
+| Source read, decode and dither | 16.033 ms | 15.913 ms |
+| Source read, display rendition, decode and dither | 114.802 ms | 114.681 ms |
+
+A second connection's `BEGIN IMMEDIATE` refused `SQLITE_BUSY` while the first held the lock.
+The first decode in this probe took 95.831 ms. The first full-path sample took 128.499 ms after
+that decode, so it does not measure a cold process. The probe used one CPU-limited disposable
+container, synthetic rows and one 80 mm Waitron wordmark (504×119 dots), not the owner's venue.
+It does not measure whole-sale latency, every logo, service load or a confirmed equivalent of the
+appendix's reference micro PC. Both probes used input SHA-256
+`cdacb3847a53e4b716734d881502fdda1a1ea0441c253e561ccef295d14e7da1`.
+
+Source, command, exact samples and cleanup receipts are in
+`~/waitron-campaign-h/receipts/a1308-receipt-cache/{hold-source.ts,hold-command.txt,box-hold.json,hold-cleanup.log}`.
+The earlier source and samples remain in `receipts/a1308-vb5/{box-timing-source.ts,box-timing.json}`
+under the same lane folder. The remote scratch directory, container and SSH master were removed.
+
 ## Files
 
 Create: `scripts/a1308/vb5-department-receipt-fixtures.mjs`, `.test.mjs`.
