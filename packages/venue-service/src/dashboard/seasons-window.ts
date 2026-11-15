@@ -83,6 +83,9 @@ export class SeasonsWindow extends LitElement {
         flex-wrap: wrap;
         gap: var(--wt-space-2);
       }
+      .start wt-combobox {
+        min-inline-size: calc(3 * var(--wt-tap-min));
+      }
       .error {
         color: var(--wt-color-danger);
         margin: 0;

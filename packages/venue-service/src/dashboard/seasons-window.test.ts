@@ -109,6 +109,21 @@ it("marks required fields visibly and clamps a late day when the month becomes s
   );
   expect(field(el, "month").options.map((o) => o.label)).toContain("February");
 });
+it.each(["en", "es"] as const)(
+  "keeps date labels readable at phone width in %s",
+  async (locale) => {
+    setLocale(locale);
+    const el = await mount();
+    el.style.width = "390px";
+    await document.fonts.ready;
+    for (const name of ["day", "month"]) {
+      const control = field(el, name);
+      await control.updateComplete;
+      const label = control.shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
+      expect(label.scrollWidth, name).toBeLessThanOrEqual(label.clientWidth);
+    }
+  },
+);
 it("marks the colours used by other named seasons and paints with pale tints", async () => {
   const el = await mount();
   const chooser = root(el).querySelector("wt-colour-chooser")!;
