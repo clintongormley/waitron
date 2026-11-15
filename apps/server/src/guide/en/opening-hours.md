@@ -14,7 +14,7 @@ In the special-day editor, choose the department and tick **Closed** under the d
 
 To close every department, use the separate **Close the whole venue** tick under that date. Untick it to change an individual department’s closure.
 
-Before changing the venue’s business-day changeover time, untick any department’s all-day closures that use the old time, then paint them again after the change.
+If an all-day closure blocks a change to the venue’s business-day start, untick the listed closures and save. Change the start time, then paint the closures again.
 
 ## Paint a zone closure {#zone-closures}
 

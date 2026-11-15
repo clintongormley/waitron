@@ -14,7 +14,7 @@ En el editor del día especial, elige el departamento y marca **Cerrado** bajo l
 
 Para cerrar todos los departamentos, usa la casilla separada **Cerrar todo el establecimiento** bajo esa fecha. Desmárcala para cambiar el cierre de un departamento.
 
-Antes de cambiar la hora de inicio del día del establecimiento, desmarca los cierres de día completo de los departamentos que usan la hora anterior y vuelve a pintarlos después del cambio.
+Si un cierre de día completo impide cambiar la hora de inicio del día del establecimiento, desmarca los cierres indicados y guarda. Cambia la hora de inicio y vuelve a pintar los cierres.
 
 ## Pintar el cierre de una zona {#zone-closures}
 
