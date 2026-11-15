@@ -4,6 +4,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { page } from "vitest/browser";
 import { TillApi } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
+import { TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 import type { TillStationToday } from "./station-today.js";
 import type { TillStationTodayDialog } from "./station-today-dialog.js";
 import "./station-today.js";
@@ -337,6 +338,46 @@ it("an authorizer read failure returns a localized refusal without hiding the cl
   expect(d.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
     "The venue's clock cannot be read",
   );
+});
+
+it("gives up reading the managers at the time limit and shows the read's refusal", async () => {
+  let asked!: () => void;
+  const managersAsked = new Promise<void>((resolve) => (asked = resolve));
+  const { el } = await mount({}, (path, init) => {
+    if (!path.endsWith("authorizers"))
+      return init.method === "PUT"
+        ? refused("authorization.not_permitted")
+        : json({ destinations, openDishCount: 0 });
+    asked();
+    return new Promise((_resolve, reject) =>
+      init.signal?.addEventListener("abort", () =>
+        reject(new DOMException("aborted", "AbortError")),
+      ),
+    );
+  });
+  const read = vi.spyOn(el.api!, "serviceDayAuthorizers");
+  act(el);
+  const d = await dialog(el);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    confirm(d);
+    await managersAsked;
+    await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
+    await el.updateComplete;
+    await d.updateComplete;
+    expect(read).toHaveBeenCalledOnce();
+    expect(d.busy).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await el.updateComplete;
+    await d.updateComplete;
+
+    expect(d.busy).toBe(false);
+    expect(d.refusal).toBe("network.error");
+    expect(el.shadowRoot!.querySelector("till-supervisor-override-dialog")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 const managers = [{ personId: "manager", displayName: "Ana" }];

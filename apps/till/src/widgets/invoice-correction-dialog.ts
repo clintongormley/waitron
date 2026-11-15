@@ -35,6 +35,7 @@ import { reasonPicker, voidReasons } from "./reason-picker.js";
 import { lineName } from "../screens/till-ticket-view.js";
 import { REASON_MAX, refusalOf, typedMoney } from "../state/bill-payment.js";
 import { refundMethodAllowed } from "../state/tender-refund.js";
+import { limited, TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 import type { StringKey } from "../i18n/strings.js";
 
 type PayRefusal = ReturnType<typeof refusalOf>;
@@ -507,13 +508,17 @@ export class TillInvoiceCorrectionDialog extends LitElement {
         this.#retry = step;
         this.#retryLost = lost;
         this.#override = undefined;
+        const limit = limited(TABLE_REQUEST_LIMIT_MS);
         try {
           this.approvers = await this.api.listApprovers(
             refusal.permission === "sale.refund" ? "sale.refund" : "sale.rectify",
+            { signal: limit.signal },
           );
           this.pinError = null;
         } catch (failure) {
           this.sendRefusal = refusalOf(failure);
+        } finally {
+          limit.done();
         }
       } else {
         this.approvers = null;

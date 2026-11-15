@@ -8659,8 +8659,9 @@ export class TillApp extends LitElement {
     const open = this.tenderRefunding;
     if (!open) return;
     const api = this.api;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      const approvers = await api.listRefundAuthorizers();
+      const approvers = await api.listRefundAuthorizers({ signal: limit.signal });
       if (this.tenderRefunding?.visit === open.visit && this.isConnected && this.api === api)
         this.tenderRefunding = { ...this.tenderRefunding, busy: false, approvers, pinError: null };
     } catch {
@@ -8670,6 +8671,8 @@ export class TillApp extends LitElement {
           busy: false,
           refusal: { code: "approvers" },
         };
+    } finally {
+      limit.done();
     }
   }
 
@@ -11171,12 +11174,15 @@ export class TillApp extends LitElement {
 
   /** The picker is the server's list of authorizers; the client holds no policy or role knowledge. */
   async #openOverrideDialog(): Promise<void> {
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      const authorizers = await this.api.listDrawerAuthorizers();
+      const authorizers = await this.api.listDrawerAuthorizers({ signal: limit.signal });
       this.overrideError = null;
       this.overrideAuthorizers = authorizers;
     } catch {
       this.#showDrawerError();
+    } finally {
+      limit.done();
     }
   }
 
@@ -13912,8 +13918,9 @@ export class TillApp extends LitElement {
     }
     const session = this.#operatorSession;
     const api = this.api;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      const authorizers = await api.serviceDayAuthorizers();
+      const authorizers = await api.serviceDayAuthorizers({ signal: limit.signal });
       if (session !== this.#operatorSession || api !== this.api || !current()) return;
       this.lateSendApproval = {
         authorizers,
@@ -13927,6 +13934,8 @@ export class TillApp extends LitElement {
       if (session !== this.#operatorSession || api !== this.api || !current()) return;
       this.lateSendApproval = null;
       this.errorKey = { code: refusalOf(error, false).code };
+    } finally {
+      limit.done();
     }
   }
 
@@ -15360,7 +15369,13 @@ export class TillApp extends LitElement {
         await this.#sendItemCancellation(open, choice);
         return;
       }
-      const authorizers = await open.api.listRefundAuthorizers();
+      const limit = limited(TABLE_REQUEST_LIMIT_MS);
+      let authorizers: StaffMember[];
+      try {
+        authorizers = await open.api.listRefundAuthorizers({ signal: limit.signal });
+      } finally {
+        limit.done();
+      }
       if (!this.#cancellationReady(open)) return;
       this.cancellingItem = {
         ...open,
@@ -15565,8 +15580,9 @@ export class TillApp extends LitElement {
       code === "authorization.not_permitted"
     ) {
       this.cancellingItem = { ...open, busy: true, refusal: "" };
+      const limit = limited(TABLE_REQUEST_LIMIT_MS);
       try {
-        const authorizers = await open.api.listRefundAuthorizers();
+        const authorizers = await open.api.listRefundAuthorizers({ signal: limit.signal });
         if (!this.#cancellationReady(open)) return;
         this.cancellingItem = {
           ...open,
@@ -15577,6 +15593,8 @@ export class TillApp extends LitElement {
       } catch {
         if (this.#itemCancellationShown(open))
           this.cancellingItem = { ...open, busy: false, refusal: codeMessage("server.internal") };
+      } finally {
+        limit.done();
       }
     } else if (stage === "approved" && APPROVER_REFUSALS.has(code) && open.approval !== undefined) {
       this.cancellingItem = { ...open, busy: false, approval: { ...open.approval, error: code } };
@@ -18636,8 +18654,9 @@ export class TillApp extends LitElement {
 
   async #askFinishApprover(open: FinishingTable): Promise<void> {
     const asked = open.composition;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      const all = await asked.api.listRefundAuthorizers();
+      const all = await asked.api.listRefundAuthorizers({ signal: limit.signal });
       if (this.finishingTable?.composition !== asked || !this.#finishCurrent(asked)) return;
       const authorizers =
         open.retryApproverId === undefined
@@ -18652,6 +18671,8 @@ export class TillApp extends LitElement {
           command: open.unconfirmed ? open.command : undefined,
           refusal: codeMessage("server.internal"),
         };
+    } finally {
+      limit.done();
     }
   }
 

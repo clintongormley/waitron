@@ -13089,6 +13089,47 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
     expect(approval(el)?.authorizers).toEqual([]);
   });
 
+  it("gives up reading who can approve finishing the table at the time limit, and says so", async () => {
+    const { el } = await mountFinish({
+      finishTable: vi
+        .fn()
+        .mockRejectedValueOnce(refusal())
+        .mockRejectedValue({ code: "authorization.not_permitted" }),
+      listRefundAuthorizers: vi.fn(
+        (options?: { signal?: AbortSignal }) =>
+          new Promise((_resolve, reject) =>
+            options?.signal?.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError")),
+            ),
+          ),
+      ),
+    });
+    await openFinish(el);
+    const dialog = finishDialog(el)!;
+    await dialog.updateComplete;
+    emit(dialog.shadowRoot!.querySelector('wt-combobox[name="reason"]')!, "wt-change", {
+      value: "r-cancel",
+    });
+    await dialog.updateComplete;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      dialog.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!.click();
+      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
+      await el.updateComplete;
+      expect(api.listRefundAuthorizers).toHaveBeenCalledOnce();
+      expect(finishDialog(el)!.busy).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await el.updateComplete;
+
+      expect(finishDialog(el)!.busy).toBe(false);
+      expect(approval(el)).toBeNull();
+      expect(finishDialog(el)!.refusal).toBe(codeMessage("server.internal"));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("drops a late approver read after closing the paid-food dialog", async () => {
     const people = held();
     const { el } = await mountFinish({

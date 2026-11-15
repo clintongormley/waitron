@@ -12,6 +12,7 @@ import type {
 } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
+import { limited, TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 import "./station-today-dialog.js";
 import "./supervisor-override-dialog.js";
 import type { OverrideConfirmDetail } from "./supervisor-override-dialog.js";
@@ -168,16 +169,19 @@ export class TillStationToday extends LitElement {
       if (this.authorizers && (code === "pin.invalid" || code === "pin.throttled")) {
         this.pinError = code;
       } else if (code === "authorization.not_permitted") {
+        const limit = limited(TABLE_REQUEST_LIMIT_MS);
         try {
           const people = this.deviceMode
             ? (await this.api.deviceStationToday(id)).authorizers
-            : await this.api.serviceDayAuthorizers();
+            : await this.api.serviceDayAuthorizers({ signal: limit.signal });
           if (this.#current(generation, id)) {
             this.authorizers = people;
             if (this.deviceMode) this.#deviceAuthorizers = people;
           }
         } catch (readError) {
           if (this.#current(generation, id)) this.refusal = this.#code(readError);
+        } finally {
+          limit.done();
         }
       } else {
         this.authorizers = null;

@@ -3218,8 +3218,13 @@ export class TillApi {
    * The eligible authorizers for a manual drawer open → `GET /api/drawer/authorizers`: the active persons
    * whose role holds `cash.drawer`, with no secrets.
    */
-  listDrawerAuthorizers(): Promise<StaffMember[]> {
-    return this.#request<StaffMember[]>("/api/drawer/authorizers", "GET");
+  listDrawerAuthorizers(options: ReadOptions = {}): Promise<StaffMember[]> {
+    return this.#request<StaffMember[]>(
+      "/api/drawer/authorizers",
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 
   /** Who may approve a bill refund → `GET /api/refund-authorizers`: the active holders of the refund
@@ -3489,8 +3494,8 @@ export class TillApi {
     );
   }
 
-  serviceDayAuthorizers(): Promise<StaffMember[]> {
-    return this.#request("/api/service-day/authorizers", "GET");
+  serviceDayAuthorizers(options: ReadOptions = {}): Promise<StaffMember[]> {
+    return this.#request("/api/service-day/authorizers", "GET", undefined, options.signal);
   }
 
   moveDishStation(

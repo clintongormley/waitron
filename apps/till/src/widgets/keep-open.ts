@@ -12,6 +12,7 @@ import type {
 } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
+import { limited, TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 import "./keep-open-dialog.js";
 import "./supervisor-override-dialog.js";
 import type { OverrideConfirmDetail } from "./supervisor-override-dialog.js";
@@ -135,11 +136,14 @@ export class TillKeepOpen extends LitElement {
       else if (this.authorizers && (code === "pin.invalid" || code === "pin.throttled"))
         this.pinError = code;
       else if (code === "authorization.not_permitted") {
+        const limit = limited(TABLE_REQUEST_LIMIT_MS);
         try {
-          const people = await this.api.serviceDayAuthorizers();
+          const people = await this.api.serviceDayAuthorizers({ signal: limit.signal });
           if (this.#current(generation, zone, subjectId)) this.authorizers = people;
         } catch (readError) {
           if (this.#current(generation, zone, subjectId)) this.refusal = this.#code(readError);
+        } finally {
+          limit.done();
         }
       } else {
         this.authorizers = null;

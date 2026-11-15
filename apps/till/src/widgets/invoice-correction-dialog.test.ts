@@ -15,8 +15,10 @@ import type {
 } from "../api/invoice-correction-types.js";
 import { InvoiceCorrectionSession } from "../state/invoice-correction.js";
 import { REASON_MAX } from "../state/bill-payment.js";
+import { TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 import "./invoice-correction-dialog.js";
 import type {
+  InvoiceCorrectionApi,
   InvoiceCorrectionCardLeg,
   TillInvoiceCorrectionDialog,
 } from "./invoice-correction-dialog.js";
@@ -423,7 +425,9 @@ function sendingApi() {
       ...OPEN,
       state: "discarded",
     })),
-    listApprovers: vi.fn(async () => [{ personId: "manager", displayName: "Marta" }]),
+    listApprovers: vi.fn<InvoiceCorrectionApi["listApprovers"]>(async () => [
+      { personId: "manager", displayName: "Marta" },
+    ]),
   };
 }
 
@@ -478,7 +482,9 @@ describe("sending a correction", () => {
 
     await confirmCorrection(el);
     const pin = await pinDialog(el);
-    expect(api.listApprovers).toHaveBeenCalledWith("sale.rectify");
+    expect(api.listApprovers).toHaveBeenCalledWith("sale.rectify", {
+      signal: expect.any(AbortSignal),
+    });
     signIn(pin);
 
     await vi.waitFor(() =>
@@ -884,7 +890,9 @@ describe("never sending what staff did not confirm (review fix round 1)", () => 
 
     root(el).querySelector<HTMLElement>("[data-choice=cash]")!.click();
     await pinDialog(el);
-    expect(api.listApprovers).toHaveBeenCalledExactlyOnceWith("sale.refund");
+    expect(api.listApprovers).toHaveBeenCalledExactlyOnceWith("sale.refund", {
+      signal: expect.any(AbortSignal),
+    });
   });
 
   it("reads the correction again when its split changed, saying so", async () => {
@@ -1319,6 +1327,39 @@ describe("the correction window's other paths", () => {
       expect(actionsError(el)).toBe(codeMessage("sale.correction_unsupported")),
     );
     expect(root(el).querySelector("till-supervisor-override-dialog")).toBeNull();
+  });
+
+  it("gives up reading the people who may sign in at the time limit, offering no sign-in", async () => {
+    const api = sendingApi();
+    api.giveInvoiceCorrectionCash.mockRejectedValueOnce(
+      refused("authorization.not_permitted", { permission: "sale.refund" }),
+    );
+    api.listApprovers.mockImplementationOnce(
+      (_permission, options) =>
+        new Promise((_resolve, reject) =>
+          options?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("aborted", "AbortError")),
+          ),
+        ),
+    );
+    const { el } = await mountSending(api, "correction-1");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      root(el).querySelector<HTMLElement>("[data-choice=cash]")!.click();
+      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
+      await el.updateComplete;
+      expect(api.listApprovers).toHaveBeenCalledOnce();
+      expect(el.busy).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await el.updateComplete;
+
+      expect(el.busy).toBe(false);
+      expect(actionsError(el)).toBe(t("invoice_correction.unknown"));
+      expect(root(el).querySelector("till-supervisor-override-dialog")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("drops the sign-in when it is cancelled, sending nothing more", async () => {

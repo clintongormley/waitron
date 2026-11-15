@@ -1438,6 +1438,28 @@ describe("TillApi", () => {
     ]);
   });
 
+  it("the six who-can-approve reads hand a caller's abort signal to fetch", async () => {
+    const fetchStub = vi.fn<typeof fetch>(async () => jsonResponse([]));
+    const api = new TillApi("", fetchStub);
+    const signal = new AbortController().signal;
+
+    await api.listRefundAuthorizers({ signal });
+    await api.listCancelCreditAuthorizers({ signal });
+    await api.listUnpaidDepartureAuthorizers({ signal });
+    await api.listApprovers("sale.refund", { signal });
+    await api.listDrawerAuthorizers({ signal });
+    await api.serviceDayAuthorizers({ signal });
+
+    expect(fetchStub.mock.calls.map(([url, init]) => [url, init?.signal])).toEqual([
+      ["/api/refund-authorizers", signal],
+      ["/api/cancel-credit-authorizers", signal],
+      ["/api/unpaid-departure-authorizers", signal],
+      ["/api/adjustment-approvers?permission=sale.refund", signal],
+      ["/api/drawer/authorizers", signal],
+      ["/api/service-day/authorizers", signal],
+    ]);
+  });
+
   it("an aborted read rejects with fetch's own abort error, which reads as no answer", async () => {
     const fetchStub = vi.fn(
       (_path: string, init?: RequestInit) =>

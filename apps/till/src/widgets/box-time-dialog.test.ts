@@ -4,6 +4,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { en, es } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 import { clockDateTime, setLocale } from "../i18n/t.js";
+import { TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 import "./box-time-dialog.js";
 import type { BoxTimeApi, TillBoxTimeDialog } from "./box-time-dialog.js";
 
@@ -29,7 +30,7 @@ function fakeApi(
       }),
     ),
     boxClockConfirm: vi.fn(confirm),
-    listApprovers: vi.fn(() => Promise.resolve([ADMIN])),
+    listApprovers: vi.fn<BoxTimeApi["listApprovers"]>(() => Promise.resolve([ADMIN])),
   };
 }
 
@@ -466,7 +467,9 @@ describe("till-box-time-dialog", () => {
     it("lists Box administration holders for the clock and shows both times before sending anything", async () => {
       const api = fakeApi(BOX_BEHIND, okConfirm(5_000));
       const el = await refusedNotStartUp(api);
-      expect(api.listApprovers).toHaveBeenCalledWith("system.box_admin");
+      expect(api.listApprovers).toHaveBeenCalledWith("system.box_admin", {
+        signal: expect.any(AbortSignal),
+      });
       const dialog = pinDialog(el) as unknown as { authorizers: unknown };
       expect(dialog.authorizers).toEqual([ADMIN]);
       await signIn(el);
@@ -481,6 +484,40 @@ describe("till-box-time-dialog", () => {
         [{ challengeId: "c2", deviceAt: TILL_AT, override }],
       ]);
       expect(words(el)).toBe(en["box_time.set_to"].replace("{after}", clockDateTime(TILL_AT)));
+    });
+
+    it("gives up reading the Box administration holders at the time limit and says the time could not be checked", async () => {
+      const api = fakeApi(BOX_BEHIND, okConfirm());
+      api.listApprovers.mockImplementationOnce(
+        (_permission, options) =>
+          new Promise((_resolve, reject) =>
+            options?.signal?.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError")),
+            ),
+          ),
+      );
+      api.boxClockChallenge.mockImplementationOnce(() =>
+        Promise.reject({ code: "clock.set_refused", reason: "not_start_up" }),
+      );
+      const el = await open(api);
+      const notStartUp = shownError(el);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        control(el, "admin")!.click();
+        await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
+        await el.updateComplete;
+        expect(api.listApprovers).toHaveBeenCalledOnce();
+        expect(shownError(el)).toBe(notStartUp);
+
+        await vi.advanceTimersByTimeAsync(1);
+        await el.updateComplete;
+
+        expect(shownError(el)).toBe(en["box_time.refused.other"]);
+        expect(controls(el)).toEqual(["close", "check-again"]);
+        expect(pinDialog(el)).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it.each([
