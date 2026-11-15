@@ -134,7 +134,7 @@ export const READ_ONLY_EXEMPTIONS: readonly ReadOnlyExemption[] = [
     path: "/api/node/handover/emergency/passkey-challenge",
     boxes: ["mirror"],
     authenticates:
-      "HTTPS only: it writes nothing, and keeps the challenge it answers in this process's memory for two minutes (`handover-switch-proof.ts`)",
+      "own-origin HTTPS only: it writes nothing, and keeps the challenge it answers in this process's memory for two minutes (`handover-switch-proof.ts`)",
   },
 ];
 

@@ -369,7 +369,8 @@ export async function verifyPasskeyAssertion(
       expectedRPID: input.rpId,
       requireUserVerification: true,
       // The counter is checked but not advanced: the caller's database may be a followed copy this
-      // box must not write (design §6.3 step 1), so this sign-in does not move the copied-key check on (D9).
+      // box must not write (design §6.3 step 1), so this sign-in does not move the copied-key check
+      // on (A947 4d plan D9).
       credential: {
         id: cred.credentialId,
         publicKey: Buffer.from(cred.publicKey, "base64url"),

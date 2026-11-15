@@ -96,8 +96,9 @@ export function assertBindingNamesOperation(
 }
 
 /**
- * Only these three fields reach the sign-in, so no break-glass secret or person id can. Given
- * `emergency`, a sign-in without an email is a passkey or this box's proof (D9).
+ * Only email, password and authenticator code reach a password sign-in, so no break-glass secret or
+ * person id can. Given `emergency`, a sign-in without an email is a passkey or this box's switch
+ * proof (A947 4d plan D9).
  */
 export async function signInCredentials(
   db: Database,

@@ -183,8 +183,9 @@ async function activate(
 }
 
 /**
- * `POST /api/node/handover/:operationId/activate`: a fresh sign-in against the placed copy, then
- * this box takes on its own filing identity under the name its preparation selected.
+ * `POST /api/node/handover/:operationId/activate`: a sign-in, or for an emergency this box's switch
+ * proof, checked against the placed copy, then this box takes on its own filing identity under the
+ * name its preparation selected.
  */
 export function mountHandoverActivationApi(
   app: Hono,
@@ -204,7 +205,7 @@ export function mountHandoverActivationApi(
         throw new AppError("handover.request_invalid", { field: "operationId" });
       const body = await readJsonBody<{ moduleOperation?: unknown; signIn?: unknown }>(c);
       // In turn, not sharing the first attempt's answer as a capture does: each caller's own
-      // password decides its own refusal, and the turn behind a success finds it activated.
+      // sign-in decides its own refusal, and the turn behind a success finds it activated.
       return c.json(
         await inTurn(deps.node, operationId, () => activate(c, deps, operationId, body, throttle)),
       );
