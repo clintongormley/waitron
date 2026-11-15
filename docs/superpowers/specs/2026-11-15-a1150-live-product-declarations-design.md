@@ -1,86 +1,85 @@
 # A1150: Live product declarations
 
 You should not have to publish a menu to correct an allergen. A1150 applies the owner's
-27 October choice of one live product source to allergens and diet labels, recorded in
-[the backlog](../../backlog.md). The exception is
-[A1517 decision 6](2026-11-11-a1517-allergen-proposal.md#owner-decisions-2026-11-11): sent till
-dishes and Orders history keep declarations captured at first send. This is a proposed design,
-not an implementation plan or a claim of owner approval.
+27 October choice of one live source, recorded in [the backlog](../../backlog.md).
+[A1517 decision 6](2026-11-11-a1517-allergen-proposal.md#owner-decisions-2026-11-11) is the
+exception: sent till dishes and Orders history keep declarations captured at first send.
+This proposed design has no watcher clearance or owner approval.
 
-For example, change a burger from milk to eggs without publishing. Its menu information,
-unsent basket, held dishes and next kitchen read show eggs. A burger already sent keeps milk
-in the till and history; its kitchen view and newly generated kitchen ticket show eggs. Each
-extra follows its own product, independently of the burger.
+Change a burger from milk to eggs without publishing: its menu information, unsent basket,
+held dishes and next kitchen read show eggs. Its already-sent till/history details keep milk;
+its kitchen view and newly generated ticket show eggs. Each extra follows its own product.
 
 ## Sources and readers
 
-Resolve the chosen product's effective `allergens` and `dietaryDeclarations` through
-`variant-fallback.ts`. A variant inherits only where its own declaration permits inheritance;
-never substitute the parent offer for a chosen variant. Preserve `null` as unreviewed and `{}`
-as reviewed with none declared. Expand dietary labels with shared `expandDietaryDeclarations`;
-derive the served `diet` profile using the declaration-first convention in `asServedDiet`,
-instead of a version's legacy `diet` or `dietOverride`. Keep existing filter rules.
+Resolve chosen-product `allergens` and `dietaryDeclarations` through `variant-fallback.ts`.
+Keep variant inheritance, `null` unreviewed versus `{}` reviewed-empty, and each extra's own
+list. Options carry no declarations. Derive `diet` from direct declarations as `asServedDiet`
+does, using shared expansion; legacy `dietOverride` no longer contributes to live labels or diet
+filters. Check this explicitly with a conflicting override fixture; filter criteria stay unchanged.
 
-| Reader and inspected source today | Required source |
+| Reader and source | Required declaration source |
 | --- | --- |
-| Till `menuOfferToTillProduct`/`sellingValuesOf`; menu filters, tiles, product information and modifier picker consume published facts | Live effective dish, chosen variant and each offered extra |
-| Basket, last-added and unsent draft products retain copied selling values; held retrieval also carries context facts | Refresh declaration fields by chosen product id, including extras; preserve prices, names and choices |
-| `working-order.ts` display nutrition and Orders history | Keep `readDisplayLineNutrition` and saved first-send captures for sent dishes and extras; unsent/held declarations stay live |
-| Kitchen queue, `kitchen-print.ts`/`kitchen-ticket.ts`, `kitchen-allergy.ts` and `party-allergy.ts` | Keep direct current-product reads; draft allergy checks receive corrected live offers |
-| Guest preview, public menu, Cloud pages and A4 paper preparation call `publicGuestMenu` with stored documents | Apply current declarations before conversion/rendering, including a paper request naming an earlier version |
-| Publish warnings, document differences, navigation targets and publication status | Current declarations for warnings; declaration-free comparisons for publication changes |
+| Till `api/client.ts` conversion; `menu-filter.ts`, menu-browser/product-info/modifier-picker | Live dish, chosen variant and offered extras |
+| Basket/last-added, drafts and held retrieval (`working-order.ts:5276`) | Refresh declarations by chosen product id; preserve prices, names and choices |
+| `line-nutrition.ts`/`order-groups.ts`: sent till/history | Keep first-send capture and display, including extras; unsent/held remain live |
+| `working-order.ts` kitchen queue, kitchen-print/ticket, kitchen-allergy/party-allergy | Keep current-product reads; draft clashes get corrected offers |
+| `guest-menu-api.ts:61,148,193,251`: Cloud, preview, paper and public pages | Hydrate current declarations before `publicGuestMenu`, including earlier-version paper requests |
+| Publication warnings and comparisons | Current declarations for warnings; frozen menu content for differences/status |
 
-The guest path needs an explicit correction: `readGuestMenu` calls `readLiveMenu`, which returns
-the stored document (`menu-publication.ts:719`). `guest-menu-api.ts` passes that document, or
-`readRecordedDocuments` for paper, directly to `publicGuestMenu`. Rendering fields alone does
-not establish a live source. Product editors already read current declarations.
+Product editors already read current values. `listWorkingLineContexts` still returns copied
+nutrition; held retrieval must stop using those fields as declarations. Keep its pricing/name
+facts and existing stored columns, without schema work. Sent displays use their dedicated capture,
+never current declarations when a capture is missing. Preserve capture replay, splitting and
+later-extra behavior; held dishes capture on release.
 
 ## Smallest change and refresh
 
-Extend `readLiveRows`/`applyLiveFields` and the shared `LiveOffer`/extra contracts to overlay
-declarations in batches alongside availability. Reuse that resolution for guest producers and
-held retrieval rather than introducing another source. Legacy version/context fields may remain
-inert data. Missing current data must never fall back to an earlier reviewed declaration.
+Follow the existing availability seam. Extend shared `OverlayOfferField` and `freezeOffer`
+(`menu-document.ts:391`) to omit `allergens`, `diet`, `dietOverride`, `dietaryDeclarations` from
+new frozen dishes/variants; omit extras' `addAllergens`/`suitableFor` too. Served types require
+these fields again. Extend batched `readLiveRows`/`applyLiveFields` to supply current declarations,
+with no per-line reads. Guest producers need a hydrated document type: passing a frozen document
+to a declaration renderer must fail typechecking. Missing live data never falls back to old labels.
 
-Include effective declarations in `liveFieldsDigest`. The till already listens for product
-changes and polls menu state every fifteen seconds (`menu-state-poll.ts`); `#onMenuState`
-reloads offers when `liveFields` changes. Extend application of those reads to existing unsent
-counter/table drafts, held lines and open information/choice views. Today's version-gated
-`refreshBasket` does not refresh a same-version declaration edit. Update declarations separately
-from price reconciliation, without requiring confirmation or marking a saved order edited.
-Retain request-order and in-flight guards. This promises refresh after successful existing reads,
-not instantaneous delivery. Guest pages refresh on regeneration/reload; Cloud retains its existing
-reconciliation, and already printed paper cannot change.
+Add declarations to `liveFieldsDigest`. Existing product notifications and fifteen-second
+`state/menu-state-poll.ts` reads feed `#onMenuState` (`till-app.ts:6710–6751`). Refresh existing
+unsent counter/table drafts, held lines and open information/choice views on successful reads.
+`menu-refresh.ts:215` skips same-version lines today; update declarations separately from price
+reconciliation, without confirmation or marking a saved order edited. Keep request/in-flight guards.
 
-Preserve A1517's first-send capture, replay, splitting and later-extra behavior. Held dishes
-capture on release. Never replace a missing sent capture with current declarations.
+Guest pages refresh on regeneration/reload; paper already printed cannot change. Cloud's
+`cloud.connection` job sleeps sixty seconds between passes (`cloud-worker.ts:20–21`), and calls
+`onGuestMenu` after successful active-installation refresh while primary (`:41–44`);
+`boot.ts:4617` wires reconciliation. Its regenerated page digest drives publication
+(`cloud-guest-menu.ts:143–163`), independently of menu publication events. These are source reads,
+not a delivery guarantee.
 
-## Publication and guidance
+## Publication, transition and guidance
 
-Exclude dish, variant and extra declaration facts from `menu-document.ts` and
-`menu-navigation.ts` publication differences. Use the same declaration-free content comparison
-for status, preview tokens, duplicate publication, scheduling, patches and included-menu
-dependencies. Compare both sides consistently, never a projected hash against a stored full
-hash. Retain full-document hashes for stored-version/cache identity and backup/export integrity
-(`backup-verification.ts:126`). Preserve stale-preview refusal for publishable content. A1151
-patches continue excluding declarations. A declaration-only edit leaves publication status current
-and adds no change-list row.
+Keep the existing single full-document hash. With declarations absent from new frozen content,
+status, preview tokens, schedules, patches, included-menu checks and backup integrity share it.
+Remove declaration comparisons/navigation in `menu-document.ts`/`menu-navigation.ts`; keep
+stale-preview refusal for publishable edits. Warnings hydrate current working offers, retaining
+advisory unreviewed-dish/active-variant policy; `{}` never warns. A1151 patches still exclude declarations.
 
-Keep existing advisory unreviewed-dish/active-variant warnings, evaluated from current effective
-declarations; `{}` does not warn. Do not broaden warning policy. Update EN/ES Products,
-Modifiers and Table service guidance, preserving shared anchors: save declarations on the
-product without republishing; variants inherit, extras stay separate, sent details say
-“Recorded when sent”, and kitchen reads stay current. Explain reopening guest/paper previews
-after declaration edits.
+**Proposed transition for watcher settlement:** retain the current document format and untouched
+stored versions/hashes. Existing menus show Changed once until ordinary republishing omits the old
+fields. Current declarations must overlay even those retained versions immediately. No migration,
+second hash, compatibility layer or reset. After that one-time republish, declaration edits alone
+leave status Current and add no change row. A1308 collisions are resolved on rebase.
+
+Update EN/ES Products, Modifiers and Table service guides, retaining anchors. Products EN
+`:266,494–507,526` and ES `:278,521–534,555` contain republish/published-declaration wording.
+Update developer `design-system.md:7027` and `products.md:785` too. Explain saving without
+republishing, inheritance, separate extras, Recorded when sent, live kitchen reads and reopening
+menu/paper previews after edits; document the one-time transition.
 
 ## Acceptance and limits
 
-The later build must check edit-without-republish across these readers in `menu-document.test.ts`,
-`menu-allergen-warnings.test.ts`, `menu-change-navigation.test.ts`, server
-`menu-allergen-workflow.test.ts`, `sent-line-nutrition.test.ts`, guest-menu API tests and till
-menu-filter/product-info/basket tests. Cover inheritance, null/empty, dietary-only edits,
-same-version refresh and sent-versus-held behavior. No suites were run for this design.
-
-Scope excludes migrations, compatibility layers, new tables, protocols, fiscal changes and A1517
-redesign. Build against current main, then rebase around A1308 overlap. A separate plan
-must precede implementation.
+The later plan names checks in menu-document/allergen-warnings/change-navigation, server
+menu-allergen-workflow/sent-line-nutrition/guest-menu API and till filter/product-info/basket suites.
+Check inheritance, null/empty, dietary-only edits, same-version refresh, preserved prices and sent
+versus held, all four guest producers, Cloud reconciliation, unchanged full-hash verification and
+the one-time transition. No suites ran for this design. No new tables, protocols, fiscal work or
+A1517 redesign. A separate reviewed plan precedes implementation.
