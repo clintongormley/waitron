@@ -144,6 +144,7 @@ import {
   saveServiceSteps,
   listServiceSteps,
   deleteDepartment,
+  setDepartmentSalePolicyField,
   setDepartmentTransferSettings,
   setProfileServiceScope,
   createServiceZone,
@@ -6711,6 +6712,43 @@ it("transfers order start policies under new department and zone ids", async () 
     expect(row.zone_id).not.toBe(sourceIds.explicitId);
     expect(row.zone_id).not.toBe(sourceIds.inheritedId);
   }
+});
+
+it("transfers how each department sells and how its till-choice orders start", async () => {
+  const source = await applyVenue(planVenue(venue("B13572478"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, async (tx) => {
+    const choosing = await createDepartment(tx, { name: "Choosing department" });
+    await setDepartmentSalePolicyField(tx, choosing.id, "dining", "till_choice");
+    await setDepartmentSalePolicyField(tx, choosing.id, "diningStartsAs", "takeaway");
+    const takeaway = await createDepartment(tx, { name: "Takeaway department" });
+    await setDepartmentSalePolicyField(tx, takeaway.id, "dining", "takeaway");
+  });
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
+  const exported = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-09T10:00:00Z"),
+    versions,
+  );
+  const decoded = decodeConfigurationBundle(
+    encodeConfigurationBundle(exported, "a strong passphrase"),
+    "a strong passphrase",
+  );
+  await applyVenue(planVenue(venue("B13572479"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
+  });
+  const imported = await targetSuite.db.execute(sql`select name, dining, dining_starts_as from departments
+    where name in ('Choosing department', 'Takeaway department') order by name`);
+  expect(imported.rows).toEqual([
+    { name: "Choosing department", dining: "till_choice", dining_starts_as: "takeaway" },
+    { name: "Takeaway department", dining: "takeaway", dining_starts_as: "eat_in" },
+  ]);
 });
 
 it("transfers department receipt maps and pictures with remapped ids and no venue defaults", async () => {

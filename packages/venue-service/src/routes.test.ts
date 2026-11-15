@@ -11,6 +11,7 @@ import {
   floorZones,
   kitchenCourses,
   kitchenStations,
+  saveVenueFields,
   serviceSteps,
   withTransaction,
   type Database,
@@ -322,6 +323,8 @@ describe("whole service settings saves", () => {
       paidWhen: "ticket_then_pay",
       collectionNumber: "numbered",
       printTradingName: true,
+      dining: "eat_in",
+      diningStartsAs: "eat_in",
     });
     expect(transfers).toEqual({
       departmentId: fx.departmentId,
@@ -1640,6 +1643,20 @@ describe("venue service management routes", () => {
       paidWhen: null,
       effective: { paidWhen: "prepay" },
     });
+  });
+
+  it("says whether the venue's region charges a different VAT class on food taken away", async () => {
+    const fx = await fixture();
+    const read = async () =>
+      (
+        (await (
+          await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+        ).json()) as { takeawayVat: boolean }
+      ).takeawayVat;
+    expect(await read()).toBe(true);
+    await db.execute(sql`update taxpayer set country = 'GB'`);
+    await withTransaction(db, (tx) => saveVenueFields(tx, { fiscalTerritory: "GB-vat" }, null));
+    expect(await read()).toBe(false);
   });
 
   it("persists department and zone collection settings and the department receipt-heading switch", async () => {
@@ -3727,6 +3744,8 @@ describe("department editor owns service settings separately from receipt policy
       paidWhen: "ticket_then_pay",
       collectionNumber: "numbered",
       printTradingName: false,
+      dining: "eat_in",
+      diningStartsAs: "eat_in",
     });
     expect(
       after.model.departments.find((row: { id: string }) => row.id === fx.departmentId),
@@ -3780,6 +3799,8 @@ it("editing a department preserves its previously read receipt defaults", async 
     paidWhen: "ticket_then_pay",
     collectionNumber: "numbered",
     printTradingName: true,
+    dining: "eat_in",
+    diningStartsAs: "eat_in",
   });
 });
 

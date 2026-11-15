@@ -1605,6 +1605,8 @@ describe("departments", () => {
         paidWhen: "ticket_then_pay",
         collectionNumber: "numbered",
         printTradingName: false,
+        dining: "eat_in",
+        diningStartsAs: "eat_in",
       });
     });
   });
@@ -3448,6 +3450,8 @@ describe("combined settings operations", () => {
         orderStart: "table",
         paidWhen: "ticket_then_pay",
         collectionNumber: "numbered",
+        dining: "eat_in",
+        diningStartsAs: "eat_in",
       });
       expect(await resolveZoneContext(tx, zone.id)).toMatchObject({
         serviceMode: "table_tab",
@@ -3578,6 +3582,8 @@ describe("combined settings operations", () => {
         orderStart: "table",
         paidWhen: "prepay",
         collectionNumber: "none",
+        dining: "eat_in",
+        diningStartsAs: "eat_in",
       });
       await settingsOperations.saveZoneServiceSettings(tx, zone.id, {
         orderStart: null,
@@ -3593,6 +3599,8 @@ describe("combined settings operations", () => {
         orderStart: "counter",
         paidWhen: "ticket_then_pay",
         collectionNumber: "numbered",
+        dining: "eat_in",
+        diningStartsAs: "eat_in",
       });
     });
   });

@@ -681,6 +681,8 @@ describe("receipt and printing policy transaction", () => {
         orderStart: "table",
         paidWhen: "ticket_then_pay",
         collectionNumber: "numbered",
+        dining: "eat_in",
+        diningStartsAs: "eat_in",
         ...policy,
       },
     ]);

@@ -20,7 +20,13 @@ import { deviceProfiles } from "../device-profiles.js";
 import { floorZones } from "../floor-zones.js";
 import { workingOrderLines, workingOrders } from "../orders.js";
 import { sales } from "../sales.js";
-import { orderStart, paidWhen, collectionNumber } from "../sale-rule-types.js";
+import {
+  collectionNumber,
+  dining,
+  diningPolicy,
+  orderStart,
+  paidWhen,
+} from "../sale-rule-types.js";
 
 export const departments = table(
   "departments",
@@ -36,6 +42,8 @@ export const departments = table(
     paidWhen: paidWhen("paid_when").notNull().default("prepay"),
     collectionNumber: collectionNumber("collection_number").notNull().default("none"),
     printTradingName: flag("print_trading_name").notNull().default(true),
+    dining: diningPolicy("dining").notNull().default("eat_in"),
+    diningStartsAs: dining("dining_starts_as").notNull().default("eat_in"),
     transferDeskProfileId: id("transfer_desk_profile_id"),
     receiptText: json<Omit<DepartmentReceiptConfig, "logo">>("receipt_text"),
     receiptLogoImageId: id("receipt_logo_image_id"),
@@ -47,6 +55,8 @@ export const departments = table(
     check("departments_order_start_ck", enumCheck(t.orderStart)),
     check("departments_paid_when_ck", enumCheck(t.paidWhen)),
     check("departments_collection_number_ck", enumCheck(t.collectionNumber)),
+    check("departments_dining_ck", enumCheck(t.dining)),
+    check("departments_dining_starts_as_ck", enumCheck(t.diningStartsAs)),
     foreignKey({
       columns: [t.transferDeskProfileId],
       foreignColumns: [deviceProfiles.id],

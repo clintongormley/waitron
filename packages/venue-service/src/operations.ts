@@ -498,6 +498,8 @@ export interface EffectiveSalePolicy {
   paidWhen: DepartmentSalePolicyRow["paidWhen"];
   collectionNumber: DepartmentSalePolicyRow["collectionNumber"];
   printTradingName: boolean;
+  dining: DepartmentSalePolicyRow["dining"];
+  diningStartsAs: DepartmentSalePolicyRow["diningStartsAs"];
 }
 
 export async function resolveSalePolicy(
@@ -514,6 +516,8 @@ export async function resolveSalePolicy(
       departmentPaidWhen: departments.paidWhen,
       departmentCollectionNumber: departments.collectionNumber,
       printTradingName: departments.printTradingName,
+      dining: departments.dining,
+      diningStartsAs: departments.diningStartsAs,
       zoneOrderStart: floorZones.orderStart,
       zonePaidWhen: floorZones.paidWhen,
       zoneCollectionNumber: floorZones.collectionNumber,
@@ -531,6 +535,8 @@ export async function resolveSalePolicy(
     paidWhen: row.zonePaidWhen ?? row.departmentPaidWhen,
     collectionNumber: row.zoneCollectionNumber ?? row.departmentCollectionNumber,
     printTradingName: row.printTradingName,
+    dining: row.dining,
+    diningStartsAs: row.diningStartsAs,
   };
 }
 
@@ -562,7 +568,7 @@ export async function readSaleReceiptHeader(tx: Transaction, saleId: string) {
 
 type DepartmentPolicyField = Pick<
   DepartmentSalePolicyRow,
-  "orderStart" | "paidWhen" | "collectionNumber" | "printTradingName"
+  "orderStart" | "paidWhen" | "collectionNumber" | "printTradingName" | "dining" | "diningStartsAs"
 >;
 type ZoneSalePolicyRow = Pick<
   typeof floorZones.$inferSelect,

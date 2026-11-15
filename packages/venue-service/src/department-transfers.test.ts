@@ -1399,6 +1399,8 @@ describe("combined department transfer settings", () => {
         orderStart: "counter",
         paidWhen: "ticket_then_pay",
         collectionNumber: "numbered",
+        dining: "eat_in",
+        diningStartsAs: "eat_in",
       });
     });
   });
