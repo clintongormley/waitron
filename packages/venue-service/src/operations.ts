@@ -1328,6 +1328,22 @@ export async function readLateSendMarks(
   return new Map(rows.map((row) => [row.workingOrderLineId, row.latePeriodName!]));
 }
 
+/**
+ * Mark each line as sent after its period: `confirmedBy` is the person who agreed to send it, or
+ * null where the send asked nobody.
+ */
+export async function recordLateSendMarks(
+  tx: Transaction,
+  marks: readonly { lineId: string; periodName: string; confirmedBy: string | null }[],
+): Promise<void> {
+  for (const mark of marks) {
+    await tx
+      .update(workingLineContexts)
+      .set({ latePeriodName: mark.periodName, lateConfirmedBy: mark.confirmedBy })
+      .where(eq(workingLineContexts.workingOrderLineId, mark.lineId));
+  }
+}
+
 export async function readSentLineNutrition(
   tx: Transaction,
   lineIds: readonly string[],

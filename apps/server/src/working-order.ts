@@ -794,19 +794,7 @@ export async function priceOrderLines(
   // The mark each confirmed late dish's rows carry, by the dish's index in `lines`.
   const marks = new Map<number, { periodName: string; confirmedBy: string }>();
   if (late.length > 0) {
-    const { departmentId } = service!;
-    const needsManager = await VENUE_SERVICE.readLateSendNeedsManager(tx, departmentId);
-    if (lateSend === undefined || late.some((dish) => !lateSend.menuIds.has(dish.menuId))) {
-      throw new AppError("menu_period.ended", {
-        departmentId,
-        menus: [...new Map(late.map(({ menuId, periodName }) => [menuId, periodName]))].map(
-          ([menuId, periodName]) => ({ menuId, periodName }),
-        ),
-        menuItemIds: [...new Set(late.map((dish) => dish.menuItemId))],
-        needsManager,
-      });
-    }
-    const confirmedBy = await lateSend.confirm(tx, needsManager);
+    const confirmedBy = await confirmLateDishes(tx, service!.departmentId, late, lateSend);
     for (const { index, periodName } of late) marks.set(index, { periodName, confirmedBy });
   }
   const invoiceLocales = await readInvoiceLocales(tx);
@@ -1954,6 +1942,120 @@ export async function insertSplitExtras(
       throw new AppError("ticket.already_fired", { workingOrderId: orderId });
     throw error;
   }
+}
+
+/**
+ * Refuses `menu_period.ended` unless `lateSend` confirms every menu of `late`, naming `lineIds`
+ * when stored lines are being sent; otherwise the person recorded as confirming.
+ */
+async function confirmLateDishes(
+  tx: Transaction,
+  departmentId: string,
+  late: readonly { menuId: string; menuItemId: string; periodName: string }[],
+  lateSend: LateSendConfirmation | undefined,
+  lineIds?: readonly string[],
+): Promise<string> {
+  const needsManager = await VENUE_SERVICE.readLateSendNeedsManager(tx, departmentId);
+  if (lateSend === undefined || late.some((dish) => !lateSend.menuIds.has(dish.menuId))) {
+    throw new AppError("menu_period.ended", {
+      departmentId,
+      menus: [...new Map(late.map(({ menuId, periodName }) => [menuId, periodName]))].map(
+        ([menuId, periodName]) => ({ menuId, periodName }),
+      ),
+      menuItemIds: [...new Set(late.map((dish) => dish.menuItemId))],
+      needsManager,
+      ...(lineIds === undefined ? {} : { workingOrderLineIds: [...lineIds] }),
+    });
+  }
+  return lateSend.confirm(tx, needsManager);
+}
+
+/**
+ * How a send of stored dishes treats one whose period ended earlier today: `ask` refuses it unless
+ * the request confirms it, `"mark"` marks it with no confirmer.
+ */
+export type LateUnsentMode = { ask: LateSendConfirmation | undefined } | "mark";
+
+/**
+ * Judge stored dishes about to fire as entry judges a new one, and mark the late ones before they
+ * fire, so their tickets print the mark. A dish already marked, or sent on hold (in a held group),
+ * was judged when it was sent. Its menu is the one it was stored from; the department is that of
+ * the order's zone now; a lunch course is judged by its lunch's product.
+ */
+export async function lateUnsentDishes(
+  tx: Transaction,
+  orderId: string,
+  lines: readonly FireableLine[],
+  mode: LateUnsentMode,
+): Promise<void> {
+  if (lines.length === 0) return;
+  const order = await VENUE_SERVICE.findOrderContext(tx, orderId);
+  if (order === null) return;
+  const ids = lines.map((line) => line.id);
+  const marked = await VENUE_SERVICE.readLateSendMarks(tx, ids);
+  const held = await tx
+    .select({ id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+    .where(and(inArray(workingOrderLines.id, ids), eq(orderGroups.state, "held")));
+  const skipped = new Set([...marked.keys(), ...held.map((row) => row.id)]);
+  const pending = lines.filter((line) => !skipped.has(line.id));
+  if (pending.length === 0) return;
+  const zone = await VENUE_SERVICE.resolveZoneContext(tx, order.zoneId);
+  const service = await VENUE_SERVICE.resolveDepartmentService(tx, zone.departmentId, new Date());
+  const periodOf = new Map(service.endedMenus.map((menu) => [menu.menuId, menu.periodName]));
+  const contexts = await VENUE_SERVICE.listLineContexts(tx, orderId);
+  const contextOf = new Map(contexts.map((context) => [context.workingOrderLineId, context]));
+  const ended = pending.flatMap((line) => {
+    const context = contextOf.get(line.id);
+    const periodName = context === undefined ? undefined : periodOf.get(context.menuId);
+    if (periodName === undefined || service.orderableMenuIds.includes(context!.menuId)) return [];
+    return [{ line, menuId: context!.menuId, menuItemId: context!.menuItemId, periodName }];
+  });
+  if (ended.length === 0) return;
+  const dishIdOf = (line: FireableLine) => line.parentLineId ?? line.id;
+  const dishes = await tx
+    .select({
+      id: workingOrderLines.id,
+      productId: workingOrderLines.productId,
+      parentProductId: products.parentId,
+    })
+    .from(workingOrderLines)
+    .innerJoin(products, eq(products.id, workingOrderLines.productId))
+    .where(inArray(workingOrderLines.id, [...new Set(ended.map(({ line }) => dishIdOf(line)))]));
+  const soldAs = new Map(
+    dishes.map((dish) => [
+      dish.id,
+      dish.parentProductId === null
+        ? { productId: dish.productId!, variantId: null }
+        : { productId: dish.parentProductId, variantId: dish.productId! },
+    ]),
+  );
+  const alsoSold = await VENUE_SERVICE.productsOfferedIn(
+    tx,
+    zone.zoneId,
+    service.orderableMenuIds,
+    [...soldAs.values()],
+  );
+  const late = ended.filter(({ line }) => {
+    const sold = soldAs.get(dishIdOf(line))!;
+    return !alsoSold.has(offeredKey(sold.productId, sold.variantId));
+  });
+  if (late.length === 0) return;
+  const confirmedBy =
+    mode === "mark"
+      ? null
+      : await confirmLateDishes(
+          tx,
+          service.departmentId,
+          late,
+          mode.ask,
+          late.map(({ line }) => line.id),
+        );
+  await VENUE_SERVICE.recordLateSendMarks(
+    tx,
+    late.map(({ line, periodName }) => ({ lineId: line.id, periodName, confirmedBy })),
+  );
 }
 
 /**
@@ -7302,6 +7404,7 @@ export async function placeOrder(
   id: string,
   operatorId: string,
   expectedEdit: OrderEditAuthority["expectedEdit"],
+  lateSend?: LateSendConfirmation,
 ): Promise<PlaceOrderResult> {
   return withTransaction(deps.db, (tx) =>
     runServiceCommand(
@@ -7330,6 +7433,7 @@ export async function placeOrder(
           tx,
           lines.map((line) => line.id),
         );
+        await lateUnsentDishes(tx, id, lines, { ask: lateSend });
         // Placing commits the whole order, a course the kitchen holds included, so every line is sent.
         const stamped = await tx
           .update(workingOrderLines)

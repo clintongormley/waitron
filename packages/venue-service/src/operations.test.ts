@@ -99,6 +99,7 @@ import {
   offeredKey,
   productsOfferedIn,
   readLateSendMarks,
+  recordLateSendMarks,
   readLunchLineIds,
   orderHasSetLunch,
 } from "./operations.js";
@@ -3772,6 +3773,50 @@ describe("a line sent late", () => {
         new Map([[split, "Lunch"]]),
       );
       await expect(readLateSendMarks(tx, [])).resolves.toEqual(new Map());
+    });
+  });
+
+  it("marks stored lines with or without a confirmer, leaving other lines unmarked", async () => {
+    const venue = await seedTwoMenuVenue();
+    await scoped(async (tx) => {
+      const orderId = await openOrder(tx, venue, 1);
+      await recordOrderServiceContext(tx, orderId, venue.diningZone);
+      const lines = [
+        await addLine(tx, venue, orderId, 1),
+        await addLine(tx, venue, orderId, 2),
+        await addLine(tx, venue, orderId, 3),
+      ];
+      await recordWorkingLineContexts(
+        tx,
+        orderId,
+        lines.map((workingOrderLineId) => ({ workingOrderLineId, menuItemId: venue.menuItemId })),
+        await listZoneOffers(tx, venue.diningZone),
+      );
+      const [asked, unasked, untouched] = lines as [string, string, string];
+      await recordLateSendMarks(tx, [
+        { lineId: asked, periodName: "Lunch", confirmedBy: "person-7" },
+        { lineId: unasked, periodName: "Brunch", confirmedBy: null },
+      ]);
+      const stored = await tx.execute<{
+        working_order_line_id: string;
+        late_period_name: string | null;
+        late_confirmed_by: string | null;
+      }>(sql`
+        select working_order_line_id, late_period_name, late_confirmed_by
+        from working_line_contexts
+        where working_order_line_id in (${asked}, ${unasked}, ${untouched})`);
+      expect(
+        Object.fromEntries(
+          stored.rows.map((row) => [
+            row.working_order_line_id,
+            [row.late_period_name, row.late_confirmed_by],
+          ]),
+        ),
+      ).toEqual({
+        [asked]: ["Lunch", "person-7"],
+        [unasked]: ["Brunch", null],
+        [untouched]: [null, null],
+      });
     });
   });
 });

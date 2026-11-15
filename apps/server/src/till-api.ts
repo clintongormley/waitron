@@ -2244,20 +2244,27 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       await gateZones(deps, session, [{ orderId: id }]);
-      const body = await readJsonBody<{ expectedEdit: BillEditExpected | null }>(c);
-      const result = await placeOrder(
-        {
-          db: deps.db,
-          backend: deps.backend,
-          admission: deps.admission,
-          clock: deps.clock,
-          log,
-          attendance: deps.attendance,
-        },
-        sendingCfg(cfg, c, session.device),
-        id,
-        personId,
-        body.expectedEdit,
+      const body = await readJsonBody<{
+        expectedEdit: BillEditExpected | null;
+        lateSend?: unknown;
+      }>(c);
+      const lateSend = parseLateSend(body.lateSend);
+      const result = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
+        placeOrder(
+          {
+            db: deps.db,
+            backend: deps.backend,
+            admission: deps.admission,
+            clock: deps.clock,
+            log,
+            attendance: deps.attendance,
+          },
+          sendingCfg(cfg, c, session.device),
+          id,
+          personId,
+          body.expectedEdit,
+          late,
+        ),
       );
       return c.json(result);
     }),
