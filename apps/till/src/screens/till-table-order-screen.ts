@@ -511,6 +511,8 @@ export interface ChangeLineDetail {
   revision: number;
   /** The complete edited dish for a station check after a routing refusal. */
   saleLine?: SaleLine;
+  /** A set lunch's choices: the course is saved and waits for Send to prep, rather than sent. */
+  waitsForSend?: boolean;
 }
 
 /**
@@ -3398,6 +3400,7 @@ export class TillTableOrderScreen extends LitElement {
             abandoned: () => {
               if (this.lunchPending === pending) this.lunchPending = null;
             },
+            waitsForSend: true,
           } satisfies ChangeLineDetail);
         }}
         @wt-modifier-cancel=${(event: Event) => {

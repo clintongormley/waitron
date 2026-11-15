@@ -6515,7 +6515,8 @@ then Station agreed — send (primary); on a counter Park the primary reads Stat
 because a park stores the order without sending it. When Change dish, or a set lunch's choices, adds
 extras to a sent dish, the window lists the dish with its added extras ("1× Omelette + Bacon"), and
 the secondary reads Don't add them, which abandons the change and closes the set lunch's choices;
-nothing is sent. The window holds a choice, not staged input,
+nothing is sent. From a set lunch's choices the primary reads Station agreed — save, because the
+course waits for Send to prep. The window holds a choice, not staged input,
 so it takes no draft scope and has no `*.unsaved.test.ts`; Escape or closing it sends nothing and
 removes nothing. The app draws one at a time (`lateSendWindow` in `apps/till/src/till-app.ts`).
 

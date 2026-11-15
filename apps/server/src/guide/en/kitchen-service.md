@@ -334,7 +334,8 @@ button reads **Station agreed — save**. The same window opens when the server 
 the till has marked it.
 
 Adding an extra to a sent dish after its period ended opens the same window:
-**Station agreed — send** adds the extra, and **Don't add them** leaves the dish as it was.
+**Station agreed — send** adds the extra (from **Lunch choices** it reads **Station agreed — save**),
+and **Don't add them** leaves the dish as it was.
 
 If the till says a dish's period has ended without listing dishes, review the order and remove
 dishes from ended periods before sending again.

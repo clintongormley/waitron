@@ -2577,15 +2577,40 @@ describe("extras added to a sent dish after its period", () => {
       })),
     }));
 
+  /** The same extras list with Cheese after Bacon. */
+  const withCheese: TillMenuOffer["offeredModifiers"] = extrasOffered.map((list) =>
+    list.kind === "extras"
+      ? {
+          ...list,
+          items: [
+            ...list.items,
+            {
+              ...list.items[0]!,
+              presentation: { ...list.items[0]!.presentation, name: "Cheese" },
+              productId: "p-cheese",
+              name: "Cheese",
+              preselected: false,
+            },
+          ],
+        }
+      : list,
+  );
+
   async function sentTable(
     updateOrderLine: ReturnType<typeof vi.fn>,
     rows: unknown[] = [sentOmelette],
+    {
+      omeletteOffered = true,
+      lists = extrasOffered,
+    }: { omeletteOffered?: boolean; lists?: TillMenuOffer["offeredModifiers"] } = {},
   ): Promise<TillApp> {
     current = menu("lunch");
-    current.offers = current.offers.map((each) =>
-      each.id === offerId(BREAKFAST_MENU, "Omelette")
-        ? { ...each, offeredModifiers: extrasOffered }
-        : each,
+    current.offers = current.offers.flatMap((each) =>
+      each.id !== offerId(BREAKFAST_MENU, "Omelette")
+        ? [each]
+        : omeletteOffered
+          ? [{ ...each, offeredModifiers: lists }]
+          : [],
     );
     const { el } = await mountApp({
       updateOrderLine,
@@ -2716,6 +2741,113 @@ describe("extras added to a sent dish after its period", () => {
     expect(windowOf(el)).toBeNull();
     expect(picker()).toBeNull();
     expect(updateOrderLine).toHaveBeenCalledTimes(1);
+  });
+
+  /** The Omelette as a set lunch, whose recorded offer lists Bacon and Cheese among its courses. */
+  const recordedLunch = {
+    ...offer(BREAKFAST_MENU, "Omelette"),
+    setLunch: true,
+    offeredModifiers: withCheese,
+  };
+
+  /** A stored Cheese course or extra on the Omelette, already sent. */
+  const sentCheese = {
+    ...sentOmelette,
+    id: "line-cheese",
+    lineNo: 2,
+    productId: "p-cheese",
+    name: "Cheese",
+    unitPriceGross: "1.00",
+    listId: "list-extras",
+    menuItemId: null,
+    parentLineNo: 1,
+    parentProductId: "Omelette",
+  };
+
+  /** Ticks Bacon in the set lunch's choices and confirms them. */
+  async function chooseBaconCourse(el: TillApp): Promise<void> {
+    const order = el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
+    await showView(order, "order", { scripted: true });
+    await flush(el, 6);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-lunch-choices]")!.click();
+    await flush(el, 6);
+    const picker = order.shadowRoot!.querySelector<HTMLElement>("[data-lunch-picker]")!;
+    await userEvent.click(
+      picker.shadowRoot!.querySelector<HTMLInputElement>("input[type=checkbox]")!,
+    );
+    await flush(el, 3);
+    await userEvent.click(picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!);
+    await flush(el, 6);
+  }
+
+  /** The change a dish's extras edit sends with `extras` picked, as a set lunch's choices send it. */
+  async function pickExtras(el: TillApp, productIds: string[]): Promise<void> {
+    const order = el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
+    emit(order, "change-line", {
+      lineNo: 1,
+      lineName: "Omelette",
+      patch: {
+        note: null,
+        portionLineNos: [],
+        options: [],
+        extras: [
+          {
+            listId: "list-extras",
+            picks: productIds.map((productId) => ({ productId, quantity: 1 })),
+          },
+        ],
+      },
+      revision: 2,
+      expectedEdit: order.billEdit,
+    });
+    await flush(el, 6);
+  }
+
+  it("opens the window from a set lunch's choices whose offer has left the menu, from the offer the line recorded", async () => {
+    const updateOrderLine = vi.fn().mockRejectedValueOnce(BREAKFAST_ENDED);
+    const el = await sentTable(updateOrderLine, [{ ...sentOmelette, lunchOffer: recordedLunch }], {
+      omeletteOffered: false,
+    });
+
+    await chooseBaconCourse(el);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette + Bacon"]);
+    expect(updateOrderLine).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads Station agreed — save on a set lunch's choices, whose course waits for Send to prep", async () => {
+    const el = await sentTable(vi.fn().mockRejectedValueOnce(BREAKFAST_ENDED), [
+      { ...sentOmelette, lunchOffer: recordedLunch },
+    ]);
+
+    await chooseBaconCourse(el);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette + Bacon"]);
+    expect(buttonText(el, "data-late-remove")).toBe("Don't add them");
+    expect(buttonText(el, "data-late-agreed")).toBe("Station agreed — save");
+  });
+
+  it("lists only the extra the dish does not already carry", async () => {
+    const el = await sentTable(
+      vi.fn().mockRejectedValueOnce(BREAKFAST_ENDED),
+      [sentOmelette, sentCheese],
+      { lists: withCheese },
+    );
+
+    await pickExtras(el, ["p-cheese", "p-bacon"]);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette + Bacon"]);
+  });
+
+  it("lists a set lunch's cancelled course picked again as added, as the server counts it", async () => {
+    const el = await sentTable(vi.fn().mockRejectedValueOnce(BREAKFAST_ENDED), [
+      { ...sentOmelette, lunchOffer: recordedLunch },
+      { ...sentCheese, cancelledQuantity: "1" },
+    ]);
+
+    await pickExtras(el, ["p-cheese", "p-bacon"]);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette + Cheese, Bacon"]);
   });
 
   it("takes back only the extra on Don't add them: the sent dish stays and nothing is sent again", async () => {

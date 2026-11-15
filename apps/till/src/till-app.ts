@@ -307,7 +307,7 @@ import {
 } from "./state/bill-payment.js";
 import "./widgets/basket-refresh-dialog.js";
 import "./widgets/late-send-dialog.js";
-import type { LateSendDish } from "./widgets/late-send-dialog.js";
+import type { LateSendDish, LateSendPurpose } from "./widgets/late-send-dialog.js";
 import "./widgets/reprint-language-dialog.js";
 import type { ReprintLanguageDetail } from "./widgets/reprint-language-dialog.js";
 import { dialogOpenUnder } from "./widgets/track-dialog.js";
@@ -3158,7 +3158,7 @@ export class TillApp extends LitElement {
     dishes: readonly LateSendDish[];
     periodNames: readonly [string, ...string[]];
     menuIds: string[];
-    purpose: "send" | "save" | "extras";
+    purpose: LateSendPurpose;
     retry: (lateSend: LateSend) => Promise<void>;
     remove: () => void;
   } | null = null;
@@ -14136,7 +14136,7 @@ export class TillApp extends LitElement {
   #openLateSend(
     listed: readonly OrderLine[],
     periods: readonly [EndedPeriod, ...EndedPeriod[]],
-    purpose: "send" | "save" | "extras",
+    purpose: LateSendPurpose,
     retry: (lateSend: LateSend) => Promise<void>,
     remove: (listed: readonly OrderLine[]) => void,
   ): void {
@@ -14149,7 +14149,7 @@ export class TillApp extends LitElement {
         name: lineProductName(line.product),
         unitName: productUnit(line.product).name,
         soldInEach: soldByTheUnit(line.product),
-        ...(purpose === "extras" && line.extras !== undefined
+        ...((purpose === "extras" || purpose === "extras-save") && line.extras !== undefined
           ? {
               extras: line.extras.map((extra) =>
                 extra.quantity > 1 ? `${extra.name} x${extra.quantity}` : extra.name,
@@ -16376,7 +16376,8 @@ export class TillApp extends LitElement {
     if (asked !== undefined) {
       // Don't add them only abandons the change: the dish was never changed, so Sent is read as it
       // stands.
-      this.#openLateSend(asked.listed, asked.periods, "extras", retry, () => {
+      const purpose = change.waitsForSend === true ? "extras-save" : "extras";
+      this.#openLateSend(asked.listed, asked.periods, purpose, retry, () => {
         change.abandoned?.();
         if (identity() && !left()) void this.#loadTabLines();
       });
@@ -16441,11 +16442,14 @@ export class TillApp extends LitElement {
   }
 
   /** The sent dish a change adds extras to, for the late-send window; undefined when the change sets
-   * no extras, or the dish or its offer is not in the till's lists. */
+   * no extras, or the dish is not in the till's lists, or its offer is neither offered now nor
+   * recorded on a set lunch. */
   #lateExtrasDish(change: ChangeLineDetail): OrderLine | undefined {
     if (change.patch.extras === undefined) return undefined;
     const line = this.tabLines.find((each) => each.lineNo === change.lineNo);
-    const offer = this.#tableOffers.byId.get(change.saleLine?.menuItemId ?? line?.menuItemId ?? "");
+    const offer =
+      this.#tableOffers.byId.get(change.saleLine?.menuItemId ?? line?.menuItemId ?? "") ??
+      line?.lunchOffer;
     if (line === undefined || offer === undefined) return undefined;
     // The line's staff name already names its variant.
     const product = {

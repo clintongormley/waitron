@@ -742,7 +742,7 @@ counter order's, are not checked. Neither is refused `menu_period.not_running` o
 menu-state reads, and marks such a dish; when its 15-second poll has not caught up, from a
 `menu_period.ended` refusal's params (`lateSendRefusalOf`, `apps/till/src/state/late-send.ts`).
 For extras added to a sent dish through Change dish, or a set lunch's choices, it opens the window
-from the refusal alone (`#lateExtrasDish`, `apps/till/src/till-app.ts`). It sends `lateSend` only after the waiter chooses Kitchen agreed in its late-send window
+from the refusal alone (`#lateExtrasDish`, `apps/till/src/till-app.ts`). It sends `lateSend` only after the waiter chooses Station agreed in its late-send window
 (`till-late-send-dialog`; plan D34–D38). Saving an unsent table draft does not check the window:
 the till gates additions and increases, and the server checks the window when the order is sent. A
 period save changes no time and takes no clock revision. Picking and sending remain separate from the department's actual open
