@@ -76,6 +76,7 @@ async function mount(api = stubApi()): Promise<PaymentsScreen> {
     api,
     request: vi.fn() as unknown as PaymentsScreen["request"],
     panels: [],
+    surface: "checks",
   });
   await flush(el);
   return el;

@@ -385,6 +385,8 @@ export class PaymentsScreen extends LitElement {
 
   @property({ attribute: false }) mode?: "demo" | "prepare" | "live";
 
+  @property({ attribute: false }) surface: "readers" | "checks" = "readers";
+
   @property({ attribute: false }) panels: readonly CardProviderPanel[] = CARD_PROVIDER_PANELS;
 
   @state() private providers?: PaymentProviderRow[];
@@ -419,7 +421,7 @@ export class PaymentsScreen extends LitElement {
   readonly #url = new UrlStateController(
     this,
     () => {
-      if (this.#url.read("dashboard") !== "payments") return;
+      if (this.surface !== "readers" || this.#url.read("dashboard") !== "payments") return;
       const id = this.#url.read("reader");
       if (id === this.#addressReader) return;
       const previous = this.#addressReader;
@@ -433,12 +435,14 @@ export class PaymentsScreen extends LitElement {
 
   #clearReaderAddress(): void {
     this.#linkedReader = this.#addressReader = null;
-    if (this.#url.read("dashboard") === "payments") void this.#url.write({ reader: null }, true);
+    if (this.surface === "readers" && this.#url.read("dashboard") === "payments")
+      void this.#url.write({ reader: null }, true);
   }
 
   #openLinkedReader(): void {
     const id = this.#linkedReader;
     if (
+      this.surface !== "readers" ||
       id === null ||
       this.readers === undefined ||
       this.busy ||
@@ -664,7 +668,10 @@ export class PaymentsScreen extends LitElement {
     // So each panel's `displayNameKey` resolves even before its module has registered its strings.
     for (const panel of this.panels) registerCatalogue(panel.strings);
     this.#showError(null);
-    void this.#load();
+    if (this.surface === "readers") {
+      void this.#load();
+      return;
+    }
     void this.#queries
       .watch("listStuckPayments", [], (rows) => {
         this.stuck = rows;
@@ -2670,20 +2677,14 @@ export class PaymentsScreen extends LitElement {
   @state() private backupOpen = false;
 
   override render(): TemplateResult {
+    return html`<h1 tabindex="-1">
+        ${t(this.surface === "checks" ? "payments.checks_title" : "payments.title")}
+      </h1>
+      ${this.surface === "checks" ? this.#renderChecks() : this.#renderReaders()}`;
+  }
+
+  #renderChecks(): TemplateResult {
     return html`
-      <h1 tabindex="-1">${t("payments.title")}</h1>
-      ${
-        this.#simulator()
-          ? html`<p class="banner" data-test="simulator-banner" role="status">
-              ${t("payments.simulator_banner")}
-            </p>`
-          : nothing
-      }
-      ${
-        this.errorKey
-          ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
-          : nothing
-      }
       ${this.#renderStuck()} ${this.#renderBillRecovery()}
       ${this.abandonedRefundError ? html`<p role="alert">${codeMessage(this.abandonedRefundError)}</p>` : nothing}
       ${
@@ -2718,6 +2719,26 @@ export class PaymentsScreen extends LitElement {
         >${t("payments.backup.title")}</wt-button
       >
       ${this.backupOpen ? html`<dashboard-backup-audit .api=${this.api}></dashboard-backup-audit>` : nothing}
+      ${this.#renderPartialDialog()} ${this.#renderResolveDialog()}
+      ${keyed(this.billAction, this.#renderBillDialog())}
+      ${keyed(this.heldAction, this.#renderHeldDialog())}
+    `;
+  }
+
+  #renderReaders(): TemplateResult {
+    return html`
+      ${
+        this.#simulator()
+          ? html`<p class="banner" data-test="simulator-banner" role="status">
+              ${t("payments.simulator_banner")}
+            </p>`
+          : nothing
+      }
+      ${
+        this.errorKey
+          ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
+          : nothing
+      }
       <p>
         <a data-test="configure-providers" href=${CARD_PROVIDERS_PATH}
           >${tRaw("modules.configure_providers")}</a
@@ -2780,9 +2801,6 @@ export class PaymentsScreen extends LitElement {
       </section>
       ${keyed(this.#discoveryVersion, this.#renderDiscovery())}
       ${keyed(this.editor, this.#renderEditor())} ${this.#renderDeleteDialog()}
-      ${this.#renderPartialDialog()} ${this.#renderResolveDialog()}
-      ${keyed(this.billAction, this.#renderBillDialog())}
-      ${keyed(this.heldAction, this.#renderHeldDialog())}
       ${
         this.labelReader === null
           ? nothing

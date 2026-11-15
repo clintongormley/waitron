@@ -44,7 +44,7 @@ const q = (el: PaymentsScreen, selector: string) =>
 async function mount(api = stub(), theme: "light" | "dark" = "light") {
   const result = await mountWidget<PaymentsScreen>(
     "dashboard-payments-screen",
-    { api, panels: [] },
+    { api, panels: [], surface: "checks" },
     theme,
   );
   await vi.waitFor(() => expect(q(result.el, "[data-test=tender-refund-tr-1]")).not.toBeNull());

@@ -45,6 +45,7 @@ it.each(["en", "es"] as const)(
     const { el } = await mountWidget<PaymentsScreen>("dashboard-payments-screen", {
       api,
       panels: [],
+      surface: "checks",
     });
     await vi.waitFor(() =>
       expect(

@@ -153,6 +153,7 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
             ]),
           }),
           panels: PANELS,
+          surface: "checks",
         },
         theme,
       );
@@ -437,6 +438,7 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
           api: stubApi(overrides),
           request: vi.fn() as unknown as PaymentsScreen["request"],
           panels: PANELS,
+          surface: "checks",
           mode: "live",
         },
         theme,
@@ -530,6 +532,7 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
         }),
         request: vi.fn() as unknown as PaymentsScreen["request"],
         panels: PANELS,
+        surface: "checks",
       },
       theme,
     );
@@ -582,6 +585,7 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
           }),
           request: vi.fn() as unknown as PaymentsScreen["request"],
           panels: PANELS,
+          surface: "checks",
         },
         theme,
       );
@@ -611,6 +615,7 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
         }),
         request: vi.fn() as unknown as PaymentsScreen["request"],
         panels: PANELS,
+        surface: "checks",
       },
       theme,
     );

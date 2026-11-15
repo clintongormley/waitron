@@ -1,5 +1,7 @@
 # A1089: refusals with a self-service next step
 
+_2026-11-15, A1529: The card-payment recovery destinations named below moved to **Check card payments** in Reporting. Their existing checks and confirmed-outcome actions stay together. [Move plan](../superpowers/plans/2026-11-15-a1529-card-pages.md)._
+
 You should be able to resolve an operational refusal without paid Waitron support. Start with the
 actual refusal and name an action you can perform. Do not replace a support instruction with a
 retry, reset or restore that the affected screen cannot complete.

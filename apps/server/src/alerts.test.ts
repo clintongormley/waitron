@@ -173,7 +173,7 @@ describe("readOpenAlerts", () => {
     });
   });
 
-  it("links the held-payments alert to Payments, and no other payment check alert", async () => {
+  it("links the held-payments alert to Check card payments, and no other payment check alert", async () => {
     const v = await seedVenueWithTill();
     await raise(v, "payment.reconcile_held", "error", NOW);
     await raise(v, "payment.reconcile_orphan", "error", NOW);
@@ -183,7 +183,7 @@ describe("readOpenAlerts", () => {
     const byCode = new Map(alerts.map((a) => [a.code, a]));
     expect(byCode.get("payment.reconcile_held")).toMatchObject({
       area: "payments",
-      screen: "payments",
+      screen: "check-card-payments",
     });
     expect(byCode.get("payment.reconcile_orphan")!.area).toBe("payments");
     expect("screen" in byCode.get("payment.reconcile_orphan")!).toBe(false);

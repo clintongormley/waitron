@@ -1358,6 +1358,7 @@ const STUCK: StuckPaymentRow[] = [
 ];
 
 describe("card payments stuck after a restart", () => {
+  const mountChecks = (api = stubApi()) => mount(api, { surface: "checks" });
   const section = (el: PaymentsScreen) => q(el, "[data-test=stuck-payments]");
   const result = (el: PaymentsScreen) => q(el, "[data-test=stuck-result]");
 
@@ -1369,14 +1370,16 @@ describe("card payments stuck after a restart", () => {
   }
 
   it("is hidden when no card payment is stuck", async () => {
-    const { el, api } = await mount();
+    const { el, api } = await mountChecks();
 
     expect(api.listStuckPayments).toHaveBeenCalled();
     expect(section(el)).toBeNull();
   });
 
   it("lists each stuck payment's order, device, provider, amount and start time", async () => {
-    const { el } = await mount(stubApi({ listStuckPayments: vi.fn().mockResolvedValue(STUCK) }));
+    const { el } = await mountChecks(
+      stubApi({ listStuckPayments: vi.fn().mockResolvedValue(STUCK) }),
+    );
 
     expect(section(el)!.querySelector("h2")!.textContent).toBe("Card payments needing attention");
     const row = q(el, "[data-test=stuck-pay-1]")!.textContent!;
@@ -1397,7 +1400,9 @@ describe("card payments stuck after a restart", () => {
       { ...STUCK[0]!, deviceName: "Counter 2" },
       { ...STUCK[1]!, source: "readiness_test", deviceId: null, deviceName: null },
     ];
-    const { el } = await mount(stubApi({ listStuckPayments: vi.fn().mockResolvedValue(rows) }));
+    const { el } = await mountChecks(
+      stubApi({ listStuckPayments: vi.fn().mockResolvedValue(rows) }),
+    );
 
     const device = (id: string) =>
       q(el, `[data-test=stuck-${id}] [data-test=stuck-device]`)!.textContent!.trim();
@@ -1407,7 +1412,9 @@ describe("card payments stuck after a restart", () => {
 
   it("reads in Spanish", async () => {
     setLocale("es");
-    const { el } = await mount(stubApi({ listStuckPayments: vi.fn().mockResolvedValue(STUCK) }));
+    const { el } = await mountChecks(
+      stubApi({ listStuckPayments: vi.fn().mockResolvedValue(STUCK) }),
+    );
 
     expect(section(el)!.querySelector("h2")!.textContent).toBe(
       "Cobros con tarjeta pendientes de revisión",
@@ -1418,7 +1425,7 @@ describe("card payments stuck after a restart", () => {
   });
 
   it("asks for confirmation, explaining both outcomes, before asking the provider", async () => {
-    const { el, api } = await mount(
+    const { el, api } = await mountChecks(
       stubApi({ listStuckPayments: vi.fn().mockResolvedValue(STUCK) }),
     );
 
@@ -1439,7 +1446,7 @@ describe("card payments stuck after a restart", () => {
 
   it("puts a provider and an order label holding a replacement pattern and later placeholders into the confirmation as written", async () => {
     const provider = "Pay $& {amount} {order}";
-    const { el } = await mount(
+    const { el } = await mountChecks(
       stubApi({
         listStuckPayments: vi
           .fn()
@@ -1456,7 +1463,7 @@ describe("card payments stuck after a restart", () => {
   });
 
   it("closes the confirmation when its dialog is dismissed", async () => {
-    const { el, api } = await mount(
+    const { el, api } = await mountChecks(
       stubApi({ listStuckPayments: vi.fn().mockResolvedValue(STUCK) }),
     );
     q(el, "[data-test=resolve-pay-1]")!.click();
@@ -1488,7 +1495,7 @@ describe("card payments stuck after a restart", () => {
       .fn()
       .mockResolvedValueOnce(STUCK)
       .mockResolvedValue(STUCK.slice(1));
-    const { el, api } = await mount(
+    const { el, api } = await mountChecks(
       stubApi({ listStuckPayments, resolveStuckPayment: vi.fn().mockResolvedValue(answer) }),
     );
 
@@ -1503,7 +1510,7 @@ describe("card payments stuck after a restart", () => {
   });
 
   it("keeps the result showing after the last stuck payment is cleared", async () => {
-    const { el } = await mount(
+    const { el } = await mountChecks(
       stubApi({
         listStuckPayments: vi.fn().mockResolvedValueOnce(STUCK.slice(0, 1)).mockResolvedValue([]),
       }),
@@ -1551,7 +1558,7 @@ describe("card payments stuck after a restart", () => {
     ],
   ])("shows the curated text for a %o refusal and refreshes the list", async (refusal, text) => {
     const listStuckPayments = vi.fn().mockResolvedValue(STUCK);
-    const { el } = await mount(
+    const { el } = await mountChecks(
       stubApi({
         listStuckPayments,
         resolveStuckPayment: vi.fn().mockRejectedValue(refusal),
@@ -1567,7 +1574,7 @@ describe("card payments stuck after a restart", () => {
 
   it("names a full disk the check met rather than the section's generic failure", async () => {
     expect(codeMessage("storage.disk_full")).not.toBe(codeMessage("server.internal"));
-    const { el } = await mount(
+    const { el } = await mountChecks(
       stubApi({
         listStuckPayments: vi.fn().mockResolvedValue(STUCK),
         resolveStuckPayment: vi.fn().mockRejectedValue({ code: "storage.disk_full" }),
@@ -1582,7 +1589,7 @@ describe("card payments stuck after a restart", () => {
   });
 
   it("keeps the section's generic failure for a check that failed inside the server", async () => {
-    const { el } = await mount(
+    const { el } = await mountChecks(
       stubApi({
         listStuckPayments: vi.fn().mockResolvedValue(STUCK),
         resolveStuckPayment: vi.fn().mockRejectedValue({ code: "server.internal" }),
@@ -1597,7 +1604,7 @@ describe("card payments stuck after a restart", () => {
   });
 
   it("reads a refusal the section has no wording of its own for by its code", async () => {
-    const { el } = await mount(
+    const { el } = await mountChecks(
       stubApi({
         listStuckPayments: vi.fn().mockResolvedValue(STUCK),
         resolveStuckPayment: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
@@ -1611,7 +1618,7 @@ describe("card payments stuck after a restart", () => {
   });
 
   it("treats an answer it does not recognise as the generic failure", async () => {
-    const { el } = await mount(
+    const { el } = await mountChecks(
       stubApi({
         listStuckPayments: vi.fn().mockResolvedValue(STUCK),
         resolveStuckPayment: vi.fn().mockResolvedValue({ outcome: "declined" }),
@@ -1625,7 +1632,7 @@ describe("card payments stuck after a restart", () => {
   });
 
   it("keeps a successful resolve's result when the refresh after it fails", async () => {
-    const { el } = await mount(
+    const { el } = await mountChecks(
       stubApi({
         listStuckPayments: vi
           .fn()
@@ -1644,7 +1651,7 @@ describe("card payments stuck after a restart", () => {
   });
 
   it("shows a failed load of the stuck list as a load failure", async () => {
-    const { el } = await mount(
+    const { el } = await mountChecks(
       stubApi({ listStuckPayments: vi.fn().mockRejectedValue({ code: "server.internal" }) }),
     );
 
@@ -1658,7 +1665,7 @@ describe("card payments stuck after a restart", () => {
     const pending = new Promise<StuckPaymentResolution>((resolve) => {
       release = resolve;
     });
-    const { el, api } = await mount(
+    const { el, api } = await mountChecks(
       stubApi({
         listStuckPayments: vi.fn().mockResolvedValue(STUCK),
         resolveStuckPayment: vi.fn().mockReturnValueOnce(pending),
@@ -1684,7 +1691,9 @@ describe("card payments stuck after a restart", () => {
   });
 
   it("names each check button after its order", async () => {
-    const { el } = await mount(stubApi({ listStuckPayments: vi.fn().mockResolvedValue(STUCK) }));
+    const { el } = await mountChecks(
+      stubApi({ listStuckPayments: vi.fn().mockResolvedValue(STUCK) }),
+    );
 
     expect(q(el, "[data-test=resolve-pay-1]")!.getAttribute("aria-label")).toBe(
       "Check with the card provider: Order 12 · Terrace 3",
@@ -2247,7 +2256,7 @@ it("keeps readers unknown while pending, then shows a successful empty list", as
 const receivedLocale = currentLocale();
 afterEach(() => setLocale(receivedLocale));
 
-it("opens the backup comparison from Card payments", async () => {
+it("opens the backup comparison from Check card payments", async () => {
   const api = stubApi({
     getBackupAudit: vi.fn().mockResolvedValue({
       day: "2026-07-01",
@@ -2268,6 +2277,7 @@ it("opens the backup comparison from Card payments", async () => {
   const { el } = await mountWidget<PaymentsScreen>("dashboard-payments-screen", {
     api,
     panels: [],
+    surface: "checks",
   });
   const button = [...el.shadowRoot!.querySelectorAll("wt-button")].find(
     (node) => node.textContent?.trim() === t("payments.backup.title"),

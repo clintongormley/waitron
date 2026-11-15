@@ -139,6 +139,15 @@ async function mount(
     listAlerts: async () => ({ visible: false, alerts: [] }),
     getDiskStop: async () => ({ stopped: false, deleted: null }),
     getSalesOverview: () => new Promise(() => undefined),
+    listPaymentProviders: async () => [],
+    listReaders: async () => [],
+    listReaderHolders: async () => [],
+    listStuckPayments: async () => [],
+    listStuckBillPayments: async () => [],
+    listStuckTenderRefunds: async () => [],
+    listStuckBillRefunds: async () => [],
+    listAbandonedRefunds: async () => [],
+    listHeldPayments: async () => [],
   } as unknown as DashboardApi;
   const { el } = await mountWidget<DashboardApp>(
     "dashboard-app",
@@ -294,4 +303,23 @@ it("finds the four hardware pages under Hardware", async () => {
   expect(el.shadowRoot!.querySelector("[data-test=nav-group-hardware]")!.textContent!.trim()).toBe(
     "Hardware",
   );
+});
+
+it("finds payment checks under Reporting while Card readers still opens Hardware", async () => {
+  const el = await mount({ permissions: ["hardware.manage"], modules: [] });
+  await search(el, "Check card payments");
+  const checks = el.shadowRoot!.querySelector<HTMLElement>(
+    "#nav-group-panel-reports [data-test=nav-check-card-payments]",
+  )!;
+  expect(checks.checkVisibility()).toBe(true);
+  await userEvent.click(checks);
+  await vi.waitFor(() => expect(location.pathname).toBe("/manage/check-card-payments"));
+  await search(el, "Card readers");
+  const readers = destination(el, "payments:readers")!;
+  expect(readers.checkVisibility()).toBe(true);
+  await userEvent.click(readers);
+  await vi.waitFor(() => expect(location.pathname).toBe("/manage/payments"));
+  expect(
+    el.shadowRoot!.querySelector("#nav-group-panel-hardware [data-test=nav-payments]"),
+  ).not.toBeNull();
 });

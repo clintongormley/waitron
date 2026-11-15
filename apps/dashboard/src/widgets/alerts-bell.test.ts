@@ -222,31 +222,33 @@ describe("dashboard-alerts-bell", () => {
     expect(popup(el).matches(":popover-open")).toBe(false);
   });
 
-  it("offers both Mark handled and Go to Card payments for the held-payments alert", async () => {
+  it("offers both Mark handled and Go to Check card payments for the held-payments alert", async () => {
     setLocale("en-GB");
     const held: AlertView = {
       ...event("7"),
       code: "payment.reconcile_held",
       params: { count: 2, payments: [] },
-      screen: "payments",
+      screen: "check-card-payments",
     };
     const { el } = await mountWidget<AlertsBell>("dashboard-alerts-bell", {
       alerts: [held],
-      canOpen: (screen) => screen === "payments",
+      canOpen: (screen) => screen === "check-card-payments",
     });
     expect(q(el, "[data-test=alert-handle]")).not.toBeNull();
     const goTo = q(el, "[data-test=alert-go-to]")!;
-    expect(goTo.textContent!.trim()).toBe("Go to Card payments");
+    expect(goTo.textContent!.trim()).toBe("Go to Check card payments");
     const emitted = vi.fn();
     el.addEventListener("wt-alert-go-to", emitted);
     el.open();
     await userEvent.click(goTo);
-    expect(emitted.mock.calls[0]![0].detail).toEqual({ screen: "payments" });
+    expect(emitted.mock.calls[0]![0].detail).toEqual({ screen: "check-card-payments" });
     setLocale("es-ES");
     await el.updateComplete;
     el.requestUpdate();
     await el.updateComplete;
-    expect(q(el, "[data-test=alert-go-to]")!.textContent!.trim()).toBe("Ir a Pagos con tarjeta");
+    expect(q(el, "[data-test=alert-go-to]")!.textContent!.trim()).toBe(
+      "Ir a Comprobar pagos con tarjeta",
+    );
   });
 
   it("offers only Mark handled for an event that names no screen", async () => {

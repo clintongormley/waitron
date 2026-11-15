@@ -7,7 +7,8 @@ El enlace de Pagos con tarjeta muestra todos los proveedores, incluidos los que 
 
 Elige **Configurar** en el menú de la fila del proveedor, introduce sus credenciales y pulsa **Guardar**.
 Usa **Cancelar** para descartar los cambios. Un proveedor configurado puede rechazar un pago;
-consulta el estado de los lectores y los pagos pendientes en **Pagos con tarjeta**.
+consulta el estado de los lectores en **Pagos con tarjeta**. Para revisar pagos pendientes, abre
+**Comprobar pagos con tarjeta** en Informes.
 
 Los filtros **Habilitado**, **Deshabilitado** y **Todos** muestran el estado de un módulo por separado
 de su configuración. **Añadir un módulo** muestra los módulos deshabilitados en la misma lista.
@@ -59,7 +60,7 @@ La descarga de tus datos personales conserva tus fichajes en `clock-entries.json
 
 ## Revisar devoluciones de pedidos abandonados {#abandoned-refunds}
 
-Si un cliente se marcha después de un cobro de SumUp, abre **Pagos con tarjeta** y revisa **Devoluciones de pedidos abandonados**.
+Si un cliente se marcha después de un cobro de SumUp, abre **Comprobar pagos con tarjeta** en Informes y revisa **Devoluciones de pedidos abandonados**.
 Waitron intenta una devolución completa cuando SumUp identifica el pago como tuyo, el importe coincide y no existe ninguna devolución.
 Un pago cobrado en el lector fuera de Waitron queda para que lo revises.
 

@@ -61,7 +61,7 @@ machines** shows the current payment state and successful refunds, even if they 
 **Download for accountant (XLSX)** includes a separate sheet of these payments, selected by
 calendar date rather than business-day cutover.
 
-In **Card payments**, open **Backup-machine comparison** to check a calendar day in the venue’s
+In **Check card payments** under Reporting, open **SumUp comparison** to check a calendar day in the venue’s
 time zone. A match links one same-account entry to one SumUp charge with the same amount,
 including tips, within five minutes. Check ambiguous or unmatched charges in SumUp before making
 any correction. The comparison sends no refunds. An incomplete day waits for the remaining daily
@@ -457,7 +457,7 @@ for one.
 ## Switch bills {#bill-switcher}
 
 If a payment was partly returned before its invoice was recorded, do not charge again.
-In **Card payments**, check the charged, refunded and still-held amounts. Choose **Retain on this
+In **Check card payments** under Reporting, check the charged, refunded and still-held amounts. Choose **Retain on this
 bill** to apply the remaining money to the bill. Check the bill amount, any excess kept as a tip,
 and what staff still need to collect before confirming. For example, from €100 charged and €40
 returned, you can keep €60 on the bill and collect only its remainder. Excess money can be kept
@@ -547,9 +547,9 @@ If a payment is recorded as not taken, you can try it again. If its result is un
 **Check again** to continue the same payment before taking another. If it was not recorded, this
 may charge the card or record the cash payment.
 If a payment stays pending, or the card was charged but the payment was not recorded, choose
-**Card payments / sign in**. Do not charge an already charged card again. Sign in there to check or
+**Check card payments / sign in**. Do not charge an already charged card again. Sign in there to check or
 record the provider’s confirmed outcome. Reopen the bill payment after it is recorded to see the
-result. If Card payments says **Payment recorded. The rest is still due.**, reopen the bill and
+result. If Check card payments says **Payment recorded. The rest is still due.**, reopen the bill and
 collect only its outstanding balance.
 
 If the reader took a different amount, compare the requested and taken figures in the warning.

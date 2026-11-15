@@ -950,7 +950,7 @@ describe("refusals that name a way out the product already has", () => {
     (lang, locale, elsewhere, noSecondCharge) => {
       const text = alertMessage("payment.bill_settle_failed", { amount: "12.00" }, lang);
       for (const label of [
-        "nav.payments",
+        "nav.check_card_payments",
         "payments.bill.heading",
         "payments.bill.check",
       ] as const) {

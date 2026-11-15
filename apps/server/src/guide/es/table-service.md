@@ -65,7 +65,7 @@ muestra el estado actual del pago y los reembolsos completados, aunque hayan cam
 **Descargar para tu gestor (XLSX)** incluye una hoja separada de estos pagos, seleccionados por
 fecha del calendario y no por el cambio de día de negocio.
 
-En **Pagos con tarjeta**, abre **Comparación del datáfono de reserva** para consultar un día natural
+En **Comprobar pagos con tarjeta**, dentro de Informes, abre **Comparación de SumUp** para consultar un día natural
 en la zona horaria del local. Una coincidencia vincula una anotación de la misma cuenta con un
 cargo de SumUp del mismo importe, incluida la propina, con un margen de cinco minutos. Comprueba
 los cargos ambiguos o sin coincidencia en SumUp antes de corregir nada. La comparación no envía
@@ -487,7 +487,7 @@ dará, y deja escribirlos cuando eliges nombres personalizados; **Añadir mesa u
 ## Cambiar de cuenta {#bill-switcher}
 
 Si se devolvió parte de un pago antes de registrar su factura, no vuelvas a cobrar.
-En **Pagos con tarjeta**, comprueba los importes cobrados, devueltos y aún retenidos. Elige
+En **Comprobar pagos con tarjeta**, dentro de Informes, comprueba los importes cobrados, devueltos y aún retenidos. Elige
 **Conservar en esta cuenta** para aplicar el dinero restante a la cuenta. Antes de confirmar,
 comprueba el importe aplicado, el exceso conservado como propina y lo que aún tienes que cobrar.
 Por ejemplo, de 100 € cobrados y 40 € devueltos, puedes conservar 60 € en la cuenta y cobrar solo
@@ -584,9 +584,9 @@ Si un cobro consta como no cobrado, puedes volver a cobrarlo. Si su resultado no
 elige **Comprobar de nuevo** para continuar ese mismo cobro antes de cobrar otro. Si no estaba
 registrado, puede cobrar la tarjeta o registrar el efectivo.
 Si un pago sigue pendiente, o la tarjeta ya se ha cobrado pero el pago no se ha registrado, elige
-**Pagos con tarjeta / acceder**. No vuelvas a cobrar una tarjeta ya cobrada. Inicia sesión para
+**Comprobar pagos con tarjeta / acceder**. No vuelvas a cobrar una tarjeta ya cobrada. Inicia sesión para
 consultar o registrar el resultado confirmado por el proveedor. Vuelve a abrir el cobro de la
-cuenta cuando esté registrado para ver el resultado. Si Pagos con tarjeta indica **Pago registrado.
+cuenta cuando esté registrado para ver el resultado. Si Comprobar pagos con tarjeta indica **Pago registrado.
 Queda parte de la cuenta por cobrar.**, vuelve a abrir la cuenta y cobra solo su saldo pendiente.
 
 Si el lector ha cobrado otro importe, compara en el aviso lo que se pidió y lo que se cobró.

@@ -1313,17 +1313,14 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 - **A1529. Hardware screens brought into line (owner, 2026-11-14).**
   The owner reviewed mock-ups of the menu and profile screens and approved them. No migration.
-  The remaining readers-only page and Reporting move follow the [Claude-reviewed, watcher-cleared plan](superpowers/plans/2026-11-15-a1529-card-pages.md).
+  The remaining readers-only page follows the [Claude-reviewed, watcher-cleared plan](superpowers/plans/2026-11-15-a1529-card-pages.md).
   Remaining work:
   - **The Card payments page is only about the card readers:** the readers table, with Add reader
     at the top; the demo-mode notice stays. The Providers list and the "Configure card providers"
     link come off the page. Add reader first asks which provider, only when more than one is set
     up, and that step links to the provider's setup (today in the card-providers module's
     settings, `CARD_PROVIDERS_PATH`).
-  - **"Backup-machine comparison" moves to Reporting** under a plain name, such as "Check card
-    payments against SumUp". It compares each day's recorded card payments with SumUp's own
-    charges and lists those that do not match (`apps/dashboard/src/widgets/backup-audit.ts`); it
-    is a check, not a setting.
+
 
 - **A1534. The device editor and the devices table made plain, and one profile per kitchen
   screen (owner, 2026-11-14).** Follows A1529, whose profile editor tabs this changes, and A1535's
