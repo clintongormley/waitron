@@ -5,8 +5,10 @@ import { customElement, property, state } from "lit/decorators.js";
 import { isPlainWebAddress } from "@waitron/shared";
 import {
   baseStyles,
+  bottomMessage,
   pageTitleStyles,
   draftScopeFor,
+  FormFeedback,
   focusFirstInvalid,
   leaveCoordinatorFor,
   saveActionState,
@@ -366,7 +368,7 @@ export class BackupScreen extends LitElement {
   @state() private configurationConfirm = "";
   @state() private configurationPassphraseVisible = false;
   @state() private configurationConfirmVisible = false;
-  @state() private configurationAttempted = false;
+  readonly #configurationFeedback = new FormFeedback(this);
   @state() private configurationRequestFailed = false;
   @state() private exportingConfiguration = false;
 
@@ -1170,9 +1172,9 @@ export class BackupScreen extends LitElement {
     if (this.exportingConfiguration) return;
     this.#disarmTurnOff();
     this.configurationRequestFailed = false;
-    this.configurationAttempted = true;
+    this.#configurationFeedback.press();
     if (this.#configurationFieldError() !== null) {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.#configurationFeedback.focus(this.shadowRoot!);
       return;
     }
     this.exportingConfiguration = true;
@@ -1191,7 +1193,7 @@ export class BackupScreen extends LitElement {
       if (this.configurationPassphrase === submitted.passphrase) this.configurationPassphrase = "";
       if (this.configurationConfirm === submitted.confirm) this.configurationConfirm = "";
       scope?.commit({ passphrase: "", confirm: "" });
-      this.configurationAttempted = false;
+      this.#configurationFeedback.reset();
     } catch {
       if (generation === this.#generation) this.configurationRequestFailed = true;
     } finally {
@@ -1229,11 +1231,13 @@ export class BackupScreen extends LitElement {
   }
 
   #renderConfigurationExport(): TemplateResult {
-    const fieldMessage = this.configurationAttempted ? this.#configurationFieldError() : null;
-    const bottom = [
-      ...(this.configurationRequestFailed ? [t("backup.configuration.request_error")] : []),
-      ...(fieldMessage === null ? [] : [t("form.fix_fields")]),
-    ].join(" ");
+    const fieldMessage = this.#configurationFeedback.attempted
+      ? this.#configurationFieldError()
+      : null;
+    const bottom = bottomMessage(
+      this.configurationRequestFailed ? t("backup.configuration.request_error") : null,
+      fieldMessage === null ? null : t("form.fix_fields"),
+    );
     return html`
       <section class="card" aria-labelledby="configuration-export-title">
         <h2 id="configuration-export-title">${t("backup.configuration.title")}</h2>
