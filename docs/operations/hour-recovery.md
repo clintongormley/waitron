@@ -14,11 +14,14 @@ Open **Open recovery** beside the till refusal, or open `/manage/recovery/fiscal
 box over HTTPS. Use the current live box's server key. A dashboard sign-in, backup password or
 key from an older backup does not replace it. Enter the key and choose **Check conflict** to inspect
 the affected invoice and identity. Confirm that the old box is offline and no parallel recovery is
-underway, then choose **Compare clocks**.
+underway, then choose **Compare clocks**. If the box cannot check its time over the internet, the
+page then shows the box's time and this device's: check that both are right, then choose **Confirm
+the time**.
 
 The procedure compares clocks and waits for an available UTC minute using the same admission rules
 as recovery. Keep the page open during its countdown. Its automatic checks run no faster than once
-every five seconds; when the wait ends, compare clocks again. Review the selected identity and
+every five seconds; when the wait ends, compare clocks again. If the box cannot check its time over
+the internet, the page asks you to confirm the time again: press **Confirm the time**. Review the selected identity and
 choose **Switch identity** explicitly. No countdown or background task activates it for you.
 
 The request limit is shared by everyone using this box's recovery route: 60 admitted requests
@@ -111,7 +114,7 @@ page goes back to choosing the backup and sends nothing"). Once the series are m
 read.
 
 There is no "last hour" question (`recovery-hour.browser.test.ts`, "asks no last-hour question and
-offers no clock confirmation"). Enter the server key, tick both statements and "These details are correct.", in any order, and
+offers no clock confirmation while the internet time service vouches for the clock"). Enter the server key, tick both statements and "These details are correct.", in any order, and
 press **Proceed**. The invoice series is the code at the start of every invoice number; recovery
 creates new ones so the box never repeats the old box's. Until **Proceed** the page sends nothing
 to the box; while the button reads **Proceed** it says "When you press Proceed, Waitron creates new invoice series for this box, so
@@ -119,9 +122,11 @@ its invoice numbers never repeat the old box's." with an example of an invoice s
 file's "the key, both statements and the details tick send nothing until Proceed, and the page says what Proceed
 does"). After **Proceed** the box asks its internet time service whether it is synchronised and
 compares its own clock with the clock of the device showing the page (AEAT's time is not read for
-it), and when the time service is synchronised or the two clocks agree the page asks the box for
-the invoice series, all by itself; nobody types a time (`recovery-hour.browser.test.ts`, "decodes the printed key and sends
-independent recovery declarations before selecting"). Changing or clearing the key, either
+it), and when the time service is synchronised the page asks the box for the invoice series, all by
+itself (`recovery-hour.browser.test.ts`, "decodes the printed key and sends independent recovery
+declarations before selecting"); when only the two clocks agree it shows both times and asks for the series once the person
+presses **Confirm the time**; nobody types a time (the same file's "when only this
+device agrees, Confirm the time compares again and selects with confirmed"). Changing or clearing the key, either
 statement or the details tick stops it, and putting it back sends nothing until **Proceed** is
 pressed again (the same file's "an edit to a declaration stops the wait, and putting it back sends
 nothing until Proceed" and "an edit to the details tick stops the wait, and putting it back sends
@@ -138,7 +143,7 @@ page shown on the box's own screen runs on the box's clock, so it does not count
 clock (`apps/server/src/request-from-box.test.ts`;
 `packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "a browser on the box itself
 is no second clock"). The box's clock must be within 30 seconds of every other clock it reads, ahead
-or behind, and nothing confirms past it (`packages/fiscal-verifactu/src/hour-clock.test.ts`, "a
+or behind (`packages/fiscal-verifactu/src/hour-clock.test.ts`, "a
 name needs a second clock within 30 seconds of the box").
 
 The new series are named from the box's clock: five symbols for the UTC minute. The box also reads
@@ -186,9 +191,12 @@ button is gone"). What the page shows when it cannot go ahead, and what it asks 
   **Both times are wrong** say to correct this device's time and reconnect to the box, and **This
   device** sets the box's clock. It does not
   retry by itself; press **Compare the clocks again**, which
-  carries on to the invoice series once the clocks agree (`recovery-hour.browser.test.ts`, "a clock
-  refusal shows each clock's reading and no countdown, and waits for Compare the clocks again" and
-  "Compare the clocks again after Proceed carries on to the series once the clocks agree").
+  carries on to the invoice series once the clocks agree, except that when the box cannot check its
+  time over the internet it shows both times and waits for **Confirm the time** (`recovery-hour.browser.test.ts`, "a clock
+  refusal shows each clock's reading and no countdown, and waits for Compare the clocks again",
+  "Compare the clocks again after Proceed carries on to the series once the clocks agree" and
+  "Compare the clocks again with no internet time, once the clocks agree, offers Confirm the time and
+  sends no select until it is pressed").
 - **The minute this box would use is already taken**: the page says "This invoice series code has already been used. Waitron creates a
   new one by itself when the countdown ends." and "New invoice series in 03:00", counting down in minutes and
   seconds to the next free minute with no button to press; it checks with the box again by itself and keeps the sentence up through the box's ordinary wait that follows (`recovery-hour.browser.test.ts`,

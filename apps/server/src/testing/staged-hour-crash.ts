@@ -134,6 +134,7 @@ export async function stagedHourCrash(
           binding: initial,
           authority,
           comparisonId: "comparison",
+          confirmed: true,
         });
       });
       if (selected.status !== "selected") throw new Error("initial hour not selected");

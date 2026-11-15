@@ -4302,7 +4302,13 @@ after the box's internet time service says it is synchronised
 internet clock at the box's own time"; `packages/fiscal-verifactu/src/hour-clock.test.ts`, "a
 synchronised time service carries on past a browser five minutes out"), or a second clock on
 another machine agrees within 30 seconds (the same file's "a name needs a second clock within 30
-seconds of the box"). AEAT's time is not read for it. A minute a name in the history it can read already holds is not taken: a
+seconds of the box"). AEAT's time is not read for it. Another machine's clock counts only once the
+person proved on that page confirms both times (**Confirm the time**) or sets the box's clock from
+it (**This device**); otherwise `select` is refused `sif.allocation_invalid`, reason
+`confirmation_required` (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a device's agreeing
+time selects only once the person confirms it"; owner, 2026-11-13: "we should never just accept
+another device's match automatically. instead, we should always ask for confirmation, and that
+confirmation should be protected"). A minute a name in the history it can read already holds is not taken: a
 restore's first choice is then refused with how long until the next free minute is taken and when
 to check again (`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "D1: a name at
 the settle target in the surviving database"; `packages/fiscal-verifactu/src/hour-selection.test.ts`,
@@ -5916,7 +5922,8 @@ unverifiable under the other environment.
 identity and chain; there is no operator chain-reset path. A setup, restore or promotion names
 its installation from the box's clock — five symbols for the UTC minute — only after the box's
 internet time service says it is synchronised, or a clock on another machine agrees within 30
-seconds (no confirmation); AEAT's time is not read for it. The minute is not taken
+seconds and the person on that page confirms both times or sets the box's clock from that machine;
+AEAT's time is not read for it. The minute is not taken
 when a name in the history the box reads already holds it: the module's own record of the names it
 has chosen, earlier abandoned attempts of the same setup, a restored or surviving database and a
 backup's record of names. A later name or a later record is never a reason to refuse or to pick a
@@ -6348,12 +6355,19 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 
 ### An installation name's minute: waits, refusals and repeats
 
-- **Restore and promotion start a new chain under a new installation name.** Setup/restore/promotion
-  use five symbols for the box's UTC minute, after the box's internet time service says it is
-  synchronised, or another machine's clock agrees within 30 seconds (no confirmation); a device that
-  has just set the box's clock from that page is that machine (A1482 plan, cleared by the watcher
-  2026-11-12 18:33; not owner-approved); AEAT's time is not read for it (owner, 2026-11-11: "Instead
-  we rely on NTP"; 2026-11-13: "b", AEAT no longer counts); a minute whose name is already in a
+- **Restore and promotion start a new chain under a new installation name.**
+  Setup/restore/promotion/conflict switch use five symbols for the box's UTC minute, after a second
+  clock agrees within 30 seconds. The box's internet time service saying it is synchronised carries
+  on by itself, and AEAT's time is not read for it (owner, 2026-11-11: "Instead we rely on NTP";
+  2026-11-13: "b", AEAT no longer counts); another machine's clock counts only once the person
+  proved on that page (the setup password on setup, the backup's node recovery key on restore, a
+  `node.manage` sign-in on promotion, the box's current recovery key on the conflict switch) confirms
+  both times or sets the box's clock from that machine (owner, 2026-11-13: "we should never just
+  accept another device's match automatically. instead, we should always ask for confirmation, and
+  that confirmation should be protected"; This device and the list of proofs follow the watcher's
+  09:49 proposal, which the owner agreed to at 09:52: "i agree with the rest", except the conflict
+  switch, which it gave as an administrator sign-in and whose page checks the box's current
+  recovery key, a choice that is not owner-approved); a minute whose name is already in a
   history the box reads is not taken (the box waits for the next free one if it starts within 150
   seconds, and otherwise refuses with when it can; the setup and restore pages count that down and
   check again by themselves; owner, 2026-10-30, A1207), and no other name or record refuses or moves
@@ -6364,8 +6378,9 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   Only preproduction throwaway skips
   second-clock/history checks; refuse it outside preproduction. Restore takes one source;
   working-time chain continues from its head. Guards:
-  hour-selection/hour-clock/hour-clock-time-service/minute-selection-unknown-name suites (the
-  last weaker than its name) and `packages/workforce/src/restore-continuation.test.ts`.
+  hour-selection/hour-clock/hour-clock-time-service/hour-setup-clock/minute-selection-unknown-name suites (the
+  last weaker than its name) and `packages/workforce/src/restore-continuation.test.ts`, weaker
+  than the rule: the server checks the `confirmed` flag, not that the page showed both times.
 
 
 ## A module's settings are one document in the shared settings table

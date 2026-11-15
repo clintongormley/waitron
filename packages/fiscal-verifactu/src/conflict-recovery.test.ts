@@ -141,10 +141,15 @@ beforeEach(async () => {
     eventId: "first",
   };
   await withOperationAuthority(binding, "administrator", async (authority) => {
-    await setup.select({ binding, authority, comparisonId: "clock" });
+    await setup.select({ binding, authority, comparisonId: "clock", confirmed: true });
     instant = Date.parse("2026-10-16T11:40:00Z");
     monotonic = 120_000;
-    const selected = await setup.select({ binding, authority, comparisonId: "clock" });
+    const selected = await setup.select({
+      binding,
+      authority,
+      comparisonId: "clock",
+      confirmed: true,
+    });
     if (selected.status !== "selected") throw new Error("setup did not settle");
     await setup.prepare({ binding, authority, input: selected.input }, (prepared) =>
       withTransaction(suite.db, (tx) => activatePreparedModuleAllocation(tx, node, prepared)),
@@ -221,12 +226,22 @@ async function attempt(event = "conflict-switch-1", ref: RecoveryConflictRef = c
     }),
   });
   const input = await withOperationAuthority(binding, operator, async (authority) => {
-    const waiting = await preparation.select({ binding, authority, comparisonId: "clock" });
+    const waiting = await preparation.select({
+      binding,
+      authority,
+      comparisonId: "clock",
+      confirmed: true,
+    });
     expect(waiting).toMatchObject({ status: "waiting", remainingMs: 120_000 });
     if (waiting.status !== "waiting") throw new Error("did not wait");
     instant = waiting.targetMs;
     monotonic += waiting.remainingMs;
-    const selected = await preparation.select({ binding, authority, comparisonId: "clock" });
+    const selected = await preparation.select({
+      binding,
+      authority,
+      comparisonId: "clock",
+      confirmed: true,
+    });
     if (selected.status !== "selected") throw new Error("recovery did not settle");
     return selected.input;
   });

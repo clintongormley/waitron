@@ -232,7 +232,7 @@ async function selectName(app: Hono): Promise<{ input: unknown; identity: string
     action: "compare-clocks",
     browser: { challengeId: challenge.id, instantMs: Date.now() },
   });
-  const selected = await prepare({ action: "select", comparisonId: compared.id });
+  const selected = await prepare({ action: "select", comparisonId: compared.id, confirmed: true });
   expect(selected.status).toBe("selected");
   return selected;
 }
@@ -538,7 +538,7 @@ describe("activating on a real placed copy", () => {
       binding,
       credentials,
       other,
-      { action: "select", comparisonId: compared.id },
+      { action: "select", comparisonId: compared.id, confirmed: true },
       client,
     )) as { input: unknown };
 
@@ -1310,6 +1310,7 @@ describe("a lost reply, then a retry or a reboot", () => {
     const fresh = await asked({
       action: "select",
       comparisonId: (compared.body as { id?: string }).id,
+      confirmed: true,
     });
 
     expect(fresh).toMatchObject({

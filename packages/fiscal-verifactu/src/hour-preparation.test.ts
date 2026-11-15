@@ -113,7 +113,7 @@ function fixture() {
     },
     selectOnce() {
       return withOperationAuthority(binding, "administrator", (authority) =>
-        preparation.select({ binding, authority, comparisonId: "comparison" }),
+        preparation.select({ binding, authority, comparisonId: "comparison", confirmed: true }),
       );
     },
     async select() {
@@ -343,7 +343,7 @@ it("a recovery-key principal cannot spend an initial-setup hour", async () => {
     },
     async (authority) => {
       await expect(
-        f.preparation.select({ binding, authority, comparisonId: "comparison" }),
+        f.preparation.select({ binding, authority, comparisonId: "comparison", confirmed: true }),
       ).rejects.toMatchObject(refuse("reauthentication_required"));
     },
   );
@@ -370,6 +370,7 @@ it.each(["restore", "promote", "reserve"])(
           binding: other,
           authority,
           comparisonId: "comparison",
+          confirmed: true,
         }),
       ).rejects.toMatchObject(refuse("event_mismatch"));
       await expect(async () =>
@@ -384,7 +385,7 @@ it("expired authority cannot record a selection or inspect one during preparatio
   const f = fixture();
   const authority = await withOperationAuthority(binding, "administrator", async (value) => value);
   await expect(
-    f.preparation.select({ binding, authority, comparisonId: "comparison" }),
+    f.preparation.select({ binding, authority, comparisonId: "comparison", confirmed: true }),
   ).rejects.toMatchObject(refuse("reauthentication_required"));
   await expect(async () =>
     f.preparation.prepare({ binding, authority, input: null }, async () => undefined),
@@ -415,7 +416,12 @@ it("the general selector can resume the same authenticated recovery-key principa
   };
   await withOperationAuthority(recovery, principal, async (authority) => {
     const run = () =>
-      f.selection.select({ binding: recovery, authority, comparisonId: "comparison" });
+      f.selection.select({
+        binding: recovery,
+        authority,
+        comparisonId: "comparison",
+        confirmed: true,
+      });
     const pending = await run();
     expect(f.passWait(pending)).toBe(true);
     const first = await run();
@@ -494,7 +500,7 @@ it.each(["", "   "])(
     const f = fixture();
     await withOperationAuthority(binding, operatorId, async (authority) => {
       await expect(
-        f.preparation.select({ binding, authority, comparisonId: "comparison" }),
+        f.preparation.select({ binding, authority, comparisonId: "comparison", confirmed: true }),
       ).rejects.toMatchObject(refuse("reauthentication_required"));
     });
     expect(f.revisions).toEqual([]);
@@ -534,7 +540,7 @@ it("the hosted adapter keeps the host scope separate from clock metadata", async
   });
   const run = () =>
     withOperationAuthority(binding, "administrator", (authority) =>
-      preparation.select({ binding, authority, comparisonId: "comparison" }),
+      preparation.select({ binding, authority, comparisonId: "comparison", confirmed: true }),
     );
   expect(f.passWait(await run())).toBe(true);
   const selected = await run();

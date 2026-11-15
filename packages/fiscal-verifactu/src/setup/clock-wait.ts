@@ -7,6 +7,7 @@ import { detailRow } from "./check-venue.js";
 /** What a page explains instead of a name: design §6.5, "Every wait explains itself". */
 export type ClockProblem =
   | { kind: "second-clock" }
+  | { kind: "confirm" }
   | { kind: "disagreement" }
   | { kind: "later" | "in-use" }
   | { kind: "next-minute"; remainingMs: number; recheckInMs: number };
@@ -44,6 +45,8 @@ interface SharedClockWords {
   deviceLater: string;
   deviceFailed: string;
   laterAfterSet: string;
+  confirmWhy: string;
+  confirm: string;
 }
 
 type ClockRowWords = Pick<ClockWords, "serverTime" | "thisDevice" | "unavailable">;
@@ -93,6 +96,9 @@ export const clockWaitStrings = {
       "The server could not set its clock from this device. Check this device's date and time, then press This device again.",
     laterAfterSet:
       "The invoice series cannot be created: the server's time is now earlier than a time already used for this venue's invoice series, so this device's time is probably wrong. Correct the time on this device, reconnect to the server and choose which time is correct again.",
+    confirmWhy:
+      "The server could not check its time over the internet. Check that both times below are right, then press Confirm the time.",
+    confirm: "Confirm the time",
   },
   es: {
     whyWait: "Esperamos a confirmar la hora para que ninguna serie de facturas se repita.",
@@ -125,6 +131,9 @@ export const clockWaitStrings = {
       "El servidor no ha podido ponerse en hora con este dispositivo. Comprueba la fecha y la hora de este dispositivo y vuelve a pulsar Este dispositivo.",
     laterAfterSet:
       "No se pueden crear las series de facturas: la hora del servidor es ahora anterior a una hora que ya se usó para las series de facturas de este local, así que probablemente la hora de este dispositivo está mal. Corrige la hora de este dispositivo, vuelve a conectarte al servidor y elige de nuevo qué hora es la correcta.",
+    confirmWhy:
+      "El servidor no ha podido comprobar su hora por internet. Comprueba que las dos horas de abajo son correctas y pulsa Confirmar la hora.",
+    confirm: "Confirmar la hora",
   },
 } satisfies Record<"en" | "es", SharedClockWords>;
 
@@ -177,6 +186,7 @@ export function clockProblem(error: unknown): ClockProblem | undefined {
     return undefined;
   const { reason, remainingMs, recheckInMs } = error.params;
   if (reason === "second_clock_missing") return { kind: "second-clock" };
+  if (reason === "confirmation_required") return { kind: "confirm" };
   if (reason === "clock_disagreement") return { kind: "disagreement" };
   if (reason === "minute_not_later") return { kind: "later" };
   if (reason !== "minute_in_use") return undefined;
@@ -272,6 +282,12 @@ export class ClockWait<Selected extends { status: "selected" }> {
   #device: DeviceClock | undefined;
   /** The box's clock was set from this device while this page was open. */
   #setHere = false;
+  /**
+   * Confirm the time was pressed. Only `show()` with nothing clears it, which a page calls when the
+   * person starts again (Compare again, Proceed, a changed detail); a new page starts without it.
+   * Until then the automatic re-checks after a press keep sending `confirmed: true`.
+   */
+  #pressed = false;
 
   constructor(host: ReactiveControllerHost, recheck: () => void) {
     this.#host = host;
@@ -307,6 +323,7 @@ export class ClockWait<Selected extends { status: "selected" }> {
     this.#problem = problem;
     this.#result = result;
     this.#answered = false;
+    if (problem === undefined && result === undefined) this.#pressed = false;
     if (this.#device?.status !== "set" || (problem === undefined && result === undefined))
       this.#device = undefined;
     this.#host.requestUpdate();
@@ -380,6 +397,29 @@ export class ClockWait<Selected extends { status: "selected" }> {
     return this.#device?.status !== "refused";
   }
 
+  /** A press of Confirm the time: compares the clocks again, with a fresh challenge. */
+  async confirm(send: (proposal: unknown) => Promise<unknown>): Promise<ClockComparison> {
+    const comparison = await readClocks(send);
+    this.#pressed = true;
+    return comparison;
+  }
+
+  /**
+   * What a page sends to name the series from a comparison with a second clock: with the internet's
+   * time among the clocks, the comparison alone; once the person has confirmed — Confirm the time,
+   * or This device set the box's clock — with `confirmed: true`. Otherwise undefined, after showing
+   * the disagreement or the times to confirm.
+   */
+  toSelect(comparison: ClockComparison): { comparisonId: string; confirmed?: true } | undefined {
+    const { clock } = comparison;
+    if (clock.disagreement) return void this.show({ kind: "disagreement" });
+    if (clock.usable.some((r) => r.source === "internet")) return { comparisonId: comparison.id };
+    if (this.#pressed || this.#device?.status === "set")
+      return { comparisonId: comparison.id, confirmed: true };
+    this.show({ kind: "confirm" });
+    return undefined;
+  }
+
   renderWait(words: ClockWords) {
     return renderWait(words, this.#countdown, this.#minuteTaken);
   }
@@ -390,6 +430,7 @@ export class ClockWait<Selected extends { status: "selected" }> {
     locale: "en" | "es",
     timeZone: string,
     setClock?: () => void,
+    confirm?: { press: () => void; busy: boolean },
   ) {
     const device = this.#device;
     const problem = renderClockProblem(
@@ -407,6 +448,7 @@ export class ClockWait<Selected extends { status: "selected" }> {
           sending: device?.status === "sending",
           line: device?.status === "refused" ? deviceRefusal(words, device.reason) : undefined,
         },
+        confirm,
       },
       { locale, timeZone },
     );
@@ -429,6 +471,8 @@ export function renderClockProblem(
     answer: () => void;
     /** This device's answer: offered when the page can set the box's clock (`set`). */
     device?: { set: (() => void) | undefined; sending: boolean; line: string | undefined };
+    /** Confirm the time: drawn when the page offers it (the setup page's Proceed confirms instead). */
+    confirm?: { press: () => void; busy: boolean };
   },
   place?: { locale: "en" | "es"; timeZone: string },
 ) {
@@ -452,6 +496,31 @@ export function renderClockProblem(
           ${onBox} ${sentence(words.secondClockDo)} ${sentence(words.secondClockEnds)}
         </section>`;
   }
+  if (problem?.kind === "confirm")
+    return html`<section data-test="clock-confirm">
+      <p role="status">${words.confirmWhy}</p>
+      ${
+        clock && place
+          ? html`<dl class="details" data-test="clock-times">
+              ${renderClockRows(clock, words, place.locale, place.timeZone)}
+            </dl>`
+          : nothing
+      }
+      ${
+        choice.confirm
+          ? html`<div class="choices">
+              <wt-button
+                data-test="confirm-time"
+                variant="primary"
+                ?disabled=${choice.confirm.busy}
+                ?loading=${choice.confirm.busy}
+                @click=${choice.confirm.press}
+                >${words.confirm}</wt-button
+              >
+            </div>`
+          : nothing
+      }
+    </section>`;
   if (problem?.kind === "disagreement") {
     const device = choice.device;
     const choices = [
@@ -514,8 +583,12 @@ export function renderClockRows(
   words: ClockRowWords,
   locale: "en" | "es",
   timeZone: string,
+  named = false,
 ) {
   const minutes = dateTimeFormat(locale, timeZone, { dateStyle: "long", timeStyle: "short" });
+  const zoneName = dateTimeFormat(locale, timeZone, { timeZoneName: "short" });
+  const zone = (ms: number) =>
+    named ? ` ${zoneName.formatToParts(ms).find((p) => p.type === "timeZoneName")?.value}` : "";
   const box = clock.usable.find((r) => r.source === "box");
   const boxMinute = box && minutes.format(middle(box));
   const format = clock.usable.some((r) => r !== box && minutes.format(middle(r)) === boxMinute)
@@ -523,7 +596,7 @@ export function renderClockRows(
     : minutes;
   const at = (source: HourClockDecision["usable"][number]["source"]) => {
     const reading = clock.usable.find((r) => r.source === source);
-    return reading ? format.format(middle(reading)) : words.unavailable;
+    return reading ? format.format(middle(reading)) + zone(middle(reading)) : words.unavailable;
   };
   return html`${detailRow(words.serverTime, at("box"))}${detailRow(words.thisDevice, at("browser"))}`;
 }

@@ -80,6 +80,15 @@ it.each([
   },
 );
 
+it("a device's agreeing time waiting for the person's confirmation asks for it", () => {
+  expect(
+    clockProblem({
+      code: "sif.allocation_invalid",
+      params: { reason: "confirmation_required" },
+    }),
+  ).toEqual({ kind: "confirm" });
+});
+
 it("a minute in use counts down when the box says how long", () => {
   const read = clockProblem({
     code: "sif.allocation_invalid",
@@ -806,5 +815,162 @@ describe("This device sets the server's clock", () => {
     ).toBe(
       "No se pueden crear las series de facturas: la hora del servidor es ahora anterior a una hora que ya se usó para las series de facturas de este local, así que probablemente la hora de este dispositivo está mal. Corrige la hora de este dispositivo, vuelve a conectarte al servidor y elige de nuevo qué hora es la correcta.",
     );
+  });
+});
+
+describe("Confirm the time", () => {
+  const host: ReactiveControllerHost = {
+    addController: () => undefined,
+    removeController: () => undefined,
+    requestUpdate: () => undefined,
+    updateComplete: Promise.resolve(true),
+  };
+  const at = Date.parse("2026-10-18T12:30:00Z");
+  const reading = (source: string, ms: number) => ({ source, lowerMs: ms, upperMs: ms });
+  const decision = (
+    usable: { source: string; lowerMs: number; upperMs: number }[],
+    disagreement = false,
+  ) =>
+    ({
+      usable,
+      unavailable: [],
+      secondClock: true,
+      disagreement,
+      releaseBlocked: false,
+      rangeBlocked: false,
+    }) as unknown as Parameters<typeof renderClockRows>[0];
+  const agreeing = decision([reading("box", at), reading("browser", at + 5_000)]);
+  const differing = decision([reading("box", at), reading("browser", at + 5 * 60_000)], true);
+  const withInternet = decision([
+    reading("box", at),
+    reading("browser", at + 5_000),
+    reading("internet", at + 1_000),
+  ]);
+  const wordsIn = (locale: "en" | "es"): ClockWords => ({
+    ...clockWaitStrings[locale],
+    secondClockDo: "",
+    secondClockEnds: "",
+  });
+  /** A box that numbers its challenges and comparisons, and answers each comparison with `clock`. */
+  const box = (clock: () => unknown) => {
+    const sent: unknown[] = [];
+    let challenges = 0,
+      comparisons = 0;
+    const send = vi.fn(async (proposal: unknown) => {
+      sent.push(proposal);
+      const action = (proposal as { action: string }).action;
+      if (action === "clock-challenge") return { id: `challenge-${++challenges}` };
+      if (action === "compare-clocks") return { id: `comparison-${++comparisons}`, clock: clock() };
+      return { status: "set" };
+    });
+    return { sent, send };
+  };
+  const draw = (
+    wait: ClockWait<{ status: "selected" }>,
+    clock: Parameters<typeof renderClockRows>[0],
+    confirm?: { press: () => void; busy: boolean },
+    locale: "en" | "es" = "en",
+  ) => {
+    const target = document.createElement("div");
+    render(
+      wait.renderProblem(wordsIn(locale), clock, locale, "Europe/Madrid", undefined, confirm),
+      target,
+    );
+    return target;
+  };
+
+  it("agreement with no internet clock shows both times and Confirm the time, and sends nothing until pressed", () => {
+    const wait = new ClockWait<{ status: "selected" }>(host, () => undefined);
+    expect(wait.toSelect({ id: "comparison-1", clock: agreeing })).toBeUndefined();
+    expect(wait.problem).toEqual({ kind: "confirm" });
+    const press = vi.fn();
+    const target = draw(wait, agreeing, { press, busy: false });
+    const section = target.querySelector("[data-test=clock-confirm]")!;
+    expect(text(section.querySelector("[role=status]"))).toBe(
+      "The server could not check its time over the internet. Check that both times below are right, then press Confirm the time.",
+    );
+    expect(
+      [...section.querySelectorAll("[data-test=clock-times] > div")].map((row) => [
+        text(row.querySelector("dt")),
+        text(row.querySelector("dd")),
+      ]),
+    ).toEqual([
+      ["Server time", "18 October 2026 at 14:30:00"],
+      ["This device", "18 October 2026 at 14:30:05"],
+    ]);
+    expect(text(section.querySelector("[data-test=confirm-time]"))).toBe("Confirm the time");
+    expect(press).not.toHaveBeenCalled();
+    section.querySelector<HTMLElement>("[data-test=confirm-time]")!.click();
+    expect(press).toHaveBeenCalledOnce();
+    const es = draw(wait, agreeing, { press, busy: false }, "es");
+    expect(text(es.querySelector("[role=status]"))).toBe(
+      "El servidor no ha podido comprobar su hora por internet. Comprueba que las dos horas de abajo son correctas y pulsa Confirmar la hora.",
+    );
+    expect(text(es.querySelector("[data-test=confirm-time]"))).toBe("Confirmar la hora");
+    expect(draw(wait, agreeing).querySelector("[data-test=confirm-time]")).toBeNull();
+  });
+
+  it("the press compares again with a fresh challenge and sends confirmed with the new comparison", async () => {
+    const wait = new ClockWait<{ status: "selected" }>(host, () => undefined);
+    wait.toSelect({ id: "comparison-0", clock: agreeing });
+    const { sent, send } = box(() => agreeing);
+    const comparison = await wait.confirm(send);
+    expect(sent.map((p) => (p as { action: string }).action)).toEqual([
+      "clock-challenge",
+      "compare-clocks",
+    ]);
+    expect((sent[1] as { browser: { challengeId: string } }).browser.challengeId).toBe(
+      "challenge-1",
+    );
+    expect(wait.toSelect(comparison)).toEqual({ comparisonId: "comparison-1", confirmed: true });
+    wait.show();
+    expect(wait.toSelect(comparison)).toBeUndefined();
+  });
+
+  it("a press 31 seconds after the first comparison still sends confirmed, with the new one", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(at);
+      const wait = new ClockWait<{ status: "selected" }>(host, () => undefined);
+      const { sent, send } = box(() => agreeing);
+      const first = await wait.confirm(send);
+      wait.show();
+      expect(wait.toSelect(first)).toBeUndefined();
+      vi.setSystemTime(at + 31_000);
+      const second = await wait.confirm(send);
+      expect((sent[3] as { browser: { instantMs: number } }).browser.instantMs).toBe(at + 31_000);
+      expect(wait.toSelect(second)).toEqual({ comparisonId: "comparison-2", confirmed: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a press whose fresh comparison disagrees shows the disagreement and sends nothing", async () => {
+    const wait = new ClockWait<{ status: "selected" }>(host, () => undefined);
+    wait.toSelect({ id: "comparison-0", clock: agreeing });
+    const comparison = await wait.confirm(box(() => differing).send);
+    expect(wait.toSelect(comparison)).toBeUndefined();
+    expect(wait.problem).toEqual({ kind: "disagreement" });
+  });
+
+  it("with the internet's time among the clocks it selects by itself and never sends confirmed", async () => {
+    const wait = new ClockWait<{ status: "selected" }>(host, () => undefined);
+    expect(wait.toSelect({ id: "comparison-1", clock: withInternet })).toEqual({
+      comparisonId: "comparison-1",
+    });
+    expect(wait.problem).toBeUndefined();
+    const pressed = await wait.confirm(box(() => withInternet).send);
+    expect(wait.toSelect(pressed)).toEqual({ comparisonId: "comparison-1" });
+  });
+
+  it("after This device sets the clock, the next comparison sends confirmed with no press", async () => {
+    const wait = new ClockWait<{ status: "selected" }>(host, () => undefined);
+    wait.show({ kind: "disagreement" });
+    const { send } = box(() => agreeing);
+    expect(await wait.setFromDevice(send)).toBe(true);
+    expect(wait.toSelect({ id: "comparison-2", clock: agreeing })).toEqual({
+      comparisonId: "comparison-2",
+      confirmed: true,
+    });
   });
 });

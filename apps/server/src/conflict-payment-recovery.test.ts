@@ -87,11 +87,21 @@ vi.mock("@waitron/provisioning/testing/allocated-venue", () => ({
       }),
     });
     return withOperationAuthority(binding, administratorId, async (authority) => {
-      const first = await engine.select({ binding, authority, comparisonId: "initial-clock" });
+      const first = await engine.select({
+        binding,
+        authority,
+        comparisonId: "initial-clock",
+        confirmed: true,
+      });
       if (first.status !== "waiting") throw new Error("initial minute did not wait");
       time.monotonic += first.remainingMs;
       vi.setSystemTime(Date.now() + first.remainingMs);
-      const selected = await engine.select({ binding, authority, comparisonId: "initial-clock" });
+      const selected = await engine.select({
+        binding,
+        authority,
+        comparisonId: "initial-clock",
+        confirmed: true,
+      });
       if (selected.status !== "selected") throw new Error("initial minute did not select");
       await stampDeployment(deps.db, "preproduction");
       return applyVenue(actions, {
@@ -242,7 +252,7 @@ it("finalises an already captured bill once after the actual administrator switc
   };
   const waiting = await request({
     kind: "prepare",
-    proposal: { action: "select", comparisonId: await compare() },
+    proposal: { action: "select", comparisonId: await compare(), confirmed: true },
   });
   expect(waiting).toMatchObject({
     kind: "prepared",
@@ -252,7 +262,7 @@ it("finalises an already captured bill once after the actual administrator switc
   vi.setSystemTime(Date.now() + 120_000);
   const selected = await request({
     kind: "prepare",
-    proposal: { action: "select", comparisonId: await compare() },
+    proposal: { action: "select", comparisonId: await compare(), confirmed: true },
   });
   if (
     selected.kind !== "prepared" ||

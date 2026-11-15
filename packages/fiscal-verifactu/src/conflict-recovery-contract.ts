@@ -14,7 +14,7 @@ export type ConflictProposal =
   | { action: "clock-challenge" }
   | { action: "compare-clocks"; browser: SetupBrowserClockSample | null }
   | { action: "preview" }
-  | { action: "select"; comparisonId: string };
+  | { action: "select"; comparisonId: string; confirmed?: true };
 export type ConflictCommand =
   | { kind: "status" }
   | { kind: "prepare"; proposal: ConflictProposal }
@@ -136,7 +136,10 @@ function validRef(value: unknown): value is ConflictRef {
 function proposal(value: unknown): value is ConflictProposal {
   if (exact(value, ["action"]))
     return value.action === "clock-challenge" || value.action === "preview";
-  if (exact(value, ["action", "comparisonId"]))
+  if (
+    exact(value, ["action", "comparisonId"]) ||
+    (exact(value, ["action", "comparisonId", "confirmed"]) && value.confirmed === true)
+  )
     return value.action === "select" && text(value.comparisonId);
   return (
     exact(value, ["action", "browser"]) &&

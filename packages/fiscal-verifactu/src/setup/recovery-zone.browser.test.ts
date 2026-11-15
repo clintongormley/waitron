@@ -100,6 +100,11 @@ for (const [zoneIndex, savedZone] of ["Not/A_Zone", " Europe/Madrid", "Europe/Ma
               };
             await vi.waitFor(() => expect(proceed().disabled).toBe(false));
             await userEvent.click(proceed());
+            const confirm = () =>
+              el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-time]");
+            await vi.waitFor(() => expect(confirm()).not.toBeNull());
+            await userEvent.click(confirm()!);
+            await vi.waitFor(() => expect(confirm()).toBeNull());
             await vi.waitFor(() =>
               expect(el.shadowRoot!.querySelector("[data-clock=read]")).not.toBeNull(),
             );

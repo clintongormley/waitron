@@ -63,7 +63,7 @@ export function applyWithFirstSetup(stateDir: string): typeof applyMinuteVenue {
     });
     const held = await selectPastWaits(clock, () =>
       withOperationAuthority(binding, initialAdministratorId, (authority) =>
-        preparation.select({ binding, authority, comparisonId: "comparison" }),
+        preparation.select({ binding, authority, comparisonId: "comparison", confirmed: true }),
       ),
     );
     if (held.status !== "selected") throw new Error(`first setup answered ${held.status}`);

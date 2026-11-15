@@ -27,14 +27,19 @@ box's own screen runs on the box's clock, so it does not count as the second clo
 the second clock"). While the time service is synchronised it carries on, whatever the device's clock reads
 (`packages/fiscal-verifactu/src/hour-clock.test.ts`, "a synchronised time service carries on past a
 browser five minutes out"). Otherwise the box's clock must be within 30 seconds of the device's,
-ahead or behind, and there is no confirmation to get past it (the same file's "a name needs a
+ahead or behind (the same file's "a name needs a
 second clock within 30 seconds of the box"). There is no "last hour" question: the page has no such field
-(`packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts`, "asks no last-hour question and offers no clock confirmation").
+(`packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts`, "asks no last-hour question and offers no clock confirmation while the internet time service vouches for the clock").
 
 Tick "These details are correct.", then press **Proceed**; once
 the clocks agree, the page asks the box for the invoice series
 (`first-hour.browser.test.ts`, "with the clocks agreeing, ticking the details and pressing Proceed
-makes the series"). The invoice series is the code at the start of every invoice number. The tick
+makes the series"). When the box's time service is not synchronised and only this device's clock
+agrees, the page shows the server's time and this device's above **Proceed**, with "The server could
+not check its time over the internet. Check that both times below are right before you press
+Proceed."; check both, because pressing **Proceed** confirms them (the same file's "when only this
+device agrees, the step shows both times above Proceed, and Proceed confirms them"). The invoice
+series is the code at the start of every invoice number. The tick
 alone asks for nothing (the same file's "with the tick and the clocks agreeing, nothing asks for the
 series until Proceed"), and **Proceed** stays disabled until the tick is given (the same file's
 "Proceed is quiet and disabled until the details are ticked"). While the button reads **Proceed**,
@@ -72,7 +77,11 @@ made the page shows "We've created these invoice series:", explains the recovery
 
 After **Proceed** the page carries on by itself through its waits. It stops for a press only when it
 shows **Compare the clocks again** (clocks that differ, a box time before this release, a date out of
-range, or a box clock earlier than a time it already used) or **Try again** (a failed request). The box waits 90 to 150 seconds before it takes the
+range, or a box clock earlier than a time it already used), **Try again** (a failed request) or both
+times to confirm with **Proceed** (`first-hour.browser.test.ts`, "when %s before Proceed, and only
+this device agrees at Proceed, Proceed shows the times to confirm and sends nothing; the next Proceed
+confirms them" and "a wait after a Proceed with the internet's time that ends with only this device
+agreeing shows both times and stops for Proceed"). The box waits 90 to 150 seconds before it takes the
 name, and the page counts down with no button; keep it open
 (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "setup checked at %s waits until %s";
 `first-hour.browser.test.ts`, "explains a waiting setup with a countdown that goes back to the
@@ -86,9 +95,12 @@ with no press or tick"). If no second clock answers at zero, or the box answers 
 page carries on the same way (the same file's "a reload's wait whose second clock is missing at
 zero makes the series by itself once a clock answers" and "a reload's wait that the box answers at
 zero with a fresh wait makes the series by itself at that wait's zero"). If it stops for anything
-else, such as clocks that differ, it needs the tick and **Proceed** (the same file's "a reload's
+else, such as clocks that differ or only this device's clock agreeing with the box's (both times
+then show above **Proceed**), it needs the tick and **Proceed** (the same file's "a reload's
 wait that stops at zero on clocks that differ needs the tick and Proceed, even after Compare the
-clocks again waits for a second clock"). Changing the tick, or the page being taken off the screen,
+clocks again waits for a second clock" and "a wait the box recorded before the page loaded that ends
+with only this device agreeing shows the times with Proceed and sends nothing; Proceed then confirms
+them"). Changing the tick, or the page being taken off the screen,
 ends that carrying-on for good (the same file's "a reload's wait ends for good once the tick
 changes, so nothing more is asked without Proceed", "a reload's wait ends when the page is taken
 off the screen" and "a recorded wait the load's preview shows only after the tick changed does not
@@ -109,9 +121,12 @@ recorded"). What the page shows when it cannot go ahead, and what it asks for:
   server** and **Both times are wrong** say to correct this device's time and reconnect to the box,
   and **This device** sets the box's clock.
   It does not retry by itself; press **Compare the clocks again**, which after **Proceed** carries on
-  to the series once the clocks agree (`first-hour.browser.test.ts`, "a clock refusal shows each
-  clock's reading and no countdown, and waits for Compare the clocks again" and "Compare the clocks again
-  after Proceed carries on to the series once the clocks agree").
+  to the series once the clocks agree, except that when the box cannot check its time over the
+  internet it shows both times above **Proceed** and waits for **Proceed** again (`first-hour.browser.test.ts`, "a clock refusal shows each
+  clock's reading and no countdown, and waits for Compare the clocks again", "Compare the clocks again
+  after Proceed carries on to the series once the clocks agree" and "Compare the clocks again with no
+  internet time, once the clocks agree, shows both times with Proceed and sends nothing until
+  Proceed").
 - **The minute this box would use is already taken**: the page says "This invoice series code has
   already been used. Waitron creates a new one by itself when the countdown ends." and "New invoice series in
   03:00", counting down in minutes and seconds to the next free minute with no button

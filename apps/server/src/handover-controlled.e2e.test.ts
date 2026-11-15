@@ -537,7 +537,7 @@ function applyWithFirstSetup(stateDir: string): typeof applyVenue {
     });
     const held = await selectPastWaits(clock, () =>
       withOperationAuthority(binding, initialAdministratorId, (authority) =>
-        preparation.select({ binding, authority, comparisonId: "comparison" }),
+        preparation.select({ binding, authority, comparisonId: "comparison", confirmed: true }),
       ),
     );
     if (held.status !== "selected") throw new Error(`first setup answered ${held.status}`);
@@ -1166,7 +1166,7 @@ async function switchOn(boxes: Boxes) {
     softwareId: string;
     identity: string;
     input: unknown;
-  }>({ action: "select", comparisonId: compared.id });
+  }>({ action: "select", comparisonId: compared.id, confirmed: true });
   expect(selected.status).toBe("selected");
   const activate = () =>
     post<unknown>("activate", {

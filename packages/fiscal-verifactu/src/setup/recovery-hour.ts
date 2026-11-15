@@ -391,21 +391,23 @@ export class RecoveryHourEntry extends LitElement {
       (cause.code === "promotion.break_glass_invalid" ||
         (record(cause.params) && cause.params.field === "nodeRecoverySecret"));
   }
-  async #run(automatic = false): Promise<void> {
+  /** `press`: Confirm the time, whose step stays up until the answer replaces it. */
+  async #run(automatic = false, press = false): Promise<void> {
     if (!this.#confirmed || this.busy || this.#wait.result?.status === "selected") return;
     const { call, current } = this.#begin();
     const context = this.context;
     // An automatic re-check leaves the current explanation up until its answer replaces it.
-    if (!automatic) this.#wait.show();
+    if (!automatic && !press) this.#wait.show();
     this.#notify();
     try {
-      const comparison = await readClocks(call);
+      const comparison = press ? await this.#wait.confirm(call) : await readClocks(call);
       this.comparison = comparison;
       const { clock } = comparison;
       if (clock.releaseBlocked || clock.rangeBlocked) return this.#wait.show();
       if (!clock.secondClock) return this.#wait.waitForSecondClock();
-      if (clock.disagreement) return this.#wait.show({ kind: "disagreement" });
-      const selected = await call({ action: "select", comparisonId: comparison.id });
+      const select = this.#wait.toSelect(comparison);
+      if (!select) return;
+      const selected = await call({ action: "select", ...select });
       if (!record(selected)) throw new Error("invalid selection");
       if (selected.status === "selected") {
         const selectedBinding = selected.binding;
@@ -493,7 +495,7 @@ export class RecoveryHourEntry extends LitElement {
                 problem === "disagreement" ||
                 problem === "later"
               ? "compareAgain"
-              : this.#confirmed && this.#wait.waiting
+              : problem === "confirm" || (this.#confirmed && this.#wait.waiting)
                 ? undefined
                 : "proceed");
     const enabled = !sending && (action !== "proceed" || this.#canCompare);
@@ -596,6 +598,7 @@ export class RecoveryHourEntry extends LitElement {
           this.locale,
           displayZone,
           () => void this.#setClock(),
+          { press: () => void this.#run(false, true), busy: this.busy },
         )}
         ${this.#wait.counting ? this.#wait.renderWait(words) : nothing}
         ${action === "proceed" && !sending ? html`<p data-test="series-line">${words.seriesLine}</p>` : nothing}

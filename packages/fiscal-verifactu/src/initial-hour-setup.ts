@@ -253,7 +253,10 @@ export function createHourInitialSetup(
       contextBinding(context);
       if (
         !record(proposal) ||
-        !exact(proposal, ["comparisonId"]) ||
+        !(
+          exact(proposal, ["comparisonId"]) ||
+          (exact(proposal, ["comparisonId", "confirmed"]) && proposal.confirmed === true)
+        ) ||
         typeof proposal.comparisonId !== "string"
       )
         return refuse("malformed_allocation");
@@ -265,6 +268,7 @@ export function createHourInitialSetup(
             binding: context.binding,
             authority,
             comparisonId: proposal.comparisonId as string,
+            ...(proposal.confirmed === true ? { confirmed: true } : {}),
           }),
       );
       const value =

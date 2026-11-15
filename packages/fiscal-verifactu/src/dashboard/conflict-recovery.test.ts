@@ -273,6 +273,170 @@ it("does not select or activate when the second clock disagrees", async () => {
   expect(screen.shadowRoot!.querySelector("[data-action=switch]")).toBeNull();
 });
 
+/** A box answering as with no internet time: each comparison named afresh, then `after` (agrees by default). */
+function deviceOnly(after?: { disagreement: boolean }) {
+  let compared = 0;
+  const comparedAt = new Map<string, number>();
+  return async (body: ConflictRequest) => {
+    if (body.command.kind === "status")
+      return { kind: "status", active: [active], event: { kind: "none" } };
+    if (body.command.kind === "prepare" && body.command.proposal.action === "compare-clocks") {
+      const id = `comparison-${++compared}`;
+      comparedAt.set(id, Date.now());
+      return {
+        kind: "prepared",
+        value: {
+          id,
+          clock: {
+            usable: [
+              { source: "box", lowerMs: Date.now(), upperMs: Date.now() },
+              { source: "browser", lowerMs: Date.now(), upperMs: Date.now() },
+            ],
+            unavailable: [{ source: "internet", result: "unavailable", reason: "offline" }],
+            secondClock: true,
+            disagreement: compared > 1 && after !== undefined ? after.disagreement : false,
+            releaseBlocked: false,
+            rangeBlocked: false,
+          },
+        },
+      };
+    }
+    if (body.command.kind === "prepare" && body.command.proposal.action === "select") {
+      const { comparisonId, confirmed } = body.command.proposal;
+      if (confirmed !== true)
+        throw { code: "sif.allocation_invalid", params: { reason: "confirmation_required" } };
+      if (Date.now() - comparedAt.get(comparisonId)! > 30_000)
+        throw { code: "sif.allocation_invalid", params: { reason: "clock_stale" } };
+    }
+    return prepared(body);
+  };
+}
+const proposals = (calls: ConflictRequest[]) =>
+  calls.flatMap((c) => (c.command.kind === "prepare" ? [c.command.proposal] : []));
+
+it("with only this device agreeing, shows both times and selects with confirmed only after Confirm the time", async () => {
+  const { screen, calls } = await mount(deviceOnly());
+  await inspect(screen);
+  await compare(screen);
+  await vi.waitFor(() =>
+    expect(
+      screen.shadowRoot!.querySelector("[data-action=confirm-time]")?.textContent?.trim(),
+    ).toBe("Confirm the time"),
+  );
+  expect(screen.shadowRoot!.querySelector("[data-confirm-time]")?.textContent).toContain(
+    "The server could not check its time over the internet. Check that both times below are right, then press Confirm the time.",
+  );
+  expect(screen.shadowRoot!.querySelectorAll("[data-confirm-time] dt")).toHaveLength(2);
+  const zone = new Intl.DateTimeFormat("en-GB", { timeZoneName: "short" })
+    .formatToParts(Date.now())
+    .find((part) => part.type === "timeZoneName")!.value;
+  for (const time of screen.shadowRoot!.querySelectorAll("[data-confirm-time] dd"))
+    expect(time.textContent?.trim()).toContain(` ${zone}`);
+  expect(proposals(calls).map((p) => p.action)).toEqual(["clock-challenge", "compare-clocks"]);
+  await click(screen, "confirm-time");
+  await vi.waitFor(() =>
+    expect(screen.shadowRoot!.querySelector("[data-identity]")?.textContent).toContain("0CNQR"),
+  );
+  expect(proposals(calls).slice(2)).toEqual([
+    { action: "clock-challenge" },
+    expect.objectContaining({ action: "compare-clocks" }),
+    { action: "select", comparisonId: "comparison-2", confirmed: true },
+  ]);
+  expect(screen.shadowRoot!.querySelector("[data-confirm-time]")).toBeNull();
+});
+
+it("a press whose fresh comparison disagrees shows the disagreement and sends no select", async () => {
+  const { screen, calls } = await mount(deviceOnly({ disagreement: true }));
+  await inspect(screen);
+  await compare(screen);
+  await vi.waitFor(() =>
+    expect(screen.shadowRoot!.querySelector("[data-action=confirm-time]")).not.toBeNull(),
+  );
+  await click(screen, "confirm-time");
+  await vi.waitFor(() =>
+    expect(screen.shadowRoot!.querySelector("wt-form-actions")!.shadowRoot!.textContent).toContain(
+      "The clocks do not agree",
+    ),
+  );
+  expect(proposals(calls).filter((p) => p.action === "select")).toEqual([]);
+  expect(screen.shadowRoot!.querySelector("[data-confirm-time]")).toBeNull();
+  expect(screen.shadowRoot!.querySelector("[data-action=switch]")).toBeNull();
+});
+
+it("a press 31 seconds after the first comparison compares again and is accepted", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const { screen, calls } = await mount(deviceOnly());
+  await inspect(screen);
+  await compare(screen);
+  await vi.waitFor(() =>
+    expect(screen.shadowRoot!.querySelector("[data-action=confirm-time]")).not.toBeNull(),
+  );
+  vi.setSystemTime(Date.now() + 31_000);
+  await click(screen, "confirm-time");
+  await vi.waitFor(() =>
+    expect(screen.shadowRoot!.querySelector("[data-identity]")?.textContent).toContain("0CNQR"),
+  );
+  expect(proposals(calls).at(-1)).toEqual({
+    action: "select",
+    comparisonId: "comparison-2",
+    confirmed: true,
+  });
+});
+
+it.each([
+  { code: "promotion.break_glass_invalid", reason: undefined, then: "inspect" },
+  { code: "sif.allocation_invalid", reason: "old_machine_active", then: "compare" },
+  { code: "sif.allocation_invalid", reason: "parallel_recovery", then: "compare" },
+  { code: "sif.allocation_invalid", reason: "uncertain_prior_activation", then: "inspect" },
+])(
+  "a Confirm the time press refused with $code/$reason drops the times shown for confirmation",
+  async ({ code, reason, then }) => {
+    const box = deviceOnly();
+    let challenges = 0;
+    const { screen } = await mount(async (body) => {
+      if (
+        body.command.kind === "prepare" &&
+        body.command.proposal.action === "clock-challenge" &&
+        ++challenges === 2
+      )
+        throw { code, ...(reason === undefined ? {} : { params: { reason } }) };
+      return box(body);
+    });
+    await inspect(screen);
+    await compare(screen);
+    await vi.waitFor(() =>
+      expect(screen.shadowRoot!.querySelector("[data-confirm-time]")).not.toBeNull(),
+    );
+    await click(screen, "confirm-time");
+    await vi.waitFor(() =>
+      expect(
+        (screen.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string })
+          .error,
+      ).not.toBe(""),
+    );
+    expect(screen.shadowRoot!.querySelector("[data-confirm-time]")).toBeNull();
+    expect(screen.shadowRoot!.querySelector("[data-action=confirm-time]")).toBeNull();
+    expect(screen.shadowRoot!.querySelector(`[data-action=${then}]`)).not.toBeNull();
+  },
+);
+
+it("with the internet's time among the clocks, selects by itself and never sends confirmed", async () => {
+  const { screen, calls } = await mount(async (body) =>
+    body.command.kind === "status"
+      ? { kind: "status", active: [active], event: { kind: "none" } }
+      : prepared(body),
+  );
+  await inspect(screen);
+  await compare(screen);
+  await vi.waitFor(() =>
+    expect(screen.shadowRoot!.querySelector("[data-identity]")).not.toBeNull(),
+  );
+  expect(proposals(calls).filter((p) => p.action === "select")).toEqual([
+    { action: "select", comparisonId: "comparison-1" },
+  ]);
+  expect(screen.shadowRoot!.querySelector("[data-action=confirm-time]")).toBeNull();
+});
+
 it("waits five seconds between automatic minute checks and never activates from a countdown", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   const { screen, calls } = await mount(async (body) => {

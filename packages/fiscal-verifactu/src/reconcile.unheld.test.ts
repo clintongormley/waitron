@@ -336,11 +336,16 @@ it("observes a freshly allocated identity before its first local invoice", async
       targetNodeId: node.nodeId,
     };
     await withOperationAuthority(binding, "administrator", async (authority) => {
-      await setup.select({ binding, authority, comparisonId: "clock" });
+      await setup.select({ binding, authority, comparisonId: "clock", confirmed: true });
       instant += 120_000;
       monotonic += 120_000;
       vi.setSystemTime(instant);
-      const selected = await setup.select({ binding, authority, comparisonId: "clock" });
+      const selected = await setup.select({
+        binding,
+        authority,
+        comparisonId: "clock",
+        confirmed: true,
+      });
       if (selected.status !== "selected") throw new Error("setup did not settle");
       await setup.prepare({ binding, authority, input: selected.input }, (prepared) =>
         withTransaction(suite.db, (tx) => activatePreparedModuleAllocation(tx, node, prepared)),

@@ -73,7 +73,7 @@ function fixture() {
     async select() {
       const run = () =>
         withOperationAuthority(binding, "admin", (authority) =>
-          preparation.select({ binding, authority, comparisonId: "comparison" }),
+          preparation.select({ binding, authority, comparisonId: "comparison", confirmed: true }),
         );
       const waiting = await run();
       if (waiting.status !== "waiting") throw new Error("setup did not wait");
@@ -175,7 +175,7 @@ it("a stored resume entry carries its minute to the new owner, so no other minut
   f.storeResumption("owner-2");
   const stored = f.history.length;
   const again = await withOperationAuthority(binding, "admin", (authority) =>
-    f.preparation.select({ binding, authority, comparisonId: "comparison" }),
+    f.preparation.select({ binding, authority, comparisonId: "comparison", confirmed: true }),
   );
   expect(again).toMatchObject({ status: "selected", identity: "0CNNW" });
   expect(f.history).toHaveLength(stored);

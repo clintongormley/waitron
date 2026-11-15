@@ -402,9 +402,12 @@ development box (`config.devMode`) takes it too (`apps/server/src/setup-api.thro
 and the terminal's, uses the owned flow: five symbols for the UTC minute, after the box's internet
 time service says it is synchronised (the terminal's only way;
 `packages/provisioning/src/first-setup-command.test.ts`, "names the series with no browser when the
-box's time service is synchronised") or a second clock on another machine
-agrees within 30 seconds (`packages/fiscal-verifactu/src/hour-clock.test.ts`, "a
-name needs a second clock within 30 seconds of the box"), not a minute a name in the history it
+box's time service is synchronised"), or, on the setup page, a second clock on another machine
+agrees within 30 seconds
+(`packages/fiscal-verifactu/src/hour-clock.test.ts`, "a name needs a second clock within 30 seconds
+of the box") and the person confirms both times by pressing **Proceed** or sets the box's clock
+with **This device** (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a device's agreeing
+time selects only once the person confirms it"), not a minute a name in the history it
 can read already holds (`packages/provisioning/src/first-setup-runtime.test.ts`, "the hosted
 selector refuses a minute another node's revoked identity already uses", which covers a name in
 the box's own database only; a later name does not refuse it,
@@ -415,7 +418,7 @@ wait
 readings lies in (90 000, 150 000]"). The terminal asks no recent-setup question
 (`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the terminal asks nothing, prints
 why it waits and until when, and keeps the wait"), and neither does the setup page, which has no
-such field (`packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts`, "asks no last-hour question and offers no clock confirmation").
+such field (`packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts`, "asks no last-hour question and offers no clock confirmation while the internet time service vouches for the clock").
 Signed allocation files do not replace that flow.
 
 Production and preproduction remain separate databases. A disposable preproduction allocation

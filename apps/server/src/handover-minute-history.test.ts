@@ -126,10 +126,20 @@ async function selectOnM1(eventId: string, activate: boolean) {
     read: async () => hourFacts(eventId),
   });
   const identity = await withOperationAuthority(held, ADMIN, async (authority) => {
-    let selected = await preparation.select({ binding: held, authority, comparisonId: eventId });
+    let selected = await preparation.select({
+      binding: held,
+      authority,
+      comparisonId: eventId,
+      confirmed: true,
+    });
     if (selected.status === "waiting") {
       vi.advanceTimersByTime(selected.targetMs + 1 - Date.now());
-      selected = await preparation.select({ binding: held, authority, comparisonId: eventId });
+      selected = await preparation.select({
+        binding: held,
+        authority,
+        comparisonId: eventId,
+        confirmed: true,
+      });
     }
     if (selected.status !== "selected") throw new Error(`M1 selection ${eventId}`);
     if (activate)
@@ -480,7 +490,12 @@ describe("a merged file close to its limit", () => {
       const held = { ...joinBinding, action, eventId, targetNodeId: nodeId };
       vi.advanceTimersByTime(60_000);
       last = await withOperationAuthority(held, ADMIN, async (authority) => {
-        const request = { binding: held, authority, comparisonId: eventId };
+        const request = {
+          binding: held,
+          authority,
+          comparisonId: eventId,
+          confirmed: true as const,
+        };
         if (waits) {
           const waiting = await selection.select(request);
           if (waiting.status !== "waiting") throw new Error(`attempt ${eventId} did not wait`);

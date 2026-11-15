@@ -271,13 +271,14 @@ it("requires the scope confirmation then imports only selected server input", as
     expect(el.shadowRoot!.textContent).toContain(code);
   expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull();
 });
-it("asks no last-hour question and offers no clock confirmation", async () => {
+it("asks no last-hour question and offers no clock confirmation while the internet time service vouches for the clock", async () => {
   const { el } = await mount();
   await ready(el);
   expect(el.shadowRoot!.querySelectorAll('input[type="radio"]')).toHaveLength(0);
   expect(el.shadowRoot!.querySelector("fieldset")).toBeNull();
   expect(el.shadowRoot!.querySelector('[name="setup-clock-confirmed"]')).toBeNull();
   expect(text(el)).not.toContain("UTC hour");
+  expect(el.shadowRoot!.querySelector("[data-test=clock-confirm]")).toBeNull();
 });
 it("keeps the server wait and never imports or locally completes it", async () => {
   const { el, calls } = await mount({
@@ -1845,6 +1846,14 @@ it.each([
           : ["clock-challenge", "compare-clocks"],
       );
       await proceed(el);
+      if (previewRefusal) {
+        // The comparison itself agrees on this device alone, so Proceed first shows the times.
+        await vi.waitFor(() =>
+          expect(el.shadowRoot!.querySelector("[data-test=clock-confirm]")).not.toBeNull(),
+        );
+        expect(calls.some((c) => c.action === "candidates")).toBe(false);
+        await proceed(el);
+      }
       await vi.waitFor(() => expect(text(el)).toContain(DIFFER));
       expect(detailRows(el, "clock-times")).toEqual([
         ["Server time", "18 October 2026 at 14:30:00"],
@@ -2065,6 +2074,34 @@ it.each<[string, string | undefined, boolean, () => Promise<LitElement>]>([
         preview: { status: "waiting", targetMs: instant + 61_000, remainingMs: 61_000 },
       });
       await shows(el, "remaining");
+      return el;
+    },
+  ],
+  [
+    "only this device agrees on load, with no internet time, and both times are shown above Proceed",
+    "Proceed",
+    false,
+    async () => {
+      const { el } = await mount({ decision: deviceOnly });
+      await ready(el);
+      await vi.waitFor(() => expect(text(el)).toContain(CONFIRM_PROCEED));
+      expect(detailRows(el, "clock-times")).toHaveLength(2);
+      return el;
+    },
+  ],
+  [
+    "a press finds only this device agreeing, with no internet time, and both times are shown for another Proceed",
+    "Proceed",
+    false,
+    async () => {
+      let decision: typeof clock = clock;
+      const { el } = await mount({ decision: () => decision });
+      await ready(el);
+      decision = deviceOnly;
+      await proceed(el);
+      await shows(el, "clock-confirm");
+      expect(text(el)).toContain(CONFIRM_PROCEED);
+      expect(detailRows(el, "clock-times")).toHaveLength(2);
       return el;
     },
   ],
@@ -2371,10 +2408,7 @@ it("a long value wraps beside its label at phone width rather than overflowing",
     list.querySelector("dt")!.getBoundingClientRect().height * 1.5,
   );
 });
-it.each([
-  ["browser", "matches this device"],
-  ["internet", "matches the internet time"],
-] as const)(
+it.each([["internet", "matches the internet time"]] as [string, string][])(
   "when only the %s agrees, Check this venue shows no clock rows",
   async (source, words) => {
     const decision = {
@@ -2397,6 +2431,168 @@ it.each([
     expect(el.shadowRoot!.querySelector("wt-disclosure")).toBeNull();
   },
 );
+it("when only this device agrees, the step shows both times above Proceed, and Proceed confirms them", async () => {
+  const { el, calls } = await mount({ decision: deviceOnly });
+  await ready(el);
+  await vi.waitFor(() =>
+    expect(text(el)).toContain(
+      "The server could not check its time over the internet. Check that both times below are right before you press Proceed.",
+    ),
+  );
+  expect(detailRows(el, "clock-times")).toEqual([
+    ["Server time", "18 October 2026 at 14:30:00"],
+    ["This device", "18 October 2026 at 14:30:00"],
+  ]);
+  expect(el.shadowRoot!.querySelector("[data-test=confirm-time]")).toBeNull();
+  expect(actionsOf(calls)).not.toContain("candidates");
+  await proceed(el);
+  await vi.waitFor(() =>
+    expect(calls.filter((c) => c.action === "candidates").map((c) => c.value)).toEqual([
+      { comparisonId: "comparison-2", confirmed: true },
+    ]),
+  );
+});
+const deviceOnly = {
+  ...clock,
+  usable: clock.usable.filter((r) => r.source !== "internet"),
+  unavailable: [{ source: "internet", result: "unavailable" as const, reason: "offline" }],
+};
+const CONFIRM_PROCEED =
+  "The server could not check its time over the internet. Check that both times below are right before you press Proceed.";
+it.each([
+  ["the internet's time agreed", clock],
+  ["the clocks differed", { ...deviceOnly, disagreement: true }],
+  ["there was no second clock yet", noSecondClock],
+] as [string, typeof clock][])(
+  "when %s before Proceed, and only this device agrees at Proceed, Proceed shows the times to confirm and sends nothing; the next Proceed confirms them",
+  async (_, before) => {
+    let decision = before;
+    const { el, calls } = await mount({ decision: () => decision });
+    await ready(el);
+    expect(el.shadowRoot!.querySelector("[data-test=clock-confirm]")).toBeNull();
+    decision = deviceOnly;
+    await proceed(el);
+    const confirmStep = () => el.shadowRoot!.querySelector("[data-test=clock-confirm]");
+    await vi.waitFor(() =>
+      expect(calls.some((c) => c.action === "candidates") || confirmStep() !== null).toBe(true),
+    );
+    expect(calls.filter((c) => c.action === "candidates")).toEqual([]);
+    expect(confirmStep()).not.toBeNull();
+    expect(text(el)).toContain(CONFIRM_PROCEED);
+    expect(detailRows(el, "clock-times")).toEqual([
+      ["Server time", "18 October 2026 at 14:30:00"],
+      ["This device", "18 October 2026 at 14:30:00"],
+    ]);
+    await vi.waitFor(() => expect(action(el)).toBe("Proceed"));
+    await proceed(el);
+    await vi.waitFor(() =>
+      expect(calls.filter((c) => c.action === "candidates").map((c) => c.value)).toEqual([
+        { comparisonId: "comparison-3", confirmed: true },
+      ]),
+    );
+  },
+);
+it("a wait the box recorded before the page loaded that ends with only this device agreeing shows the times with Proceed and sends nothing; Proceed then confirms them", async () => {
+  let decision = clock;
+  fakeClock();
+  try {
+    const { el, calls } = await mount({ prepare: reloadedDuringWait(() => decision) });
+    await vi.waitFor(() => expect(remaining(el)).toBe("1:01"));
+    decision = deviceOnly;
+    vi.advanceTimersByTime(61_000);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=clock-confirm]")).not.toBeNull(),
+    );
+    expect(text(el)).toContain(CONFIRM_PROCEED);
+    expect(detailRows(el, "clock-times")).toEqual([
+      ["Server time", "18 October 2026 at 14:30:00"],
+      ["This device", "18 October 2026 at 14:30:00"],
+    ]);
+    expect(action(el)).toBe("Proceed");
+    expect(button(el, "compare").disabled).toBe(true);
+    expect(calls.filter((c) => c.action === "candidates")).toEqual([]);
+    await userEvent.click(detailsTick(el));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=clock-confirm]")).not.toBeNull();
+    expect(calls.filter((c) => c.action === "candidates")).toEqual([]);
+    await proceed(el);
+    await vi.waitFor(() =>
+      expect(calls.filter((c) => c.action === "candidates").map((c) => c.value)).toEqual([
+        { comparisonId: "comparison", confirmed: true },
+      ]),
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("a wait after a Proceed with the internet's time that ends with only this device agreeing shows both times and stops for Proceed", async () => {
+  let decision: typeof clock = clock;
+  fakeClock();
+  try {
+    const { el, calls } = await mount({
+      decision: () => decision,
+      select: async () => ({
+        status: "waiting",
+        targetMs: instant + 90_000,
+        remainingMs: 90_000,
+      }),
+    });
+    const candidates = () => calls.filter((c) => c.action === "candidates").map((c) => c.value);
+    await ready(el);
+    await proceed(el);
+    await vi.waitFor(() => expect(remaining(el)).toBe("1:30"));
+    expect(candidates()).toEqual([{ comparisonId: "comparison-2" }]);
+    expect(el.shadowRoot!.querySelector("[data-test=clock-times]")).toBeNull();
+    decision = deviceOnly;
+    vi.advanceTimersByTime(90_000);
+    await shows(el, "clock-confirm");
+    expect(text(el)).toContain(CONFIRM_PROCEED);
+    expect(detailRows(el, "clock-times")).toEqual([
+      ["Server time", "18 October 2026 at 14:30:00"],
+      ["This device", "18 October 2026 at 14:30:00"],
+    ]);
+    expect(actionsOf(calls).filter((a) => a === "compare-clocks")).toHaveLength(3);
+    expect(action(el)).toBe("Proceed");
+    expect(button(el, "compare").disabled).toBe(false);
+    expect(candidates()).toHaveLength(1);
+    await proceed(el);
+    await vi.waitFor(() =>
+      expect(candidates()).toEqual([
+        { comparisonId: "comparison-2" },
+        { comparisonId: "comparison-4", confirmed: true },
+      ]),
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("Compare the clocks again with no internet time, once the clocks agree, shows both times with Proceed and sends nothing until Proceed", async () => {
+  let decision: typeof clock = clock;
+  const { el, calls } = await mount({ decision: () => decision });
+  await ready(el);
+  decision = { ...deviceOnly, disagreement: true };
+  await proceed(el);
+  await differ(el);
+  await vi.waitFor(() => expect(action(el)).toBe("Compare the clocks again"));
+  decision = deviceOnly;
+  await userEvent.click(button(el, "compare"));
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=clock-confirm]")).not.toBeNull(),
+  );
+  expect(text(el)).toContain(CONFIRM_PROCEED);
+  expect(detailRows(el, "clock-times")).toEqual([
+    ["Server time", "18 October 2026 at 14:30:00"],
+    ["This device", "18 October 2026 at 14:30:00"],
+  ]);
+  await vi.waitFor(() => expect(action(el)).toBe("Proceed"));
+  expect(calls.filter((c) => c.action === "candidates")).toEqual([]);
+  await proceed(el);
+  await vi.waitFor(() =>
+    expect(calls.filter((c) => c.action === "candidates").map((c) => c.value)).toEqual([
+      { comparisonId: "comparison-4", confirmed: true },
+    ]),
+  );
+});
 it.each(["en", "es"] as const)(
   "%s: clocks that differ show one time per clock, ask which is correct; The server and Both times are wrong send nothing",
   async (locale) => {

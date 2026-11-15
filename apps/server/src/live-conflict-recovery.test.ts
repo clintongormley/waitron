@@ -208,14 +208,14 @@ async function selected(m: ReturnType<typeof mounted>): Promise<ConflictAllocati
     expect(comparison.clock).toMatchObject({ secondClock: true, disagreement: false });
     return comparison.id;
   };
-  const first = await prepare({ action: "select", comparisonId: await compare() });
+  const first = await prepare({ action: "select", comparisonId: await compare(), confirmed: true });
   expect(first).toMatchObject({ status: "waiting", remainingMs: 120_000 });
   for (let i = 0; i < 24; i++) {
     monotonic += 5000;
     vi.setSystemTime(Date.now() + 5000);
     await publicAnswer(await m.send(request()));
   }
-  const final = await prepare({ action: "select", comparisonId: await compare() });
+  const final = await prepare({ action: "select", comparisonId: await compare(), confirmed: true });
   if (!("status" in final) || final.status !== "selected") throw new Error("no selection");
   return final.input;
 }

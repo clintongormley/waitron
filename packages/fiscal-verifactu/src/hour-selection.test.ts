@@ -103,7 +103,12 @@ function fixture() {
     },
     run(selected = binding) {
       return withOperationAuthority(selected, "administrator", (authority) =>
-        engine.select({ binding: selected, authority, comparisonId: "comparison" }),
+        engine.select({
+          binding: selected,
+          authority,
+          comparisonId: "comparison",
+          confirmed: true,
+        }),
       );
     },
     preview(selected = binding) {
@@ -135,6 +140,41 @@ it("exposes an hour only after its complete bound intent is persisted", async ()
 });
 
 const refusal = (reason: string) => ({ code: "sif.allocation_invalid", params: { reason } });
+
+const synchronised = (at = instant) =>
+  compareHourClocks(
+    ["box", "browser", "internet"].map(
+      (source) =>
+        ({
+          source,
+          result: "usable",
+          instantMs: at,
+          uncertaintyMs: 0,
+          wallStartedMs: at,
+          wallFinishedMs: at,
+          monotonicStartedMs: 0,
+          monotonicFinishedMs: 0,
+        }) as HourClockObservation,
+    ),
+    Date.parse("2026-10-15T00:00:00Z"),
+  );
+it("a device's agreeing time selects only once the person confirms it", async () => {
+  const f = fixture();
+  const unconfirmed = withOperationAuthority(binding, "administrator", (authority) =>
+    f.create().select({ binding, authority, comparisonId: "comparison" }),
+  );
+  await expect(unconfirmed).rejects.toMatchObject(refusal("confirmation_required"));
+  expect(f.writes).toEqual([]);
+  expect(await f.run()).toMatchObject({ status: "selected", identity: "0CNNW" });
+});
+it("the internet time service selects with no confirmation", async () => {
+  const f = fixture();
+  f.facts = { ...f.facts, clock: synchronised() };
+  const selected = withOperationAuthority(binding, "administrator", (authority) =>
+    f.create().select({ binding, authority, comparisonId: "comparison" }),
+  );
+  await expect(selected).resolves.toMatchObject({ status: "selected", identity: "0CNNW" });
+});
 
 it.each([
   { action: "setup", allowed: false, identity: "0CNNY" },
@@ -525,9 +565,9 @@ it("never returns usable material after persistence fails, before or after actua
     throw new Error("disk refused");
   });
   await withOperationAuthority(binding, "administrator", async (authority) => {
-    await expect(before.select({ binding, authority, comparisonId: "comparison" })).rejects.toThrow(
-      "disk refused",
-    );
+    await expect(
+      before.select({ binding, authority, comparisonId: "comparison", confirmed: true }),
+    ).rejects.toThrow("disk refused");
     const after = f.create((selected, run) =>
       f.store(selected, (state) =>
         run({
@@ -539,9 +579,9 @@ it("never returns usable material after persistence fails, before or after actua
         }),
       ),
     );
-    await expect(after.select({ binding, authority, comparisonId: "comparison" })).rejects.toThrow(
-      "lost durable reply",
-    );
+    await expect(
+      after.select({ binding, authority, comparisonId: "comparison", confirmed: true }),
+    ).rejects.toThrow("lost durable reply");
   });
   expect(await f.run()).toMatchObject({ status: "selected", identity: "0CNNW" });
   expect(f.writes).toHaveLength(1);
@@ -554,7 +594,7 @@ it("expired authority cannot select and expiry during persistence cannot expose 
     async (authority) => authority,
   );
   await expect(
-    f.create().select({ binding, authority, comparisonId: "comparison" }),
+    f.create().select({ binding, authority, comparisonId: "comparison", confirmed: true }),
   ).rejects.toMatchObject(refusal("reauthentication_required"));
   expect(f.writes).toEqual([]);
   let pending!: Promise<unknown>;
@@ -564,7 +604,7 @@ it("expired authority cannot select and expiry during persistence cannot expose 
         await new Promise((resolve) => setTimeout(resolve, 0));
         return f.store(binding, run);
       })
-      .select({ binding, authority: active, comparisonId: "comparison" });
+      .select({ binding, authority: active, comparisonId: "comparison", confirmed: true });
   });
   await expect(pending).rejects.toMatchObject(refusal("reauthentication_required"));
   expect(f.writes).toEqual([]);
@@ -627,7 +667,7 @@ it("expiry while awaiting durable persistence leaves a spent hour but returns no
         }),
       ),
     );
-    pending = engine.select({ binding, authority, comparisonId: "comparison" });
+    pending = engine.select({ binding, authority, comparisonId: "comparison", confirmed: true });
     await reached;
   });
   release();
@@ -711,7 +751,7 @@ it.each([-1, NaN, Infinity])(
     });
     await withOperationAuthority(setup, "administrator", async (authority) => {
       await expect(
-        engine.select({ binding: setup, authority, comparisonId: "comparison" }),
+        engine.select({ binding: setup, authority, comparisonId: "comparison", confirmed: true }),
       ).rejects.toMatchObject(refusal("clock_unconfirmed"));
     });
   },
@@ -793,7 +833,7 @@ it("a host that omits retained revisions cannot authorise a fresh hour", async (
   );
   await withOperationAuthority(binding, "administrator", async (authority) => {
     await expect(
-      engine.select({ binding, authority, comparisonId: "comparison" }),
+      engine.select({ binding, authority, comparisonId: "comparison", confirmed: true }),
     ).rejects.toMatchObject(refusal("history_invalid"));
   });
   expect(f.writes).toEqual([]);
@@ -1050,7 +1090,7 @@ it("records the intent durably before the select resolves selected", async () =>
     ),
   );
   const result = await withOperationAuthority(binding, "administrator", (authority) =>
-    engine.select({ binding, authority, comparisonId: "comparison" }),
+    engine.select({ binding, authority, comparisonId: "comparison", confirmed: true }),
   );
   order.push(`resolved ${result.status}`);
   expect(order).toEqual(["replace true", "resolved selected"]);
@@ -1127,7 +1167,12 @@ it("a new pick a minute after a recorded pick writes one wait the spy sees", asy
   const other = event(setup, "other");
   await withOperationAuthority(other, "administrator", async (authority) => {
     expect(
-      await engine.select({ binding: other, authority, comparisonId: "comparison" }),
+      await engine.select({
+        binding: other,
+        authority,
+        comparisonId: "comparison",
+        confirmed: true,
+      }),
     ).toMatchObject({ status: "waiting", targetMs: at("2026-10-24T09:05:00Z") });
   });
   expect(replaced).toHaveLength(1);

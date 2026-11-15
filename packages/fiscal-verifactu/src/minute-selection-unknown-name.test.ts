@@ -169,6 +169,7 @@ async function restore(c: Row): Promise<Outcome> {
         binding: operation.binding,
         authority,
         comparisonId: comparison.id,
+        ...(c.internet == null ? { confirmed: true } : {}),
       }),
     );
   };

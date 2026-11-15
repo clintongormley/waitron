@@ -890,7 +890,10 @@ describe("a restore whose clock is before or past the backup's newest record", (
       asBrowser,
     )) as { id: string };
     expect(
-      await service.prepare({ action: "select", comparisonId: compared.id }, asBrowser),
+      await service.prepare(
+        { action: "select", comparisonId: compared.id, confirmed: true },
+        asBrowser,
+      ),
     ).toMatchObject({ status: "waiting", targetMs: Date.parse("2026-10-24T09:02:00Z") });
     expect(await recoverySelectPastWaits(clock, service, asBrowser)).toMatchObject({
       status: "selected",
@@ -919,7 +922,10 @@ it("a restore beside a leftover start-again note file names its minute as a box 
     asBrowser,
   )) as { id: string };
   expect(
-    await f.service.prepare({ action: "select", comparisonId: compared.id }, asBrowser),
+    await f.service.prepare(
+      { action: "select", comparisonId: compared.id, confirmed: true },
+      asBrowser,
+    ),
   ).toMatchObject({ status: "waiting", targetMs: Date.parse("2026-10-24T09:02:00Z") });
   expect(await recoverySelectPastWaits(clock, f.service, asBrowser)).toMatchObject({
     status: "selected",

@@ -137,12 +137,15 @@ que otra máquina siga vendiendo.
 Abre `/manage/recovery/fiscal-conflict` en este servidor mediante HTTPS. Necesitas la clave del
 servidor actual; iniciar sesión en el panel no sustituye esa clave. Escríbela y elige
 **Consultar conflicto** para ver la factura y la identidad afectadas. Confirma que has desconectado
-el servidor antiguo o copiado y que nadie más lo está recuperando, y elige **Comparar relojes**.
+el servidor antiguo o copiado y que nadie más lo está recuperando, y elige **Comparar relojes**. Si el
+servidor no puede comprobar su hora por internet, la página muestra la hora del servidor y la de este
+dispositivo: comprueba que las dos son correctas y elige **Confirmar la hora**.
 
 Si no hay un minuto disponible, espera la cuenta atrás. La página vuelve a comprobarlo cada cinco
-segundos. Cuando termine la espera, compara los relojes otra vez. Comprueba la identidad elegida y
-pulsa **Cambiar identidad**. La cuenta atrás nunca la cambia por ti. Se conservan tus pedidos,
-pagos e historial. Los resultados de envío y las incidencias existentes no cambian. Una factura
+segundos. Cuando termine la espera, compara los relojes otra vez. Si el servidor no puede comprobar
+su hora por internet, la página te pide confirmar la hora otra vez: elige **Confirmar la hora**.
+Comprueba la identidad elegida y pulsa **Cambiar identidad**. La cuenta atrás nunca la cambia por
+ti. Se conservan tus pedidos, pagos e historial. Los resultados de envío y las incidencias existentes no cambian. Una factura
 encontrada al consultar Hacienda puede no estar en el historial de este servidor.
 
 Si se pierde la respuesta, la página consulta el resultado del mismo intento. Un resultado sin

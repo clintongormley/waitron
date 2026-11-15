@@ -52,6 +52,7 @@ for (const theme of ["light", "dark"] as const)
           for (const state of [
             "empty",
             "invalid",
+            "confirm",
             "disagreement",
             "answered",
             "second-clock",
@@ -191,8 +192,15 @@ for (const theme of ["light", "dark"] as const)
                 await vi.waitFor(() =>
                   expect(el.shadowRoot!.querySelector("[data-clock=read]")).not.toBeNull(),
                 );
+              if (["waiting", "later", "in-use", "in-use-no-time", "selected"].includes(state)) {
+                const confirm = () =>
+                  el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-time]")!;
+                await vi.waitFor(() => expect(confirm()).not.toBeNull());
+                await userEvent.click(confirm());
+              }
               if (state !== "refusal") {
                 const shown: string = {
+                  confirm: "[data-test=clock-confirm]",
                   disagreement: "[data-test=clock-refused]",
                   answered: "[data-test=server-correct]",
                   "second-clock": "[data-test=clock-wait]",
@@ -243,6 +251,7 @@ for (const theme of ["light", "dark"] as const)
           for (const state of [
             "empty",
             "selected",
+            "confirm",
             "second-clock",
             "disagreement",
             "answered",
@@ -344,9 +353,13 @@ for (const theme of ["light", "dark"] as const)
                   ).toBeGreaterThan(0),
                 );
               } else {
-                if (state === "selected")
-                  await vi.waitFor(() => expect(el.readOperation()).not.toBeNull());
-                else if (differ) {
+                if (state === "selected" || state === "confirm") {
+                  await vi.waitFor(() => expect(action("confirm-time")).not.toBeNull());
+                  if (state === "selected") {
+                    await userEvent.click(action("confirm-time"));
+                    await vi.waitFor(() => expect(el.readOperation()).not.toBeNull());
+                  }
+                } else if (differ) {
                   await vi.waitFor(() => expect(action("server-correct")).not.toBeNull());
                   if (state === "answered") {
                     await userEvent.click(action("server-correct"));

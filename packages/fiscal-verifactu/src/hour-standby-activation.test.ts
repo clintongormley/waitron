@@ -218,7 +218,12 @@ it("a promotion waits for the minute after the original box's", async () => {
   const before = await snapshot();
   await withOperationAuthority(f.binding, f.operatorId, async (authority) => {
     const select = () =>
-      selector.select({ binding: f.binding, authority, comparisonId: "comparison" });
+      selector.select({
+        binding: f.binding,
+        authority,
+        comparisonId: "comparison",
+        confirmed: true,
+      });
     expect(await select()).toEqual({
       status: "waiting",
       targetMs: Date.parse("2026-10-16T11:41:00.000Z"),

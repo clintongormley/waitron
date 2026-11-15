@@ -495,11 +495,41 @@ it.each([
   { answer: "no", comparisonId: "comparison" },
   { comparisonId: 1 },
   { comparisonId: "comparison", taxpayerNif: "injected" },
+  { comparisonId: "comparison", confirmed: false },
+  { comparisonId: "comparison", confirmed: "true" },
+  { comparisonId: "comparison", confirmed: true, extra: true },
 ])("refuses an unsupported selection proposal %j", async (proposal) => {
   await expect(configured().seat.candidates(context, proposal)).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "malformed_allocation" },
   });
+});
+it("first setup selects on a device's agreeing time only once the person confirms it", async () => {
+  const f = configured();
+  const device = { onBox: false };
+  const compared = async () => {
+    const challenge = (await f.seat.preparation!(
+      context,
+      { action: "clock-challenge" },
+      device,
+    )) as { id: string };
+    const comparison = (await f.seat.preparation!(
+      context,
+      { action: "compare-clocks", browser: { challengeId: challenge.id, instantMs: Date.now() } },
+      device,
+    )) as { id: string };
+    return comparison.id;
+  };
+  await expect(
+    f.seat.candidates(context, { comparisonId: await compared() }),
+  ).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "confirmation_required" },
+  });
+  expect(f.history).toEqual([]);
+  await expect(
+    f.seat.candidates(context, { comparisonId: await compared(), confirmed: true }),
+  ).resolves.toMatchObject({ status: "waiting" });
 });
 it("requires the module's fresh candidate rather than a copied or reused candidate", async () => {
   const f = configured();

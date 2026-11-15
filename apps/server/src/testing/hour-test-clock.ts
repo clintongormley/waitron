@@ -97,6 +97,9 @@ export function recoverySelectPastWaits(
       },
       client,
     )) as { id: string };
-    return service.prepare({ action: "select", comparisonId: compared.id }, client);
+    return service.prepare(
+      { action: "select", comparisonId: compared.id, confirmed: true },
+      client,
+    );
   });
 }

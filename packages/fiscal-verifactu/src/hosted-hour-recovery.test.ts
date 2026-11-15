@@ -366,6 +366,8 @@ it.each([
   { action: "select", comparisonId: "x", installationCodes: ["0CNJR"] },
   { action: "select" },
   { action: "select", comparisonId: 42 },
+  { action: "select", comparisonId: "x", confirmed: false },
+  { action: "select", comparisonId: "x", confirmed: "true" },
   { action: "compare-clocks" },
   { action: "compare-clocks", browser: {} },
   { action: "compare-clocks", browser: { challengeId: 1, instantMs: NOW } },
@@ -382,6 +384,28 @@ it.each([
     ).rejects.toMatchObject(refusal("event_mismatch"));
   });
   expect(f.history).toEqual([]);
+});
+
+it("a device's agreeing time counts for a restore only once the person confirms it", async () => {
+  const f = fixture();
+  const operations = FISCAL_OPERATIONS.configure!(f.host);
+  await withOperationAuthority(binding, key, async (authority) => {
+    const operation = { binding, authority };
+    const client = { onBox: false };
+    const send = async (confirmed?: true) =>
+      operations.recovery!(
+        operation,
+        {
+          action: "select",
+          comparisonId: (await compare(operations, operation, true, client)).id,
+          ...(confirmed === undefined ? {} : { confirmed }),
+        },
+        client,
+      );
+    await expect(send()).rejects.toMatchObject(refusal("confirmation_required"));
+    expect(f.history).toEqual([]);
+    await expect(send(true)).resolves.toMatchObject({ status: "waiting" });
+  });
 });
 
 it.each(["readRecoveryFacts", "withPreparationState"] as const)(

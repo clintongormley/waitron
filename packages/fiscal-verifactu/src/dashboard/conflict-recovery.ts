@@ -26,11 +26,15 @@ import {
   type ConflictPreparationResult,
 } from "../conflict-recovery-contract.js";
 import type { ActivationResult } from "../allocation-types.js";
+import type { HourClockDecision } from "../hour-clock.js";
+import { clockWaitStrings, renderClockRows } from "../setup/clock-wait.js";
+import { checkVenueStyles } from "../setup/check-venue.js";
 
 @customElement("vf-conflict-recovery")
 export class ConflictRecovery extends LitElement {
   static override styles = [
     baseStyles,
+    checkVenueStyles,
     css`
       :host {
         display: block;
@@ -85,6 +89,8 @@ export class ConflictRecovery extends LitElement {
   @state() private activating = false;
   @state() private waiting: { remainingMs: number; measuredAt: number } | null = null;
   @state() private remainingSeconds = 0;
+  /** Agreed with only this device's clock: shown for Confirm the time. */
+  @state() private toConfirm: HourClockDecision | null = null;
   readonly #leave = new LeaveController(this);
   #scope?: DraftScope<{ hasKey: boolean; offline: boolean; parallel: boolean }>;
   #poll?: ReturnType<typeof setTimeout>;
@@ -175,6 +181,7 @@ export class ConflictRecovery extends LitElement {
     this.isolationAttempted = false;
     this.selection = null;
     this.activating = false;
+    this.toConfirm = null;
     this.#scope?.commit({ hasKey: false, offline: false, parallel: false });
   }
   override disconnectedCallback(): void {
@@ -226,9 +233,11 @@ export class ConflictRecovery extends LitElement {
         this.key = "";
         this.active = null;
         this.selection = null;
+        this.toConfirm = null;
         this.refusal = this.t("conflict_recovery.key_refused");
       } else if (code === "sif.allocation_invalid" && reason === "uncertain_prior_activation") {
         this.selection = null;
+        this.toConfirm = null;
         this.uncertain = true;
         this.refusal = this.t("conflict_recovery.uncertain");
       } else if (
@@ -238,6 +247,7 @@ export class ConflictRecovery extends LitElement {
         this.offline = false;
         this.noParallel = false;
         this.selection = null;
+        this.toConfirm = null;
         this.refusal = this.t("conflict_recovery.confirm");
       } else
         this.refusal = this.t(
@@ -274,7 +284,7 @@ export class ConflictRecovery extends LitElement {
   private inspect(): Promise<void> {
     return this.within(async (send) => this.acceptStatus(await send({ kind: "status" })));
   }
-  private compare(): Promise<void> {
+  private compare(pressed = false): Promise<void> {
     this.isolationAttempted = true;
     if (!this.offline || !this.noParallel || this.#conflict === undefined) return Promise.resolve();
     this.cancelWait();
@@ -292,6 +302,7 @@ export class ConflictRecovery extends LitElement {
       if (compared.kind !== "prepared" || !("clock" in compared.value))
         throw { code: "connection.failed" };
       const clock = compared.value.clock;
+      this.toConfirm = null;
       if (clock.disagreement || !clock.secondClock || clock.releaseBlocked || clock.rangeBlocked) {
         this.refusal = this.t(
           clock.disagreement
@@ -300,9 +311,15 @@ export class ConflictRecovery extends LitElement {
         );
         return;
       }
+      const internet = clock.usable.some((r) => r.source === "internet");
+      if (!internet && !pressed) return void (this.toConfirm = clock);
       const selected = await send({
         kind: "prepare",
-        proposal: { action: "select", comparisonId: compared.value.id },
+        proposal: {
+          action: "select",
+          comparisonId: compared.value.id,
+          ...(internet ? {} : { confirmed: true as const }),
+        },
       });
       if (selected.kind !== "prepared" || !("status" in selected.value))
         throw { code: "connection.failed" };
@@ -444,6 +461,16 @@ export class ConflictRecovery extends LitElement {
                     : nothing
                 }
                 ${this.active?.length === 0 ? html`<p>${this.t("conflict_recovery.no_conflict")}</p>` : nothing}
+                ${
+                  this.toConfirm === null
+                    ? nothing
+                    : html`<section data-confirm-time>
+                        <p role="status">${this.t("conflict_recovery.confirm_why")}</p>
+                        <dl class="details">
+                          ${renderClockRows(this.toConfirm, clockWaitStrings[this.locale], this.locale, Intl.DateTimeFormat().resolvedOptions().timeZone, true)}
+                        </dl>
+                      </section>`
+                }
                 ${this.selection === null ? nothing : html`<p data-identity>${this.selection.identity}</p>`}
                 ${this.waiting === null ? nothing : html`<p data-wait role="status">${this.t("conflict_recovery.wait").replace("{seconds}", String(this.remainingSeconds))}</p>`}
                 ${this.uncertain ? html`<p role="status">${this.t("conflict_recovery.uncertain")}</p>` : nothing}
@@ -458,7 +485,7 @@ export class ConflictRecovery extends LitElement {
                     @click=${this.stop}
                     >${this.t("conflict_recovery.stop")}</wt-button
                   >
-                  ${this.restart ? html`<wt-button data-action="again" variant="primary" @click=${this.again}>${this.t("conflict_recovery.again")}</wt-button>` : this.selection !== null || this.activating ? html`<wt-button data-action="switch" variant="primary" .disabled=${this.busy || invalid} .loading=${this.busy} @click=${this.switchIdentity}>${this.t("conflict_recovery.switch")}</wt-button>` : this.#conflict !== undefined && this.active !== null && !this.uncertain ? html`<wt-button data-action="compare" .variant=${this.busy || (this.offline && this.noParallel && !invalid && !isolationInvalid && this.waiting === null) ? "primary" : "secondary"} .disabled=${this.busy || invalid || isolationInvalid || this.waiting !== null} .loading=${this.busy} @click=${this.compare}>${this.t("conflict_recovery.compare")}</wt-button>` : html`<wt-button data-action="inspect" .variant=${this.busy || this.key.trim().length > 0 ? "primary" : "secondary"} .disabled=${this.busy || invalid} .loading=${this.busy} @click=${this.inspect}>${this.t("conflict_recovery.inspect")}</wt-button>`}
+                  ${this.restart ? html`<wt-button data-action="again" variant="primary" @click=${this.again}>${this.t("conflict_recovery.again")}</wt-button>` : this.selection !== null || this.activating ? html`<wt-button data-action="switch" variant="primary" .disabled=${this.busy || invalid} .loading=${this.busy} @click=${this.switchIdentity}>${this.t("conflict_recovery.switch")}</wt-button>` : this.#conflict !== undefined && this.active !== null && !this.uncertain ? html`<wt-button data-action=${this.toConfirm === null ? "compare" : "confirm-time"} .variant=${this.busy || (this.offline && this.noParallel && !invalid && !isolationInvalid && this.waiting === null) ? "primary" : "secondary"} .disabled=${this.busy || invalid || isolationInvalid || this.waiting !== null} .loading=${this.busy} @click=${() => this.compare(this.toConfirm !== null)}>${this.t(this.toConfirm === null ? "conflict_recovery.compare" : "conflict_recovery.confirm_time")}</wt-button>` : html`<wt-button data-action="inspect" .variant=${this.busy || this.key.trim().length > 0 ? "primary" : "secondary"} .disabled=${this.busy || invalid} .loading=${this.busy} @click=${this.inspect}>${this.t("conflict_recovery.inspect")}</wt-button>`}
                 </wt-form-actions>`
         }
       </main>

@@ -208,8 +208,19 @@ it.each([
   },
   { kind: "prepare", proposal: { action: "preview" } },
   { kind: "prepare", proposal: { action: "select", comparisonId: "comparison-1" } },
+  {
+    kind: "prepare",
+    proposal: { action: "select", comparisonId: "comparison-1", confirmed: true },
+  },
 ])("reads the exact supported command %j", (command) => {
   expect(parseConflictRequest({ ...request, command })).toEqual({ ...request, command });
+});
+it.each([false, "true", 1, null])("refuses a select confirmed as %j", (confirmed) => {
+  const command = {
+    kind: "prepare",
+    proposal: { action: "select", comparisonId: "comparison-1", confirmed },
+  };
+  expect(parseConflictRequest({ ...request, command })).toBeNull();
 });
 it.each([
   { ...input, allocation: { ...input.allocation, extra: "secret" } },
