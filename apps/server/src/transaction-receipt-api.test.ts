@@ -952,7 +952,11 @@ it("reads every pre-invoice payment in order without replaying settlement", asyn
   ]);
   expect(await snapshot()).toEqual(before);
 });
-async function correctiveOf(originalId: string, replacesOriginal: boolean) {
+async function correctiveOf(
+  originalId: string,
+  replacesOriginal: boolean,
+  patch: Partial<typeof sales.$inferInsert> = {},
+) {
   const [series] = await inTx(venue, (tx) =>
     tx
       .select({ id: invoiceSeries.id })
@@ -965,6 +969,7 @@ async function correctiveOf(originalId: string, replacesOriginal: boolean) {
     seriesId: series!.id,
     correctsSaleId: originalId,
     replacesOriginal,
+    ...patch,
   });
 }
 it("prints a replacement corrective's first till print as its original and later ones as copies", async () => {
@@ -991,6 +996,28 @@ it("prints a replacement corrective's first till print as its original and later
   ]);
   expect(second.drawers).toEqual([]);
   expect(await snapshot()).toEqual(before);
+});
+it("prints a replacement's original in the language chosen at the till", async () => {
+  const original = await projectionInvoice({ locale: "ca-ES", invoiceLocales: ["ca-ES"] });
+  const replacement = await correctiveOf(original.id, true, {
+    locale: "ca-ES",
+    invoiceLocales: ["ca-ES"],
+  });
+  expect((await reprint(replacement.id, { language: "es-ES" })).status).toBe(200);
+  const { prints } = await jobs();
+  expect(prints).toEqual([expect.objectContaining({ saleId: replacement.id, receiptCopy: false })]);
+  const { decodeTicket } = await import("./testing/decode-ticket.js");
+  const text = decodeTicket(prints[0]!.payload);
+  expect(text).toContain("Base imponible");
+  expect(text).not.toContain("Base imposable");
+});
+it("prints one original when two tills reprint a replacement at once", async () => {
+  const original = await projectionInvoice();
+  const replacement = await correctiveOf(original.id, true);
+  const answers = await Promise.all([reprint(replacement.id), reprint(replacement.id)]);
+  expect(answers.map((answer) => answer.status)).toEqual([200, 200]);
+  const { prints } = await jobs();
+  expect(prints.map((row) => row.receiptCopy).sort()).toEqual([false, true]);
 });
 it("still prints a refund corrective that never printed as a copy", async () => {
   const original = await projectionInvoice();

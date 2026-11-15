@@ -259,7 +259,16 @@ export function mountTransactionReceiptApi(
         if (printer === undefined) return;
         if (await awaitsOriginalPrint(tx, id)) {
           // Put this right issues a replacement without printing it, so this print is its original.
-          await enqueueOriginalReceipt(tx, cfg, ticket, id, async () => printer, session.personId);
+          await enqueueOriginalReceipt(
+            tx,
+            cfg,
+            ticket,
+            id,
+            async () => printer,
+            session.personId,
+            undefined,
+            language,
+          );
           return;
         }
         const copy = await enqueueReceiptCopy(

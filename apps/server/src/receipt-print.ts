@@ -237,10 +237,19 @@ async function resolvePrinterAndReceipt(
   saleId: string,
   duplicate: boolean,
   printers: PrinterLookup,
+  language?: string,
 ): Promise<{ printer: DevicePrinter; receiptBytes: Uint8Array } | undefined> {
   const printer = await printers("receipt");
   if (printer === undefined) return undefined;
-  const receiptBytes = await buildReceiptBytes(tx, cfg, ticket, saleId, duplicate, printer);
+  const receiptBytes = await buildReceiptBytes(
+    tx,
+    cfg,
+    ticket,
+    saleId,
+    duplicate,
+    printer,
+    language,
+  );
   /* v8 ignore start -- issuer row structurally always present (buildReceiptBytes); degrade, never throw (§5) */
   if (receiptBytes === undefined) return undefined;
   /* v8 ignore stop */
@@ -528,6 +537,7 @@ export async function enqueueOriginalReceipt(
   printers: PrinterLookup = printerLookup(tx, cfg.origin),
   personId?: string | null,
   requestKey?: string,
+  language?: string,
 ): Promise<void> {
   const [original] = await tx
     .select({ id: printJobs.id })
@@ -546,7 +556,15 @@ export async function enqueueOriginalReceipt(
       throw new AppError("invoice_delivery.active", {});
     duplicate = emails.some((email) => email.designation === "original" && email.status === "sent");
   }
-  const resolved = await resolvePrinterAndReceipt(tx, cfg, ticket, saleId, duplicate, printers);
+  const resolved = await resolvePrinterAndReceipt(
+    tx,
+    cfg,
+    ticket,
+    saleId,
+    duplicate,
+    printers,
+    language,
+  );
   if (resolved === undefined) return;
   const job = await enqueuePrintJob(tx, resolved.printer.id, resolved.receiptBytes, "document", {
     saleId,
