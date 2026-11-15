@@ -43,6 +43,41 @@ export function newKey(): { cose: Buffer; privateKey: KeyObject } {
   return { cose, privateKey };
 }
 
+/** A `none`-attestation registration response for `challenge` at `origin`, user present and verified. */
+export function signedRegistration(rpId: string, challenge: string, origin: string) {
+  const id = randomBytes(32);
+  const idLength = Buffer.alloc(2);
+  idLength.writeUInt16BE(id.length);
+  const authData = Buffer.concat([
+    rpIdHash(rpId),
+    Buffer.from([0x45]), // user present, user verified, attested credential data
+    Buffer.alloc(4),
+    Buffer.alloc(16),
+    idLength,
+    id,
+    newKey().cose,
+  ]);
+  const attestationObject = cbor(
+    new Map<unknown, unknown>([
+      ["fmt", "none"],
+      ["attStmt", new Map()],
+      ["authData", authData],
+    ]),
+  );
+  const clientData = { type: "webauthn.create", challenge, origin, crossOrigin: false };
+  return {
+    id: id.toString("base64url"),
+    rawId: id.toString("base64url"),
+    type: "public-key" as const,
+    clientExtensionResults: {},
+    response: {
+      clientDataJSON: Buffer.from(JSON.stringify(clientData)).toString("base64url"),
+      attestationObject: attestationObject.toString("base64url"),
+      transports: ["internal" as const],
+    },
+  };
+}
+
 /**
  * A passkey signed with `node:crypto`: the stored row's values, and a signer of assertions for
  * `rpId` as a browser at `origin` would make them, user present and verified.

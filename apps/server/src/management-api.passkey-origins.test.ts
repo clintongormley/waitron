@@ -5,12 +5,14 @@ import { CORE_MIGRATIONS, withTransaction, writeNodeMembership } from "@waitron/
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { webauthnCredentials } from "@waitron/identity";
 import { openManagementSession, seedPerson } from "@waitron/identity/test/fixtures.js";
-import { signingPasskey } from "@waitron/identity/test/passkey-signer.js";
+import { signedRegistration, signingPasskey } from "@waitron/identity/test/passkey-signer.js";
 import type { Logger } from "./logger.js";
+import { createStaffApp } from "./cloud-remote.js";
 import { mountManagementApi } from "./management-api.js";
 import { mountMeApi } from "./me-api.js";
 import { venuePasskeyOrigins } from "./passkey-origins.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 
 // The WebAuthn verifier is the real one: the assertion is signed with `node:crypto`.
 
@@ -69,8 +71,8 @@ async function chartListing(nodes: { nodeId: string; contactUrl: string }[]): Pr
   });
 }
 
-async function seedPasskey(personId: string) {
-  const passkey = signingPasskey(RP_ID);
+async function seedPasskey(personId: string, rpId = RP_ID) {
+  const passkey = signingPasskey(rpId);
   await withTransaction(suite.db, (tx) =>
     tx.insert(webauthnCredentials).values({
       personId,
@@ -82,16 +84,22 @@ async function seedPasskey(personId: string) {
   return passkey;
 }
 
-async function signInAt(origin: string): Promise<Response> {
-  const passkey = await seedPasskey(await seedPerson(suite.db, "manager"));
-  const app = mountApp();
-  const options = await app.request("/management-api/passkey/auth/options", { method: "POST" });
+async function signInAt(
+  origin: string,
+  app: Hono = mountApp(),
+  base = "",
+  passkey?: Awaited<ReturnType<typeof seedPasskey>>,
+): Promise<Response> {
+  passkey ??= await seedPasskey(await seedPerson(suite.db, "manager"));
+  const options = await app.request(`${base}/management-api/passkey/auth/options`, {
+    method: "POST",
+  });
   expect(options.status).toBe(200);
   const begun = (await options.json()) as {
     challengeHandle: string;
     options: { challenge: string };
   };
-  return app.request("/management-api/passkey/auth/verify", {
+  return app.request(`${base}/management-api/passkey/auth/verify`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
@@ -125,6 +133,16 @@ describe("a dashboard passkey sign-in made at a box's own name", () => {
     expect(await res.json()).toEqual({
       error: { code: "passkey.verification_failed", params: {} },
     });
+  });
+
+  it("reads the chart on each request, so a box listed after the API was mounted counts", async () => {
+    const app = mountApp();
+    const passkey = await seedPasskey(await seedPerson(suite.db, "manager"));
+    expect((await signInAt(ABCD_ORIGIN, app, "", passkey)).status).toBe(401);
+
+    await chartListing([{ nodeId: ABCD, contactUrl: ABCD_ORIGIN }]);
+
+    expect((await signInAt(ABCD_ORIGIN, app, "", passkey)).status).toBe(200);
   });
 
   it("signs in at the venue's name", async () => {
@@ -173,5 +191,61 @@ describe("a fresh sign-in check made at a box's own name", () => {
     expect(await res.json()).toEqual({
       error: { code: "passkey.verification_failed", params: {} },
     });
+  });
+});
+
+describe("enrolling a passkey made at a box's own name", () => {
+  it("enrols it when the held chart lists that box", async () => {
+    await chartListing([{ nodeId: ABCD, contactUrl: ABCD_ORIGIN }]);
+    const { token } = await openManagementSession(suite.db, "manager");
+    await withTransaction(suite.db, (tx) =>
+      setFreshManagementSignIn(tx, `waitron_management_session=${token}`),
+    );
+    const app = mountApp();
+    const cookie = `waitron_management_session=${token}`;
+    const options = await app.request("/management-api/passkey/register/options", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(options.status).toBe(200);
+    const begun = (await options.json()) as {
+      challengeHandle: string;
+      options: { challenge: string };
+    };
+    const response = signedRegistration(RP_ID, begun.options.challenge, ABCD_ORIGIN);
+
+    const res = await app.request("/management-api/passkey/register/verify", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ challengeHandle: begun.challengeHandle, response }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ credentialId: response.id });
+  });
+});
+
+describe("a passkey sign-in through the Cloud remote-staff address", () => {
+  const STAFF = "https://staff.example.test";
+
+  beforeEach(async () => {
+    await chartListing([{ nodeId: ABCD, contactUrl: ABCD_ORIGIN }]);
+  });
+
+  it("is checked against the request's own address", async () => {
+    const passkey = await seedPasskey(await seedPerson(suite.db, "manager"), "staff.example.test");
+
+    const res = await signInAt(STAFF, createStaffApp(mountApp(), STAFF), STAFF, passkey);
+
+    expect(res.status).toBe(200);
+  });
+
+  it("is refused at a box the chart lists, which only a local request may use", async () => {
+    const passkey = await seedPasskey(await seedPerson(suite.db, "manager"));
+
+    const res = await signInAt(ABCD_ORIGIN, createStaffApp(mountApp(), STAFF), STAFF, passkey);
+
+    expect(res.status).toBe(401);
   });
 });

@@ -2,7 +2,6 @@
  * Each passkey ceremony accepts only a challenge its own begin issued, checked with the real
  * WebAuthn verifier: the responses here are built and signed with `node:crypto`, not mocked.
  */
-import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import {
@@ -22,7 +21,7 @@ import {
   verifyOwnPasskey,
 } from "./passkey.js";
 import { codeOf, openManagementSession, TOTP_KEY_RING } from "../test/fixtures.js";
-import { cbor, newKey, rpIdHash, signingPasskey } from "../test/passkey-signer.js";
+import { signedRegistration, signingPasskey } from "../test/passkey-signer.js";
 
 const RP_ID = "localhost";
 const ORIGIN = "http://localhost";
@@ -31,40 +30,8 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 const run = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);
 
-/** A `none`-attestation registration response for `challenge`, user present and verified. */
-function registrationResponse(challenge: string, origin = ORIGIN) {
-  const id = randomBytes(32);
-  const idLength = Buffer.alloc(2);
-  idLength.writeUInt16BE(id.length);
-  const authData = Buffer.concat([
-    rpIdHash(RP_ID),
-    Buffer.from([0x45]), // user present, user verified, attested credential data
-    Buffer.alloc(4),
-    Buffer.alloc(16),
-    idLength,
-    id,
-    newKey().cose,
-  ]);
-  const attestationObject = cbor(
-    new Map<unknown, unknown>([
-      ["fmt", "none"],
-      ["attStmt", new Map()],
-      ["authData", authData],
-    ]),
-  );
-  const clientData = { type: "webauthn.create", challenge, origin, crossOrigin: false };
-  return {
-    id: id.toString("base64url"),
-    rawId: id.toString("base64url"),
-    type: "public-key" as const,
-    clientExtensionResults: {},
-    response: {
-      clientDataJSON: Buffer.from(JSON.stringify(clientData)).toString("base64url"),
-      attestationObject: attestationObject.toString("base64url"),
-      transports: ["internal" as const],
-    },
-  };
-}
+const registrationResponse = (challenge: string, origin = ORIGIN) =>
+  signedRegistration(RP_ID, challenge, origin);
 
 /** Stores a passkey for `personId` and returns a signer of assertions from it. */
 async function seedSigningPasskey(personId: string) {
