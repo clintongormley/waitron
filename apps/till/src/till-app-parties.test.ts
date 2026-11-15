@@ -1742,6 +1742,14 @@ describe("till-app: the party on a handheld", () => {
       const { call, answer } = held();
       const { el } = await mountApp({
         ...onPhone(),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({
+            deviceId: "d1",
+            name: "Device",
+            formFactor: "phone-portrait",
+            kitchenScreens: [{ kind: "station", available: true, stations: [], zones: null }],
+          }),
         getTill: vi.fn().mockResolvedValue({
           ...till,
           formFactor: "phone-portrait",

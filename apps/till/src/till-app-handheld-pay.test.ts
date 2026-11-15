@@ -6491,7 +6491,28 @@ describe("a presented counter bill from Find a bill, on a device with no counter
           : name === "a till with counter zones"
             ? onTill(screens)
             : { ...tableStartTill, ...onTill(screens) };
-    const { el } = await mountApp(device);
+    const { el } = await mountApp({
+      ...device,
+      ...(open === "show-station" || open === "show-expo"
+        ? {
+            getDeviceIdentity: vi
+              .fn()
+              .mockResolvedValue({
+                deviceId: "d1",
+                name: "Device",
+                formFactor: name === "a handheld" ? "phone-portrait" : "till",
+                kitchenScreens: [
+                  {
+                    kind: open === "show-station" ? "station" : "pass",
+                    available: true,
+                    stations: [],
+                    zones: null,
+                  },
+                ],
+              }),
+          }
+        : {}),
+    });
     await flush(el);
     emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
     await flush(el);

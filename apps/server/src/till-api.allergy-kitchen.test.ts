@@ -76,12 +76,12 @@ async function fixture() {
     .select()
     .from(kitchenStations)
     .where(eq(kitchenStations.id, ticket!.stationId));
-  const [profile] = await seedDeviceProfiles(v.db, {
-    name: "Kitchen display",
-    formFactor: "kds",
-    capabilities: [],
-  });
   const enrol = async (kind: DeviceKitchenScreen["kind"]) => {
+    const [profile] = await seedDeviceProfiles(v.db, {
+      name: `${kind} profile`,
+      formFactor: "kds",
+      capabilities: [],
+    });
     const device = await enrolDeviceForTest(v.db, v.cfg, {
       name: `${kind} screen`,
       profileId: profile!.id,

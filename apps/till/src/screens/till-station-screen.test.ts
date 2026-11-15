@@ -677,11 +677,11 @@ describe("till-station-screen", () => {
     expect(api.getStationQueue).not.toHaveBeenCalled();
   });
 
-  it("a failed listStations degrades to the no-stations state (never an unhandled rejection)", async () => {
+  it("a failed listStations reports the read failure without an unhandled rejection", async () => {
     const api = stubApi({ listStations: vi.fn().mockRejectedValue({ code: "server.internal" }) });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
     await flush(el);
-    expect(el.shadowRoot!.textContent).toContain(t("station.no_stations"));
+    expect(el.shadowRoot!.textContent).toContain(t("kitchen_screen.read_failed"));
     expect(api.getStationQueue).not.toHaveBeenCalled();
   });
 
@@ -4141,11 +4141,11 @@ describe("till-station-screen out-of-date banner", () => {
     expect(bannerText(el)).toBe("Sin actualizaciones desde las 10:19, hace 5 minutos");
   });
 
-  it("a station list that cannot be read on open shows the banner beside No stations, dated from when the screen opened", async () => {
+  it("a station list that cannot be read on open shows the banner beside the read failure, dated from when the screen opened", async () => {
     const api = stubApi({ listStations: vi.fn().mockRejectedValue({ code: "server.internal" }) });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
     await flush(el);
-    expect(el.shadowRoot!.textContent).toContain(t("station.no_stations"));
+    expect(el.shadowRoot!.textContent).toContain(t("kitchen_screen.read_failed"));
     expect(banner(el)!.getAttribute("role")).toBe("status");
     expect(bannerText(el)).toBe("No updates since 10:19, less than a minute ago");
     await tick(el, 60_000); // 10:20:50

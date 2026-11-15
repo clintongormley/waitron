@@ -205,17 +205,13 @@ for (const route of ["escape", "add-close"] as const) {
     expect(unload()).toBe(false);
   });
 }
-for (const field of ["name", "profile", "screen"] as const) {
+for (const field of ["name", "profile"] as const) {
   it(`pair ${field} changes and normalized reverts track the submitted settings`, async () => {
     const { screen, deny } = await mount();
     expect(unload()).toBe(false);
-    if (field === "screen") {
-      change(screen, "profile", "p2");
-      await screen.updateComplete;
-      change(screen, "screen", "station");
-    } else change(screen, field, field === "name" ? "Renamed" : "p2");
+    change(screen, field, field === "name" ? "Renamed" : "p2");
     expect(unload()).toBe(true);
-    change(screen, field === "screen" ? "profile" : field, field === "name" ? "  Counter  " : "p1");
+    change(screen, field, field === "name" ? "  Counter  " : "p1");
     expect(unload()).toBe(false);
     q(screen, "[data-test=pair-cancel]")!.click();
     await expect.poll(() => modal(screen)).toBeNull();
@@ -254,13 +250,11 @@ it("successful pairing commits its exact payload before a failed refresh and ope
   change(screen, "name", " Renamed ");
   change(screen, "profile", "p2");
   await screen.updateComplete;
-  change(screen, "screen", "station");
   q(screen, "[data-test=pair-submit]")!.click();
   await expect.poll(() => modal(screen)).toBeNull();
   expect(accept).toHaveBeenCalledExactlyOnceWith("j1", {
     name: "Renamed",
     profileId: "p2",
-    kitchenScreens: [{ kind: "station", stationIds: null, zoneIds: null }],
   });
   expect(deny).not.toHaveBeenCalled();
   expect(release).toHaveBeenCalledOnce();
@@ -469,7 +463,7 @@ it("late native close reports cannot discard a reopened settings owner", async (
   expect(deny).toHaveBeenCalledExactlyOnceWith("j1", { createdAt: request.createdAt });
 });
 
-it("#1422 reconnect: a Pair dialog opened after the screen is put back asks before discarding a changed kitchen screen", async () => {
+it("#1422 reconnect: a Pair dialog opened after the screen is put back asks before discarding a changed profile", async () => {
   const { app, screen } = await mount();
   screen.remove();
   app.shadowRoot!.append(screen);
@@ -480,18 +474,13 @@ it("#1422 reconnect: a Pair dialog opened after the screen is put back asks befo
   change(screen, "profile", "p2");
   await screen.updateComplete;
   expect(unload()).toBe(true);
-  change(screen, "screen", "station");
-  await screen.updateComplete;
-  q(screen, "[data-test=pair-screen-every-station]")!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { checked: false } }),
-  );
   await screen.updateComplete;
   expect(unload()).toBe(true);
   await userEvent.keyboard("{Escape}");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   expect(modal(screen)!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
   await choose(app, "keep");
-  expect((q(screen, "[data-test=pair-screen]") as HTMLInputElement).value).toBe("station");
+  expect((q(screen, "[data-test=pair-profile]") as HTMLInputElement).value).toBe("p2");
   await userEvent.keyboard("{Escape}");
   await choose(app, "discard");
   await expect.poll(() => modal(screen)).toBeNull();

@@ -12,6 +12,7 @@ it("resolves offered profile settings passively", async () => {
   const answers = deviceResponses({
     profiles,
     kitchen: [
+      { profileId: "p/+", screens: { pass: { stationIds: null, zoneIds: null } } },
       { profileId: "kds", screens: { station: { stationIds: null, zoneIds: null } } },
       { profileId: "monitor", screens: { pass_monitor: { stationIds: null, zoneIds: null } } },
     ],
