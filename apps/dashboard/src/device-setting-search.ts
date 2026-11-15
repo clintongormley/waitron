@@ -11,7 +11,7 @@ export function deviceSettingSearchDestinations(
     screen: "devices",
     labelKey: field.labelKey,
     locationKey: "action.edit",
-    ...("requiresPermission" in field ? { requiresPermission: field.requiresPermission } : {}),
+    requiresPermission: "hardware.manage",
     async resolve() {
       const [devices, deviceProfiles, kitchenScreens, stations, zones] = await Promise.all([
         api.background.listDevices(),

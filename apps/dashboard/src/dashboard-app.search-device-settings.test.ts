@@ -77,14 +77,14 @@ it("chooses a device row and Cancel does not pair or write", async () => {
   expect(location.pathname).toBe("/manage/devices/device/d1");
   expect(fetchImpl.mock.calls.slice(start).filter(([, init]) => init.method !== "GET")).toEqual([]);
 });
-it("inherits the page gate and separately hides the reader without hardware permission", async () => {
+it("requires hardware permission alongside the page gate", async () => {
   const own = await mountDeviceApp({ permissions: [], path: "/manage/overview" });
   expect(own.app.shadowRoot!.querySelector("[data-test=nav-search]")).toBeNull();
   expect(searchResult(own.app, "dashboard:device:name")).toBeNull();
   cleanupWidgets();
   const { app } = await mountDeviceApp({ permissions: ["venue.view"], path: "/manage/overview" });
   await searchSettings(app, t("devices.name"));
-  expect(searchResult(app, "dashboard:device:name")).toBeTruthy();
+  expect(searchResult(app, "dashboard:device:name")).toBeNull();
   await searchSettings(app, t("devices.default_reader"));
   expect(searchResult(app, "dashboard:device:defaultReaderId")).toBeNull();
 });

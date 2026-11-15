@@ -4137,9 +4137,9 @@ including switched-off ones. Calibration opens the step holding the setting. Its
 buttons retain the draft and replace the address; searching another step uses Keep editing/Discard.
 The chooser shows saved printer names, including identical names across receipt and A4 printers.
 Mounted EN/ES checks compare the Edit and calibration controls and result labels with declarations.
-Device settings use **Edit** as their location and offer only devices whose saved editor shows the
-setting. Kitchen choices follow the current profile and fitted station/zone lists. Reader settings
-also require permission to manage hardware. The chooser shows device names and opens the existing
+Device settings use **Edit** as their location and require permission to manage hardware, matching
+the device-list read. Kitchen-setting candidates follow the current profile and fitted station/zone
+lists. A refused reader read in the editor still hides its field. The chooser shows device names and opens the existing
 Edit dialog; search does not start pairing. Mounted EN/ES checks compare its named controls and
 group headings with the declarations.
 

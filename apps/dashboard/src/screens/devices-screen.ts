@@ -297,7 +297,6 @@ export const deviceSettingFields = [
   {
     name: "defaultReaderId",
     labelKey: "devices.default_reader",
-    requiresPermission: "hardware.manage",
   },
   { name: "approvedProfileIds", labelKey: "devices.approved_profiles" },
   { name: "madeHereStationIds", labelKey: "devices.made_here" },
@@ -307,7 +306,7 @@ export const deviceSettingFields = [
   { name: "screenStations", labelKey: "device_profiles.kitchen_stations" },
   { name: "screenZones", labelKey: "device_profiles.kitchen_zones" },
   { name: "showNonPassStations", labelKey: "device_profiles.show_other_stations" },
-] as const satisfies readonly { name: string; labelKey: StringKey; requiresPermission?: string }[];
+] as const satisfies readonly { name: string; labelKey: StringKey }[];
 export function deviceSettingIsOffered(
   name: string,
   device: DeviceRow,

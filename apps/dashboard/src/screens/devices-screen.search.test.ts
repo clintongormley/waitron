@@ -26,6 +26,7 @@ it.each(["en-GB", "es-ES"])("declarations equal mounted names and labels in %s",
     { factor: "kds", kind: "pass_monitor", caps: [] },
     { factor: "kds", kind: null, caps: [] },
     { factor: "till", kind: null, caps: [] },
+    { factor: "till", kind: null, caps: [], different: true },
     { factor: null, kind: null, caps: [] },
     { factor: "till", kind: "pass", caps: ["show-expo"], empty: true },
     { factor: "kds", kind: "pass", caps: [], empty: true },
@@ -36,7 +37,11 @@ it.each(["en-GB", "es-ES"])("declarations equal mounted names and labels in %s",
         ? []
         : [
             { ...deviceProfile, formFactor: variant.factor, capabilities: [...variant.caps] },
-            { ...deviceProfile, id: "dp2", formFactor: variant.factor },
+            {
+              ...deviceProfile,
+              id: "dp2",
+              formFactor: "different" in variant ? "kds" : variant.factor,
+            },
           ];
     const row = {
       ...device,
