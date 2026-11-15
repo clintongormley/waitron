@@ -120,7 +120,6 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
           printerId,
         });
         const { id: product } = await createProduct(tx, {
-          menuId: cat.id,
           categoryId: null,
           name: "Ribeye",
           pricingUnit: "each",

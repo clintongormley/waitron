@@ -547,7 +547,6 @@ describe("option list CRUD", () => {
       const dinner = await createMenu(tx, { name: "Dinner" });
       for (const name of ["steak", "burger", "chips"]) {
         const product = await createProduct(tx, {
-          menuId: lunch.id,
           categoryId: null,
           name,
           unitId: null,
@@ -584,7 +583,6 @@ describe("option list CRUD", () => {
       const made: Record<string, string> = {};
       for (const name of ["steak", "burger", "chips"]) {
         const product = await createProduct(tx, {
-          menuId: menu.id,
           categoryId: null,
           name,
           unitId: null,

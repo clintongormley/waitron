@@ -173,7 +173,6 @@ async function venue(): Promise<Venue> {
     const menu = await createMenu(tx, { name: "Delicatessen" });
     const category = await createCategory(tx, { name: "Drinks" });
     await createProduct(tx, {
-      menuId: menu.id,
       categoryId: category.id,
       name: "Agua mineral",
       pricingUnit: "each",

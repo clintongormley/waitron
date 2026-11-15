@@ -194,7 +194,6 @@ async function setupVenue(): Promise<Venue> {
     for (const [dish, unitPrice] of Object.entries(DISHES) as [Dish, string][]) {
       productId[dish] = (
         await createProduct(tx, {
-          menuId: menu.id,
           categoryId: category.id,
           name: dish,
           customerName: { [LOCALE]: `menu ${dish}` },

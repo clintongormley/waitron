@@ -170,7 +170,6 @@ async function venueWith(
     const category = await createCategory(tx, { name: "Tapas" });
     // The staff, customer-facing and kitchen names all differ (docs/developers/products.md).
     const product = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: category.id,
       name: "STAFF Pan",
       customerName: {
@@ -807,7 +806,6 @@ describe("a sale prints its goods in the default content language its lines stor
         defaultLanguage,
       );
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: "STAFF Torrada",
         customerName: wording((words) => words.name),

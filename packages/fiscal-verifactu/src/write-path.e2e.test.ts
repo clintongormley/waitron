@@ -706,7 +706,6 @@ describe("a variant line is filed at its own effective VAT rate", () => {
   async function wineOffer(tx: Transaction) {
     const menu = await createMenu(tx, { name: "Barra" });
     const parent = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Wine by the glass",
       customerName: { "es-ES": "Vino de la casa" },

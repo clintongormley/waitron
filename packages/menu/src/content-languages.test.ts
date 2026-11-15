@@ -77,7 +77,6 @@ describe("site content languages", () => {
         "en",
       );
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: "Coffee",
         customerName: { en: "CLIENT Coffee", fr: "CLIENT ES coffee" },
@@ -126,7 +125,6 @@ describe("site content languages", () => {
         names: { en: "CLIENT Bar", fr: "CLIENT Bar FR" },
       });
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: "Coffee",
         customerName: { en: "CLIENT Coffee", fr: "CLIENT ES coffee" },
@@ -499,7 +497,6 @@ describe("site content languages", () => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
       const [menu] = await tx.insert(menus).values({ name: "Lunch" }).returning({ id: menus.id });
       await tx.insert(products).values({
-        menuId: menu!.id,
         name: "Bread",
         customerName: { en: "Bread", "fr-FR": "Pain" },
 
@@ -553,7 +550,6 @@ describe("site content languages", () => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
       const [menu] = await tx.insert(menus).values({ name: "Lunch" }).returning({ id: menus.id });
       await tx.insert(products).values({
-        menuId: menu!.id,
         name: "Bread",
         customerName: { en: "Bread" },
 

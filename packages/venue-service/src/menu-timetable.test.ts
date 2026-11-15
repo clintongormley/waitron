@@ -1456,7 +1456,6 @@ async function recordedLine(v: Timed) {
     values (${randomUUID()}, 'each', 'Each', 'ea', '{"en":"each"}', '{"en":"ea"}', 0, null)`);
   return scoped(async (tx) => {
     const product = await createProduct(tx, {
-      menuId: v.menus.Desayunos,
       categoryId: null,
       name: "Tortilla",
       pricingUnit: "each",
@@ -2709,7 +2708,6 @@ describe("the routing that names a period", () => {
       .returning({ id: categories.id });
     const mojito = await scoped((tx) =>
       createProduct(tx, {
-        menuId: v.menus.Copas,
         categoryId: cocktails!.id,
         name: "Mojito",
         pricingUnit: "each",
@@ -2793,7 +2791,6 @@ describe("the routing that names a period", () => {
       const product = async (name: string, categoryId: string | null) =>
         (
           await createProduct(tx, {
-            menuId: v.menus.Copas,
             categoryId,
             name,
             pricingUnit: "each",

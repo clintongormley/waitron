@@ -71,7 +71,6 @@ async function fixture() {
       "en",
     );
     const parent = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Wine by the glass",
       customerName: { en: "House wine" },
@@ -82,7 +81,6 @@ async function fixture() {
       vatClass: "reduced",
     });
     const other = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Cider",
       unitId: glass.id,

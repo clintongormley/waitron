@@ -318,7 +318,6 @@ describe("A803 portions: recording portions", () => {
       const product = async (name: string, price: string) =>
         (
           await createProduct(tx, {
-            menuId: venue.menuId,
             categoryId: null,
             name,
             customerName: { [defaultLanguage]: `${name} (customer)` },
@@ -507,7 +506,6 @@ describe("A803 portions: recording portions", () => {
       const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
       const bacon = (
         await createProduct(tx, {
-          menuId,
           categoryId: null,
           name: "Bacon",
           customerName: { [defaultLanguage]: "Bacon (customer)" },

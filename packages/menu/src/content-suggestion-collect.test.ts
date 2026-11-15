@@ -97,7 +97,6 @@ async function product(
   categoryId: string | null = null,
 ): Promise<string> {
   const created = await createProduct(tx, {
-    menuId: lunch.menuId,
     categoryId,
     unitId: null,
     name: `STAFF ${name}`,
@@ -120,7 +119,6 @@ async function variant(
   const [row] = await tx
     .insert(products)
     .values({
-      menuId: lunch.menuId,
       parentId,
       name: `STAFF ${name}`,
       kitchenName: `KITCHEN ${name}`,

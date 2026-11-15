@@ -147,7 +147,6 @@ async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
     });
     const product = (name: string, unitPrice: string) =>
       createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name,
         pricingUnit: "each",
@@ -778,7 +777,6 @@ it.each([false, true])(
       await updateProduct(tx, v.products.burger, { setLunch: true, unitPrice: "18.00" });
       await updateProduct(tx, v.products.cheese, { vatClass: "general" });
       const includedCoffee = await createProduct(tx, {
-        menuId: v.counter.menuId,
         categoryId: null,
         name: "Included coffee",
         customerName: { es: "Included guest coffee" },

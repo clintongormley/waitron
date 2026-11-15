@@ -40,7 +40,6 @@ export async function addProduct(
   customerName: Record<string, string> | null,
 ): Promise<string> {
   const product = await createProduct(tx, {
-    menuId: menuId,
     categoryId: null,
     unitId: null,
     name: `STAFF ${label}`,
@@ -181,7 +180,6 @@ export async function addOversizedFamily(
   const [variant] = await tx
     .insert(products)
     .values({
-      menuId: menuId,
       parentId: productId,
       name: "STAFF Wide glass",
       kitchenName: "KITCHEN Wide glass",

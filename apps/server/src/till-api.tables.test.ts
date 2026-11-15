@@ -94,7 +94,6 @@ const suite = useVenueDb({
       const cat = await createMenu(tx, { name: "Daily menu" });
       const drinksCategory = await createCategory(tx, { name: "Drinks" });
       const p = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: drinksCategory.id,
         name: "Agua mineral",
         pricingUnit: "each",
@@ -102,7 +101,6 @@ const suite = useVenueDb({
         vatClass: "general",
       });
       const bread = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: drinksCategory.id,
         name: "Bread",
         pricingUnit: "each",
@@ -612,7 +610,6 @@ describe("table + tab routes", () => {
     const choice = await withTransaction(suite.db, async (tx) => {
       const menu = await createMenu(tx, { name: "Lunch choices" });
       const extra = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: "Included coffee",
         pricingUnit: "each",

@@ -49,7 +49,6 @@ describe("menu allergen workflows", () => {
       ];
       for (const sample of samples) {
         await createProduct(tx, {
-          menuId: menu.id,
           pricingUnit: "each",
           vatClass: "reduced",
           ...sample,

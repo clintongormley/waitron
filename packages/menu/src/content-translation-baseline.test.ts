@@ -365,7 +365,6 @@ describe("translation peer baseline projection", () => {
           })
           .returning();
         const product = await createProduct(tx, {
-          menuId: parent.id,
           categoryId: null,
           name: "STAFF Bread",
           kitchenName: "KITCHEN Bread",

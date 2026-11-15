@@ -23,7 +23,6 @@ beforeEach(async () => {
 const make = (name: string) =>
   app((tx) =>
     createProduct(tx, {
-      menuId: menu,
       categoryId: null,
       name,
       pricingUnit: "each",

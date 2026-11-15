@@ -48,7 +48,6 @@ beforeEach(async () => {
     const product = async (name: string, unitPrice: string) =>
       (
         await createProduct(tx, {
-          menuId: menu.id,
           categoryId: null,
           name,
           unitId: null,

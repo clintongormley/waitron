@@ -117,7 +117,6 @@ useVenueDb({
       const product = async (name: string, unitPrice: string) =>
         (
           await createProduct(tx, {
-            menuId: burger!.menuId,
             categoryId: burger!.categoryId,
             name,
             customerName: { [v.cfg.locale]: name },

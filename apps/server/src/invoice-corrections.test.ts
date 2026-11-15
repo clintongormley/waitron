@@ -89,7 +89,6 @@ useVenueDb({
         ["Rice platter", "10.00"],
       ] as const) {
         const product = await createProduct(tx, {
-          menuId: menu!.id,
           categoryId: category!.id,
           name,
           customerName: { [venue.cfg.locale]: `House ${name}` },
@@ -101,7 +100,6 @@ useVenueDb({
         ids.set(name, product.id);
       }
       const soup = await createProduct(tx, {
-        menuId: menu!.id,
         categoryId: category!.id,
         name: "Cold soup",
         customerName: { [venue.cfg.locale]: "House Cold soup" },

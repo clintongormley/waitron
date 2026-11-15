@@ -145,7 +145,6 @@ async function setupVenue(options: {
       for (const name of MENUS) menus[name] = (await createMenu(tx, { name })).id;
       const product = (menuId: string, name: string, unitPrice: string) =>
         createProduct(tx, {
-          menuId,
           categoryId: null,
           name,
           pricingUnit: "each",
@@ -1178,7 +1177,6 @@ describe("service periods gate only added dishes and added stored quantities", (
     )!;
     const { extraId, listId } = await withTransaction(suite.db, async (tx) => {
       const extra = await createProduct(tx, {
-        menuId: v.menus["Midday menu"],
         categoryId: null,
         name: "Butter",
         pricingUnit: "each",
@@ -2016,7 +2014,6 @@ describe("kitchen routing follows the period running when a dish goes on the ord
       );
       const cocktails = (await createCategory(tx, { name: "Cocktails" })).id;
       const mojito = await createProduct(tx, {
-        menuId: v.menus["Midday menu"],
         categoryId: cocktails,
         name: "Mojito",
         pricingUnit: "each",
@@ -2218,7 +2215,6 @@ describe("kitchen routing follows the period running when a dish goes on the ord
         { kind: "station", stationId: c.downstairs.stationId },
       );
       const mint = await createProduct(tx, {
-        menuId: c.v.menus["Midday menu"],
         categoryId: garnish,
         name: "Mint",
         pricingUnit: "each",

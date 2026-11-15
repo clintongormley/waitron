@@ -88,7 +88,6 @@ async function setupVenue(): Promise<Seeded> {
     const cat = await createMenu(tx, { name: "Carta" });
     const drinks = await createCategory(tx, { name: "Bebidas" });
     const coffee = await createProduct(tx, {
-      menuId: cat.id,
       categoryId: drinks.id,
       name: "Café",
       pricingUnit: "each",
@@ -96,7 +95,6 @@ async function setupVenue(): Promise<Seeded> {
       vatClass: "general",
     });
     const water = await createProduct(tx, {
-      menuId: cat.id,
       categoryId: drinks.id,
       name: "Agua",
       pricingUnit: "each",
@@ -104,7 +102,6 @@ async function setupVenue(): Promise<Seeded> {
       vatClass: "general",
     });
     const ham = await createProduct(tx, {
-      menuId: cat.id,
       categoryId: drinks.id,
       name: "Jamón",
       pricingUnit: "weight",
@@ -112,7 +109,6 @@ async function setupVenue(): Promise<Seeded> {
       vatClass: "reduced",
     });
     const bacon = await createProduct(tx, {
-      menuId: cat.id,
       categoryId: drinks.id,
       name: "Bacon",
       pricingUnit: "each",

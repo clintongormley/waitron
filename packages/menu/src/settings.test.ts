@@ -59,7 +59,6 @@ describe("the venue's new-product defaults", () => {
       const [product] = await suite.db
         .insert(products)
         .values({
-          menuId: menu!.id,
           name: "Lemonade",
 
           unitPrice: 100,

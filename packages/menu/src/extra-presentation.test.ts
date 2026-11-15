@@ -19,7 +19,6 @@ async function sourceFixture(variant: boolean) {
   const f = await menusFixture(fx.db);
   const extraId = await app(async (tx) => {
     const parent = await createProduct(tx, {
-      menuId: f.lunch,
       categoryId: null,
       unitId: null,
       name: "Staff topping",

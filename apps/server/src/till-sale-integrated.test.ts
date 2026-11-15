@@ -125,7 +125,6 @@ describe("saved-zone payment transactions", () => {
       ]) {
         products.push(
           await createProduct(tx, {
-            menuId,
             categoryId: category.id,
             name: name!,
             customerName: { "en-GB": `Customer ${name}` },

@@ -30,7 +30,6 @@ beforeEach(async () => {
     const make = async (name: string, unitPrice: string) =>
       (
         await createProduct(tx, {
-          menuId: menu.id,
           categoryId: null,
           name,
           unitId: null,

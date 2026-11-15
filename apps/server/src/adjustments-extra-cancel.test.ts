@@ -63,7 +63,6 @@ useVenueDb({
         .where(eq(products.name, "Burger"));
       const product = (name: string, customer: string, kitchen: string, price: string) =>
         createProduct(tx, {
-          menuId: burger!.menuId,
           categoryId: burger!.categoryId!,
           name,
           customerName: { [venue.cfg.locale]: customer },
@@ -595,7 +594,6 @@ describe("cancelling an extra of a held dish (B11g)", () => {
         ["SCRB", screenId],
       ] as const) {
         const product = await createProduct(tx, {
-          menuId: burger!.menuId,
           categoryId: burger!.categoryId!,
           name: `${kitchenName} ${randomUUID()}`,
           customerName: { [venue.cfg.locale]: kitchenName },

@@ -163,7 +163,6 @@ export async function seedMenus(
             ).id
           : undefined;
         const created = await createProduct(tx, {
-          menuId: menu.id,
           categoryId: category.id,
           name: plain(product.staffName ?? product.customerName),
           customerName: translated(product.customerName),

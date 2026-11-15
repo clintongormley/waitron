@@ -359,7 +359,6 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
         const menu = await createMenu(tx, { name: `Stream menu ${streamId}` });
         const drinks = await createCategory(tx, { name: "Bebidas" });
         const water = await createProduct(tx, {
-          menuId: menu.id,
           categoryId: drinks.id,
           name: "Agua",
           pricingUnit: "each",

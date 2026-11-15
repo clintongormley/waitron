@@ -50,7 +50,6 @@ async function seasonVenue() {
       const dish = async (menuName: string, name: string) => {
         const menuId = (await createMenu(tx, { name: menuName })).id;
         const product = await createProduct(tx, {
-          menuId: menuId,
           categoryId: null,
           name,
           pricingUnit: "each",

@@ -175,7 +175,6 @@ export async function provisionBillVenue(
     const productIds = new Map<string, string>();
     for (const item of MENU) {
       const product = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: platos.id,
         name: item.name,
         customerName: { [LOCALE]: item.customer },

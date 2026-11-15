@@ -148,7 +148,6 @@ beforeAll(async () => {
     const drinks = await createCategory(tx, { name: "Bebidas" });
     // Every case asserts against this 1.00 gross.
     const product = await createProduct(tx, {
-      menuId: cat.id,
       categoryId: drinks.id,
       name: "Agua",
       pricingUnit: "each",

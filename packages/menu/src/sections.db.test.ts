@@ -34,7 +34,6 @@ async function fixture() {
     const make = async (name: string) =>
       (
         await createProduct(tx, {
-          menuId: menu.id,
           categoryId: null,
           name: `${name} (staff)`,
           customerName: { en: `${name} (customer)` },
@@ -516,7 +515,6 @@ describe("moving and removing several members", () => {
       async (tx) =>
         (
           await createProduct(tx, {
-            menuId: other.ownerMenuId,
             categoryId: null,
             name: "Cider (staff)",
             customerName: { en: "Cider (customer)" },

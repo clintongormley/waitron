@@ -39,7 +39,6 @@ function product(id: string, name: string, unitPrice: string, unit = EACH): Prod
   return {
     id,
     modifiers: [],
-    menuId: "cat-1",
     categoryId: "category-1",
     primaryCategoryId: "category-1",
     name,

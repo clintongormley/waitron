@@ -28,7 +28,6 @@ beforeEach(async () => {
     const make = async (name: string, categoryId: string) =>
       (
         await createProduct(tx, {
-          menuId: menu.id,
           categoryId,
           name,
           pricingUnit: "each",
@@ -264,7 +263,6 @@ describe("deleteProductItems with the counts the client read before deleting", (
   const addProduct = (tx: Transaction, categoryId: string) =>
     createMenu(tx, { name: "Later" }).then((menu) =>
       createProduct(tx, {
-        menuId: menu.id,
         categoryId,
         name: "Stout",
         pricingUnit: "each",
@@ -395,7 +393,6 @@ describe("summariseFolders", () => {
       const stouts = (await createCategory(tx, { name: "Stout", parentId: b })).id;
       const bar = await createMenu(tx, { name: "Bar" });
       const { id } = await createProduct(tx, {
-        menuId: bar.id,
         categoryId: stouts,
         name: "Porter",
         pricingUnit: "each",

@@ -71,7 +71,6 @@ async function fixture(tx: Transaction) {
   const product = async (name: string, categoryId: string | null) =>
     (
       await createProduct(tx, {
-        menuId: menu.id,
         name,
         categoryId,
         pricingUnit: "each",
@@ -85,7 +84,7 @@ async function fixture(tx: Transaction) {
   const cheese = await product("Cheese", null);
   const [large] = await tx
     .insert(products)
-    .values({ menuId: menu.id, parentId: burger, name: "Large", categoryId: null })
+    .values({  parentId: burger, name: "Large", categoryId: null })
     .returning();
   const list = await createExtraList(
     tx,

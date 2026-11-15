@@ -108,7 +108,6 @@ useVenueDb({
         ["Leche", "1.00", "reduced"],
       ] as const) {
         const product = await createProduct(tx, {
-          menuId: menu!.id,
           categoryId: category!.id,
           name,
           customerName: { [venue.cfg.locale]: `${name} de la casa` },
@@ -136,7 +135,6 @@ useVenueDb({
       );
       extraListId = extras.id;
       const ham = await createProduct(tx, {
-        menuId: menu!.id,
         categoryId: category!.id,
         name: "Jamón",
         unitId: kg!.id,

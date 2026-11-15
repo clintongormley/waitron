@@ -127,7 +127,6 @@ async function fixture(tx: Transaction, suffix = "") {
   const product = async (name: string, categoryId: string | null) =>
     (
       await createProduct(tx, {
-        menuId: menu.id,
         name,
         categoryId,
         pricingUnit: "each",
@@ -139,7 +138,7 @@ async function fixture(tx: Transaction, suffix = "") {
   const bread = await product(`Bread${suffix}`, null);
   const [variant] = await tx
     .insert(products)
-    .values({ menuId: menu.id, parentId: mojito, name: "Large", categoryId: null })
+    .values({  parentId: mojito, name: "Large", categoryId: null })
     .returning();
   return {
     cfg,
@@ -169,7 +168,6 @@ async function breadVariant(tx: Transaction, f: { bread: string; food: string })
   const [half] = await tx
     .insert(products)
     .values({
-      menuId: bread!.menuId,
       parentId: f.bread,
       name: "Half",
       categoryId: f.food,
@@ -1222,7 +1220,6 @@ describe("routing previews", () => {
         .returning();
       const menu = await createMenu(tx, { name: "Drinks menu" });
       const lager = await createProduct(tx, {
-        menuId: menu.id,
         name: "Lager",
         categoryId: f.beer,
         pricingUnit: "each",
@@ -1369,7 +1366,6 @@ describe("routing previews", () => {
       const product = async (name: string, categoryId: string | null) =>
         (
           await createProduct(tx, {
-            menuId: f.menu,
             name,
             categoryId,
             pricingUnit: "each",
@@ -1761,7 +1757,6 @@ describe("routing previews", () => {
           const [variant] = await tx
             .insert(products)
             .values({
-              menuId: f.menu,
               parentId: await f.product(name, sides),
               name: "Large",
               categoryId: null,
@@ -1837,7 +1832,6 @@ describe("routing previews", () => {
       const product = async (name: string, categoryId: string | null) =>
         (
           await createProduct(tx, {
-            menuId: menu.id,
             name,
             categoryId,
             pricingUnit: "each",
@@ -1848,7 +1842,7 @@ describe("routing previews", () => {
       const variant = async (parentId: string, name: string, categoryId: string | null) => {
         const [row] = await tx
           .insert(products)
-          .values({ menuId: menu.id, parentId, name, categoryId })
+          .values({  parentId, name, categoryId })
           .returning();
         return row!.id;
       };
@@ -2140,7 +2134,6 @@ async function extrasFixture(tx: Transaction) {
   const product = async (name: string, categoryId: string) =>
     (
       await createProduct(tx, {
-        menuId: menu.id,
         name,
         categoryId,
         pricingUnit: "each",
@@ -2152,7 +2145,7 @@ async function extrasFixture(tx: Transaction) {
   const cheese = await product("Cheese", toppings);
   const [variant] = await tx
     .insert(products)
-    .values({ menuId: menu.id, parentId: chips, name: "Large chips", categoryId: null })
+    .values({  parentId: chips, name: "Large chips", categoryId: null })
     .returning();
   await setCategoryCell(tx, sides, { kind: "station", stationId: fryer!.id });
   return {
@@ -2906,7 +2899,6 @@ describe("saving a cell's period choices", () => {
       .returning();
     const daiquiri = (
       await createProduct(tx, {
-        menuId: f.menu,
         name: "Daiquiri",
         categoryId: f.cocktails,
         pricingUnit: "each",

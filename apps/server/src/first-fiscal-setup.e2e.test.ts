@@ -112,7 +112,6 @@ async function configurationArtifact() {
   await withTransaction(source.db, async (tx) => {
     const menu = await createMenu(tx, { name: "Prepared menu" });
     await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Prepared gazpacho",
       pricingUnit: "each",

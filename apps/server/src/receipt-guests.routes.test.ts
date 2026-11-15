@@ -146,7 +146,6 @@ async function venue(db: Database): Promise<Venue> {
     });
     const category = await createCategory(tx, { name: "Tapas" });
     const product = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: category.id,
       name: "Pan",
       pricingUnit: "each",
@@ -154,7 +153,6 @@ async function venue(db: Database): Promise<Venue> {
       vatClass: "general",
     });
     const free = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: category.id,
       name: "Agua del grifo",
       pricingUnit: "each",

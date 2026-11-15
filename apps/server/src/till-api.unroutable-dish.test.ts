@@ -152,7 +152,6 @@ async function dish(name: string, categoryId: string | null = null): Promise<Dis
   return inTx(v, async (tx) => {
     const staffName = `${name} ${randomUUID().slice(0, 8)}`;
     const product = await createProduct(tx, {
-      menuId,
       categoryId,
       name: staffName,
       customerName: { [v.cfg.locale]: `Customer ${name}` },

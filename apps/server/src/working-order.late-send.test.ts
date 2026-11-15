@@ -73,7 +73,6 @@ async function mealVenue(weekdays: readonly number[] = [1]) {
       const product = async (menuId: string, name: string, unitPrice: string) =>
         (
           await createProduct(tx, {
-            menuId,
             categoryId: null,
             name,
             pricingUnit: "each",

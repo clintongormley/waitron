@@ -38,7 +38,6 @@ useVenueDb({
       const cat = await createMenu(tx, { name: "Menu" });
       const category = await createCategory(tx, { name: "Food" });
       const dish = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: category.id,
         name: "Dish",
         pricingUnit: "each",

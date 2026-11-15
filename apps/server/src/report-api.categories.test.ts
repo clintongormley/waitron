@@ -176,7 +176,6 @@ const suite = useVenueDb({
       const product = async (name: string, categoryId: string | null) =>
         (
           await createProduct(tx, {
-            menuId: menu.id,
             categoryId,
             name,
             pricingUnit: "each",

@@ -37,7 +37,6 @@ async function twoMenus() {
     const make = async (name: string) =>
       (
         await createProduct(tx, {
-          menuId: dinner,
           categoryId,
           name,
           pricingUnit: "each",

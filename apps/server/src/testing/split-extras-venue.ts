@@ -149,7 +149,6 @@ export async function setupSplitExtrasVenue() {
     ) =>
       (
         await createProduct(tx, {
-          menuId,
           categoryId,
           name,
           customerName: { [defaultLanguage]: customer },
@@ -326,7 +325,6 @@ export async function addExtras(
     )
       throw new Error("addExtras: three distinct names required");
     const { id } = await createProduct(tx, {
-      menuId,
       categoryId: item.categoryId ?? null,
       name: item.name,
       ...(item.customerName === undefined

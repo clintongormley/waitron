@@ -628,7 +628,6 @@ describe("the floor's attention signals", () => {
       const menu = await createMenu(tx, { name: "Pesados" });
       const category = await createCategory(tx, { name: "Raciones" });
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: category.id,
         name: "Pulpo",
         customerName: { "es-ES": "Pulpo a la gallega" },

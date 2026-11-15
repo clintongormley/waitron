@@ -52,7 +52,6 @@ async function fixture(tx: Transaction) {
   await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "ca", "en"] });
   const menu = await createMenu(tx, { name: "Lunch" });
   const product = await createProduct(tx, {
-    menuId: menu.id,
     categoryId: null,
     unitId: null,
     name: "STAFF Bread",
@@ -106,7 +105,6 @@ async function fixture(tx: Transaction) {
     "es",
   );
   const extraProduct = await createProduct(tx, {
-    menuId: menu.id,
     categoryId: null,
     unitId: null,
     name: "STAFF Butter",

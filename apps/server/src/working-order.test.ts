@@ -197,7 +197,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
       const cat = await createMenu(tx, { name: "Menu" });
       const drinksCategory = await createCategory(tx, { name: "ES drinks" });
       const coffeeProduct = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: drinksCategory.id,
         name: "Espresso",
         pricingUnit: "each",
@@ -207,7 +206,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
       // Deliberately category-less, so its priced line snapshots `category: null` — the other side
       // of `parkOrder`'s `?? null`.
       const waterProduct = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "Water",
         pricingUnit: "each",
@@ -389,7 +387,6 @@ async function addExtraList(
   } = {},
 ): Promise<{ listId: string; productId: string }> {
   const offered = await createProduct(tx, {
-    menuId,
     categoryId: null,
     name: `${label} staff`,
     customerName: { [CONTENT_LANGUAGE]: `${label} customer` },
@@ -466,7 +463,6 @@ async function seedVariantOffer(
   menuId: string,
 ): Promise<{ offerId: string; variantId: string; productId: string }> {
   const product = await createProduct(tx, {
-    menuId,
     categoryId: null,
     name: "Coffee",
     customerName: { [LOCALE]: "Freshly ground coffee" },
@@ -604,7 +600,6 @@ describe("parkOrder", () => {
     const id = randomUUID();
     const seeded = await withTransaction(db, async (tx) => {
       const product = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Coffee",
         customerName: { [LOCALE]: "Freshly ground coffee" },
@@ -1621,7 +1616,6 @@ describe("getHeldOrder", () => {
     const { cfg, menuId, zoneId, coffeeId, premiumCoffeeOfferId, kgUnitId } = await setupVenue();
     const extra = await withTransaction(db, async (tx) => {
       const product = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Ham",
         unitId: kgUnitId,
@@ -1674,7 +1668,6 @@ describe("getHeldOrder", () => {
     const { cfg, menuId, zoneId, coffeeId, premiumCoffeeOfferId, kgUnitId } = await setupVenue();
     const extra = await withTransaction(db, async (tx) => {
       const product = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Ham",
         unitId: kgUnitId,
@@ -1748,7 +1741,6 @@ describe("getHeldOrder", () => {
     const { cfg, menuId, zoneId, coffeeId, premiumCoffeeOfferId, kgUnitId } = await setupVenue();
     const extra = await withTransaction(db, async (tx) => {
       const product = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Ham staff",
         customerName: { [CONTENT_LANGUAGE]: "Ham customer" },
@@ -1845,7 +1837,6 @@ describe("getHeldOrder", () => {
         returning id`);
       const unitId = inserted.rows[0]!.id;
       const product = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Ham",
         unitId,
@@ -3248,7 +3239,6 @@ async function makeProduct(
   route: { categoryId?: string; stationId?: string },
 ): Promise<string> {
   const { id } = await createProduct(tx, {
-    menuId,
     categoryId: route.categoryId ?? null,
     name: `P-${randomUUID().slice(0, 8)}`,
     pricingUnit: "each",
@@ -3410,7 +3400,6 @@ async function addExtra(
   },
 ): Promise<{ listId: string; productId: string }> {
   const offered = await createProduct(tx, {
-    menuId,
     categoryId: null,
     name,
     pricingUnit: "each",
@@ -5486,7 +5475,6 @@ describe("advanceTicketItem / listStationQueue (bump + queue)", () => {
       // A gluten burger with a "gluten-free bun" option: base `{gluten: contains}`. The option states no
       // allergens of its own; the dish shows its OWN gluten (options are never folded into the dish).
       const burger = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Hamburguesa",
         pricingUnit: "each",
@@ -5576,7 +5564,6 @@ describe("advanceTicketItem / listStationQueue (bump + queue)", () => {
     await withTransaction(db, async (tx) => {
       const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
       const dish = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Ensalada",
         pricingUnit: "each",
@@ -5605,7 +5592,6 @@ describe("advanceTicketItem / listStationQueue (bump + queue)", () => {
     await withTransaction(db, async (tx) => {
       const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
       const dish = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Crema",
         pricingUnit: "each",
@@ -5655,7 +5641,6 @@ describe("advanceTicketItem / listStationQueue (bump + queue)", () => {
     await withTransaction(db, async (tx) => {
       const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
       const dish = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Ensalada",
         pricingUnit: "each",
@@ -6380,7 +6365,6 @@ describe("correction slips on line changes and cancellations (A6)", () => {
     courseId?: string,
   ): Promise<string> {
     const { id } = await createProduct(tx, {
-      menuId,
       categoryId: null,
       name: name,
       pricingUnit: "each",
@@ -7028,7 +7012,6 @@ describe("a cancel's extras cascade (FIX 2)", () => {
         stationId: extrasStation.id,
       });
       const extra = await createProduct(tx, {
-        menuId,
         categoryId: extrasCategory.id,
         name: "Ham",
         unitId: kgUnitId,
@@ -7135,7 +7118,6 @@ describe("a cancel's extras cascade (FIX 2)", () => {
         stationId: extrasStation.id,
       });
       const extra = await createProduct(tx, {
-        menuId,
         categoryId: extrasCategory.id,
         name: "Ham",
         unitId: kgUnitId,
@@ -7215,7 +7197,6 @@ describe("a cancel's extras cascade (FIX 2)", () => {
     const { cfg, coffeeId, menuId, kgUnitId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const extra = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Ham",
         unitId: kgUnitId,
@@ -7282,7 +7263,6 @@ describe("a cancel's extras cascade (FIX 2)", () => {
     const { cfg, coffeeId, menuId, kgUnitId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const extra = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Ham",
         unitId: kgUnitId,
@@ -7358,7 +7338,6 @@ describe("a cancel's extras cascade (FIX 2)", () => {
     name: string,
   ): Promise<{ listId: string; productId: string }> {
     const offered = await createProduct(tx, {
-      menuId,
       categoryId: null,
       name,
       pricingUnit: "each",
@@ -7553,7 +7532,6 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
     for (const name of ["Uno", "Dos"]) {
       offered.push(
         await createProduct(tx, {
-          menuId,
           categoryId: null,
           name,
           pricingUnit: "each",
@@ -7932,7 +7910,6 @@ it("shows the dish's own allergens and diet beside a frozen options answer", asy
   await withTransaction(db, async (tx) => {
     const station = await createStation(tx, { name: "Kitchen", isDefault: true });
     const product = await createProduct(tx, {
-      menuId,
       categoryId: null,
       name: "Coffee",
       pricingUnit: "each",
@@ -7978,7 +7955,6 @@ describe("frozen answers through a fractional quantity edit", () => {
     const { cfg, coffeeId, menuId, kgUnitId } = await setupVenue();
     const seeded = await withTransaction(db, async (tx) => {
       const extra = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Ham",
         unitId: kgUnitId,
@@ -8270,7 +8246,6 @@ describe("order path — extras and options", () => {
     return withTransaction(db, async (tx) => {
       const { defaultLanguage } = await menu.readContentLanguages(tx, cfg.locale);
       const dish = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Pizza",
         pricingUnit: "each",
@@ -8278,7 +8253,6 @@ describe("order path — extras and options", () => {
         vatClass: "reduced",
       });
       const wine = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Wine staff",
         customerName: { [defaultLanguage]: "Wine customer" },
@@ -9272,7 +9246,6 @@ describe("editing a saved order prices only what the edit adds", () => {
       const mains = await createCategory(tx, { name: "Mains" });
       const product = (name: string, unitPrice: string, categoryId: string | null = null) =>
         createProduct(tx, {
-          menuId,
           categoryId,
           name: `${name} staff`,
           customerName: { [LOCALE]: `${name} customer` },
@@ -9573,7 +9546,6 @@ async function seedWine(tx: Transaction, menuId: string) {
   const firstCourse = await createCourse(tx, { name: "First", displayOrder: 1 });
   const secondCourse = await createCourse(tx, { name: "Second", displayOrder: 2 });
   const parent = await createProduct(tx, {
-    menuId,
     categoryId: wineCategory.id,
     name: "Wine by the glass",
     customerName: { [LOCALE]: "House wine" },
@@ -9881,7 +9853,6 @@ describe("a variant is sold as the product it is", () => {
       );
       await tx.update(products).set({ active: false }).where(eq(products.id, inactive!.id));
       const cider = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Cider",
         pricingUnit: "each",
@@ -10542,7 +10513,6 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
     const { cfg, menuId } = await setupVenue();
     const coffee = await withTransaction(db, async (tx) => {
       const product = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Coffee",
         pricingUnit: "each",

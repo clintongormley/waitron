@@ -100,7 +100,6 @@ function product(id: string, name: string, overrides: Partial<Product> = {}): Pr
   return {
     id,
     modifiers: [],
-    menuId: "cat-1",
     categoryId: null,
     primaryCategoryId: null,
     name,

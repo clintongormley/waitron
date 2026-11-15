@@ -662,7 +662,6 @@ describe("routing cells in a staged import", () => {
           name: `Configuration import menu`,
         });
         const product = await createProduct(tx, {
-          menuId: menu.id,
           categoryId: category.id,
           name: "Mojito",
           pricingUnit: "each",
@@ -671,7 +670,7 @@ describe("routing cells in a staged import", () => {
         });
         const [large] = await tx
           .insert(products)
-          .values({ menuId: menu.id, parentId: product.id, name: "Large", categoryId: null })
+          .values({  parentId: product.id, name: "Large", categoryId: null })
           .returning();
         await setRoutingCell(
           tx,

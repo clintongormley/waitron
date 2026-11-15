@@ -561,7 +561,6 @@ describe("A669 atomic submit", () => {
       });
       const make = (name: string) =>
         createProduct(tx, {
-          menuId: cat.id,
           categoryId: category.id,
           name,
           customerName: { es: `${name} customer` },

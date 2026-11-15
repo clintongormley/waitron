@@ -105,7 +105,6 @@ it("counts a variant but not its complete product, which travels only as context
     const [row] = await tx
       .insert(products)
       .values({
-        menuId: menu.id,
         parentId: water,
         name: "STAFF Water small",
         kitchenName: "KITCHEN Water small",

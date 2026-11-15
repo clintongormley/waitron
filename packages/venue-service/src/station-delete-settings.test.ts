@@ -175,7 +175,6 @@ it("clears owned daily dates and incoming destinations without reopening their o
     const f = await fixture(tx);
     const [menu] = await tx.insert(menus).values({ name: "Daily menu" }).returning();
     const product = await createProduct(tx, {
-      menuId: menu!.id,
       name: "Daily product",
       categoryId: null,
       pricingUnit: "each",

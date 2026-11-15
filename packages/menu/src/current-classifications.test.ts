@@ -26,7 +26,6 @@ async function fixture() {
     const spirits = await createCategory(tx, { name: "Spirits" });
     const product = (name: string, categoryId: string | null) =>
       createProduct(tx, {
-        menuId: menu.id,
         categoryId,
         name,
         pricingUnit: "each",

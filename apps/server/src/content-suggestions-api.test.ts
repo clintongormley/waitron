@@ -114,7 +114,6 @@ async function bread(): Promise<string> {
       names: { es: "CLIENT-es Almuerzo", en: "CLIENT-en Lunch" },
     });
     const product = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       unitId: null,
       name: "STAFF Bread",

@@ -68,7 +68,6 @@ async function fixture(db: Database): Promise<Fixture> {
   const [product] = await db
     .insert(products)
     .values({
-      menuId: menu!.id,
       name: "Bread",
 
       unitPrice: 200,
@@ -143,7 +142,6 @@ describe("a written image filename", () => {
   // `expect(...).rejects` refuses anything that is not one.
   const insertProduct = async (image: string | null): Promise<void> => {
     await suite.db.insert(products).values({
-      menuId: ids.menuId,
       name: "Roll",
 
       unitPrice: 100,
@@ -389,7 +387,6 @@ async function publishedOnly(): Promise<{ menuId: string; productId: string }> {
   return withTransaction(suite.db, async (tx) => {
     const menu = await createMenu(tx, { name: "Lunch Menu" });
     const product = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Toast",
       pricingUnit: "each",

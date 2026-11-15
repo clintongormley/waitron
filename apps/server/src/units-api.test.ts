@@ -54,7 +54,7 @@ async function seedProduct(
 ): Promise<string> {
   const [product] = await tx
     .insert(products)
-    .values({ menuId, name, unitPrice: 100, vatClass: "general" })
+    .values({  name, unitPrice: 100, vatClass: "general" })
     .returning({ id: products.id });
   await tx
     .update(products)

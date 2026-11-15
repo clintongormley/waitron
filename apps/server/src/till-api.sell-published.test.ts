@@ -199,7 +199,6 @@ async function setupLunch(): Promise<Lunch> {
     const category = await createCategory(tx, { name: "Carta" });
     const product = (name: string, unitPrice: string, vatClass: "general" | "reduced") =>
       createProduct(tx, {
-        menuId: lunch.id,
         categoryId: category.id,
         name,
         pricingUnit: "each",
@@ -774,7 +773,6 @@ describe("who may order a product on its own (spec §9, D12)", () => {
         .from(products)
         .where(eq(products.id, v.burger.productId));
       const bacon = await createProduct(tx, {
-        menuId: v.menuId,
         categoryId,
         name: "Bacon",
         customerName: { [LOCALE]: "Beicon crujiente" },

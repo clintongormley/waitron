@@ -71,7 +71,6 @@ export async function plantStoredProduct(
   const [row] = await tx
     .insert(products)
     .values({
-      menuId,
       ...nameColumns(name),
       parentId,
       ...(parentId === null
@@ -166,7 +165,6 @@ export async function seedMenuFixture(tx: Transaction): Promise<SeededMenu> {
     )
   ).id;
   const slicedHam = await createProduct(tx, {
-    menuId: menu.id,
     categoryId: food.id,
     name: "sliced ham",
     unitId: kgUnitId,
@@ -174,7 +172,6 @@ export async function seedMenuFixture(tx: Transaction): Promise<SeededMenu> {
     vatClass: "reduced",
   });
   const water = await createProduct(tx, {
-    menuId: menu.id,
     categoryId: drinks.id,
     name: "water",
     unitId: eachUnitId,

@@ -74,7 +74,6 @@ describe("menu operations", () => {
     await asVenue(async (tx) => {
       const menu = await createMenu(tx, { name: "Lunch" });
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: "Coffee",
         customerName: { en: "Coffee", es: "Café" },
@@ -114,7 +113,6 @@ describe("menu operations", () => {
         vatClass: "general",
       });
       const nine = await addProductToMenu(tx, {
-        menuId: upstairs.id,
         productId: product.id,
         grossPrice: "9.00",
       });
@@ -168,7 +166,6 @@ describe("menu operations", () => {
         vatClass: "general",
       });
       const item = await addProductToMenu(tx, {
-        menuId: menu.id,
         productId: product.id,
         grossPrice: "1.50",
       });
@@ -253,7 +250,6 @@ describe("menu operations", () => {
       const cat = await createMenu(tx, { name: "Deli" });
       const other = await createMenu(tx, { name: "Other" });
       const ham = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "sliced ham",
         unitId: kgUnitId,
@@ -261,7 +257,6 @@ describe("menu operations", () => {
         vatClass: "reduced",
       });
       const water = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "water",
         unitId: eachUnitId,
@@ -270,7 +265,6 @@ describe("menu operations", () => {
       });
       // A product in a DIFFERENT menu must not leak into this menu's listing.
       await createProduct(tx, {
-        menuId: other.id,
         categoryId: null,
         name: "olives",
         unitId: eachUnitId,
@@ -334,7 +328,6 @@ describe("menu operations", () => {
       // Create a normal product, then clear its stored unit so the read exercises the
       // null-join branch of a product that has no stored unit at all.
       const product = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "loose sweets",
         pricingUnit: "each",
@@ -355,7 +348,6 @@ describe("menu operations", () => {
     await asVenue(async (tx) => {
       const cat = await createMenu(tx, { name: "Deli" });
       const created = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "loose sweets",
         unitId: null,
@@ -372,7 +364,6 @@ describe("menu operations", () => {
     await asVenue(async (tx) => {
       const cat = await createMenu(tx, { name: "Deli" });
       const created = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "ham",
         unitId: kgUnitId,
@@ -393,7 +384,6 @@ describe("menu operations", () => {
     await asVenue(async (tx) => {
       const cat = await createMenu(tx, { name: "Deli" });
       const created = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "ham",
         unitId: kgUnitId,
@@ -409,7 +399,6 @@ describe("menu operations", () => {
     await asVenue(async (tx) => {
       const cat = await createMenu(tx, { name: "Deli" });
       const created = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "loose sweets",
         pricingUnit: "each",
@@ -426,7 +415,6 @@ describe("menu operations", () => {
       const cat = await createMenu(tx, { name: "Deli" });
       await expect(
         createProduct(tx, {
-          menuId: cat.id,
           categoryId: null,
           name: "Stray",
           unitId: "",
@@ -437,7 +425,6 @@ describe("menu operations", () => {
       expect(await listProducts(tx, cat.id)).toEqual([]);
 
       const created = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "ham",
         unitId: kgUnitId,
@@ -458,7 +445,6 @@ describe("menu operations", () => {
       const missing = crypto.randomUUID();
       await expect(
         createProduct(tx, {
-          menuId: cat.id,
           categoryId: missing,
           name: "Stray",
           unitId: eachUnitId,
@@ -476,7 +462,6 @@ describe("menu operations", () => {
     await expect(
       asVenue((tx) =>
         createProduct(tx, {
-          menuId: missing,
           categoryId: null,
           name: "Stray",
           unitId: eachUnitId,
@@ -492,7 +477,6 @@ describe("menu operations", () => {
     await expect(
       asVenue((tx) =>
         createProduct(tx, {
-          menuId: missing,
           categoryId: crypto.randomUUID(),
           name: "Stray",
           unitId: eachUnitId,
@@ -508,7 +492,6 @@ describe("menu operations", () => {
       const cat = await createMenu(tx, { name: "Deli" });
       await expect(
         createProduct(tx, {
-          menuId: cat.id,
           categoryId: null,
           name: "mystery",
           unitPrice: "0.00",
@@ -523,7 +506,6 @@ describe("menu operations", () => {
       const cat = await createMenu(tx, { name: "Deli" });
       await expect(
         createProduct(tx, {
-          menuId: cat.id,
           categoryId: null,
           name: "mystery",
           // A stray legacy value must be rejected at the boundary, not treated as weight.
@@ -562,7 +544,6 @@ describe("menu operations", () => {
     await asVenue(async (tx) => {
       const cat = await createMenu(tx, { name: "Deli" });
       const product = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "ham",
         unitId: kgUnitId,
@@ -582,7 +563,6 @@ describe("menu operations", () => {
     await asVenue(async (tx) => {
       const menu = await createMenu(tx, { name: "Deli" });
       const ham = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: "ham",
         pricingUnit: "weight",
@@ -609,7 +589,6 @@ describe("menu operations", () => {
     await asVenue(async (tx) => {
       const menu = await createMenu(tx, { name: "Deli" });
       const ham = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: "ham",
         unitId: kgUnitId,
@@ -634,7 +613,6 @@ describe("menu operations", () => {
     await asVenue(async (tx) => {
       const menu = await createMenu(tx, { name: "Deli" });
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: "ham",
         pricingUnit: "each",
@@ -659,7 +637,6 @@ describe("menu operations", () => {
     await asVenue(async (tx) => {
       const cat = await createMenu(tx, { name: "Deli" });
       const water = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "water",
         unitId: eachUnitId,
@@ -692,7 +669,6 @@ describe("menu operations", () => {
       expect(withImage.image).toBe(libraryImageName("x.webp"));
       // Omitting `image` leaves it null (no picture — distinct from allergens' PENDING null).
       const noImage = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "water",
         unitId: eachUnitId,
@@ -718,7 +694,6 @@ describe("menu operations", () => {
     const { cat, p } = await asVenue(async (tx) => {
       const cat = await createMenu(tx, { name: "Deli" });
       const p = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "water",
         unitId: eachUnitId,
@@ -744,7 +719,6 @@ describe("menu operations", () => {
       const cat = await createMenu(tx, { name: "Deli" });
       // Created INACTIVE in one write: the flag round-trips out of createProduct.
       const hidden = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "seasonal",
         unitId: eachUnitId,
@@ -755,7 +729,6 @@ describe("menu operations", () => {
       expect(hidden.active).toBe(false);
       // Omitting `active` leaves the column default (true).
       const shown = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "water",
         unitId: eachUnitId,
@@ -774,7 +747,6 @@ describe("menu operations", () => {
     await asVenue(async (tx) => {
       const cat = await createMenu(tx, { name: "Deli" });
       const base = {
-        menuId: cat.id,
         categoryId: null,
         unitId: eachUnitId,
         unitPrice: "1.50",
@@ -806,7 +778,6 @@ describe("menu operations", () => {
     await asVenue(async (tx) => {
       const cat = await createMenu(tx, { name: "Deli" });
       const p = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "bacon",
         unitId: eachUnitId,
@@ -824,7 +795,6 @@ describe("menu operations", () => {
     await asVenue(async (tx) => {
       const cat = await createMenu(tx, { name: "Deli" });
       const p = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "Bread",
         unitId: eachUnitId,
@@ -848,7 +818,6 @@ describe("menu operations", () => {
     await asVenue(async (tx) => {
       const cat = await createMenu(tx, { name: "Deli" });
       const p = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "bread",
         unitId: eachUnitId,
@@ -866,7 +835,6 @@ describe("menu operations", () => {
     await asVenue(async (tx) => {
       const cat = await createMenu(tx, { name: "Deli" });
       const p = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "water",
         unitId: eachUnitId,
@@ -882,7 +850,6 @@ describe("menu operations", () => {
       const cat = await createMenu(tx, { name: "Deli" });
       await expect(
         createProduct(tx, {
-          menuId: cat.id,
           categoryId: null,
           name: "mystery",
           unitId: eachUnitId,
@@ -898,7 +865,6 @@ describe("menu operations", () => {
     await asVenue(async (tx) => {
       const cat = await createMenu(tx, { name: "Deli" });
       const p = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "cake",
         unitId: eachUnitId,
@@ -927,7 +893,6 @@ describe("menu operations", () => {
     await asVenue(async (tx) => {
       const cat = await createMenu(tx, { name: "Deli" });
       await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "milk",
         unitId: eachUnitId,
@@ -992,7 +957,6 @@ describe("menu operations", () => {
         ["olives", eachUnitId],
       ] as const) {
         await createProduct(tx, {
-          menuId: cat.id,
           categoryId: null,
           name,
           unitId,
@@ -1012,7 +976,6 @@ describe("menu operations", () => {
     await asVenue(async (tx) => {
       const cat = await createMenu(tx, { name: "Deli" });
       await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "falafel wrap",
         unitId: eachUnitId,
@@ -1033,7 +996,6 @@ describe("menu operations", () => {
     const result = await withTransaction(fx.db, async (tx) => {
       const cat = await createMenu(tx, { name: "C" });
       const p = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "sandwich",
         unitId: eachUnitId,
@@ -1052,7 +1014,6 @@ describe("menu operations", () => {
     const [withOverride, without] = await withTransaction(fx.db, async (tx) => {
       const cat = await createMenu(tx, { name: "C" });
       const forced = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "falafel",
         unitId: eachUnitId,
@@ -1061,7 +1022,6 @@ describe("menu operations", () => {
         dietOverride: { vegan: "no", halal: "yes", addContains: ["meat"] },
       });
       const plain = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "plain",
         unitId: eachUnitId,
@@ -1101,7 +1061,6 @@ describe("menu operations", () => {
     const [row] = await asVenue(async (tx) => {
       const cat = await createMenu(tx, { name: "C" });
       const p = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "plain",
         unitId: eachUnitId,
@@ -1120,7 +1079,6 @@ describe("menu operations", () => {
     const [row] = await asVenue(async (tx) => {
       const cat = await createMenu(tx, { name: "C" });
       const p = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "falafel",
         unitId: eachUnitId,
@@ -1139,7 +1097,6 @@ describe("menu operations", () => {
       const cat = await createMenu(tx, { name: "C" });
       await expect(
         createProduct(tx, {
-          menuId: cat.id,
           categoryId: null,
           name: "x",
           unitId: eachUnitId,
@@ -1155,7 +1112,6 @@ describe("menu operations", () => {
     await asVenue(async (tx) => {
       const cat = await createMenu(tx, { name: "C" });
       const p = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "x",
         unitId: eachUnitId,
@@ -1175,7 +1131,6 @@ describe("menu operations", () => {
     const [row] = await asVenue(async (tx) => {
       const cat = await createMenu(tx, { name: "C" });
       const p = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "x",
         unitId: eachUnitId,
@@ -1212,7 +1167,6 @@ describe("menu operations", () => {
       const cat = await createMenu(tx, { name: "Deli" });
       const food = await createCategory(tx, { name: "Food" });
       const p1 = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: food.id,
         name: "sliced ham",
         unitId: kgUnitId,
@@ -1220,7 +1174,6 @@ describe("menu operations", () => {
         vatClass: "reduced",
       });
       const p2 = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "water",
         unitId: eachUnitId,
@@ -1249,7 +1202,6 @@ describe("menu operations", () => {
         [old, "Hidden"],
       ] as const) {
         await createProduct(tx, {
-          menuId: menu.id,
           categoryId: null,
           name,
           unitId: eachUnitId,
@@ -1272,7 +1224,6 @@ describe("menu operations", () => {
       for (const name of ["Lunch", "Main"]) {
         const menu = await createMenu(tx, { name });
         await createProduct(tx, {
-          menuId: menu.id,
           categoryId: null,
           name,
           unitId: eachUnitId,
@@ -1372,7 +1323,6 @@ describe("menu operations", () => {
     await asVenue(async (tx) => {
       const cat = await createMenu(tx, { name: "Deli" });
       await createProduct(tx, {
-        menuId: cat.id,
         categoryId: null,
         name: "water",
         unitId: eachUnitId,
@@ -1440,7 +1390,6 @@ describe("menu operations", () => {
       dietOverride: null,
       dietaryDeclarations: [],
       courseId: null,
-      menuId: "00000000-0000-0000-0000-000000000001",
       menuName: "Deli",
       offeredModifiers: [],
     };
@@ -1453,7 +1402,6 @@ describe("menu operations", () => {
     await asVenue(async (tx) => {
       const menu = await createMenu(tx, { name: "By measure" });
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: "Oil",
         unitId: eachUnitId,
@@ -1502,7 +1450,6 @@ describe("menu offers nest a product's variants", () => {
         vatClass: "reduced",
       });
       const offer = await addProductToMenu(tx, {
-        menuId: menu.id,
         productId: parent.id,
         grossPrice: "4.50",
       });
@@ -1538,7 +1485,6 @@ describe("menu offers nest a product's variants", () => {
         vatClass: "general",
       });
       await addProductToMenu(tx, {
-        menuId: f.menuId,
         productId: product.id,
         grossPrice: "3.75",
       });
@@ -1576,7 +1522,6 @@ describe("menu offers nest a product's variants", () => {
         vatClass: "general",
       });
       return addProductToMenu(tx, {
-        menuId: f.menuId,
         productId: product.id,
         grossPrice: null,
       });
@@ -1738,7 +1683,6 @@ describe("a variant's published allergens and diet", () => {
     ({ parentId, variantId } = await run(async (tx) => {
       const menu = await createMenu(tx, { name: "Bar" });
       const parent = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: "Latte",
         pricingUnit: "each",
@@ -1917,7 +1861,6 @@ describe("a product's own colour", () => {
     ({ menuId, productId, variantId } = await app(async (tx) => {
       const menu = await createMenu(tx, { name: "Menu" });
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: "Wine",
         pricingUnit: "each",

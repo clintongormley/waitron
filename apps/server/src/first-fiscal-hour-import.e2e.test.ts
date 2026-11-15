@@ -145,7 +145,6 @@ async function configurationArtifact() {
     await tx.update(invoiceSeries).set({ nextNumber: 42 });
     const menu = await createMenu(tx, { name: "Imported menu" });
     await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Imported gazpacho",
       pricingUnit: "each",

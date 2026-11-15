@@ -54,7 +54,6 @@ useVenueDb({
       const product = async (name: string, price: string) =>
         (
           await createProduct(tx, {
-            menuId: menuId,
             categoryId: null,
             name,
             customerName: { [venue.cfg.locale]: `${name} (customer)` },
@@ -67,7 +66,6 @@ useVenueDb({
       const burger = await product("Burger", "9.50");
       const ham = (
         await createProduct(tx, {
-          menuId: menuId,
           categoryId: null,
           name: "Ham",
           customerName: { [venue.cfg.locale]: "Ham (customer)" },

@@ -31,7 +31,6 @@ async function fixture() {
   const menu = await app((tx) => createMenu(tx, { name: "Lunch" }));
   const product = await app((tx) =>
     createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Toast",
       pricingUnit: "each",
@@ -223,7 +222,6 @@ it("updateProduct's categoryId sets the main category, with no membership coupli
   const { app, food, drinks, product, menu } = await fixture();
   const second = await app((tx) =>
     createProduct(tx, {
-      menuId: menu.id,
       categoryId: drinks.id,
       name: "Coffee",
       pricingUnit: "each",

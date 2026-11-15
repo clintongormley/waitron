@@ -196,7 +196,6 @@ async function extraFixture(separate: boolean) {
       .where(eq(products.id, v.productId("Burger")));
     const { defaultLanguage } = await readContentLanguages(tx, v.cfg.locale);
     const extra = await createProduct(tx, {
-      menuId: parent!.menuId,
       categoryId: null,
       name: "Extra staff name",
       customerName: { [defaultLanguage]: "Customer side name" },

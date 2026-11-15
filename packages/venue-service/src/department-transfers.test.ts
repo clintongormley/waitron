@@ -924,7 +924,6 @@ describe("departmental tab transfers", () => {
         .returning();
       const menu = await createMenu(tx, { name: "Source menu" });
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: "Soup",
         pricingUnit: "each",

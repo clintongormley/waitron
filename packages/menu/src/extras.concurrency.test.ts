@@ -30,7 +30,6 @@ beforeEach(async () => {
     const menu = await createMenu(tx, { name: "Deli" });
     for (const [key, unitPrice] of Object.entries({ sourdough: "2.50", rye: "3.25" })) {
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: key,
         unitId: null,
@@ -41,7 +40,6 @@ beforeEach(async () => {
     }
     dish = (
       await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: "dish",
         unitId: null,

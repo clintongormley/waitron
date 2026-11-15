@@ -59,7 +59,6 @@ useVenueDb({
       const product = async (name: string, price: string) =>
         (
           await createProduct(tx, {
-            menuId: menuId,
             categoryId: null,
             name,
             customerName: null,

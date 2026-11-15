@@ -232,7 +232,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
     const cat = await createMenu(tx, { name: "Delicatessen" });
     const drinks = await createCategory(tx, { name: "Drinks" });
     await createProduct(tx, {
-      menuId: cat.id,
       categoryId: drinks.id,
       name: "Café",
       pricingUnit: "each",

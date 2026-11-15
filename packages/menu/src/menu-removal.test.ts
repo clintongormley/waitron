@@ -41,7 +41,6 @@ async function removalFixture() {
     const make = async (name: string) =>
       (
         await createProduct(tx, {
-          menuId: tapas,
           categoryId: tapasFolder,
           name,
           pricingUnit: "each",
@@ -304,7 +303,6 @@ describe("takeOffMenus", () => {
       async (tx) =>
         (
           await createProduct(tx, {
-            menuId: r.tapas,
             categoryId: null,
             name: "Tomato soup",
             pricingUnit: "each",
@@ -335,7 +333,6 @@ describe("an Inactive product cannot be added to a menu list", () => {
   async function inactive(r: Removal): Promise<string> {
     return app(async (tx) => {
       const { id } = await createProduct(tx, {
-        menuId: r.tapas,
         categoryId: null,
         name: "Tomato soup",
         pricingUnit: "each",
@@ -631,7 +628,6 @@ describe("menusHolding", () => {
     const gazpacho = await app(async (tx) => {
       const id = (
         await createProduct(tx, {
-          menuId: r.tapas,
           categoryId: null,
           name: "Tomato soup",
           pricingUnit: "each",

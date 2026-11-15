@@ -370,7 +370,6 @@ async function seed(
       for (let n = 1; n <= count; n++) {
         const label = `${course.name} ${String(made + n).padStart(3, "0")}`;
         await createProduct(tx, {
-          menuId: menu.id,
           categoryId: category.id,
           name: label,
           customerName: { [LOCALE]: `House ${label.toLowerCase()}` },

@@ -52,7 +52,6 @@ function product(overrides: Partial<Product> = {}): Product {
   return {
     id: BREAD,
     modifiers: [],
-    menuId: "cat-1",
     categoryId: "category-1",
     primaryCategoryId: "category-1",
     name: "White bread",

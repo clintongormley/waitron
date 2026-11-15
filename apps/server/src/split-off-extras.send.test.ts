@@ -122,7 +122,6 @@ describe("sending split-off extras", () => {
     const { cfg, menuId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const burger = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Burger",
         customerName: { "es-ES": "Classic beef burger" },
@@ -362,7 +361,6 @@ describe("sending split-off extras", () => {
     await withTransaction(db, async (tx) => {
       const grill = await createStation(tx, { name: "Grill", isDefault: true });
       const burger = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Burger",
         customerName: { "es-ES": "Classic beef burger" },
@@ -413,7 +411,6 @@ describe("sending split-off extras", () => {
         printerId: printer.id,
       });
       const water = await createProduct(tx, {
-        menuId,
         categoryId: drinks.id,
         name: "Water",
         customerName: { "es-ES": "Still mineral water" },
@@ -463,7 +460,6 @@ describe("sending split-off extras", () => {
         { kind: "no_preparation" },
       );
       const water = await createProduct(tx, {
-        menuId,
         categoryId: drinks.id,
         name: "Water",
         customerName: { "es-ES": "Still mineral water" },
@@ -533,7 +529,6 @@ describe("sending split-off extras", () => {
       );
       await routeCategoryTo(tx, sides.id, fryer.id);
       const water = await createProduct(tx, {
-        menuId,
         categoryId: drinks.id,
         name: "Water",
         customerName: { "es-ES": "Still mineral water" },
@@ -603,7 +598,6 @@ describe("sending split-off extras", () => {
       const sides = await createCategory(tx, { name: "Sides" });
       await routeCategoryTo(tx, sides.id, fryer.id);
       const burger = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Burger",
         customerName: { "es-ES": "Classic beef burger" },
@@ -654,7 +648,6 @@ describe("sending split-off extras", () => {
       await routeCategoryTo(tx, burgers.id, grill.id);
       await routeCategoryTo(tx, sides.id, fryer.id);
       const burger = await createProduct(tx, {
-        menuId,
         categoryId: burgers.id,
         name: "Burger",
         customerName: { "es-ES": "Classic beef burger" },
@@ -709,7 +702,6 @@ describe("sending split-off extras", () => {
       const sides = await createCategory(tx, { name: "Sides" });
       await routeCategoryTo(tx, sides.id, fryer.id);
       const burger = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Burger",
         customerName: { "es-ES": "Classic beef burger" },
@@ -765,7 +757,6 @@ describe("sending split-off extras", () => {
       const sides = await createCategory(tx, { name: "Sides" });
       await routeCategoryTo(tx, sides.id, fryer.id);
       const burger = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Burger",
         customerName: { "es-ES": "Classic beef burger" },
@@ -815,7 +806,6 @@ describe("sending split-off extras", () => {
       await routeCategoryTo(tx, burgers.id, grill.id);
       await routeCategoryTo(tx, sides.id, fryer.id);
       const burger = await createProduct(tx, {
-        menuId,
         categoryId: burgers.id,
         name: "Burger",
         customerName: { "es-ES": "Classic beef burger" },
@@ -966,7 +956,6 @@ describe("sending split-off extras", () => {
       const sides = await createCategory(tx, { name: "Sides" });
       await routeCategoryTo(tx, sides.id, bar.id);
       const burger = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Burger",
         customerName: { "es-ES": "Classic beef burger" },

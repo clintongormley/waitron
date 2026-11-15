@@ -83,7 +83,6 @@ async function setupVenue() {
   const beer = await withTransaction(suite.db, async (tx) => {
     const menu = await createMenu(tx, { name: "Drinks" });
     const product = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Beer",
       pricingUnit: "each",

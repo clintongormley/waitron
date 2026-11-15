@@ -32,7 +32,6 @@ it.each(["products", "available", "offers"] as const)(
         "en",
       );
       const weighed = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: "Staff potatoes",
         unitId: unit.id,
@@ -40,7 +39,6 @@ it.each(["products", "available", "offers"] as const)(
         vatClass: "general",
       });
       const each = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: "Staff cup",
         unitId: null,

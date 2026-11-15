@@ -99,7 +99,6 @@ beforeEach(async () => {
     menuId = menu.id;
     for (const [key, fields] of Object.entries(products)) {
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         unitId: null,
         ...fields,

@@ -58,7 +58,6 @@ async function fixture(): Promise<Fixture> {
     const make = async (name: string) =>
       (
         await createProduct(tx, {
-          menuId: lunch.id,
           categoryId: category.id,
           name: `${name} (staff)`,
           customerName: { en: `${name} (customer)` },

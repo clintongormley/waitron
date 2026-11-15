@@ -59,7 +59,6 @@ useVenueDb({
         .from(categories)
         .where(eq(categories.name, "Platos"));
       const water = await createProduct(tx, {
-        menuId: menu!.id,
         categoryId: category!.id,
         name: "Agua",
         customerName: { [venue.cfg.locale]: "Agua del grifo" },

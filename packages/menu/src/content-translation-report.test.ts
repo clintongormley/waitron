@@ -52,7 +52,6 @@ async function bread(
   customerName: Record<string, string> | null = { es: "CLIENT-ES Pan con tomate" },
 ) {
   return createProduct(tx, {
-    menuId,
     categoryId: null,
     name: "STAFF Pan",
     customerName,

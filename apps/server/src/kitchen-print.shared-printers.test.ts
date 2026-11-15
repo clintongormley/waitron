@@ -65,7 +65,6 @@ async function makeDish(
   stationId: string,
 ): Promise<string> {
   const { id } = await createProduct(tx, {
-    menuId,
     categoryId: null,
     name,
     pricingUnit: "each",
@@ -696,7 +695,6 @@ it("fires and reprints through a replaced station printer set with no drawer pul
       printerId: shared,
     });
     const { id: productId } = await createProduct(tx, {
-      menuId,
       categoryId: null,
       name: "Staff stew",
       customerName: { "es-ES": "Diner stew" },

@@ -2790,7 +2790,6 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
       const menu = await createMenu(tx, { name: unique("Menu") });
       const category = await createCategory(tx, { name: unique("Cat") });
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: category.id,
         name: unique("Prod"),
         pricingUnit: "each",
@@ -2942,7 +2941,6 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
         name: unique("Cat"),
       });
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: category.id,
         name: unique("Prod"),
         pricingUnit: "each",
@@ -3003,7 +3001,6 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     const { variantId } = await withTransaction(suite.db, async (tx) => {
       const menu = await createMenu(tx, { name: unique("Menu") });
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: unique("Prod"),
         pricingUnit: "each",
@@ -3012,7 +3009,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
       });
       const [variant] = await tx
         .insert(products)
-        .values({ menuId: menu.id, parentId: product.id, name: unique("Variant") })
+        .values({  parentId: product.id, name: unique("Variant") })
         .returning({ id: products.id });
       return { variantId: variant!.id };
     });
@@ -3032,7 +3029,6 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     const productId = await withTransaction(suite.db, async (tx) => {
       const menu = await createMenu(tx, { name: unique("Archive menu") });
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: unique("Archived dish"),
         pricingUnit: "each",

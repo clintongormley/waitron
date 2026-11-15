@@ -136,7 +136,6 @@ describe("the category report reconciles with the till's sales", () => {
       ) =>
         (
           await createProduct(tx, {
-            menuId: menu.id,
             categoryId,
             name,
             pricingUnit: "each",

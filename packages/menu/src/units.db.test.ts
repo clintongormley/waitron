@@ -35,7 +35,6 @@ async function product(id: string | null = null): Promise<string> {
     .insert(products)
     .values({
       ...(id === null ? {} : { id }),
-      menuId: menu!.id,
       name: "Soup",
       unitPrice: 1,
       vatClass: "general",
@@ -325,7 +324,7 @@ async function variantOf(parent: string): Promise<string> {
     .where(inArray(products.id, [parent]));
   const [variantRow] = await suite.db
     .insert(products)
-    .values({ menuId: parentRow!.menuId, parentId: parent, name: "Small" })
+    .values({  parentId: parent, name: "Small" })
     .returning({ id: products.id });
   return variantRow!.id;
 }

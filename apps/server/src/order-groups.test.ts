@@ -196,7 +196,6 @@ async function setupVenue(countryCourses = false): Promise<Venue> {
     const productId = {} as Record<Dish, string>;
     for (const [dish, names] of Object.entries(DISHES) as [Dish, (typeof DISHES)[Dish]][]) {
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: category.id,
         name: names.staff,
         customerName: { en: names.customer },

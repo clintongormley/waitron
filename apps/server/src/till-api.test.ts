@@ -209,7 +209,6 @@ const suite = useVenueDb({
         const cat = await createMenu(tx, { name: "Daily menu" });
         const drinksCategory = await createCategory(tx, { name: "Drinks" });
         const p = await createProduct(tx, {
-          menuId: cat.id,
           categoryId: drinksCategory.id,
           name: "Agua mineral",
           pricingUnit: "each",
@@ -221,7 +220,6 @@ const suite = useVenueDb({
 
         const cat2 = await createMenu(tx, { name: "Happy Hour" });
         const p2 = await createProduct(tx, {
-          menuId: cat2.id,
           categoryId: drinksCategory.id,
           name: "Cerveza",
           pricingUnit: "each",
@@ -4207,7 +4205,6 @@ async function modifierOfferFixture() {
   const data = await withTransaction(suite.db, async (tx) => {
     const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
     const product = await createProduct(tx, {
-      menuId: waterProduct.menuId,
       categoryId: null,
       name: `Prueba de modificadores ${fixture}`,
       pricingUnit: "each",
@@ -4221,7 +4218,6 @@ async function modifierOfferFixture() {
     });
 
     const cheese = await createProduct(tx, {
-      menuId: waterProduct.menuId,
       categoryId: null,
       name: `Cheese staff ${fixture}`,
       customerName: { [defaultLanguage]: "Queso customer" },
@@ -4882,7 +4878,6 @@ describe("settling edit answers", () => {
               const menu = await createMenu(tx, { name: "Weighed dishes" });
               const category = await createCategory(tx, { name: "Fish dishes" });
               const product = await createProduct(tx, {
-                menuId: menu.id,
                 categoryId: category.id,
                 name: "Fish",
                 pricingUnit: "each",

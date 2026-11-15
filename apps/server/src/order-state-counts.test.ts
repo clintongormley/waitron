@@ -159,7 +159,6 @@ useVenueDb({
         .from(products)
         .where(eq(products.id, cake));
       const sauce = await createProduct(tx, {
-        menuId,
         categoryId: categoryId!,
         name: "Pepper sauce",
         customerName: { "es-ES": "Pepper sauce" },

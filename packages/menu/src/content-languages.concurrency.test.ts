@@ -29,7 +29,6 @@ it("a default switch waits for an authoring transaction and keeps its incomplete
     async (tx) => {
       await validateContentTranslations(tx, { en: "Bread" }, "es");
       await tx.insert(products).values({
-        menuId: menuId,
         name: "Bread",
         customerName: { en: "Bread" },
 

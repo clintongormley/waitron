@@ -38,7 +38,6 @@ async function make(
 ): Promise<string> {
   const created = await app((tx) =>
     createProduct(tx, {
-      menuId,
       categoryId,
       name,
       pricingUnit: "each",
@@ -438,7 +437,6 @@ describe("two writes started together", () => {
   it("lets one of two creates of one staff name through, and refuses the other", async () => {
     const create = (name: string) => (tx: Transaction) =>
       createProduct(tx, {
-        menuId: dinner,
         categoryId: null,
         name,
         pricingUnit: "each",

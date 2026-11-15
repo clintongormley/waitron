@@ -202,7 +202,6 @@ describe("metadata and references", () => {
       const [inserted] = await tx
         .insert(products)
         .values({
-          menuId: menu!.id,
           name: "Bread",
 
           unitPrice: 200,
@@ -244,7 +243,6 @@ describe("metadata and references", () => {
       const [product] = await tx
         .insert(products)
         .values({
-          menuId: menu!.id,
           name: "Bread",
 
           unitPrice: 200,
@@ -255,7 +253,6 @@ describe("metadata and references", () => {
       const [variant] = await tx
         .insert(products)
         .values({
-          menuId: menu!.id,
           parentId: product!.id,
           name: "Large",
           unitPrice: 300,
@@ -297,7 +294,6 @@ describe("metadata and references", () => {
       const [product] = await tx
         .insert(products)
         .values({
-          menuId: menu!.id,
           name: "Bread",
 
           unitPrice: 200,
@@ -308,7 +304,7 @@ describe("metadata and references", () => {
       // No photo of its own: it borrows the parent's, which is the parent's use, not its own.
       await tx
         .insert(products)
-        .values({ menuId: menu!.id, parentId: product!.id, name: "Large", unitPrice: 300 });
+        .values({  parentId: product!.id, name: "Large", unitPrice: 300 });
       const uses = [
         { kind: "product", id: product!.id, menuId: menu!.id, name: "Bread", active: true },
       ];
@@ -337,16 +333,14 @@ describe("metadata and references", () => {
       ]);
       // Every variant id sorts BEFORE its product's, so the products-first order is the reader's.
       await tx.insert(products).values([
-        { menuId, id: "a-kept", parentId: "p-on", name: "Large", image: image.filename },
+        {  id: "a-kept", parentId: "p-on", name: "Large", image: image.filename },
         {
-          menuId,
           id: "a-of-inactive",
           parentId: "p-off",
           name: "Slice",
           image: image.filename,
         },
         {
-          menuId,
           id: "a-removed",
           parentId: "p-on",
           name: "Small",
@@ -916,7 +910,6 @@ it("protects an image only a live menu version names, and releases it once anoth
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Lemonade" } }, {});
     const menu = await createMenu(tx, { name: "Lunch Menu" });
     const lemonade = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Lemonade",
       pricingUnit: "each",
@@ -966,7 +959,6 @@ it("protects an image only a queued menu edition names, counts it as a use, and 
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Lemonade" } }, {});
     const menu = await createMenu(tx, { name: "Lunch Menu" });
     const lemonade = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Lemonade",
       pricingUnit: "each",
@@ -1026,7 +1018,6 @@ it("lists a live version and a queued edition of one menu in number order, then 
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Lemonade" } }, {});
     const menu = await createMenu(tx, { name: "Lunch Menu" });
     const lemonade = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Lemonade",
       pricingUnit: "each",
@@ -1094,7 +1085,6 @@ it("protects the photo of a product a live menu version offers only as an extra"
     const menu = await createMenu(tx, { name: "Lunch Menu" });
     const make = (name: string, photoName: string | null) =>
       createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name,
         pricingUnit: "each",
@@ -1245,7 +1235,6 @@ describe("free default choice with incomplete menu and image text", () => {
         "en",
       );
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: "ES potatoes",
         kitchenName: "KITCHEN POTATOES",

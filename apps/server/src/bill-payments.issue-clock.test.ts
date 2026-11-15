@@ -145,7 +145,6 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     const productIds = new Map<string, string>();
     for (const item of MENU) {
       const product = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: dishes.id,
         name: item.name,
         customerName: { [LOCALE]: item.customer },

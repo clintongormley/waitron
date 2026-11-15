@@ -30,7 +30,6 @@ async function product(tx: Transaction, name: string) {
   const [row] = await tx
     .insert(products)
     .values({
-      menuId: menu!.id,
       name,
 
       unitPrice: 1,

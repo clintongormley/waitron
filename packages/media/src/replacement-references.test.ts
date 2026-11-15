@@ -46,7 +46,6 @@ it("changes presentation without rewriting product, variant, section, folder, re
     const menu = await createMenu(tx, { name: "Lunch" });
     const included = await createMenu(tx, { name: "Drinks", image: image.filename });
     const product = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Staff dish",
       pricingUnit: "each",
@@ -55,7 +54,6 @@ it("changes presentation without rewriting product, variant, section, folder, re
       image: image.filename,
     });
     await tx.insert(products).values({
-      menuId: menu.id,
       parentId: product.id,
       name: "Large",
 

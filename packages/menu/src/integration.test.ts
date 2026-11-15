@@ -102,7 +102,6 @@ describe("menu → priceBasket → recordSale (end-to-end)", () => {
         )
       ).id;
       const product = await createProduct(tx, {
-        menuId: cat.id,
         categoryId: food.id,
         name: "sliced ham",
         unitId: kgUnitId,

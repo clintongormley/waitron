@@ -49,7 +49,6 @@ it("deleting a category removes its own and its subtree's category cells and kee
     const drinks = await createCategory(tx, { name: "Drinks", parentId: food.id });
     const cocktails = await createCategory(tx, { name: "Cocktails", parentId: drinks.id });
     const negroni = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: cocktails.id,
       name: "Negroni",
       pricingUnit: "each",
@@ -129,7 +128,6 @@ it("an open order keeps its copied category label after the category is deleted"
       "en",
     );
     const product = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: category.id,
       name: "Bread",
       unitId: unit.id,

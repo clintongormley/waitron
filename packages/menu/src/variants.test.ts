@@ -54,7 +54,6 @@ beforeEach(async () => {
       "en",
     );
     const product = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Coffee",
       unitId: unit.id,
@@ -287,7 +286,6 @@ describe("product variants", () => {
         "en",
       );
       const other = await createProduct(tx, {
-        menuId: menuId,
         categoryId: null,
         name: "Bravas",
         unitId: unit.id,
@@ -356,7 +354,6 @@ describe("which products have an Active variant", () => {
       const [product] = await listProducts(tx);
       const make = (name: string) =>
         createProduct(tx, {
-          menuId: menuId,
           categoryId: null,
           name,
           unitId: product!.unitId,

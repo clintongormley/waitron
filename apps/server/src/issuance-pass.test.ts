@@ -154,7 +154,6 @@ async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
     const additions = await category("Añadidos");
     const product = (name: string, categoryId: string | null, unitPrice: string) =>
       createProduct(tx, {
-        menuId: menu.id,
         categoryId,
         name: `${name} staff`,
         customerName: { es: `${name} cliente` },

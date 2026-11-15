@@ -411,7 +411,6 @@ beforeAll(async () => {
     // A menu the Deli sells from, offered in the bar as well.
     const specials = await createMenu(tx, { name: "Deli specials" });
     const pastrami = await createProduct(tx, {
-      menuId: specials.id,
       categoryId: null,
       name: "Pastrami",
       pricingUnit: "each",

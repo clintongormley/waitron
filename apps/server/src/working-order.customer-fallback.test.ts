@@ -49,7 +49,6 @@ async function arrange() {
       })
       .returning();
     const dish = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Staff dish",
       customerName: { fr: "Other dish" },
@@ -59,7 +58,6 @@ async function arrange() {
       vatClass: "general",
     });
     const parent = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: null,
       name: "Staff topping",
       customerName: { en: "Published English topping" },

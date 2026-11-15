@@ -1015,7 +1015,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         });
         const drinks = await createCategory(tx, { name: "Bebidas" });
         const water = await createProduct(tx, {
-          menuId: menu.id,
           categoryId: drinks.id,
           name: "Agua",
           pricingUnit: "each",

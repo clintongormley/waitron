@@ -421,7 +421,6 @@ export async function seedFiredLine(
   const [product] = await db
     .insert(products)
     .values({
-      menuId: menu!.id,
       name: "Item",
 
       unitPrice: stringToCents("1.00"),

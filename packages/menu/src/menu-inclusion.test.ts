@@ -99,7 +99,6 @@ describe("menu inclusions and owned sections", () => {
     const [lager, merlot] = await app(async (tx) => {
       const make = (name: string) =>
         createProduct(tx, {
-          menuId: f.a,
           categoryId: null,
           name,
           pricingUnit: "each",
@@ -203,7 +202,6 @@ describe("menu inclusions and owned sections", () => {
     const f = await fixture();
     const wine = await app((tx) =>
       createProduct(tx, {
-        menuId: f.c,
         categoryId: null,
         name: "Merlot",
         pricingUnit: "each",
@@ -237,7 +235,6 @@ describe("menu inclusions and owned sections", () => {
     const child = await app((tx) => createSectionIn(tx, parent.id, { internalName: "Child" }));
     const dish = await app((tx) =>
       createProduct(tx, {
-        menuId: f.a,
         categoryId: null,
         name: "Kept product",
         pricingUnit: "each",

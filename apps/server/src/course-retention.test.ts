@@ -92,7 +92,6 @@ async function setup() {
     const menu = await createMenu(tx, { name: "Menu" });
     const category = await createCategory(tx, { name: "Food" });
     const dish = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: category.id,
       name: "Staff steak",
       kitchenName: "K-STEAK",
@@ -102,7 +101,6 @@ async function setup() {
       vatClass: "general",
     });
     const sauce = await createProduct(tx, {
-      menuId: menu.id,
       categoryId: category.id,
       name: "Staff sauce",
       kitchenName: "K-SAUCE",

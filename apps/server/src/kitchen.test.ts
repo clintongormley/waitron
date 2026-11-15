@@ -697,7 +697,6 @@ async function seedProduct(): Promise<string> {
   const [row] = await db
     .insert(products)
     .values({
-      menuId: cat!.id,
       name: "Routed product",
 
       unitPrice: 100,
@@ -714,7 +713,7 @@ async function seedVariant(parentId: string): Promise<string> {
   );
   const [row] = await db
     .insert(products)
-    .values({ menuId: rows[0]!.menu_id, parentId, name: "Routed variant" })
+    .values({  parentId, name: "Routed variant" })
     .returning({ id: products.id });
   return row!.id;
 }

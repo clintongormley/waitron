@@ -49,7 +49,6 @@ it.each(["attach", "delete"] as const)(
     const product = await app(async (tx) => {
       const menu = await createMenu(tx, { name: "M" });
       return createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: "P",
         pricingUnit: "each",
@@ -125,7 +124,6 @@ const seedProduct = (name = "P") =>
     const menu = await createMenu(tx, { name: `Menu for ${name}` });
     return (
       await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name,
         pricingUnit: "each",

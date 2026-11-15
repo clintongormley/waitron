@@ -69,7 +69,6 @@ const suite = useVenueDb({
     await withTransaction(db, async (tx) => {
       const menu = await createMenu(tx, { name: "Menu" });
       const coffee = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         name: COFFEE,
         pricingUnit: "each",

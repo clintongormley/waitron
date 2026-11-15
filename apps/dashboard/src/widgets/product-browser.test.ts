@@ -42,7 +42,6 @@ const product = (
   primaryCategoryId,
   categoryId: primaryCategoryId,
   active,
-  menuId: "c",
   modifiers: [],
   customerName: null,
   unitId: "u",

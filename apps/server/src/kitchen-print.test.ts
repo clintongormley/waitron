@@ -459,7 +459,6 @@ async function makeProduct(
   route: { stationId?: string; courseId?: string } = {},
 ): Promise<string> {
   const { id } = await createProduct(tx, {
-    menuId,
     categoryId: null,
     name: name,
     pricingUnit: "each",
@@ -1169,7 +1168,6 @@ describe("a dish sold by the piece prints no unit", () => {
       unit: { unitId: string } | { pricingUnit: "each" | "weight" },
     ) => {
       const { id } = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name,
         ...unit,
@@ -2496,7 +2494,6 @@ async function ticketWithNames(frozen: {
       printerId,
     });
     const { id: productId } = await createProduct(tx, {
-      menuId,
       categoryId: null,
       name: "Coffee",
       customerName: { [LOCALE]: "Fresh filter brew" },
@@ -2960,7 +2957,6 @@ describe("A803 portion grouping", () => {
     const oysters = await makeProduct(tx, menuId, "Oysters", { stationId: kitchen.id });
     const chips = await makeProduct(tx, menuId, "Chips", { stationId: fryer.id });
     const { id: octopus } = await createProduct(tx, {
-      menuId,
       categoryId: null,
       name: "Octopus",
       pricingUnit: "weight",
@@ -3208,7 +3204,6 @@ describe("A803 portion grouping", () => {
         })
         .returning({ id: units.id });
       const { id: bread } = await createProduct(tx, {
-        menuId,
         categoryId: null,
         name: "Bread",
         unitId: piece!.id,

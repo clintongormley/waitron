@@ -62,7 +62,6 @@ async function venue(staffNames: readonly string[]): Promise<string[]> {
     const ids: string[] = [];
     for (const name of staffNames) {
       const product = await createProduct(tx, {
-        menuId: menu.id,
         categoryId: null,
         unitId: null,
         name,
