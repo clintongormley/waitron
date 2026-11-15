@@ -44,6 +44,7 @@ import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { invoiceDeliveryAlertSource } from "./alert-sources.js";
 import { createPageTestPages } from "./page-test-pages.js";
+import { reserveInvoiceDelivery } from "./invoice-delivery.js";
 const store = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let venue: OrderVenue;
 beforeEach(async () => {
@@ -1020,6 +1021,34 @@ it("prints one original when two tills reprint a replacement at once", async () 
   expect(answers.map((answer) => answer.status)).toEqual([200, 200]);
   const { prints } = await jobs();
   expect(prints.map((row) => row.receiptCopy).sort()).toEqual([false, true]);
+});
+it("records every till print of a replacement emailed as its original as a reprint", async () => {
+  const original = await projectionInvoice();
+  const replacement = await correctiveOf(original.id, true);
+  const email = await inTx(venue, (tx) =>
+    reserveInvoiceDelivery(tx, replacement.id, {
+      medium: "email",
+      requestKey: randomUUID(),
+      personId: venue.operatorId,
+      recipient: "guest@example.test",
+    }),
+  );
+  expect(email.designation).toBe("original");
+  await inTx(venue, (tx) =>
+    tx.update(invoiceDeliveries).set({ status: "sent" }).where(eq(invoiceDeliveries.id, email.id)),
+  );
+  expect((await reprint(replacement.id)).status).toBe(200);
+  expect((await reprint(replacement.id)).status).toBe(200);
+  const { prints, reprints } = await jobs();
+  expect(prints).toEqual([
+    expect.objectContaining({ saleId: replacement.id, kind: "document", receiptCopy: true }),
+    expect.objectContaining({ saleId: replacement.id, kind: "document", receiptCopy: true }),
+  ]);
+  expect(reprints.map((row) => row.printJobId).sort()).toEqual(prints.map((row) => row.id).sort());
+  expect(reprints).toEqual([
+    expect.objectContaining({ saleId: replacement.id, personId: venue.operatorId }),
+    expect.objectContaining({ saleId: replacement.id, personId: venue.operatorId }),
+  ]);
 });
 it("still prints a refund corrective that never printed as a copy", async () => {
   const original = await projectionInvoice();

@@ -531,7 +531,8 @@ export async function confirmReceiptHandover(
 
 /**
  * Queues the sale's original receipt on the receipt printer, and says what it did: `"exists"` when
- * the sale already has an original job, `"not_queued"` when no printer or receipt resolves.
+ * the sale already has an original job, `"not_queued"` when no printer or receipt resolves, else the
+ * queued job, marked a copy when the original already went out by email.
  */
 export async function enqueueOriginalReceipt(
   tx: Transaction,
@@ -544,7 +545,7 @@ export async function enqueueOriginalReceipt(
     requestKey?: string;
     language?: string;
   } = {},
-): Promise<"queued" | "exists" | "not_queued"> {
+): Promise<"exists" | "not_queued" | { jobId: string; receiptCopy: boolean }> {
   const { personId, requestKey, language } = options;
   const printers = options.printers ?? printerLookup(tx, cfg.origin);
   const [original] = await tx
@@ -579,7 +580,7 @@ export async function enqueueOriginalReceipt(
     receiptCopy: duplicate,
   });
   await enrollExplicitInvoiceReceipt(tx, ticket, saleId, job.jobId, personId, requestKey);
-  return "queued";
+  return { jobId: job.jobId, receiptCopy: duplicate };
 }
 
 async function enqueueBillDrawer(

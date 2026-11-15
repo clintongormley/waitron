@@ -257,6 +257,7 @@ export function mountTransactionReceiptApi(
           throw new AppError("management.request_invalid", { field: "language" });
         const printer = await resolveReceiptPrinter(tx, cfg.origin);
         if (printer === undefined) return;
+        let copy: { jobId: string } | undefined;
         if (ticket.corrects?.inFull === true) {
           // Put this right issues a replacement without printing it, so its first print is its
           // original.
@@ -265,17 +266,13 @@ export function mountTransactionReceiptApi(
             personId: session.personId,
             language,
           });
-          if (original !== "exists") return;
+          if (original === "not_queued") return;
+          if (original !== "exists") {
+            if (!original.receiptCopy) return;
+            copy = original;
+          }
         }
-        const copy = await enqueueReceiptCopy(
-          tx,
-          cfg,
-          ticket,
-          id,
-          printer,
-          language,
-          session.personId,
-        );
+        copy ??= await enqueueReceiptCopy(tx, cfg, ticket, id, printer, language, session.personId);
         if (copy !== undefined)
           await tx
             .insert(receiptReprints)
