@@ -869,8 +869,9 @@ export interface VenueServiceContribution {
     tx: Transaction,
     workingOrderIds: readonly string[],
   ): Promise<ReadonlySet<string>>;
-  /** An existing order's way once its department becomes `to.departmentId`; called only when the
-   *  department changes. Refuses `order.set_lunch_takeaway` when it would take a set lunch away. */
+  /** An existing order's way once its department becomes `to.departmentId`; called when an order's
+   *  department changes or is first set. Refuses `order.set_lunch_takeaway` when it would take a set
+   *  lunch away. */
   applyDepartmentDining(
     tx: Transaction,
     workingOrderId: string,
@@ -1108,6 +1109,8 @@ export interface VenueServiceContribution {
     workingOrderIds: readonly string[],
   ): Promise<ReadonlyMap<string, string>>;
   readLunchLineIds(tx: Transaction, lineIds: readonly string[]): Promise<Set<string>>;
+  /** Whether any of the order's lines is a set lunch, as its recorded menu version says. */
+  orderHasSetLunch(tx: Transaction, workingOrderId: string): Promise<boolean>;
   readLunchOffers(
     tx: Transaction,
     workingOrderId: string,

@@ -7,13 +7,12 @@ import {
   orderServiceContexts,
   readTaxpayer,
   readVenueSettings,
-  workingOrderLines,
   workingOrders,
   type Transaction,
 } from "@waitron/db";
 import type { ServiceMode } from "@waitron/module";
 import { AppError, type Dining, type DiningPolicy } from "@waitron/shared";
-import { readLunchLineIds } from "./operations.js";
+import { orderHasSetLunch } from "./operations.js";
 import "./errors.js";
 
 /** Whether the venue's region charges a different VAT class on food taken away. */
@@ -103,7 +102,7 @@ export async function resolveOrderDining(
  * An order whose way is fixed (sent or paid) keeps it, and a takeaway order moved to a table stays
  * takeaway. Otherwise a department fixed one way gives the order that way, and a till-choice
  * department leaves it for staff to switch; becoming takeaway with a set lunch is refused. A region
- * without takeaway VAT changes nothing. The caller calls this only when the department changes.
+ * without takeaway VAT changes nothing. Called when an order's department changes or is first set.
  */
 export async function applyDepartmentDining(
   tx: Transaction,
@@ -125,16 +124,7 @@ export async function applyDepartmentDining(
     .where(eq(departmentSalePolicies.departmentId, to.departmentId));
   const dining = policy?.dining ?? "eat_in";
   if (dining === "till_choice" || dining === order.dining) return;
-  if (dining === "takeaway") {
-    const lines = await tx
-      .select({ id: workingOrderLines.id })
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, workingOrderId));
-    const lunches = await readLunchLineIds(
-      tx,
-      lines.map((line) => line.id),
-    );
-    if (lunches.size > 0) throw new AppError("order.set_lunch_takeaway", { canSwitch: false });
-  }
+  if (dining === "takeaway" && (await orderHasSetLunch(tx, workingOrderId)))
+    throw new AppError("order.set_lunch_takeaway", { canSwitch: false });
   await tx.update(workingOrders).set({ dining }).where(eq(workingOrders.id, workingOrderId));
 }

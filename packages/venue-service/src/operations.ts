@@ -1143,6 +1143,22 @@ export async function findOrderServiceZones(
   return new Map(rows.map((row) => [row.workingOrderId, row.zoneId]));
 }
 
+/** Whether any of the order's lines is a set lunch, as {@link readLunchLineIds} reads it. */
+export async function orderHasSetLunch(tx: Transaction, workingOrderId: string): Promise<boolean> {
+  const lines = await tx
+    .select({ id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, workingOrderId));
+  return (
+    (
+      await readLunchLineIds(
+        tx,
+        lines.map((line) => line.id),
+      )
+    ).size > 0
+  );
+}
+
 export async function readLunchLineIds(
   tx: Transaction,
   lineIds: readonly string[],

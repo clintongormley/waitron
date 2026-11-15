@@ -50,6 +50,7 @@ describe("VENUE_SERVICE", () => {
       "moveAllergyDraftTicks",
       "moveBillAllergies",
       "openStationForToday",
+      "orderHasSetLunch",
       "orderInZones",
       "orderZoneIdSql",
       "partiesWithAllergicGuests",

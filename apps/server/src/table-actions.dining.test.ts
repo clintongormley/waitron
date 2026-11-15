@@ -24,8 +24,8 @@ import { createTable } from "./testing/live-table.js";
 import { moveGuests } from "./testing/table-action-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 
-// A whole table moved into another department: each bill keeps its own way of selling where it is
-// fixed, and an unfixed one takes the new department's (A1522, Decision 6).
+// A whole table moved into another department: a sent bill keeps its way, and a takeaway bill moved
+// to a table stays takeaway, even where the department sells only eaten here (A1522, Decision 6).
 let venue: BillVenue;
 /** A table zone of a department that sells only eaten here. */
 let eatInZone: string;
@@ -71,7 +71,7 @@ function revisionOf(partyId: string): number {
 }
 
 describe("a whole table moved into another department", () => {
-  it("keeps a sent takeaway bill takeaway and an unsent eaten-here bill eaten here", async () => {
+  it("keeps a sent takeaway bill and an unsent takeaway bill takeaway at the new table", async () => {
     const seated = await seatedWith(venue);
     venue.db.run(sql`update working_orders set dining = 'takeaway' where id = ${seated.tabId}`);
     const ordered = await send(
@@ -90,8 +90,9 @@ describe("a whole table moved into another department", () => {
     );
     expect(ordered.status).toBe(200);
     expect(await inTx(venue, (tx) => orderDiningLocked(tx, seated.tabId))).toBe("sent");
-    const eatIn = await inTx(venue, (tx) => insertPartyBill(tx, venue.cfg, seated.partyId));
-    expect(diningOf(eatIn)).toBe("eat_in");
+    const unsent = await inTx(venue, (tx) => insertPartyBill(tx, venue.cfg, seated.partyId));
+    venue.db.run(sql`update working_orders set dining = 'takeaway' where id = ${unsent}`);
+    expect(await inTx(venue, (tx) => orderDiningLocked(tx, unsent))).toBeNull();
     const table = await inTx(venue, (tx) =>
       createTable(tx, venue.cfg, { label: `Table ${randomUUID().slice(0, 8)}`, zoneId: eatInZone }),
     );
@@ -104,8 +105,8 @@ describe("a whole table moved into another department", () => {
     );
 
     expect(zoneOf(seated.tabId)).toBe(eatInZone);
-    expect(zoneOf(eatIn)).toBe(eatInZone);
+    expect(zoneOf(unsent)).toBe(eatInZone);
     expect(diningOf(seated.tabId)).toBe("takeaway");
-    expect(diningOf(eatIn)).toBe("eat_in");
+    expect(diningOf(unsent)).toBe("takeaway");
   });
 });

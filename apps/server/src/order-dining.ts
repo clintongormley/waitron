@@ -2,7 +2,6 @@ import { eq, inArray } from "drizzle-orm";
 import {
   orderDiningLocked,
   ordersDiningLocked,
-  workingOrderLines,
   workingOrders,
   type Transaction,
 } from "@waitron/db";
@@ -152,17 +151,8 @@ export async function switchOrderDining(
   }
   const locked = await orderDiningLocked(tx, workingOrderId);
   if (locked !== null) throw new AppError("order.dining_locked", { reason: locked });
-  if (dining === "takeaway") {
-    const lines = await tx
-      .select({ id: workingOrderLines.id })
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, workingOrderId));
-    const lunches = await VENUE_SERVICE.readLunchLineIds(
-      tx,
-      lines.map((line) => line.id),
-    );
-    if (lunches.size > 0) throw new AppError("order.set_lunch_takeaway", { canSwitch: false });
-  }
+  if (dining === "takeaway" && (await VENUE_SERVICE.orderHasSetLunch(tx, workingOrderId)))
+    throw new AppError("order.set_lunch_takeaway", { canSwitch: false });
   await tx
     .update(workingOrders)
     .set({ dining, revision: revision + 1 })
