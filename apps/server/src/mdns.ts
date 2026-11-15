@@ -24,6 +24,10 @@ export interface MdnsSocket {
 }
 
 export interface MdnsResponder {
+  /** Tells every device now, unasked, that `name` is at this box's addresses. */
+  announce(name: string): void;
+  /** Tells every device to drop its cached answer for `name` at this box's addresses. */
+  withdraw(name: string): void;
   stop(): Promise<void>;
 }
 
@@ -42,8 +46,12 @@ export interface MdnsDeps {
   makeSocket?: () => MdnsSocket;
 }
 
-export function buildMdnsAnswers(hostname: string, addresses: string[]): MdnsAnswer[] {
-  return addresses.map((data) => ({ name: hostname, type: "A", ttl: MDNS_TTL_SECONDS, data }));
+export function buildMdnsAnswers(
+  hostname: string,
+  addresses: string[],
+  ttl: number = MDNS_TTL_SECONDS,
+): MdnsAnswer[] {
+  return addresses.map((data) => ({ name: hostname, type: "A", ttl, data }));
 }
 
 function respondsOnLan(deps: { devMode: boolean; httpHost: string }): boolean {
@@ -55,7 +63,7 @@ function respondsOnLan(deps: { devMode: boolean; httpHost: string }): boolean {
 /** Outside development, answer mDNS A queries for a non-loopback HTTP listener. */
 export function startMdnsResponder(deps: MdnsDeps): MdnsResponder {
   if (!respondsOnLan(deps)) {
-    return { stop: () => Promise.resolve() };
+    return { announce: () => {}, withdraw: () => {}, stop: () => Promise.resolve() };
   }
   const { names, getAddresses, log } = deps;
   const makeSocket = deps.makeSocket ?? (() => multicastDns() as MdnsSocket);
@@ -85,7 +93,13 @@ export function startMdnsResponder(deps: MdnsDeps): MdnsResponder {
   log("info", "mdns.responding", { hostnames: [...names()] });
 
   let stopped = false;
+  const send = (name: string, ttl: number) => {
+    const answers = buildMdnsAnswers(name, getAddresses(), ttl);
+    if (!stopped && answers.length > 0) socket.respond({ answers });
+  };
   return {
+    announce: (name) => send(name, MDNS_TTL_SECONDS),
+    withdraw: (name) => send(name, 0),
     stop() {
       if (stopped) return Promise.resolve();
       stopped = true;

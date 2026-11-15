@@ -85,7 +85,7 @@ import {
   readPairLink,
   setSingletonRole,
 } from "@waitron/node-db";
-import { readVenueAuthority } from "./boot-peer-check.js";
+import { askPeerStatus, readVenueAuthority, type SilentReason } from "./boot-peer-check.js";
 import { startSpareStore, type SpareStore } from "./spare-store.js";
 import {
   copyNeededLink,
@@ -490,6 +490,15 @@ import { isReadOnlyExempt } from "./read-only-exemptions.js";
 import { isFenced } from "./membership-fence.js";
 import { endMirrorViewer } from "./mirror-session.js";
 import { spareReadGate } from "./spare-read-gate.js";
+import {
+  MAIN_ASK_INTERVAL_MS,
+  MAIN_SILENT_MS,
+  startMainSilenceWatch,
+  type MainAskResult,
+  type MainSilenceWatch,
+} from "./main-silence-watch.js";
+import { readSelectedCopy, readStagedCopy } from "./handover-copy-selection.js";
+import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
 import { acceptMembershipDocument, servingPrimaryNodeId, standingOf } from "@waitron/membership";
 import { fetchPeerMembershipDocument, reconcileMembershipOnBoot } from "./membership-reconcile.js";
 import { readFilingModule } from "./node-config.js";
@@ -982,7 +991,7 @@ function makeStartedServer(
   health: HealthState,
   log: Logger,
   teardown: BootTeardown,
-  mdns: MdnsResponder,
+  mdns: Pick<MdnsResponder, "stop">,
   landing: { close(): Promise<void> } | undefined,
   promote?:
     | { kind: "mirror"; run: (a: FenceAttestation) => Promise<MirrorPromotionResult> }
@@ -1082,6 +1091,12 @@ export interface StartServerSeams {
   /** Awaited by the joining spare's first-copy job before each attempt. */
   spareCopy?: { hold?: Promise<void> };
   spareSettings?: { checkMs?: number; retryMs?: number };
+  /** A spare's watch on its main box: how often it asks, how long until silent, and the ask. */
+  mainSilence?: {
+    intervalMs?: number;
+    silentAfterMs?: number;
+    ask?: () => Promise<MainAskResult>;
+  };
 }
 
 /**
@@ -1886,7 +1901,7 @@ async function bootServer(
       log,
     });
     undoOnFailure.push(() => responder.stop());
-    const mdns: MdnsResponder = {
+    const mdns: Pick<MdnsResponder, "stop"> = {
       stop: async () => {
         await venueName.stop();
         await responder.stop();
@@ -2416,6 +2431,47 @@ async function bootServer(
     );
   }
   await endMirrorViewer(db);
+  // Built as the switch's own check builds it (`sourceSilent` in handover-emergency-api.ts).
+  const askMainBox = async (mainId: string): Promise<MainAskResult> => {
+    const held = await readNodeMembership(db);
+    const main = held?.body.nodes.find((n) => n.nodeId === mainId);
+    const own = held?.body.nodes.find((n) => n.nodeId === node.nodeId);
+    const authority = await readVenueAuthority(config.stateDir);
+    const self = { db, node: store.node, ring, nodeId: node.nodeId };
+    let reason: SilentReason = "not_established";
+    const answer = await askPeerStatus({
+      sign: (body) => signAsThisBox(self, "query", body),
+      publicKeyOf: await peerKeyOf(self, held),
+      ownOrigin: own?.contactUrl || config.managementOrigin,
+      authorityOf: () => authority,
+      onSilent: (_id, why) => {
+        reason = why;
+      },
+    })({ nodeId: mainId, url: main?.contactUrl ?? "", standing: "serving-primary" });
+    return answer === null ? reason : "answered";
+  };
+  const mainNodeId =
+    isMirror && heldMembership !== null ? servingPrimaryNodeId(heldMembership) : undefined;
+  // Set once the trading responder starts, which announces a silence found before then.
+  const venueNameAnswers: { responder?: MdnsResponder } = {};
+  const mainSilence: MainSilenceWatch | undefined =
+    mainNodeId === undefined || mainNodeId === node.nodeId
+      ? undefined
+      : startMainSilenceWatch({
+          ask: seams.mainSilence?.ask ?? (() => askMainBox(mainNodeId)),
+          now: Date.now,
+          intervalMs: seams.mainSilence?.intervalMs ?? MAIN_ASK_INTERVAL_MS,
+          silentAfterMs: seams.mainSilence?.silentAfterMs ?? MAIN_SILENT_MS,
+          silentFromFirst:
+            (await readStagedCopy(config.stateDir)) !== null ||
+            (await readSelectedCopy(config.stateDir)) !== null,
+          onChange: (silent) =>
+            silent
+              ? venueNameAnswers.responder?.announce(BOX_HOSTNAME)
+              : venueNameAnswers.responder?.withdraw(BOX_HOSTNAME),
+          log,
+        });
+  undoOnFailure.push(async () => mainSilence?.stop());
   if (isMirror) app.use("*", spareReadGate());
 
   // The node whose DATA the node-scoped read paths display. On a mirror it is the ORIGIN primary,
@@ -4514,7 +4570,10 @@ async function bootServer(
 
   const mdns = startMdnsResponder({
     // A stepdown closes the gate while admitted requests drain; tills must stop finding it then.
-    names: () => (acceptingSales && !handoverGate.isClosed() ? ownAndVenueNames : ownNameOnly),
+    names: () =>
+      (acceptingSales && !handoverGate.isClosed()) || mainSilence?.state().silent === true
+        ? ownAndVenueNames
+        : ownNameOnly,
     makeSocket: seams.mdnsSocket,
     devMode: config.devMode,
     httpHost: config.httpHost,
@@ -4522,6 +4581,8 @@ async function bootServer(
     log,
   });
   undoOnFailure.push(() => mdns.stop());
+  venueNameAnswers.responder = mdns;
+  if (mainSilence?.state().silent === true) mdns.announce(BOX_HOSTNAME);
   const cloudController = new AbortController();
   undoOnFailure.push(async () => cloudController.abort());
   if (cloudConnection)
@@ -4621,6 +4682,7 @@ async function bootServer(
     spareJoin,
     spareSettings,
     spareFollow,
+    mainSilence,
   });
   const started = makeStartedServer(
     server,

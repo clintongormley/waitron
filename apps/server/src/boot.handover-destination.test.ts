@@ -273,6 +273,8 @@ async function boot(
     timings: { maxTickMs: 600000, minTickMs: 200 },
     peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
     restart: () => {},
+    // The spare's watch asks the main box without an operation; `asked` counts operation reads.
+    mainSilence: { ask: async () => "answered" },
   });
   return { nodeId, asked, posts, binding };
 }

@@ -280,6 +280,74 @@ describe("mdns", () => {
       fields: { message: "bind EADDRINUSE 0.0.0.0:5353" },
     });
   });
+
+  it("announce sends the name's answers with their lifetime; withdraw sends them with a lifetime of 0", () => {
+    const f = fakeSocket();
+    const r = startMdnsResponder({
+      names: () => ["box-3333.waitron.local"],
+      devMode: false,
+      httpHost: "0.0.0.0",
+      getAddresses: () => ["192.168.1.5", "10.0.0.9"],
+      log: () => {},
+      makeSocket: () => f.socket,
+    });
+    r.announce("waitron.local");
+    r.withdraw("waitron.local");
+    expect(f.respond.mock.calls).toEqual([
+      [
+        {
+          answers: [
+            { name: "waitron.local", type: "A", ttl: MDNS_TTL_SECONDS, data: "192.168.1.5" },
+            { name: "waitron.local", type: "A", ttl: MDNS_TTL_SECONDS, data: "10.0.0.9" },
+          ],
+        },
+      ],
+      [
+        {
+          answers: [
+            { name: "waitron.local", type: "A", ttl: 0, data: "192.168.1.5" },
+            { name: "waitron.local", type: "A", ttl: 0, data: "10.0.0.9" },
+          ],
+        },
+      ],
+    ]);
+  });
+
+  it("announce sends nothing without an address, nor once stopped", async () => {
+    const f = fakeSocket();
+    let addresses: string[] = [];
+    const r = startMdnsResponder({
+      names: () => ["waitron.local"],
+      devMode: false,
+      httpHost: "0.0.0.0",
+      getAddresses: () => addresses,
+      log: () => {},
+      makeSocket: () => f.socket,
+    });
+    r.announce("waitron.local");
+    addresses = ["192.168.1.5"];
+    await r.stop();
+    r.announce("waitron.local");
+    r.withdraw("waitron.local");
+    expect(f.respond).not.toHaveBeenCalled();
+  });
+
+  it("announce and withdraw send nothing in development mode", () => {
+    const f = fakeSocket();
+    const makeSocket = vi.fn(() => f.socket);
+    const r = startMdnsResponder({
+      names: () => ["waitron.local"],
+      devMode: true,
+      httpHost: "0.0.0.0",
+      getAddresses: () => ["192.168.1.5"],
+      log: () => {},
+      makeSocket,
+    });
+    r.announce("waitron.local");
+    r.withdraw("waitron.local");
+    expect(makeSocket).not.toHaveBeenCalled();
+    expect(f.respond).not.toHaveBeenCalled();
+  });
 });
 
 const OWN = "192.168.10.5";

@@ -468,7 +468,7 @@ function failLandingAfterMdns(
     vi.mocked(listBoxIpv4).mockImplementationOnce(() => {
       throw failure;
     });
-    return { stop };
+    return { stop, announce: () => {}, withdraw: () => {} };
   });
   return stop;
 }
