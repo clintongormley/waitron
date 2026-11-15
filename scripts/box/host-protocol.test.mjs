@@ -78,7 +78,7 @@ describe("the lists", () => {
       "screen.set",
       "tag.write",
     ]);
-    expect(SHELL_VERBS).toEqual(["clock.status", "clock.set"]);
+    expect(SHELL_VERBS).toEqual(["clock.status", "clock.set", "clock.sync-on"]);
     expect(HOST_VERBS.filter((verb) => SHELL_VERBS.includes(verb))).toEqual([]);
     expect(Object.isFrozen(HOST_VERBS)).toBe(true);
     expect(Object.isFrozen(SHELL_VERBS)).toBe(true);
@@ -309,6 +309,7 @@ describe("the verb", () => {
   it.each([
     ["clock.status", "clock.status"],
     ["clock.set", 'clock.set 1730073600000 {"source":"admin","person":"p1"}'],
+    ["clock.sync-on", "clock.sync-on"],
     ["a longer verb", `network.readx {"actor":${PERSON}}`],
     ["upper case", `NETWORK.READ {"actor":${PERSON}}`],
     ["a prefix", `network {"actor":${PERSON}}`],
@@ -1651,6 +1652,7 @@ describe("handleHostRequest passes the parser's refusals on", () => {
     ["unknown_request", `network.readx {"actor":${PERSON}}`],
     ["unknown_request", "clock.status"],
     ["unknown_request", 'clock.set 1730073600000 {"source":"admin","person":"p1"}'],
+    ["unknown_request", "clock.sync-on"],
     ["actor_invalid", `network.join {${JOIN_FIELDS},"actor":${SERVER}}`],
     ["fields_invalid", `screen.set {"start":"kitchen","actor":${PERSON}}`],
   ])("answers %s to %s without calling anything", async (reason, text) => {

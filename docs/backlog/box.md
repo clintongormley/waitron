@@ -852,8 +852,8 @@ its request writer and reply reader; PR 9's routes call that client): what the s
 host service and what the host may answer, as a pure module with no socket, root or NetworkManager.
 
 - Seven requests from Task 3.1's list (`HOST_VERBS`; `first-start.status` is left to the installed
-  first-start service); `clock.status` and `clock.set` stay slice 9b's shell handler's (`SHELL_VERBS`), and this
-  module answers them `unknown_request`.
+  first-start service); `clock.status` and `clock.set` stay slice 9b's shell handler's (`SHELL_VERBS`, which
+  gained `clock.sync-on` on 2026-11-15), and this module answers them `unknown_request`.
 - A request is one line: the verb, one space and one JSON object of the request's fields and then
   `actor`, printable ASCII only, at most 4096 characters, and accepted only in the exact form
   `formatHostRequest` writes, so a duplicate key, another key order, extra spaces or an upper-case
