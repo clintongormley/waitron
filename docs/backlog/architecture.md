@@ -244,7 +244,7 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   A972 cut 1 moves its original bytes and keeps the existing encoder behavior.
 - **A974 — remaining Bucket E and F sites.** Still open: identifiers and file names from the audit.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
-  The server split suites' comments and private bill/party helper bindings remain.
+  The server split suites' comments and shared helper consumers remain.
   Record and submission names also remain in server seed,
   snapshot and fiscal-identity suites; check protected fixtures and fiscal-provider contracts.
   Fixture strings remain separate from this naming work. Shared helpers' Spanish dish samples
@@ -589,7 +589,6 @@ The comment (`packages/db/src/schema/drawer-opens.ts:50-51`) omits a cash refund
   A private person binding (`marta`, shown as Martha) remains in the protected
   `clock-set.route.test.ts`; check the clock-suite boundary before renaming.
   Protected fiscal and receipt helpers still need their boundary audit.
-  The published-menu sale fixture uses English private preparation and section names.
   Other split-suite comments, shared helper consumers and file names remain.
   Private drink bindings remain in `sale-till-source.receipt.test.ts`,
   `issuance-pass.fiscal-identity.test.ts`, `list-unit-price.fiscal-identity.test.ts` and
