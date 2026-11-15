@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
-import {
-  GENERATION_NAME,
-  bucketKey,
-  generationName,
-  parseGenerationName,
-} from "./names.js";
+import { GENERATION_NAME, bucketKey, generationName, parseGenerationName } from "./names.js";
 
 const NODE = "3f1c2b9e-8d7a-4e21-9b0c-5a6d7e8f9012";
 
