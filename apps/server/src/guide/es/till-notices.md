@@ -120,7 +120,7 @@ texto, quizá de una versión más reciente del servidor. Avisa al encargado par
 
 Si una acción dice **No se ha guardado: el servidor no tiene espacio en disco. Avisa al encargado.**,
 avisa al encargado y espera a que se libere espacio antes de reintentarlo. Que se rechace la
-impresión de un recibo o justificante no anula un pago; no lo cobres otra vez. Si el mensaje dice
+impresión de un recibo o justificante, o la apertura del cajón, no anula un pago; no lo cobres otra vez. Si el mensaje dice
 que se ha cobrado la tarjeta, sigue sus instrucciones de recuperación en lugar de volver a cobrar.
 
 ## Cuando se detiene la facturación por un conflicto de identidad {#invoice-conflict}

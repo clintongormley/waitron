@@ -13601,7 +13601,10 @@ describe("till-app", () => {
         zonePolicy: { serviceMode: "ticket_then_pay" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
         markCollected: vi.fn().mockRejectedValue({ code: "storage.disk_full" }),
-        getStationQueue: vi.fn().mockResolvedValue({ items: [stationGroup], notices: [] }),
+        getStationQueue: vi
+          .fn()
+          .mockResolvedValueOnce({ items: [stationGroup], notices: [] })
+          .mockRejectedValue({ code: "storage.disk_full" }),
       });
       const c = await toCounter(el);
 

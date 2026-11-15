@@ -258,7 +258,7 @@ export class TillStationScreen extends LitElement {
    * so a reload reconciles nothing and a silent failure would leave the operator no feedback.
    */
   @state() private reprintErrorCode?: string;
-  @state() private acknowledgeErrorCode?: string;
+  @state() private acknowledgeError?: { code: string; noticeId: string };
   /** A bump the box could not save because its disk is full; any other refusal stays silent. */
   @state() private bumpErrorCode?: string;
   @state() private stale = false;
@@ -494,6 +494,8 @@ export class TillStationScreen extends LitElement {
 
   #forgetUnlisted(notices: KitchenNotice[]): void {
     const listed = new Set(notices.map((notice) => notice.id));
+    if (this.acknowledgeError && !listed.has(this.acknowledgeError.noticeId))
+      this.acknowledgeError = undefined;
     for (const id of this.#acknowledged) if (!listed.has(id)) this.#acknowledged.delete(id);
   }
 
@@ -641,6 +643,7 @@ export class TillStationScreen extends LitElement {
       this.notices = [];
       this.printersDown = [];
       this.bumpErrorCode = undefined;
+      this.acknowledgeError = undefined;
       // Reads still out are for the station being left.
       this.#appliedRequest = this.#queueRequest;
       this.#lastGoodAt = new Date();
@@ -767,7 +770,7 @@ export class TillStationScreen extends LitElement {
   async #onAcknowledgeNotice(event: Event): Promise<void> {
     event.stopPropagation();
     const { noticeId } = (event as CustomEvent<{ noticeId: string }>).detail;
-    this.acknowledgeErrorCode = undefined;
+    this.acknowledgeError = undefined;
     try {
       await (this.deviceMode
         ? this.api.deviceAcknowledgeKitchenNotice(noticeId)
@@ -775,7 +778,10 @@ export class TillStationScreen extends LitElement {
     } catch (error) {
       if (this.#switched(error)) return;
       if ((error as { code?: string }).code !== "kitchen_notice.not_found") {
-        this.acknowledgeErrorCode = (error as { code?: string }).code ?? "server.internal";
+        this.acknowledgeError = {
+          code: (error as { code?: string }).code ?? "server.internal",
+          noticeId,
+        };
         return;
       }
     }
@@ -1125,9 +1131,9 @@ export class TillStationScreen extends LitElement {
             : nothing
         }
         ${
-          this.acknowledgeErrorCode
+          this.acknowledgeError
             ? html`<p class="error" role="alert">
-                ${this.acknowledgeErrorCode === "storage.disk_full" ? codeMessage(this.acknowledgeErrorCode) : t("station.acknowledge_error")}
+                ${this.acknowledgeError.code === "storage.disk_full" ? codeMessage(this.acknowledgeError.code) : t("station.acknowledge_error")}
               </p>`
             : nothing
         }

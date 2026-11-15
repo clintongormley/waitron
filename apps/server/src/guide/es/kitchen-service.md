@@ -77,7 +77,7 @@ un aviso por estación y un ticket por impresora, con los números de esas cuent
 de confirmar.
 
 Si **Entendido** se rechaza porque el servidor no tiene espacio en disco, el aviso sigue en pantalla.
-Avisa al encargado y sigue sus instrucciones hasta que puedas confirmarlo.
+Avisa al encargado y sigue las instrucciones del aviso hasta que puedas confirmarlo.
 
 ## Relaciona los nombres cambiados con los pedidos originales {#party-names}
 

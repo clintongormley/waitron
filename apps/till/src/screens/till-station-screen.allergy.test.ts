@@ -103,6 +103,36 @@ describe("A669 boards acknowledgement", () => {
         allergyBlock.who,
       );
     });
+    it(`clears a full-disk acknowledgement refusal only when its notice disappears, device=${deviceMode}`, async () => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      let notices = snapshot().notices;
+      const read = vi.fn(async () =>
+        deviceMode
+          ? { stations: deviceSnapshot().stations.map((station) => ({ ...station, notices })) }
+          : { ...snapshot(), notices },
+      );
+      const { el } = await mount(deviceMode, {
+        [deviceMode ? "getDeviceStationScreen" : "getStationQueue"]: read,
+        [deviceMode ? "deviceAcknowledgeKitchenNotice" : "acknowledgeKitchenNotice"]: vi
+          .fn()
+          .mockRejectedValue({ code: "storage.disk_full" }),
+      });
+      await clickAck(el);
+      const shown = () => el.shadowRoot!.querySelector('[role="alert"]')?.textContent;
+      await vi.waitFor(() => expect(shown()).toContain(codeMessage("storage.disk_full")));
+      const reads = read.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(15_000);
+      await vi.waitFor(() => expect(read.mock.calls.length).toBeGreaterThan(reads));
+      expect(shown()).toContain(codeMessage("storage.disk_full"));
+
+      notices = [allergyNotice("removed")];
+      await vi.advanceTimersByTimeAsync(15_000);
+      await vi.waitFor(() =>
+        expect(queue(el).notices.map((notice) => notice.id)).toEqual(["allergy-removed"]),
+      );
+      expect(shown()).toBeUndefined();
+    });
+
     it(`retains the notice on an acknowledgement refusal, device=${deviceMode}`, async () => {
       const refused = vi.fn().mockRejectedValue({ code: "server.internal" });
       const { el } = await mount(deviceMode, {
