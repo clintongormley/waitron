@@ -211,7 +211,7 @@ and the successful-adoption latch separately; neither closes the restart gap. Af
 resend of a half-finished adopt, the identity reserved on the primary and the local leftovers
 remain unmeasured. The reset page still needs a way to identify this box in the primary's list.
 From source reading, removal treats a `serving-secondary` entry with no `nodes` row as a standby
-that never finished joining (`membership-removal.ts`).
+that never finished joining (A61, #708; `membership-removal.ts`).
 
 The following remain source-reading findings unless a test is named.
 
@@ -360,7 +360,8 @@ choice for later venues (the owner's answer to question 4 of that design).
 - **Setup wizard choice, open since #443.** Whether to keep offering “Add a mirror node” remains
   an owner decision. Joining and takeover run in tests, but two started boxes remain unqualified.
   Decide `apps/setup/src/screens/mode-screen.ts`'s Join or recover row and `role-screen.ts`'s row
-  together; removing or disabling the option is a product decision.
+  together; removing or disabling the option is a product decision. Read the A947 design, §4,
+  when settling this choice.
 - **Retirement and rejoin still lack a drain confirmation.** From source reading, `retireSelf`
   checks membership before self-eviction, and `rejoinAsSecondary` checks fencing and a carrier
   before wiping. Neither proves the old box's tail was carried forward. `rejoin --accept-loss`
@@ -383,13 +384,12 @@ choice for later venues (the owner's answer to question 4 of that design).
 - **Split-brain and payments.** Examine selling, the fiscal chain, pending card payments and
   printing together (owner, 2026-08-26), including the till's timed-out-card choices. Settle
   [provider cancellation ownership](payments.md#decisions-and-deliberate-limits) (A764).
-
 - **Carry-in qualification.** Measure the installation reservation cost of a bundle fetch and
   qualify provision/adopt serialization on one box. Verify that node identity is established
   before signing. The old returned-primary and one-more-filing-pass risks need start/fencing
   qualification against today's A947 start checks; they are not established by the sequential
-  handover test. The design says slice 5a decides the role before the first filing pass, but this
-  audit has not qualified that on two started boxes.
+  handover test. The design says slice 5a decides the role before the first filing pass; this
+  remains unqualified on two started boxes.
 
 The streaming and stored-primary-key decisions remain under
 [Decisions and deliberate limits](#decisions-and-deliberate-limits).
@@ -667,8 +667,8 @@ Only an answer or a thread exit ends its wait. The controlled-handover deadline 
 - **Boot membership fetch and remaining entry fixtures.** The credential-free chart read and
   PostgreSQL-shaped fixtures remain.
   [Detail](replication-cloud.md#boot-membership-fetch-and-remaining-entry-fixtures)
-- **Replication, membership & failover residuals.** Retirement, re-admission, restore/promotion,
-  certificates and payment qualification remain.
+- **Replication, membership & failover residuals.** The setup-wizard choice, carry-in qualification,
+  retirement, re-admission, restore/promotion, certificates and payment qualification remain.
   [Detail](replication-cloud.md#replication-membership--failover--residuals-afterwards)
 - **Task 1a: unverified concurrency claims.** Promotion, sealing and scheduler takeover.
   [Detail](replication-cloud.md#task-1a--unverified-concurrency-claims)
