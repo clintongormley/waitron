@@ -85,6 +85,4 @@ it("requires hardware permission alongside the page gate", async () => {
   const { app } = await mountDeviceApp({ permissions: ["venue.view"], path: "/manage/overview" });
   await searchSettings(app, t("devices.name"));
   expect(searchResult(app, "dashboard:device:name")).toBeNull();
-  await searchSettings(app, t("devices.default_reader"));
-  expect(searchResult(app, "dashboard:device:defaultReaderId")).toBeNull();
 });

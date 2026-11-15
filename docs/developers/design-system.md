@@ -4139,7 +4139,8 @@ The chooser shows saved printer names, including identical names across receipt 
 Mounted EN/ES checks compare the Edit and calibration controls and result labels with declarations.
 Device settings use **Edit** as their location and require permission to manage hardware, matching
 the device-list read. Kitchen-setting candidates follow the current profile and fitted station/zone
-lists. A refused reader read in the editor still hides its field. The chooser shows device names and opens the existing
+lists. A refused reader read in the editor still hides its field. The chooser shows device names
+and opens the existing
 Edit dialog; search does not start pairing. Mounted EN/ES checks compare its named controls and
 group headings with the declarations.
 
