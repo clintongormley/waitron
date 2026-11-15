@@ -1,3 +1,4 @@
+import { KEY_RING_VARIABLES } from "@waitron/credentials";
 import { SECRETS_ENV_FILE, TRADING_ENV_FILE, BACKUP_ENV_FILE } from "@waitron/store";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -34,13 +35,6 @@ export async function loadBoxEnv(
   }
   return merged;
 }
-
-const KEY_RING_VARIABLES = [
-  "WAITRON_CREDENTIALS_KEY",
-  "WAITRON_CREDENTIALS_KEY_VERSION",
-  "WAITRON_CREDENTIALS_KEY_PREVIOUS",
-  "WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION",
-] as const;
 
 /** The vault key variables `env` sets non-empty: the ones that win over `secrets.env` at every start. */
 export function keyRingVariables(

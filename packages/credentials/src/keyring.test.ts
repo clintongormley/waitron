@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { hasCode } from "@waitron/shared";
-import { keyForVersion, loadKeyRing } from "./keyring.js";
+import { KEY_RING_VARIABLES, keyForVersion, loadKeyRing } from "./keyring.js";
 import { capturedSync as captured } from "./testing/captured.js";
 
 const K1 = Buffer.alloc(32, 1).toString("base64");
@@ -158,6 +158,33 @@ describe("loadKeyRing", () => {
       currentVariable: "WAITRON_CREDENTIALS_KEY_VERSION",
       previousVariable: "WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION",
     });
+  });
+});
+
+describe("KEY_RING_VARIABLES", () => {
+  const full = {
+    WAITRON_CREDENTIALS_KEY: K1,
+    WAITRON_CREDENTIALS_KEY_VERSION: "3",
+    WAITRON_CREDENTIALS_KEY_PREVIOUS: K2,
+    WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "2",
+  };
+
+  it("names every variable a full ring is read from, and nothing else", () => {
+    const listed = Object.fromEntries(KEY_RING_VARIABLES.map((name) => [name, full[name]]));
+    expect(loadKeyRing({ ...listed, UNLISTED: "x" })).toEqual(loadKeyRing(full));
+    expect(Object.keys(listed).sort()).toEqual(Object.keys(full).sort());
+  });
+
+  it.each(KEY_RING_VARIABLES.map((name) => [name]))("%s changes what loadKeyRing reads", (name) => {
+    const without: Record<string, string> = { ...full };
+    delete without[name];
+    let read: unknown;
+    try {
+      read = loadKeyRing(without);
+    } catch (error) {
+      read = error;
+    }
+    expect(read).not.toEqual(loadKeyRing(full));
   });
 });
 

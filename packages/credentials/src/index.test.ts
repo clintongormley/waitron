@@ -16,6 +16,7 @@ describe("the public surface", () => {
         "PURPOSES",
         "isPurpose",
         "validatePayload",
+        "KEY_RING_VARIABLES",
         "loadKeyRing",
         "credentialProvisioned",
         "credentialRevision",

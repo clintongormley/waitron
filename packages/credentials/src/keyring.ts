@@ -7,6 +7,9 @@ const CURRENT_VERSION = "WAITRON_CREDENTIALS_KEY_VERSION";
 const PREVIOUS = "WAITRON_CREDENTIALS_KEY_PREVIOUS";
 const PREVIOUS_VERSION = "WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION";
 
+/** Every variable `loadKeyRing` reads. */
+export const KEY_RING_VARIABLES = [CURRENT, CURRENT_VERSION, PREVIOUS, PREVIOUS_VERSION] as const;
+
 export interface KeyEntry {
   key: Buffer;
   version: number;
