@@ -144,9 +144,9 @@ function state(version: string, liveFields = "lf-1", setupRevision?: string): Me
 }
 
 const courses = [
-  { id: "drinks", name: "Drinks", displayOrder: 0 },
-  { id: "mains", name: "Mains", displayOrder: 1 },
-  { id: "desserts", name: "Desserts", displayOrder: 2 },
+  { id: "drinks", name: "Drinks", displayOrder: 0, fireNowZoneIds: [] },
+  { id: "mains", name: "Mains", displayOrder: 1, fireNowZoneIds: [] },
+  { id: "desserts", name: "Desserts", displayOrder: 2, fireNowZoneIds: [] },
 ];
 
 function party(over: Partial<TableParty> = {}): TableParty {
@@ -466,7 +466,7 @@ describe("A768 the till follows the venue's setup revision", () => {
     await switchServer();
     answerLate({
       ...till(drillFormFactor),
-      courses: [{ id: "late", name: "Late", displayOrder: 0 }],
+      courses: [{ id: "late", name: "Late", displayOrder: 0, fireNowZoneIds: [] }],
       setupRevision: "s2",
     });
     await flush(el);
@@ -627,7 +627,7 @@ describe("A768 the till follows the venue's setup revision", () => {
     await switchServer();
     late.resolve({
       ...till(drillFormFactor),
-      courses: [{ id: "late", name: "Late", displayOrder: 0 }],
+      courses: [{ id: "late", name: "Late", displayOrder: 0, fireNowZoneIds: [] }],
       setupRevision: "s2",
     });
     await flush(el);

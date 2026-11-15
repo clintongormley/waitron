@@ -9816,7 +9816,7 @@ describe("till-app", () => {
       });
 
       it("boots the venue courses without the retired table Fire-control setting", async () => {
-        const courses = [{ id: "c1", name: "Entrantes", displayOrder: 0 }];
+        const courses = [{ id: "c1", name: "Entrantes", displayOrder: 0, fireNowZoneIds: [] }];
         const { el } = await mountApp({
           getTill: vi.fn().mockResolvedValue({ ...till, courses }),
           getTablesState: vi.fn().mockResolvedValue([openTable]),

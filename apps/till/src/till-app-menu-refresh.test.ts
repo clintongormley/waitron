@@ -1171,8 +1171,8 @@ describe("a table round refused because the menu changed", () => {
           ...till,
           formFactor: tableFormFactor,
           courses: [
-            { id: "starters", name: "Starters", displayOrder: 0 },
-            { id: "desserts", name: "Desserts", displayOrder: 1 },
+            { id: "starters", name: "Starters", displayOrder: 0, fireNowZoneIds: [] },
+            { id: "desserts", name: "Desserts", displayOrder: 1, fireNowZoneIds: [] },
           ],
         }),
         listZoneOffers: vi.fn((zoneId: string) =>
