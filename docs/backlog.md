@@ -656,12 +656,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   hours and closures kept in Waitron update the venue's Google Business Profile, so Google Maps never
   shows a closed venue as open. Needs a design. Not started.
 
-- **A1540. Clarify the Calendar Show option spacing report (owner, 2026-11-14).** Shared action
-  and choice appearance and grouped-option indent are built. The reported uneven option gaps
-  did not reproduce: the real Calendar layout measured zero gaps between options, 27 px only
-  where a group heading sits, and 48 px rows, the same before and after. The owner still needs
-  to identify the spacing they saw. Watcher retained this point on 14 November at 21:43.
-
 - **Department dialog** (bundle of 1, size S). [Detail](backlog/service-periods.md#bundle-department-dialog)
 
 - **One rule for two managers editing at once** (bundle of 6, 2 important, size M). Holds A1073. [Detail](backlog/service-periods.md#bundle-one-rule-for-two-managers-editing-at-once)
