@@ -16,7 +16,12 @@ function parts(el: HTMLElement) {
   };
 }
 
-type Textarea = HTMLElement & { value: string; spellcheck: boolean; error: string };
+type Textarea = HTMLElement & {
+  value: string;
+  spellcheck: boolean;
+  autocorrect: boolean;
+  error: string;
+};
 
 test("renders its label, associated with the textarea so a click on it focuses the textarea", async () => {
   const el = await mount('<wt-textarea label="Note"></wt-textarea>');
@@ -329,6 +334,24 @@ test("autocapitalize passes through, and none is set by default", async () => {
   const plain = await mount('<wt-textarea label="Note"></wt-textarea>');
   expect(parts(off).textarea.getAttribute("autocapitalize")).toBe("off");
   expect(parts(plain).textarea.hasAttribute("autocapitalize")).toBe(false);
+});
+
+test('autocorrect="off" as an attribute reaches the textarea as off', async () => {
+  const el = await mount('<wt-textarea label="Kit" autocorrect="off"></wt-textarea>');
+  expect(parts(el).textarea.getAttribute("autocorrect")).toBe("off");
+});
+
+test("autocorrect set to false as a property reaches the textarea as off", async () => {
+  const el = await mount('<wt-textarea label="Kit"></wt-textarea>');
+  (el as Textarea).autocorrect = false;
+  await (el as LitElement).updateComplete;
+  expect(parts(el).textarea.getAttribute("autocorrect")).toBe("off");
+});
+
+test("autocorrect is left to the browser by default, and an attribute other than off leaves it so", async () => {
+  const plain = await mount('<wt-textarea label="Note"></wt-textarea>');
+  const on = await mount('<wt-textarea label="Note" autocorrect="on"></wt-textarea>');
+  for (const el of [plain, on]) expect(parts(el).textarea.hasAttribute("autocorrect")).toBe(false);
 });
 
 test("autocomplete passes through, and none is set by default", async () => {
