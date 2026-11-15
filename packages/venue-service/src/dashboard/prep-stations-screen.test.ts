@@ -2058,6 +2058,49 @@ describe("A725 retired Times destinations", () => {
   });
 });
 
+describe("a link naming a station", () => {
+  const withRetiredGrill: PrepStationsView = {
+    ...view,
+    stations: [
+      ...view.stations,
+      { ...view.stations[0]!, id: "grill", name: "Grill", active: false },
+    ],
+  };
+  it("opens that station's editor once the stations have loaded", async () => {
+    history.replaceState(null, "", "/manage/prep-stations/view/stations/station/bar");
+    const push = vi.spyOn(history, "pushState");
+    const el = await mount(api());
+    await settleEditor(el);
+    expect(stationEditor(el)?.station?.id).toBe("bar");
+    expect(location.pathname).toBe("/manage/prep-stations/view/stations/station/bar");
+    expect(push).not.toHaveBeenCalled();
+  });
+  it.each(["ghost", "grill"])(
+    "opens nothing for %s and drops it from the address without a history entry",
+    async (id) => {
+      history.replaceState(null, "", `/manage/prep-stations/view/stations/station/${id}`);
+      const push = vi.spyOn(history, "pushState");
+      const replace = vi.spyOn(history, "replaceState");
+      const el = await mount(api({ load: vi.fn().mockResolvedValue(withRetiredGrill) }));
+      await settleEditor(el);
+      expect(stationEditor(el)).toBeNull();
+      expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+      expect(writtenPaths(replace)).toEqual(["/manage/prep-stations/view/stations"]);
+      expect(push).not.toHaveBeenCalled();
+    },
+  );
+  it("closing the editor it opened takes the station out of the address without a history entry", async () => {
+    history.replaceState(null, "", "/manage/prep-stations/view/stations/station/bar");
+    const push = vi.spyOn(history, "pushState");
+    const el = await mount(api());
+    await settleEditor(el);
+    expect(stationEditor(el)).not.toBeNull();
+    await cancelEditor(el);
+    expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+    expect(push).not.toHaveBeenCalled();
+  });
+});
+
 it("has no station hours section, editor or Today actions", async () => {
   setLocale("en");
   const el = await mount(

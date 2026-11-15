@@ -197,7 +197,12 @@ export class PrepStationsScreen extends LitElement {
       if (this.#url.read("dashboard") !== "prep-stations") return;
       const requested = this.#url.read("view");
       this.tab = PREP_TABS.find((tab) => tab === requested) ?? "stations";
-      this.#url.write({ dashboard: "prep-stations", view: this.tab, station: null }, true);
+      this.#linkedStation = requested === "stations" ? this.#url.read("station") : null;
+      this.#url.write(
+        { dashboard: "prep-stations", view: this.tab, station: this.#linkedStation },
+        true,
+      );
+      if (this.view) this.#openLinkedStation();
     },
     {
       basePath: "/manage",
@@ -205,6 +210,24 @@ export class PrepStationsScreen extends LitElement {
       children: { "prep-stations": { view: "view", station: "station" }, "*": { view: "view" } },
     },
   );
+  #linkedStation: string | null = null;
+  /** The opening a link made, whose closing takes the station back out of the address. */
+  #linkedEdit?: object;
+  /** A link to a station that is gone, retired or behind another open editor leaves the address. */
+  #openLinkedStation() {
+    const id = this.#linkedStation;
+    if (id === null) return;
+    this.#linkedStation = null;
+    if (this.stationEdit?.station.id === id) {
+      this.#linkedEdit = this.stationEdit.token;
+      return;
+    }
+    const station = this.view?.stations.find((each) => each.active && each.id === id);
+    if (station && !this.stationEdit) {
+      this.#editStation(station);
+      this.#linkedEdit = this.stationEdit!.token;
+    } else this.#url.write({ station: null }, true);
+  }
   /** A cell choice whose route-change preview is open. */
   @state() private pending?: {
     change: RoutingChange;
@@ -377,6 +400,14 @@ export class PrepStationsScreen extends LitElement {
     this.#syncStationDrafts();
     this.#syncCellDraft();
     const changedState = changed as Map<PropertyKey, unknown>;
+    if (
+      changedState.has("stationEdit") &&
+      this.#linkedEdit &&
+      this.stationEdit?.token !== this.#linkedEdit
+    ) {
+      this.#linkedEdit = undefined;
+      this.#url.write({ station: null }, true);
+    }
     if (changedState.has("view") && this.#writtenChoice !== undefined) {
       if (this.cellChoice === this.#writtenChoice) this.cellChoice = null;
       this.#writtenChoice = undefined;
@@ -531,6 +562,7 @@ export class PrepStationsScreen extends LitElement {
             this.stationEditBusy = false;
             this.#stationEditRun++;
           }
+          this.#openLinkedStation();
           if (
             this.cellRefusal !== null &&
             this.cellRefusal === this.#droppedRefusal &&
