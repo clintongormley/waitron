@@ -771,7 +771,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A1526. A table's whole meal in one list: service steps and course firing together (owner,
   2026-11-14).** The owner approved the [design](superpowers/specs/2026-11-14-a1526-meal-flow.md)
   at 21:09 on 14 November: “Approve, all three as written (Recommended)” (watcher window picker,
-  recorded in Lane D's questions.md). Claude reviewed the [four-cut build plan](superpowers/plans/2026-11-14-a1526-meal-flow-build.md), and the watcher cleared it on 15 November at 00:33. The first cut adds Tables with fixed moments, editable steps and current read-only course values, plus the five-minute floor warning. Steps now choose a named predecessor and sit by that start, with preset course links retained for later starter steps. Department course firing and reminder choices are edited in Tables. Replacement starter steps remain open.
+  recorded in Lane D's questions.md). Claude reviewed the [four-cut build plan](superpowers/plans/2026-11-14-a1526-meal-flow-build.md), and the watcher cleared it on 15 November at 00:33. Replacement starter steps remain open.
   - The department's **Tables** tab combines fixed meal moments, waiter steps and courses in one
     list. **Service** keeps orders, payment and the collection ticket. Courses keep their names
     and order; each department owns Fire now / Hold for later and each held course's reminder.
@@ -780,8 +780,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
     those links do not exist. “Anything else?” stops being a default.
   - Steps follow named starts without dragging. An undone step gets an amber outline five minutes
     after it is due. Colours are fixed by kind and state, with no per-venue picker.
-  - Builds on A757 §8, slices 7 and 8. The course hold setting and reminder change shape; before
-    go-live, rebuild the affected starting migration and reset practice venues for the remaining schema cuts.
+  - Builds on A757 §8, slices 7 and 8.
 
 - **Service steps after a bill moves or tables combine** (bundle of 4, 2 important, size S). Holds A1330, A1331, A1333, A1005. [Detail](backlog/till.md#bundle-service-steps-after-a-bill-moves-or-tables-combine)
 
