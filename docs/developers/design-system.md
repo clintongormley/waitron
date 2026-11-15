@@ -2570,6 +2570,28 @@ the input fill exactly that box via `inset: 0` with no size of its own. If you b
 where the hit target is a covering, invisible native control, size the _container_, not the
 control.
 
+### Forced colours (Windows contrast themes)
+
+With a Windows contrast theme on, the browser repaints the page in a few system colours: it deletes
+box-shadows, paints backgrounds as the page colour and paints transparent borders in the text
+colour. So a primitive that draws an edge, a focus mark or a state with a box-shadow, a background
+or a transparent border also draws it inside `@media (forced-colors: active)`, with an ordinary
+border or outline in system colours (`CanvasText`, `Canvas`, `Highlight`, `HighlightText`,
+`GrayText`). It uses `forced-color-adjust: none` only where the browser would otherwise repaint a
+colour it needs. Three do so today:
+
+- the shared field box (`fieldStyles`) shows its bottom line as a border, an outline in `Highlight`
+  while focused, and a single dashed `GrayText` line when disabled;
+- `wt-switch` outlines its track and fills its thumb; ON fills the track in `Highlight` with a
+  `HighlightText` thumb at the far end, and a disabled switch is drawn in `GrayText`;
+- `wt-tabs` underlines only the selected tab, in `Highlight`.
+
+Their tests turn the theme on with the Chrome DevTools Protocol's `forced-colors` media emulation,
+check it took, and read pixels from a real screenshot:
+`packages/ui-core/src/components/wt-input.forced-colors.test.ts`,
+`packages/ui/src/components/wt-switch.forced-colors.test.ts` and
+`packages/ui/src/components/wt-tabs.forced-colors.test.ts`.
+
 ### Focus delegation
 
 A primitive that wraps exactly one native focusable control (a single `<button>` or `<input>`) sets:
