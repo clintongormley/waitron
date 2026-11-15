@@ -10162,7 +10162,7 @@ describe("a variant is sold as the product it is", () => {
     printed: string;
   }>([
     { staffName: "125 ml", customerName: null, frozen: "125 ml", printed: "125 ml" },
-    { staffName: "  ", customerName: null, frozen: "", printed: "  " },
+    { staffName: "\t", customerName: null, frozen: "", printed: "\t" },
     {
       staffName: "125 ml",
       customerName: { [LOCALE]: "Copa pequeña", "en-GB": "Small glass" },
