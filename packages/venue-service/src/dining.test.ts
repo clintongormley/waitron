@@ -34,7 +34,6 @@ async function venueIn(country: string, fiscalTerritory: string): Promise<void> 
   await seedVenue(db, {
     name: "Corner Kitchen",
     invoiceLocales: ["en-GB"],
-    operationDescription: "Hospitality",
     fiscalTerritory,
   });
   await db.execute(sql`update taxpayer set country = ${country}`);
