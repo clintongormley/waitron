@@ -6396,7 +6396,12 @@ describe("a recovery request refused because another setup holds the server", ()
   };
 
   /** The setup app on a server whose recovery routes run through the real client and refuse `refused`. */
-  async function recoveryApp(source: Source, refused: Refused, code = "setup.attempt_conflict") {
+  async function recoveryApp(
+    source: Source,
+    refused: Refused,
+    code = "setup.attempt_conflict",
+    extra: Partial<Record<keyof SetupApi, unknown>> = {},
+  ) {
     const conflict = () => refusal(code);
     const calls: string[] = [];
     const transport = vi.fn<typeof fetch>(async (url) => {
@@ -6424,6 +6429,7 @@ describe("a recovery request refused because another setup holds the server", ()
         prepareRecovery: real("prepareRecovery"),
         discardStagedRecovery: real("discardStagedRecovery"),
         cloudRecoveryStatus: vi.fn().mockResolvedValue(cloudPoint),
+        ...extra,
       }),
     );
     const screen: Screen =
@@ -6476,6 +6482,36 @@ describe("a recovery request refused because another setup holds the server", ()
     proceed().click();
   }
 
+  it.each([
+    ["archive", ["https://192.168.10.10", "https://10.0.0.5"], "https://192.168.10.10"],
+    ["bucket", ["https://192.168.10.10"], "https://192.168.10.10"],
+    ["cloud", ["https://192.168.10.10"], "https://192.168.10.10"],
+    ["archive", [], "https://waitron.local"],
+  ] as const)(
+    "a %s recovery hands the fiscal form the address the setup discovery gave for this box (%j)",
+    async (source, ipUrls, address) => {
+      const getDiscovery = vi.fn().mockResolvedValue({
+        caDownloadAvailable: false,
+        hostnameUrl: "https://waitron.local",
+        ipUrls,
+      });
+      const { copy } = await recoveryApp(source, "preparation", undefined, { getDiscovery });
+      copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
+      await vi.waitFor(() =>
+        expect(
+          copy
+            .shadowRoot!.querySelector<LitElement>("setup-recovery-allocation")
+            ?.shadowRoot?.querySelector("vf-recovery-hour"),
+        ).toBeTruthy(),
+      );
+      const entry = copy
+        .shadowRoot!.querySelector<LitElement>("setup-recovery-allocation")!
+        .shadowRoot!.querySelector<LitElement & { context: { boxAddress?: string } }>(
+          "vf-recovery-hour",
+        )!;
+      expect(entry.context.boxAddress).toBe(address);
+    },
+  );
   it.each([
     ["archive", "preview"],
     ["bucket", "preview"],

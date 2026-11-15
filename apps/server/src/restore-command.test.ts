@@ -398,7 +398,7 @@ describe("waitron-restore restore", () => {
       expect(code).toBe(1);
       expect(out).toEqual([
         COLD_RESTORE_NOTICE,
-        "The box could not confirm its time, so it made no invoice series. Let the box keep its time over the internet and run this command again, or open the restore page on a phone or laptop on the venue's network, which says what is wrong with the box's clock.",
+        `restore failed: sif.allocation_invalid (${reason}) — the box's time is not confirmed, so no invoice series was made; check that timedatectl shows "System clock synchronized: yes", then run this command again`,
       ]);
     },
   );

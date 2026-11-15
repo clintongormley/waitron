@@ -422,11 +422,9 @@ function sharedRefusal(err: unknown): string {
   if (err.code === "restore.request_waiting")
     return "restore failed: restore.request_waiting — a restore saved from the setup page is still waiting and this command changed nothing; start the server to run that restore. If it cannot finish, use Retry a normal boot or choose Throw this restore away on the HTTPS recovery page, using an administrator password from the selected backup; after discarding it, run this command again";
   // The series check could not confirm the box's time (`clockRefusal` in fiscal-verifactu's `hour-clock.ts`, and `hour-selection.ts`'s own refusals).
-  if (
-    err.code === "sif.allocation_invalid" &&
-    CLOCK_REFUSALS.has((err.params as { reason?: unknown }).reason)
-  )
-    return "The box could not confirm its time, so it made no invoice series. Let the box keep its time over the internet and run this command again, or open the restore page on a phone or laptop on the venue's network, which says what is wrong with the box's clock.";
+  const reason = (err.params as { reason?: unknown }).reason;
+  if (err.code === "sif.allocation_invalid" && CLOCK_REFUSALS.has(reason))
+    return `restore failed: sif.allocation_invalid (${String(reason)}) — the box's time is not confirmed, so no invoice series was made; check that timedatectl shows "System clock synchronized: yes", then run this command again`;
   if (err.code === "promotion.break_glass_invalid")
     return "restore failed: promotion.break_glass_invalid — use the selected backup's server key";
   if (err.code === "provisioning.database_in_use") {

@@ -11,14 +11,23 @@ export type ClockProblem =
   | { kind: "later" | "in-use" }
   | { kind: "next-minute"; remainingMs: number; recheckInMs: number };
 
-export interface ClockWords {
+/** A page's no-second-clock wait says what to do in two sentences, or lists two choices. */
+export type ClockWords = SharedClockWords &
+  (
+    | { secondClockDo: string; secondClockEnds: string; secondClockChoices?: never }
+    | {
+        secondClockChoices: readonly [string, string];
+        secondClockDo?: never;
+        secondClockEnds?: never;
+      }
+  );
+
+interface SharedClockWords {
   whyWait: string;
   nothingToDo: string;
   continuesIn: string;
   whySecondClock: string;
   onBox: string;
-  secondClockDo: string;
-  secondClockEnds: string;
   whichCorrect: string;
   theServer: string;
   bothWrong: string;
@@ -118,7 +127,7 @@ export const clockWaitStrings = {
     laterAfterSet:
       "No se pueden crear las series de facturas: la hora del servidor es ahora anterior a una hora que ya se usó para las series de facturas de este local, así que probablemente la hora de este dispositivo está mal. Corrige la hora de este dispositivo, vuelve a conectarte al servidor y elige de nuevo qué hora es la correcta.",
   },
-} satisfies Record<"en" | "es", Omit<ClockWords, "secondClockDo" | "secondClockEnds">>;
+} satisfies Record<"en" | "es", SharedClockWords>;
 
 const formats = new Map<string, Intl.DateTimeFormat>();
 
@@ -424,16 +433,26 @@ export function renderClockProblem(
   },
   place?: { locale: "en" | "es"; timeZone: string },
 ) {
-  if (problem?.kind === "second-clock")
-    return html`<section data-test="clock-wait">
-      <p role="status">${words.whySecondClock}</p>
-      ${
-        clock?.unavailable.some((r) => r.source === "browser" && r.reason === "same_machine")
-          ? html`<p>${words.onBox}</p>`
-          : nothing
-      }
-      ${sentence(words.secondClockDo)} ${sentence(words.secondClockEnds)}
-    </section>`;
+  if (problem?.kind === "second-clock") {
+    const onBox = clock?.unavailable.some(
+      (r) => r.source === "browser" && r.reason === "same_machine",
+    )
+      ? html`<p>${words.onBox}</p>`
+      : nothing;
+    const choices = words.secondClockChoices;
+    return choices
+      ? html`<section data-test="clock-wait">
+          <p role="status">${words.whySecondClock}</p>
+          <ul>
+            ${choices.map((line) => html`<li>${line}</li>`)}
+          </ul>
+          ${onBox}
+        </section>`
+      : html`<section data-test="clock-wait">
+          <p role="status">${words.whySecondClock}</p>
+          ${onBox} ${sentence(words.secondClockDo)} ${sentence(words.secondClockEnds)}
+        </section>`;
+  }
   if (problem?.kind === "disagreement") {
     const device = choice.device;
     const choices = [

@@ -174,9 +174,13 @@ them and no longer shows that button (the same file's "once the series are made,
 button is gone"). What the page shows when it cannot go ahead, and what it asks for:
 
 - **No second clock** (the box's time service is not synchronised, and the page is on the box
-  itself): let the box keep its time over the internet, or open the page on a phone or laptop on the venue's network that has the backup. It
-  checks again about every 15 seconds and carries on by itself (`recovery-hour.browser.test.ts`,
-  "with no second clock it explains itself and carries on when the internet arrives").
+  itself): the page says the server's time must be correct and it cannot check it over the
+  internet, then lists two choices: fix the internet connection, or open the page at the box's own
+  address (shown when the setup page knows it) on a phone or till on the venue's network and carry
+  on there. It checks again about every 15 seconds and carries on by itself (`recovery-hour.browser.test.ts`,
+  "with no second clock it explains itself and carries on when the internet arrives", and "with no
+  second clock it lists the two ways on, naming the box's address, then says the box's screen does
+  not count").
 - **The clocks differ by more than 30 seconds** (the box's time service is not synchronised): the
   page shows the server's time and this device's, and asks which is correct; **The server** and
   **Both times are wrong** say to correct this device's time and reconnect to the box, and **This

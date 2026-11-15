@@ -64,6 +64,7 @@ export class SetupRestoreBucketScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api: SetupApi = new SetupApi();
+  @property({ attribute: false }) boxAddress?: string;
   @property() errorMessage?: string;
   /** The field `errorMessage` is about. */
   @property() invalidField?: BucketField;
@@ -464,6 +465,7 @@ export class SetupRestoreBucketScreen extends LitElement {
           this.recoveryInvalid = event.detail.invalid;
         }}
         .api=${this.api}
+        .boxAddress=${this.boxAddress}
         .bucketKit=${this.kit}
         .environment=${this.environment}
         .oldBoxGone=${this.oldBoxGone}

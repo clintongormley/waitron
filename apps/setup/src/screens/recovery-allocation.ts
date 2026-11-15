@@ -83,6 +83,7 @@ export class SetupRecoveryAllocation extends LitElement {
   @property({ attribute: false }) prepare?: (
     request: ModuleRecoveryPreparationRequest,
   ) => Promise<unknown>;
+  @property({ attribute: false }) boxAddress?: string;
   @property() errorMessage?: string;
   @property() refusedField?: string;
   @state() private refusalDismissed = false;
@@ -124,6 +125,7 @@ export class SetupRecoveryAllocation extends LitElement {
                 targetNodeId: preview.nodeId,
               },
               prepare: this.prepare,
+              boxAddress: this.boxAddress,
             })
           : undefined;
       this.#keyEntry =

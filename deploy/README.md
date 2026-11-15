@@ -684,9 +684,9 @@ command against it treat that entrypoint differently:
   show archive and bucket access only; add that procedure's recovery override and credentials
   when restoring Veri*Factu. The recovery key alone does not authorise activation.
   When the series check cannot confirm the box's time (`sif.allocation_invalid` with reason
-  `second_clock_missing` or `clock_unconfirmed`), the command prints "The box could not confirm its time, so it made no invoice series. Let the box keep its time over the internet and
-  run this command again, or open the restore page on a phone or laptop on the venue's network,
-  which says what is wrong with the box's clock."
+  `second_clock_missing` or `clock_unconfirmed`), the command prints one line naming the code and
+  that reason, says no invoice series was made, and asks you to check that `timedatectl` shows
+  "System clock synchronized: yes" before running the command again.
 
   ```bash
   docker compose run --rm -v "$PWD/recovery-pack.pdf:/recovery-pack.pdf:ro" --entrypoint node app \

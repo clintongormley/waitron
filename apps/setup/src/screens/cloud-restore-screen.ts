@@ -44,6 +44,7 @@ export class SetupCloudRestoreScreen extends LitElement {
     `,
   ];
   @property({ attribute: false }) api: SetupApi = new SetupApi();
+  @property({ attribute: false }) boxAddress?: string;
   @property({ attribute: false }) view?: CloudRecoveryView;
   @property({ attribute: false }) retryConfirmation?: CloudRestoreConfirmation;
   @property() errorMessage?: string;
@@ -268,6 +269,7 @@ export class SetupCloudRestoreScreen extends LitElement {
                             this.recoveryInvalid = event.detail.invalid;
                           }}
                           .api=${this.api}
+                          .boxAddress=${this.boxAddress}
                           .cloudPointId=${approved.id}
                           .selectionId=${this.#currentApprovalBinding()}
                         ></setup-recovery-copy>
