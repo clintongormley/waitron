@@ -9,11 +9,7 @@ import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/te
 import { createDepartment, createServiceZone, resolveSalePolicy } from "@waitron/venue-service";
 import { ALL_MODULES } from "./modules.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
-import {
-  buildConfigurationBundle,
-  exportConfigurationTables,
-  importConfigurationTables,
-} from "./configuration-transfer.js";
+import { buildConfigurationBundle, importConfigurationTables } from "./configuration-transfer.js";
 
 const source = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const target = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
