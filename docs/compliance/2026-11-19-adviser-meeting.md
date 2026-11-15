@@ -102,6 +102,13 @@ when staff record that the table has left with part unpaid. It carries the date 
   Monday, still unpaid, or may it wait until Thursday and show Monday as the date of the meal? His
   answer 1.4 mentions invoices issued after payment by bank transfer; his answer 1.3 says issuing
   cannot wait for full payment.
+- (c) An invoice issued after the VAT period of its meal has ended. Waitron counts it in the VAT
+  return of the meal's period (LIVA 75.Uno.2.º), as question 7 does for a wrong date, and the
+  accountant's export lists it in that period too, showing both dates. Example: a meal on 28 March,
+  paid by bank transfer, is invoiced on 25 April, after the first quarter's return was filed on
+  20 April. Is it right to count it in the first quarter and file a complementary return for it
+  (LGT art. 122), or does it count in the period it was issued? And may the accountant's export list
+  it by the date of the meal rather than the date of issue?
 
 Yes / No / Note: ____________________________________________
 
@@ -533,6 +540,14 @@ momento.
   lunes, aún sin cobrar, o puede esperar al jueves indicando el lunes como fecha de la operación? Su
   respuesta 1.4 menciona facturas expedidas tras un pago por transferencia; la 1.3, que la
   expedición no puede quedar condicionada al cobro total.
+- (c) Una factura expedida después de terminar el periodo de liquidación de la comida. Waitron la
+  computa en la autoliquidación del periodo de la comida (LIVA art. 75.Uno.2.º), como en la pregunta
+  7 para una fecha errónea, y la exportación para el gestor también la incluye en ese periodo, con
+  las dos fechas. Ejemplo: una comida del 28 de marzo, pagada por transferencia, se factura el 25 de
+  abril, después de presentar el 20 de abril la autoliquidación del primer trimestre. ¿Es correcto
+  computarla en el primer trimestre y presentar por ella una autoliquidación complementaria (LGT
+  art. 122), o se computa en el periodo de su expedición? ¿Y puede la exportación para el gestor
+  incluirla por la fecha de la operación, en lugar de la fecha de expedición?
 
 Sí / No / Nota: ____________________________________________
 
@@ -926,5 +941,5 @@ Texto de la plantilla de la declaración (`packages/fiscal-verifactu/declaration
 | T16, a change of producer | Owner, 11 November, "Later": A993 is built only once a change is scheduled. Its venue-move half is now in question 6 | commit `e59fac8c94`; [backlog.md:246-249](../backlog.md) |
 | T9 and T10, tips | Held by the owner on 6 November until A793 is revived, and A793 is still not approved | [2026-11-06-adviser-questions.md:71-72](2026-11-06-adviser-questions.md); [backlog.md:1283-1286](../backlog.md) |
 | S14's second half: may R5 and R1 to R4 share one series? | Owner, 15 November: they will not share; the adviser agreed the same day (his 1.14). Question 4 asks the narrower point | `~/waitron-campaign-shared/desk/done/20261115-1018-L-r5-series-date-rulings.md` |
-| S4's last part: may the issue date stand as the date VAT falls due? | Owner, 12 and 15 November: one date when invoiced at the meal's end, the sale day when invoiced later. The adviser agreed on 15 November (his 1.4); question 3 now asks only when the meal ends and whether the ticket may wait | [backlog/fiscal.md:1103-1116](../backlog/fiscal.md); `desk/done/20261115-0530-L-later-sale-date-rule.md`, `20261115-1113-L-later-sale-q1-open-bill.md`, `20261115-1113-L-later-sale-q2-vat-period.md` |
+| S4's last part: may the issue date stand as the date VAT falls due? | Owner, 12 and 15 November: one date when invoiced at the meal's end, the sale day when invoiced later. The adviser agreed on 15 November (his 1.4); question 3 now asks when the meal ends, whether the ticket may wait, and where an invoice issued after its meal's VAT period counts | [backlog/fiscal.md:1103-1116](../backlog/fiscal.md); `desk/done/20261115-0530-L-later-sale-date-rule.md`, `20261115-1113-L-later-sale-q1-open-bill.md`, `20261115-1113-L-later-sale-q2-vat-period.md` |
 | The 6 November background on AEAT's time (decision 2b and "How a wrong clock is known") | Owner, 10 to 13 November: Waitron reads AEAT's time only to warn of drift, and a refusal for a future date no longer stops a box whose internet time is synchronised | [CLAUDE.md:958-967 and 995](../../CLAUDE.md) |
