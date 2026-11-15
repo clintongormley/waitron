@@ -37,6 +37,7 @@ describe("new extras unit preparation", () => {
       descriptions: { en: "Customer extra" },
       kitchenName: "Kitchen extra",
       vatClass: "general",
+      takeawayVatClass: "general",
     };
     const kept = {
       productId: "old",
@@ -75,6 +76,7 @@ describe("new extras unit preparation", () => {
         price: "2.00",
         listId: "list",
         vatClass: "general",
+        takeawayVatClass: "general",
         quantity: 2,
         physicalQuantity: "0.500",
         priceQuantity: "0.250",

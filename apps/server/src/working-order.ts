@@ -33,6 +33,7 @@ import {
   sumDecimals,
   thousandthsToDecimal,
   type Dining,
+  appliedVatClass,
   type TimingBand,
   toScale,
   workingOrderId as brandWorkingOrderId,
@@ -250,7 +251,7 @@ import { authorize, type Override, type PinAttempts } from "@waitron/identity";
 import { issuancePass } from "./issuance-pass.js";
 import { issueMoment, type IssueMoment } from "./issue-moment.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { requireOrderDining } from "./order-dining.js";
+import { refuseTakeawaySetLunch, requireOrderDining, storedOrderDining } from "./order-dining.js";
 import { readMadeHereStations } from "./made-here.js";
 import { foodOnItsWay } from "./delivery-release.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
@@ -466,6 +467,7 @@ function offerModifiers(offer: ZoneMenuOffer, config: ContentLanguages): OfferMo
         ),
         kitchenName: item.kitchenName,
         vatClass: item.vatClass as VatClass,
+        takeawayVatClass: item.takeawayVatClass as VatClass,
       });
     }
     extras.push({
@@ -608,6 +610,8 @@ export async function priceOrderLines(
   tx: Transaction,
   cfg: TradingContext,
   workingOrderId: string,
+  /** The gross lines are priced at this way's classes; the rows store both. */
+  dining: Dining,
   // `courseId` absent or null = the offer's default course; a string is an override.
   // An ACTIVE options list must be answered even when `options` is absent.
   requestedLines: ({
@@ -767,6 +771,9 @@ export async function priceOrderLines(
         (line[ADDED_EXTRAS_ONLY] !== true || line[RECORDED_OFFER] !== undefined),
     };
   });
+  if (dining === "takeaway" && lines.some((line) => line.setLunch)) {
+    await refuseTakeawaySetLunch(tx, workingOrderId, zoneId);
+  }
   // The mark each confirmed late dish's rows carry, by the dish's index in `lines`.
   const marks = new Map<number, { periodName: string; confirmedBy: string }>();
   if (late.length > 0) {
@@ -837,6 +844,8 @@ export async function priceOrderLines(
         unit: ExtraChild["unitContext"];
         portionable: boolean;
         late?: { periodName: string; confirmedBy: string };
+        vatClass: VatClass;
+        takeawayVatClass: VatClass;
       }
     | {
         kind: "child";
@@ -847,6 +856,8 @@ export async function priceOrderLines(
         extraListId: string;
         unit?: ExtraChild["unitContext"];
         late?: { periodName: string; confirmedBy: string };
+        vatClass: VatClass;
+        takeawayVatClass: VatClass;
       };
   const lunchProducts = [
     ...new Set(
@@ -874,12 +885,16 @@ export async function priceOrderLines(
       contentConfig.defaultLanguage,
       contentConfig.languages,
     );
+    const classes = {
+      vatClass: selection.vatClass as VatClass,
+      takeawayVatClass: selection.takeawayVatClass as VatClass,
+    };
     const product = {
       name: selection.name,
       unitPrice: selection.unitPrice,
       unit: prepareUnitSnapshot(selection.unit, contentConfig),
       pricingUnit: selection.unit.hardwareUnit === null ? ("each" as const) : ("weight" as const),
-      vatClass: selection.vatClass as VatClass,
+      vatClass: appliedVatClass(dining, classes),
       category: selection.category,
       courseId: selection.courseId,
       descriptions: customerText.product,
@@ -942,7 +957,7 @@ export async function priceOrderLines(
         kitchenName: child.kitchenName,
         // The GROSS price of ONE of this extra.
         priceDelta: child.price,
-        vatClass: line.setLunch ? product.vatClass : child.vatClass,
+        vatClass: line.setLunch ? product.vatClass : appliedVatClass(dining, child),
         quantity: child.quantity,
         physicalQuantity: child.physicalQuantity,
         priceQuantity: child.priceQuantity,
@@ -959,6 +974,7 @@ export async function priceOrderLines(
       note,
       makeAt: line.makeAt != null && activeStations.has(line.makeAt) ? line.makeAt : null,
       portionable: takesExtras(selection.unit),
+      ...classes,
       ...(mark === undefined ? {} : { late: mark }),
       unit: {
         id: selection.unit.id,
@@ -983,6 +999,9 @@ export async function priceOrderLines(
         menuItemId: line.menuItemId,
         extraListId: child.listId,
         unit: child.unitContext,
+        // A set lunch is sold only eaten here, and its choices at the dish's class.
+        vatClass: line.setLunch ? classes.vatClass : child.vatClass,
+        takeawayVatClass: line.setLunch ? classes.vatClass : child.takeawayVatClass,
         ...(mark === undefined ? {} : { late: mark }),
       });
     }
@@ -1048,8 +1067,8 @@ export async function priceOrderLines(
       // re-price, so a later menu price change never moves the filed total. Never derived as
       // `line_total ÷ quantity`, which drifts for a weighed line.
       unitPriceGross: decimalToCents(line.grossUnitPrice),
-      vatClass: line.vatClass,
-      takeawayVatClass: A1522_STAND_IN.takeawayVatClass(line.vatClass),
+      vatClass: meta.vatClass,
+      takeawayVatClass: meta.takeawayVatClass,
       // GROSS, unlike the filed `sale_lines.line_total`'s net base: every total the operator and
       // customer see is gross, so the held-orders list's `sum(line_total)` must be too.
       lineTotal: decimalToCents(line.lineGross),
@@ -1520,6 +1539,7 @@ export async function createOpenOrder(
     tx,
     cfg,
     id,
+    dining,
     lines,
     effectiveZoneId,
     undefined,
@@ -2927,6 +2947,7 @@ export async function priceTabRound(
     tx,
     cfg,
     tabId,
+    await storedOrderDining(tx, tabId),
     lines,
     context?.zoneId,
     undefined,
@@ -5468,7 +5489,7 @@ interface LineIntent {
   extras: { set: unknown } | null;
 }
 
-type RequestedLine = Parameters<typeof priceOrderLines>[3][number];
+type RequestedLine = Parameters<typeof priceOrderLines>[4][number];
 
 /**
  * An OPEN order, else `working_order.not_open`, whose revision is `revision`, else
@@ -6175,6 +6196,7 @@ async function applyLineEdits(
     tx,
     cfg,
     orderId,
+    await storedOrderDining(tx, orderId),
     pricing,
     context?.zoneId,
     snapshot,

@@ -22,13 +22,18 @@ import {
   send,
   type BillVenue,
 } from "./testing/bill-venue.js";
-import { offerProducts } from "./testing/zone-offers.js";
+import { addTabRound } from "./testing/order-writer-fixture.js";
+import { seedTakeawayProducts } from "./testing/takeaway-menu.js";
+import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { parkOrder } from "./working-order.js";
 
 // A new order takes its way of selling from its department; a request naming a way the order does
 // not have is refused before anything is sent, priced or paid (A1522, Decisions 3 and 11).
 let venue: BillVenue;
 let counterZoneId: string;
+let counter: ZoneOffers;
+let tables: ZoneOffers;
+let menu: Awaited<ReturnType<typeof seedTakeawayProducts>>;
 
 useVenueDb({
   resetPerTest: false,
@@ -36,7 +41,12 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionBillVenue(db);
-    counterZoneId = (await withTransaction(db, (tx) => offerProducts(tx, venue.cfg))).zoneId;
+    await withTransaction(db, async (tx) => {
+      menu = await seedTakeawayProducts(tx);
+      counter = await offerProducts(tx, venue.cfg);
+      tables = await offerProducts(tx, venue.cfg, { zone: "tables" });
+    });
+    counterZoneId = counter.zoneId;
   },
 });
 
@@ -370,4 +380,116 @@ describe("a request naming a way an existing order does not have", () => {
     });
     expect(await effectsOf(tabId)).toEqual({ sales: 0, ticketItems: 0 });
   });
+});
+
+describe("the classes a line keeps", () => {
+  beforeEach(() => departmentsSell("till_choice"));
+
+  it("stores both classes on every line of a takeaway order, an extra keeping its own", async () => {
+    const parked = await park({
+      dining: "takeaway",
+      lines: [
+        { menuItemId: counter.offerFor(menu.cola), quantity: "1" },
+        { menuItemId: counter.offerFor(menu.cheese), quantity: "1" },
+        {
+          menuItemId: counter.offerFor(menu.burger),
+          quantity: "1",
+          extras: [
+            { listId: menu.burgerExtras, picks: [{ productId: menu.lemonSoda, quantity: 1 }] },
+          ],
+        },
+      ],
+    });
+    expect(parked.status).toBe(200);
+    const rows = await inTx(venue, (tx) =>
+      tx
+        .select({
+          productId: workingOrderLines.productId,
+          vatClass: workingOrderLines.vatClass,
+          takeawayVatClass: workingOrderLines.takeawayVatClass,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, parked.json.id as string))
+        .orderBy(workingOrderLines.lineNo),
+    );
+    expect(rows).toEqual([
+      { productId: menu.cola, vatClass: "reduced", takeawayVatClass: "general" },
+      { productId: menu.cheese, vatClass: "super_reduced", takeawayVatClass: "super_reduced" },
+      { productId: menu.burger, vatClass: "general", takeawayVatClass: "general" },
+      { productId: menu.lemonSoda, vatClass: "reduced", takeawayVatClass: "zero" },
+    ]);
+  });
+});
+
+describe("a set lunch on a takeaway order", () => {
+  const lunchAt = (offers: ZoneOffers) => [
+    { menuItemId: offers.offerFor(menu.setLunch), quantity: "1" },
+  ];
+
+  it("refuses a new takeaway order's set lunch, saying staff may switch it", async () => {
+    await departmentsSell("till_choice");
+    const id = randomUUID();
+    const parked = await park({ id, dining: "takeaway", lines: lunchAt(counter) });
+    expect(parked.status).toBe(409);
+    expect(parked.json).toEqual({
+      code: "order.set_lunch_takeaway",
+      params: { canSwitch: true },
+    });
+    expect(await diningOf(id)).toBeUndefined();
+  });
+
+  it("refuses a set lunch in a takeaway department, saying the order cannot switch", async () => {
+    await departmentsSell("takeaway");
+    const parked = await park({ lines: lunchAt(counter) });
+    expect(parked.status).toBe(409);
+    expect(parked.json).toEqual({
+      code: "order.set_lunch_takeaway",
+      params: { canSwitch: false },
+    });
+  });
+
+  it("accepts a set lunch on an order eaten here", async () => {
+    await departmentsSell("till_choice", "takeaway");
+    const parked = await park({ dining: "eat_in", lines: lunchAt(counter) });
+    expect(parked.status).toBe(200);
+  });
+
+  it("refuses a set lunch added to an open takeaway order, which may still switch", async () => {
+    await departmentsSell("till_choice");
+    const id = await parkedTakeaway();
+    const saved = await send(venue.app, venue.cookie, "PUT", `/api/working-orders/${id}`, {
+      lines: [...cana(), ...lunchAt(counter)],
+      revision: await revisionOf(id),
+    });
+    expect(saved.status).toBe(409);
+    expect(saved.json).toEqual({
+      code: "order.set_lunch_takeaway",
+      params: { canSwitch: true },
+    });
+  });
+
+  it.each([
+    ["nothing is sent", true],
+    ["the kitchen has a dish", false],
+  ] as const)(
+    "refuses a set lunch in a round on a takeaway table bill when %s",
+    async (_, canSwitch) => {
+      await departmentsSell("till_choice");
+      const tabId = await tabWith(venue, "Steak");
+      await inTx(venue, async (tx) => {
+        await tx
+          .update(workingOrders)
+          .set({ dining: "takeaway" })
+          .where(eq(workingOrders.id, tabId));
+        if (!canSwitch)
+          await tx
+            .update(workingOrderLines)
+            .set({ sentAt: new Date().toISOString() })
+            .where(eq(workingOrderLines.workingOrderId, tabId));
+      });
+      await expect(
+        inTx(venue, (tx) => addTabRound(tx, venue.cfg, tabId, lunchAt(tables))),
+      ).rejects.toMatchObject({ code: "order.set_lunch_takeaway", params: { canSwitch } });
+    },
+  );
 });

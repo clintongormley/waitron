@@ -538,6 +538,7 @@ describe("A803 portions: recording portions", () => {
         tx,
         cfg,
         billId,
+        "eat_in",
         published.toOfferLines([
           {
             productId: ids.burger,

@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
-import { workingOrders, type Transaction } from "@waitron/db";
+import { orderDiningLocked, workingOrders, type Transaction } from "@waitron/db";
 import { AppError, DININGS, type Dining } from "@waitron/shared";
+import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";
 
 /** `dining` from a request body, or undefined when it is absent; an explicit null is refused. */
@@ -37,4 +38,46 @@ export async function requireOrderDining(
     .from(workingOrders)
     .where(eq(workingOrders.id, workingOrderId));
   if (order !== undefined) refuseOtherDining(workingOrderId, order, requested);
+}
+
+/** The way an existing order sells, as stored. */
+export async function storedOrderDining(tx: Transaction, workingOrderId: string): Promise<Dining> {
+  const [order] = await tx
+    .select({ dining: workingOrders.dining })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, workingOrderId));
+  if (order === undefined) throw new AppError("working_order.not_found", { workingOrderId });
+  return order.dining;
+}
+
+/**
+ * Refuse `order.set_lunch_takeaway`, saying whether staff may still switch the order to eaten here:
+ * its zone's department leaves the way to the till, the region charges takeaway VAT, and nothing is
+ * sent or paid. An order not yet written has nothing sent or paid.
+ */
+export async function refuseTakeawaySetLunch(
+  tx: Transaction,
+  workingOrderId: string,
+  zoneId: string | undefined,
+): Promise<never> {
+  throw new AppError("order.set_lunch_takeaway", {
+    canSwitch:
+      zoneId !== undefined &&
+      (await orderDiningLocked(tx, workingOrderId)) === null &&
+      (await takesEitherWay(tx, zoneId)),
+  });
+}
+
+// `resolveOrderDining` accepts both requests only for a till-choice department in a region that
+// charges takeaway VAT: either other case fixes one way and refuses the other.
+async function takesEitherWay(tx: Transaction, zoneId: string): Promise<boolean> {
+  for (const dining of DININGS) {
+    try {
+      await VENUE_SERVICE.resolveOrderDining(tx, zoneId, dining);
+    } catch (error) {
+      if (error instanceof AppError && error.code === "order.dining_fixed") return false;
+      throw error;
+    }
+  }
+  return true;
 }

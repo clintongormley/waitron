@@ -502,6 +502,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "working_order.not_open": 409,
   "working_order.out_of_date": 409,
   "order.dining_fixed": 409,
+  "order.set_lunch_takeaway": 409,
   "kitchen_note.out_of_date": 409,
   "allergy.invalid": 400,
   "allergy.out_of_date": 409,
@@ -1765,6 +1766,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
                 tx,
                 cfg,
                 body.workingOrderId ?? newId(),
+                // Priced only for its dishes' routes, never for a class.
+                "eat_in",
                 active.map(({ line }) => line),
                 zoneId ?? undefined,
                 undefined,
@@ -3787,6 +3790,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           tx,
           cfg,
           newId(),
+          // Priced only for its dishes' routes, never for a class.
+          "eat_in",
           lines.map((line) => ({
             menuItemId: line.menuItemId,
             quantity: line.quantity,
