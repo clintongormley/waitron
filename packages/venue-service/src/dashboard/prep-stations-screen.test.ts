@@ -2058,6 +2058,94 @@ describe("A725 retired Times destinations", () => {
   });
 });
 
+describe("a link naming a station", () => {
+  const withDeletedGrill: PrepStationsView = {
+    ...view,
+    stations: [
+      ...view.stations,
+      { ...view.stations[0]!, id: "grill", name: "Grill", active: false },
+    ],
+  };
+  it("opens that station's editor once the stations have loaded", async () => {
+    history.replaceState(null, "", "/manage/prep-stations/view/stations/station/bar");
+    const push = vi.spyOn(history, "pushState");
+    const el = await mount(api());
+    await settleEditor(el);
+    expect(stationEditor(el)?.station?.id).toBe("bar");
+    expect(location.pathname).toBe("/manage/prep-stations/view/stations/station/bar");
+    expect(push).not.toHaveBeenCalled();
+  });
+  it.each([
+    ["an unknown station", "ghost"],
+    ["a deleted station", "grill"],
+  ])(
+    "opens nothing for %s and drops it from the address without a history entry",
+    async (_, id) => {
+      history.replaceState(null, "", `/manage/prep-stations/view/stations/station/${id}`);
+      const push = vi.spyOn(history, "pushState");
+      const replace = vi.spyOn(history, "replaceState");
+      const el = await mount(api({ load: vi.fn().mockResolvedValue(withDeletedGrill) }));
+      await settleEditor(el);
+      expect(stationEditor(el)).toBeNull();
+      expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+      expect(writtenPaths(replace)).toEqual(["/manage/prep-stations/view/stations"]);
+      expect(push).not.toHaveBeenCalled();
+    },
+  );
+  it("closing the editor it opened takes the station out of the address without a history entry", async () => {
+    history.replaceState(null, "", "/manage/prep-stations/view/stations/station/bar");
+    const push = vi.spyOn(history, "pushState");
+    const el = await mount(api());
+    await settleEditor(el);
+    expect(stationEditor(el)).not.toBeNull();
+    await cancelEditor(el);
+    expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+    expect(push).not.toHaveBeenCalled();
+  });
+  it("closes the editor it opened when the address loses the station, and a re-read of the same address changes nothing", async () => {
+    history.replaceState(null, "", "/manage/prep-stations/view/stations/station/bar");
+    const el = await mount(api());
+    await settleEditor(el);
+    const opened = stationEditor(el);
+    expect(opened?.station?.id).toBe("bar");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await settleEditor(el);
+    expect(stationEditor(el)).toBe(opened);
+    history.replaceState(null, "", "/manage/prep-stations/view/stations");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await settle(el);
+    expect(stationEditor(el)).toBeNull();
+    expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+  });
+  it("leaves an editor opened from its row menu open when a link names another station, which leaves the address", async () => {
+    history.replaceState(null, "", "/manage/prep-stations/view/stations");
+    const el = await mount(
+      api({ load: vi.fn().mockResolvedValue({ ...view, stations: [...view.stations, upstairs] }) }),
+    );
+    await settle(el);
+    q(el, '[data-test="edit-bar"]')!.click();
+    await settleEditor(el);
+    expect(stationEditor(el)?.station?.id).toBe("bar");
+    const push = vi.spyOn(history, "pushState");
+    history.replaceState(null, "", "/manage/prep-stations/view/stations/station/upstairs");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await settleEditor(el);
+    expect(stationEditor(el)?.station?.id).toBe("bar");
+    expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+    expect(push).not.toHaveBeenCalled();
+  });
+  it("a link naming a station again after its editor was cancelled opens it again", async () => {
+    history.replaceState(null, "", "/manage/prep-stations/view/stations/station/bar");
+    const el = await mount(api());
+    await settleEditor(el);
+    await cancelEditor(el);
+    history.replaceState(null, "", "/manage/prep-stations/view/stations/station/bar");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await settleEditor(el);
+    expect(stationEditor(el)?.station?.id).toBe("bar");
+  });
+});
+
 it("has no station hours section, editor or Today actions", async () => {
   setLocale("en");
   const el = await mount(

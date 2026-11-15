@@ -4941,7 +4941,7 @@ it("links each name to its screen only where the person may open it", async () =
     ["Counter", "/manage/device-profiles/profile/dp2"],
     ["Kitchen screen", "/manage/device-profiles/profile/dp3"],
     ["Dining room", "/manage/venue-operations/department/d1"],
-    ["Bar", "/manage/prep-stations/view/stations"],
+    ["Bar", "/manage/prep-stations/view/stations/station/s1"],
   ]);
 });
 

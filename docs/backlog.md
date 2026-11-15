@@ -1171,9 +1171,6 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   point 4, #2678)** — needs a `print_jobs` column.
   [Detail](backlog/printers.md#reprint-kitchen-tickets-and-other-printouts-laid-out-again-for-any-printer)
 
-- **A Used by link to a prep station opens the Stations tab, not the station (left open by A405).**
-  [Detail](backlog/printers.md#a-used-by-link-to-a-prep-station-opens-the-stations-tab-not-the-station)
-
 - **Guest count** (bundle of 2, size S, needs the owner). [Detail](backlog/printers.md#bundle-guest-count)
 
 - **Loose ends left by A661 (#1745).**
