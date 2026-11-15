@@ -34,6 +34,7 @@ import {
   endedPeriodOf,
   isLateSendManagerRefusal,
   lateSendAsked,
+  storedLateSendAsked,
   type EndedPeriod,
   type LateSendAsked,
 } from "./state/late-send.js";
@@ -8320,7 +8321,7 @@ export class TillApp extends LitElement {
         };
       }
       reachedPlace = true;
-      await api.placeOrder(id, null);
+      await api.placeOrder(id, null, lateSend);
       if (!current()) return;
       this.#unconfirmedPlace = undefined;
       this.stage = "collect";
@@ -8330,9 +8331,16 @@ export class TillApp extends LitElement {
       // about refunds.
       if (!current()) return;
       if (!isNetworkFailure(error)) this.#unconfirmedPlace = undefined;
-      const asked = lateSendAsked(error, basketLines);
-      const approval = asked === undefined ? lateSendApprovalAsked(error, lateSend) : undefined;
-      if (asked !== undefined) this.#openCounterLateSend(asked, retry);
+      const stored = storedLateSendAsked(error, basketLines);
+      const asked = stored === undefined ? lateSendAsked(error, basketLines) : undefined;
+      const approval =
+        stored === undefined && asked === undefined
+          ? lateSendApprovalAsked(error, lateSend)
+          : undefined;
+      // Declining leaves stored dishes on the parked order.
+      if (stored !== undefined)
+        this.#openLateSend(stored.listed, stored.periods, "stored", retry, () => undefined);
+      else if (asked !== undefined) this.#openCounterLateSend(asked, retry);
       // Awaited before `finally` so `placing` stays set while the managers are read.
       else if (approval !== undefined)
         await this.#askLateSendApproval(approval.lateSend, approval.pinError, retry);

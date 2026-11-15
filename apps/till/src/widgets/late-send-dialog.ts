@@ -5,7 +5,7 @@ import { baseStyles } from "@waitron/ui";
 import { currentLocale, t } from "../i18n/t.js";
 import { dishLine } from "./dish-format.js";
 
-export type LateSendPurpose = "send" | "save" | "extras" | "extras-save";
+export type LateSendPurpose = "send" | "save" | "extras" | "extras-save" | "stored";
 
 export interface LateSendDish {
   quantity: string;
@@ -18,8 +18,8 @@ export interface LateSendDish {
 
 /**
  * Lists dishes whose period has ended and changes nothing itself: Remove them (Don't add them, for
- * extras) sends `wt-late-send-removed`, Kitchen agreed sends `wt-late-send-agreed`, and dismissing
- * it sends `wt-late-send-cancelled`.
+ * extras; Don't send them, for stored dishes) sends `wt-late-send-removed`, Kitchen agreed sends
+ * `wt-late-send-agreed`, and dismissing it sends `wt-late-send-cancelled`.
  */
 @customElement("till-late-send-dialog")
 export class TillLateSendDialog extends LitElement {
@@ -48,7 +48,8 @@ export class TillLateSendDialog extends LitElement {
 
   /** `save`: a Park, which stores the order without sending it to the kitchen. `extras`: a change
    * adding extras to a sent dish, which the secondary choice abandons; `extras-save`: the same, for
-   * a change that is saved without being sent. */
+   * a change that is saved without being sent. `stored`: a Place of dishes already stored on the
+   * order, which the secondary choice leaves there unsent. */
   @property() purpose: LateSendPurpose = "send";
 
   #emit(type: "wt-late-send-removed" | "wt-late-send-agreed" | "wt-late-send-cancelled"): void {
@@ -94,7 +95,9 @@ export class TillLateSendDialog extends LitElement {
         ${t(
           this.purpose === "extras" || this.purpose === "extras-save"
             ? "late_send.dont_add"
-            : "late_send.remove",
+            : this.purpose === "stored"
+              ? "late_send.dont_send"
+              : "late_send.remove",
         )}
       </wt-button>
       <wt-button

@@ -5909,6 +5909,7 @@ describe("a late-send confirmation on a request", () => {
     ],
     ["pay", (api, lateSend) => api.pay({ expectedEdit: null, id: "wo-1", lines, lateSend })],
     ["parkOrder", (api, lateSend) => api.parkOrder({ id: "wo-1", lines, lateSend })],
+    ["placeOrder", (api, lateSend) => api.placeOrder("wo-1", null, lateSend)],
     [
       "updateWorkingOrder",
       (api, lateSend) =>

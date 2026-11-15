@@ -36,11 +36,16 @@ export function endedPeriodOf(line: OrderLine, index: LateSendIndex): EndedPerio
   return soldNow ? undefined : { menuId: offer.menuId, periodName };
 }
 
-/** What a `menu_period.ended` refusal names: the ended menus, and the late dishes by offer id. */
+/** What a `menu_period.ended` refusal names: the ended menus, and the late dishes by offer id —
+ * and, on a Place, the stored lines they are on. */
 export interface LateSendRefusal {
   menus: readonly [EndedPeriod, ...EndedPeriod[]];
   menuItemIds: string[];
+  workingOrderLineIds?: string[];
 }
+
+const isTextList = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((id) => typeof id === "string");
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -55,14 +60,17 @@ function isEndedPeriod(value: unknown): value is EndedPeriod {
 /** The params of a `menu_period.ended` refusal, or undefined when it is another error or they are unusable. */
 export function lateSendRefusalOf(error: unknown): LateSendRefusal | undefined {
   if (!isRecord(error) || error.code !== "menu_period.ended") return undefined;
-  const { menus, menuItemIds } = error;
+  const { menus, menuItemIds, workingOrderLineIds } = error;
   if (!Array.isArray(menus) || !menus.every(isEndedPeriod)) return undefined;
-  if (!Array.isArray(menuItemIds) || !menuItemIds.every((id) => typeof id === "string")) {
-    return undefined;
-  }
+  if (!isTextList(menuItemIds)) return undefined;
+  if (workingOrderLineIds !== undefined && !isTextList(workingOrderLineIds)) return undefined;
   const [head, ...tail] = menus.map(({ menuId, periodName }) => ({ menuId, periodName }));
   if (head === undefined) return undefined;
-  return { menus: [head, ...tail], menuItemIds: [...menuItemIds] };
+  return {
+    menus: [head, ...tail],
+    menuItemIds: [...menuItemIds],
+    ...(workingOrderLineIds === undefined ? {} : { workingOrderLineIds: [...workingOrderLineIds] }),
+  };
 }
 
 /**
@@ -99,6 +107,26 @@ export function lateSendAsked(
   if (refusal === undefined) return undefined;
   const listed = refusedLines(lines, refusal, extrasAddedTo);
   return listed.length === 0 ? undefined : { listed, periods: refusal.menus };
+}
+
+/**
+ * For a refusal naming stored lines (a Place's): the lines it names by id; when the basket holds
+ * none of those ids (lines saved without the till learning their ids), the lines carrying a refused
+ * offer id; and when none carry one either, no lines, so the window names the period alone.
+ * Undefined for a refusal naming no stored line.
+ */
+export function storedLateSendAsked(
+  error: unknown,
+  lines: readonly OrderLine[],
+): LateSendAsked | undefined {
+  const refusal = lateSendRefusalOf(error);
+  if (refusal?.workingOrderLineIds === undefined) return undefined;
+  const ids = new Set<string | undefined>(refusal.workingOrderLineIds);
+  const byId = lines.filter((line) => ids.has(line.workingOrderLineId));
+  const offers = new Set<string | undefined>(refusal.menuItemIds);
+  const listed =
+    byId.length > 0 ? byId : lines.filter((line) => offers.has(line.product.menuItemId));
+  return { listed, periods: refusal.menus };
 }
 
 /** A send refused because confirming it needs a manager's PIN. */

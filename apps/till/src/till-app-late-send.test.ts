@@ -2324,6 +2324,80 @@ describe("counter place and park", () => {
     expect(approval(el)).toBeNull();
   });
 
+  const STORED_OMELETTE_ENDED = { ...BREAKFAST_ENDED, workingOrderLineIds: ["wol-omelette"] };
+  const placedLateSends = () => api.placeOrder!.mock.calls.map((call) => call[2]);
+  const removeText = (el: TillApp) =>
+    windowOf(el)!.shadowRoot!.querySelector("[data-late-remove]")!.textContent!.trim();
+  const storedLines = (el: TillApp) =>
+    counterScreen(el).store.lines.map((line) => [line.product.name, line.workingOrderLineId]);
+
+  it("lists a parked dish Place's refusal names by its line, and places it once the station agreed", async () => {
+    const placeOrder = vi
+      .fn()
+      .mockRejectedValueOnce(STORED_OMELETTE_ENDED)
+      .mockResolvedValue({ id: "wo-1", status: "placed" });
+    const el = await counterBasket(parking({ placeOrder }), { ...PLACE, products: [], held: true });
+    await place(el);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette"]);
+    expect(agreedText(el)).toBe("Station agreed — send");
+    expect(removeText(el)).toBe("Don't send them");
+
+    await choose(el, "data-late-agreed");
+
+    expect(placedLateSends()).toEqual([undefined, BREAKFAST_CONFIRMED]);
+    expect(windowOf(el)).toBeNull();
+    expect(errorLine(el)).toBe("");
+  });
+
+  it("removes a new marked dish on Remove them, then leaves the parked dish on the order unsent on Don't send them", async () => {
+    const placeOrder = vi.fn().mockRejectedValue(STORED_OMELETTE_ENDED);
+    const el = await lateCounter(parking({ placeOrder }), {
+      ...PLACE,
+      products: ["Omelette"],
+      held: true,
+    });
+    await place(el);
+    expect(removeText(el)).toBe("Remove them");
+    await choose(el, "data-late-remove");
+
+    expect(storedLines(el)).toEqual([["Omelette", "wol-omelette"]]);
+    expect(placeOrder).not.toHaveBeenCalled();
+
+    await place(el);
+    expect(windowDishes(el)).toEqual(["1× Omelette"]);
+    await choose(el, "data-late-remove");
+
+    expect(windowOf(el)).toBeNull();
+    expect(storedLines(el)).toEqual([["Omelette", "wol-omelette"]]);
+    expect(placedLateSends()).toEqual([undefined]);
+    expect(errorLine(el)).toBe("");
+  });
+
+  it("asks for a manager when Place's refusal of a parked dish needs one, and places again with their PIN", async () => {
+    const placeOrder = vi
+      .fn()
+      .mockRejectedValueOnce(STORED_OMELETTE_ENDED)
+      .mockRejectedValueOnce(MANAGER_NEEDED)
+      .mockResolvedValue({ id: "wo-1", status: "placed" });
+    const el = await counterBasket(
+      parking({ placeOrder, serviceDayAuthorizers: vi.fn().mockResolvedValue([MARTA]) }),
+      { ...PLACE, products: [], held: true },
+    );
+    await place(el);
+    await choose(el, "data-late-agreed");
+
+    expect(approvalText(el, ".prompt")).toBe("Choose who approves");
+    await authorize(el, "0123");
+
+    expect(placedLateSends()).toEqual([
+      undefined,
+      BREAKFAST_CONFIRMED,
+      { ...BREAKFAST_CONFIRMED, override: { personId: MARTA.personId, pin: "0123" } },
+    ]);
+    expect(approval(el)).toBeNull();
+  });
+
   it("asks about the marked dish before Park saves anything, offering to save", async () => {
     const el = await lateCounter(parking());
     await park(el);

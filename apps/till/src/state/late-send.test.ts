@@ -6,6 +6,7 @@ import {
   lateSendAsked,
   lateSendRefusalOf,
   refusedLines,
+  storedLateSendAsked,
 } from "./late-send.js";
 import type { OrderLine } from "./working-order.js";
 
@@ -110,6 +111,20 @@ describe("lateSendRefusalOf", () => {
     expect(lateSendRefusalOf({ code: "menu_period.ended", status: 409 })).toBeUndefined();
   });
 
+  it("reads the stored lines a Place's refusal names", () => {
+    const error = {
+      code: "menu_period.ended",
+      menus,
+      menuItemIds: ["toast-breakfast"],
+      workingOrderLineIds: ["wol-1"],
+    };
+    expect(lateSendRefusalOf(error)).toEqual({
+      menus,
+      menuItemIds: ["toast-breakfast"],
+      workingOrderLineIds: ["wol-1"],
+    });
+  });
+
   it.each([
     ["menus not a list", { menus: "Breakfast", menuItemIds: ["x"] }],
     ["a menu with no name", { menus: [{ menuId: "breakfast" }], menuItemIds: ["x"] }],
@@ -118,6 +133,8 @@ describe("lateSendRefusalOf", () => {
     ["a menu that is not an object", { menus: [null], menuItemIds: ["x"] }],
     ["a dish id that is not text", { menus, menuItemIds: [7] }],
     ["no dish ids", { menus }],
+    ["a stored line id that is not text", { menus, menuItemIds: ["x"], workingOrderLineIds: [7] }],
+    ["stored line ids not a list", { menus, menuItemIds: ["x"], workingOrderLineIds: "wol-1" }],
   ])("is undefined for %s", (_label, params) => {
     expect(
       lateSendRefusalOf({ code: "menu_period.ended", status: 409, ...params }),
@@ -215,6 +232,56 @@ describe("lateSendAsked", () => {
     ["no error object", undefined],
   ])("is undefined for %s", (_label, error) => {
     expect(lateSendAsked(error, [line("toast-breakfast")])).toBeUndefined();
+  });
+});
+
+describe("storedLateSendAsked", () => {
+  const menus = [{ menuId: "breakfast", periodName: "Breakfast" }];
+  const placeRefused = (workingOrderLineIds?: string[]) => ({
+    code: "menu_period.ended",
+    status: 409,
+    menus,
+    menuItemIds: ["toast-breakfast"],
+    ...(workingOrderLineIds === undefined ? {} : { workingOrderLineIds }),
+    needsManager: false,
+  });
+
+  it("lists the stored lines the refusal names by id, in the basket's order", () => {
+    const first = line("toast-breakfast", { workingOrderLineId: "wol-1" });
+    const other = line("toast-breakfast", { workingOrderLineId: "wol-2" });
+    const second = line("egg-breakfast", { workingOrderLineId: "wol-3" });
+    const fresh = line("toast-breakfast");
+    const asked = storedLateSendAsked(placeRefused(["wol-3", "wol-1"]), [
+      first,
+      other,
+      fresh,
+      second,
+    ]);
+    expect(asked).toEqual({ listed: [first, second], periods: menus });
+  });
+
+  it("lists the lines carrying a refused dish when the basket holds none of the named ids", () => {
+    const savedHere = line("toast-breakfast");
+    const coffee = line("coffee-lunch");
+    expect(storedLateSendAsked(placeRefused(["wol-9"]), [coffee, savedHere])).toEqual({
+      listed: [savedHere],
+      periods: menus,
+    });
+  });
+
+  it("names the period alone when the basket holds none of the refused dishes", () => {
+    expect(storedLateSendAsked(placeRefused(["wol-9"]), [line("coffee-lunch")])).toEqual({
+      listed: [],
+      periods: menus,
+    });
+  });
+
+  it("is undefined for a refusal naming no stored line, which lateSendAsked lists", () => {
+    expect(
+      storedLateSendAsked(placeRefused(), [
+        line("toast-breakfast", { workingOrderLineId: "wol-1" }),
+      ]),
+    ).toBeUndefined();
   });
 });
 
