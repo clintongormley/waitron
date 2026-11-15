@@ -59,6 +59,15 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("forgets exactly the reported saved Wi-Fi network", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({}));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.forgetBoxNetwork({ ssidHex: "2042617220" })).toEqual({});
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/api/box/network/forget", "POST", { ssidHex: "2042617220" }],
+    ]);
+  });
+
   it("reads the box network without a request body", async () => {
     const answer = {
       wired: { connected: true, address: "192.0.2.8" },
