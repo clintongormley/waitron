@@ -78,6 +78,10 @@ export function readSessionToken(c: Context): string | null {
   return getCookie(c, SESSION_COOKIE) ?? null;
 }
 
+export function hasSessionCookie(c: Context): boolean {
+  return readSessionToken(c) !== null;
+}
+
 /** The person whose open session `token` names, on `deviceId` when one is given; `null` when it
  * names none. */
 export async function openSessionPerson(

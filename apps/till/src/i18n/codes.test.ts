@@ -36,6 +36,11 @@ it("words a refund above its cancelled dishes", () => {
 
 it.each([
   [
+    "till.origin_refused",
+    "This page cannot change the till. Open the till from the venue's address and try again.",
+    "Esta página no puede hacer cambios en el TPV. Abre el TPV desde la dirección del local e inténtalo de nuevo.",
+  ],
+  [
     "party.not_found",
     "The table order could not be found.",
     "No se ha encontrado el pedido de la mesa.",
