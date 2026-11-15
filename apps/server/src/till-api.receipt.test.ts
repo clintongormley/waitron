@@ -2222,12 +2222,6 @@ describe("GET /api/drawer/authorizers (eligible cash.drawer supervisors over HTT
   });
 });
 
-afterEach(async () => {
-  await suite.db.execute(sql`delete from management_sessions`);
-  await suite.db.execute(sql`delete from sessions`);
-  await suite.db.execute(sql`delete from persons`);
-});
-
 describe("original receipt and payment slip actions", () => {
   it("prints an original then a marked duplicate without additional fiscal records", async () => {
     const { cfg, each, operatorId } = await setupVenue();
