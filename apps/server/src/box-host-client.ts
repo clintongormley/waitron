@@ -32,8 +32,13 @@ export type ClockServiceStatus =
 export type ClockSetAnswer =
   | { available: false; reason: Unavailable; refusal?: string; detail?: string }
   | { available: true; beforeMs: number; afterMs: number };
+export type TimeServiceOnAnswer =
+  | { available: false; reason: Unavailable; refusal?: string; detail?: string }
+  | { available: true };
 export interface BoxHostClient {
   clockStatus(): Promise<ClockServiceStatus>;
+  /** Switches the host's automatic time back on (`clock.sync-on`); test fakes may leave it out. */
+  timeServiceOn?(): Promise<TimeServiceOnAnswer>;
   setClock(input: {
     targetMs: number;
     requester: Record<string, string | null>;
@@ -144,7 +149,7 @@ const SERVICES: ReadonlySet<unknown> = new Set(["on", "off", "stopped"]);
 
 export function boxHostClient(
   deps: { socketPath?: string; statusMs?: number; setMs?: number } = {},
-): BoxHostClient {
+): Required<BoxHostClient> {
   const socketPath = isUnset(deps.socketPath) ? DEFAULT_SOCKET_PATH : deps.socketPath;
   return {
     async clockStatus() {
@@ -198,6 +203,18 @@ export function boxHostClient(
       const { beforeMs, afterMs } = result.reply;
       if (!isMs(beforeMs) || !isMs(afterMs)) return { available: false, reason: "malformed" };
       return { available: true, beforeMs, afterMs };
+    },
+    async timeServiceOn() {
+      const result = await exchange(socketPath, "clock.sync-on", deps.setMs ?? DEFAULT_SET_MS);
+      if (!result.ok) {
+        return {
+          available: false,
+          reason: result.reason,
+          ...(result.refusal === undefined ? {} : { refusal: result.refusal }),
+          ...(result.detail === undefined ? {} : { detail: result.detail }),
+        };
+      }
+      return { available: true };
     },
   };
 }

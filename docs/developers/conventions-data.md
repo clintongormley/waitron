@@ -4625,6 +4625,9 @@ comes out:
   plus the time since the request arrived; moves timesyncd's saved clock file to the new time when
   there is one; and starts the services again — also from a `trap` on any exit, and, after a kill,
   from the unit's `ExecStopPost=`. It answers `{"ok":true,"beforeMs":…,"afterMs":…}`, or `set_failed`.
+- `clock.sync-on` is refused `busy` while a set holds the same lock, running nothing. Otherwise it
+  writes one `logger -t waitron-box` line and runs `timedatectl set-ntp true`, answering
+  `{"ok":true}` or `sync_on_failed`.
   Any other line answers `unknown_request`.
 
 The requester is JSON the server reports about itself: the host only logs it, never runs it, and
@@ -4634,14 +4637,17 @@ the app mounts the socket's folder only once `.env` names it (`WAITRON_BOX_SOCKE
 `deploy/compose.yml`).
 
 **The server's client** (`apps/server/src/box-host-client.ts`). `clockStatus()` waits 2 seconds and
-`setClock()` 20, longer than the host's own 15-second limit. Every failure is an answer, never a
+`setClock()` and `timeServiceOn()` 20, longer than the host's own 15-second limit. Every failure is an answer, never a
 throw: `missing` (no connection was made), `lost` (the connection broke, or closed with no answer,
 after the request was sent, so the clock may have moved), `refused`, `timeout` or `malformed`.
 The start check, the clock watch, time health, the `clock.sync_off` warning
 (`apps/server/src/clock-sync-alert.ts`: `off`, `stopped`, `unsynchronised`, and `unreachable` in
 production only), the `clock.disagrees` and `clock.peer_disagrees` warnings and the till's
 `clock.device_wrong` notice read the status through one 60-second cache
-(`sharedClockServiceReading`), which a set clears; a clock set asks the host itself.
+(`sharedClockServiceReading`), which a set clears; a clock set asks the host itself. Boot hands
+every reader the host through `keepTimeServiceOn` (`apps/server/src/time-service-kept-on.ts`): a
+status reading `off` asks `clock.sync-on`, logs `time_service.switched_on` or, once per distinct
+failure, `time_service.switch_on_failed`, and answers the reading as it was.
 The same file's `boxHostRequests()` asks B3's seven host requests and answers the same way, with
 two more answers, `unsupported` (the host does not take that request) and `invalid` (nothing sent),
 and one difference: a whole reply line that arrived before the connection broke is read as the

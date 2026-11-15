@@ -10,6 +10,7 @@ import {
   type BoxHostClient,
   type BoxHostRequests,
 } from "./box-host-client.js";
+import { keepTimeServiceOn } from "./time-service-kept-on.js";
 import { boxNameTagJob } from "./box-name-tag.js";
 import { createSetupRecoveryPreparation } from "./recovery-preparation.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
@@ -1218,7 +1219,24 @@ async function bootServer(
   }
   await assertNoStartAgainDeletion(config.venueDir);
   let moduleConfig: import("@waitron/module").ModuleConfig = { overrides: new Map() };
-  const boxHost = seams.boxHost ?? boxHostClient();
+  const verbosity = createVerbosityController({ defaultLevel: "info", now });
+  const stdoutSink = (line: string) => process.stdout.write(line);
+  // Stdout only: it reports that the file sink has failed.
+  const stdoutLog = createLogger(stdoutSink, now);
+  // Logging never throws into a request path: a lost log directory loses the file, not the sale.
+  const fileSink = createRotatingFileSink(
+    { dir: config.logDir, maxBytes: LOG_MAX_BYTES, maxFiles: LOG_MAX_FILES },
+    () => stdoutLog("warn", "log.file_unavailable"),
+  );
+  const reader = createLogReader({ dir: config.logDir, maxFiles: LOG_MAX_FILES });
+  // The two halves are deliberately NOT filtered alike. The FILE half masks URL credentials, because
+  // the recovery page serves that file's tail to anyone on the venue's LAN with no login. The STDOUT
+  // half is left whole: it is the installer's channel, reachable only with a shell on the box, and
+  // masking it would erase the difference between a wrong password and none at all. Pinned by
+  // `recovery-surface.test.ts` → "the caught error's own words on the page". That is `redactSecrets`
+  // alone: the personal-data mask runs in `createLogger`, before the split, so it applies to both.
+  const log = createLogger(tee(stdoutSink, fileSink), now, () => verbosity.current());
+  const boxHost = keepTimeServiceOn(seams.boxHost ?? boxHostClient(), log);
   const timeServiceSynchronised = timeServiceReader(boxHost);
   let setupKeyRing: ReturnType<typeof loadKeyRing> | undefined;
   // Built in setup mode, once the log exists, before any setup route is mounted.
@@ -1267,23 +1285,6 @@ async function bootServer(
   countAsOwnAddresses(config.boxAddresses ?? []);
   // Before any surface that gates on a management session is mounted, in either mode.
   registerModulePermissions(ALL_MODULE_PERMISSIONS);
-  const verbosity = createVerbosityController({ defaultLevel: "info", now });
-  const stdoutSink = (line: string) => process.stdout.write(line);
-  // Stdout only: it reports that the file sink has failed.
-  const stdoutLog = createLogger(stdoutSink, now);
-  // Logging never throws into a request path: a lost log directory loses the file, not the sale.
-  const fileSink = createRotatingFileSink(
-    { dir: config.logDir, maxBytes: LOG_MAX_BYTES, maxFiles: LOG_MAX_FILES },
-    () => stdoutLog("warn", "log.file_unavailable"),
-  );
-  const reader = createLogReader({ dir: config.logDir, maxFiles: LOG_MAX_FILES });
-  // The two halves are deliberately NOT filtered alike. The FILE half masks URL credentials, because
-  // the recovery page serves that file's tail to anyone on the venue's LAN with no login. The STDOUT
-  // half is left whole: it is the installer's channel, reachable only with a shell on the box, and
-  // masking it would erase the difference between a wrong password and none at all. Pinned by
-  // `recovery-surface.test.ts` → "the caught error's own words on the page". That is `redactSecrets`
-  // alone: the personal-data mask runs in `createLogger`, before the split, so it applies to both.
-  const log = createLogger(tee(stdoutSink, fileSink), now, () => verbosity.current());
   try {
     await writeTunnelConfiguration(config.tunnelControlDir);
   } catch (error) {
