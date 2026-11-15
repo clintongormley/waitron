@@ -38,6 +38,7 @@ import { AppError } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { makeBreakGlassSecret, mintBreakGlassKeyTx } from "./break-glass.js";
 import { keyRingEnv, type EncodedKeyRing } from "./box-secrets.js";
+import { isUnset } from "./env-value.js";
 import { assertAuthorityKeyMatches, installVenueAuthority, markJoined } from "./box-tls-install.js";
 import type { DeploymentEnvironment } from "./config.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
@@ -95,6 +96,13 @@ export interface AdoptRequest {
   confirmedCaPem?: string;
 }
 
+const KEY_RING_VARIABLES = [
+  "WAITRON_CREDENTIALS_KEY",
+  "WAITRON_CREDENTIALS_KEY_VERSION",
+  "WAITRON_CREDENTIALS_KEY_PREVIOUS",
+  "WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION",
+] as const;
+
 export interface AdoptHooks {
   /** Awaited after `adoptFromPrimary`'s own checks, immediately before its first writing step. */
   beforeFirstWrite: () => Promise<void>;
@@ -109,6 +117,9 @@ export interface AdoptDeps {
   ownerNode: NodeDatabase;
   /** The ring this box booted with. Adopt replaces it with the bundle's and seals nothing under it. */
   ring: KeyRing;
+  /** The real environment, whose non-empty vault key variables win over `secrets.env` at every
+   * start (`loadBoxEnv`). */
+  baseEnv: NodeJS.ProcessEnv;
   /** Replaces `secrets.env` whole with the main box's ring, so the next boot opens what it sealed. */
   persistCredentialsRing: (ring: EncodedKeyRing) => Promise<void>;
   /** Sends the standby identity so the primary can reserve and endorse it. */
@@ -225,7 +236,15 @@ export async function adoptFromPrimary(
     throw new AppError("mirror.bundle_fetch_failed", {});
   }
   assertAuthorityKeyMatches(bundle.boxCaPem, bundle.boxCaKeyPem);
-  const ring = loadKeyRing(keyRingEnv(bundle.credentialsRing));
+  const bundleEnv = keyRingEnv(bundle.credentialsRing);
+  // The ring persisted below would be hidden at the next start, and the keys sealed under it lost.
+  for (const name of KEY_RING_VARIABLES) {
+    const set = deps.baseEnv[name];
+    if (!isUnset(set) && set !== bundleEnv[name]) {
+      throw new AppError("mirror.environment_key_differs", {});
+    }
+  }
+  const ring = loadKeyRing(bundleEnv);
   const recovery = await makeBreakGlassSecret();
 
   await hooks.beforeFirstWrite();

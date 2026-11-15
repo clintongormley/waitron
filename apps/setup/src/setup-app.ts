@@ -326,6 +326,7 @@ const ADOPT_ERROR_MESSAGES: Record<string, StringKey> = {
   ...FIRST_SETUP_ERROR_MESSAGES,
   "mirror.bundle_fetch_failed": "shell.adopt.bundle_fetch_failed",
   "mirror.vault_not_empty": "shell.adopt.vault_not_empty",
+  "mirror.environment_key_differs": "shell.adopt.environment_key_differs",
   // A fault in Waitron: the connect screen sends a certificate only from its own read, which the
   // server has already checked is one authority certificate.
   "mirror.primary_unconfirmed": "shell.adopt.primary_unconfirmed",

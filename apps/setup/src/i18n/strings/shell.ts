@@ -98,6 +98,8 @@ export const shellEn = {
     "The server rejected the details. Check the address and login, then try again.",
   "shell.adopt.vault_not_empty":
     "This server already holds saved keys for other services, and joining would make them unreadable for good. Nothing was changed. Starting again on this server would set those keys aside or delete them, with the rest of its restaurant files; to keep them, leave this server as it is.",
+  "shell.adopt.environment_key_differs":
+    "This server's own settings set a vault key that is not the primary server's, so after joining it could not open the keys it holds. Nothing was changed. Remove the WAITRON_CREDENTIALS_KEY settings from this server, or set them to the primary server's, then restart it and join again.",
   "shell.adopt.primary_unconfirmed":
     "The primary server's certificate wasn't compared, so nothing was sent. This is a fault in Waitron. Check the address and compare the certificate again.",
   "shell.adopt.login_failed":
@@ -326,6 +328,8 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "El servidor ha rechazado los datos. Revisa la dirección y el inicio de sesión, e inténtalo de nuevo.",
   "shell.adopt.vault_not_empty":
     "Este servidor ya guarda claves de otros servicios y, al unirlo, dejarían de poder leerse para siempre. No se ha cambiado nada. Empezar de nuevo en este servidor apartaría o borraría esas claves junto con el resto de sus archivos del restaurante; para conservarlas, deja este servidor como está.",
+  "shell.adopt.environment_key_differs":
+    "La configuración propia de este servidor fija una clave de la caja fuerte que no es la del servidor principal, así que, tras unirse, no podría abrir las claves que guarda. No se ha cambiado nada. Quita los ajustes WAITRON_CREDENTIALS_KEY de este servidor o pon los del servidor principal; después reinícialo y vuelve a unirlo.",
   "shell.adopt.primary_unconfirmed":
     "No se ha comparado el certificado del servidor principal, así que no se ha enviado nada. Es un fallo de Waitron. Revisa la dirección y vuelve a comparar el certificado.",
   "shell.adopt.login_failed":

@@ -95,6 +95,7 @@ async function joinAsSpare(stateDir: string, venueDir: string): Promise<void> {
         {
           ownerDb: store.venue,
           ownerNode: store.node,
+          baseEnv: {},
           ring: await ringIn(join(stateDir, "secrets.env")),
           fetchBundle: async (_url, _credential, standby) => ({
             ...BUNDLE,

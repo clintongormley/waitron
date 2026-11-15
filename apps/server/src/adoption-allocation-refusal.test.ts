@@ -86,6 +86,7 @@ function deps(value = bundle()) {
   return {
     ownerDb: suite.db,
     ownerNode: suite.node,
+    baseEnv: {},
     ring: loadKeyRing({
       WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 4).toString("base64"),
       WAITRON_CREDENTIALS_KEY_VERSION: "1",

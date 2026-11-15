@@ -158,6 +158,7 @@ export async function joinSpare(
     {
       ownerDb: spareBox.db,
       ownerNode: spareBox.node,
+      baseEnv: {},
       ring,
       persistCredentialsRing: async () => {},
       fetchBundle: async (_url, credential: AdoptCredential, sent) => {
