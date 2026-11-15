@@ -87,7 +87,7 @@ export function namedRows(
       null, null, null, s.role, 1, coalesce(c.active, 0), (s.role = 'menu_root'), null, 1, null
     from sections s left join menus c on c.id = s.owner_menu_id
       where ${filter("menu", sql`s.id`)}
-    union all select 'section', s.id, s.internal_name, s.names, null, s.owner_menu_id, c.name,
+    union all select 'section', s.id, coalesce(s.internal_name, c.name), s.names, null, s.owner_menu_id, c.name,
       null, null, null, s.role, 1, coalesce(c.active, 0), (c.id is not null), null, 1, null
     from sections s left join menus c on c.id = s.owner_menu_id where ${filter("section", sql`s.id`)}
     union all select 'included_menu', m.id, coalesce(s.internal_name, a.name), m.folder_names,

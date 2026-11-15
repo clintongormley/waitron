@@ -115,7 +115,6 @@ export function themeLogoName(side: "light" | "dark") {
     case when json_type(${customThemes.theme}) = 'object' and json_type(${customThemes.theme}, ${path}) = 'text'
     then json_extract(${customThemes.theme}, ${path}) end end`;
 }
-// The expression `section_members_folder_image_idx` indexes.
 const folderImage = sectionMembers.folderImage;
 const includedRoots = alias(sections, "included_roots");
 const includedMenus = alias(menus, "included_menus");

@@ -252,6 +252,17 @@ describe("inline translation targets", () => {
         ["missing", false, "missing"],
         ["present", false, "role"],
       ]);
+      const rootAsSection = await resolveTranslationTargets(
+        tx,
+        "en",
+        [{ kind: "section", id: ids.root }],
+        context,
+      );
+      expect(rootAsSection.targets[0]!.target).toMatchObject({
+        name: "STAFF Lunch",
+        eligible: false,
+        unavailableReason: "role",
+      });
       await tx
         .update(sectionMembers)
         .set({ sectionId: ids.section })

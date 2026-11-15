@@ -157,7 +157,6 @@ async function itemOf(tx: Transaction, menuId: string, productId: string): Promi
   return rows.find((row) => row.productId === productId)!.id;
 }
 
-/** Every row the menu owns, as stored. */
 async function rowsOf(menuId: string) {
   return app(async (tx) => {
     const owned = await tx

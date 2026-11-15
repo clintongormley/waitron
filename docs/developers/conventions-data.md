@@ -1807,6 +1807,9 @@ migration set. Since A760 (November 2026) only the first exists in the tree: eve
 migration creates is in core's set (`packages/db/drizzle/0000_baseline.sql`) and names only tables
 core's set creates. Write its source in `packages/db/triggers/core.sql`.
 
+**2026-11-15 (A1308 mn8):** the current include-photo triggers in `packages/db/triggers/core.sql`
+read `section_members.folder_image`. The JSON path in the historical account below has been retired.
+
 Until A760 the live instance of the trigger edge was `packages/media`; the account below describes
 that old set in the present tense of its day. Its old migration files were deleted with the frozen
 history on 2026-11-07 (A1422); read one with

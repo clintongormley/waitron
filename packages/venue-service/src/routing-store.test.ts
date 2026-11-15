@@ -3307,7 +3307,9 @@ describe("saving a cell's period choices", () => {
         ).session;
         const prepared = vi.spyOn(session, "prepareQuery");
         const productListReads = () =>
-          prepared.mock.calls.filter(([query]) => query.sql.includes("coalesce(")).length;
+          prepared.mock.calls.filter(([query]) =>
+            query.sql.includes('coalesce("products"."parent_id", "products"."id")'),
+          ).length;
         try {
           await routingModel(tx, at);
           expect(productListReads()).toBe(0);
