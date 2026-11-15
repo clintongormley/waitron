@@ -3,7 +3,13 @@ import { tmpdir } from "node:os";
 import { runInNewContext } from "node:vm";
 import { URL } from "node:url";
 import { describe, expect, it } from "vitest";
-import { githubRequest, healthCommand, main, serverRoute } from "./ci-server-health.mjs";
+import {
+  githubRequest,
+  healthCommand,
+  main,
+  serverRoute,
+  serverHealth,
+} from "./ci-server-health.mjs";
 
 const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
 function workflowEnvironment(capacity) {
@@ -64,7 +70,7 @@ function fixture(running = 0, queued = 0) {
 
 describe("queue-pressure routing", () => {
   it.each(["health", "hosted"])(
-    "routes past an old queued-list mismatch in the %s read but refuses a missing fresh run",
+    "routes past an old queued-list mismatch in the %s read but refuses differing fresh rows",
     async (scope) => {
       const f = fixture(20),
         request = f.options.request,
@@ -85,7 +91,8 @@ describe("queue-pressure routing", () => {
           created_at: "2026-11-14T09:18:00Z",
         };
       f.options.now = now;
-      let missingFresh = false;
+      let missingFresh = false,
+        missingReads = 0;
       const recentReads = [];
       f.options.request = async (path, options) => {
         if (
@@ -95,9 +102,14 @@ describe("queue-pressure routing", () => {
           const params = new URL("https://fixture.test" + path).searchParams;
           const recent = params.get("created") === ">=" + cutoff;
           if (recent) recentReads.push(path);
+          if (missingFresh && params.get("page") === "1") missingReads++;
+          const row = recent ? freshRun : oldRun;
           return {
             total_count: recent && !missingFresh ? 1 : 2,
-            workflow_runs: params.get("page") === "1" ? [recent ? freshRun : oldRun] : [],
+            workflow_runs:
+              params.get("page") === "1"
+                ? [{ ...row, id: missingFresh && missingReads === 2 ? 53 : row.id }]
+                : [],
           };
         }
         if (path.includes("/runs/52/attempts/2/jobs?")) return { total_count: 0, jobs: [] };
@@ -536,9 +548,66 @@ describe("queue-pressure routing", () => {
     },
   );
 
-  it("uses hosted after two incomplete reads of the active run list", async () => {
+  it.each(["same", "reordered", "different id", "changed row"])(
+    "uses two agreeing short queued CI lists, or falls back for %s rows",
+    async (change) => {
+      const f = fixture(),
+        request = f.options.request,
+        pages = [],
+        reports = [],
+        outputs = [];
+      const runs = [
+        { ...f.run, head_repository: { id: 42 } },
+        { ...f.run, id: 52, head_repository: { id: 42 } },
+      ];
+      f.options.capacity = { observedAt: 1, slots: 6, serverRunning: 0, serverWaiting: 0 };
+      let reads = 0;
+      f.options.request = async (path, options) => {
+        if (path.includes("/workflows/ci.yml/runs?status=queued")) {
+          const page = Number(new URL("https://fixture.test" + path).searchParams.get("page"));
+          pages.push(page);
+          if (page === 1) reads++;
+          if (reads > 2) throw new Error("Unexpected third enumeration");
+          let rows = runs.map((run) => ({ ...run }));
+          if (reads === 2) {
+            if (change === "reordered") rows.reverse();
+            if (change === "different id") rows[1] = { ...rows[1], id: 53 };
+            if (change === "changed row") rows[1] = { ...rows[1], run_attempt: 3 };
+          }
+          return { total_count: reads === 1 ? 3 : 4, workflow_runs: page === 1 ? rows : [] };
+        }
+        if (path.includes("/attempts/2/jobs?")) return { total_count: 0, jobs: [] };
+        return request(path, options);
+      };
+      await healthCommand("route", f.options, {
+        output: (line) => outputs.push(line),
+        report: (line) => reports.push(line),
+      });
+      expect(pages).toEqual([1, 2, 1, 2]);
+      if (change === "same" || change === "reordered") {
+        expect(outputs).toEqual(["server_route=server"]);
+        expect(reports.join("\n")).toContain("Stale queued CI inventory count");
+        expect(reports.join("\n")).toContain("run ids=50,52; rows=2; counts=3,4");
+        expect(reports.join("\n")).not.toContain("CI_ROUTE_BLIND");
+      } else {
+        expect(outputs).toEqual(["server_route=hosted"]);
+        expect(reports.join("\n")).toContain("CI_ROUTE_BLIND run=51 attempt=1");
+        expect(reports.join("\n")).not.toContain("Stale queued CI inventory count");
+      }
+      expect(f.calls.some(([, options]) => options?.method)).toBe(false);
+      if (change === "same") {
+        reads = 0;
+        await expect(serverHealth(f.options)).rejects.toThrow("empty page after 2 of 4");
+      }
+    },
+  );
+
+  it("uses two agreeing empty queued CI lists despite an inflated count", async () => {
     const f = fixture(),
-      request = f.options.request;
+      request = f.options.request,
+      reports = [];
+    f.options.capacity = { observedAt: 1, slots: 6, serverRunning: 0, serverWaiting: 0 };
+    f.options.report = (line) => reports.push(line);
     let reads = 0;
     f.options.request = async (path, options) => {
       if (path.includes("/workflows/ci.yml/runs?") && path.includes("status=queued")) {
@@ -548,8 +617,9 @@ describe("queue-pressure routing", () => {
       }
       return request(path, options);
     };
-    expect((await serverRoute(f.options)).route).toBe("hosted");
+    expect((await serverRoute(f.options)).route).toBe("server");
     expect(reads).toBe(2);
+    expect(reports.join("\n")).toContain("run ids=; rows=0; counts=1,1");
   });
 
   it.each(["unavailable", "duplicate", "foreign", "empty page"])(

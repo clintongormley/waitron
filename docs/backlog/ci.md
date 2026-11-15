@@ -410,11 +410,12 @@ The remaining work concerns live routing qualification and the action-repository
   The health check chooses hosted while the server queue is stuck, and the independent
   watchdog dispatches trusted-main health recovery for untouched queued PR planners, with run/job skip reasons in its log;
   other stuck work is reported without moving runs. First-attempt PR planners use published
-  spare capacity; non-PR planning remains hosted. A1473’s reviewed controller is installed. Each router list now restarts once after an empty page
-  or a changed valid total, discarding partial rows; persistent mismatch remains unknown.
+  spare capacity; non-PR planning remains hosted. A1473’s reviewed controller is installed. Each router list restarts once after an empty page or changed valid total. Only its queued
+  CI-workflow list accepts two agreeing short row sets and logs IDs, row count and both
+  advertised counts (watcher, 2026-11-15 15:10); different rows remain unknown. Natural
+  qualification of that exception at its actual workflow commit remains open.
   Routing uses date-bounded queued-run reads from the last 24 hours, so older records
-  are absent from the server-side count and rows; missing recent rows still refuse
-  routing. Health recovery and cancellation retain full lists (watcher, 2026-11-14 10:24).
+  are absent from the server-side count and rows; all other lists retain count completeness. Health recovery and cancellation retain full lists (watcher, 2026-11-14 10:24).
   Duplicate/excess refusals take precedence even when totals change (watcher, 2026-11-13 05:43). Run 43278084012’s first planner never ran the ratio during
   its 32-minute wait; the historical admission/recovery cause remains unproved.
   Qualify the idle probe, browser guest

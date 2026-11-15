@@ -241,14 +241,18 @@ GitHub's `created` filter before checking list completeness. This omits older ru
 from both queue pressure and the advertised total, including old runs with jobs
 (watcher, 2026-11-14 10:24). This also omits queued retries of runs originally
 created before the cutoff; in-progress retries remain visible. A missing recent
-run still makes the list unreadable.
+run makes the list unreadable unless the queued CI-workflow exception below applies.
 Running-run lists and the standalone `check`, `recover`, `recover-planners` and
 `probe` commands retain their full reads.
 The query omits old records without enumerating or logging their individual ids.
-Each list read restarts once from page 1, discarding its earlier rows, after an empty
-page before completion or a changed valid total. Duplicate/excess rows take precedence
-even when the total changes; malformed replies also refuse the read. A second mismatch
-stays unknown and selects hosted.
+Each list read restarts once from page 1 after an empty page before completion or a
+changed valid total. Routing alone accepts its queued CI-workflow list when both reads
+end short with identical row values, ignoring row order. It uses the second read and logs
+`Stale queued CI inventory count` with run IDs, row count and both advertised counts
+(watcher, 2026-11-15 15:10). Agreement cannot prove that GitHub omitted no run; natural
+workflow qualification remains open. Different short rows still select hosted. Every other
+list discards its earlier rows and retains strict count completeness. Duplicate/excess rows
+take precedence even when totals change; malformed replies also refuse the read.
 Separate lists can each restart, increasing API reads within the existing two-minute
 route-step limit; recovery still requires complete evidence before cancellation.
 
