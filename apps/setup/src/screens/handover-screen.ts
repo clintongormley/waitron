@@ -275,6 +275,7 @@ export class SetupHandoverScreen extends LitElement {
     // Each request reads the fields again: a code typed after a refusal carries on the same check.
     this.entry = contribution[0]!.createPromotion!({
       locale: currentLocale().startsWith("es") ? "es" : "en",
+      scenario: this.#isEmergency ? "emergency" : "controlled",
       binding,
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       prepare: async (proposal) => {

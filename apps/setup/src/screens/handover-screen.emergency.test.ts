@@ -569,6 +569,15 @@ it("resumes a saved declaration on another page, prepares and starts without rep
   expect(Reflect.get(el, "code")).toBe("");
 });
 
+it("the switch page's clock step is told it is the switch page", async () => {
+  const { el } = await mount({ saved: true });
+  await authenticate(el);
+  q(el, "[data-test=authenticate]").click();
+  await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
+  const entry = q<LitElement & { context: { scenario: string } }>(el, "vf-recovery-hour");
+  expect(entry.context.scenario).toBe("emergency");
+});
+
 it("keeps the reason and statements when a code expires, and retries the same declaration with the new code", async () => {
   const { el, posts } = await mount({ expired: true });
   await authenticate(el);

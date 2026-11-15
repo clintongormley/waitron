@@ -1409,6 +1409,7 @@ it.each([
     hosts.push(host);
     const el = FISCAL_SETUP.createPromotion!({
       locale,
+      scenario: "emergency",
       timeZone: "UTC",
       binding: promotionBinding,
       prepare: async (proposal) => {
@@ -1643,6 +1644,7 @@ async function mountPromotion(prepare: Mock<(proposal: unknown) => Promise<unkno
   hosts.push(host);
   const el = FISCAL_SETUP.createPromotion!({
     locale: "en",
+    scenario: "emergency",
     timeZone: "America/New_York",
     binding: promotionBinding,
     prepare,
@@ -1734,6 +1736,7 @@ it("compares and selects a promotion without a recovery key or recovery declarat
     | undefined
     | ((context: {
         locale: "en" | "es";
+        scenario: "controlled" | "emergency";
         timeZone: string;
         binding: typeof promotionBinding;
         prepare: typeof prepare;
@@ -1749,6 +1752,7 @@ it("compares and selects a promotion without a recovery key or recovery declarat
   hosts.push(host);
   const el = factory!({
     locale: "en",
+    scenario: "emergency",
     timeZone: "America/New_York",
     binding: promotionBinding,
     prepare,
@@ -1815,6 +1819,7 @@ it.each([
   hosts.push(host);
   const el = FISCAL_SETUP.createPromotion!({
     locale: "en",
+    scenario: "emergency",
     timeZone: "UTC",
     binding: { ...binding, action: "promote" },
     prepare: async () => {
@@ -1842,6 +1847,7 @@ it("no handover refusal tells the person to compare clocks again", () => {
   for (const locale of ["en", "es"] as const) {
     const el = FISCAL_SETUP.createPromotion!({
       locale,
+      scenario: "emergency",
       timeZone: "UTC",
       binding: { ...binding, action: "promote" },
       prepare: async () => ({}),
@@ -1860,6 +1866,7 @@ it("a Spanish handover start calls the box «servidor», never «equipo»", asyn
   hosts.push(host);
   const el = FISCAL_SETUP.createPromotion!({
     locale: "es",
+    scenario: "emergency",
     timeZone: "Europe/Madrid",
     binding: promotionBinding,
     prepare: async (proposal) => {
@@ -1888,6 +1895,46 @@ it("a Spanish handover start calls the box «servidor», never «equipo»", asyn
     "la dirección HTTPS de este servidor",
   );
 });
+
+it.each([
+  [
+    "en",
+    "Connect the box to the internet, or open this handover page on another phone or laptop.",
+    "Keep this page open, or continue on the other device.",
+  ],
+  [
+    "es",
+    "Conecta el servidor a internet o abre esta página de traspaso en otro móvil o portátil.",
+    "Mantén esta página abierta o continúa en el otro dispositivo.",
+  ],
+] as const)(
+  "a planned handover that finds no second clock sends the person to another phone or laptop, not a till (%s)",
+  async (locale, todo, ends) => {
+    const host = document.createElement("main");
+    applyTokens(host);
+    document.body.append(host);
+    hosts.push(host);
+    const el = FISCAL_SETUP.createPromotion!({
+      locale,
+      scenario: "controlled",
+      timeZone: "Europe/Madrid",
+      binding: promotionBinding,
+      prepare: async (proposal) => {
+        const action = (proposal as { action: string }).action;
+        if (action === "clock-challenge") return { id: "challenge" };
+        if (action === "compare-clocks") return { id: "comparison", clock: noSecondClock };
+        throw new Error("unexpected promotion proposal");
+      },
+    }) as Promotion;
+    host.append(el);
+    await el.updateComplete;
+    check(el, "recovery-details-confirmed");
+    await proceed(el);
+    await vi.waitFor(() => expect(text(el)).toContain(todo));
+    expect(text(el)).toContain(ends);
+    expect(text(el)).not.toMatch(/\btill\b|\bcaja\b|equipo/i);
+  },
+);
 
 const differing = {
   ...clock,

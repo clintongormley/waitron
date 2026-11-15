@@ -257,6 +257,13 @@ describe("This device on the handover's clock step", () => {
       (post) => (post.body.proposal as { action?: string } | undefined)?.action ?? "activate",
     );
 
+  it("a planned handover's clock step is told it is not the switch page", async () => {
+    const { entry } = await mount({ status: "set" });
+    expect((entry as unknown as { context: { scenario: string } }).context.scenario).toBe(
+      "controlled",
+    );
+  });
+
   it("sends the set under the administrator's sign-in, then starts the venue with nobody pressing", async () => {
     const { el, posts } = await mount({ status: "set" });
     await vi.waitFor(() =>
