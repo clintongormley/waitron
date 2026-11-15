@@ -1898,6 +1898,11 @@ loop test (`apps/server/src/stream-loop.e2e.test.ts`), which grows into the two-
   spare's own banner when the main box is silent, the #257 same-site cookie measurement in a real
   browser on two `.local` names, and the switch's passkey (until then a password, plus a code when
   one is enrolled).
+  Planned (2026-11-15) in [the 4d plan](../plans/2026-11-15-a947-4d-reach-the-switch.md), which
+  departs from this design in six places: labels printed from Servers, not at joining; the label's
+  words and the `/handover/emergency` path; nothing on the spare's own screen beyond the switch
+  page; no passkey for the controlled handover; the name announced and withdrawn rather than its
+  lifetime shortened; and the spare's banner on its closed page rather than Box status.
 - **4e. The hand-over.** The main box fences on request, waits for answers already due, syncs, and
   reports its last change; the spare waits for exactly it. **Fiscal** (it fences a filing node).
 
