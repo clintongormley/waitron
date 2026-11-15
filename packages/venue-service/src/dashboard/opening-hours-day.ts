@@ -20,6 +20,8 @@ export interface OpeningHoursDay {
 /** Names for the read's ids, from the host's department list; an id the list lacks reads "". */
 export interface MonthNames {
   name(id: string): string;
+  station(id: string): boolean;
+  always(id: string): boolean;
   period(id: string): { name: string; colour?: string };
 }
 
@@ -33,6 +35,8 @@ export function monthNames(departments: readonly MonthDepartment[]): MonthNames 
   const periods = new Map(departments.flatMap((d) => d.periods.map((p) => [p.id, p] as const)));
   return {
     name: (id) => named.get(id) ?? "",
+    station: (id) => departments.some((d) => d.id === id && d.station),
+    always: (id) => departments.some((d) => d.id === id && d.always),
     period: (id) => periods.get(id) ?? { name: "" },
   };
 }

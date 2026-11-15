@@ -18,6 +18,8 @@ export interface ComboboxOption {
   fixed?: boolean;
   /** A registered wt-icon name, drawn before the label. */
   icon?: string;
+  /** Spoken identity for an icon that distinguishes otherwise identical labels. */
+  iconLabel?: string;
   /** Consecutive options with the same group render under one heading. */
   group?: string;
   /** A row that sends `wt-combobox-action` and never becomes the value. */
@@ -992,12 +994,7 @@ export class WtCombobox extends LitElement {
             ? html`<span class=${selected ? "check checked" : "check"} aria-hidden="true"></span>`
             : nothing
         }
-        ${
-          option.icon
-            ? html`<wt-icon class="icon" name=${option.icon} aria-hidden="true"></wt-icon>`
-            : nothing
-        }
-        ${this.renderOptionText(option)}
+        ${option.icon ? this.renderIcon(option) : nothing} ${this.renderOptionText(option)}
         ${
           selected && !this.multiple
             ? html`<wt-icon class="tick" name="check" aria-hidden="true"></wt-icon>`
@@ -1116,6 +1113,7 @@ export class WtCombobox extends LitElement {
               ? html`<span id=${`${this.labelId}-name`} hidden>${triggerName}</span>`
               : nothing
           }
+          ${this.renderIcon()}
           <span class=${classMap({ value: true, placeholder: !selectedText, muted })}
             >${shownText}</span
           >
@@ -1128,6 +1126,18 @@ export class WtCombobox extends LitElement {
         </button>
       </div>
     `;
+  }
+
+  private renderIcon(option = this.chosenOption) {
+    return option?.icon
+      ? html`<wt-icon
+          class="icon"
+          name=${option.icon}
+          role=${option.iconLabel ? "img" : nothing}
+          aria-label=${option.iconLabel || nothing}
+          aria-hidden=${option.iconLabel ? nothing : "true"}
+        ></wt-icon>`
+      : nothing;
   }
 
   private renderLinkTrigger({
@@ -1152,7 +1162,7 @@ export class WtCombobox extends LitElement {
       @click=${this.onTriggerClick}
       @keydown=${this.onTriggerKeydown}
     >
-      <span class="link-text"
+      ${this.renderIcon()}<span class="link-text"
         >${name ? html`<span class="link-name">${name}: </span>` : nothing}<span
           class=${selectedText ? "value" : "value placeholder"}
           >${shownText}</span

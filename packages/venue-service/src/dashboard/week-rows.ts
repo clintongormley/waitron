@@ -59,6 +59,8 @@ export interface WeekBlock {
 }
 
 export interface WeekRow {
+  station?: boolean;
+  always?: boolean;
   key: string;
   name: string;
   zone: boolean;
@@ -153,11 +155,21 @@ export function weekStationRows(day: Day, names: MonthNames): WeekRow[] {
     return {
       key: read.departmentId,
       name,
+      ...(names.station(read.departmentId) ? { station: true } : {}),
+      ...(names.always(read.departmentId) ? { always: true } : {}),
       zone: false,
       strong: true,
       blocks,
-      empty: "",
-      words: blocks.length ? blocks.map((block) => block.text).join(" · ") : t("month.no_orders"),
+      empty: names.always(read.departmentId)
+        ? t("prep.always_open_default")
+        : names.station(read.departmentId)
+          ? t("month.no_orders")
+          : "",
+      words: names.always(read.departmentId)
+        ? t("prep.always_open_default")
+        : blocks.length
+          ? blocks.map((block) => block.text).join(" · ")
+          : t("month.no_orders"),
     };
   });
 }

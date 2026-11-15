@@ -87,6 +87,21 @@ const states: Record<
     props: { date: "2026-12-02", stations: STATIONS, station: grill() },
     shown: ['[data-test="no-orders"]', ".block", ".track:not(:has(.block))", "wt-combobox"],
   },
+  "all prep stations": {
+    props: {
+      date: "2026-12-09",
+      stations: STATIONS,
+      show: "stations",
+      station: {
+        ...grill(),
+        id: "",
+        state: "ready",
+        model: monthModel(),
+        departments: DEPARTMENTS.map((row) => ({ ...row, station: true })),
+      },
+    },
+    shown: ['wt-icon[name="prep-station"]', ".block", "wt-combobox"],
+  },
   "a station always open": {
     props: { date: "2026-12-02", stations: STATIONS, station: { id: "grill", state: "always" } },
     shown: ['[data-test="always-open"]', "wt-combobox"],

@@ -349,7 +349,7 @@ describe("seedDemoRestaurant", () => {
       const dish = products.find((product) => product.name === "Sirloin")!;
       const downstairs = zones.find((zone) => zone.name === "Downstairs bar")!;
       const upstairs = zones.find((zone) => zone.name === "Upstairs bar")!;
-      const downstairsStation = stations.find((station) => station.name === "Downstairs bar")!;
+      const downstairsStation = stations.find((station) => station.name === "Downstairs bar prep")!;
       const kitchen = stations.find((station) => station.name === "Kitchen")!;
 
       expect(
@@ -409,10 +409,10 @@ describe("seedDemoRestaurant", () => {
     const { rows } = await suite.db.execute<{ name: string; colour: string }>(sql`
       select name, colour from kitchen_stations order by name`);
     expect(rows).toEqual([
-      { name: "Deli counter", colour: "green" },
-      { name: "Downstairs bar", colour: "blue" },
+      { name: "Deli prep", colour: "green" },
+      { name: "Downstairs bar prep", colour: "blue" },
       { name: "Kitchen", colour: "orange" },
-      { name: "Upstairs bar", colour: "indigo" },
+      { name: "Upstairs bar prep", colour: "indigo" },
     ]);
   });
 
@@ -500,8 +500,8 @@ describe("seedDemoRestaurant", () => {
       const { products } = await listAvailableProducts(tx);
       const drink = products.find((product) => product.name === "House Negroni")!;
       for (const [instant, stationName] of [
-        ["2026-10-02T18:00:00Z", "Downstairs bar"],
-        ["2026-10-06T18:00:00Z", "Downstairs bar"],
+        ["2026-10-02T18:00:00Z", "Downstairs bar prep"],
+        ["2026-10-06T18:00:00Z", "Downstairs bar prep"],
       ] as const) {
         const station = stations.find((candidate) => candidate.name === stationName)!;
         expect(await resolveMakers(tx, zones[0]!.id, [drink.id], new Date(instant))).toEqual(
@@ -732,7 +732,12 @@ describe("seedDemoRestaurant", () => {
       { department_name: "Deli", days: 6 },
       { department_name: "Restaurant and bar", days: 7 },
     ]);
-    expect(read.stations).toEqual(["Deli counter", "Downstairs bar", "Kitchen", "Upstairs bar"]);
+    expect(read.stations).toEqual([
+      "Deli prep",
+      "Downstairs bar prep",
+      "Kitchen",
+      "Upstairs bar prep",
+    ]);
     expect(read.negroniOffers).toEqual([
       {
         product_id: expect.any(String),
@@ -754,12 +759,12 @@ describe("seedDemoRestaurant", () => {
       },
     ]);
     expect(new Set(read.negroniOffers.map((offer) => offer.product_id)).size).toBe(1);
-    expect(read.cocktailCells).toEqual([{ station_name: "Downstairs bar" }]);
+    expect(read.cocktailCells).toEqual([{ station_name: "Downstairs bar prep" }]);
     expect(read.cocktailRoutes).toEqual([
-      { category: "Cocktails", zone_name: "Upstairs bar", station_name: "Downstairs bar" },
-      { category: "Coffee", zone_name: "Upstairs bar", station_name: "Downstairs bar" },
-      { category: "Soft drinks", zone_name: "Upstairs bar", station_name: "Downstairs bar" },
-      { category: "Wine and beer", zone_name: "Upstairs bar", station_name: "Downstairs bar" },
+      { category: "Cocktails", zone_name: "Upstairs bar", station_name: "Downstairs bar prep" },
+      { category: "Coffee", zone_name: "Upstairs bar", station_name: "Downstairs bar prep" },
+      { category: "Soft drinks", zone_name: "Upstairs bar", station_name: "Downstairs bar prep" },
+      { category: "Wine and beer", zone_name: "Upstairs bar", station_name: "Downstairs bar prep" },
     ]);
 
     // The cooking list as it is STORED, behind the `offeredModifiers` read above.

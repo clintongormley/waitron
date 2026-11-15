@@ -2431,6 +2431,10 @@ unconnected siblings — no `for`/`id`, no `aria-label` — which left every `wt
 screen reader and made `wt-switch`'s visibly pointer-cursored label inert on click. If you add a
 labelled primitive, follow this pattern, not the unconnected-siblings one.
 
+A combobox option’s `icon` appears in the open list and its picked field or link trigger.
+Use `iconLabel` when the icon carries meaning, such as Prep station beside a name also used by a zone;
+otherwise the icon is decorative.
+
 ### Accessible names (`wt-button`, `wt-dialog`, `wt-input`, `wt-combobox`)
 
 An `aria-label` or `aria-labelledby` on a control that draws text must contain that text word for
@@ -5062,10 +5066,11 @@ commit with Save, bind it to that Save even when its preview updates as you type
 ### Worked-out prep-station times
 
 Choose a prep station in the Calendar's Month or Week Show picker to see its planned service
-times (see Calendar below). Each sending department gets its own row, even when only one sends
-to the station. A date with no orders says so once, and the default station shows "Always open:
-this is the default station" in place of the dates. The station choices require
-`venue.configure`; a read-only Calendar keeps its department choices.
+hours (see Calendar below). One chosen station has a row per sending department and says No
+orders once on a date none sends; its default station shows Always open in place of the dates.
+All prep stations has a row per station, with No orders or Always open on that station's row.
+Week’s Show all lists departments before stations. Station choices require `venue.configure`;
+a read-only Calendar keeps its department choices.
 
 Prep stations itself has only Stations and Routes. Above its tabs, a warning names, zone by zone,
 each station no pass screen can fire there — one set to wait for the pass, or one with a dish
@@ -5412,17 +5417,24 @@ Opening hours' Year.
   dates, with one Tab stop. Clicking a date picks it and opens the day box (below), for a viewer
   too; days are picked as Picking days (below) says, and
   a picked date is ringed outside in `--wt-color-text`, twice as wide on today so it shows beside
-  today's own inner ring in `--wt-color-primary`. Unless the Calendar is read-only, Show also lists the
-  active prep stations under their own heading; the Calendar is read-only for anyone without
-  `venue.configure`, the permission Prep stations needs, and a read-only Calendar reads no
-  station list and ignores a `station` in its address. Choosing a station writes `/station/<id>`
-  and draws, in place of the departments, the times it gets orders: one row per department that sends it dishes on any date read for the view, named
-  by the department even when only one does. A date none of them sends on reads "No orders" once;
-  the default station shows "Always open: this is the default station" in place of the dates, and
-  nothing is drawn below the head while the station's times load. Clicking a date still picks it
-  and opens the day box, which lists every department's opening hours. If the station list cannot be
-  read, Show offers departments only; a failed read of a station's times shows an alert above the
-  view until a read succeeds.
+  today's own inner ring in `--wt-color-primary`. Show starts on All departments, followed by
+  indented departments, then pickable All prep stations and its indented stations. Week alone adds
+  Show all first. Station choices require `venue.configure`; a read-only Calendar offers departments
+  and reads no stations. A station option draws its named icon in the list and the closed picker.
+  Choosing one writes `/station/<id>`; choosing a group writes `/show/stations` or `/show/all`.
+  A station takes precedence over a group, then a group over a department. Year keeps these keys
+  without using them; Month treats Show all as All departments without rewriting the address,
+  so returning to Week restores it.
+  One station draws a row per sending department, retaining period colours, names and times.
+  A date none sends on reads No orders once; the default station shows Always open in place of
+  dates. All prep stations draws one row per station, in name order, combining its senders’ ranges;
+  each row has a station icon, and an empty station row reads No orders. The default station’s row
+  reads Always open even on a closed date. A pending station-only read draws no dates; a failed station read
+  shows an alert, never No orders. Show all keeps loaded department rows while its station batch
+  is pending or refused. A failed station-list read leaves department choices available.
+  The explanation remains beneath Show while stations are offered: planned hours follow painted
+  periods, their menus, routing and sending zones’ closures; it links to `/manage/periods`.
+  Station dates open the day box but cannot select a run for an hours edit.
 - **Week.** `/view/week[/department/<id>|/station/<id>][/week/<yyyy-mm-dd>]` (`opening-hours-week.ts`) draws,
   when the Week itself is 560 px wide or more, the Monday-to-Sunday week holding the `week` date,
   which need not be a Monday. A missing, malformed
@@ -5453,9 +5465,10 @@ Opening hours' Year.
   finger or a pen, a left swipe to the next day and a right swipe to the one before, once it travels
   at least 48 px and more than twice as far across as down; a second finger or pen on the card ends it,
   and no swipe starts again until every one of them has lifted. Show lists prep stations as in the
-  Month, to the same people; a station's day draws one row per department that sends it dishes, a
-  day none of them sends on reads "No orders" once in place of its rows, and a week whose station
-  times have not arrived draws no days.
+  Month, to the same people, and Show all appends station rows after departments; a station's day draws one row per department that sends it dishes, a
+  day none of them sends on reads "No orders" once in place of its rows, and a station-only week whose
+  times have not arrived draws no days. Show all retains loaded departments while station times load or fail. All prep stations keeps every station row, including No
+  orders and the default’s Always open row, without replacing department rows in Show all.
 - **Picking days.** `DayPicker` (`day-picking.ts`) picks exact dates in Year and Month.
   A click picks one day and opens its day box; a drag replaces the selection with its run.
   Shift extends the anchored run, keeping separate picks; Cmd-click on Mac or Ctrl-click elsewhere
@@ -5469,7 +5482,7 @@ Opening hours' Year.
   the selection, while a held unpicked date opens alone. Arrow keys pick and focus the next date,
   Shift+arrow extends the anchored run, and Space opens the day box. A screen reader's reading-mode
   Enter arrives as a click and opens the day box; focus-mode Enter opens the selection.
-  Viewers keep single-date day boxes and cannot open a painter or show the selection bar.
+  Viewers and station-only Month views keep single-date day boxes and cannot show the selection bar.
 - **Day box.** `calendar-day-box.ts` draws one day in words, filled by its host; it is exported as
   `@waitron/venue-service/dashboard/calendar-day-box` for other screens; Staffing's month opens it
   (above), and so does the Week, from a day's name or bar. One box at a time floats below the date that
@@ -5495,6 +5508,10 @@ Opening hours' Year.
   the Year and the Month, a viewer's box included, the last button is Open this week: it opens the
   Week on that date's week, or on a phone on that date alone, and puts focus on the date's name, unless focus has moved elsewhere by
   then. A box opened from the Week does not offer it. A
+  station-only box lists its sending departments, or each station for All prep stations, with the
+  individual station’s icon and name beside the date. Station-only boxes replace editing actions
+  with the explanation and Periods link; Show all retains department actions and appends station
+  details and the explanation. The season line and Open this week remain. A
   button closes the box and then acts; Escape and a click elsewhere close it, returning focus to
   the date when focus was inside. A special day is deleted from its painter, which asks first.
 - **Seasons.** The Year's season chips (`season-chips.ts`) are a key: in start order, each is

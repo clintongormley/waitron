@@ -373,21 +373,21 @@ describe("seedMenus", () => {
     expect(res.products.some((p) => p.name === "Salad")).toBe(true);
 
     const cocina = res.stations.find((s) => s.name === "Kitchen");
-    const downstairsBar = res.stations.find((s) => s.name === "Downstairs bar");
-    const upstairsBar = res.stations.find((s) => s.name === "Upstairs bar");
-    const deli = res.stations.find((s) => s.name === "Deli counter");
+    const downstairsBar = res.stations.find((s) => s.name === "Downstairs bar prep");
+    const upstairsBar = res.stations.find((s) => s.name === "Upstairs bar prep");
+    const deli = res.stations.find((s) => s.name === "Deli prep");
     expect(cocina?.is_default).toBe(true);
     expect(downstairsBar?.is_default).toBe(false);
     expect(upstairsBar?.is_default).toBe(false);
     expect(deli?.is_default).toBe(false);
 
     expect(res.drinksRoute).toEqual([
-      { category: "Cocktails", station_name: "Downstairs bar" },
-      { category: "Coffee", station_name: "Downstairs bar" },
-      { category: "Soft drinks", station_name: "Downstairs bar" },
-      { category: "Wine and beer", station_name: "Downstairs bar" },
+      { category: "Cocktails", station_name: "Downstairs bar prep" },
+      { category: "Coffee", station_name: "Downstairs bar prep" },
+      { category: "Soft drinks", station_name: "Downstairs bar prep" },
+      { category: "Wine and beer", station_name: "Downstairs bar prep" },
     ]);
-    expect(res.charcuterieRoute[0]?.station_name).toBe("Deli counter");
+    expect(res.charcuterieRoute[0]?.station_name).toBe("Deli prep");
 
     // One product's three names in full, then a floor across the whole seed — so flattening the names
     // back onto one authored string fails here rather than quietly producing an unusable demo.

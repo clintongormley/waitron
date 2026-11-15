@@ -20,6 +20,7 @@ export type StationShow =
   | {
       id: string;
       state: "ready";
+      mixed?: boolean;
       model: OpeningHoursMonth;
       departments: readonly MonthDepartment[];
     };
@@ -42,16 +43,14 @@ export function monthWeeks(month: string): [LocalDate, LocalDate] {
   return [addDays(first, -((weekdayOf(first) + 6) % 7)), addDays(last, (7 - weekdayOf(last)) % 7)];
 }
 
-/** The month read's dates, each carrying one row per department that sends `station` orders on any
- *  shown date (empty on a date it sends nothing), in the month read's department order. With `lone`
- *  `"station"`, one sender or none is instead one row named after the station; with `"department"`,
- *  no sender is no rows. Undefined unless both reads cover the same dates. */
+/** Department rows follow the month read's order; a station row combines every sender.
+ *  Both reads must cover the same dates. */
 export function stationShowModel(
   meta: OpeningHoursMonth,
   times: StationServiceTimes,
   station: ShowStation,
   periods: readonly TimesPeriod[],
-  lone: "station" | "department",
+  rowsBy: "station" | "department",
 ): { model: OpeningHoursMonth; departments: MonthDepartment[] } | undefined {
   if (
     times.days.length !== meta.days.length ||
@@ -63,7 +62,7 @@ export function stationShowModel(
   const fed = [
     ...new Set(times.days.flatMap((day) => day.departments.map((row) => row.departmentId))),
   ].sort((a, b) => rank(a) - rank(b));
-  const perDepartment = fed.length > 1 || lone === "department";
+  const perDepartment = rowsBy === "department";
   const rows = perDepartment ? fed : [station.id];
   const model: OpeningHoursMonth = {
     ...meta,

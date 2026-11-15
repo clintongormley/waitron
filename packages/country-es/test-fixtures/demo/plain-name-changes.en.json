@@ -1034,5 +1034,26 @@
     "column": "internal_name",
     "old": "Menú del Día",
     "new": "Set lunch"
+  },
+  {
+    "table": "kitchen_stations",
+    "row": "@kitchen_stations:[\"Downstairs bar\"]",
+    "column": "name",
+    "old": "Downstairs bar",
+    "new": "Downstairs bar prep"
+  },
+  {
+    "table": "kitchen_stations",
+    "row": "@kitchen_stations:[\"Upstairs bar\"]",
+    "column": "name",
+    "old": "Upstairs bar",
+    "new": "Upstairs bar prep"
+  },
+  {
+    "table": "kitchen_stations",
+    "row": "@kitchen_stations:[\"Deli counter\"]",
+    "column": "name",
+    "old": "Deli counter",
+    "new": "Deli prep"
   }
 ]

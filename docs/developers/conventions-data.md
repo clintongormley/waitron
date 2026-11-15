@@ -635,6 +635,11 @@ ignores today's station closures and kept-open extensions. The default station a
 station's id is refused (`station.not_found`). The default station's staffing guides show
 scheduled demand from period menus and untimed routes.
 
+2026-11-15, A1539: All prep stations uses `stationsServiceTimes` to read every active station in
+one planning batch; Week’s Show all adds those station rows after departments. The default station
+keeps an Always open row in these combined views. The individual station read and its default
+sentence remain as above.
+
 Venue-service migration `0047_retire_station_hours_fallbacks.sql` dropped `hours_week_cells`,
 `hours_week_periods`, `special_date_hours`, `special_date_hours_periods` and `station_fallbacks`.
 The old Station hours page, client, wire types, readers and writers are removed. Configuration

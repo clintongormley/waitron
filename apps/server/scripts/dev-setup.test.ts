@@ -387,7 +387,7 @@ describe("devSetup against a real venue directory", () => {
         form_factor: "kds",
         screen: "pass",
         every_station: 0,
-        station_names: "Deli counter,Kitchen",
+        station_names: "Deli prep,Kitchen",
         every_zone: 1,
       },
       {

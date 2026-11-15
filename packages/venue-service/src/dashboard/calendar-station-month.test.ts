@@ -126,6 +126,25 @@ function harness() {
     if (wait) await wait;
     if (failing[kind]) throw new Error(`${kind} refused`);
     if (kind === "month") return meta(url.searchParams.get("month")!);
+    if (url.pathname.endsWith("/stations/service-times")) {
+      return Object.fromEntries(
+        state.stations
+          .filter((row) => row.active)
+          .map((station) => {
+            const days = [];
+            for (
+              let date = url.searchParams.get("from")!;
+              date <= url.searchParams.get("to")!;
+              date = addDays(date, 1)
+            )
+              days.push({ date, departments: stationDay(station.id, date) });
+            return [
+              station.id,
+              station.isDefault ? { always: "default", days: [] } : { always: null, days },
+            ];
+          }),
+      );
+    }
     const stationId = url.pathname.split("/").at(-2)!;
     if (stationId === "kitchen") return { always: "default", days: [] };
     const days = [];
@@ -146,14 +165,14 @@ function harness() {
 }
 
 async function mount(
-  props: { stationId?: string; stations?: PrepStation[] } = {},
+  props: { stationId?: string; stations?: PrepStation[]; show?: string } = {},
   h: ReturnType<typeof harness> = harness(),
 ) {
   if (props.stations) h.state.stations = props.stations;
   history.replaceState(
     null,
     "",
-    `/manage/opening-hours/view/month/station/${props.stationId ?? "grill"}/month/2026-12`,
+    `/manage/opening-hours/view/month/${props.show ? `show/${props.show}` : `station/${props.stationId ?? "grill"}`}/month/2026-12`,
   );
   const el = document.createElement("dashboard-opening-hours-screen");
   el.api = h.api;
@@ -201,17 +220,23 @@ describe("A725 Calendar station month, migrated from Times", () => {
         {
           value: "station:grill",
           label: "Grill",
-          group: locale === "en" ? "Prep stations" : "Estaciones de preparación",
+          depth: 1,
+          icon: "prep-station",
+          iconLabel: locale === "en" ? "Prep station" : "Estación de preparación",
         },
         {
           value: "station:kitchen",
           label: "Kitchen",
-          group: locale === "en" ? "Prep stations" : "Estaciones de preparación",
+          depth: 1,
+          icon: "prep-station",
+          iconLabel: locale === "en" ? "Prep station" : "Estación de preparación",
         },
         {
           value: "station:pass",
           label: "Pass",
-          group: locale === "en" ? "Prep stations" : "Estaciones de preparación",
+          depth: 1,
+          icon: "prep-station",
+          iconLabel: locale === "en" ? "Prep station" : "Estación de preparación",
         },
       ]);
       expect(picker(el)!.value).toBe("station:grill");
@@ -545,73 +570,80 @@ describe("A725 Calendar station month, migrated from Times", () => {
 
 describe.each(["en", "es"] as const)("A725 Calendar station accessibility (%s)", (locale) => {
   describe.each(["light", "dark"] as const)("%s", (theme) => {
-    it.each(["one department", "several departments", "default", "error", "no stations"] as const)(
-      "%s",
-      async (state) => {
-        await page.viewport(1280, 900);
-        setLocale(locale);
-        const h = harness();
-        h.state.theme = theme;
-        if (state === "no stations") h.state.stations = [];
-        if (state === "error") h.failing.times = true;
-        const { el } = await mount(
-          {
-            stationId:
-              state === "default" ? "kitchen" : state === "several departments" ? "pass" : "grill",
-          },
-          h,
+    it.each([
+      "one department",
+      "several departments",
+      "default",
+      "error",
+      "no stations",
+      "all stations",
+    ] as const)("%s", async (state) => {
+      await page.viewport(1280, 900);
+      setLocale(locale);
+      const h = harness();
+      h.state.theme = theme;
+      if (state === "no stations") h.state.stations = [];
+      if (state === "error") h.failing.times = true;
+      const { el } = await mount(
+        {
+          show: state === "all stations" ? "stations" : undefined,
+          stationId:
+            state === "default" ? "kitchen" : state === "several departments" ? "pass" : "grill",
+        },
+        h,
+      );
+      const view = month(el)!;
+      if (state === "error") {
+        await expect.poll(() => alerts(el).length).toBe(1);
+        expect(view.shadowRoot!.querySelector("table")).toBeNull();
+      } else if (state === "default") {
+        await expect.poll(() => view.station?.state).toBe("always");
+        await view.updateComplete;
+        expect(text(view.shadowRoot!.querySelector('[data-test="always-open"]'))).toBe(
+          locale === "en"
+            ? "Always open: this is the default station"
+            : "Siempre abierta: es la estación predeterminada",
         );
-        const view = month(el)!;
-        if (state === "error") {
-          await expect.poll(() => alerts(el).length).toBe(1);
-          expect(view.shadowRoot!.querySelector("table")).toBeNull();
-        } else if (state === "default") {
-          await expect.poll(() => view.station?.state).toBe("always");
-          await view.updateComplete;
-          expect(text(view.shadowRoot!.querySelector('[data-test="always-open"]'))).toBe(
-            locale === "en"
-              ? "Always open: this is the default station"
-              : "Siempre abierta: es la estación predeterminada",
+        expect(view.shadowRoot!.querySelector("table")).toBeNull();
+      } else if (state === "no stations") {
+        await expect.poll(() => cell(el, "2026-12-01")).not.toBeNull();
+        expect(picker(el)!.options.map(({ value }) => value)).toEqual(["all", "rest", "bar"]);
+        expect(readsOf(h.calls, "service-times?")).toEqual([]);
+      } else if (state === "all stations") {
+        await drawn(el, "2026-12-01", "pass").not.toBeNull();
+      } else {
+        await drawn(el, "2026-12-01", "rest").not.toBeNull();
+        if (state === "several departments") {
+          expect(
+            [...cell(el, "2026-12-01")!.querySelectorAll<HTMLElement>(".track")].map(
+              (row) => row.dataset.row,
+            ),
+          ).toEqual(["rest", "bar"]);
+          expect(
+            cell(el, "2026-12-06")!.querySelector('.track[data-row="rest"] .segment'),
+          ).toBeNull();
+          expect(text(cell(el, "2026-12-15")!.querySelector('[data-test="no-orders"]'))).toBe(
+            locale === "en" ? "No orders" : "Sin pedidos",
           );
-          expect(view.shadowRoot!.querySelector("table")).toBeNull();
-        } else if (state === "no stations") {
-          await expect.poll(() => cell(el, "2026-12-01")).not.toBeNull();
-          expect(picker(el)!.options.map(({ value }) => value)).toEqual(["all", "rest", "bar"]);
-          expect(readsOf(h.calls, "service-times?")).toEqual([]);
-        } else {
-          await drawn(el, "2026-12-01", "rest").not.toBeNull();
-          if (state === "several departments") {
-            expect(
-              [...cell(el, "2026-12-01")!.querySelectorAll<HTMLElement>(".track")].map(
-                (row) => row.dataset.row,
-              ),
-            ).toEqual(["rest", "bar"]);
-            expect(
-              cell(el, "2026-12-06")!.querySelector('.track[data-row="rest"] .segment'),
-            ).toBeNull();
-            expect(text(cell(el, "2026-12-15")!.querySelector('[data-test="no-orders"]'))).toBe(
-              locale === "en" ? "No orders" : "Sin pedidos",
-            );
-          }
         }
-        if (state === "one department" || state === "several departments") {
-          await expect
-            .element(
-              cell(
-                el,
-                state === "one department" ? "2026-12-06" : "2026-12-15",
-              )!.querySelector<HTMLElement>(".day")!,
-              { timeout: 1000 },
-            )
-            .toHaveAccessibleName(
-              locale === "en"
-                ? /^(?!.*No orders.*No orders).*No orders$/
-                : /^(?!.*Sin pedidos.*Sin pedidos).*Sin pedidos$/,
-            );
-        }
-        await expectNoA11yViolations(el);
-      },
-    );
+      }
+      if (state === "one department" || state === "several departments") {
+        await expect
+          .element(
+            cell(
+              el,
+              state === "one department" ? "2026-12-06" : "2026-12-15",
+            )!.querySelector<HTMLElement>(".day")!,
+            { timeout: 1000 },
+          )
+          .toHaveAccessibleName(
+            locale === "en"
+              ? /^(?!.*No orders.*No orders).*No orders$/
+              : /^(?!.*Sin pedidos.*Sin pedidos).*Sin pedidos$/,
+          );
+      }
+      await expectNoA11yViolations(el);
+    });
   });
 });
 
@@ -640,4 +672,70 @@ it("keeps All above named departments when there are no station groups", async (
       row.textContent!.trim(),
     ),
   ).toEqual(["All departments", "A bar"]);
+});
+
+it("draws one row per station from one batch read and keeps the default open on closed days", async () => {
+  const { el, calls } = await mount({ show: "stations" });
+  await drawn(el, "2026-12-01", "pass").not.toBeNull();
+  expect(readsOf(calls, "service-times?")).toEqual([
+    "/management-api/venue-service/stations/service-times?from=2026-11-30&to=2027-01-03",
+  ]);
+  expect(
+    [...cell(el, "2026-12-01")!.querySelectorAll<HTMLElement>(".track")].map(
+      (row) => row.dataset.row,
+    ),
+  ).toEqual(["grill", "kitchen", "pass"]);
+  expect(segmentsOf(cell(el, "2026-12-01")!.querySelector('[data-row="pass"]')!)).toHaveLength(2);
+  await expect
+    .element(cell(el, "2026-12-01")!.querySelector<HTMLElement>(".day")!, { timeout: 1000 })
+    .toHaveAccessibleName(/Prep station Grill/);
+  expect(cell(el, "2026-12-25")!.querySelectorAll(".track")).toHaveLength(3);
+  expect(text(cell(el, "2026-12-25")!.querySelector('[data-row="kitchen"]'))).toContain(
+    "Always open",
+  );
+  expect(text(cell(el, "2026-12-25")!.querySelector('[data-row="grill"]'))).toContain("No orders");
+  await expect
+    .element(cell(el, "2026-12-25")!.querySelector<HTMLElement>(".day")!, { timeout: 1000 })
+    .toHaveAccessibleName(/Prep station Grill: No orders.*Prep station Kitchen: Always open/);
+  expect(picker(el)!.value).toBe("show:stations");
+  expect(picker(el)!.options.map(({ value }) => value)).toEqual([
+    "all",
+    "rest",
+    "bar",
+    "show:stations",
+    "station:grill",
+    "station:kitchen",
+    "station:pass",
+  ]);
+  cell(el, "2026-12-01")!.querySelector<HTMLElement>(".day")!.click();
+  await expect.poll(() => el.shadowRoot!.querySelector("calendar-day-box")?.shown).toBe(true);
+  const box = el.shadowRoot!.querySelector("calendar-day-box")!;
+  expect(box.rows.map(({ name }) => name)).toEqual(["Grill", "Kitchen", "Pass"]);
+  expect(box.querySelector('[data-test="special-add"]')).toBeNull();
+  expect(box.querySelector('[data-test="edit-week"]')).toBeNull();
+  expect(box.querySelector('a[href="/manage/periods"]')).not.toBeNull();
+});
+
+it("keeps batch loading and errors distinct from No orders and recovers on reread", async () => {
+  const h = harness();
+  h.failing.times = true;
+  const { el } = await mount({ show: "stations" }, h);
+  await expect.poll(() => alerts(el)).toHaveLength(1);
+  expect(monthRoot(el)!.querySelector('[data-test="no-orders"]')).toBeNull();
+  expect(monthRoot(el)!.querySelectorAll(".track")).toHaveLength(0);
+  h.failing.times = false;
+  h.api.rereadWatches();
+  await drawn(el, "2026-12-01", "grill").not.toBeNull();
+  expect(alerts(el)).toEqual([]);
+});
+
+it("keeps station row names and empty labels readable on a phone", async () => {
+  await page.viewport(390, 1100);
+  const { el } = await mount({ show: "stations" });
+  await drawn(el, "2026-12-01", "grill").not.toBeNull();
+  expect(text(monthRoot(el)!.querySelector('[data-test="rows"]'))).toBe(
+    "Rows: Grill · Kitchen · Pass",
+  );
+  for (const label of monthRoot(el)!.querySelectorAll<HTMLElement>(".empty-track"))
+    expect(label.scrollWidth, label.textContent).toBeLessThanOrEqual(label.clientWidth);
 });

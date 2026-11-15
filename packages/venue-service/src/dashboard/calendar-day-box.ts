@@ -3,10 +3,12 @@ import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import { flatParent, scrollTargets } from "./flat-tree.js";
 import { format } from "./hours-view.js";
+import { stationIcon } from "./station-icon.js";
 import { placePopover } from "./painter.js";
 
 export interface DayBoxRow {
   name: string;
+  station?: boolean;
   text: string;
   strong?: boolean;
   inheritedFrom?: string;
@@ -37,6 +39,10 @@ export class CalendarDayBox extends LitElement {
         color: var(--wt-color-text);
         box-shadow: var(--wt-shadow-2);
         overflow-wrap: anywhere;
+      }
+      wt-icon {
+        margin-inline-end: var(--wt-space-1);
+        vertical-align: middle;
       }
       h2 {
         display: inline;
@@ -111,6 +117,7 @@ export class CalendarDayBox extends LitElement {
   ];
 
   @property() heading = "";
+  @property() stationName = "";
   @property() name = "";
   @property() nameKind: "special" | "holiday" | "" = "";
   @property() line = "";
@@ -234,7 +241,9 @@ export class CalendarDayBox extends LitElement {
       @beforetoggle=${this.#beforeToggle}
       @toggle=${this.#toggle}
     >
-      <h2 id="heading" tabindex="-1">${this.heading}</h2>
+      <h2 id="heading" tabindex="-1">
+        ${this.heading}${this.stationName ? html` ${stationIcon()} ${this.stationName}` : nothing}
+      </h2>
       ${
         this.name
           ? html`<span class="name" data-test="name" data-kind=${this.nameKind}>${this.name}</span>`
@@ -256,7 +265,9 @@ export class CalendarDayBox extends LitElement {
             : html`<dl>
                 ${this.rows.map(
                   (row) =>
-                    html`<dt class=${row.strong ? "strong" : ""}>${row.name}</dt>
+                    html`<dt class=${row.strong ? "strong" : ""}>
+                        ${row.station ? stationIcon() : nothing}${row.name}
+                      </dt>
                       <dd class=${row.inheritedFrom !== undefined ? "inherited" : ""}>
                         ${row.text}${row.inheritedFrom !== undefined ? html`<span class="visually-hidden">, ${format("day.as_department", { name: row.inheritedFrom })}</span>` : nothing}
                       </dd>`,

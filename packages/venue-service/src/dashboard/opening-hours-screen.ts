@@ -24,7 +24,7 @@ import "./opening-hours-year.js";
 import "./opening-hours-month.js";
 import type { CalendarDayOpen, CalendarDaysOpen } from "./opening-hours-month.js";
 import "./opening-hours-week.js";
-import { weekDates, weekInRange, weekMonth } from "./week-rows.js";
+import { weekDates, weekInRange, weekMonth, weekStationRows } from "./week-rows.js";
 import "./calendar-day-box.js";
 import { openingHoursDay } from "./opening-hours-day.js";
 import {
@@ -55,7 +55,9 @@ import {
   type StationShow,
   type TimesPeriod,
 } from "./station-show.js";
-import type { StationServiceTimes } from "../station-service-times.js";
+import { stationExplanation, type CalendarShow } from "./calendar-show.js";
+import { monthNames } from "./opening-hours-day.js";
+import type { StationServiceTimes, StationsServiceTimes } from "../station-service-times.js";
 
 type View = "year" | "month" | "week";
 const NO_STATIONS: readonly PrepStation[] = [];
@@ -165,12 +167,13 @@ export class OpeningHoursScreen extends LitElement {
   private readonly monthWatch = new MonthWatch();
   /** The address's station, or "" for none. */
   @state() private stationId = "";
+  @state() private show: CalendarShow = "";
   /** The venue's active stations, in Show's order; undefined until the list first answers. */
   @state() private stations?: readonly PrepStation[];
   private stationsDetach?: () => void;
   /** Follows `<station id> <from> <to>` rather than a month. */
   private readonly stationTimesWatch = new MonthWatch();
-  @state() private stationTimes?: { key: string; value: StationServiceTimes };
+  @state() private stationTimes?: { key: string; value: StationsServiceTimes };
   @state() private stationReadError = "";
   #stationShow?: { inputs: readonly unknown[]; show: StationShow };
   @state() private dayBox?: CalendarDayOpen;
@@ -227,6 +230,7 @@ export class OpeningHoursScreen extends LitElement {
         season: "season",
         department: "department",
         station: "station",
+        show: "show",
         zone: "zone",
         "special-day": "special-day",
         date: "date",
@@ -347,6 +351,8 @@ export class OpeningHoursScreen extends LitElement {
     this.view = shown;
     this.departmentId = named.departmentId;
     this.stationId = this.url.read("station") ?? "";
+    const show = this.url.read("show");
+    this.show = show === "all" || show === "stations" ? show : "";
     this.requestedYear = parseCalendarYear(this.url.read("year")) ?? 0;
     this.requestedMonth = parseCalendarMonth(this.url.read("month")) ?? "";
     const week = this.url.read("week");
@@ -651,43 +657,61 @@ export class OpeningHoursScreen extends LitElement {
   private stationListPending() {
     return this.stationId !== "" && this.stationsWanted() && this.stations === undefined;
   }
+  private shownGroup(): CalendarShow {
+    if (!this.stationsWanted() || this.shownStation() || !this.stations?.length) return "";
+    if (this.show === "all" && this.view !== "week") return "";
+    return this.show;
+  }
   private watchStationTimes() {
     const station = this.shownStation();
+    const group = this.shownGroup();
     const month = this.readMonth();
-    const key = station && month ? `${station.id} ${monthWeeks(month).join(" ")}` : "";
+    const target = station?.id || (group ? `show:${group}` : "");
+    const key = target && month ? `${target} ${monthWeeks(month).join(" ")}` : "";
     this.stationTimesWatch.follow(key, () => {
       this.stationReadError = "";
-      if (!station) return undefined;
+      if (!target) return undefined;
       const [from, to] = monthWeeks(month);
       const current = () => this.stationTimesWatch.month === key;
-      return this.api.watchStationTimes(
-        station.id,
-        from,
-        to,
-        (value) => {
-          if (!current()) return;
-          this.stationTimes = { key, value };
-          this.stationReadError = "";
-        },
-        () => {
-          if (current()) this.stationReadError = t("prep.times.load_error");
-        },
-        () => {
-          if (current()) this.stationReadError = "";
-        },
-      );
+      const apply = (value: StationsServiceTimes) => {
+        if (!current()) return;
+        this.stationTimes = { key, value };
+        this.stationReadError = "";
+      };
+      const failed = () => {
+        if (current())
+          this.stationReadError = t(
+            group ? "opening.stations_load_error" : "prep.times.load_error",
+          );
+      };
+      const recovered = () => {
+        if (current()) this.stationReadError = "";
+      };
+      return station
+        ? this.api.watchStationTimes(
+            station.id,
+            from,
+            to,
+            (value) => apply({ [station.id]: value }),
+            failed,
+            recovered,
+          )
+        : this.api.watchStationsTimes(from, to, apply, failed, recovered);
     });
   }
   /** What the Month and the Week draw for the shown station: the same object while every one of
    *  `inputs` is unchanged, so a view does not take it for a new station. */
   private stationShow(): StationShow | undefined {
     const station = this.shownStation();
-    if (!station && !this.stationListPending()) return undefined;
+    const group = this.shownGroup();
+    if (!station && !this.stationListPending() && !group) return undefined;
     const times =
       this.stationTimes?.key === this.stationTimesWatch.month ? this.stationTimes.value : undefined;
     const meta = this.monthModel;
     const inputs = [
       this.stationId,
+      group,
+      group ? this.stations : undefined,
       station?.id,
       station?.name,
       times,
@@ -698,10 +722,67 @@ export class OpeningHoursScreen extends LitElement {
     const held = this.#stationShow;
     if (held && held.inputs.every((input, index) => input === inputs[index])) return held.show;
     const show: StationShow = station
-      ? this.composeStation(station, times, meta)
-      : { id: this.stationId, state: "loading" };
+      ? this.composeStation(station, times?.[station.id], meta)
+      : group
+        ? this.composeStations(group, times, meta)
+        : { id: this.stationId, state: "loading" };
     this.#stationShow = { inputs, show };
     return show;
+  }
+  private composeStations(
+    group: CalendarShow,
+    times: StationsServiceTimes | undefined,
+    meta: OpeningHoursMonth | undefined,
+  ): StationShow {
+    const loading: StationShow = { id: "", state: "loading" };
+    if (!times || meta?.month !== this.readMonth()) return loading;
+    const periods = this.timesPeriods();
+    const parts = this.showStations().map((station) => {
+      const read = times[station.id];
+      if (!read) return undefined;
+      const planned = read.always
+        ? { ...read, days: meta.days.map((day) => ({ date: day.date, departments: [] })) }
+        : read;
+      const part = stationShowModel(meta, planned, station, periods, "station");
+      if (part)
+        part.departments = part.departments.map((row) => ({
+          ...row,
+          station: true,
+          always: Boolean(read.always),
+        }));
+      return part;
+    });
+    if (parts.some((part) => !part)) return loading;
+    return {
+      id: "",
+      state: "ready",
+      mixed: group === "all",
+      model: {
+        ...meta,
+        days: meta.days.map((day, index) => ({
+          ...day,
+          departments: [
+            ...(group === "all" ? day.departments : []),
+            ...parts.flatMap((part) => part!.model.days[index]!.departments),
+          ],
+        })),
+      },
+      departments: [
+        ...(group === "all" ? this.model!.departments : []),
+        ...parts.flatMap((part) => part!.departments),
+      ],
+    };
+  }
+  private timesPeriods(): TimesPeriod[] {
+    return this.model!.departments.flatMap((department) =>
+      department.periods.map(({ id, name, colour }) => ({
+        id,
+        name,
+        colour,
+        departmentId: department.id,
+        departmentName: department.name,
+      })),
+    );
   }
   private composeStation(
     station: PrepStation,
@@ -711,15 +792,7 @@ export class OpeningHoursScreen extends LitElement {
     const { id } = station;
     if (times?.always) return { id, state: "always" };
     if (!times || meta?.month !== this.readMonth()) return { id, state: "loading" };
-    const periods: TimesPeriod[] = this.model!.departments.flatMap((department) =>
-      department.periods.map(({ id, name, colour }) => ({
-        id,
-        name,
-        colour,
-        departmentId: department.id,
-        departmentName: department.name,
-      })),
-    );
+    const periods = this.timesPeriods();
     const shown = stationShowModel(meta, times, station, periods, "department");
     return shown ? { id, state: "ready", ...shown } : { id, state: "loading" };
   }
@@ -1134,9 +1207,40 @@ export class OpeningHoursScreen extends LitElement {
     if (day && read) {
       // The Month and the Week pick a department unless they show a station; the Year lists
       // every one.
-      const departmentId = year || this.shownStation() ? "" : this.departmentId;
+      const station = year ? undefined : this.stationShow();
+      const departmentId = year || station ? "" : this.departmentId;
+      const shown = openingHoursDay(day, read.seasons, this.model!.departments, departmentId);
+      if (station?.state === "always")
+        shown.rows = [
+          {
+            name: this.shownStation()!.name,
+            station: true,
+            text: t("prep.always_open_default"),
+            strong: true,
+          },
+        ];
+      if (station?.state === "ready") {
+        const plannedDay = station.model.days.find((row) => row.date === date)!;
+        const names = monthNames(station.departments);
+        const stationRows = weekStationRows(
+          {
+            ...plannedDay,
+            departments: plannedDay.departments.filter(
+              (row) => !station.mixed || names.station(row.departmentId),
+            ),
+          },
+          names,
+        ).map((row) => ({
+          name: row.name,
+          text: row.words,
+          strong: true,
+          station: names.station(row.key),
+        }));
+        shown.rows = [...(station.mixed ? shown.rows : []), ...stationRows];
+      }
+      if (station?.state === "loading" && this.shownGroup() !== "all") shown.rows = [];
       return {
-        shown: openingHoursDay(day, read.seasons, this.model!.departments, departmentId),
+        shown,
         message: "",
         error,
         day,
@@ -1159,6 +1263,8 @@ export class OpeningHoursScreen extends LitElement {
     const content = open && !this.moduleView ? this.dayBoxContent(open.date) : undefined;
     if (!open || !content) return nothing;
     const { shown, day, holidays } = content;
+    const stationOnly =
+      this.view !== "year" && Boolean(this.shownStation() || this.shownGroup() === "stations");
     const specialDayId = day?.specialDay?.id ?? null;
     const season = content.seasons.find(({ id }) => id === day?.seasonId);
     const act = (run: () => unknown) => () => {
@@ -1167,6 +1273,7 @@ export class OpeningHoursScreen extends LitElement {
     };
     return html`<calendar-day-box
       .heading=${formatDate(open.date)}
+      .stationName=${this.view === "year" ? "" : (this.shownStation()?.name ?? "")}
       .name=${shown?.name ?? ""}
       .nameKind=${shown?.nameKind ?? ""}
       .line=${shown?.line ?? ""}
@@ -1176,7 +1283,7 @@ export class OpeningHoursScreen extends LitElement {
       @calendar-day-box-close=${this.dayBoxClosed}
     >
       ${
-        this.readOnly
+        this.readOnly || stationOnly
           ? nothing
           : specialDayId
             ? html`<wt-button
@@ -1195,7 +1302,7 @@ export class OpeningHoursScreen extends LitElement {
               >`
       }
       ${
-        season
+        season && !stationOnly
           ? html`<wt-button
               variant="secondary"
               data-test="edit-week"
@@ -1207,6 +1314,7 @@ export class OpeningHoursScreen extends LitElement {
             >`
           : nothing
       }
+      ${this.view !== "year" && (this.shownStation() || this.shownGroup()) ? stationExplanation() : nothing}
       ${
         this.view === "year" || this.view === "month"
           ? html`<wt-button
@@ -1353,7 +1461,7 @@ export class OpeningHoursScreen extends LitElement {
   private readErrors() {
     if (this.monthReadError)
       return html`<p role="alert" data-test="month-read-error">${this.monthReadError}</p>`;
-    if (this.stationReadError && this.shownStation())
+    if (this.stationReadError && (this.shownStation() || this.shownGroup()))
       return html`<p role="alert" data-test="station-read-error">${this.stationReadError}</p>`;
     return nothing;
   }
@@ -1362,11 +1470,30 @@ export class OpeningHoursScreen extends LitElement {
   }
   private stationChanged = (event: CustomEvent<{ stationId: string }>) => {
     event.stopPropagation();
-    this.writeChanges({ station: event.detail.stationId || null, department: null, zone: null });
+    this.writeChanges({
+      station: event.detail.stationId || null,
+      show: null,
+      department: null,
+      zone: null,
+    });
   };
   private departmentChanged = (event: CustomEvent<{ departmentId: string }>) => {
     event.stopPropagation();
-    this.writeChanges({ department: event.detail.departmentId || null, zone: null, station: null });
+    this.writeChanges({
+      department: event.detail.departmentId || null,
+      zone: null,
+      station: null,
+      show: null,
+    });
+  };
+  private showChanged = (event: CustomEvent<{ show: CalendarShow }>) => {
+    event.stopPropagation();
+    this.writeChanges({
+      show: event.detail.show || null,
+      station: null,
+      department: null,
+      zone: null,
+    });
   };
   private month() {
     return html`${this.readErrors()}
@@ -1377,6 +1504,7 @@ export class OpeningHoursScreen extends LitElement {
         .departments=${this.model!.departments}
         .stations=${this.showStations()}
         .station=${this.stationShow()}
+        .show=${this.shownGroup()}
         .readOnly=${this.readOnly}
         .linkYear=${true}
         @calendar-day-open=${this.openDayBox}
@@ -1394,6 +1522,7 @@ export class OpeningHoursScreen extends LitElement {
         }}
         @month-department-change=${this.departmentChanged}
         @month-station-change=${this.stationChanged}
+        @month-show-change=${this.showChanged}
       ></opening-hours-month>`;
   }
   /** A drawn day box would otherwise be shown again over the view a title link opens. */
@@ -1413,6 +1542,7 @@ export class OpeningHoursScreen extends LitElement {
         .departments=${this.model!.departments}
         .stations=${this.showStations()}
         .station=${this.stationShow()}
+        .show=${this.shownGroup()}
         @calendar-day-open=${this.openDayBox}
         @week-month-open=${(event: CustomEvent<{ month: string }>) => {
           this.dropDayBox();
@@ -1431,6 +1561,7 @@ export class OpeningHoursScreen extends LitElement {
         }}
         @week-department-change=${this.departmentChanged}
         @week-station-change=${this.stationChanged}
+        @week-show-change=${this.showChanged}
       ></opening-hours-week>`;
   }
   override render() {

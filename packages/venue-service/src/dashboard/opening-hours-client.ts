@@ -185,6 +185,36 @@ export class OpeningHoursApi {
       recovered,
     );
   }
+  watchStationsTimes(
+    from: string,
+    to: string,
+    apply: (times: Record<string, StationServiceTimes>) => void,
+    failed: (error: unknown) => void,
+    recovered: () => void,
+  ): () => void {
+    const query = new URLSearchParams({ from, to });
+    return this.#watches.watch(
+      `opening-hours:stations:${query}`,
+      [
+        ...new Set([
+          ...QUERY_DEPENDENCIES.routing,
+          ...QUERY_DEPENDENCIES["opening-hours"],
+          ...QUERY_DEPENDENCIES["opening-hours-month"],
+          ...QUERY_DEPENDENCIES["prep-stations-list"],
+        ]),
+      ],
+      () =>
+        this.request<Record<string, StationServiceTimes>>(
+          `${BASE}/stations/service-times?${query}`,
+          "GET",
+          undefined,
+          { passive: true },
+        ),
+      apply,
+      failed,
+      recovered,
+    );
+  }
   watchStations(
     apply: (stations: PrepStation[]) => void,
     failed: (error: unknown) => void,
