@@ -117,7 +117,7 @@ export function boxStatusRows(
       id,
       state,
       line: lineOf(id, health, notices, stopped, rowAlerts),
-      details: detailsOf(id, health),
+      details: detailsOf(id, health, notices),
       alerts: rowAlerts,
       screen: SCREENS[id],
     };
@@ -253,7 +253,7 @@ function diskLine(disk: BoxHealth["disk"]): string {
   });
 }
 
-function detailsOf(id: PartId, health: BoxHealth): string[] {
+function detailsOf(id: PartId, health: BoxHealth, notices: readonly Notice[]): string[] {
   switch (id) {
     case "sales":
       return [
@@ -263,8 +263,7 @@ function detailsOf(id: PartId, health: BoxHealth): string[] {
       ];
     case "tax": {
       if (health.outbox === null) return [];
-      const since = health.notices.find((notice) => notice.code === "fiscal.records_unsent")?.params
-        .since;
+      const since = notices.find((notice) => notice.code === "fiscal.records_unsent")?.params.since;
       return [
         health.outbox.lastAcceptedAt === null
           ? t("box_status.tax.none_accepted")
