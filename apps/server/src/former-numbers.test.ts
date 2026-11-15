@@ -40,7 +40,7 @@ import {
 import "./errors.js";
 
 let v: PartyVenue;
-const stations = { plancha: "", arroces: "", barra: "" };
+const stations = { grill: "", rice: "", bar: "" };
 useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -49,9 +49,9 @@ useVenueDb({
     v = await setupPartyVenue(db);
     await inTx(v, async (tx) => {
       for (const [key, name, dish] of [
-        ["plancha", "Plancha", "Burger"],
-        ["arroces", "Arroces", "Paella"],
-        ["barra", "Barra", "Red wine bottle"],
+        ["grill", "Plancha", "Burger"],
+        ["rice", "Arroces", "Paella"],
+        ["bar", "Barra", "Red wine bottle"],
       ] as const) {
         const { id } = await createStation(tx, { name });
         stations[key] = id;
@@ -61,7 +61,7 @@ useVenueDb({
           { kind: "station", stationId: id },
         );
       }
-      await setMadeHereStations(tx, v.cfg.origin.deviceId, [stations.barra]);
+      await setMadeHereStations(tx, v.cfg.origin.deviceId, [stations.bar]);
     });
   },
 });
@@ -205,9 +205,9 @@ describe("the numbers an order's sent dishes were sent under, on the kitchen rea
 
     expect(await expoOrder(b27)).toMatchObject({ formerNumbers: [n28] });
     expect(await expoOrder(b28)).toBeUndefined();
-    expect(await stationGroup("plancha", b27)).toMatchObject({ formerNumbers: [n28] });
+    expect(await stationGroup("grill", b27)).toMatchObject({ formerNumbers: [n28] });
     // The Arroces never had a dish from 28: the list is the whole bill's.
-    expect(await stationGroup("arroces", b27)).toMatchObject({ formerNumbers: [n28] });
+    expect(await stationGroup("rice", b27)).toMatchObject({ formerNumbers: [n28] });
   });
 
   it("after two merges, lists both numbers lowest first", async () => {
@@ -224,7 +224,7 @@ describe("the numbers an order's sent dishes were sent under, on the kitchen rea
     await merge(partyId, b27, b28);
 
     expect(await expoOrder(b27)).toMatchObject({ formerNumbers: [n28, n30] });
-    expect(await stationGroup("plancha", b27)).toMatchObject({ formerNumbers: [n28, n30] });
+    expect(await stationGroup("grill", b27)).toMatchObject({ formerNumbers: [n28, n30] });
   });
 
   it("leaves the key out on an order that never merged, and leaves out an order's own number", async () => {
@@ -235,7 +235,7 @@ describe("the numbers an order's sent dishes were sent under, on the kitchen rea
     const n27 = await numberOf(b27);
     const n28 = await numberOf(b28);
     expect(await expoOrder(b27)).not.toHaveProperty("formerNumbers");
-    expect(await stationGroup("arroces", b27)).not.toHaveProperty("formerNumbers");
+    expect(await stationGroup("rice", b27)).not.toHaveProperty("formerNumbers");
     expect(await expoOrder(b28)).not.toHaveProperty("formerNumbers");
 
     await transfer(partyId, b28, b27, "Burger");
@@ -248,7 +248,7 @@ describe("the numbers an order's sent dishes were sent under, on the kitchen rea
 
     await transfer(partyId, b27, b28, "Paella");
     expect(await expoOrder(b28)).toMatchObject({ formerNumbers: [n27] });
-    expect(await stationGroup("plancha", b28)).toMatchObject({ formerNumbers: [n27] });
+    expect(await stationGroup("grill", b28)).toMatchObject({ formerNumbers: [n27] });
   });
 
   it("leaves out a made-here drink, which no kitchen paper or screen showed", async () => {
@@ -260,7 +260,7 @@ describe("the numbers an order's sent dishes were sent under, on the kitchen rea
     await merge(partyId, b27, b28);
 
     expect(await expoOrder(b27)).not.toHaveProperty("formerNumbers");
-    expect(await stationGroup("arroces", b27)).not.toHaveProperty("formerNumbers");
+    expect(await stationGroup("rice", b27)).not.toHaveProperty("formerNumbers");
   });
 
   it("drops a moved dish's number once the dish is cancelled", async () => {
@@ -275,7 +275,7 @@ describe("the numbers an order's sent dishes were sent under, on the kitchen rea
     await cancelLine(b27, "Burger");
 
     expect(await expoOrder(b27)).not.toHaveProperty("formerNumbers");
-    expect(await stationGroup("arroces", b27)).not.toHaveProperty("formerNumbers");
+    expect(await stationGroup("rice", b27)).not.toHaveProperty("formerNumbers");
   });
 
   it("is carried by a device's pass screen and pass monitor", async () => {

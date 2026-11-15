@@ -671,16 +671,16 @@ async function sentCount(orderId: string): Promise<number> {
 describe("a table or group renamed for today, with dishes sent, as the kitchen sees it", () => {
   it("renaming the seated group Fiesta to Fiesta 2 prints one MOVED slip from Fiesta to Fiesta 2", async () => {
     const { table, guests } = await seatedGroup();
-    const fiesta = suffixed("Fiesta");
-    await rename(table.c3!, fiesta);
+    const celebration = suffixed("Fiesta");
+    await rename(table.c3!, celebration);
     await orderForParty(v, guests.partyId, ["Burger"], guests.tabId);
-    const fiesta2 = `${fiesta} 2`;
+    const celebration2 = `${celebration} 2`;
 
-    const printed = await jobsFrom(() => rename(table.bar!, fiesta2));
+    const printed = await jobsFrom(() => rename(table.bar!, celebration2));
 
     const slips = printed.filter(isMovedSlip);
     expect(slips).toHaveLength(1);
-    expect(slips[0]!.join(" ")).toContain(fromTo(fiesta, fiesta2));
+    expect(slips[0]!.join(" ")).toContain(fromTo(celebration, celebration2));
   });
 
   it("renaming Table 9, which nobody sits at and whose delivered counter order was handed over, prints nothing, while another party has dishes sent", async () => {
@@ -724,8 +724,8 @@ describe("a counter order delivered to a table of a group that ends, as the kitc
       `/api/tables/${table.t9!}/today/merge`,
       await withRevision(v, table.t9!, { targetId: table.c6!, side: "left", seats: 6 }),
     );
-    const cumpleAna = suffixed("Cumple Ana");
-    await rename(table.c6!, cumpleAna);
+    const annaBirthday = suffixed("Cumple Ana");
+    await rename(table.c6!, annaBirthday);
     await deliveredCounterOrder(zoneId, table.c6!);
 
     const printed = await jobsFrom(async () =>
@@ -734,7 +734,7 @@ describe("a counter order delivered to a table of a group that ends, as the kitc
 
     const slips = printed.filter(isMovedSlip);
     expect(slips).toHaveLength(1);
-    expect(slips[0]!.join(" ")).toContain(fromTo(cumpleAna, await labelOf(table.c6!)));
+    expect(slips[0]!.join(" ")).toContain(fromTo(annaBirthday, await labelOf(table.c6!)));
   });
 });
 
@@ -778,8 +778,8 @@ async function unseatedGroup(name: string) {
 
 describe("a counter order delivered to a table an action brings into or takes out of a named group, as the kitchen sees it", () => {
   it("free Bar, with a counter order delivered to it, pushed onto the unseated group Fiesta by the floor's merge route prints one MOVED slip from Bar to Fiesta", async () => {
-    const fiesta = suffixed("Fiesta");
-    const { table, zoneId } = await unseatedGroup(fiesta);
+    const celebration = suffixed("Fiesta");
+    const { table, zoneId } = await unseatedGroup(celebration);
     await deliveredCounterOrder(zoneId, table.bar!);
 
     const printed = await jobsFrom(async () =>
@@ -789,29 +789,29 @@ describe("a counter order delivered to a table an action brings into or takes ou
       ),
     );
 
-    expect((await floorRow(v, table.bar!)).today?.joinName).toBe(fiesta);
+    expect((await floorRow(v, table.bar!)).today?.joinName).toBe(celebration);
     const slips = printed.filter(isMovedSlip);
     expect(slips).toHaveLength(1);
-    expect(slips[0]!.join(" ")).toContain(fromTo(await labelOf(table.bar!), fiesta));
+    expect(slips[0]!.join(" ")).toContain(fromTo(await labelOf(table.bar!), celebration));
   });
 
   it("the party at the group Fiesta joining free Counter 6, with a counter order delivered to it, merged into the group prints one MOVED slip from Counter 6 to Fiesta", async () => {
     const { table, zoneId, guests } = await seatedGroup();
-    const fiesta = suffixed("Fiesta");
-    await rename(table.bar!, fiesta);
+    const celebration = suffixed("Fiesta");
+    await rename(table.bar!, celebration);
     await deliveredCounterOrder(zoneId, table.c6!);
 
     const printed = await jobsFrom(() => pushOnto(guests.partyId, table.c6!, table.bar!, 16));
 
-    expect((await floorRow(v, table.c6!)).today?.joinName).toBe(fiesta);
+    expect((await floorRow(v, table.c6!)).today?.joinName).toBe(celebration);
     const slips = printed.filter(isMovedSlip);
     expect(slips).toHaveLength(1);
-    expect(slips[0]!.join(" ")).toContain(fromTo(await labelOf(table.c6!), fiesta));
+    expect(slips[0]!.join(" ")).toContain(fromTo(await labelOf(table.c6!), celebration));
   });
 
   it("Table 9, with a counter order delivered to it, ticked off the unseated group Cumple by Split tables… prints one MOVED slip from Cumple to Table 9", async () => {
-    const cumple = suffixed("Cumple");
-    const { table, zoneId } = await unseatedGroup(cumple);
+    const birthday = suffixed("Cumple");
+    const { table, zoneId } = await unseatedGroup(birthday);
     await deliveredCounterOrder(zoneId, table.t9!);
 
     const printed = await jobsFrom(async () =>
@@ -824,12 +824,12 @@ describe("a counter order delivered to a table an action brings into or takes ou
     expect((await floorRow(v, table.t9!)).today?.joinName).toBeNull();
     const slips = printed.filter(isMovedSlip);
     expect(slips).toHaveLength(1);
-    expect(slips[0]!.join(" ")).toContain(fromTo(cumple, await labelOf(table.t9!)));
+    expect(slips[0]!.join(" ")).toContain(fromTo(birthday, await labelOf(table.t9!)));
   });
 
   it("the same, with a party holding Counter 6 alone, prints one MOVED slip from Cumple to Table 9 and one for the party's bill from Cumple to Counter 6", async () => {
-    const cumple = suffixed("Cumple");
-    const { table, zoneId } = await unseatedGroup(cumple);
+    const birthday = suffixed("Cumple");
+    const { table, zoneId } = await unseatedGroup(birthday);
     const movedBillId = await counterOrder(v, "Burger");
     await post(`/api/bills/${movedBillId}/move`, {
       partyId: null,
@@ -853,7 +853,7 @@ describe("a counter order delivered to a table an action brings into or takes ou
     const slips = printed.filter(isMovedSlip).map((slip) => slip.join(" "));
     expect(slips).toHaveLength(2);
     for (const tableId of [table.c6!, table.t9!]) {
-      const to = fromTo(cumple, await labelOf(tableId));
+      const to = fromTo(birthday, await labelOf(tableId));
       expect(slips.filter((slip) => slip.includes(to))).toHaveLength(1);
     }
   });
