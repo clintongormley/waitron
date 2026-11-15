@@ -4,6 +4,7 @@ import { repeat } from "lit/directives/repeat.js";
 import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, uniqueId } from "../interactive.js";
 import { HelpModeController } from "../help-mode.js";
+import { holdsTabbable } from "../tabbable.js";
 import "./wt-help-tooltip.js";
 import type { WtHelpTooltip } from "./wt-help-tooltip.js";
 
@@ -19,18 +20,6 @@ export interface TabItem {
 
 /** The fade spans this many `--wt-space-6`: wider than the padding and gap between two labels. */
 const FADE_SPACES = 2;
-
-const CONTROL =
-  ':is(a[href], button, input, select, textarea, [tabindex], [contenteditable]):not([tabindex^="-"], :disabled)';
-
-function holdsControl(elements: Iterable<Element>): boolean {
-  for (const element of elements) {
-    if (element.matches(CONTROL)) return true;
-    if (holdsControl(element.children)) return true;
-    if (element.shadowRoot && holdsControl(element.shadowRoot.children)) return true;
-  }
-  return false;
-}
 
 @customElement("wt-tabs")
 export class WtTabs extends LitElement {
@@ -400,7 +389,7 @@ export class WtTabs extends LitElement {
   #syncPanelStop(): void {
     for (const panel of this.renderRoot.querySelectorAll<HTMLElement>('[role="tabpanel"]')) {
       const slotted = panel.querySelector("slot")!.assignedElements({ flatten: true });
-      if (panel.hidden || holdsControl(slotted)) panel.removeAttribute("tabindex");
+      if (panel.hidden || holdsTabbable(slotted)) panel.removeAttribute("tabindex");
       else panel.tabIndex = 0;
     }
   }

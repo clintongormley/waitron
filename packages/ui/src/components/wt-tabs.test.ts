@@ -1421,3 +1421,54 @@ test("selecting a tab keeps every tab's width and position, though its label tur
     .element(page.elementLocator(buttons(el)[1]!))
     .toHaveAccessibleName("Availability windows");
 });
+
+async function panelHolding(content: string) {
+  const el = (await mountThemed(
+    `<wt-tabs label="Product"><section slot="a"><p>Notes</p>${content}</section></wt-tabs>`,
+  )) as WtTabs;
+  el.items = [{ key: "a", label: "A" }];
+  await el.updateComplete;
+  buttons(el)[0]!.focus();
+  await userEvent.tab();
+  return el;
+}
+
+test.each([
+  ["a hidden input", '<input type="hidden" name="id">'],
+  ["a button inside a hidden element", "<div hidden><button>Hidden</button></div>"],
+  ["a button inside an inert element", "<div inert><button>Inert</button></div>"],
+  ["a button shown nowhere", '<button style="display: none">Gone</button>'],
+  ["an invisible button", '<button style="visibility: hidden">Invisible</button>'],
+  ["text that cannot be edited", '<p contenteditable="false">Fixed</p>'],
+  ["a link with no address", "<a>Nowhere</a>"],
+  ["a disabled button", "<button disabled>Off</button>"],
+  ["a button taken out of the tab order", '<button tabindex="-1">Skipped</button>'],
+])("a panel holding text and %s is a Tab stop of its own", async (_, content) => {
+  const el = await panelHolding(content);
+  expect(el.shadowRoot!.activeElement!.getAttribute("role")).toBe("tabpanel");
+});
+
+test.each([
+  ["a details summary", "<details><summary>More</summary><p>Hidden</p></details>", "summary"],
+  ["editable text", "<p contenteditable>Edit me</p>", "[contenteditable]"],
+  ["a link", '<a href="#notes">Notes</a>', "a"],
+])("a panel holding %s gives Tab to it, not to the panel", async (_, content, selector) => {
+  const el = await panelHolding(content);
+  expect(document.activeElement).toBe(el.querySelector(selector));
+  expect(el.shadowRoot!.querySelector('[role="tabpanel"]')!.hasAttribute("tabindex")).toBe(false);
+});
+
+test("a panel whose only control sits in a shadow root inside a shadow root gives Tab to it", async () => {
+  const el = (await mountThemed(
+    `<wt-tabs label="Product"><section slot="a"><p>Notes</p><div></div></section></wt-tabs>`,
+  )) as WtTabs;
+  el.items = [{ key: "a", label: "A" }];
+  await el.updateComplete;
+  const inner = document.createElement("div");
+  el.querySelector("section > div")!.attachShadow({ mode: "open" }).append(inner);
+  const control = document.createElement("button");
+  inner.attachShadow({ mode: "open" }).append(control);
+  buttons(el)[0]!.focus();
+  await userEvent.tab();
+  expect(inner.shadowRoot!.activeElement).toBe(control);
+});

@@ -3,6 +3,7 @@ import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import { uniqueId } from "../interactive.js";
 import { modalClosed, modalOpened } from "../modal-layer.js";
+import { composedParent, isTabbable, tabbables } from "../tabbable.js";
 import { belongsToComposition } from "@waitron/ui-core/submit-on-enter";
 import type { LeaveReason } from "@waitron/ui-core/unsaved-changes";
 import {
@@ -19,31 +20,10 @@ function deepActiveElement(): Element | null {
   return focused;
 }
 
-function composedParent(node: Node): Node | null {
-  return node instanceof ShadowRoot ? node.host : node.parentNode;
-}
-
 /** Whether `node` is `ancestor` or sits inside it, across shadow-root boundaries. */
 function composedContains(ancestor: Node, node: Node | null): boolean {
   for (let at = node; at; at = composedParent(at)) if (at === ancestor) return true;
   return false;
-}
-
-function isTabbable(node: Node): node is HTMLElement {
-  return node instanceof HTMLElement && node.tabIndex >= 0 && !node.matches(":disabled");
-}
-
-/** The elements in `root`, and in the open shadow roots inside it, with a tabindex of 0 or above
- * that are not disabled, in tree order and a host's shadow root first, leaving out `skip` and
- * everything inside it. */
-function* tabbables(root: Node, skip: Set<Node>): Generator<HTMLElement> {
-  const shadow = root instanceof Element ? root.shadowRoot : null;
-  if (shadow && !skip.has(shadow)) yield* tabbables(shadow, skip);
-  for (const child of root.childNodes) {
-    if (skip.has(child)) continue;
-    if (isTabbable(child)) yield child;
-    yield* tabbables(child, skip);
-  }
 }
 
 /** Open popovers and modal dialogs in `root` and in every open shadow root inside it. */
@@ -613,7 +593,7 @@ export class WtDialog extends LitElement {
   private focusFirstContent(): void {
     for (const node of this.bodySlot.assignedElements({ flatten: true })) {
       if (isTabbable(node) && this.takesFocus(node)) return;
-      for (const candidate of tabbables(node, new Set())) if (this.takesFocus(candidate)) return;
+      for (const candidate of tabbables(node)) if (this.takesFocus(candidate)) return;
     }
   }
 
