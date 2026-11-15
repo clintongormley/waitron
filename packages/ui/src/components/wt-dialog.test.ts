@@ -690,6 +690,25 @@ test("shows its footer actions' message in the footer, on its own line above the
   expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
 });
 
+test("on a browser without custom states, still shows its footer actions' message in the footer", async () => {
+  const saved = Object.getOwnPropertyDescriptor(ElementInternals.prototype, "states")!;
+  delete (ElementInternals.prototype as unknown as Record<string, unknown>).states;
+  onTestFinished(() => {
+    Object.defineProperty(ElementInternals.prototype, "states", saved);
+  });
+  const el = (await mount(`<wt-dialog heading="Rename">
+    <wt-form-actions slot="footer"><button>Save</button></wt-form-actions>
+  </wt-dialog>`)) as Openable;
+  el.open = true;
+  await el.updateComplete;
+  const actions = el.querySelector("wt-form-actions")!;
+  actions.error = "Correct the highlighted fields to continue.";
+  const message = (await formMessageOf(actions))!;
+
+  expect(message.textContent).toBe("Correct the highlighted fields to continue.");
+  expect(message.parentElement).toBe(el.shadowRoot!.querySelector(".footer"));
+});
+
 test.each([
   ["a field", '<label>Passkey name <input name="passkey-name" /></label>'],
   ["a wt-input", '<wt-input name="passkey-name" label="Passkey name"></wt-input>'],

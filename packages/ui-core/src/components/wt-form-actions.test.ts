@@ -877,3 +877,38 @@ test("keeps its room when its only slotted element is hidden after it arrived", 
   await nextFrame();
   expect(row.getBoundingClientRect().height).toBeGreaterThan(0);
 });
+
+/** Removes custom states, as on a browser that has element internals but not their states. */
+function withoutCustomStates(): void {
+  const saved = Object.getOwnPropertyDescriptor(ElementInternals.prototype, "states")!;
+  delete (ElementInternals.prototype as unknown as Record<string, unknown>).states;
+  onTestFinished(() => {
+    Object.defineProperty(ElementInternals.prototype, "states", saved);
+  });
+  expect("states" in ElementInternals.prototype).toBe(false);
+}
+
+test("on a browser without custom states, still takes no room when empty, shows and reports its message, and scrolls into view", async () => {
+  withoutCustomStates();
+  const scroller = (await mount(`<div style="height: 200px; overflow-y: auto">
+    <div style="height: 1000px">Fields</div>
+    <wt-form-actions> </wt-form-actions>
+  </div>`)) as HTMLElement;
+  const row = scroller.querySelector<WtFormActions>("wt-form-actions")!;
+  await row.updateComplete;
+  expect(row.getBoundingClientRect().height).toBe(0);
+  const seen: string[] = [];
+  host.addEventListener("wt-form-error", (event) => seen.push(event.detail.message));
+
+  row.error = "The routing could not be saved.";
+  await row.updateComplete;
+  expect(seen).toEqual(["The routing could not be saved."]);
+  expect(row.getBoundingClientRect().height).toBeGreaterThan(0);
+  expect(row.shadowRoot!.querySelector("[role=alert]")!.textContent).toBe(
+    "The routing could not be saved.",
+  );
+
+  row.scrollIntoView({ block: "nearest" });
+  expect(scroller.scrollTop).toBeGreaterThan(0);
+  expect(getComputedStyle(row).position, "held again afterwards").toBe("sticky");
+});
