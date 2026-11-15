@@ -258,7 +258,7 @@ export class TillStationScreen extends LitElement {
    * so a reload reconciles nothing and a silent failure would leave the operator no feedback.
    */
   @state() private reprintErrorCode?: string;
-  @state() private acknowledgeFailed = false;
+  @state() private acknowledgeErrorCode?: string;
   /** A bump the box could not save because its disk is full; any other refusal stays silent. */
   @state() private bumpErrorCode?: string;
   @state() private stale = false;
@@ -767,7 +767,7 @@ export class TillStationScreen extends LitElement {
   async #onAcknowledgeNotice(event: Event): Promise<void> {
     event.stopPropagation();
     const { noticeId } = (event as CustomEvent<{ noticeId: string }>).detail;
-    this.acknowledgeFailed = false;
+    this.acknowledgeErrorCode = undefined;
     try {
       await (this.deviceMode
         ? this.api.deviceAcknowledgeKitchenNotice(noticeId)
@@ -775,7 +775,7 @@ export class TillStationScreen extends LitElement {
     } catch (error) {
       if (this.#switched(error)) return;
       if ((error as { code?: string }).code !== "kitchen_notice.not_found") {
-        this.acknowledgeFailed = true;
+        this.acknowledgeErrorCode = (error as { code?: string }).code ?? "server.internal";
         return;
       }
     }
@@ -1125,8 +1125,10 @@ export class TillStationScreen extends LitElement {
             : nothing
         }
         ${
-          this.acknowledgeFailed
-            ? html`<p class="error" role="alert">${t("station.acknowledge_error")}</p>`
+          this.acknowledgeErrorCode
+            ? html`<p class="error" role="alert">
+                ${this.acknowledgeErrorCode === "storage.disk_full" ? codeMessage(this.acknowledgeErrorCode) : t("station.acknowledge_error")}
+              </p>`
             : nothing
         }
         ${opts.body}

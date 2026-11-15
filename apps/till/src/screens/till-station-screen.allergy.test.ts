@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { DeviceStationScreen, StationQueue, TillApi } from "../api/client.js";
+import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget, resetPage } from "../widgets/test-helpers.js";
 import type { TillStationQueue } from "../widgets/station-queue.js";
@@ -82,6 +83,22 @@ describe("A669 boards acknowledgement", () => {
       expect(
         deviceMode ? api.acknowledgeKitchenNotice : api.deviceAcknowledgeKitchenNotice,
       ).not.toHaveBeenCalled();
+      expect(queue(el).shadowRoot!.querySelector('[data-item="ticked"]')!.textContent).toContain(
+        allergyBlock.who,
+      );
+    });
+    it(`explains full-disk acknowledgement refusal and keeps the notice, device=${deviceMode}`, async () => {
+      const refused = vi.fn().mockRejectedValue({ code: "storage.disk_full", status: 507 });
+      const { el } = await mount(deviceMode, {
+        [deviceMode ? "deviceAcknowledgeKitchenNotice" : "acknowledgeKitchenNotice"]: refused,
+      });
+      await clickAck(el);
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
+          codeMessage("storage.disk_full"),
+        ),
+      );
+      expect(queue(el).notices.map((n) => n.id)).toEqual(["allergy-changed"]);
       expect(queue(el).shadowRoot!.querySelector('[data-item="ticked"]')!.textContent).toContain(
         allergyBlock.who,
       );

@@ -1,5 +1,5 @@
 import type { WtWaitronLockup } from "@waitron/ui/src/components/wt-waitron-lockup.js";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page } from "vitest/browser";
 import {
   chooseTheme,
@@ -13,6 +13,7 @@ import {
 } from "@waitron/ui";
 import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
 import { nextLogoLoad, png } from "@waitron/ui/test/venue-logo-fixture.js";
+import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { expectChooserFaces, cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillLockScreen } from "./till-lock-screen.js";
@@ -638,6 +639,30 @@ describe("till-lock-screen", () => {
     await flush(el);
     expect(login).toHaveBeenCalledWith("p1", "0000");
   });
+
+  it.each(["en", "es"])(
+    "explains a full-disk sign-in refusal without signing in (%s)",
+    async (locale) => {
+      const before = currentLocale();
+      onTestFinished(() => setLocale(before));
+      setLocale(locale);
+      const login = vi.fn().mockRejectedValue({ code: "storage.disk_full", status: 507 });
+      const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+        api: stubApi({ login }),
+      });
+      await flush(el);
+      const loggedIn = vi.fn();
+      el.addEventListener("logged-in", loggedIn);
+      click(el, 'wt-button.operator-button[data-person="p1"]');
+      await el.updateComplete;
+      await type(el, "1234");
+      click(el, ".submit");
+      await flush(el);
+      expect(query(el, ".error")!.textContent).toContain(codeMessage("storage.disk_full"));
+      expect(query(el, ".submit")!.hasAttribute("disabled")).toBe(true);
+      expect(loggedIn).not.toHaveBeenCalled();
+    },
+  );
 
   it("shows the localised pin.invalid error and clears the PIN, without logging in", async () => {
     const login = vi.fn().mockRejectedValue({ code: "pin.invalid" });

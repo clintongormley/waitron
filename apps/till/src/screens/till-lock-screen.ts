@@ -10,6 +10,7 @@ import {
 import "@waitron/ui/src/components/wt-language-chooser.js";
 import "@waitron/ui/src/components/wt-powered-by.js";
 import "@waitron/ui/src/components/wt-venue-logo.js";
+import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -39,9 +40,9 @@ export interface LoggedInDetail {
   locale: string | null;
 }
 
-/** Only `pin.invalid` is spelled out; every other code collapses to the generic `login.error`, never
- * the raw code. */
-function loginErrorKey(code: string): StringKey {
+/** Account-specific causes stay private at sign-in. */
+function loginErrorKey(code: string): StringKey | "storage.disk_full" {
+  if (code === "storage.disk_full") return code;
   if (code === "pin.invalid") return "pin.invalid";
   return "login.error";
 }
@@ -201,7 +202,7 @@ export class TillLockScreen extends LitElement {
   /** Its presence is what puts the screen in PIN mode. */
   @state() private selected?: StaffMember;
   @state() private pin = "";
-  @state() private errorKey?: StringKey;
+  @state() private errorKey?: StringKey | "storage.disk_full";
   /** Seconds left on a `pin.throttled` back-off; `0` means not throttled. */
   @state() private throttleRemaining = 0;
 
@@ -481,7 +482,9 @@ export class TillLockScreen extends LitElement {
     }
     if (this.staff.length === 0) {
       return this.errorKey
-        ? html`<p class="status error" role="alert">${t(this.errorKey)}</p>`
+        ? html`<p class="status error" role="alert">
+            ${this.errorKey === "storage.disk_full" ? codeMessage(this.errorKey) : t(this.errorKey)}
+          </p>`
         : html`<p class="status">${t("login.no_staff")}</p>`;
     }
     return html`
@@ -513,7 +516,9 @@ export class TillLockScreen extends LitElement {
               ${t("login.throttled").replace("{n}", String(this.throttleRemaining))}
             </p>`
           : this.errorKey
-            ? html`<p class="error" role="alert">${t(this.errorKey)}</p>`
+            ? html`<p class="error" role="alert">
+                ${this.errorKey === "storage.disk_full" ? codeMessage(this.errorKey) : t(this.errorKey)}
+              </p>`
             : nothing
       }
       <div class="pad-wrap" ?inert=${throttled}>
