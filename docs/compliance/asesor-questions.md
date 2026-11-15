@@ -1,5 +1,7 @@
 # Questions for the asesor
 
+**2026-11-15:** The [sheet for the meeting of 19 November](2026-11-19-adviser-meeting.md) is the current list to take to the tax adviser: what is still open, each framed for a yes or a correction, in English and Spanish.
+
 **2026-11-06:** The [curated list](2026-11-06-adviser-questions.md) replaces the Spanish batch of 5 November and is now the base version: four research passes reduced its 25 questions to seven points of real judgement plus confirmations. Nothing has been sent.
 
 **2026-11-05:** The [next adviser batch](2026-11-05-consultas-para-asesores.md) was prepared in Spanish, grouped by recipient. It is superseded by the curated list above.
