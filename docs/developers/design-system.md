@@ -5043,8 +5043,9 @@ background image or gradient, and content too short or not text) still passes, s
 this writing axe reports zero contrast violations for any `--wt-color-*`
 pairing actually used by every primitive in the table above, in either theme, across every documented state except the disabled `wt-combobox` rows below, which axe does not score (`wt-input`
 invalid, `wt-switch` checked/unchecked, `wt-dialog` open, `wt-button` icon-only and every variant,
-disabled and loading states; `wt-spinner` as a status region (a progress bar since 2026-11-15) and decorative — all verified
-2026-09-11; `wt-button` as a menu trigger, open and closed — verified 2026-09-27 by running
+disabled and loading states; `wt-spinner` decorative — all verified
+2026-09-11; `wt-spinner` as a progress bar — verified 2026-11-15 by running
+`packages/ui-core/src/components/wt-spinner.a11y.test.ts`; `wt-button` as a menu trigger, open and closed — verified 2026-09-27 by running
 `packages/ui-core/src/components/wt-button.a11y.test.ts`; `wt-button` in each variant under the
 pointer on `--wt-color-surface` and `--wt-color-surface-raised`, and primary and danger focused from
 the keyboard and then hovered — verified 2026-10-07 by running

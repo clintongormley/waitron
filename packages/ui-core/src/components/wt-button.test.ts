@@ -215,7 +215,7 @@ test("the loading spinner is decorative — the button's aria-busy and label car
   const spinner = el.shadowRoot!.querySelector("wt-spinner")!;
   await (spinner as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
   expect(spinner.hasAttribute("decorative")).toBe(true);
-  expect(spinner.shadowRoot!.querySelector("[role=status]")).toBeNull();
+  expect(spinner.shadowRoot!.querySelector("[role]")).toBeNull();
 });
 
 test("does not emit click while loading", async () => {
