@@ -230,6 +230,28 @@ async function burger() {
   return { partyId, tabId, item: item! };
 }
 
+/** Orders Burgers on one bill until two of its lines have ids that sort against their line
+ *  numbers, and returns them: `first` has the lower line number and the larger id. */
+async function burgersAgainstIds(prefix: string) {
+  const tableId = await venue.table(`${prefix}-${randomUUID().slice(0, 8)}`);
+  const { partyId, tabId } = await seat(venue, tableId);
+  for (let round = 0; round < 20; round++) {
+    await orderForParty(venue, partyId, ["Burger"], tabId);
+    const lines = await inTx(venue, (tx) =>
+      tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, tabId))
+        .orderBy(workingOrderLines.lineNo),
+    );
+    for (let i = 0; i < lines.length; i++)
+      for (let j = i + 1; j < lines.length; j++)
+        if (lines[i]!.id > lines[j]!.id)
+          return { partyId, tabId, first: lines[i]!.id, second: lines[j]!.id };
+  }
+  throw new Error("no line pair whose ids run against their line numbers");
+}
+
 async function snapshot(tabId: string, itemId: string) {
   return {
     barJobs: (await jobs(barPrinter)).length,
@@ -1379,21 +1401,14 @@ describe("moveDishesToStation", () => {
     expect(asked).toEqual([bar]);
   });
 
-  it("asks assertFrom about each distinct station of the named dishes", async () => {
-    const tableId = await venue.table(`D-${randomUUID().slice(0, 8)}`);
-    const { partyId, tabId } = await seat(venue, tableId);
-    await orderForParty(venue, partyId, ["Burger", "Water"], tabId);
-    const lineIds = (
-      await inTx(venue, (tx) =>
-        ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, tabId)),
-      )
-    ).map((item) => item.workingOrderLineId);
+  it("asks assertFrom about each distinct station of the named dishes, by lowest line number", async () => {
+    const { tabId, first, second } = await burgersAgainstIds("D");
     await inTx(venue, (tx) =>
       moveDishesToStation(
         tx,
         venue.cfg,
         tabId,
-        { submissionId: randomUUID(), lineIds: [lineIds[1]!], stationId: grill },
+        { submissionId: randomUUID(), lineIds: [second], stationId: grill },
         mover(),
       ),
     );
@@ -1403,12 +1418,12 @@ describe("moveDishesToStation", () => {
         tx,
         venue.cfg,
         tabId,
-        { submissionId: randomUUID(), lineIds, stationId: bar },
+        { submissionId: randomUUID(), lineIds: [first, second], stationId: bar },
         mover(),
         { assertFrom: (stationId) => void asked.push(stationId) },
       ),
     );
-    expect([...asked].sort()).toEqual([bar, grill].sort());
+    expect(asked).toEqual([bar, grill]);
   });
 
   it("copies a dish's move records, under new ids, to the line a quantity split makes", async () => {
@@ -1641,6 +1656,51 @@ describe("moveDishesToStation", () => {
       expect(added[3]).toHaveLength(1);
       expect(decodeTicket(added[3]![0]!.payload)).toContain("From Bar");
       expect(decodeTicket(added[3]![0]!.payload)).not.toContain("MOVED TO");
+    } finally {
+      await detachStationPrinters(listed);
+    }
+  });
+  it("prints a move's slips from several stations in the order of each station's lowest line number", async () => {
+    const { tabId, ...pair } = await burgersAgainstIds("O");
+    await inTx(venue, (tx) =>
+      moveDishesToStation(
+        tx,
+        venue.cfg,
+        tabId,
+        { submissionId: randomUUID(), lineIds: [pair.second], stationId: grill },
+        mover(),
+      ),
+    );
+    const { pass, listed } = await inTx(venue, async (tx) => {
+      const pass = (await createStation(tx, { name: `Pass ${randomUUID().slice(0, 8)}` })).id;
+      const stationIds = [bar, grill, pass];
+      return {
+        pass,
+        listed: [
+          [await stationPrinter(tx, `All ${randomUUID()}`, stationIds), stationIds],
+        ] as const,
+      };
+    });
+    const [[printerId]] = listed;
+    try {
+      const before = (await jobs(printerId)).length;
+      await inTx(venue, (tx) =>
+        moveDishesToStation(
+          tx,
+          venue.cfg,
+          tabId,
+          { submissionId: randomUUID(), lineIds: [pair.first, pair.second], stationId: pass },
+          mover(),
+        ),
+      );
+      const printed = (await jobs(printerId)).slice(before).map((job) => decodeTicket(job.payload));
+      expect(printed).toHaveLength(4);
+      expect(printed[0]).toContain("MOVED TO PASS");
+      expect(printed[0]!.split("\n")[1]).toBe("Bar");
+      expect(printed[1]).toContain("MOVED TO PASS");
+      expect(printed[1]!.split("\n")[1]).toBe("Grill");
+      expect(printed[2]).toContain("From Bar");
+      expect(printed[3]).toContain("From Grill");
     } finally {
       await detachStationPrinters(listed);
     }
@@ -3044,8 +3104,8 @@ describe("moveDishesToStation", () => {
     expect(result.moved).toHaveLength(2);
     const paper = (await jobs(grillPrinter)).slice(before).map((job) => decodeTicket(job.payload));
     expect(paper).toHaveLength(2);
-    expect(paper.some((ticket) => ticket.includes("From Bar"))).toBe(true);
-    expect(paper.some((ticket) => ticket.includes("From Fryer"))).toBe(true);
+    expect(paper[0]).toContain("From Bar");
+    expect(paper[1]).toContain("From Fryer");
   });
   describe("held paper at the station a held dish leaves", () => {
     /** For `fn`, a fresh Kitchen (own printer, prints held work) and Screen (no printer, prints

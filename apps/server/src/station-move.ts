@@ -389,7 +389,8 @@ export async function moveDishesToStation(
               })
               .from(workingOrderLines)
               .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
-              .where(inArray(workingOrderLines.id, lineIds));
+              .where(inArray(workingOrderLines.id, lineIds))
+              .orderBy(workingOrderLines.lineNo);
       const byId = new Map(rows.map((row) => [row.id, row]));
       const isDish = await serviceDishPredicate(tx, rows);
       for (const lineId of lineIds) {
@@ -407,8 +408,8 @@ export async function moveDishesToStation(
       }
       if (options.assertFrom) {
         const asked = new Set<string>();
-        for (const lineId of lineIds) {
-          const stationId = byId.get(lineId)!.stationId!;
+        for (const row of rows) {
+          const stationId = row.stationId!;
           if (asked.has(stationId)) continue;
           asked.add(stationId);
           await options.assertFrom(stationId);

@@ -842,11 +842,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Status words on the pass and beside it** (bundle of 5, size S). [Detail](backlog/till.md#bundle-status-words-on-the-pass-and-beside-it)
 
-- **A station move of dishes from several stations prints each station's slips in an order that
-  can change between runs (left open by A773-2 B3's reviews; predates it).** `moveDishesToStation`
-  groups dishes by station from a select with no `orderBy`. Order it, so tests can compare slips
-  in order.
-
 - **Segmented choices still break words when whole words cannot fit (left by A773-2 B4b).** Decide
   whether such a control should stack its choices instead.
   [Detail](backlog/till.md#segmented-choices-still-break-words-when-whole-words-cannot-fit-left-by-a773-2-b4b)
