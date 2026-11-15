@@ -1,75 +1,8 @@
-import type { HolidayDatasetRow, HolidayDatasetYear } from "@waitron/country";
 import { ANNEX_2026 } from "./sources.js";
-
-/** The annex's own mark for a row (`*`, `**`, `***`), or the clarifying note it comes from. */
-export type SpanishHolidayCategory = "*" | "**" | "***" | "note-1" | "note-2";
-
-export interface SpanishHolidayRow extends HolidayDatasetRow {
-  readonly category: SpanishHolidayCategory;
-  readonly englishName: string;
-}
-
-export interface SpanishHolidayYear extends HolidayDatasetYear {
-  readonly rows: readonly SpanishHolidayRow[];
-}
+import { ALL, rowsFrom, type SpanishHolidayYear } from "./rows.js";
 
 const SOURCE = ANNEX_2026.id;
-const ALL = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10"].concat([
-  "11",
-  "12",
-  "13",
-  "14",
-  "15",
-  "16",
-  "17",
-  "18",
-  "19",
-]);
-
-/** A row of the annex, keyed by the row's own element id in the BOE's XML. */
-function annex(
-  row: string,
-  date: string,
-  name: string,
-  englishName: string,
-  category: "*" | "**" | "***",
-  regions: readonly string[],
-  extra: Partial<SpanishHolidayRow> = {},
-): SpanishHolidayRow {
-  return {
-    key: `${SOURCE}:${row}`,
-    date,
-    name,
-    englishName,
-    scope: category === "***" ? "regional" : "national",
-    category,
-    regions,
-    sourceId: SOURCE,
-    ...extra,
-  };
-}
-
-/** A holiday a clarifying note gives one area. */
-function note(
-  number: 1 | 2,
-  area: string,
-  date: string,
-  name: string,
-  englishName: string,
-  region: string,
-): SpanishHolidayRow {
-  return {
-    key: `${SOURCE}:note-${number}:${area}`,
-    date,
-    name,
-    englishName,
-    scope: "regional",
-    category: `note-${number}`,
-    regions: [region],
-    onlyAreas: [area],
-    sourceId: SOURCE,
-  };
-}
+const { annex, note } = rowsFrom(SOURCE);
 
 export const SPAIN_2026: SpanishHolidayYear = {
   year: 2026,

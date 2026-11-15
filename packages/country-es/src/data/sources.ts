@@ -1,12 +1,21 @@
 import type { HolidaySourceReference } from "@waitron/country";
 
-/** Each hash is of the page archived beside this file in `sources/`, as fetched on 2026-10-06. */
+/** Each hash is of the page archived beside this file in `sources/`, as fetched on 2026-10-06,
+ * except `ANNEX_2027`'s, fetched on 2026-11-15. */
 export const ANNEX_2026: HolidaySourceReference = {
   id: "BOE-A-2025-21667",
   title:
     "Resolución de 17 de octubre de 2025, de la Dirección General de Trabajo, por la que se publica la relación de fiestas laborales para el año 2026.",
   url: "https://www.boe.es/buscar/doc.php?id=BOE-A-2025-21667",
   sha256: "f85e22b21de215dafdc2491eab6a535b0c92e744c8d2ae79d3d4c0532c9770e0",
+};
+
+export const ANNEX_2027: HolidaySourceReference = {
+  id: "BOE-A-2026-21254",
+  title:
+    "Resolución de 8 de octubre de 2026, de la Dirección General de Trabajo, por la que se publica relación de fiestas laborales para el año 2027.",
+  url: "https://www.boe.es/buscar/doc.php?id=BOE-A-2026-21254",
+  sha256: "2e8c47e795d370466bdfe4372d5a6789a1dcd906b68218da8d1b5569a992eb48",
 };
 
 export const GEOGRAPHY_SOURCES: readonly HolidaySourceReference[] = [

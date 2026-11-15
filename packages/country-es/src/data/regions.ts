@@ -58,8 +58,13 @@ export const PROVINCE_REGIONS: Readonly<Record<string, string>> = {
 };
 
 /** The 2026 annex's columns in the annex's order, each with the INE community name that has the
- * same code. */
-export const BOE_COLUMNS: readonly { boe: string; ine: string; region: string }[] = [
+ * same code; `also` holds a later annex's other spelling of the same column. */
+export const BOE_COLUMNS: readonly {
+  boe: string;
+  also?: readonly string[];
+  ine: string;
+  region: string;
+}[] = [
   { boe: "Andalucía", ine: "Andalucía", region: "01" },
   { boe: "Aragón", ine: "Aragón", region: "02" },
   { boe: "Asturias", ine: "Asturias, Principado de", region: "03" },
@@ -71,7 +76,7 @@ export const BOE_COLUMNS: readonly { boe: string; ine: string; region: string }[
   { boe: "Cataluña", ine: "Cataluña", region: "09" },
   { boe: "Extremadura", ine: "Extremadura", region: "11" },
   { boe: "Galicia", ine: "Galicia", region: "12" },
-  { boe: "Com. Madrid", ine: "Madrid, Comunidad de", region: "13" },
+  { boe: "Com. Madrid", also: ["Com. de Madrid"], ine: "Madrid, Comunidad de", region: "13" },
   { boe: "Región Murcia", ine: "Murcia, Región de", region: "14" },
   { boe: "C. Foral Navarra", ine: "Navarra, Comunidad Foral de", region: "15" },
   { boe: "País Vasco", ine: "País Vasco", region: "16" },

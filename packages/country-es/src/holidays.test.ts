@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { findAdministrativeArea } from "@waitron/country";
+import { createHolidayCalendar, findAdministrativeArea } from "@waitron/country";
 import { describe, expect, it } from "vitest";
 import { BOE_COLUMNS, HOLIDAY_AREAS, PROVINCE_REGIONS } from "./data/regions.js";
 import { SPAIN_2026 } from "./data/es-2026.js";
+import { SPAIN_2027 } from "./data/es-2027.js";
+import type { SpanishHolidayYear } from "./data/rows.js";
 import {
   compareRows,
   expectedRowsFromAnnex,
@@ -11,7 +13,7 @@ import {
   parseAnnex,
   parseHtmlTable,
 } from "./data/official-sources.js";
-import { SPAIN_HOLIDAY_CALENDAR } from "./holidays.js";
+import { SPAIN_HOLIDAY_CALENDAR, SPAIN_HOLIDAY_YEARS } from "./holidays.js";
 import { SPAIN } from "./spain.js";
 
 const artifact = (name: string) => readFileSync(new URL(`./data/sources/${name}`, import.meta.url));
@@ -20,6 +22,8 @@ const latin1 = (bytes: Uint8Array) => new TextDecoder("latin1").decode(bytes);
 
 const ANNEX_FILE = "BOE-A-2025-21667.xml";
 const annex = parseAnnex(artifact(ANNEX_FILE).toString("utf8"));
+const ANNEX_2027_FILE = "BOE-A-2026-21254.xml";
+const annex2027 = parseAnnex(artifact(ANNEX_2027_FILE).toString("utf8"));
 const ineRegions = parseHtmlTable(latin1(artifact("ine-cod_ccaa_provincia.htm"))).filter((cells) =>
   /^\d{2}$/.test(cells[0] ?? ""),
 );
@@ -32,6 +36,7 @@ const ineIslands = parseHtmlTable(latin1(artifact("ine-cod_islas.htm"))).filter(
 
 const calendar = SPAIN_HOLIDAY_CALENDAR;
 const ANNEX = "BOE-A-2025-21667";
+const ANNEX_2027 = "BOE-A-2026-21254";
 const codeOf = (province: string) => findAdministrativeArea(SPAIN, province)!.code;
 const day = (province: string, date: string, areaKey: string | null = null) =>
   calendar.read({ provinceCode: codeOf(province), areaKey, from: date, to: date });
@@ -63,6 +68,7 @@ const complete = (regionCode: string) => [
 describe("source artifacts", () => {
   const files: Record<string, string> = {
     [ANNEX]: ANNEX_FILE,
+    "BOE-A-2026-21254": ANNEX_2027_FILE,
     "BOE-A-2015-2294": "BOE-A-2015-2294.xml",
     "INE-cod_ccaa_provincia": "ine-cod_ccaa_provincia.htm",
     "INE-cod_islas": "ine-cod_islas.htm",
@@ -74,10 +80,13 @@ describe("source artifacts", () => {
       expect(source.sha256, source.id).toBe(sha256(artifact(files[source.id]!)));
   });
 
-  it("names the BOE resolution by its own title and address", () => {
-    const annexSource = calendar.sources.find(({ id }) => id === ANNEX)!;
-    expect(annexSource.title).toBe(annex.title);
-    expect(annexSource.url).toBe(`https://www.boe.es/buscar/doc.php?id=${ANNEX}`);
+  it.each([
+    [ANNEX, annex],
+    ["BOE-A-2026-21254", annex2027],
+  ])("names the BOE resolution %s by its own title and address", (id, page) => {
+    const annexSource = calendar.sources.find((source) => source.id === id)!;
+    expect(annexSource.title).toBe(page.title);
+    expect(annexSource.url).toBe(`https://www.boe.es/buscar/doc.php?id=${id}`);
   });
 
   it("pins the INE province list used only to check the inventory", () => {
@@ -130,6 +139,12 @@ describe("province to region", () => {
     );
     for (const { boe, ine, region } of BOE_COLUMNS)
       for (const [code, name] of ineRegions) if (code === region) expect(name, boe).toBe(ine);
+  });
+
+  it("reads the 2027 annex's columns as the same regions, in the same order", () => {
+    const regionOf = (column: string) =>
+      BOE_COLUMNS.find(({ boe, also }) => boe === column || also?.includes(column))?.region;
+    expect(annex2027.columns.map(regionOf)).toEqual(BOE_COLUMNS.map(({ region }) => region));
   });
 });
 
@@ -257,14 +272,29 @@ describe("Spain's 2026 holidays", () => {
     expect(ids(day("Las Palmas", "2026-05-30"))).toEqual([`shipped:${ANNEX}:3005`]);
   });
 
-  it("describes 2027, not yet published nationally, as a missing year", () => {
+  it("describes 2028, not yet published nationally, as a missing year", () => {
     expect(
-      calendar.read({ provinceCode: "41", areaKey: null, from: "2026-12-25", to: "2027-01-06" }),
+      calendar.read({ provinceCode: "41", areaKey: null, from: "2027-12-25", to: "2028-01-06" }),
     ).toEqual({
-      facts: [fact("2512", "2026-12-25", "Natividad del Señor", "national", "Christmas Day")],
+      facts: [
+        {
+          id: `shipped:${ANNEX_2027}:2512`,
+          date: "2027-12-25",
+          name: "Natividad del Señor",
+          englishName: "Christmas Day",
+          scope: "national",
+          sourceId: ANNEX_2027,
+        },
+      ],
       coverage: [
-        ...complete("01"),
-        { year: 2027, state: "missing_year", regionCode: "01", dataVersion: null, sourceIds: [] },
+        {
+          year: 2027,
+          state: "complete",
+          regionCode: "01",
+          dataVersion: "ES-2027.1",
+          sourceIds: [ANNEX_2027],
+        },
+        { year: 2028, state: "missing_year", regionCode: "01", dataVersion: null, sourceIds: [] },
       ],
     });
   });
@@ -280,49 +310,106 @@ describe("Spain's 2026 holidays", () => {
   });
 });
 
-describe("the shipped rows against the archived annex", () => {
-  const areaByName = (name: string) => HOLIDAY_AREAS.find((area) => area.name === name)?.key;
-  const expected = expectedRowsFromAnnex(annex, ANNEX, BOE_COLUMNS, areaByName);
-  const regionOfArea = (key: string) => {
-    const province = HOLIDAY_AREAS.find((area) => area.key === key)?.provinces[0];
-    return province === undefined ? undefined : PROVINCE_REGIONS[province];
-  };
-  const shipped = normalizeShippedRows(SPAIN_2026, regionOfArea);
+describe("Spain's 2027 holidays", () => {
+  const ids2027 = (areaKey: string | null) =>
+    ids(
+      calendar.read({
+        provinceCode: codeOf("Lleida"),
+        areaKey,
+        from: "2027-01-01",
+        to: "2027-12-31",
+      }),
+    );
+  const easterMonday = `shipped:${ANNEX_2027}:2903`;
+  const aranDay = `shipped:${ANNEX_2027}:note-2:aran`;
 
-  it("reads every dated row and both clarifying notes from the annex", () => {
-    expect(annex.year).toBe(2026);
-    expect(annex.rows).toHaveLength(36);
-    expect(annex.notes).toHaveLength(2);
-    expect(annex.codes).toEqual({
-      "*": "Fiesta Nacional no sustituible",
-      "**": "Fiesta Nacional respecto de la que no se ha ejercido la facultad de sustitución",
-      "***": "Fiesta de Comunidad Autónoma",
-    });
+  it("replaces Easter Monday with 17 June in Arán, and asks which part of Lleida until told", () => {
+    expect(ids2027("aran")).toContain(aranDay);
+    expect(ids2027("aran")).not.toContain(easterMonday);
+    expect(ids2027("lleida-except-aran")).toContain(easterMonday);
+    expect(ids2027("lleida-except-aran")).not.toContain(aranDay);
+    expect(ids2027(null)).not.toContain(easterMonday);
+    expect(ids2027(null)).not.toContain(aranDay);
+    expect(ids(day("Barcelona", "2027-03-29"))).toEqual([easterMonday]);
+    expect(ids(day("Barcelona", "2027-12-26"))).toEqual([]);
   });
 
-  it("ships exactly the annex's rows, region by region, with its notes applied", () => {
-    expect(compareRows(expected, shipped)).toEqual({ missing: [], extra: [] });
-    expect(new Set(shipped).size).toBe(shipped.length);
-  });
-
-  it("notices a wrong region, an altered date and a dropped territorial note", () => {
-    const rows = SPAIN_2026.rows;
-    const mutated = (index: number, change: object) => ({
-      ...SPAIN_2026,
-      rows: rows.map((row, at) => (at === index ? { ...row, ...change } : row)),
-    });
-    const november = rows.findIndex(({ key }) => key === `${ANNEX}:0211`);
-    const boxing = rows.findIndex(({ key }) => key === `${ANNEX}:2612`);
-    for (const broken of [
-      mutated(november, { regions: [...rows[november]!.regions, "09"] }),
-      mutated(november, { date: "2026-11-03" }),
-      mutated(boxing, { exceptAreas: undefined }),
-    ]) {
-      const result = compareRows(expected, normalizeShippedRows(broken, regionOfArea));
-      expect(result.missing.length + result.extra.length).toBeGreaterThan(0);
-    }
+  it("adds each Canary island's own 2027 day only on that island", () => {
+    expect(ids(day("Las Palmas", "2027-09-17", "fuerteventura"))).toEqual([
+      `shipped:${ANNEX_2027}:note-1:fuerteventura`,
+    ]);
+    expect(ids(day("Las Palmas", "2027-09-17", "gran-canaria"))).toEqual([]);
   });
 });
+
+const areaByName = (name: string) => HOLIDAY_AREAS.find((area) => area.name === name)?.key;
+const regionOfArea = (key: string) => {
+  const province = HOLIDAY_AREAS.find((area) => area.key === key)?.provinces[0];
+  return province === undefined ? undefined : PROVINCE_REGIONS[province];
+};
+
+describe.each([
+  {
+    data: SPAIN_2026,
+    page: annex,
+    source: ANNEX,
+    // 2 November is missing in Cataluña; 26 December is Arán's swapped day.
+    widened: "0211",
+    swapped: "2612",
+    dated: 36,
+  },
+  {
+    data: SPAIN_2027,
+    page: annex2027,
+    source: ANNEX_2027,
+    // 16 August is missing in Cataluña; 29 March is Arán's swapped day.
+    widened: "1608",
+    swapped: "2903",
+    dated: 35,
+  },
+])(
+  "the shipped $data.year rows against the archived annex",
+  ({ data, page, source, widened, swapped, dated }) => {
+    const expected = expectedRowsFromAnnex(page, source, BOE_COLUMNS, areaByName);
+    const shipped = normalizeShippedRows(data, regionOfArea);
+
+    it("reads every dated row and both clarifying notes from the annex", () => {
+      expect(page.year).toBe(data.year);
+      expect(page.rows).toHaveLength(dated);
+      expect(page.notes).toHaveLength(2);
+      expect(page.codes).toEqual({
+        "*": "Fiesta Nacional no sustituible",
+        "**": "Fiesta Nacional respecto de la que no se ha ejercido la facultad de sustitución",
+        "***": "Fiesta de Comunidad Autónoma",
+      });
+    });
+
+    it("ships exactly the annex's rows, region by region, with its notes applied", () => {
+      expect(compareRows(expected, shipped)).toEqual({ missing: [], extra: [] });
+      expect(new Set(shipped).size).toBe(shipped.length);
+    });
+
+    it("notices a wrong region, an altered date and a dropped territorial note", () => {
+      const rows = data.rows;
+      const mutated = (index: number, change: object) => ({
+        ...data,
+        rows: rows.map((row, at) => (at === index ? { ...row, ...change } : row)),
+      });
+      const regional = rows.findIndex(({ key }) => key === `${source}:${widened}`);
+      const territorial = rows.findIndex(({ key }) => key === `${source}:${swapped}`);
+      expect(rows[regional]!.regions).not.toContain("09");
+      expect(rows[territorial]!.exceptAreas).toEqual(["aran"]);
+      for (const broken of [
+        mutated(regional, { regions: [...rows[regional]!.regions, "09"] }),
+        mutated(regional, { date: `${data.year}-11-03` }),
+        mutated(territorial, { exceptAreas: undefined }),
+      ]) {
+        const result = compareRows(expected, normalizeShippedRows(broken, regionOfArea));
+        expect(result.missing.length + result.extra.length).toBeGreaterThan(0);
+      }
+    });
+  },
+);
 
 describe("reading an archived page", () => {
   const page = (note: string, cell = "<abbr>*</abbr>") =>
@@ -392,8 +479,16 @@ describe("English holiday display names", () => {
   );
 
   it("provides an English name for every shipped holiday, including territorial notes", () => {
-    for (const row of SPAIN_2026.rows)
+    for (const row of SPAIN_HOLIDAY_YEARS.flatMap(({ rows }) => rows))
       expect(row, row.key).toHaveProperty("englishName", expect.stringMatching(/\S/));
+  });
+
+  it("gives one official name the same English name in every shipped year", () => {
+    const english = new Map<string, string>();
+    for (const row of SPAIN_HOLIDAY_YEARS.flatMap(({ rows }) => rows)) {
+      expect(english.get(row.name) ?? row.englishName, row.key).toBe(row.englishName);
+      english.set(row.name, row.englishName);
+    }
   });
 
   it("retains official area names alongside English in the actual calendar read", () => {
@@ -419,4 +514,71 @@ it("resolves English for a stored official holiday name even when a future year 
   expect(calendar.englishNameFor?.("Viernes Santo")).toBe("Good Friday");
   expect(calendar.englishNameFor?.("Natividad del Señor")).toBe("Christmas Day");
   expect(calendar.englishNameFor?.("A locally authored name")).toBeUndefined();
+});
+
+/**
+ * Every place a venue can choose, as `readHolidayDates` in `@waitron/venue-service` reads it: each
+ * province, and each of its areas where it has some. That reader keeps only a holiday name's first
+ * date in a year, so two dates with one name in one place would lose the second.
+ */
+function namesTakenTwice(read: typeof calendar, years: readonly SpanishHolidayYear[]): string[] {
+  const found: string[] = [];
+  for (const { year } of years)
+    for (const province of Object.keys(PROVINCE_REGIONS)) {
+      const areas = read.areasForProvince(province).map(({ key }) => key);
+      for (const areaKey of [null, ...areas]) {
+        const { facts } = read.read({
+          provinceCode: province,
+          areaKey,
+          from: `${year}-01-01`,
+          to: `${year}-12-31`,
+        });
+        const dates = new Map<string, string[]>();
+        for (const { name, date } of facts) dates.set(name, [...(dates.get(name) ?? []), date]);
+        for (const [name, on] of dates)
+          if (on.length > 1) found.push(`${year} ${province} ${areaKey ?? "-"} ${name}: ${on}`);
+      }
+    }
+  return found;
+}
+
+describe("one name per holiday in each place", () => {
+  it("never gives two holidays one name in a year, in any place a venue can choose", () => {
+    expect(SPAIN_HOLIDAY_YEARS.map(({ year }) => year)).toEqual([2026, 2027]);
+    expect(namesTakenTwice(calendar, SPAIN_HOLIDAY_YEARS)).toEqual([]);
+  });
+
+  it("notices two holidays with one name in one place", () => {
+    const renamed = {
+      ...SPAIN_2027,
+      rows: SPAIN_2027.rows.map((row) =>
+        row.key === `${ANNEX_2027}:note-2:aran` ? { ...row, name: "Lunes de Pascua" } : row,
+      ),
+    };
+    const copy = createHolidayCalendar({
+      localEntryLimit: 2,
+      sources: calendar.sources,
+      provinceRegions: PROVINCE_REGIONS,
+      areas: HOLIDAY_AREAS,
+      years: [SPAIN_2026, renamed],
+    });
+    // Arán keeps only the renamed 17 June; the rest of Lleida keeps only 29 March.
+    expect(namesTakenTwice(copy, [renamed])).toEqual([]);
+    const balears = {
+      ...SPAIN_2027,
+      rows: SPAIN_2027.rows.map((row) =>
+        row.key === `${ANNEX_2027}:0103B` ? { ...row, name: "Lunes de Pascua" } : row,
+      ),
+    };
+    const twice = createHolidayCalendar({
+      localEntryLimit: 2,
+      sources: calendar.sources,
+      provinceRegions: PROVINCE_REGIONS,
+      areas: HOLIDAY_AREAS,
+      years: [SPAIN_2026, balears],
+    });
+    expect(namesTakenTwice(twice, [balears])).toEqual([
+      "2027 07 - Lunes de Pascua: 2027-03-01,2027-03-29",
+    ]);
+  });
 });
