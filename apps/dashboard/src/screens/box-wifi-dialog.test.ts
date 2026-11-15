@@ -4,7 +4,7 @@ import { userEvent } from "vitest/browser";
 import type { WtCombobox, WtDialog, WtInput } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { DashboardApi } from "../api/client.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, dialogClosed, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import { BoxWifiDialog } from "./box-wifi-dialog.js";
 
@@ -179,8 +179,10 @@ it("holds an open dialog while another change runs, then accepts Enter once", as
 it("Cancel clears a staged password without sending Join", async () => {
   const { dialog, password, joinBoxNetwork } = await mount();
   await type(password, "secret");
+  const closed = dialogClosed(dialog);
   await userEvent.click(dialog.querySelector<HTMLElement>("[slot=cancel]")!);
-  await expect.poll(() => dialog.open).toBe(false);
+  await closed;
+  expect(dialog.open).toBe(false);
   expect(password.value).toBe("");
   expect(joinBoxNetwork).not.toHaveBeenCalled();
 });

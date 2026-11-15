@@ -4068,7 +4068,7 @@ export const en = {
   "box_status.title": "Box status",
   "box_status.network.title": "Network",
   "box_status.network.password_wpa":
-    "Use 8–63 printable ASCII characters (English letters, numbers, spaces and punctuation), or a 64-digit hexadecimal key. Then try Join again.",
+    "Use a password of 8–63 printable ASCII characters (English letters, numbers, spaces and punctuation), or a 64-digit hexadecimal key. Then try Join again.",
   "box_status.network.password_sae":
     "Use a password of 1–256 UTF-8 bytes, without control characters. Then try Join again.",
   "box_status.network.forget": "Forget saved Wi-Fi",

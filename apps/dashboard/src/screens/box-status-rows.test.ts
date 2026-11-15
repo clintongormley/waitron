@@ -784,14 +784,7 @@ it.each([
   ["applied", "current", "", "", "running configuration", "up to date"],
   ["applied", "pending", "", "", "running configuration", "waiting"],
   ["applied", "failed", "", "io-failed", "running configuration", "could not be written"],
-  [
-    "applied",
-    "absent",
-    "password-unavailable",
-    "",
-    "running configuration",
-    "password was unavailable",
-  ],
+  ["applied", "absent", "", "", "running configuration", "password was unavailable"],
   ["refused", "current", "failed", "", "could not join", "up to date"],
   ["refused", "absent", "password-rejected", "", "may be wrong", "no Wi-Fi copy"],
 ] as const)(
@@ -802,7 +795,7 @@ it.each([
         kind: "join",
         ssidHex: "426172",
         state,
-        reason: state === "refused" ? (reason === "password-rejected" ? reason : "failed") : null,
+        reason: reason || null,
       },
       bootCopy: {
         state: copy,
@@ -828,7 +821,14 @@ it("does not call Forget durable until its boot copy is absent", () => {
 it.each([
   ["network-not-found", "absent", "cable-only", null, "not found", "cable-only"],
   ["timed-out", "absent", "enterprise", null, "timed out", "security cannot be copied"],
-  ["failed", "failed", null, "publication-unverified", "could not join", "could not be verified"],
+  [
+    "failed",
+    "failed",
+    null,
+    "publication-unverified",
+    "could not join",
+    "The written boot copy could not be verified.",
+  ],
   ["failed", "failed", null, "path-unsafe", "could not join", "could not be verified for writing"],
 ] as const)(
   "names the refusal %s and boot-copy problem",
