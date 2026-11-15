@@ -92,13 +92,18 @@ is about a by-differences correction, a money change, so it stays as it is.
 
 1. **R4 "S"**, from the sources above (watcher's default, 2026-11-14 22:51).
 2. **Same amounts rules as the simplified replacement**: rectified amounts 0.00 / 0.00 and the real
-   day as `FechaOperacion`. Owner's answers A and B (2026-11-14 09:50) were given for a refused
-   original whatever its type, and AEAT's worked examples write «Tipo Factura: Rx» for both options
+   day as `FechaOperacion`. This carries the owner's answers A, B, C and E over from the
+   simplified-invoice replacement, an inference this plan makes and nobody has confirmed (Still
+   open 4). What supports it: AEAT's worked examples write «Tipo Factura: Rx» for both options
    (FAQ, «¿Cómo registra el emisor una factura rectificativa por sustitución "S"?») **(read)**.
 3. **The same customer, copied, never typed in.** The replacement's sale row copies the original's
-   six `counterparty_*` columns and the recipient's address; the record's `Destinatarios` is built
-   from them by the same `buildDestinatarios` that built the original's. The browser sends no
-   customer detail. A wrong customer is a different correction and not in scope.
+   six `counterparty_*` columns and the recipient's address, for the printed copy. The record's
+   `Destinatarios` is the refused original record's own stored `destinatarios`, copied as it is
+   (`registros_facturacion.destinatarios`, `packages/fiscal-verifactu/src/schema/registros.ts:84`,
+   decoded by `decodeRegistroRow`, `registro-row.ts:340`), not rebuilt from the sale's columns
+   through today's identifier checks (`buildDestinatarios`, `backend.ts:781-797`), so it is the
+   customer AEAT was sent, byte for byte. The browser sends no customer detail. A wrong customer is
+   a different correction and not in scope.
 4. **The issuer's domicile is today's**, read from `taxpayer` and refused
    `fiscal.taxpayer_domicile_missing` before a number is used when blank, as `recordSale` does for
    a full invoice (`packages/core/src/record-sale.ts:259-266`) **(read)**: the replacement is a new
@@ -107,7 +112,8 @@ is about a by-differences correction, a money change, so it stays as it is.
    is today: core's `requireSupportedCorrection` refuses the replacement (it carries the customer),
    `correction-admission.ts:56-60` answers `not_simplified` for an R4, and the backend's
    by-differences path accepts only an F2 or an R5 "S" (`backend.ts:533`, `:542-544`) **(read)**.
-   Task 1 pins that an R4 "S" is never corrected by an R5 "I".
+   Task 1 pins that an R4 "S" is never corrected by an R5 "I". So the owner's answer D (a later
+   refund's credit note names the replacement) is **not** carried over to a full invoice.
 6. **No schema change, no migration, no venue reset.** The counterparty columns already exist on
    every `sales` row (`packages/db/src/schema/sales.ts:104-114`); the only database rule about them,
    `sales_recipient_identity_insert` (`packages/db/triggers/core.sql:530-542`), checks that an
@@ -116,13 +122,13 @@ is about a by-differences correction, a money change, so it stays as it is.
 ## Scope and non-scope
 
 In scope: the R4 "S" writer (core and Veri\*Factu backend); the remedy admitting an F1; the case
-dialog's words and the guide (EN, ES); the printed and on-screen copy of an R4; tests that pin the
-VAT return and accountant export for a replaced full invoice; the backlog and the claims this
-retires.
+dialog's words and the guide (EN, ES); the printed and on-screen copy of an R4, and what every
+delivery and document path does with it; a test that pins the accountant export for a replaced full
+invoice; the backlog and the claims this retires.
 
 Not in scope (watcher, 2026-11-14 22:51): the refusal hold (gone since #3233 anyway); the VAT
-return beyond counting a replaced full invoice in its real day's period, which needs no code
-(Task 4); clocks running behind; F3; any by-differences correction of a full invoice (R1); emailing
+return (it never reads the customer, `packages/reporting/src/vat-return.ts:29-63`, and #3235's
+2 March / 28 February case already covers `supply_day`); clocks running behind; F3; any by-differences correction of a full invoice (R1); emailing
 or A4 delivery of the replacement (Still open 3); any AEAT call. The R4 "S" test-service probe joins
 the go-live probe entry #3235 added (`docs/backlog.md:373-377`, "Probe a replacement R5 "S" on
 AEAT's test service") — Task 2 widens that entry; it is not run here.
@@ -159,7 +165,8 @@ R1 too, so it does not decide R4 against R1 — the sources above do.
   alta builder. Task 1 changes exactly this: the replacement gate admits an F1 original as well as
   an F2 (same "AEAT refused every record of it, none with `3000`" check, `refusedEveryRecordOf`);
   `TipoFactura` becomes "R4" when the original is an F1 and stays "R5" otherwise; an R4 carries
-  `Destinatarios: this.buildDestinatarios(sale.counterparty)`; the replacement is refused
+  the original record's stored `destinatarios` as its `Destinatarios` (the select of the original
+  at `:516-526` gains that column); the replacement is refused
   `fiscal.correction_unsupported` when the original is an F1 and `sale.counterparty` is null, or
   an F2 and it is not. `ImporteRectificacion`, `FechaOperacion`, `FacturasRectificadas`, the
   by-differences branch, `appendToChain`, `envios` and the QR are as today.
@@ -176,10 +183,15 @@ R1 too, so it does not decide R4 against R1 — the sources above do.
 
 ## Order and pull requests
 
-One pull request, branch `feat/a1407-full-invoice-replacement` from `main`, four tasks in order,
-one implementer each. Until Task 2, nothing in production reaches the R4 path: the remedy still
-admits only an F2. First lines of the PR: fiscal; files a new record type (R4 "S"); no schema change
-and no venue reset.
+One pull request, branch `feat/a1407-full-invoice-replacement` from `main`, five tasks in order
+(1, 2, 3a, 3b, 4), one implementer each. Until Task 2, nothing in production reaches the R4 path: the remedy still
+admits only an F2. **The PR description must open with these lines:**
+
+- Fiscal; files a new record type, an R4 by replacement ("S"); no schema change and no venue reset.
+- Go-live gate: the adviser's answer to S14 (may correctives of full invoices, R4, share one series
+  with correctives of simplified invoices, R5?) is needed before the first real R4 is filed. This PR
+  numbers R4 from the same `rectificative` series as R5, against our own research's reading
+  (Still open 1).
 
 ---
 
@@ -193,8 +205,9 @@ if blank, before `allocateInvoiceNumber`; write them on the replacement's row in
 `storedCounterparty(row)` that rebuilds a `Counterparty` from those columns, the identifier pair
 only when present); `packages/core/src/errors.ts:55` (the comment on `sale.correction_unsupported`
 now says it is the by-differences path that refuses a full invoice);
-`packages/fiscal-verifactu/src/backend.ts` (as under "Protected files"; the comment at `:115-121`
-says F1 → R4 by replacement); `registro-row.ts:142-144`; `errors.ts:312-319` (the R1 claim
+`packages/fiscal-verifactu/src/backend.ts` (as under "Protected files": `OriginalAltaForCorrection`
+gains `destinatarios`, read and decoded with the original; the comment at `:115-121` says F1 → R4
+by replacement); `registro-row.ts:142-144`; `errors.ts:312-319` (the R1 claim
 corrected: the R-type follows the cause, R4 for a wrong date and R1 for a money change, citing the
 FAQ).
 
@@ -216,7 +229,10 @@ Failing tests first:
      naming the F1, and `destinatarios` **equal to the original row's `destinatarios`**;
      `validate(fromRegistroRow(row))` is `[]`; `serializeEnvio` contains
      `<sf:TipoFactura>R4</sf:TipoFactura>` and the customer's `NIF`. The assertion that fails if the
-     behaviour is deleted: `tipo_factura` "R4" and the `destinatarios` equality. Fails today:
+     behaviour is deleted: `tipo_factura` "R4" and the `destinatarios` equality. One more case pins
+     the copy: an original whose stored `destinatarios` differs from what `buildDestinatarios` would
+     make of the sale's columns today (seed the sale row's name differently from the record's) →
+     the R4 carries the record's, not the row's. Fails today:
      `fiscal.correction_unsupported` with `tipoFactura: "F1"`.
    - "refuses an F1 replacement handed no customer, and an F2 replacement handed one, recording
      nothing" (both `fiscal.correction_unsupported`; count of `registros_facturacion` unchanged).
@@ -278,8 +294,13 @@ Failing tests first:
   **Send** posts `kind: "replacement-invoice"` with the `registroId` and `operationDate`, no customer
   field and no amount. Fails today: the not-yet sentence. A `fiscal.taxpayer_domicile_missing`
   answer shows its sentence in the bottom message.
-- `record-remedy-routes.test.ts` / `put-right-words` coverage: every `REMEDY_REFUSALS` code has a
-  sentence (the existing exhaustiveness check, if any, catches the new code; otherwise add the case).
+- `record-remedy-replacement.test.ts`: "refuses a full invoice when the business has no registered
+  address": blank `taxpayer.taxpayer_domicile`, an F1 `1112` case → 409
+  `fiscal.taxpayer_domicile_missing`, no number used, case still open. Fails today: 400
+  `fiscal.remedy_invalid` (the F1 is refused first). `put-right-words.ts`'s `REFUSAL_WORDS` is
+  typed `Record<RemedyRefusal, …>`, so the compiler, not a test, makes the new code need a
+  sentence; `record-remedy-routes.test.ts:180-190` scans only the correction-record files and does
+  not see this path.
 
 Commands: `pnpm --filter @waitron/fiscal-verifactu exec vitest run --project node
 src/record-remedy-replacement.test.ts src/put-right.test.ts src/record-remedy-routes.test.ts`;
@@ -295,12 +316,14 @@ Docs, same task: `docs/backlog.md` A1407 (`:1781`) keeps only what remains (AEAT
 writer files one yet", "`computeVatReturn` counts a full invoice in its issue date's period");
 A1089 (`docs/backlog.md:224` and `docs/backlog/self-service-refusals.md:968`) says "an invoice AEAT
 refused for a future date"; the probe entry (`docs/backlog.md:373-377`) gains "and an R4 'S'
-replacing a full invoice refused the same way, naming the same customer"; `docs/backlog/fiscal.md:1140-1145`
+replacing a full invoice refused the same way, naming the same customer" and a second go-live gate:
+"answer adviser question S14 (one corrective series for R4 and R5?) before the first real R4 is
+filed"; `docs/backlog/fiscal.md:1140-1145`
 and the A444 exception line (`:1114-1116`) gain a dated line naming the R4 "S".
 
 Size: about 50 production lines, 40 lines of words, 10 of guide prose; 220 test lines.
 
-## Task 3 — the printed and on-screen copy of an R4
+## Task 3 — the printed and on-screen copy of an R4, and every path that reads the customer
 
 A full invoice must show the customer's tax number, name and address (RD 1619/2012 art. 6.1.d and
 6.1.e, quoted in `docs/superpowers/plans/2026-10-15-a663-receipt-layout.md:209-212`) **(read)**, and
@@ -308,22 +331,61 @@ the R4 is filed as one (it carries `Destinatarios`). Today every corrective prin
 `invoiceType: "R5"` (`apps/server/src/transaction-receipt.ts:158-168`), and the paper layout treats
 anything but "F1" as simplified (`receipt-document.ts:157`), so an R4 would print with no customer
 block **(read)**. The customer would already reach the result: `transaction-receipt.ts:170-183`
-adds `recipient` from the sale's own counterparty columns, which Task 1 now fills.
+adds `recipient` from the sale's own counterparty columns, which Task 1 now fills. The A4 page is
+built from the same document (`invoice-page.ts:124` calls `buildReceiptDocument`), so the layout
+change carries to it.
 
-Files: `apps/server/src/transaction-receipt.ts` (a corrective whose sale names a customer reads
-`invoiceType: "R4"`); `apps/server/src/till-sale.ts:340` and `apps/till/src/api/client.ts:1026`
-(the union gains "R4"); `apps/server/src/receipt-document.ts` (`simplified` is F2 or R5; the full
-layout's heading block prints `correctiveInvoice`, "Replaces invoice … in full" with its number and
-date, and the 0,00 € rectification row when `corrects` is set, reusing the three labels A802 slice
-5a and #3208 added, so no new words); `apps/server/src/invoice-email.ts:77-83` (title
-`correctiveInvoice` for R4 too); `apps/till/src/screens/till-ticket-view.ts` (one local
-`full = invoiceType === "F1" || invoiceType === "R4"` for the LAYOUT sites only: `:243`, `:1240`,
-`:1293`, `:1306-1354`). Deliberately unchanged, each treating an R4 like an R5: the delivery and
-document-choice sites (`till-ticket-view.ts:682-770`, `:1102-1132`, `:1475-1506`,
-`apps/server/src/receipt-print.ts:392`, `:540`, `apps/till/src/till-app.ts`,
-`settlement-document-dialog.ts`), so an R4 is reprinted on the receipt printer and offered no A4 or
-email (Still open 3); and `till-ticket-view.ts:1204`'s "Full invoice" banner, since the corrective
-heading takes its place. Found with `git grep -n 'invoiceType [!=]== "\(F1\|F2\|R5\)"'` **(run)**.
+**Until now "the sale has a customer tax number" meant "a full invoice", because no corrective
+carried a customer.** After Task 1 an R4 does, so every place that decides by that column needs a
+decision. The list is `git grep -n "counterpartyTaxId\|counterparty_tax_id" -- apps packages
+':!*.test.ts' ':!**/testing/**'` **(run)**, with the schema, migration, demo fixtures and the
+writers left out. Each decision follows Still open 3's default: **in this PR an R4 is reprinted on
+the receipt printer only; it is not emailed, not sent as an A4, and no delivery of it is
+tracked.** That describes what this task builds, not today's code: today the delivery code would
+treat an R4 as a full invoice and offer it all of those (table below).
+
+One shared predicate does the work: `deliversAsFullInvoice(row)`, true when the sale has a customer
+tax number **and** `corrects_sale_id` is null, in `apps/server/src/invoice-selection.ts` beside
+`storedRecipientIdentifier` (with an SQL twin where a query filters). "A corrective skips this"
+below means the site uses the predicate, so an R4 is handled exactly as an R5 replacement is today.
+Each site's line was read **(read)**; none was run.
+
+| Site | What it does today | Decision |
+| --- | --- | --- |
+| `invoice-delivery-status.ts:154`, `:186-190` | a sale with a customer gets a delivery state, page-printer offers and email | a corrective skips this: an R4's state is `null`, as an R5's |
+| `document-printer-offers.ts:118`, `:127-129` | `full = recipient !== null`; A4 and page printers accepted | a corrective skips this: receipt only; asking for the invoice document refuses `management.request_invalid` (`field: "document"`), as for an R5 |
+| `invoice-delivery.ts:48-55` (`reserveInvoiceDelivery`) | a sale with a customer may reserve receipt, A4 or email deliveries | a corrective skips this: receipt and A4 refuse `invoice_delivery.full_invoice_required`, as for an R5 |
+| `invoice-print.ts:48-82` (reprint) | a sale with a customer opens an invoice delivery on reprint | a corrective skips this: a plain resend, which then agrees with `receipt-print.ts:392`, which already checks the type and so skips an R4 |
+| `alert-sources.ts:618`, `:634` | an undelivered sale with a customer is an "undelivered full invoice" alert candidate | a corrective skips this (`isNull(sales.correctsSaleId)` beside each `isNotNull`): no alert for an R4 |
+| `invoice-document.ts:63`, `:150-160` (A4 and email document) | types any sale with a customer "F1", even one with a corrective's number | type it R4: the same typing helper as `transaction-receipt.ts` (`invoiceType` "R4" and `corrects` with `inFull`), so the document says what was filed. `:63` stays: the R4 has a customer, and the customer's data download (next row) needs its PDF |
+| `invoice-customer-data.ts:55`, `:77` (A980 S3: a customer's own data download) | lists and renders every sale naming the customer's tax number | keep: an R4 names the customer, so it belongs in their download, rendered through `invoice-document.ts` as an R4 |
+| `transaction-receipt.ts:160-183`, `receipt-issuer.ts:26` | type and recipient of a reprint | type it R4 (this task's main change); `receipt-issuer.ts` answers "F1" for any customer and `transaction-receipt.ts` overrides it for a corrective, so it is left alone |
+| `receipt-adjustments.ts:58`, `:92` | net prices per line for a sale with a customer | keep: the R4 prints in the full layout |
+| `receipt-guests.ts:62-69` | guest count only on a sale without a customer | keep: no guest count on a full layout |
+| `find-bill-transactions.ts:55`, `:74` | types a sale with a customer `full-invoice` | none needed: `replaces_original` is tested first (`:53`), so an R4 is typed `replacement` |
+| `invoice-lookup-api.ts:47` | full-invoice search | none needed: it already requires `corrects_sale_id` null (`:49`) and series purpose `full` |
+| `orders-list.ts:173-215`, `:473`, `:948-1015` | a bill row's and its own sale's type | none needed: they read the bill's own sale; the replacement is listed as `kind: "replacement"` |
+| `deferred-close.ts:436`, `deferred-payment-export.ts:58` | the deferred bill's own sale | none needed: an R4 is never a deferred closure's sale |
+| `till-api.ts:2366`, `:2409` | the receipt of a bill's sale | none needed: found by `working_order_id`, which a replacement does not have |
+| `invoice-choice-delivery.ts:75` | the bill's staged delivery choice | none needed: joins the working order, which a replacement does not have, so it answers `false` |
+| `accountant-export.ts:209` | customer columns per row | keep: the replacement's row shows the customer (Task 4) |
+| `packages/core/src/*` | the writers and refusals | Task 1 |
+
+Files: `apps/server/src/transaction-receipt.ts` and `invoice-document.ts` (a corrective whose sale
+names a customer reads `invoiceType: "R4"` with `corrects`, through one shared helper);
+`invoice-selection.ts` (`deliversAsFullInvoice`); the five "a corrective skips this" sites above;
+`apps/server/src/till-sale.ts:340` and `apps/till/src/api/client.ts:1026` (the union gains "R4");
+`apps/server/src/receipt-document.ts` (`simplified` is F2 or R5; the full layout's heading block
+prints `correctiveInvoice`, "Replaces invoice … in full" with its number and date, and the 0,00 €
+rectification row when `corrects` is set, reusing the three labels A802 slice 5a and #3208 added,
+so no new words); `apps/server/src/invoice-email.ts:77-83` (title `correctiveInvoice` for R4 too);
+`apps/till/src/screens/till-ticket-view.ts` (one local `full = invoiceType === "F1" ||
+invoiceType === "R4"` for the LAYOUT sites only: `:243`, `:1240`, `:1293`, `:1306-1354`). The
+till's delivery and document-choice sites (`till-ticket-view.ts:682-770`, `:1102-1132`,
+`:1475-1506`, `apps/till/src/till-app.ts`, `settlement-document-dialog.ts`) compare with "F1" and so
+already treat an R4 like an R5; they are left alone. Found with `git grep -n 'invoiceType [!=]==
+"\(F1\|F2\|R5\)"'` **(run)**. `till-ticket-view.ts:1204`'s "Full invoice" banner stays F1-only;
+the corrective heading takes its place.
 
 Failing tests first:
 
@@ -338,42 +400,52 @@ Failing tests first:
 - `apps/till/src/screens/till-ticket-view.test.ts` (beside `:3401-3437`): an R4 result shows the
   recipient section and the replacement lines, and offers no invoice (A4) choice. Fails today: no
   recipient section.
+- **The delivery default, one assertion per site** (each fails today, because Task 1 gave the R4 a
+  customer, and each fails again if its site's predicate is removed):
+  `invoice-delivery-status.test.ts`: the R4's delivery state is `null` while its original keeps its
+  own; `document-printer-offers.test.ts`: for the R4, `document: "receipt"` offers receipt printers
+  and `document: "invoice"` refuses `management.request_invalid`; `invoice-delivery.test.ts`:
+  reserving an `a4` or `receipt` delivery for the R4 refuses `invoice_delivery.full_invoice_required`;
+  `invoice-print-api.test.ts`: reprinting the R4's job writes no `invoice_deliveries` row;
+  `alert-sources.invoice-delivery.test.ts`: a failed R4 print raises no undelivered-invoice alert.
+- `invoice-document.test.ts`: the R4's document reads `invoiceType` "R4" with `corrects.inFull`;
+  `invoice-customer-data.pdfs.test.ts`: the customer's download includes the R4's PDF. Fails
+  today: typed "F1".
 - `apps/server/src/invoice-email.test.ts` (if the title is tested there): an R4's caption reads
   "Corrective invoice". Otherwise covered by the type test.
 
 Commands: `cd apps/server && TESTCONTAINERS_RYUK_DISABLED=true pnpm exec vitest run
 src/receipt-issuer.test.ts src/receipt-document.test.ts src/invoice-email.test.ts
-src/transaction-receipt-api.test.ts src/receipt-print.test.ts`; `pnpm --filter @waitron/till exec
+src/transaction-receipt-api.test.ts src/receipt-print.test.ts src/invoice-delivery-status.test.ts
+src/document-printer-offers.test.ts src/invoice-delivery.test.ts src/invoice-print-api.test.ts
+src/alert-sources.invoice-delivery.test.ts src/invoice-document.test.ts
+src/invoice-customer-data.pdfs.test.ts src/invoice-customer-data.files.test.ts`; `pnpm --filter @waitron/till exec
 vitest run src/screens/till-ticket-view.test.ts src/screens/till-ticket-view.a11y.test.ts`
 (browser; memory first). Print an R4 to a file at both widths and look at it, and open the till's
 ticket view on one, both themes (CLAUDE.md §4: a page asserted as a string has nothing checking
 that it renders). The type change crosses the server–till wire, so run `pnpm --filter @waitron/till
 typecheck` and `pnpm --filter @waitron/server typecheck` (a PR tests only changed packages).
 
-Size: about 60 production lines, 220 test lines. If it passes about 150 tool calls unfinished, the
-till half is a clean split.
+Size: about 100 production lines, 380 test lines, the largest task, so it is split before dispatch:
+**3a** (server: typing, layout, the delivery predicate and its sites, their tests) and **3b** (the
+till's ticket view and its tests), one implementer each.
 
-## Task 4 — the VAT return and the accountant export, pinned for a full invoice
+## Task 4 — the accountant export, pinned for a full invoice
 
-No production change is expected: `computeVatReturn` and the accountant export do not look at the
-customer (`packages/reporting/src/vat-return.ts:29-63`; `apps/server/src/accountant-export.ts:208-235`
-reads the counterparty columns from each row as it is) **(read)**. These are pins, written so a
-later change cannot drop a full invoice from #3235's rule.
+No production change is expected: the export reads the counterparty columns from each row as it
+is (`apps/server/src/accountant-export.ts:208-235`) **(read)**. The VAT return gets no new test: it
+never reads the customer (`packages/reporting/src/vat-return.ts:29-63`), and #3235's 2 March /
+28 February case already covers `supply_day`.
 
-- `packages/reporting/src/vat-return.test.ts` (beside #3235's 2 March / 28 February case): the same
-  with the original carrying `counterpartyTaxId` (the fixture already takes it,
-  `packages/reporting/test/fixtures.ts:166`) → February holds its base and VAT, March zero. Passes
-  on its first run; mutation check: drop `repl.supply_day` from the `coalesce` and see it fail.
 - `apps/server/src/accountant-export.test.ts`: a replaced full invoice, made through
   `recordReplacement`, exports its replacement row typed "Replacement corrective — do not add" with
   the same customer name and tax number as the original's row. Fails before Task 1 (no replacement
   of a full invoice can be made), passes after.
 
-Commands: `pnpm --filter @waitron/reporting exec vitest run src/vat-return.test.ts`; `cd apps/server
-&& TESTCONTAINERS_RYUK_DISABLED=true pnpm exec vitest run src/accountant-export.test.ts
-src/report-api.accountant-export.test.ts`.
+Commands: `cd apps/server && TESTCONTAINERS_RYUK_DISABLED=true pnpm exec vitest run
+src/accountant-export.test.ts src/report-api.accountant-export.test.ts`.
 
-Size: 0 production lines, about 90 test lines.
+Size: 0 production lines, about 50 test lines.
 
 ---
 
@@ -381,15 +453,16 @@ Size: 0 production lines, about 90 test lines.
 
 | Task | Production | Tests |
 | --- | --- | --- |
-| 1 writer | 70 | 300 |
-| 2 remedy, words, guide | 50 (+ 40 words, 10 guide) | 220 |
-| 3 printed and on-screen R4 | 60 | 220 |
-| 4 pins | 0 | 90 |
-| **Total** | **about 230** | **about 830** |
+| 1 writer | 70 | 320 |
+| 2 remedy, words, guide | 50 (+ 40 words, 10 guide) | 250 |
+| 3a server: typing, layout, delivery sites | 75 | 260 |
+| 3b till ticket view | 25 | 120 |
+| 4 accountant export pin | 0 | 50 |
+| **Total** | **about 270** | **about 1,000** |
 
 Calibration **(run**, `git show --numstat`**)**: Q37-FIX PR 3 (#3235) was planned at about 345
 production and 720 test lines and landed at 616 and 1,322 (docs and the generated migration left
-out), about 1.8 times the estimate. On that ratio this PR lands nearer 400 and 1,500. Every task is
+out), about 1.8 times the estimate. On that ratio this PR lands nearer 480 and 1,800. Every task is
 meant to finish well under 100 tool calls; an implementer past about 150 stops at a passing point,
 commits and hands over.
 
@@ -407,20 +480,42 @@ commits and hands over.
    `recover-provisioned-venue.ts:28`; `packages/fiscal-verifactu/src/custodian/custody-state.ts:149`;
    `hour-series-configuration.ts:7`; `initial-paper-candidates.ts:29`; `allocation-identity.ts:69`;
    `packages/db/src/reserved-identity.ts:80`, from `git grep -n '"rectificative"'` **(run)**), well
-   past this scope. **Default: share it, and say so in the PR**; S14's answer decides later.
-2. **Does the printed R4 show the day the sale really happened?** Art. 6.1.i (full) and 7.1.c
-   (simplified) ask for the operation date «siempre que se trate de una fecha distinta a la de
-   expedición de la factura» (`2026-10-15-a663-receipt-layout.md:209`) **(read)**, and the R4 files
-   one. But the owner decided on 2026-11-12 that no printed invoice carries a separate operation
+   past this scope. **Default: share it.** This default goes against our own research
+   (`docs/compliance/research/2026-10-09-vat-and-corrections.md` §4.3 bullet d: «art. 7.1.a's
+   separation suggests they should not share»); it is chosen for size, not because a source allows
+   it. So S14 becomes a go-live gate: the probe entry in `docs/backlog.md` says "answer before the
+   first real R4 is filed" (Task 2), and the PR description opens with it. Ask the owner together
+   with question 2.
+2. **Does the printed R4 show the day the sale really happened?** Art. 6.1.i requires the
+   operation date on a full invoice «siempre que se trate de una fecha distinta a la de expedición
+   de la factura», and 7.1.c says the same for a simplified one
+   (`2026-10-15-a663-receipt-layout.md:209`) **(read)**. The R4 is a full invoice and its real day
+   always differs from its issue day when it is filed (otherwise `FechaOperacion` is left out), so
+   on its face the regulation asks for it on paper. But the owner decided on 2026-11-12 that no printed invoice carries a separate operation
    date (A444, `docs/backlog/fiscal.md:1099-1116`), and #3235's printed R5 replacement shows none
    (`git grep` of `operationDate|supplyDay` over the receipt code prints nothing **(run)**). **Default:
-   not printed, as for the R5**; one answer should cover both, so it is the owner's.
+   not printed, as for #3235's R5**; one answer should cover both, so it is the owner's, asked
+   together with question 1.
 3. **Does the customer get the R4 by email or as an A4 document?** A full invoice's original goes to
-   its customer that way; this plan reprints the R4 on the receipt printer only, as the R5
-   replacement is (Task 3's unchanged delivery sites). **Default: not in this PR**; the
-   administrator reprints it from the bill's transactions. If the answer is yes, it is a task of its
-   own (delivery bookkeeping, `invoice_deliveries`, the A4 builder `invoice-document.ts:150`, which
-   types only F1/F2).
+   its customer that way. This plan makes the delivery code skip an R4, so it is reprinted on the
+   receipt printer only, as the R5 replacement is (Task 3's table; without that, today's code
+   would offer it as a full invoice). **Default: not in this PR**; the administrator reprints it
+   from the bill's transactions. The R4 still appears, as a PDF, in the customer's own data download
+   (Task 3). If the answer is yes, it is a task of its own: delivery bookkeeping
+   (`invoice_deliveries`), the original/duplicate designation, and lifting the five "a corrective
+   skips this" sites.
+4. **Carrying the owner's simplified-invoice answers over to a full invoice — UNVERIFIED.** The
+   answers were given on 2026-11-14 09:50 to "Q37-FIX replacement invoice … five tax choices"
+   (`~/waitron-campaign-shared/desk/done/20261114-0001-L-q37-replacement-fiscal.md`), asked about
+   the simplified-invoice replacement. This plan carries over exactly: **A** (rectified amounts
+   0.00 / 0.00 when AEAT holds nothing for the refused original), **B** (the operation date is the
+   original's real date), **C** (the printed copy says "Replaces invoice X in full" and "Amount of
+   the rectification: 0,00 €") and **E** as later answered (owner, 2026-11-14 17:20: the VAT return
+   counts the sale in its real day's period). It does **not** carry over **D** (a later refund names
+   the replacement): a refund of a full invoice stays refused (Decision 5). The answers' wording is
+   not specific to simplified invoices, but nobody was asked about a full invoice: applying them is
+   this plan's inference. **Default: build on them; the PR names them as carried over, for the
+   owner to confirm when landing.**
 
 ## Contradictions with the brief
 
