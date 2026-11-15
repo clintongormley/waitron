@@ -202,13 +202,23 @@ describe("the Opening hours year read", () => {
       repeatsYearly: true,
       dates: [{ date: "2026-04-03", closedAllDay: true }],
     });
+    const easterDates = (year: Awaited<ReturnType<typeof read>>) =>
+      year.days
+        .filter(({ specialDay }) => specialDay?.name === "Easter week")
+        .map(({ date }) => date);
     const now = await read(2027);
+    expect(now.publicHolidaysAvailable).toBe(true);
+    expect(now.holidayCoverage.map(({ nationalRegional }) => nationalRegional)).toEqual([
+      "complete",
+    ]);
+    expect(easterDates(now)).toEqual(["2027-03-26"]);
     expect(now).not.toHaveProperty("missingHolidays");
     const next = await read(2028);
     expect(next.publicHolidaysAvailable).toBe(false);
     expect(next.holidayCoverage.map(({ nationalRegional }) => nationalRegional)).toEqual([
       "missing_year",
     ]);
+    expect(easterDates(next)).toEqual([]);
     expect(next).not.toHaveProperty("missingHolidays");
     const readiness = await run((tx) => listVenueReadiness(tx, new Date("2027-06-01T12:00:00Z")));
     expect(readiness.map(({ code }) => code)).not.toContain("special_day.holiday_missing");
