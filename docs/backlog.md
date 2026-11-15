@@ -106,8 +106,7 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 [Small checks and indexes that are cheap only inside A1308's fresh tables](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables). A1306's history rewrite is A1308's last step (owner, 2026-11-06).
 
 **4. Released by the hold, once A760 lands.** Build order: the pay window, A446 pre-bill,
-close the day, then A947 and its handover bundles. A1150 (allergens from the live product) is needed before go-live; its
-[design](superpowers/specs/2026-11-15-a1150-live-product-declarations-design.md) and [two-PR plan](superpowers/plans/2026-11-15-a1150-live-product-declarations.md) are cleared; refreshing already-open till views remains.
+close the day, then A947 and its handover bundles.
 
 - [The pay window, after A739](backlog/till.md#bundle-the-pay-window-after-a739)
 - [Close the day: count the cash, record cash in and out, waiter floats](backlog/till.md#bundle-close-the-day-count-the-cash-record-cash-in-and-out-waiter-floats)
@@ -631,14 +630,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **The menu patch window: split the file first** (bundle of 9, size M). [Detail](backlog/menu.md#bundle-the-menu-patch-window-split-the-file-first)
 
-- **A1150. Refresh already-open till views after live declaration edits** (owner,
-  2026-10-27). [Design](superpowers/specs/2026-11-15-a1150-live-product-declarations-design.md) and
-  [two-PR plan](superpowers/plans/2026-11-15-a1150-live-product-declarations.md) reviewed by Claude
-  and cleared by the watcher on 15 November. New/reloaded menu reads, held retrieval and guest
-  outputs use current product declarations without publishing. PR 2 remains: refresh existing
-  unsent counter/table/held lines, last-added dishes and open information/choice views on the
-  existing menu-state read, without saves, price confirmation or changing first-send captures.
-  Needed before go-live.
 
 ### Service periods, opening hours and departments
 

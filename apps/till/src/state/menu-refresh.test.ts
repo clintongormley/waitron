@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { lineBlock, refreshBasket, repriceRebuilt, withUnavailable } from "./menu-refresh.js";
+import {
+  lineBlock,
+  refreshBasket,
+  repriceRebuilt,
+  withUnavailable,
+  refreshProductDeclarations,
+} from "./menu-refresh.js";
 import { menuOfferToTillProduct, type TillMenuOffer } from "../api/client.js";
 import { WorkingOrderStore, type OrderLine } from "./working-order.js";
 
@@ -44,7 +50,11 @@ function offer(overrides: Partial<TillMenuOffer> & Pick<TillMenuOffer, "id" | "p
   } satisfies TillMenuOffer;
 }
 
-function extraItem(productId: string, price: string, available = true) {
+function extraItem(
+  productId: string,
+  price: string,
+  available = true,
+): Extract<LiveModifier, { kind: "extras" }>["items"][number] {
   return {
     presentation: {
       name: productId,
@@ -901,3 +911,122 @@ describe("repriceRebuilt", () => {
     );
   });
 });
+
+describe("refreshProductDeclarations", () => {
+  it("refreshes chosen variant and extras declarations while retaining every commercial field", () => {
+    const before = menuOfferToTillProduct(
+      { ...burger, variants: [variant("small", "7.00", { allergens: { milk: {} } })] },
+      "v1",
+    );
+    const chosen = { ...before, variantId: "small", unitPrice: "7.00", allergens: { milk: {} } };
+    const live = menuOfferToTillProduct(
+      {
+        ...burger,
+        name: "New name",
+        unitPrice: "19.00",
+        variants: [
+          variant("small", "17.00", {
+            allergens: { eggs: {} },
+            diet: { vegan: "no", vegetarian: "yes", contains: [] },
+            dietOverride: { vegetarian: "yes" },
+            dietaryDeclarations: ["vegetarian"],
+          }),
+        ],
+        offeredModifiers: [
+          extrasList("list-extras", [
+            {
+              ...extraItem("cheese", "9.00", false),
+              addAllergens: { sesame: {} },
+              suitableFor: ["vegan"],
+            },
+          ]),
+        ],
+      },
+      "v2",
+    );
+    const next = refreshProductDeclarations(chosen, [live]);
+    expect(next).toEqual({
+      ...chosen,
+      allergens: { eggs: {} },
+      diet: { vegan: "no", vegetarian: "yes", contains: [] },
+      dietOverride: { vegetarian: "yes" },
+      dietaryDeclarations: ["vegetarian"],
+      variants: [
+        {
+          ...before.variants![0]!,
+          allergens: { eggs: {} },
+          diet: { vegan: "no", vegetarian: "yes", contains: [] },
+          dietOverride: { vegetarian: "yes" },
+          dietaryDeclarations: ["vegetarian"],
+        },
+      ],
+      offeredModifiers: before.offeredModifiers!.map((entry) =>
+        entry.kind === "extras"
+          ? {
+              ...entry,
+              items: entry.items.map((item) =>
+                item.productId === "cheese"
+                  ? { ...item, addAllergens: { sesame: {} }, suitableFor: ["vegan"] }
+                  : item,
+              ),
+            }
+          : entry,
+      ),
+      modifierAvailability: before.modifierAvailability!.map((entry) =>
+        entry.kind === "extras"
+          ? {
+              ...entry,
+              items: entry.items.map((item) =>
+                item.productId === "cheese"
+                  ? { ...item, addAllergens: { sesame: {} }, suitableFor: ["vegan"] }
+                  : item,
+              ),
+            }
+          : entry,
+      ),
+    });
+    expect(chosen.allergens).toEqual({ milk: {} });
+  });
+
+  it("takes null and empty declarations by product identity across offers", () => {
+    const before = menuOfferToTillProduct(
+      { ...burger, allergens: { milk: {} }, dietaryDeclarations: ["vegan"] },
+      "v1",
+    );
+    const live = menuOfferToTillProduct({
+      ...burger,
+      id: "another-offer",
+      allergens: null,
+      dietaryDeclarations: [],
+      diet: null,
+      dietOverride: null,
+    });
+    const next = refreshProductDeclarations(before, [live]);
+    expect(next.allergens).toBeNull();
+    expect(next.dietaryDeclarations).toEqual([]);
+    expect(next.menuItemId).toBe("offer-burger");
+    expect(refreshProductDeclarations(before, [])).toBe(before);
+  });
+});
+
+it.each([false, true])(
+  "refreshes extras from the matching offer regardless of offer order (%s)",
+  (reverse) => {
+    const before = menuOfferToTillProduct(burger, "v1");
+    const other = { ...before, menuItemId: "other", offeredModifiers: [] };
+    const current = menuOfferToTillProduct(
+      {
+        ...burger,
+        offeredModifiers: [
+          extrasList("list-extras", [
+            { ...extraItem("cheese", "1.00"), addAllergens: { milk: {} } },
+          ]),
+        ],
+      },
+      "v1",
+    );
+    const next = refreshProductDeclarations(before, reverse ? [current, other] : [other, current]);
+    const list = next.offeredModifiers![0]!;
+    expect(list.kind === "extras" && list.items[0]!.addAllergens).toEqual({ milk: {} });
+  },
+);

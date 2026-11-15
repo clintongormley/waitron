@@ -1,3 +1,4 @@
+import { refreshProductDeclarations } from "../state/menu-refresh.js";
 import "./modifier-picker.js";
 import "./order-kitchen-note.js";
 import type { SaveKitchenNoteDetail } from "./order-kitchen-note.js";
@@ -721,6 +722,10 @@ export class TillBasket extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
+    if (this.#modifierProduct && this.modifierLine)
+      this.#modifierProduct = refreshProductDeclarations(this.#modifierProduct, [
+        this.modifierLine.product,
+      ]);
     if (changed.has("nutritionLines") || changed.has("storedLines")) {
       const nutritionRows = (this.nutritionLines ?? this.storedLines)?.lines ?? [];
       this.#nutritionById = new Map(nutritionRows.map((row) => [row.id, row]));

@@ -366,6 +366,13 @@ export class TillModifierPicker extends LitElement {
 
   override willUpdate(): void {
     this.#prepareDraft();
+    if (this.initialSelections === undefined && !this.inline) {
+      const hidden = this.#filteredPicks();
+      if (hidden.length > 0)
+        this.removedDefaults = [
+          ...new Set([...this.removedDefaults, ...hidden.map((pick) => pick.name)]),
+        ];
+    }
     const stale = this.#stalePicks();
     const totals = this.#listTotals();
     this.#checks = {
@@ -475,6 +482,20 @@ export class TillModifierPicker extends LitElement {
         if (item.preselected) this.picks[pickKey(entry.id, item.productId)] = 1;
       }
     }
+  }
+
+  #filteredPicks() {
+    return offeredListsOf(this.product).flatMap((entry) =>
+      entry.kind === "extras"
+        ? entry.items
+            .filter(
+              (item) =>
+                this.#countOf(entry.id, item.productId) > 0 &&
+                !allowsAllergenChoice(item.addAllergens, this.filters),
+            )
+            .map((item) => ({ listId: entry.id, productId: item.productId, name: item.name }))
+        : [],
+    );
   }
 
   /** The lists the till offers on this dish (`offeredListsOf`), in offer order. A product the till synthesised (a retrieved line
@@ -933,6 +954,8 @@ export class TillModifierPicker extends LitElement {
                         variant="primary"
                         @click=${(event: Event) => {
                           event.stopPropagation();
+                          for (const pick of this.#filteredPicks())
+                            this.#setCount(pick.listId, pick.productId, 0);
                           this.removedDefaults = [];
                         }}
                         >${t("modifier.remove_extras_continue")}</wt-button

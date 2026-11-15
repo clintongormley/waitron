@@ -185,3 +185,45 @@ it("leaves saved selections unchanged even when a host supplies exclusions", asy
     el.shadowRoot!.querySelector<HTMLInputElement>('input[id="pick-toppings-Walnuts"]')?.checked,
   ).toBe(true);
 });
+
+it.each([false, true])(
+  "asks before dropping an already-picked extra after declarations change (default %s)",
+  async (preselected) => {
+    const product = dish(false);
+    const list = product.offeredModifiers![0]!;
+    if (list.kind !== "extras") throw new Error("extras");
+    list.items = [extra("Seeds", {}, preselected), extra("Herbs", {})];
+    const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
+      product,
+      filters: noNuts,
+    });
+    if (!preselected)
+      await userEvent.click(
+        el.shadowRoot!.querySelector<HTMLInputElement>('input[id="pick-toppings-Seeds"]')!,
+      );
+    const confirm = vi.fn();
+    el.addEventListener("wt-modifier-confirm", confirm);
+    el.product = {
+      ...product,
+      offeredModifiers: [
+        {
+          ...list,
+          items: [
+            extra("Seeds", { nuts: { kinds: ["walnuts"] } }, preselected),
+            extra("Herbs", {}),
+          ],
+        },
+      ],
+    };
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".allergen-removal")?.textContent).toContain("Seeds");
+    expect(el.shadowRoot!.querySelector(".confirm")!.hasAttribute("disabled")).toBe(true);
+    el.confirm();
+    expect(confirm).not.toHaveBeenCalled();
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>(".remove-extras")!);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".allergen-removal")).toBeNull();
+    el.confirm();
+    expect(confirm.mock.calls[0]![0].detail.extras).toBeUndefined();
+  },
+);

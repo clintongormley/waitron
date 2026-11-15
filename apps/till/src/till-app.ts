@@ -6530,6 +6530,18 @@ export class TillApp extends LitElement {
         : zoneOffers.defaultMenuId;
     this.counterService = loaded ? zoneOffers.service : null;
     this.counterDepartmentName = loaded ? (zoneOffers.context?.departmentName ?? "") : "";
+    if (loaded) {
+      const known = this.counterLines?.orderId === this.#store.id ? this.counterLines.lines : null;
+      const keep = new Set(
+        this.#store.lines.flatMap((line) => {
+          const id = line.workingOrderLineId;
+          return id === undefined || known?.some((row) => row.id === id && row.sentAt === null)
+            ? []
+            : [id];
+        }),
+      );
+      this.#store.refreshDeclarations(this.#counterOffers.products(), keep);
+    }
     this.#showCounterOffers();
   }
 
@@ -6594,6 +6606,8 @@ export class TillApp extends LitElement {
           ...rebuildReturned(sync.store.lines, byId, versions),
         ]),
       );
+    sync?.store.refreshDeclarations(this.#tableOffers.products());
+    this.#partylessDraft.refreshDeclarations(this.#tableOffers.products());
     this.#markRounds(true);
     this.#markDraft(true);
   }
@@ -6749,7 +6763,10 @@ export class TillApp extends LitElement {
         this.#reconcileDraft();
       } else
         void this.#reloadTableOffers(zoneId).then((read) => {
-          if (read) this.#reconcileDraft(false);
+          if (read) {
+            this.#reconcileDraft(false);
+            void this.#refreshTableLines();
+          }
         });
     }
   }
@@ -12760,6 +12777,21 @@ export class TillApp extends LitElement {
       placed.push({ ...line, place: { ...placement.place } });
     }
     return placed;
+  }
+
+  async #refreshTableLines(): Promise<void> {
+    const billId = this.activeTabId;
+    if (billId === undefined) return;
+    const read = ++this.#tabLinesRead;
+    try {
+      const tab = await this.api.getTabLines(billId);
+      if (read !== this.#tabLinesRead || billId !== this.activeTabId) return;
+      this.tabLines = tab.lines;
+      this.tabRevision = tab.revision;
+    } catch {
+      if (read === this.#tabLinesRead && billId === this.activeTabId)
+        this.#tableOffers.liveFields = undefined;
+    }
   }
 
   /** A failed read, or no tab id, leaves an empty tab rather than blocking the operator. */

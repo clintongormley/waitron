@@ -968,6 +968,15 @@ This sent-order/history exception follows the owner's 11-November decision 6 in
 [the A1517 proposal](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md#owner-decisions-2026-11-11). The retired Allergens screen has no destination or print path.
 
 
+### Live declarations in an open till view
+
+The existing menu-state poll refreshes declarations in open lines and choices from current offers,
+without editing saved orders or their prices. Sent details continue to show first-send captures.
+A product absent from every current offer keeps its last open-view declaration until retrieval or
+reload. The watcher cleared this limit for A1150 PR 2 on 15 November 2026 at 21:52; there is no
+separate declaration read.
+
+
 ### Regional practice names
 
 A demo set up in Catalonia or the Balearic Islands uses the pack's

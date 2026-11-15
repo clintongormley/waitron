@@ -28,6 +28,7 @@ import type {
   MenuUnavailable,
   TillApi,
   TillMenuOffer,
+  TillProduct,
   TillSaleResult,
   ZoneOffers,
 } from "./api/client.js";
@@ -921,7 +922,7 @@ describe("a refresh overtaken by a change of service area", () => {
   it("does not let the old zone's reloaded offers replace the new zone's", async () => {
     let answerRefresh!: (value: ZoneOffers) => void;
     const terrace = {
-      ...menu("t1", [offer("offer-terrace-water", "Water", "2.00")]),
+      ...menu("t1", [offer("offer-terrace-water", "Water", "2.00", { allergens: { milk: {} } })]),
       context: {
         departmentName: "Restaurant",
         zoneId: "zone-terrace",
@@ -957,10 +958,17 @@ describe("a refresh overtaken by a change of service area", () => {
 
     emit(counter(el), "counter-zone-selected", { zoneId: "zone-terrace" });
     await flush(el);
-    answerRefresh(menu("v2", V1.offers));
+    add(el, "Water");
+    answerRefresh(
+      menu("v2", [
+        ...V1.offers,
+        offer("offer-terrace-water", "Water", "2.00", { allergens: { eggs: {} } }),
+      ]),
+    );
     await flush(el);
 
     expect(counter(el).products.map((product) => product.productId)).toEqual(["Water"]);
+    expect(counter(el).store.lines[0]!.product.allergens).toEqual({ milk: {} });
   });
 });
 
@@ -2856,4 +2864,201 @@ it("hides availability actions without take-orders", async () => {
   const info = browser.shadowRoot!.querySelector("till-product-info")!;
   await info.updateComplete;
   expect(info.shadowRoot!.querySelector("[data-availability]")).toBeNull();
+});
+
+async function retrieveForRefresh(
+  el: TillApp,
+  product: TillProduct,
+  sentAt: string | null = null,
+  readable = true,
+) {
+  api.retrieveWorkingOrder = vi.fn().mockResolvedValue({
+    id: "held-order",
+    revision: 7,
+    label: "Lunch",
+    expectedEdit: null,
+    kitchenNote: {
+      scope: { workingOrderId: "held-order" },
+      note: null,
+      revision: 0,
+      ownerRevision: 0,
+    },
+    lines: [
+      {
+        product,
+        productId: "Lemonade",
+        menuItemId: "offer-lemonade",
+        workingOrderLineId: "held-line",
+        quantity: "1.000",
+        note: "Keep cold",
+      },
+    ],
+  });
+  api.getTabLines = readable
+    ? vi.fn().mockResolvedValue({
+        revision: 7,
+        lines: [{ ...tabLemonade, id: "held-line", sentAt, note: "Keep cold" }],
+      })
+    : vi.fn().mockRejectedValue(new Error("read failed"));
+  emit(counter(el), "retrieve-order", { id: "held-order" });
+  await flush(el);
+  expect(counter(el).store.id).toBe("held-order");
+}
+
+it.each(["counter", "table", "held"] as const)(
+  "refreshes same-version declarations in the open %s without editing its lines",
+  async (kind) => {
+    const { el } = await mountApp(kind === "table" ? tableStubs() : {});
+    if (kind === "table") await toTable(el);
+    else await toCounter(el);
+    const screen = () => (kind === "table" ? tableScreen(el) : counter(el));
+    const shown = screen().shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!;
+    const store = shown.store;
+    const picked = shown.products.find((product) => product.productId === "Lemonade")!;
+    if (kind === "held") await retrieveForRefresh(el, picked);
+    else {
+      store.addProduct(picked, "1", { note: "Keep cold" });
+      await flush(el);
+    }
+    if (kind === "table") await vi.waitFor(() => expect(api.saveDraft).toHaveBeenCalled());
+    const line = store.lines[0]!;
+    const product = { ...line.product };
+    const last = store.lastAdded;
+    const dirty = store.dirty;
+    const saves = api.saveDraft?.mock.calls.length ?? 0;
+    const updateWorkingOrder = vi.fn();
+    api.updateWorkingOrder = updateWorkingOrder;
+    const changed = menu("v1", [
+      offer("offer-lemonade", "Lemonade", "99.00", {
+        name: "Renamed",
+        allergens: { eggs: {} },
+        dietaryDeclarations: ["halal"],
+        diet: { vegan: "no", vegetarian: "yes", contains: [] },
+      }),
+      burgerOffer(),
+    ]);
+    api.listZoneOffers.mockResolvedValue({ ...changed, liveFields: "changed" });
+    api.menuState.mockResolvedValue({ ...menuState("v1"), liveFields: "changed" });
+    await poll(el);
+    expect(store.lines[0]).toBe(line);
+    expect(line.product).toMatchObject({
+      ...product,
+      allergens: { eggs: {} },
+      dietaryDeclarations: ["halal"],
+      diet: { vegan: "no", vegetarian: "yes", contains: [] },
+    });
+    expect(line.note).toBe("Keep cold");
+    expect(store.lastAdded).toBe(last);
+    expect(store.dirty).toBe(dirty);
+    expect(store.total).toBe("3.00");
+    expect(dialog(el)).toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 30));
+    expect(api.saveDraft?.mock.calls.length ?? 0).toBe(saves);
+    expect(updateWorkingOrder).not.toHaveBeenCalled();
+  },
+);
+
+it.each([true, false])(
+  "keeps a sent counter declaration when its listing is readable (%s)",
+  async (readable) => {
+    const { el } = await mountApp();
+    await toCounter(el);
+    await retrieveForRefresh(
+      el,
+      { ...counter(el).products[0]!, allergens: { milk: {} } },
+      "2026-11-15T10:00:00Z",
+      readable,
+    );
+    api.listZoneOffers.mockResolvedValue({
+      ...menu("v1", [offer("offer-lemonade", "Lemonade", "3.00", { allergens: { eggs: {} } })]),
+      liveFields: "changed",
+    });
+    api.menuState.mockResolvedValue({ ...menuState("v1"), liveFields: "changed" });
+    await poll(el);
+    expect(counter(el).store.lines[0]!.product.allergens).toEqual({ milk: {} });
+  },
+);
+
+it("refreshes the live declaration on an already-held table dish", async () => {
+  const held = {
+    ...tabLemonade,
+    id: "held-table-line",
+    sentAt: null,
+    firedAt: null,
+    nutrition: { allergens: { milk: {} }, dietaryDeclarations: [] },
+  };
+  const { el } = await mountApp(
+    tableStubs(DINING, { getTabLines: vi.fn().mockResolvedValue({ lines: [held], revision: 0 }) }),
+  );
+  await toTable(el);
+  expect(tableScreen(el).lines[0]!.nutrition?.allergens).toEqual({ milk: {} });
+  api.getTabLines.mockResolvedValue({
+    lines: [{ ...held, nutrition: { allergens: { eggs: {} }, dietaryDeclarations: [] } }],
+    revision: 0,
+  });
+  api.listZoneOffers.mockResolvedValue({ ...DINING, liveFields: "changed" });
+  api.menuState.mockResolvedValue({ ...menuState("v1"), liveFields: "changed" });
+  await poll(el);
+  expect(tableScreen(el).lines[0]!.nutrition?.allergens).toEqual({ eggs: {} });
+});
+
+it("refreshes declarations in the draft of a table without a seated party", async () => {
+  const { el } = await mountApp(
+    tableStubs(DINING, {
+      getTablesState: vi.fn().mockResolvedValue([
+        {
+          ...table,
+          state: "free",
+          party: null,
+          hasOpenTab: false,
+          tabLineCount: 0,
+          tabTotal: "0.00",
+        },
+      ]),
+    }),
+  );
+  await toTable(el);
+  const shown = tableScreen(el).shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!;
+  shown.store.addProduct(shown.products[0]!, "1");
+  const line = shown.store.lines[0]!;
+  expect(line.product.allergens).toBeNull();
+  api.listZoneOffers.mockResolvedValue({
+    ...menu("v1", [offer("offer-lemonade", "Lemonade", "3.00", { allergens: { eggs: {} } })]),
+    liveFields: "changed",
+  });
+  api.menuState.mockResolvedValue({ ...menuState("v1"), liveFields: "changed" });
+  await poll(el);
+  expect(line.product.allergens).toEqual({ eggs: {} });
+});
+
+it("keeps the displayed table bill after a declaration read fails and retries on the next poll", async () => {
+  const held = {
+    ...tabLemonade,
+    id: "held-table-line",
+    sentAt: null,
+    nutrition: { allergens: { milk: {} }, dietaryDeclarations: [] },
+  };
+  const listGroups = vi.fn().mockResolvedValue({ groups: [], printProblems: [] });
+  const { el } = await mountApp(
+    tableStubs(DINING, {
+      getTabLines: vi.fn().mockResolvedValue({ lines: [held], revision: 0 }),
+      listGroups,
+    }),
+  );
+  await toTable(el);
+  const groupsRead = listGroups.mock.calls.length;
+  api.getTabLines.mockRejectedValue(new TypeError("offline"));
+  api.listZoneOffers.mockResolvedValue({ ...DINING, liveFields: "changed" });
+  api.menuState.mockResolvedValue({ ...menuState("v1"), liveFields: "changed" });
+  await poll(el);
+  expect(tableScreen(el).lines).toHaveLength(1);
+  expect(tableScreen(el).lines[0]!.nutrition?.allergens).toEqual({ milk: {} });
+  expect(listGroups.mock.calls.length).toBe(groupsRead);
+  api.getTabLines.mockResolvedValue({
+    lines: [{ ...held, nutrition: { allergens: { eggs: {} }, dietaryDeclarations: [] } }],
+    revision: 0,
+  });
+  await poll(el);
+  expect(tableScreen(el).lines[0]!.nutrition?.allergens).toEqual({ eggs: {} });
+  expect(listGroups.mock.calls.length).toBe(groupsRead);
 });

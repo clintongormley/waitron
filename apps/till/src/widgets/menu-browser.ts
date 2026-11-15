@@ -1,3 +1,4 @@
+import { refreshProductDeclarations } from "../state/menu-refresh.js";
 import type { ChangeAvailability, ChangeOptionAvailability } from "./product-info.js";
 import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { orderableMenus, EMPTY_MENU_FILTERS, type MenuFilters } from "../menu-filter.js";
@@ -502,6 +503,11 @@ export class TillMenuBrowser extends LitElement {
   /** The open section is judged before each render, so a menu that has lost it never draws it. */
   override willUpdate(): void {
     if (this.infoProduct) this.infoProduct = this.#currentInfoOffer(this.infoProduct);
+    if (this.pickerProduct)
+      this.pickerProduct = refreshProductDeclarations(this.pickerProduct, [
+        ...(this.unfilteredProducts ?? this.products),
+        ...(this.unfilteredServedProducts ?? this.servedProducts),
+      ]);
     if (this.menu === undefined) return;
     const pending = this.#pendingSection;
     if (pending !== undefined) {

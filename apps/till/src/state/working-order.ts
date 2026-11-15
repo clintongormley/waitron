@@ -23,7 +23,7 @@ import { assertQuantityPrecision } from "@waitron/menu/src/unit-validation.js";
 import type { Decimal, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { lineGross, takesExtras } from "./order-line.js";
 import { orderLineMergeKey } from "./draft-lines.js";
-import type { BlockReason } from "./menu-refresh.js";
+import { refreshProductDeclarations, type BlockReason } from "./menu-refresh.js";
 import type { EndedPeriod } from "./late-send.js";
 import type { KitchenNoteSnapshot, HeldExtra, TillCourse, TillProduct } from "../api/client.js";
 import { productUnit, toPresentation } from "../widgets/product-name.js";
@@ -805,6 +805,21 @@ export class WorkingOrderStore {
     this.#invalidatePricing();
     this.#markDirty();
     this.emit("changed");
+  }
+
+  refreshDeclarations(
+    products: readonly TillProduct[],
+    keep: ReadonlySet<string> = new Set(),
+  ): void {
+    let changed = false;
+    for (const line of this.#lines) {
+      if (line.workingOrderLineId !== undefined && keep.has(line.workingOrderLineId)) continue;
+      const product = refreshProductDeclarations(line.product, products);
+      if (product === line.product) continue;
+      line.product = product;
+      changed = true;
+    }
+    if (changed) this.emit("changed");
   }
 
   /** One entry per line. Display only, so the lines stay as clean as they were. Without `notify`, a
