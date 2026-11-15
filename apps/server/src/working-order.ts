@@ -398,13 +398,6 @@ export interface TillSaleDeps {
 
 type WorkingOrderLineInsert = typeof workingOrderLines.$inferInsert;
 
-// A1522: Tasks 12 and 15 replace every use of this marker; it must be gone before PR 2 ends.
-export const A1522_STAND_IN: {
-  takeawayVatClass: <C extends string>(vatClass: C) => C;
-} = {
-  takeawayVatClass: (vatClass) => vatClass,
-};
-
 /**
  * `note` is a free-text kitchen note on the parent dish line: non-fiscal, never part of a sale.
  * `menuVersionId` is the menu version an UNSAVED line was priced against on the till: what staff
@@ -4057,6 +4050,7 @@ export async function moveOrderLines(
       id: workingOrders.id,
       status: workingOrders.status,
       orderNumber: workingOrders.orderNumber,
+      dining: workingOrders.dining,
     })
     .from(workingOrders)
     .where(or(eq(workingOrders.id, fromTabId), eq(workingOrders.id, toTabId)));
@@ -4067,6 +4061,10 @@ export async function moveOrderLines(
   }
   if (to === undefined || to.status !== "open") {
     throw new AppError("tab.not_open", { tabId: toTabId });
+  }
+  // A line is rated by its order's way, so a move across ways would change a sent line's rate.
+  if (from.dining !== to.dining) {
+    throw new AppError("order.dining_differs", { fromOrderId: fromTabId, toOrderId: toTabId });
   }
   const sourceWhere =
     lineNos === undefined
@@ -4660,6 +4658,7 @@ async function carveLines(
       unitPriceGross: workingOrderLines.unitPriceGross,
       priceQuantity: workingOrderLines.priceQuantity,
       vatClass: workingOrderLines.vatClass,
+      takeawayVatClass: workingOrderLines.takeawayVatClass,
       category: workingOrderLines.category,
       unitName: workingOrderLines.unitName,
       unitPrecision: workingOrderLines.unitPrecision,
@@ -4834,7 +4833,7 @@ async function carveLines(
         unitPriceGross: decimalToCents(row.unitPriceGross),
         priceQuantity: decimalToThousandths(row.priceQuantity),
         vatClass: row.vatClass,
-        takeawayVatClass: A1522_STAND_IN.takeawayVatClass(row.vatClass),
+        takeawayVatClass: row.takeawayVatClass,
         lineTotal: decimalToCents(grossLineTotal(row.unitPriceGross, moved, row.priceQuantity)),
         category: row.category,
         unitName: row.unitName,

@@ -274,7 +274,7 @@ import { resolveLoginLocale } from "./login-locale.js";
 import "./errors.js";
 import { stationPrintersDown } from "./station-outputs-down.js";
 import { mountGatedWhileDiskFull } from "./disk-full-gate.js";
-import { parseDining } from "./order-dining.js";
+import { parseDining, switchOrderDining } from "./order-dining.js";
 import { parseLateSend, withLateSendCheck } from "./late-send.js";
 import {
   checkZones,
@@ -503,6 +503,8 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "working_order.out_of_date": 409,
   "order.dining_fixed": 409,
   "order.set_lunch_takeaway": 409,
+  "order.dining_locked": 409,
+  "order.dining_differs": 409,
   "kitchen_note.out_of_date": 409,
   "allergy.invalid": 400,
   "allergy.out_of_date": 409,
@@ -2087,6 +2089,30 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },
       );
       return c.json({ revision });
+    }),
+  );
+
+  app.put("/api/working-orders/:id/dining", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const id = requireUuidId(c.req.param("id"), "working_order.not_found");
+      await gateZones(deps, session, [{ orderId: id }]);
+      const body = await readJsonBody<{
+        dining?: unknown;
+        revision?: unknown;
+        expectedEdit: BillEditExpected | null;
+      }>(c);
+      const dining = parseDining(body.dining);
+      if (dining === undefined)
+        throw new AppError("management.request_invalid", { field: "dining" });
+      const revision = requireRevision(body.revision);
+      await withTransaction(deps.db, (tx) =>
+        switchOrderDining(tx, id, dining, revision, {
+          operatorId: session.personId,
+          expectedEdit: body.expectedEdit,
+        }),
+      );
+      return c.json({ revision: revision + 1 });
     }),
   );
 

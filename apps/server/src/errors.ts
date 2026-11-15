@@ -1,6 +1,7 @@
 // A bare side-effect import: it makes TypeScript augment "@waitron/shared" rather than declare a
 // fresh ambient module.
 import "@waitron/shared";
+import type { Dining } from "@waitron/shared";
 import type { VerifyFailure } from "@waitron/membership";
 import type { ProbeFailure } from "@waitron/stream";
 import type { AllocationPreview } from "./bill-allocation.js";
@@ -551,6 +552,15 @@ declare module "@waitron/shared" {
      * is sent or paid).
      */
     "order.set_lunch_takeaway": { canSwitch: boolean };
+    /**
+     * Declared by `@waitron/venue-service` too, with the same params: a switch of an order whose
+     * department sells one way only, or in a region without takeaway VAT. `dining`: the order's way.
+     */
+    "order.dining_fixed": { dining: Dining };
+    /** The order's way of selling can no longer be switched: its kitchen has it, or money was taken. */
+    "order.dining_locked": { reason: "sent" | "paid" };
+    /** Dishes move only between two orders sold the same way (eaten here or taken away). */
+    "order.dining_differs": { fromOrderId: string; toOrderId: string };
     /**
      * A working order this caller tried to CANCEL or AMEND is not `placed` (still open, settled,
      * abandoned, or absent — one code for all).

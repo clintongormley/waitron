@@ -2,10 +2,12 @@ import { eq, inArray } from "drizzle-orm";
 import {
   orderDiningLocked,
   ordersDiningLocked,
+  workingOrderLines,
   workingOrders,
   type Transaction,
 } from "@waitron/db";
 import { AppError, DININGS, type Dining } from "@waitron/shared";
+import { requireOrderBillEditor, type OrderEditAuthority } from "./bill-editing.js";
 import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";
 
@@ -114,4 +116,53 @@ async function takesEitherWay(tx: Transaction, zoneId: string): Promise<boolean>
     }
   }
   return true;
+}
+
+/**
+ * Switch an open order between eaten here and takeaway at `revision`, moving its revision on. The
+ * choice is the one the till's read offers ({@link readOrderDinings}): the order's own department,
+ * not its zone's current one, must leave the way to the till, and nothing may be sent or paid. Lines
+ * keep both their classes, so nothing else changes.
+ */
+export async function switchOrderDining(
+  tx: Transaction,
+  workingOrderId: string,
+  dining: Dining,
+  revision: number,
+  authority: OrderEditAuthority,
+): Promise<void> {
+  const [order] = await tx
+    .select({
+      status: workingOrders.status,
+      revision: workingOrders.revision,
+      dining: workingOrders.dining,
+    })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, workingOrderId));
+  if (order === undefined) throw new AppError("working_order.not_found", { workingOrderId });
+  if (order.status !== "open" || order.revision !== revision) {
+    throw new AppError("working_order.out_of_date", { workingOrderId, revision: order.revision });
+  }
+  await requireOrderBillEditor(tx, workingOrderId, authority);
+  const switchable = await VENUE_SERVICE.findOrdersWithDiningChoice(tx, [workingOrderId]);
+  if (!switchable.has(workingOrderId)) {
+    throw new AppError("order.dining_fixed", { dining: order.dining });
+  }
+  const locked = await orderDiningLocked(tx, workingOrderId);
+  if (locked !== null) throw new AppError("order.dining_locked", { reason: locked });
+  if (dining === "takeaway") {
+    const lines = await tx
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, workingOrderId));
+    const lunches = await VENUE_SERVICE.readLunchLineIds(
+      tx,
+      lines.map((line) => line.id),
+    );
+    if (lunches.size > 0) throw new AppError("order.set_lunch_takeaway", { canSwitch: false });
+  }
+  await tx
+    .update(workingOrders)
+    .set({ dining, revision: revision + 1 })
+    .where(eq(workingOrders.id, workingOrderId));
 }

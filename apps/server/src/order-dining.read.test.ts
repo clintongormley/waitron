@@ -5,7 +5,12 @@ import { products, withTransaction, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Dining, DiningPolicy } from "@waitron/shared";
-import { departments, setDepartmentSalePolicyField, setRoutingCell } from "@waitron/venue-service";
+import {
+  clearRoutingCell,
+  departments,
+  setDepartmentSalePolicyField,
+  setRoutingCell,
+} from "@waitron/venue-service";
 import { readBillEditState } from "./bill-editing.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
@@ -101,30 +106,33 @@ describe("the till's order reads", () => {
 
   it("locks the switch on a table bill once its dishes are sent", async () => {
     await departmentsSell("till_choice");
-    // Handed over with no kitchen ticket, so nothing is sent until the send stamps it.
-    await inTx(venue, async (tx) => {
-      const [octopus] = await tx
+    // Handed over with no kitchen ticket, so nothing is sent until the send stamps it. The venue is
+    // shared by the whole file, so the routing goes back after the case.
+    const octopus = await inTx(venue, async (tx) => {
+      const [row] = await tx
         .select({ id: products.id })
         .from(products)
         .where(eq(products.name, "Octopus"));
-      await setRoutingCell(
-        tx,
-        { row: { kind: "product", productId: octopus!.id }, zoneId: null },
-        { kind: "no_preparation" },
-      );
+      const address = { row: { kind: "product" as const, productId: row!.id }, zoneId: null };
+      await setRoutingCell(tx, address, { kind: "no_preparation" });
+      return address;
     });
-    const tabId = await tabWith(venue, "Octopus");
-    expect(await heldRead(tabId)).toMatchObject({ dining: "eat_in", diningChoice: "open" });
-    expect(await billRead(tabId)).toMatchObject({ dining: "eat_in", diningChoice: "open" });
-    const sent = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${tabId}/lines/send`,
-      { lineNos: [1], expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, tabId)) },
-    );
-    expect(sent.status).toBe(200);
-    expect(await billRead(tabId)).toMatchObject({ dining: "eat_in", diningChoice: "locked" });
+    try {
+      const tabId = await tabWith(venue, "Octopus");
+      expect(await heldRead(tabId)).toMatchObject({ dining: "eat_in", diningChoice: "open" });
+      expect(await billRead(tabId)).toMatchObject({ dining: "eat_in", diningChoice: "open" });
+      const sent = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/working-orders/${tabId}/lines/send`,
+        { lineNos: [1], expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, tabId)) },
+      );
+      expect(sent.status).toBe(200);
+      expect(await billRead(tabId)).toMatchObject({ dining: "eat_in", diningChoice: "locked" });
+    } finally {
+      await inTx(venue, (tx) => clearRoutingCell(tx, octopus));
+    }
   });
 
   it("reads a placed counter order's way as locked", async () => {

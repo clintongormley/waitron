@@ -138,6 +138,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | PUT  /api/working-orders/:id/invoice-choice             | order                  | refuses PUT .../invoice-choice                       |
  * | PUT  /api/working-orders/:id/receipt-language           | order                  | refuses PUT .../receipt-language                     |
  * | PUT  /api/working-orders/:id/label                      | order                  | refuses PUT .../label                                |
+ * | PUT  /api/working-orders/:id/dining                     | order                  | refuses PUT .../dining                               |
  * | DELETE /api/working-orders/:id                          | order                  | refuses DELETE /api/working-orders/:id               |
  * | POST /api/working-orders/:id/place                      | order                  | refuses POST .../place                               |
  * | POST /api/orders/:id/ready  | order                  | refuses POST /api/orders/:id/<verb>|
@@ -657,6 +658,13 @@ const ROUTES: readonly Row[] = [
     "PUT /api/working-orders/:id/label",
     "PUT",
     (x) => `/api/working-orders/${x.deliOrder}/label`,
+    () => ({}),
+    deliOrderZone,
+  ],
+  [
+    "PUT /api/working-orders/:id/dining",
+    "PUT",
+    (x) => `/api/working-orders/${x.deliOrder}/dining`,
     () => ({}),
     deliOrderZone,
   ],

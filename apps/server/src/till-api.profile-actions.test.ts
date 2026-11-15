@@ -224,6 +224,7 @@ const ROUTES: readonly Row[] = [
   ordering("PUT", `/api/working-orders/${id}/invoice-choice`),
   ordering("PUT", `/api/working-orders/${id}/receipt-language`),
   ordering("PUT", `/api/working-orders/${id}/label`),
+  ordering("PUT", `/api/working-orders/${id}/dining`),
   ordering("POST", `/api/working-orders/${id}/place`),
   ordering("POST", `/api/working-orders/${id}/cancel`),
   ordering("PUT", `/api/working-orders/${id}/make-at`),
