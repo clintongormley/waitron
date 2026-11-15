@@ -5,6 +5,7 @@ import { formatIsoMinute } from "../date-utils.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { es } from "../i18n/strings.js";
 import { fill, setLocale, t } from "../i18n/t.js";
+import * as networkRows from "./box-status-rows.js";
 import { boxStatusRows, partOfAlert, partsOfNotice, type PartRow } from "./box-status-rows.js";
 
 beforeEach(() => setLocale("en"));
@@ -770,4 +771,50 @@ describe("the Clock row while the start waits for its time", () => {
     });
     expect(other).toBe(0);
   });
+});
+
+// A running connection and a durable boot copy are independent outcomes.
+it.each([
+  ["running", "pending", "", "", "in progress", "waiting"],
+  ["applied", "current", "", "", "running configuration", "up to date"],
+  ["applied", "pending", "", "", "running configuration", "waiting"],
+  ["applied", "failed", "", "io-failed", "running configuration", "could not be written"],
+  [
+    "applied",
+    "absent",
+    "password-unavailable",
+    "",
+    "running configuration",
+    "password was unavailable",
+  ],
+  ["refused", "current", "failed", "", "could not join", "up to date"],
+  ["refused", "absent", "password-rejected", "", "may be wrong", "no Wi-Fi copy"],
+])(
+  "distinguishes join %s and copy %s",
+  (state, copy, reason, failure, connectionWords, copyWords) => {
+    const result = (
+      networkRows as unknown as { networkOutcome?: (n: unknown) => string }
+    ).networkOutcome?.({
+      change: { kind: "join", ssidHex: "426172", state, reason: reason || null },
+      bootCopy: {
+        state: copy,
+        reason: copy === "absent" ? "password-unavailable" : null,
+        failure: failure || null,
+      },
+    });
+    expect(result).toContain("Bar");
+    expect(result).toContain(connectionWords);
+    expect(result).toContain(copyWords);
+  },
+);
+it("does not call Forget durable until its boot copy is absent", () => {
+  const result = (
+    networkRows as unknown as { networkOutcome?: (n: unknown) => string }
+  ).networkOutcome?.({
+    change: { kind: "forget", ssidHex: "426172", state: "applied", reason: null },
+    bootCopy: { state: "current", reason: null, failure: null },
+  });
+  expect(result).toContain("removed from the running configuration");
+  expect(result).toContain("up to date");
+  expect(result).not.toContain("complete");
 });

@@ -6486,7 +6486,7 @@ in `box-status-rows.ts`) is under System, before Diagnostics, for people with `s
 reads `GET /api/box/health` every 15 seconds (passively after the first read) and the bell's own
 alert list.
 
-- **Network.** A read-only card after the health cards and before Restart, with Wired,
+- **Network.** A card after the health cards and before Restart, with Wired,
   Current Wi-Fi and Saved Wi-Fi. It reads `/api/box/network` once a minute even with a live
   connection, with the first read active and later reads passive. It hides for
   `box_host.unavailable`; other failures replace its old observation with a read-failed
@@ -6494,7 +6494,15 @@ alert list.
   asks again. Its read state is separate from health and alert failures.
   Null addresses and saved names say they were not reported; disconnected connections
   say Not connected. Names are decoded as UTF-8 and rendered as text. Its guide link opens
-  the page's `network` section. It offers no network changes.
+  the page's `network` section. After a successful read, Scan Wi-Fi opens a staged-input dialog
+  with a `wt-combobox` and password `wt-input`; unsupported security is listed but disabled.
+  Join closes and clears the password on acceptance before refreshing. It warns about losing
+  the page's connection, with cable/local-screen recovery when unwired. Running changes and
+  unobserved acceptance hold new actions. Only a successful read begun after acceptance retires
+  that local notice. Last change names the host's operation, network and outcome on reopening;
+  its running-configuration outcome and the durable boot-copy outcome are worded separately.
+  A read's recovery never clears an action refusal. Lost requests advise checking Last change
+  before resending. The existing minute watch supplies later outcomes.
 
 - **Rows.** One card per part, in order: Sales, Tax agency, Bucket copy, Spare box (only while
   this box copies to a paired spare), Printers, Card readers (left out when the payments module is

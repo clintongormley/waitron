@@ -1873,7 +1873,19 @@ export interface AlertView {
   deviceName?: string | null;
 }
 
+export type BoxNetworkChange = {
+  kind: "join" | "forget";
+  ssidHex: string;
+  state: "running" | "applied" | "refused";
+  reason: "password-rejected" | "network-not-found" | "timed-out" | "failed" | null;
+};
 export interface BoxNetwork {
+  change: BoxNetworkChange | null;
+  bootCopy: {
+    state: "pending" | "current" | "absent" | "failed";
+    reason: string | null;
+    failure: string | null;
+  };
   wired: { connected: boolean; address: string | null };
   wifi: { connectedSsidHex: string | null; savedSsidHex: string | null };
 }

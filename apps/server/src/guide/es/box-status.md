@@ -88,10 +88,20 @@ página avisa de que puede no mostrar todos los problemas.
 ## Consultar la red {#network}
 
 Cuando tu servidor puede informar de su red, **Red** muestra la conexión por cable y su dirección,
-el nombre de la Wi-Fi actual y el de la Wi-Fi guardada. Úsala para comprobar qué red
-utiliza el servidor. La tarjeta se actualiza aproximadamente cada minuto; no puedes cambiar
-la red desde aquí. Si falla la lectura, espera al siguiente intento automático. Si falta la tarjeta, vuelve a abrir
-**Estado del servidor** para consultar de nuevo al servidor.
+el nombre de la Wi-Fi actual y el de la Wi-Fi guardada. Pulsa **Buscar redes Wi-Fi**, elige tu red,
+introduce su contraseña y pulsa **Conectar**. Las redes con seguridad no compatible aparecen,
+pero no se pueden seleccionar.
+
+Cambiar la Wi-Fi puede desconectar esta página. Si no tienes conexión por cable, ten a mano un
+cable de red o la pantalla local del servidor para volver a conectarte. Introduce contraseñas
+solo desde el panel HTTPS en la dirección del propio servidor.
+
+Que el servidor acepte la solicitud no confirma el cambio. **Último cambio** indica qué ha
+pasado con la conexión en uso; la copia de arranque se indica por separado. Una copia pendiente
+o fallida no garantiza Wi-Fi en el próximo arranque. La tarjeta se actualiza aproximadamente
+cada minuto, por lo que el resultado puede tardar un par de minutos en aparecer. Si se desconoce
+el resultado de la solicitud, consulta **Último cambio** antes de reintentar. Si falla una lectura,
+espera al siguiente intento automático. Si falta la tarjeta, vuelve a abrir **Estado del servidor**.
 
 ## Vuelve a intentar los registros que esperan {#retry-now}
 

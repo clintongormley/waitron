@@ -79,10 +79,19 @@ problem.
 ## Check the network {#network}
 
 When your box can report its network, **Network** shows the wired connection and its address,
-the current Wi-Fi name and the saved Wi-Fi name. Use it to check which network the
-box is using. The card refreshes about once a minute; you cannot change the network here.
-If a read fails, wait for the next automatic attempt. If the card is missing, reopen
-**Box status** to ask the box again.
+the current Wi-Fi name and the saved Wi-Fi name. Choose **Scan Wi-Fi**, pick your network and
+enter its password, then **Join**. Unsupported security stays listed but cannot be selected.
+
+Changing Wi-Fi can disconnect this page. If you have no wired connection, keep a network cable
+or the box's local screen available so you can reconnect. Enter passwords only through the
+box's own HTTPS dashboard address.
+
+Acceptance means the request reached the box. **Last change** reports what happened to the
+running connection; the boot copy is reported separately. A pending or failed boot copy does
+not promise Wi-Fi at the next boot. The card refreshes about once a minute, so the outcome can
+take a couple of minutes to appear. If the request's outcome is unknown, check **Last change**
+before trying again. If a read fails, wait for the next automatic attempt. If the card is
+missing, reopen **Box status** to ask the box again.
 
 ## Try the waiting records again {#retry-now}
 
