@@ -62,6 +62,7 @@ it.each([
 });
 it("makes a fresh signed code request each time without writing a code to connection state", async () => {
   const operations: unknown[] = [];
+  let staleReply = false;
   const f = await installationFixture(undefined, {
     emergencyCode: async (v, saved, req, res) => {
       operations.push(v[4]);
@@ -69,7 +70,9 @@ it("makes a fresh signed code request each time without writing a code to connec
       expect(v[7]).toBe('{"version":1}');
       const r = (saved.view as { registration: { installationId: string; venueId: string } })
         .registration;
-      res.end(JSON.stringify(reply(r.installationId, r.venueId)));
+      const answer = reply(r.installationId, r.venueId);
+      if (staleReply) answer.asOf = new Date(Date.now() - 120000).toISOString();
+      res.end(JSON.stringify(answer));
     },
   });
   try {
@@ -83,6 +86,10 @@ it("makes a fresh signed code request each time without writing a code to connec
     expect(operations).toHaveLength(2);
     expect(operations[0]).not.toBe(operations[1]);
     expect(await readFile(path, "utf8")).toBe(before);
+    staleReply = true;
+    await expect(f.client.emergencyCode("https://staff.test")).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
   } finally {
     await f.close();
   }
@@ -168,4 +175,13 @@ it("drops a code when its registration is replaced before Cloud answers", async 
   } finally {
     await f.close();
   }
+});
+
+it.each([-60000, 60000])("accepts the inclusive exchange boundary at %ims", (offset) => {
+  const original = reply(),
+    now = Date.parse(original.asOf);
+  const value = { ...original, asOf: new Date(now + offset).toISOString() };
+  expect(emergency.readEmergencyCode(value, expected, { sentAt: now, receivedAt: now })).toEqual(
+    value,
+  );
 });

@@ -91,14 +91,14 @@ export class CloudServicesScreen extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) canManageEmergency = false;
   @state() private emergencyPeople: CloudEmergencyPerson[] | undefined;
-  @state() private peopleUnavailable = false;
+  @state() private peopleError: string | undefined;
   readonly #peopleQueries = new QueryController(
     this,
     () => this.api.liveData,
     (error) => {
       this.emergencyPeople = undefined;
-      this.peopleUnavailable = true;
-      if (codeOf(error) === "authorization.not_permitted") this.canManageEmergency = false;
+      this.peopleError = codeOf(error);
+      if (this.peopleError === "authorization.not_permitted") this.#clearCode();
     },
   );
   @state() private revealedCode: CloudEmergencyCode | undefined;
@@ -123,7 +123,7 @@ export class CloudServicesScreen extends LitElement {
       if (generation === this.#codeGeneration)
         this.codeError =
           codeOf(error) === "cloud.unavailable"
-            ? t("cloud.emergency_unavailable")
+            ? t("cloud.emergency_code_unavailable")
             : codeMessage(
                 codeOf(error),
                 undefined,
@@ -179,7 +179,7 @@ export class CloudServicesScreen extends LitElement {
   #stopEmergency() {
     this.#clearCode();
     this.emergencyPeople = undefined;
-    this.peopleUnavailable = false;
+    this.peopleError = undefined;
     this.#peopleQueries.release("getCloudEmergencyPeople");
     this.#emergencyQueries.release("getCloudEmergency");
     this.#emergencyKey = undefined;
@@ -204,7 +204,7 @@ export class CloudServicesScreen extends LitElement {
           (value) => {
             if (key === this.#emergencyKey) {
               this.emergencyPeople = value;
-              this.peopleUnavailable = false;
+              this.peopleError = undefined;
             }
           },
         )
@@ -361,9 +361,9 @@ export class CloudServicesScreen extends LitElement {
       }
       ${prices?.status === "published" ? html`<p>${fill("cloud.emergency_daily", { amount: money(Number((BigInt(prices.hostedMonthlyCents) + 15n) / 30n)), vat })}</p>` : prices?.status === "unavailable" ? html`<p>${t("cloud.billing_prices_unpublished")}</p>` : nothing}
       ${
-        this.canManageEmergency
+        this.canManageEmergency && this.peopleError !== "authorization.not_permitted"
           ? html`
-              ${this.peopleUnavailable ? html`<p>${t("cloud.emergency_people_unavailable")}</p>` : nothing}
+              ${this.peopleError ? html`<p>${t("cloud.emergency_people_unavailable")}</p>` : nothing}
               ${
                 this.emergencyPeople
                   ? html`<p>

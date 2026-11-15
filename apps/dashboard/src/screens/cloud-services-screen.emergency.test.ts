@@ -69,12 +69,21 @@ const section = (el: CloudServicesScreen) =>
 it.each([403, 503])(
   "keeps Cloud facts visible when the separate people read fails with %i",
   async (statusCode) => {
+    let displayReads = 0;
     let release!: () => void;
     const wait = new Promise<void>((r) => {
       release = r;
     });
     const api = new DashboardApi("", async (url) => {
       const path = String(url);
+      if (path.endsWith("/emergency")) {
+        displayReads++;
+        if (displayReads > 1)
+          return Response.json(
+            { error: { code: "cloud.unavailable", params: {} } },
+            { status: 503 },
+          );
+      }
       if (path.endsWith("/people")) {
         await wait;
         return Response.json(
@@ -113,9 +122,10 @@ it.each([403, 503])(
               : "cloud.emergency_people_unavailable",
           ),
         );
-      await expect
-        .poll(() => section(el)!.querySelector('a[href="https://emergency.example.test/"]'))
-        .not.toBeNull();
+      expect(
+        section(el)!.querySelector('a[href="https://emergency.example.test/"]'),
+      ).not.toBeNull();
+      expect(displayReads).toBe(1);
     } finally {
       release();
     }
@@ -380,5 +390,5 @@ it("explains when Cloud cannot provide the code yet", async () => {
   el.shadowRoot!.querySelector<HTMLElement>("#show-emergency-code")!.click();
   await expect
     .poll(() => section(el)?.querySelector('[role="alert"]')?.textContent)
-    .toContain(t("cloud.emergency_unavailable"));
+    .toContain("The emergency code could not be read.");
 });

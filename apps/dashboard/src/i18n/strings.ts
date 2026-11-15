@@ -627,6 +627,8 @@ export const en = {
   "cloud.account": "Open Cloud account",
   "cloud.emergency": "Emergency start in Cloud",
   "cloud.emergency_show_code": "Show code",
+  "cloud.emergency_code_unavailable":
+    "The emergency code could not be read. Showing it may not be available in Cloud yet. Open your Cloud account to check, or try again later.",
   "cloud.emergency_hide_code": "Hide code",
   "cloud.emergency_people": "Have permission and an authenticator",
   "cloud.emergency_needs_authenticator": "Need to set up an authenticator first",
@@ -4951,6 +4953,8 @@ export const es: Record<StringKey, string> = {
   "cloud.account": "Abrir la cuenta de Cloud",
   "cloud.emergency": "Inicio de emergencia en Cloud",
   "cloud.emergency_show_code": "Mostrar código",
+  "cloud.emergency_code_unavailable":
+    "No se pudo consultar el código de emergencia. Puede que Cloud aún no permita mostrarlo. Abre tu cuenta de Cloud para comprobarlo o inténtalo más tarde.",
   "cloud.emergency_hide_code": "Ocultar código",
   "cloud.emergency_people": "Tienen permiso y autenticador",
   "cloud.emergency_needs_authenticator": "Necesitan configurar un autenticador primero",
