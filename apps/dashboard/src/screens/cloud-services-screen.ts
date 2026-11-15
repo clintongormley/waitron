@@ -10,6 +10,8 @@ import { centsToDecimal, formatMoney } from "@waitron/shared";
 import type {
   CloudBilling,
   CloudEmergency,
+  CloudEmergencyCode,
+  CloudEmergencyPerson,
   CloudConnectionStatus,
   DashboardApi,
 } from "../api/client.js";
@@ -84,6 +86,46 @@ export class CloudServicesScreen extends LitElement {
     `,
   ];
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ attribute: false }) canManageEmergency = false;
+  @state() private emergencyPeople: CloudEmergencyPerson[] | undefined;
+  @state() private peopleUnavailable = false;
+  readonly #peopleQueries = new QueryController(
+    this,
+    () => this.api.liveData,
+    () => {
+      this.emergencyPeople = undefined;
+      this.peopleUnavailable = true;
+    },
+  );
+  @state() private revealedCode: CloudEmergencyCode | undefined;
+  @state() private codeBusy = false;
+  @state() private codeError: string | undefined;
+  #codeGeneration = 0;
+  #clearCode() {
+    this.#codeGeneration++;
+    this.revealedCode = undefined;
+    this.codeBusy = false;
+    this.codeError = undefined;
+  }
+  async #revealCode() {
+    if (this.codeBusy) return;
+    const generation = ++this.#codeGeneration;
+    this.codeBusy = true;
+    this.codeError = undefined;
+    try {
+      const answer = await this.api.revealCloudEmergencyCode();
+      if (generation === this.#codeGeneration) this.revealedCode = answer;
+    } catch (error) {
+      if (generation === this.#codeGeneration)
+        this.codeError = codeMessage(
+          codeOf(error),
+          undefined,
+          (error as { params?: { reason?: unknown; seconds?: unknown } }).params,
+        );
+    } finally {
+      if (generation === this.#codeGeneration) this.codeBusy = false;
+    }
+  }
   @state() private status: CloudConnectionStatus | undefined;
   @state() private busy = false;
   @state() private error: string | undefined;
@@ -128,6 +170,10 @@ export class CloudServicesScreen extends LitElement {
     },
   );
   #stopEmergency() {
+    this.#clearCode();
+    this.emergencyPeople = undefined;
+    this.peopleUnavailable = false;
+    this.#peopleQueries.release("getCloudEmergencyPeople");
     this.#emergencyQueries.release("getCloudEmergency");
     this.#emergencyKey = undefined;
     this.emergency = undefined;
@@ -135,11 +181,27 @@ export class CloudServicesScreen extends LitElement {
   }
   #watchEmergency() {
     if (!this.isConnected) return;
-    const key = readsBilling(this.status) ? JSON.stringify(this.status?.registration) : undefined;
+    const key =
+      readsBilling(this.status) && this.status?.registration
+        ? JSON.stringify([this.status?.registration, this.canManageEmergency])
+        : undefined;
     if (key === this.#emergencyKey) return;
     this.#stopEmergency();
     if (key === undefined) return;
     this.#emergencyKey = key;
+    if (this.canManageEmergency)
+      void this.#peopleQueries
+        .watch(
+          "getCloudEmergencyPeople",
+          dashboardQuery(this.api, "getCloudEmergencyPeople", []),
+          (value) => {
+            if (key === this.#emergencyKey) {
+              this.emergencyPeople = value;
+              this.peopleUnavailable = false;
+            }
+          },
+        )
+        .catch(() => undefined);
     const query = dashboardQuery(this.api, "getCloudEmergency", []);
     void this.#emergencyQueries
       .watch("getCloudEmergency", { ...query, key: `${query.key}:${key}` }, (value) => {
@@ -291,6 +353,68 @@ export class CloudServicesScreen extends LitElement {
           : nothing
       }
       ${prices?.status === "published" ? html`<p>${fill("cloud.emergency_daily", { amount: money(Number((BigInt(prices.hostedMonthlyCents) + 15n) / 30n)), vat })}</p>` : prices?.status === "unavailable" ? html`<p>${t("cloud.billing_prices_unpublished")}</p>` : nothing}
+      ${
+        this.canManageEmergency
+          ? html`
+              ${this.peopleUnavailable ? html`<p>${t("cloud.emergency_people_unavailable")}</p>` : nothing}
+              ${
+                this.emergencyPeople
+                  ? html`<p>
+                        ${t("cloud.emergency_people")}:
+                        ${
+                          this.emergencyPeople
+                            .filter((p) => p.hasAuthenticator)
+                            .map((p) => p.displayName)
+                            .join(", ") || t("cloud.emergency_nobody")
+                        }
+                      </p>
+                      <p data-test="emergency-needs-authenticator">
+                        ${t("cloud.emergency_needs_authenticator")}:
+                        ${
+                          this.emergencyPeople
+                            .filter((p) => !p.hasAuthenticator)
+                            .map((p) => p.displayName)
+                            .join(", ") || t("cloud.emergency_nobody")
+                        }
+                      </p>`
+                  : nothing
+              }
+              ${
+                this.revealedCode
+                  ? html`<div data-test="emergency-code">
+                        <p class="code">${this.revealedCode.code}</p>
+                        <p>
+                          <a
+                            href=${this.revealedCode.address}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            >${this.revealedCode.address}</a
+                          >
+                        </p>
+                        <p>
+                          ${t("cloud.emergency_issued")}: ${time(this.revealedCode.codeIssuedAt)}
+                        </p>
+                      </div>
+                      <wt-button id="hide-emergency-code" @click=${() => this.#clearCode()}
+                        >${t("cloud.emergency_hide_code")}</wt-button
+                      >`
+                  : html`<wt-button
+                      id="show-emergency-code"
+                      variant="primary"
+                      ?disabled=${this.codeBusy}
+                      .loading=${this.codeBusy}
+                      @click=${() => void this.#revealCode()}
+                      >${t("cloud.emergency_show_code")}</wt-button
+                    >`
+              }
+              ${this.codeError ? html`<p role="alert" class="error">${this.codeError}</p>` : nothing}
+            `
+          : html`<p>${t("cloud.emergency_permission")}</p>
+              <wt-button
+                @click=${() => this.dispatchEvent(new CustomEvent("admin-sign-in", { bubbles: true, composed: true }))}
+                >${t("cloud.emergency_sign_in")}</wt-button
+              >`
+      }
       ${s.accountUrl ? html`<a href=${s.accountUrl} target="_blank" rel="noopener noreferrer">${t("cloud.account")}</a>` : nothing}
     </section>`;
   }

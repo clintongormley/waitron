@@ -1,4 +1,5 @@
 import { isIP } from "node:net";
+import { AppError } from "@waitron/shared";
 import {
   exactKeys,
   fetchCloudDisplay,
@@ -10,6 +11,100 @@ import {
 import type { SavedCloudState } from "./cloud-client.js";
 import type { OnRefusal } from "./cloud-translation.js";
 import "./errors.js";
+
+export interface EmergencyCode {
+  version: 1;
+  installationId: string;
+  venueId: string;
+  countryCode: "ES";
+  asOf: string;
+  code: string;
+  codeIssuedAt: string;
+  address: string;
+}
+export function readEmergencyCode(
+  value: unknown,
+  expected: Parameters<typeof readEmergencyDisplay>[1],
+  exchange?: { sentAt: number; receivedAt: number },
+): EmergencyCode {
+  exactKeys(value, [
+    "version",
+    "installationId",
+    "venueId",
+    "countryCode",
+    "asOf",
+    "code",
+    "codeIssuedAt",
+    "address",
+  ]);
+  if (
+    value.version !== 1 ||
+    value.installationId !== expected.installationId ||
+    value.venueId !== expected.venueId ||
+    value.countryCode !== "ES" ||
+    !instant(value.asOf) ||
+    (exchange &&
+      (Date.parse(value.asOf) < exchange.sentAt - 60000 ||
+        Date.parse(value.asOf) > exchange.receivedAt + 60000)) ||
+    typeof value.code !== "string" ||
+    !/^[A-HJ-NP-Z2-9]{4}(?:-[A-HJ-NP-Z2-9]{4}){5}$/.test(value.code) ||
+    !instant(value.codeIssuedAt) ||
+    value.codeIssuedAt > value.asOf ||
+    !addressValid(value.address, expected.cloudOrigin, expected.staffOrigin)
+  )
+    unavailable();
+  return value as unknown as EmergencyCode;
+}
+export function fetchEmergencyCode(
+  state: SavedCloudState,
+  staffOrigin: string,
+  options: { signal?: AbortSignal; onRefusal?: OnRefusal; timeoutMs?: number } = {},
+): Promise<EmergencyCode> {
+  return fetchCloudDisplay(
+    state,
+    "emergency-hosting-code",
+    (value, exchange) =>
+      readEmergencyCode(
+        value,
+        {
+          installationId: state.view!.registration!.installationId,
+          venueId: state.view!.registration!.venueId,
+          cloudOrigin: state.origin,
+          staffOrigin,
+        },
+        exchange,
+      ),
+    {
+      ...options,
+      refusal: (status, value, retryAfter) => {
+        if (status === 403 && object(value) && value.error === "emergency_hosting_closed") {
+          exactKeys(value, ["error", "reason"]);
+          if (
+            !["setting_off", "level_inactive", "no_payment_method", "not_provisioned"].includes(
+              value.reason as string,
+            )
+          )
+            unavailable();
+          return new AppError("cloud.emergency_hosting_closed", { reason: value.reason as string });
+        }
+        const seconds =
+          retryAfter !== null && /^[1-9]\d*$/.test(retryAfter) ? Number(retryAfter) : NaN;
+        if (
+          status === 429 &&
+          Number.isSafeInteger(seconds) &&
+          object(value) &&
+          value.error === "rate_limited" &&
+          Object.keys(value).length === 1
+        )
+          return new AppError("cloud.emergency_code_rate_limited", { seconds });
+        return new AppError(
+          [400, 405, 413, 415].includes(status) ? "cloud.request_invalid" : "cloud.unavailable",
+          {},
+        );
+      },
+    },
+  );
+}
 
 export type EmergencyFacts =
   | {

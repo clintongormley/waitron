@@ -3310,6 +3310,8 @@ export class DashboardApp extends LitElement {
       case "cloud":
         return html`<dashboard-cloud-services-screen
           .api=${this.api}
+          .canManageEmergency=${this.#sessionPermissions.includes("node.manage")}
+          @admin-sign-in=${() => void this.#onLogout("cloud")}
         ></dashboard-cloud-services-screen>`;
       case "backup":
         return html`<dashboard-backup-screen

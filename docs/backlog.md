@@ -1857,7 +1857,7 @@ Not in any track until the standalone primary is done.
   Cloud's half, and for A947's strip (built in slice 4c) to show at a venue with no spare too. Local selected-backup placement groundwork keeps the spare's own
   identity; since A947 3b-F (#3172) a spare of a Veri*Factu venue can join as well:
   [A1188 design](superpowers/specs/2026-10-29-a1188-cloud-emergency-start-design.md).
-  The emergency-card adapter is built; its facts need Cloud’s display endpoint. Code reveal/readiness (part 1b), saved till facts (part 2) and hosted runtime remain open.
+  The emergency-card adapter is built; its facts need Cloud’s display endpoint. The card can reveal a fresh code and list permission/authenticator readiness; Cloud’s code endpoint is still required. Saved till facts (part 2), recovery-pack printing (A1187-2) and hosted runtime remain open.
   [Part 1 plan](superpowers/plans/2026-11-14-a1188-part1-emergency-card.md).
   [Detail](backlog/replication-cloud.md#a1188-someone-at-the-venue-can-start-the-venue-in-the-cloud-when-the-box-has-died-owner-2026-10-29)
 

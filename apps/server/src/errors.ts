@@ -82,6 +82,8 @@ declare module "@waitron/shared" {
     "fiscal.certificate_diagnosis_busy": Record<string, never>;
     "fiscal.certificate_diagnosis_unavailable": Record<string, never>;
     "cloud.unavailable": Record<string, never>;
+    "cloud.emergency_hosting_closed": { reason: string };
+    "cloud.emergency_code_rate_limited": { seconds: number };
     "cloud.tunnel_unavailable": Record<string, never>;
     "cloud.tunnel_conflict": Record<string, never>;
     "cloud.request_unavailable": Record<string, never>;

@@ -59,6 +59,164 @@ async function open(value: unknown, connected = status) {
 }
 const section = (el: CloudServicesScreen) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=cloud-emergency]");
+
+it("keeps Cloud facts visible when the separate people read fails", async () => {
+  let release!: () => void;
+  const wait = new Promise<void>((r) => {
+    release = r;
+  });
+  const api = new DashboardApi("", async (url) => {
+    const path = String(url);
+    if (path.endsWith("/people")) {
+      await wait;
+      return Response.json(
+        { error: { code: "authorization.not_permitted", params: {} } },
+        { status: 403 },
+      );
+    }
+    return Response.json(
+      path.endsWith("/emergency")
+        ? facts()
+        : path.endsWith("/billing")
+          ? { billing: { status: "unavailable" }, prices: { status: "unavailable" } }
+          : status,
+    );
+  });
+  try {
+    const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", {
+      api,
+      canManageEmergency: true,
+    });
+    await expect
+      .poll(() => section(el)?.querySelector('a[href="https://emergency.example.test/"]'))
+      .toBeInstanceOf(HTMLAnchorElement);
+    release();
+    await expect
+      .poll(() => section(el)?.textContent)
+      .toContain(t("cloud.emergency_people_unavailable"));
+    expect(section(el)!.querySelector('a[href="https://emergency.example.test/"]')).not.toBeNull();
+  } finally {
+    release();
+  }
+});
+
+it("fetches a code only on demand, shows its own address/date and clears it on close and leave", async () => {
+  let reads = 0;
+  const api = new DashboardApi("", async (url, init) => {
+    const path = String(url);
+    if (path.endsWith("/code")) {
+      reads++;
+      expect(init!.method).toBe("POST");
+      expect(init!.body).toBe("{}");
+      return Response.json({
+        asOf: "2026-11-10T12:00:00.000Z",
+        code: "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ",
+        address: "https://current.example.test/",
+        codeIssuedAt: "2026-11-05T09:00:00.000Z",
+      });
+    }
+    if (path.endsWith("/people"))
+      return Response.json([
+        { personId: "a", displayName: "Alex", hasAuthenticator: true },
+        { personId: "b", displayName: "Beatrice", hasAuthenticator: false },
+      ]);
+    return Response.json(
+      path.endsWith("/emergency")
+        ? facts()
+        : path.endsWith("/billing")
+          ? { billing: { status: "unavailable" }, prices: { status: "unavailable" } }
+          : status,
+    );
+  });
+  let pendingCode: ReturnType<DashboardApi["revealCloudEmergencyCode"]> | undefined;
+  const reveal = api.revealCloudEmergencyCode.bind(api);
+  api.revealCloudEmergencyCode = () => (pendingCode = reveal());
+  const { el, host } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", {
+    api,
+    canManageEmergency: true,
+  });
+  const button = (id: string) => el.shadowRoot!.querySelector<HTMLElement>(`#${id}`);
+  await expect.poll(() => button("show-emergency-code")).toBeInstanceOf(HTMLElement);
+  expect(reads).toBe(0);
+  await expect.poll(() => section(el)?.textContent).toContain("Alex");
+  expect(
+    section(el)!.querySelector("[data-test=emergency-needs-authenticator]")!.textContent,
+  ).toContain("Beatrice");
+  button("show-emergency-code")!.click();
+  await expect.poll(() => button("hide-emergency-code")).toBeInstanceOf(HTMLElement);
+  expect(section(el)!.textContent).toContain("ABCD-EFGH-JKLM-NPQR-STUV-WXYZ");
+  expect(section(el)!.querySelector("[data-test=emergency-code] a")!.getAttribute("href")).toBe(
+    "https://current.example.test/",
+  );
+  expect(
+    section(el)!.querySelector("[data-test=emergency-code] time")!.getAttribute("datetime"),
+  ).toBe("2026-11-05T09:00:00.000Z");
+  await expectNoA11yViolations(host);
+  button("hide-emergency-code")!.click();
+  await el.updateComplete;
+  expect(section(el)!.textContent).not.toContain("ABCD-EFGH-JKLM-NPQR-STUV-WXYZ");
+  button("show-emergency-code")!.click();
+  await expect.poll(() => reads).toBe(2);
+  host.remove();
+  await pendingCode;
+  await el.updateComplete;
+  expect(el.shadowRoot!.textContent).not.toContain("ABCD-EFGH-JKLM-NPQR-STUV-WXYZ");
+});
+it("keeps code replies out of a card whose registration changed while the read waited", async () => {
+  let replaced = false,
+    entered = false,
+    release!: () => void;
+  const wait = new Promise<void>((r) => {
+    release = r;
+  });
+  const api = new DashboardApi("", async (url) => {
+    const path = String(url);
+    if (path.endsWith("/code")) {
+      entered = true;
+      await wait;
+      return Response.json({
+        code: "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ",
+        address: "https://old.example.test/",
+        asOf: "2026-11-10T12:00:00.000Z",
+        codeIssuedAt: "2026-11-01T09:00:00.000Z",
+      });
+    }
+    if (path.endsWith("/people")) return Response.json([]);
+    return Response.json(
+      path.endsWith("/emergency")
+        ? facts()
+        : path.endsWith("/billing")
+          ? { billing: { status: "unavailable" }, prices: { status: "unavailable" } }
+          : { ...status, registration: { installationId: replaced ? "second" : "first" } },
+    );
+  });
+  let pendingCode: ReturnType<DashboardApi["revealCloudEmergencyCode"]> | undefined;
+  const reveal = api.revealCloudEmergencyCode.bind(api);
+  api.revealCloudEmergencyCode = () => (pendingCode = reveal());
+  try {
+    const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", {
+      api,
+      canManageEmergency: true,
+    });
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("#show-emergency-code"))
+      .toBeInstanceOf(HTMLElement);
+    el.shadowRoot!.querySelector<HTMLElement>("#show-emergency-code")!.click();
+    await expect.poll(() => entered).toBe(true);
+    replaced = true;
+    el.shadowRoot!.querySelector<HTMLElement>("#refresh")!.click();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("#show-emergency-code")?.hasAttribute("disabled"))
+      .toBe(false);
+    release();
+    await pendingCode;
+    await el.updateComplete;
+    await expect.poll(() => el.shadowRoot!.querySelector("#hide-emergency-code")).toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain("ABCD-EFGH-JKLM-NPQR-STUV-WXYZ");
+  } finally {
+    release();
+  }
+});
 for (const language of ["en", "es"] as const) {
   it(`${language} shows the emergency address, dates and exactly rounded daily price accessibly`, async () => {
     setLocale(language);

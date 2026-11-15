@@ -651,7 +651,9 @@ source in the emergency declaration. Since A947 3b-F (#3172) a spare of a venue 
 Veri*Factu can join, with nothing fiscal written at the join. Cloud placement and the hosted start
 still wait for Cloud's half, and for A947's strip (built in slice 4c, shown only at a venue with a
 spare) to show at a venue with no spare too. The emergency-card adapter is built; its facts need
-Cloud's display endpoint. Code reveal/readiness and saved till facts remain open.
+Cloud's display endpoint. The card can reveal a fresh code and list permission/authenticator
+readiness; Cloud's code endpoint remains required. Saved till facts, recovery-pack printing and
+hosted runtime remain open.
 The [part 1 plan](../superpowers/plans/2026-11-14-a1188-part1-emergency-card.md) proposes two
 card slices and pins Cloud’s 14 November 13:33 CET agreement to the contract values.
 The watcher resumed the card on 2026-11-15 at 05:46, requiring a post-agreement plan read

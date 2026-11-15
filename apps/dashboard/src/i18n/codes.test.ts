@@ -14,6 +14,26 @@ it("resolves a known code to its Spanish copy", () => {
   expect(codeMessage("password.invalid", "es")).toBe("Contraseña incorrecta, inténtalo de nuevo");
 });
 
+it("explains each emergency closure and the code-read wait in both languages", () => {
+  for (const locale of ["en", "es"] as const) {
+    for (const reason of [
+      "setting_off",
+      "level_inactive",
+      "no_payment_method",
+      "not_provisioned",
+    ] as const)
+      expect(codeMessage("cloud.emergency_hosting_closed", locale, { reason })).toBe(
+        { en, es }[locale][`cloud.emergency_${reason}`],
+      );
+    expect(codeMessage("cloud.emergency_code_rate_limited", locale, { seconds: 17 })).toContain(
+      "17",
+    );
+    expect(codeMessage("cloud.emergency_code_rate_limited", locale, { seconds: 17 })).toContain(
+      locale === "en" ? "seconds" : "segundos",
+    );
+  }
+});
+
 it("degrades an unknown code to the generic message, NEVER the raw code", () => {
   const message = codeMessage("totally.made.up", "en");
   expect(message).toBe("Something went wrong, try again");

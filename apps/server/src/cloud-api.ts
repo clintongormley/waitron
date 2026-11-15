@@ -17,6 +17,7 @@ import type { Logger } from "./logger.js";
 import type { CloudChoice, CloudConnection } from "./cloud-client.js";
 import type { CloudReplacement } from "./cloud-replacement.js";
 import "./errors.js";
+import { readEmergencyPeople } from "./cloud-emergency-people.js";
 export interface CloudApiDeps {
   db: Database;
   connection?: CloudConnection;
@@ -42,6 +43,8 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
       "person.suspended": 403,
       "authorization.not_permitted": 403,
       "cloud.unavailable": 503,
+      "cloud.emergency_hosting_closed": 403,
+      "cloud.emergency_code_rate_limited": 429,
       "cloud.tunnel_unavailable": 422,
       "cloud.tunnel_conflict": 409,
       "cloud.request_unavailable": 409,
@@ -57,11 +60,15 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
     },
     "cloud.failed",
   );
-  const authorize = async (c: Context, passive = false) => {
+  const authorize = async (
+    c: Context,
+    passive = false,
+    permission: "system.manage" | "node.manage" = "system.manage",
+  ) => {
     const sessionId = requireManagementSession(c);
     const check = () =>
       withTransaction(deps.db, (tx) =>
-        authorizeManager(tx, { managementSessionId: sessionId, permission: "system.manage" }),
+        authorizeManager(tx, { managementSessionId: sessionId, permission }),
       );
     if (passive) await withPassiveManagementRead(check);
     else await check();
@@ -138,6 +145,38 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
       primary();
       c.header("Cache-Control", "no-store");
       return c.json({ asOf, emergency, prices, stale });
+    }),
+  );
+  app.use("/management-api/cloud/emergency/*", async (c, next) => {
+    c.header("Cache-Control", "no-store");
+    await next();
+  });
+  app.get("/management-api/cloud/emergency/people", (c) =>
+    run(c, log, async () => {
+      await authorize(c, true, "node.manage");
+      primary();
+      const people = await withTransaction(deps.db, readEmergencyPeople);
+      await authorize(c, true, "node.manage");
+      primary();
+      return c.json(people);
+    }),
+  );
+  app.post("/management-api/cloud/emergency/code", (c) =>
+    run(c, log, async () => {
+      if (c.req.header("origin") !== managementOriginFor(c, deps.managementOrigin))
+        throw new AppError("authorization.not_permitted", { permission: "node.manage" });
+      await authorize(c, false, "node.manage");
+      primary();
+      const body = await readRawJsonBody<unknown>(c);
+      if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).length)
+        throw new AppError("cloud.request_invalid", {});
+      const { asOf, code, codeIssuedAt, address } = await connection().emergencyCode(
+        deps.managementOrigin,
+        c.req.raw.signal,
+      );
+      await authorize(c, true, "node.manage");
+      primary();
+      return c.json({ asOf, code, codeIssuedAt, address });
     }),
   );
   for (const action of ["prepare", "check", "reissue"] as const)

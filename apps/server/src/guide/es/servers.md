@@ -276,4 +276,11 @@ Si el inicio está desactivado, el plan Conectado no está activo o falta un mé
 abre la cuenta de Cloud para corregirlo. **Cloud aún no puede iniciar este local** indica que el
 alojamiento no está disponible para este local. Los datos anteriores se indican como tales;
 Cloud los comprueba de nuevo antes de iniciar el local. El precio diario es aproximado y no
-incluye IVA. La tarjeta solo muestra los datos; no inicia el local ni revela su código.
+incluye IVA.
+
+Con permiso para gestionar el servidor, pulsa **Mostrar código** para consultar el código actual.
+Comprueba su fecha de emisión antes de usar una copia guardada. **Ocultar código** lo retira de
+la tarjeta, igual que salir de esta pantalla. La dirección junto al código corresponde a ese código.
+La tarjeta también muestra quién tiene permiso y autenticador, y quién necesita configurarlo
+en su perfil. Para identificarte durante una emergencia necesitas tu contraseña y el autenticador
+o un código de recuperación. La tarjeta no inicia el local.
