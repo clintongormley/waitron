@@ -1,5 +1,7 @@
 # Questions for the asesor
 
+**2026-11-15, answers:** The adviser answered [the shortened list](#the-shortened-list-2026-10-09)'s S1 to S16 and R1 to R6 in a draft of 15 November (his 1.1 to 1.16 and 2.1 to 2.6). S17 to S19 are unanswered. What each answer changes, and the owner's decisions it needs, are in [2026-11-15-adviser-answers.md](2026-11-15-adviser-answers.md); the follow-ups are questions 3, 4 and 15 to 22 of the [meeting sheet](2026-11-19-adviser-meeting.md). The question texts below are unchanged.
+
 **2026-11-15:** The [sheet for the meeting of 19 November](2026-11-19-adviser-meeting.md) is the current list to take to the tax adviser: what is still open, each framed for a yes or a correction, in English and Spanish.
 
 **2026-11-06:** The [curated list](2026-11-06-adviser-questions.md) replaces the Spanish batch of 5 November and is now the base version: four research passes reduced its 25 questions to seven points of real judgement plus confirmations. Nothing has been sent.
@@ -280,8 +282,9 @@ checked word for word against the downloaded text, are in
 about a quarter were answered outright and most of the rest narrowed to a yes or no. What is left for the
 advisor is below: eighteen short questions, S1 to S18, and a review list, R1 to R6, for the advisor to
 read and correct only where we are wrong. **This list replaces the 6 October Word copies**; the
-question texts further down this file stay as the background and the record. Sent; awaiting the
-adviser's reply (owner, 2026-11-11).
+question texts further down this file stay as the background and the record. Sent (owner,
+2026-11-11). S1 to S16 and R1 to R6 answered on 2026-11-15; S17 to S19 still awaited. See
+[the answers](2026-11-15-adviser-answers.md).
 
 Questions not in the 6 October Word copy (Q3, Q4, Q8, Q10, and the lawyer's Q9, Q11, Q12 and Q16)
 are unchanged by this pass. Q46, on selling by weight, was added afterwards the same day as S17.
