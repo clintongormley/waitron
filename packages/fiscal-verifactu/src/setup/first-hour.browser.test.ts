@@ -232,7 +232,7 @@ it("automatically compares clocks and shows combined country, place and zone, wi
     },
   });
   expect(calls.some((c) => c.action === "candidates")).toBe(false);
-  expect(el.shadowRoot!.querySelector('input[type="file"], wt-textarea')).toBeNull();
+  expect(el.shadowRoot!.querySelector("wt-file-input, wt-textarea")).toBeNull();
 });
 it("shows Canary local time rather than the browser or Madrid zone", async () => {
   const request = structuredClone(context);

@@ -2165,7 +2165,7 @@ The station printers check reads the multi-select's rendered `aria-selected` opt
 in `packages/venue-service/src/dashboard/prep-stations-screen.test.ts`, “the station editor retains
 printer memberships independently for each station”, rather than relying on the host values alone.
 
-### Wait for the native picker's PDF import
+### Wait for the recovery PDF picker's import
 
 A PDF mismatch check must wait for `RecoveryKeyEntry.importFile` to finish before reading its
 rendered refusal. Track the promise started by the real file-picker event, keeping the real

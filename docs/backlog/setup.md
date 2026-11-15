@@ -490,15 +490,6 @@ that operation's reader. Do not remove exact-content checks to make a large file
   A947 slice 3a.
   [Detail](setup.md#a1284-where-the-environment-sets-the-vault-key-a-move-or-a-join-leaves-a-ring-that-is-not-the-one-in-use)
 
-## Bundle: File input sweep
-
-1 entry, size M, from the backlog review of 2026-11-06.
-
-- **File pickers the browser still draws show "Choose File / No file chosen" in the browser's
-  language**, not the chooser's. Left: the dashboard's node recovery panel, and the fiscal
-  first-setup, recovery key and offline custodian pages. `wt-file-input` hides that control and
-  draws its own words.
-
 ## Starter courses for Italy
 
 When Italy's country pack is built, seed Antipasti, Primi piatti, Secondi piatti and Dolci.

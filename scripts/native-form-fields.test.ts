@@ -20,7 +20,6 @@ const ROOTS = ["apps", "packages"];
 const NOT_TEXT = new Set([
   "checkbox",
   "radio",
-  "file",
   "range",
   "color",
   "hidden",
@@ -39,6 +38,7 @@ const EXEMPT_FILES = new Set([
   "packages/ui/src/components/wt-price-input.ts",
   "packages/ui/src/components/wt-number-stepper.ts",
   "packages/ui/src/components/wt-data-table.ts",
+  "packages/ui/src/components/wt-file-input.ts",
 ]);
 
 /** Fields that are not fields: the list shrinks; it does not grow. */
@@ -163,6 +163,10 @@ describe("offendingFields", () => {
 
   test("does not read a comment", () => {
     expect(offendingFields("// <select>\nconst x = 1;")).toEqual([]);
+  });
+
+  test("reports a file input", () => {
+    expect(offendingFields('html`<input type="file">`')).toEqual([1]);
   });
 
   test("reports a date input", () => {

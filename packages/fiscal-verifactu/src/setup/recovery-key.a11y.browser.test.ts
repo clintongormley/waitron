@@ -2,6 +2,7 @@ import axe from "axe-core";
 import { afterEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
+import { chooseFiles } from "@waitron/ui/src/test-helpers.js";
 import type { LitElement } from "lit";
 import "./recovery-key.js";
 import { renderRecoveryPdf } from "../recovery-pdf.js";
@@ -29,18 +30,20 @@ for (const theme of ["light", "dark"] as const)
             "background:var(--wt-color-surface-raised);color:var(--wt-color-text);font-family:var(--wt-font-family);padding:var(--wt-space-4)";
           document.body.style.background = getComputedStyle(host).backgroundColor;
           document.documentElement.style.background = getComputedStyle(host).backgroundColor;
-          for (const state of ["empty", "invalid", "loaded"] as const) {
+          for (const state of ["empty", "invalid", "refused", "loaded"] as const) {
             const heading = document.createElement("h2");
             heading.textContent =
               locale === "en"
                 ? {
                     empty: "Recovery key",
                     invalid: "Check the printed key",
+                    refused: "Choose another PDF",
                     loaded: "Saved recovery PDF",
                   }[state]
                 : {
                     empty: "Clave de recuperación",
                     invalid: "Revisa la clave impresa",
+                    refused: "Elige otro PDF",
                     loaded: "PDF de recuperación guardado",
                   }[state];
             host.append(heading);
@@ -64,6 +67,18 @@ for (const theme of ["light", "dark"] as const)
               }
               await el.updateComplete;
             }
+            if (state === "refused") {
+              const reading = vi.spyOn(el, "importFile");
+              chooseFiles(
+                el.shadowRoot!.querySelector("wt-file-input")!,
+                new File(["not a PDF"], "notes.pdf"),
+              );
+              await reading.mock.results[0]!.value;
+              await el.updateComplete;
+              expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent!.trim()).not.toBe(
+                "",
+              );
+            }
             if (state === "loaded") {
               const bytes = await renderRecoveryPdf(
                 {
@@ -82,12 +97,11 @@ for (const theme of ["light", "dark"] as const)
                 locale,
                 "Europe/Madrid",
               );
-              const picker = el.shadowRoot!.querySelector<HTMLInputElement>('input[type="file"]')!;
-              const transfer = new DataTransfer();
-              transfer.items.add(new File([bytes], "recovery.pdf"));
-              picker.files = transfer.files;
               const reading = vi.spyOn(el, "importFile");
-              picker.dispatchEvent(new Event("change"));
+              chooseFiles(
+                el.shadowRoot!.querySelector("wt-file-input")!,
+                new File([bytes], "recovery.pdf"),
+              );
               await reading.mock.results[0]!.value;
               await el.updateComplete;
             }

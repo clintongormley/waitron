@@ -1,6 +1,7 @@
 import { afterEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
+import { chooseFiles, drawnFileName } from "@waitron/ui/src/test-helpers.js";
 import type { InitialSetupActions } from "@waitron/module/src/setup-contract.js";
 import "./first-fiscal-screen.js";
 import type { FirstFiscalScreen } from "./first-fiscal-screen.js";
@@ -103,12 +104,13 @@ async function field(el: FirstFiscalScreen, test: string, value: string) {
   );
   await el.updateComplete;
 }
-async function file(el: FirstFiscalScreen, test: string, value: unknown) {
-  const control = el.shadowRoot!.querySelector<HTMLInputElement>(`[data-test=${test}]`)!;
-  const files = new DataTransfer();
-  files.items.add(new File([JSON.stringify(value)], "public.json", { type: "application/json" }));
-  control.files = files.files;
-  control.dispatchEvent(new Event("change"));
+async function file(el: FirstFiscalScreen, test: string, value: unknown, length = 0) {
+  chooseFiles(
+    el.shadowRoot!.querySelector(`[data-test=${test}]`)!,
+    new File([JSON.stringify(value).padEnd(length, " ")], "public.json", {
+      type: "application/json",
+    }),
+  );
   await el.updateComplete;
 }
 async function candidates(el: FirstFiscalScreen) {
@@ -309,20 +311,44 @@ it("keeps a refused candidate proposal editable without accepting a public reque
   );
   expect(el.shadowRoot!.querySelector("[data-test=allocation-file]")).toBeNull();
 });
-it("refuses a missing or oversized public file before reading or uploading it", async () => {
+it("refuses a public file over 64 KiB before reading or uploading it", async () => {
+  const { vi } = await import("vitest");
   const { el, calls } = await mount();
   await candidates(el);
-  const control = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=allocation-file]")!;
-  const data = new DataTransfer();
-  data.items.add(new File(["X".repeat(65537)], "large.json"));
-  control.files = data.files;
-  control.dispatchEvent(new Event("change"));
+  await file(el, "allocation-file", input, 65_537);
+  const read = vi.spyOn(File.prototype, "text");
+  try {
+    await click(el, "import");
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=allocation-error]")?.textContent)
+      .toContain("Check");
+    expect(read).not.toHaveBeenCalled();
+    expect(calls.map((call) => call.action)).toEqual(["candidates"]);
+  } finally {
+    read.mockRestore();
+  }
+});
+it("draws both public file pickers in Spanish and passes the chosen files on", async () => {
+  const { el, calls } = await mount();
+  el.locale = "es";
   await el.updateComplete;
+  await candidates(el);
+  const allocation = el.shadowRoot!.querySelector("[data-test=allocation-file]")!;
+  expect(allocation.shadowRoot!.textContent).toContain("Elegir archivo");
+  expect(allocation.shadowRoot!.textContent).not.toContain("Choose");
+  await file(el, "allocation-file", input, 1_500);
+  expect(drawnFileName(allocation)).toBe("public.json");
+  expect(allocation.shadowRoot!.querySelector(".size")!.textContent).toBe("1,5 kB");
+  expect(allocation.shadowRoot!.textContent).toContain("Elegir otro archivo");
   await click(el, "import");
-  await expect
-    .poll(() => el.shadowRoot!.querySelector("[data-test=allocation-error]")?.textContent)
-    .toContain("Check");
-  expect(calls.map((call) => call.action)).toEqual(["candidates"]);
+  await expect.poll(() => el.shadowRoot!.querySelector("[data-test=key-file]")).not.toBeNull();
+  expect(calls.map((call) => call.action)).toEqual(["candidates", "input"]);
+  expect(calls[1]!.values[0]).toEqual(input);
+  const key = el.shadowRoot!.querySelector("[data-test=key-file]")!;
+  expect(key.shadowRoot!.textContent).toContain("Elegir archivo");
+  await file(el, "key-file", publicKey);
+  expect(drawnFileName(key)).toBe("public.json");
+  expect(key.shadowRoot!.textContent).toContain("Elegir otro archivo");
 });
 it("does not enrol a key when the independent fingerprint is missing or mismatches", async () => {
   const { el, calls } = await mount();

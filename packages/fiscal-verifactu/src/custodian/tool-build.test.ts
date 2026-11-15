@@ -14,8 +14,9 @@ import type { PaperBlock, PaperConsumption, SignedPaperValue } from "../paper-pr
 async function click(page: Page, name: string) {
   await page.getByRole("button", { name, exact: true }).click();
 }
+/** A file picker's label also holds its required mark, so its words alone are not the whole label. */
 async function selectJson(page: Page, label: string, value: unknown) {
-  await page.getByLabel(label, { exact: true }).setInputFiles({
+  await page.getByLabel(label).setInputFiles({
     name: "public.json",
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify(value)),
@@ -172,9 +173,7 @@ it("runs the saved self-contained artifact offline, reopens its actual download,
         .fill("original kept");
       await click(page, "I checked and kept the one usable original");
       await click(page, "Check saved file");
-      await page
-        .getByLabel("Saved protected key file", { exact: true })
-        .setInputFiles(join(dir, "saved-key.json"));
+      await page.getByLabel("Saved protected key file").setInputFiles(join(dir, "saved-key.json"));
       await page.getByLabel("Passphrase", { exact: false }).first().fill(custodyPassphrase);
       await click(page, "Reopen selected file");
       await downloadJson(page, "Save check receipt", dir, "file-check.json");
@@ -217,7 +216,7 @@ it("runs the saved self-contained artifact offline, reopens its actual download,
       await click(resume, "Load check request");
       await click(resume, "Check saved file");
       await resume
-        .getByLabel("Saved protected key file", { exact: true })
+        .getByLabel("Saved protected key file")
         .setInputFiles(join(dir, "saved-key.json"));
       await resume.getByLabel("Passphrase", { exact: false }).first().fill(custodyPassphrase);
       await click(resume, "Reopen selected file");

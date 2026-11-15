@@ -23,6 +23,8 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-textarea.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-file-input.js";
+import { fileInputCopy } from "../file-input-copy.js";
 import { fiscalSetupStrings } from "./strings.js";
 
 type Context = {
@@ -100,19 +102,10 @@ export class FirstFiscalScreen extends LitElement {
         margin-block: var(--wt-space-4);
       }
       wt-input,
-      wt-textarea {
+      wt-textarea,
+      wt-file-input {
         display: block;
         margin-block: var(--wt-space-3);
-      }
-      label {
-        display: block;
-        margin-block: var(--wt-space-3);
-      }
-      input[type="file"] {
-        max-width: 100%;
-        min-height: var(--wt-tap-min);
-        font: inherit;
-        color: var(--wt-color-text);
       }
       p,
       dd {
@@ -347,22 +340,25 @@ export class FirstFiscalScreen extends LitElement {
     setTimeout(() => URL.revokeObjectURL(url), 0);
   }
   #file(test: "allocation-file" | "key-file", label: string, field: "allocationFile" | "keyFile") {
-    return html`<label
-      >${label} *<input
-        type="file"
-        accept="application/json,.json"
-        name=${field === "allocationFile" ? "fiscal-public-allocation" : "custodian-public-key"}
-        data-test=${test}
-        ?disabled=${this.busy}
-        @change=${(event: Event) => {
-          event.stopPropagation();
-          this.#change({ [field]: (event.target as HTMLInputElement).files?.[0] });
-          if (field === "allocationFile") {
-            this.imported = undefined;
-            this.enrolled = false;
-          }
-        }}
-    /></label>`;
+    return html`<wt-file-input
+      accept="application/json,.json"
+      name=${field === "allocationFile" ? "fiscal-public-allocation" : "custodian-public-key"}
+      data-test=${test}
+      required
+      label=${label}
+      .locale=${this.locale}
+      .copy=${fileInputCopy[this.locale]}
+      .files=${this.draft[field] ? [this.draft[field]] : []}
+      ?disabled=${this.busy}
+      @wt-change=${(event: CustomEvent<{ files: File[] }>) => {
+        event.stopPropagation();
+        this.#change({ [field]: event.detail.files[0] });
+        if (field === "allocationFile") {
+          this.imported = undefined;
+          this.enrolled = false;
+        }
+      }}
+    ></wt-file-input>`;
   }
   override render() {
     if (this.api?.preparation)

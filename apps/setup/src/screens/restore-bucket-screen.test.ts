@@ -1,16 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
-import { SetupApi } from "../api/client.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
-import type { WtFileInput } from "@waitron/ui";
 import {
   chooseFiles,
-  cleanupWidgets,
+  chooseOption,
   drawnFileName,
   fileControl,
   fileError,
-  mountWidget,
-} from "../widgets/test-helpers.js";
+} from "@waitron/ui/src/test-helpers.js";
+import { SetupApi } from "../api/client.js";
+import { currentLocale, setLocale } from "../i18n/t.js";
+import type { WtFileInput } from "@waitron/ui";
+import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { BucketRestoreRequestDetail } from "../events.js";
 import { SetupRestoreBucketScreen } from "./restore-bucket-screen.js";
 import {

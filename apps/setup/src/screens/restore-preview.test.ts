@@ -3,7 +3,8 @@ import type { WtFileInput } from "@waitron/ui";
 import { afterEach, expect, it, vi } from "vitest";
 import { SetupApi } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
-import { chooseFiles, cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { chooseFiles } from "@waitron/ui/src/test-helpers.js";
+import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { SetupRestoreScreen } from "./restore-screen.js";
 
 const saved = {

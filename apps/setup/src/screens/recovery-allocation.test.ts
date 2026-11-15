@@ -1,7 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
 import type { LitElement } from "lit";
 import { SetupApi, type RecoveryRestoreCredentials } from "../api/client.js";
-import { chooseFiles, cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { chooseFiles } from "@waitron/ui/src/test-helpers.js";
+import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { SetupRestoreScreen } from "./restore-screen.js";
 import { SetupRestoreBucketScreen } from "./restore-bucket-screen.js";
 import { SetupCloudRestoreScreen } from "./cloud-restore-screen.js";

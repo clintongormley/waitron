@@ -7,14 +7,8 @@ import { venue, wizardApi } from "../test/first-setup-browser.js";
 import { setLocale, t } from "./i18n/t.js";
 import type { StringKey } from "./i18n/strings.js";
 import type { SetupCertScreen } from "./screens/cert-screen.js";
-import {
-  chooseFiles,
-  mountWidget,
-  cleanupWidgets,
-  expectNoA11yViolations,
-  fileControl,
-  fileError,
-} from "./widgets/test-helpers.js";
+import { chooseFiles, fileControl, fileError } from "@waitron/ui/src/test-helpers.js";
+import { mountWidget, cleanupWidgets, expectNoA11yViolations } from "./widgets/test-helpers.js";
 
 const pfxError = (root: ShadowRoot) => fileError(root.querySelector("[data-test=pfx]")!);
 

@@ -1,7 +1,9 @@
-import { LitElement, css, html, type PropertyValues } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, draftScopeFor, type DraftScope } from "@waitron/ui";
+import { baseStyles, draftScopeFor, visuallyHiddenStyles, type DraftScope } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-file-input.js";
+import { fileInputCopy } from "../file-input-copy.js";
 import { MAX_RECOVERY_PDF, RecoveryPackWithoutKeyError } from "../recovery-document.js";
 import { normaliseTypedCode } from "../paper-register-compact.js";
 import { decodeRecoveryKey } from "../recovery-key-code.js";
@@ -44,18 +46,13 @@ export class RecoveryKeyEntry extends LitElement {
       :host {
         display: block;
       }
-      wt-input {
+      wt-input,
+      wt-file-input {
         display: block;
         margin-block: var(--wt-space-3);
       }
-      .error {
-        color: var(--wt-color-danger);
-      }
-      input[type="file"] {
-        max-width: 100%;
-        min-height: var(--wt-tap-min);
-        font: inherit;
-        color: var(--wt-color-text);
+      .visually-hidden {
+        ${visuallyHiddenStyles}
       }
     `,
   ];
@@ -106,9 +103,7 @@ export class RecoveryKeyEntry extends LitElement {
   clear(): void {
     this.#clear();
   }
-  #clear(clearPicker = true): void {
-    const picker = this.shadowRoot?.querySelector<HTMLInputElement>("input[type=file]");
-    if (clearPicker && picker) picker.value = "";
+  #clear(): void {
     ++this.#generation;
     this.draft = empty();
     this.invalid = false;
@@ -142,8 +137,6 @@ export class RecoveryKeyEntry extends LitElement {
     this.draft = { value };
     this.pdfError = undefined;
     this.loaded = false;
-    const picker = this.shadowRoot?.querySelector<HTMLInputElement>("input[type=file]");
-    if (picker) picker.value = "";
     this.#scope?.changed();
     const generation = ++this.#generation;
     const selection = this.selection && { ...this.selection };
@@ -168,7 +161,7 @@ export class RecoveryKeyEntry extends LitElement {
     if (current() && input && caret) input.setSelectionRange(caret[0]!, caret[1]!);
   }
   async importFile(file?: File): Promise<void> {
-    this.#clear(false);
+    this.#clear();
     if (!file) return;
     this.draft = { ...empty(), file };
     this.#scope?.changed();
@@ -235,20 +228,23 @@ export class RecoveryKeyEntry extends LitElement {
                 ? "Choose a valid recovery PDF, or enter the key below."
                 : "Elige un PDF de recuperación válido, o introduce la clave abajo."
               : "";
-    return html` <label for="recovery-pdf">${en ? "Recovery PDF" : "PDF de recuperación"}</label>
-      <input
-        id="recovery-pdf"
+    return html` <wt-file-input
         name="recovery-pdf"
-        type="file"
         accept="application/pdf,.pdf"
-        aria-invalid=${pdfError ? "true" : "false"}
-        aria-describedby="pdf-error"
-        @change=${(event: Event) => {
-          void this.importFile((event.currentTarget as HTMLInputElement).files?.[0]);
+        label=${en ? "Recovery PDF" : "PDF de recuperación"}
+        .locale=${this.locale}
+        .copy=${fileInputCopy[this.locale]}
+        .files=${this.draft.file ? [this.draft.file] : []}
+        .error=${pdfError}
+        @wt-change=${(event: CustomEvent<{ files: File[] }>) => {
+          event.stopPropagation();
+          void this.importFile(event.detail.files[0]);
         }}
-      />
-      <p id="pdf-error" class="error" role="status">${pdfError}</p>
-      <p role="status">${this.loaded ? (en ? "Key loaded" : "Clave cargada") : ""}</p>
+      ></wt-file-input>
+      <p role="status">
+        ${this.loaded ? (en ? "Key loaded" : "Clave cargada") : nothing}
+        ${pdfError ? html`<span class="visually-hidden">${pdfError}</span>` : nothing}
+      </p>
       <wt-input
         name="printed-recovery-key"
         type="password"

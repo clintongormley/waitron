@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { leaveCoordinatorFor } from "@waitron/ui";
+import { leaveCoordinatorFor, type WtFileInput } from "@waitron/ui";
 import { SetupApp, type Screen } from "./setup-app.js";
 import type { SetupApi } from "./api/client.js";
 import type { SetupRestoreBucketScreen } from "./screens/restore-bucket-screen.js";
 import type { WtTextarea } from "@waitron/ui/src/components/wt-textarea.js";
-import type { WtFileInput } from "@waitron/ui/src/components/wt-file-input.js";
 import type { WtUnsavedChanges } from "@waitron/ui/src/components/wt-unsaved-changes.js";
-import { chooseFiles, cleanupWidgets, drawnFileName, mountWidget } from "./widgets/test-helpers.js";
+import { chooseFiles, drawnFileName } from "@waitron/ui/src/test-helpers.js";
+import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { setLocale } from "./i18n/t.js";
 
 afterEach(() => {

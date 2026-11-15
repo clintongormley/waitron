@@ -2,7 +2,8 @@ import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WtFileInput } from "@waitron/ui";
 import { setLocale } from "../i18n/t.js";
-import { chooseFiles, cleanupWidgets, fileControl, mountWidget } from "../widgets/test-helpers.js";
+import { chooseFiles, fileControl } from "@waitron/ui/src/test-helpers.js";
+import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { SetupLiveSourceScreen } from "./live-source-screen.js";
 
 afterEach(cleanupWidgets);

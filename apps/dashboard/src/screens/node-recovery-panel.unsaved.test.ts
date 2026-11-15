@@ -1,7 +1,8 @@
 import { LitElement, html } from "lit";
 import { afterEach, expect, it, vi } from "vitest";
-import { LeaveController, type WtInput } from "@waitron/ui";
+import { LeaveController, type WtFileInput, type WtInput } from "@waitron/ui";
 import type { DashboardApi } from "../api/client.js";
+import { chooseFiles, drawnFileName } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { t } from "../i18n/t.js";
 import "./node-recovery-panel.js";
@@ -31,11 +32,8 @@ it("protects the typed node key and selected register, and discarding clears the
   await panel.updateComplete;
   const key = panel.shadowRoot!.querySelector<WtInput>("wt-input")!;
   key.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "private-node-key" } }));
-  const file = panel.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!;
-  const files = new DataTransfer();
-  files.items.add(new File(["{}"], "register.json"));
-  file.files = files.files;
-  file.dispatchEvent(new Event("change"));
+  const file = panel.shadowRoot!.querySelector<WtFileInput>("wt-file-input")!;
+  chooseFiles(file, new File(["{}"], "register.json"));
   await panel.updateComplete;
   let proceeded = false;
   const leaving = app.leave.coordinator.request({
@@ -59,6 +57,7 @@ it("protects the typed node key and selected register, and discarding clears the
   await panel.updateComplete;
   expect(key.shadowRoot!.querySelector<HTMLInputElement>("input")!.value).toBe("");
   expect(file.files).toHaveLength(0);
+  expect(drawnFileName(file)).toBeNull();
 });
 
 it("discarding during a request prevents its old key from returning in a late download", async () => {
@@ -75,11 +74,7 @@ it("discarding during a request prevents its old key from returning in a late do
   panel
     .shadowRoot!.querySelector<WtInput>("wt-input")!
     .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "private-node-key" } }));
-  const picker = panel.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!;
-  const files = new DataTransfer();
-  files.items.add(new File(["{}"], "register.json"));
-  picker.files = files.files;
-  picker.dispatchEvent(new Event("change"));
+  chooseFiles(panel.shadowRoot!.querySelector("wt-file-input")!, new File(["{}"], "register.json"));
   await panel.updateComplete;
   (panel.shadowRoot!.querySelector("wt-button") as HTMLElement).click();
   await vi.waitFor(() => expect(complete).toBeTypeOf("function"));

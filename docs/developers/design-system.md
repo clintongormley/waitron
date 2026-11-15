@@ -3421,15 +3421,15 @@ html`
 `;
 ```
 
-**A screen does not draw its own form field.** A `<select>`, a `<textarea>` or an `<input>` that
-takes text is drawn by a field primitive; where none fits, add to one or add one. Guard:
+**A screen does not draw its own form field.** A `<select>`, a `<textarea>`, or an `<input>` that
+takes text or a file is drawn by a field primitive; where none fits, add to one or add one. Guard:
 `scripts/native-form-fields.test.ts`, weaker than its name — it reads text, and only the literals
 of non-test `.ts` files under `apps/` and `packages/`, so a field made with
 `document.createElement`, from markup no single literal holds, or with its tag name split across a
 `${…}` is invisible to it, and the field primitives' own files, and `wt-data-table`'s (its search
 box), are not read at all. It allows some files by name: the hidden username inputs the browser's
-password manager reads, in two files, the print agent's setup page, and the recovery page's
-password box, each held to the number of
+password manager reads, in two files, the print agent's setup page, the recovery page's
+password box, and the carry-on form on the page a box serves while it waits for its peers, each held to the number of
 lines it draws a field on, so a field swapped for another, a hidden input made visible, or a field
 added on a line that already has one passes.
 

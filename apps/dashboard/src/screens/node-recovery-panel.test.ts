@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
-import type { WtButton, WtInput } from "@waitron/ui";
+import type { WtButton, WtFileInput, WtInput } from "@waitron/ui";
 import { DashboardApi } from "../api/client.js";
+import { chooseFiles, drawnFileName, fileError } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { NodeRecoveryPanel } from "./node-recovery-panel.js";
@@ -32,11 +33,10 @@ async function file(
   el: NodeRecoveryPanel,
   content = JSON.stringify({ "test-regime": { signed: "public-register" } }),
 ) {
-  const picker = q<HTMLInputElement>(el, "register-file");
-  const files = new DataTransfer();
-  files.items.add(new File([content], "register.json", { type: "application/json" }));
-  picker.files = files.files;
-  picker.dispatchEvent(new Event("change"));
+  chooseFiles(
+    q(el, "register-file"),
+    new File([content], "register.json", { type: "application/json" }),
+  );
   await el.updateComplete;
 }
 async function create(el: NodeRecoveryPanel) {
@@ -100,13 +100,35 @@ it.each(["not-json", "null", "[]", '"wrong"', '{"secret":"-----BEGIN PRIVATE KEY
       await create(el);
       expect(read).toHaveBeenCalledTimes(1);
       await read.mock.results[0]!.value;
-      await vi.waitFor(() => expect(q(el, "file-error")?.textContent?.trim()).toBeTruthy());
+      await vi.waitFor(() =>
+        expect(fileError(q(el, "register-file"))?.textContent?.trim()).toBeTruthy(),
+      );
       expect(fetcher).not.toHaveBeenCalled();
     } finally {
       read.mockRestore();
     }
   },
 );
+
+it("refuses a register over 128 KiB without reading it or sending the node credential", async () => {
+  const { el, fetcher } = await mount();
+  await key(el);
+  const register = JSON.stringify({ "test-regime": { signed: "public-register" } });
+  await file(el, register.padEnd(131_073, " "));
+  const read = vi.spyOn(File.prototype, "text");
+  try {
+    await create(el);
+    await vi.waitFor(() =>
+      expect(fileError(q(el, "register-file"))?.textContent?.trim()).toBe(
+        t("node_pack.file_error"),
+      ),
+    );
+    expect(read).not.toHaveBeenCalled();
+    expect(fetcher).not.toHaveBeenCalled();
+  } finally {
+    read.mockRestore();
+  }
+});
 
 it("keeps failed input retryable and puts a bad node key beside its field", async () => {
   const fetcher = vi
@@ -149,7 +171,32 @@ it("ignores a response after leaving and releases download URLs when removed", a
   await el.updateComplete;
   expect(q(el, "download-pack")).toBeNull();
   expect(q<WtInput>(el, "node-key").value).toBe("");
-  expect(q<HTMLInputElement>(el, "register-file").files).toHaveLength(0);
+  expect(q<WtFileInput>(el, "register-file").files).toHaveLength(0);
+  expect(drawnFileName(q(el, "register-file"))).toBeNull();
+});
+
+it("draws the register picker in Spanish, sizes the file the Spanish way and empties it after the pack is made", async () => {
+  const old = currentLocale();
+  try {
+    setLocale("es-ES");
+    const { el } = await mount();
+    const picker = q<WtFileInput>(el, "register-file");
+    expect(picker.shadowRoot!.textContent).toContain("Elegir archivo");
+    expect(picker.shadowRoot!.textContent).not.toContain("Choose");
+    await key(el);
+    const register = JSON.stringify({ "test-regime": { signed: "public-register" } });
+    await file(el, register.padEnd(1_500, " "));
+    expect(drawnFileName(picker)).toBe("register.json");
+    expect(picker.shadowRoot!.querySelector(".size")!.textContent).toBe("1,5 kB");
+    expect(picker.shadowRoot!.textContent).toContain("Elegir otro archivo");
+    await create(el);
+    await vi.waitFor(() => expect(q(el, "download-pack")).not.toBeNull());
+    await el.updateComplete;
+    expect(drawnFileName(picker)).toBeNull();
+    expect(q<WtButton>(el, "create-pack").disabled).toBe(true);
+  } finally {
+    setLocale(old);
+  }
 });
 
 it.each(["en-GB", "es-ES"] as const)("uses the current %s wording", async (locale) => {
@@ -171,6 +218,10 @@ it("updates an already open form when the language changes", async () => {
     setLocale("es-ES");
     await el.updateComplete;
     expect(el.shadowRoot!.textContent).toContain("Kit de recuperación del nodo");
+    const picker = q<WtFileInput>(el, "register-file");
+    await picker.updateComplete;
+    expect(picker.shadowRoot!.textContent).toContain(t("file_input.choose", "es-ES"));
+    expect(picker.shadowRoot!.textContent).not.toContain(t("file_input.choose", "en-GB"));
   } finally {
     setLocale(old);
   }

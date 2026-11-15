@@ -83,30 +83,3 @@ export async function expectNoA11yViolations(context: Element): Promise<void> {
   const colourReadings = undecidedColourReadings(results.incomplete);
   expect(colourReadings, colourReadings.join("\n\n")).toEqual([]);
 }
-
-/** The native file control inside a `wt-file-input`. */
-export function fileControl(picker: Element): HTMLInputElement {
-  return picker.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!;
-}
-
-/** Chooses `files` through the picker's own native control, so the primitive's real `change`
- * handler runs. With no files it sends the empty change the primitive also passes on for a drop
- * that carries no files. */
-export function chooseFiles(picker: Element, ...files: File[]): void {
-  const input = fileControl(picker);
-  const selection = new DataTransfer();
-  for (const file of files) selection.items.add(file);
-  input.files = selection.files;
-  input.dispatchEvent(new Event("change"));
-}
-
-/** The name of the file a `wt-file-input` draws as chosen, or null when it draws none. The native
- * control is emptied after every change, so the drawing is the only record a person sees. */
-export function drawnFileName(picker: Element): string | null {
-  return picker.shadowRoot!.querySelector(".selected strong")?.textContent ?? null;
-}
-
-/** The message a `wt-file-input` shows under itself, or null when there is none. */
-export function fileError(picker: Element): HTMLElement | null {
-  return picker.shadowRoot!.querySelector<HTMLElement>("[data-error]");
-}

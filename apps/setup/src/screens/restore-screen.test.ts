@@ -1,15 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
-import type { WtFileInput } from "@waitron/ui";
-import { setLocale } from "../i18n/t.js";
 import {
   chooseFiles,
-  cleanupWidgets,
+  chooseOption,
   drawnFileName,
   fileControl,
-  mountWidget,
-} from "../widgets/test-helpers.js";
+} from "@waitron/ui/src/test-helpers.js";
+import type { WtFileInput } from "@waitron/ui";
+import { setLocale } from "../i18n/t.js";
+import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { RestoreRequestDetail } from "../events.js";
 import { SetupRestoreScreen } from "./restore-screen.js";
 
