@@ -68,8 +68,8 @@ describe("readTableStepRules", () => {
     const empty = await departmentWithTables("Empty");
     await scoped(async (tx) => {
       await saveServiceSteps(tx, a.departmentId, [
-        { name: "Bread", start: "seated", courseId: null, minutes: 0 },
-        { name: "Order", start: "after_previous", courseId: null, minutes: 2 },
+        { key: "parent", name: "Bread", start: "seated", courseId: null, minutes: 0 },
+        { name: "Order", start: "after_step", afterStepKey: "parent", courseId: null, minutes: 2 },
         { name: "Drinks?", start: "since_last_order", courseId: null, minutes: 20 },
       ]);
       await saveServiceSteps(tx, b.departmentId, [
@@ -86,7 +86,7 @@ describe("readTableStepRules", () => {
       rules.map(({ name, start, minutes }) => ({ name, start, minutes }));
     const aRules = [
       { name: "Bread", start: "seated", minutes: 0 },
-      { name: "Order", start: "after_previous", minutes: 2 },
+      { name: "Order", start: "after_step", minutes: 2 },
       { name: "Drinks?", start: "since_last_order", minutes: 20 },
     ];
     expect(read.size).toBe(4);
@@ -101,6 +101,7 @@ describe("readTableStepRules", () => {
           id: expect.any(String),
           name: "Bill?",
           start: "all_served",
+          afterStepId: null,
           courseId: null,
           minutes: 10,
         },
@@ -132,8 +133,14 @@ describe("step completions", () => {
     const [first, second] = (
       await scoped(async (tx) => {
         await saveServiceSteps(tx, a.departmentId, [
-          { name: "Bread", start: "seated", courseId: null, minutes: 0 },
-          { name: "Order", start: "after_previous", courseId: null, minutes: 2 },
+          { key: "parent", name: "Bread", start: "seated", courseId: null, minutes: 0 },
+          {
+            name: "Order",
+            start: "after_step",
+            afterStepKey: "parent",
+            courseId: null,
+            minutes: 2,
+          },
         ]);
         return readTableStepRules(tx, a.tableIds);
       })

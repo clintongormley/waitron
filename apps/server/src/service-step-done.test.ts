@@ -250,8 +250,8 @@ describe("markServiceStepDone", () => {
       v,
       await departmentOf(v, v.tables.zoneId),
       [
-        seated("Set up"),
-        { name: "Bread?", start: "after_previous", courseId: null, minutes: 0 },
+        { ...seated("Set up"), key: "setup" },
+        { name: "Bread?", start: "after_step", afterStepKey: "setup", courseId: null, minutes: 0 },
         seated("Water?", 5),
         seated("Coffee?", 60),
       ],

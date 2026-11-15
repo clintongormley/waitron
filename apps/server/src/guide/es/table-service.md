@@ -373,6 +373,10 @@ leer la comida desde que se sienta el grupo hasta que se va, con sus momentos fi
 Las filas de los cursos muestran si se envían o se retienen y su recordatorio; cambia esa elección
 en **Cursos** y el recordatorio compartido en la pestaña **Servicio** del departamento.
 
+Elige por nombre cuándo empieza un paso, por ejemplo **Tras Montar mesa**, y ajusta su demora.
+La lista lo coloca junto a ese inicio. Cambiar el nombre de otro paso conserva el vínculo;
+eliminarlo también quita los pasos que empiezan tras él. Revisa esos pasos antes de guardar.
+
 Cuando vence un paso, la tarjeta de la mesa muestra su nombre, con un botón **Hecho** si puedes
 tomar pedidos. En el plano, si no hay nada más urgente, la mesa se vuelve azul con una campana. Los
 detalles de la mesa muestran el paso, con **Hecho** si puedes tomar pedidos.

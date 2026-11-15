@@ -13,6 +13,7 @@ export interface StepRule {
   name: string;
   start: ServiceStepStart;
   courseId: string | null;
+  afterStepId: string | null;
   minutes: number;
 }
 
@@ -31,6 +32,7 @@ export async function readTableStepRules(
       name: serviceSteps.name,
       start: serviceSteps.start,
       courseId: serviceSteps.courseId,
+      afterStepId: serviceSteps.afterStepId,
       minutes: serviceSteps.minutes,
     })
     .from(diningTables)
@@ -50,6 +52,7 @@ export async function readTableStepRules(
       name: row.name!,
       start: row.start!,
       courseId: row.courseId,
+      afterStepId: row.afterStepId,
       minutes: row.minutes!,
     });
   }

@@ -1,3 +1,4 @@
+import { deleteServiceSteps } from "./service-steps.js";
 import { and, asc, eq, inArray, or } from "drizzle-orm";
 import {
   departmentDays,
@@ -390,7 +391,14 @@ export async function clearServiceDeleteSettings(
     await tx
       .delete(departmentSalePolicies)
       .where(eq(departmentSalePolicies.departmentId, selected.departmentId));
-    await tx.delete(serviceSteps).where(eq(serviceSteps.departmentId, selected.departmentId));
+    const steps = await tx
+      .select({ id: serviceSteps.id })
+      .from(serviceSteps)
+      .where(eq(serviceSteps.departmentId, selected.departmentId));
+    await deleteServiceSteps(
+      tx,
+      steps.map((row) => row.id),
+    );
     await tx
       .delete(departmentTransferDesks)
       .where(eq(departmentTransferDesks.departmentId, selected.departmentId));

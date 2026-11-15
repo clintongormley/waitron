@@ -398,8 +398,17 @@ describe.each(["light", "dark"] as const)("department-settings service steps (%s
     const view = structuredClone(model);
     view.courses = [{ id: "c1", name: "Mains", heldUntilFired: true }];
     view.serviceSteps = [
-      { id: "s1", departmentId: "d1", name: "Set up", start: "seated", courseId: null, minutes: 0 },
       {
+        afterStepId: null,
+        id: "s1",
+        departmentId: "d1",
+        name: "Set up",
+        start: "seated",
+        courseId: null,
+        minutes: 0,
+      },
+      {
+        afterStepId: null,
         id: "s2",
         departmentId: "d1",
         name: "Dessert?",

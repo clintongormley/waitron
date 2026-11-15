@@ -41,31 +41,25 @@ it.each([
 it.each([
   [
     "en-GB",
-    "1 service step that starts when it is served.",
-    "2 service steps that start when it is served.",
-    "1 service step now starts When seated.",
-    "2 service steps now start When seated.",
+    "1 service step that starts from it or follows another step.",
+    "2 service steps that start from it or their following steps.",
     "1 product fires earliest.",
   ],
   [
     "es-ES",
-    "1 paso de servicio que empieza al servirlo.",
-    "2 pasos de servicio que empiezan al servirlo.",
-    "1 paso de servicio pasa a empezar Al sentarse.",
-    "2 pasos de servicio pasan a empezar Al sentarse.",
+    "1 paso de servicio que empieza al servirlo o tras otro paso.",
+    "2 pasos de servicio que empiezan al servirlo o tras esos pasos.",
     "1 producto se prepara primero.",
   ],
 ])(
-  "says which service steps go and which now start When seated in %s",
-  (locale, oneStep, steps, oneSeated, seated, oneProduct) => {
+  "names removed service steps and their followers in %s",
+  (locale, oneStep, steps, oneProduct) => {
     setLocale(locale!);
     const copy = courseDeleteCopy();
     expect([
       copy.item({ key: "course_service_steps", count: 1, targets: [] }),
       copy.item({ key: "course_service_steps", count: 2, targets: [] }),
-      copy.item({ key: "course_seated_steps", count: 1, targets: [] }),
-      copy.item({ key: "course_seated_steps", count: 2, targets: [] }),
       copy.item({ key: "course_products", count: 1, targets: [] }),
-    ]).toEqual([oneStep, steps, oneSeated, seated, oneProduct]);
+    ]).toEqual([oneStep, steps, oneProduct]);
   },
 );

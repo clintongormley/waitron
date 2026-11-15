@@ -404,8 +404,8 @@ describe("the floor's attention signals", () => {
     const v = await setupPartyVenue(suite.db);
     const bar = await withBar(v);
     const [takeOrder, bread] = await setSteps(v, await departmentOf(v, v.tables.zoneId), [
-      TAKE_ORDER,
-      { name: "Bread?", start: "after_previous", courseId: null, minutes: 0 },
+      { ...TAKE_ORDER, key: "order" },
+      { name: "Bread?", start: "after_step", afterStepKey: "order", courseId: null, minutes: 0 },
     ]);
     const table2 = await v.table("Mesa 2");
     const { partyId } = await seat(v, table2);

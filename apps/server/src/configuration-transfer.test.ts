@@ -143,6 +143,8 @@ import {
 import { payments } from "@waitron/payments";
 import {
   createDepartment,
+  saveServiceSteps,
+  listServiceSteps,
   deleteDepartment,
   departmentReceipts,
   setDepartmentTransferSettings,
@@ -8308,3 +8310,49 @@ it.each([false, true])(
     }
   },
 );
+
+it("imports named starts under new ids and replaces existing dependent steps", async () => {
+  const source = await applyVenue(planVenue(venue("B12348765"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const original = await withTransaction(suite.db, async (tx) => {
+    const department = await createDepartment(tx, { name: "Named meal", orderStart: "table" });
+    await saveServiceSteps(tx, department.id, [
+      {
+        key: "child",
+        name: "Order",
+        start: "after_step",
+        afterStepKey: "parent",
+        courseId: null,
+        minutes: 2,
+      },
+      { key: "parent", name: "Set up", start: "seated", courseId: null, minutes: 0 },
+    ]);
+    return (await listServiceSteps(tx)).filter((row) => row.departmentId === department.id);
+  });
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
+  const bundle = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-10T12:00:00Z"),
+    versions,
+  );
+  await applyVenue(planVenue(venue("B98765431"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: async (tx) => {
+      await createDepartment(tx, { name: "Old dependent meal", orderStart: "table" });
+      await importConfigurationTables(tx, bundle, ALL_MODULES, versions);
+    },
+  });
+  const imported = await withTransaction(targetSuite.db, (tx) => listServiceSteps(tx));
+  const child = imported.find((row) => row.name === "Order")!;
+  const parent = imported.find((row) => row.id === child.afterStepId)!;
+  expect(child.id).not.toBe(original[0]!.id);
+  expect(parent.id).not.toBe(original[1]!.id);
+  expect(parent.name).toBe("Set up");
+  expect(parent.departmentId).toBe(child.departmentId);
+  expect(imported.some((row) => original.some((old) => old.id === row.id))).toBe(false);
+});

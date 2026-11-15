@@ -1093,8 +1093,8 @@ For the owner, a candidate question to batch: the words the pictures do not draw
 start's label ("Repeats after the last order" / "Se repite tras el último pedido"), the Spanish
 starter names ("Montar mesa", "Tomar nota", "¿Algo más?"), the Spanish labels, the minutes
 field's screen-reader label ("Minutes" / "Minutos") and the required stars on the "Step" and
-"Starts" column heads. The owner sees at land that deleting a course deletes the steps that start
-from it, and that a step left first that started after the step before then starts When seated.
+"Starts" column heads. Deleting a course removes the steps that start from it and, since A1526’s named starts,
+their dependent steps too.
 Since A918 slice 3 (2026-10-27) the starter names come from
 `packages/venue-service/src/starter-content.ts`, in the staff language. Not put to the owner
 (plan's question 3): a department created

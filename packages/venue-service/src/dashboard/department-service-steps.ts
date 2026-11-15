@@ -1,14 +1,18 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import { ReorderController, baseStyles, reorder, type ReorderModel } from "@waitron/ui";
+import { ReorderController, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import type { ServiceStepStart } from "@waitron/db";
 import { MAX_SERVICE_STEPS } from "../service-step-limits.js";
-import type { ServiceStepDraft } from "./service-step-draft.js";
+import {
+  dependentStepKeys,
+  placeServiceSteps,
+  type ServiceStepDraft,
+} from "./service-step-draft.js";
 import { format } from "./hours-view.js";
 import { t } from "./strings.js";
 
@@ -16,15 +20,19 @@ export type ServiceStepField = "name" | "start" | "minutes";
 export type ServiceStepErrors = Record<string, Partial<Record<ServiceStepField, string>>>;
 
 const COURSE = "course_served:";
+const STEP = "after_step:";
 
 const startValue = (step: ServiceStepDraft) =>
-  step.start === "course_served" ? `${COURSE}${step.courseId}` : step.start;
+  step.start === "course_served"
+    ? `${COURSE}${step.courseId}`
+    : step.start === "after_step"
+      ? `${STEP}${step.afterStepKey}`
+      : step.start;
 
 @customElement("department-service-steps")
 export class DepartmentServiceSteps extends LitElement {
   static override styles = [
     baseStyles,
-    ReorderController.styles,
     ReorderController.tableStyles,
     css`
       :host {
@@ -54,9 +62,7 @@ export class DepartmentServiceSteps extends LitElement {
       tbody td {
         vertical-align: top;
       }
-      td.handle-cell,
       td.actions-cell,
-      th.handle-cell,
       th.actions-cell {
         width: 1%;
         padding-inline: 0;
@@ -103,21 +109,11 @@ export class DepartmentServiceSteps extends LitElement {
   @property({ attribute: false }) listError = "";
   @property({ type: Boolean }) disabled = false;
 
-  readonly #reorder = new ReorderController(
-    this,
-    {
-      order: () => this.steps.map((step) => step.key),
-      move: (key, to) => this.#move(key, to),
-      label: (key) => this.steps.find((step) => step.key === key)!.name,
-      busy: () => this.disabled,
-      get reorderLabel(): string {
-        return t("venue.reorder_service_step");
-      },
-    } satisfies ReorderModel,
-    { announce: () => t("venue.service_step_reordered").replace("{name}", "{item}") },
-  );
-
   #send(steps: ServiceStepDraft[]): void {
+    steps = placeServiceSteps(
+      steps,
+      this.courses.map((course) => course.id),
+    );
     this.steps = steps;
     this.dispatchEvent(
       new CustomEvent("steps-change", { detail: { steps }, bubbles: true, composed: true }),
@@ -126,11 +122,6 @@ export class DepartmentServiceSteps extends LitElement {
 
   #edit(key: string, change: Partial<ServiceStepDraft>): void {
     this.#send(this.steps.map((step) => (step.key === key ? { ...step, ...change } : step)));
-  }
-
-  #move(key: string, to: number): void {
-    const from = this.steps.findIndex((step) => step.key === key);
-    this.#send(reorder(this.steps, from, to));
   }
 
   async #focus(selector: string): Promise<void> {
@@ -152,7 +143,8 @@ export class DepartmentServiceSteps extends LitElement {
         key,
         id: null,
         name: "",
-        start: this.steps.length === 0 ? "seated" : "after_previous",
+        start: this.steps.length === 0 ? "seated" : "after_step",
+        afterStepKey: this.steps.at(-1)?.key ?? null,
         courseId: null,
         minutes: "0",
       },
@@ -162,8 +154,9 @@ export class DepartmentServiceSteps extends LitElement {
 
   #remove(key: string): void {
     const at = this.steps.findIndex((step) => step.key === key);
-    const next = this.steps[at + 1]?.key;
-    this.#send(this.steps.filter((step) => step.key !== key));
+    const removed = dependentStepKeys(this.steps, key);
+    const next = this.steps.slice(at + 1).find((step) => !removed.has(step.key))?.key;
+    this.#send(this.steps.filter((step) => !removed.has(step.key)));
     void this.#focus(
       next === undefined ? '[data-test="add-service-step"]' : this.#nameSelector(next),
     );
@@ -171,14 +164,30 @@ export class DepartmentServiceSteps extends LitElement {
 
   #chooseStart(key: string, value: string): void {
     if (value.startsWith(COURSE))
-      this.#edit(key, { start: "course_served", courseId: value.slice(COURSE.length) });
-    else this.#edit(key, { start: value as ServiceStepStart, courseId: null });
+      this.#edit(key, {
+        start: "course_served",
+        courseId: value.slice(COURSE.length),
+        afterStepKey: null,
+      });
+    else if (value.startsWith(STEP))
+      this.#edit(key, {
+        start: "after_step",
+        afterStepKey: value.slice(STEP.length),
+        courseId: null,
+      });
+    else this.#edit(key, { start: value as ServiceStepStart, courseId: null, afterStepKey: null });
   }
 
-  #startOptions() {
+  #startOptions(step: ServiceStepDraft) {
+    const descendants = dependentStepKeys(this.steps, step.key);
     return [
       { value: "seated", label: t("venue.service_step_start.seated") },
-      { value: "after_previous", label: t("venue.service_step_start.after_previous") },
+      ...this.steps
+        .filter((row) => !descendants.has(row.key))
+        .map((row) => ({
+          value: `${STEP}${row.key}`,
+          label: format("venue.service_step_start.after_step", { step: row.name }),
+        })),
       ...this.courses.map((course) => ({
         value: `${COURSE}${course.id}`,
         label: format("venue.service_step_start.course_served", { course: course.name }),
@@ -192,11 +201,6 @@ export class DepartmentServiceSteps extends LitElement {
     const errors = this.errors[step.key] ?? {};
     const stop = (event: Event) => event.stopPropagation();
     return html`<tr data-step=${step.key}>
-      ${
-        this.disabled
-          ? nothing
-          : html`<td class="handle-cell">${this.#reorder.handle(step.key)}</td>`
-      }
       <td>
         <div class="fields">
           <wt-input
@@ -214,7 +218,7 @@ export class DepartmentServiceSteps extends LitElement {
             }}
           ></wt-input>
           <wt-combobox
-            ?preserve-order=${true /* Preserve predecessor step sequence. */}
+            ?preserve-order=${true}
             class="start"
             name="serviceStepStart"
             label=${t("venue.service_step_starts")}
@@ -272,7 +276,6 @@ export class DepartmentServiceSteps extends LitElement {
   }
 
   #table(): TemplateResult {
-    const options = this.#startOptions();
     return html`<div
       class="table-wrap"
       tabindex="0"
@@ -282,13 +285,6 @@ export class DepartmentServiceSteps extends LitElement {
       <table>
         <thead>
           <tr>
-            ${
-              this.disabled
-                ? nothing
-                : html`<th scope="col" class="handle-cell">
-                    <span class="visually-hidden">${t("venue.reorder_service_step")}</span>
-                  </th>`
-            }
             <th scope="col">
               <div class="fields">
                 <span class="name" data-head
@@ -319,7 +315,7 @@ export class DepartmentServiceSteps extends LitElement {
           ${repeat(
             this.steps,
             (step) => step.key,
-            (step) => this.#row(step, options),
+            (step) => this.#row(step, this.#startOptions(step)),
           )}
         </tbody>
       </table>
@@ -330,7 +326,6 @@ export class DepartmentServiceSteps extends LitElement {
     return html`<h4 data-test="service-steps-heading">
         <wt-icon name="floor-step"></wt-icon>${t("venue.service_steps")}
       </h4>
-      ${this.disabled ? nothing : this.#reorder.liveRegion()}
       ${
         this.steps.length === 0
           ? html`<p class="empty" data-test="empty">${t("venue.no_service_steps")}</p>`

@@ -28,7 +28,7 @@ import { ensureFixtureJobRole } from "@waitron/db/testing/seed.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { planVenue } from "@waitron/provisioning";
-import { serviceSteps } from "@waitron/venue-service";
+import { serviceSteps, saveServiceSteps } from "@waitron/venue-service";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import type { VenueResult } from "@waitron/provisioning";
 import { nodeId as brandNodeId } from "@waitron/shared";
@@ -171,8 +171,12 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
       counter: await offerProducts(tx, cfg, { zone: "counter" }),
       productIds: new Map(available.map((p) => [p.name, p.id])),
     };
-    // A test venue starts with no service steps; a suite that tests them adds its own.
-    await tx.delete(serviceSteps);
+    const stepDepartments = new Set(
+      (await tx.select({ departmentId: serviceSteps.departmentId }).from(serviceSteps)).map(
+        (row) => row.departmentId,
+      ),
+    );
+    for (const departmentId of stepDepartments) await saveServiceSteps(tx, departmentId, []);
     return offers;
   });
   return {

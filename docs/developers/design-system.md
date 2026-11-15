@@ -5768,8 +5768,7 @@ words.
 
 Courses and prep stations offer **Delete** on every active row, with no Status column or
 Status filter. The shared dialog reads the current impact before enabling Delete. A course
-clears product defaults, deletes the service steps that start from it (a step left first that
-started after the step before then starts When seated), and retains any row needed by recorded work. A station refuses deletion
+clears product defaults, deletes the service steps that start from it and their named followers, and retains any row needed by recorded work. A station refuses deletion
 while it is the default, an explicit effective KDS screen binding names it, or unfinished food
 remains. A hidden inactive device does not bind; an Every-stations scope alone does not. Once deletion is
 allowed, the dialog lists the settings and unsent choices that will be removed. Deleted rows

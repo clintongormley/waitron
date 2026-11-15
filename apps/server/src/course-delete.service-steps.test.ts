@@ -162,16 +162,13 @@ describe("deleting a course with service steps", () => {
 
   it("after the delete the venue's export still imports", async () => {
     const { v, id, departmentId } = await venueWithSteps((course) => [
-      step("Dessert?", "course_served", 10, course),
-      step("Coffee", "after_previous", 5),
+      { ...step("Dessert?", "course_served", 10, course), key: "dessert" },
+      { ...step("Coffee", "after_step", 5), afterStepKey: "dessert" },
     ]);
     expect((await inTx(v, (tx) => deleteCourse(tx, id))).removes).toEqual([
-      { key: "course_service_steps", count: 1, targets: [] },
-      { key: "course_seated_steps", count: 1, targets: [] },
+      { key: "course_service_steps", count: 2, targets: [] },
     ]);
-    expect(await stepsOf(v, departmentId)).toEqual([
-      { name: "Coffee", start: "seated", minutes: 5 },
-    ]);
+    expect(await stepsOf(v, departmentId)).toEqual([]);
     const versions = await schemaVersionsByModule(
       { venue: suite.db, node: suite.node },
       ALL_MODULES,
@@ -183,9 +180,7 @@ describe("deleting a course with service steps", () => {
       new Date("2026-10-19T10:00:00Z"),
       versions,
     );
-    expect(bundle.tables.service_steps).toContainEqual(
-      expect.objectContaining({ name: "Coffee", start: "seated" }),
-    );
+    expect(bundle.tables.service_steps).toEqual([]);
     expect(() => validateConfigurationBundle(bundle, ALL_MODULES, versions)).not.toThrow();
   });
 });

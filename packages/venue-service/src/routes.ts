@@ -197,7 +197,7 @@ function requireTransferSettings(value: unknown) {
   return { receivingProfileId, destinationDepartmentIds };
 }
 
-const SERVICE_STEP_KEYS = ["id", "name", "start", "courseId", "minutes"];
+const SERVICE_STEP_KEYS = ["id", "key", "afterStepKey", "name", "start", "courseId", "minutes"];
 
 function requireServiceSteps(value: unknown): ServiceStepInput[] {
   if (!Array.isArray(value) || value.length > MAX_SERVICE_STEPS)
@@ -214,9 +214,14 @@ function requireServiceSteps(value: unknown): ServiceStepInput[] {
     }
     const name = requireName(entry.name, `${field}.name`);
     const starts: readonly unknown[] = SERVICE_STEP_STARTS;
-    if (!starts.includes(entry.start) || (index === 0 && entry.start === "after_previous"))
+    if (!starts.includes(entry.start))
       throw new AppError("management.request_invalid", { field: `${field}.start` });
     const start = entry.start as ServiceStepStart;
+    const key = entry.key === undefined ? undefined : requireName(entry.key, `${field}.key`);
+    if (start !== "after_step" && entry.afterStepKey !== undefined && entry.afterStepKey !== null)
+      throw new AppError("management.request_invalid", { field: `${field}.start` });
+    const afterStepKey =
+      start === "after_step" ? requireName(entry.afterStepKey, `${field}.start`) : null;
     if (start !== "course_served" && entry.courseId !== undefined && entry.courseId !== null)
       throw new AppError("management.request_invalid", { field: `${field}.courseId` });
     const courseId =
@@ -230,7 +235,15 @@ function requireServiceSteps(value: unknown): ServiceStepInput[] {
       (start === "since_last_order" && minutes < 1)
     )
       throw new AppError("management.request_invalid", { field: `${field}.minutes` });
-    return { ...(id === undefined ? {} : { id }), name, start, courseId, minutes };
+    return {
+      ...(id === undefined ? {} : { id }),
+      ...(key === undefined ? {} : { key }),
+      afterStepKey,
+      name,
+      start,
+      courseId,
+      minutes,
+    };
   });
 }
 

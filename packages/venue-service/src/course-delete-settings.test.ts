@@ -16,6 +16,7 @@ import {
   clearCourseDeleteSettings as clear,
   courseDeleteSettingsRemoves,
   readCourseDeleteSettings as read,
+  saveServiceSteps,
 } from "./index.js";
 
 const suite = useVenueDb({
@@ -49,15 +50,20 @@ async function department(courseId: string, name: string, steps: Step[]) {
     .insert(departments)
     .values({ name, tradingName: name })
     .returning({ id: departments.id });
-  for (const [position, [stepName, start, minutes = 0, course]] of steps.entries())
-    await db.insert(serviceSteps).values({
-      departmentId: row!.id,
-      position,
-      name: stepName,
-      start,
-      minutes,
-      courseId: course === "dessert" ? courseId : null,
-    });
+  await run((tx) =>
+    saveServiceSteps(
+      tx,
+      row!.id,
+      steps.map(([name, start, minutes = 0, course], index) => ({
+        key: name,
+        name,
+        start,
+        minutes,
+        courseId: course === "dessert" ? courseId : null,
+        afterStepKey: start === "after_step" ? steps[index - 1]![0] : null,
+      })),
+    ),
+  );
   return row!.id;
 }
 
@@ -104,70 +110,26 @@ it("clears them and leaves other steps", async () => {
   expect(await run((tx) => readCourseDeleteSettings(tx, courseId))).toEqual([]);
 });
 
-it("a step left first that started after the step before now starts When seated, its minutes kept", async () => {
-  const { courseId } = await venue("Promoting");
-  const dining = await department(courseId, "Dining", [
-    ["Dessert?", "course_served", 10, "dessert"],
-    ["Coffee", "after_previous", 5],
-  ]);
-  expect(await run((tx) => readCourseDeleteSettings(tx, courseId))).toEqual([
-    { key: "course_service_steps", count: 1, targets: [] },
-    { key: "course_seated_steps", count: 1, targets: [] },
-  ]);
-  await run((tx) => clearCourseDeleteSettings(tx, courseId));
-  expect(await stepsOf(dining)).toEqual([{ name: "Coffee", start: "seated", minutes: 5 }]);
-});
-
-it("every step tied at the lowest remaining position that starts after the step before now starts When seated", async () => {
-  const { courseId } = await venue("Ties");
-  const [row] = await db
-    .insert(departments)
-    .values({ name: "Dining", tradingName: "Dining" })
-    .returning({ id: departments.id });
-  const dining = row!.id;
-  await db.insert(serviceSteps).values([
-    {
-      departmentId: dining,
-      position: 0,
-      name: "Dessert?",
-      start: "course_served",
-      courseId,
-      minutes: 10,
-    },
-    { departmentId: dining, position: 1, name: "Coffee", start: "after_previous", minutes: 5 },
-    { departmentId: dining, position: 1, name: "Tea", start: "after_previous", minutes: 3 },
-    { departmentId: dining, position: 2, name: "Bill", start: "after_previous", minutes: 2 },
-  ]);
-  expect(await run((tx) => readCourseDeleteSettings(tx, courseId))).toEqual([
-    { key: "course_service_steps", count: 1, targets: [] },
-    { key: "course_seated_steps", count: 2, targets: [] },
-  ]);
-  await run((tx) => clearCourseDeleteSettings(tx, courseId));
-  expect((await stepsOf(dining)).sort((a, b) => a.name.localeCompare(b.name))).toEqual([
-    { name: "Bill", start: "after_previous", minutes: 2 },
-    { name: "Coffee", start: "seated", minutes: 5 },
-    { name: "Tea", start: "seated", minutes: 3 },
-  ]);
-});
-
-it("a step that stays below another keeps After the step before", async () => {
-  const { courseId } = await venue("Below");
+it("deleting a course removes its named descendants regardless of their positions, keeping unrelated starts", async () => {
+  const { courseId } = await venue("Descendants");
   const dining = await department(courseId, "Dining", [
     ["Set up", "seated"],
     ["Dessert?", "course_served", 10, "dessert"],
-    ["Coffee", "after_previous", 5],
+    ["Coffee", "after_step", 5],
+    ["Bill", "after_step", 2],
+    ["Water", "seated", 3],
   ]);
   expect(await run((tx) => readCourseDeleteSettings(tx, courseId))).toEqual([
-    { key: "course_service_steps", count: 1, targets: [] },
+    { key: "course_service_steps", count: 3, targets: [] },
   ]);
   await run((tx) => clearCourseDeleteSettings(tx, courseId));
   expect(await stepsOf(dining)).toEqual([
     { name: "Set up", start: "seated", minutes: 0 },
-    { name: "Coffee", start: "after_previous", minutes: 5 },
+    { name: "Water", start: "seated", minutes: 3 },
   ]);
 });
 
-it("a first step that does not start after the step before is left as it is", async () => {
+it("an unrelated Everything served start is left as it is", async () => {
   const { courseId } = await venue("Left alone");
   const dining = await department(courseId, "Dining", [
     ["Dessert?", "course_served", 10, "dessert"],

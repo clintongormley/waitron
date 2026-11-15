@@ -1636,8 +1636,14 @@ describe("validateServiceSteps", () => {
   }
 
   const starters = (): Row[] => [
-    stepRow({ position: 0, name: "Set up", start: "seated", minutes: 0 }),
-    stepRow({ position: 1, name: "Take order", start: "after_previous", minutes: 2 }),
+    stepRow({ id: "setup", position: 0, name: "Set up", start: "seated", minutes: 0 }),
+    stepRow({
+      position: 1,
+      name: "Take order",
+      start: "after_step",
+      after_step_id: "setup",
+      minutes: 2,
+    }),
     stepRow({ position: 2, name: "Anything else?", start: "all_served", minutes: 10 }),
   ];
 
@@ -1678,13 +1684,13 @@ describe("validateServiceSteps", () => {
     );
   });
 
-  it("refuses after the step before at a department's lowest position", () => {
+  it("refuses a named start without a predecessor", () => {
     const steps = [
       stepRow({ department_id: DELI, position: 0, start: "seated" }),
-      stepRow({ position: 3, start: "after_previous", minutes: 2 }),
+      stepRow({ position: 3, start: "after_step", minutes: 2 }),
       stepRow({ position: 5, start: "seated" }),
     ];
-    expect(() => validate(bundle(steps))).toThrowError(refusal("service_steps.start"));
+    expect(() => validate(bundle(steps))).toThrowError(refusal("service_steps.after_step_id"));
   });
 
   it.each<[string, Row]>([
@@ -1736,6 +1742,23 @@ describe("validateServiceSteps", () => {
       refusal("service_steps"),
     );
   });
+
+  it.each(["missing", "other department", "cycle"])(
+    "refuses a named predecessor that is %s",
+    (kind) => {
+      const rows = [
+        stepRow({ id: "a", start: "after_step", after_step_id: "b" }),
+        stepRow({
+          id: "b",
+          department_id: kind === "other department" ? DELI : RESTAURANT,
+          start: kind === "cycle" ? "after_step" : "seated",
+          after_step_id: kind === "cycle" ? "a" : null,
+        }),
+      ];
+      if (kind === "missing") rows.pop();
+      expect(() => validate(bundle(rows))).toThrowError(refusal("service_steps.after_step_id"));
+    },
+  );
 
   it("lists service_steps right after departments", () => {
     const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);

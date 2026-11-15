@@ -10,6 +10,7 @@ import {
   withTransaction,
   menus,
   kitchenStations,
+  serviceSteps,
   kitchenCourses,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -23,7 +24,7 @@ import { createServiceZone } from "./operations.js";
 import { readProfileKitchenScreens } from "./kitchen-screens.js";
 import { readProfileServiceAccess, setProfileServiceAccess } from "./profile-access.js";
 import { VENUE_SERVICE_PROVISIONING } from "./provisioning.js";
-import { STARTER_STEPS } from "./service-steps.js";
+import { deleteServiceSteps, STARTER_STEPS } from "./service-steps.js";
 import {
   STARTER_COURSE_NAMES,
   STARTER_PERIOD_NAMES,
@@ -269,7 +270,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       await seed();
       expect(await steps()).toEqual([
         { name: "Set up", start: "seated", minutes: 0, position: 0 },
-        { name: "Take order", start: "after_previous", minutes: 2, position: 1 },
+        { name: "Take order", start: "after_step", minutes: 2, position: 1 },
         { name: "Anything else?", start: "all_served", minutes: 10, position: 2 },
       ]);
     });
@@ -278,9 +279,13 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       const { seed, steps } = await venue("Starter re-run");
       await seed();
       expect(await steps()).toHaveLength(3);
-      await db.execute(
-        sql`delete from service_steps where department_id in (select id from departments )`,
-      );
+      await withTransaction(db, async (tx) => {
+        const rows = await tx.select({ id: serviceSteps.id }).from(serviceSteps);
+        await deleteServiceSteps(
+          tx,
+          rows.map((row) => row.id),
+        );
+      });
       await seed();
       expect(await steps()).toEqual([]);
     });

@@ -1351,6 +1351,59 @@ for (const locale of ["en", "es"] as const) {
         );
         phases[phase]!.kitchen_courses = 4;
       }
+      const coursesNow = expected[phase].tables.kitchen_courses!;
+      coursesNow.columns.splice(
+        coursesNow.columns.findIndex((column) => column.name === "name") + 1,
+        0,
+        { name: "starter_key", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
+      );
+      for (const row of Object.values(coursesNow.rows))
+        row.starter_key =
+          row.name === STARTER_COURSE_NAMES.Mains.es
+            ? "mains"
+            : row.name === STARTER_COURSE_NAMES.Desserts.es
+              ? "desserts"
+              : null;
+      const stepsNow = expected[phase].tables.service_steps!;
+      stepsNow.columns.splice(
+        stepsNow.columns.findIndex((column) => column.name === "course_id") + 1,
+        0,
+        { name: "after_step_id", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
+      );
+      stepsNow.foreignKeys = [
+        {
+          id: 0,
+          seq: 0,
+          table: "service_steps",
+          from: "department_id",
+          to: "department_id",
+          on_update: "NO ACTION",
+          on_delete: "RESTRICT",
+          match: "NONE",
+        },
+        {
+          id: 0,
+          seq: 1,
+          table: "service_steps",
+          from: "after_step_id",
+          to: "id",
+          on_update: "NO ACTION",
+          on_delete: "RESTRICT",
+          match: "NONE",
+        },
+        ...stepsNow.foreignKeys.map((key) => ({ ...key, id: key.id + 1 })),
+      ];
+      for (const row of Object.values(stepsNow.rows)) {
+        row.after_step_id =
+          row.start === "after_previous"
+            ? Object.values(stepsNow.rows).find(
+                (parent) =>
+                  parent.department_id === row.department_id &&
+                  parent.position === Number(row.position) - 1,
+              )!.id!
+            : null;
+        if (row.start === "after_previous") row.start = "after_step";
+      }
       const admissions = expected[phase].tables.device_profile_admission_roles!;
       admissions.columns = [
         { name: "device_profile_id", type: "TEXT", notnull: 1, dflt_value: null, pk: 1 },

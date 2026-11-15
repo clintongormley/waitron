@@ -1,65 +1,39 @@
-import { eq, inArray } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import { serviceSteps, type Transaction } from "@waitron/db";
 import type { DeleteImpactItem } from "@waitron/shared";
-import { departments, serviceSteps } from "@waitron/db";
+import { deleteServiceSteps } from "./service-steps.js";
 
-export type CourseDeleteSettings = { readonly named: string[]; readonly seated: string[] };
+export type CourseDeleteSettings = { readonly named: string[] };
 
 export async function readCourseDeleteSettings(
   tx: Transaction,
   courseId: string,
 ): Promise<CourseDeleteSettings> {
-  const named = await tx
-    .select({ id: serviceSteps.id, departmentId: serviceSteps.departmentId })
-    .from(serviceSteps)
-    .innerJoin(departments, eq(departments.id, serviceSteps.departmentId))
-    .where(eq(serviceSteps.courseId, courseId));
-  const touched = [...new Set(named.map((row) => row.departmentId))];
-  const removed = new Set(named.map((row) => row.id));
-  const remaining =
-    touched.length === 0
-      ? []
-      : (
-          await tx
-            .select({
-              id: serviceSteps.id,
-              departmentId: serviceSteps.departmentId,
-              position: serviceSteps.position,
-              start: serviceSteps.start,
-            })
-            .from(serviceSteps)
-            .where(inArray(serviceSteps.departmentId, touched))
-        ).filter((row) => !removed.has(row.id));
-  const lowest = new Map<string, number>();
-  for (const row of remaining)
-    lowest.set(
-      row.departmentId,
-      Math.min(lowest.get(row.departmentId) ?? row.position, row.position),
-    );
-  // Every tie at the lowest position counts: the configuration import refuses any of them.
-  const seated = remaining
-    .filter(
-      (row) => row.start === "after_previous" && row.position === lowest.get(row.departmentId),
-    )
-    .map((row) => row.id);
-  return { named: [...removed], seated };
+  const rows = await tx
+    .select({
+      id: serviceSteps.id,
+      courseId: serviceSteps.courseId,
+      afterStepId: serviceSteps.afterStepId,
+    })
+    .from(serviceSteps);
+  const named = new Set(rows.filter((row) => row.courseId === courseId).map((row) => row.id));
+  let size: number;
+  do {
+    size = named.size;
+    for (const row of rows)
+      if (row.afterStepId !== null && named.has(row.afterStepId)) named.add(row.id);
+  } while (size !== named.size);
+  return { named: [...named] };
 }
 
-export function courseDeleteSettingsRemoves({
-  named,
-  seated,
-}: CourseDeleteSettings): DeleteImpactItem[] {
-  return [
-    { key: "course_service_steps", count: named.length, targets: [] },
-    { key: "course_seated_steps", count: seated.length, targets: [] },
-  ].filter((item) => item.count > 0);
+export function courseDeleteSettingsRemoves({ named }: CourseDeleteSettings): DeleteImpactItem[] {
+  return named.length === 0
+    ? []
+    : [{ key: "course_service_steps", count: named.length, targets: [] }];
 }
 
 export async function clearCourseDeleteSettings(
   tx: Transaction,
-  { named, seated }: CourseDeleteSettings,
+  { named }: CourseDeleteSettings,
 ): Promise<void> {
-  if (named.length > 0) await tx.delete(serviceSteps).where(inArray(serviceSteps.id, named));
-  if (seated.length > 0)
-    await tx.update(serviceSteps).set({ start: "seated" }).where(inArray(serviceSteps.id, seated));
+  await deleteServiceSteps(tx, named);
 }
