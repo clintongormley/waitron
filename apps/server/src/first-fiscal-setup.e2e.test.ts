@@ -560,7 +560,7 @@ it("keeps English working names through fresh Live publication with Spanish rece
     migrations = join(root, "migrations");
   await copyMigrationsRoot(migrations);
   const [port] = await freePorts(1);
-  const restart = vi.spyOn(process, "kill").mockReturnValue(true);
+  const restart = vi.fn();
   const server = await startServer(
     {
       WAITRON_ENV: "production",
@@ -574,7 +574,7 @@ it("keeps English working names through fresh Live publication with Spanish rece
       WAITRON_MANAGEMENT_ORIGIN: "https://localhost",
     },
     {},
-    { testClock: time.clock },
+    { testClock: time.clock, restart },
   );
   const agent = new Agent({ connect: { ca: await readFile(join(stateDir, "tls/ca.crt")) } });
   try {
@@ -613,7 +613,7 @@ it("keeps English working names through fresh Live publication with Spanish rece
       status: 200,
       body: { provisioned: true },
     });
-    await vi.waitFor(() => expect(restart).toHaveBeenCalledWith(process.pid, "SIGTERM"));
+    await vi.waitFor(() => expect(restart).toHaveBeenCalledWith("signal"));
   } finally {
     await server.close();
     await agent.close();
