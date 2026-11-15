@@ -161,6 +161,8 @@ export function validateMenuConfiguration(
       throw new AppError("setup.request_invalid", { field: "extra_lists.max_picks" });
   const defaults = new Set<unknown>();
   for (const row of tables.option_labels ?? []) {
+    if (row.is_default !== undefined && row.is_default !== 0 && row.is_default !== 1)
+      throw new AppError("setup.request_invalid", { field: "option_labels.is_default" });
     if (row.is_default !== 1) continue;
     if (defaults.has(row.list_id))
       throw new AppError("setup.request_invalid", { field: "option_labels.is_default" });

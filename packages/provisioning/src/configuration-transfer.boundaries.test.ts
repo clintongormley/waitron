@@ -500,7 +500,7 @@ it("imports fresh ids and actual bytes without rewriting ordinary text that rese
       sql`create table zz_parents (id text primary key, name text, bytes blob, enabled integer)`,
     );
     await tx.execute(
-      sql`create table zz_children (id text primary key, parent_id text references zz_parents(id), note text)`,
+      sql`create table zz_children (id text primary key, parent_id text references zz_parents(id), target_ref text, note text)`,
     );
     const bundle = configurationBundle();
     bundle.tables = {
@@ -512,11 +512,13 @@ it("imports fresh ids and actual bytes without rewriting ordinary text that rese
           enabled: true,
         },
       ],
-      zz_children: [{ id: "old-child", parent_id: "old-id", note: "\\x0001ff" }],
+      zz_children: [
+        { id: "old-child", parent_id: "old-id", target_ref: "old-id", note: "\\x0001ff" },
+      ],
     };
     bundle.modules = { "synthetic-transfer": 1 };
     const module = moduleWith([
-      { name: "zz_children" },
+      { name: "zz_children", references: ["target_ref"] },
       { name: "zz_parents", before: ["zz_children"] },
     ]);
     await importConfigurationTables(tx, bundle, [module], bundle.modules);
@@ -533,8 +535,14 @@ it("imports fresh ids and actual bytes without rewriting ordinary text that rese
       enabled: 1,
     });
     expect(parent.id).not.toBe("old-id");
-    const child = (await tx.execute(sql`select id, parent_id, note from zz_children`)).rows[0]!;
-    expect(child).toEqual({ id: expect.any(String), parent_id: parent.id, note: "\\x0001ff" });
+    const child = (await tx.execute(sql`select id, parent_id, target_ref, note from zz_children`))
+      .rows[0]!;
+    expect(child).toEqual({
+      id: expect.any(String),
+      parent_id: parent.id,
+      target_ref: parent.id,
+      note: "\\x0001ff",
+    });
     expect(child.id).not.toBe("old-child");
     expect((await tx.execute(sql`pragma foreign_key_check`)).rows).toEqual([]);
   });

@@ -1518,8 +1518,6 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
       },
       "es",
     );
-    // The default names a label of the same list, so the import has to remap BOTH and keep them
-    // pointing at each other.
     const withDefault = await updateOptionList(
       tx,
       optionList.id,

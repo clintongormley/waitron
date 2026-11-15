@@ -461,6 +461,16 @@ describe("explicit unit staff identity on configuration import", () => {
 });
 
 describe("imported option and extras lists", () => {
+  it.each([null, true, false, "1", 2])("refuses an imported default flag of %j", (is_default) => {
+    expect(() =>
+      validateMenuConfiguration({ option_labels: [{ name: "Choice", list_id: "a", is_default }] }),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "setup.request_invalid",
+        params: { field: "option_labels.is_default" },
+      }),
+    );
+  });
   it.each([0, -1, "1"])("refuses an imported maximum of %j", (max_picks) => {
     expect(() =>
       validateMenuConfiguration({ extra_lists: [{ name: "Sides", min_picks: 0, max_picks }] }),
