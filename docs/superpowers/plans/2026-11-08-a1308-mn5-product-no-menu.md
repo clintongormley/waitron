@@ -52,6 +52,9 @@ added rows; the frozen captures stay unchanged. The old cross-menu variant refus
 plain parent key's missing-parent refusal, with its legitimate parent control retained.
 The owner's build authority is the build order's 9 November “build all of it as planned”;
 the watcher cleared these detailed corrections.
+At 05:50 the watcher also cleared the rebase ports for A1522’s newly landed takeaway VAT tests:
+505 scripted field removals, the editor/SQL/HTTP fixture ports with VAT expectations unchanged,
+and a new stop at about 2,000 counted lines. No new review wave was requested for those ports.
 
 ## What it builds
 

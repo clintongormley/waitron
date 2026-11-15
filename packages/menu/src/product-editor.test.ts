@@ -226,9 +226,7 @@ it("saves and reads the canonical editor shape with independent content and vari
 });
 
 it("saves a product's takeaway class and clears it to none", async () => {
-  const saved = await withTransaction(fx.db, (tx) =>
-    saveProductEditor(tx, null, input, "en"),
-  );
+  const saved = await withTransaction(fx.db, (tx) => saveProductEditor(tx, null, input, "en"));
   expect(saved.takeawayVatClass).toBe("general");
   const cleared = await withTransaction(fx.db, (tx) =>
     saveProductEditor(tx, saved.id, { ...saved, takeawayVatClass: null }, "en"),
