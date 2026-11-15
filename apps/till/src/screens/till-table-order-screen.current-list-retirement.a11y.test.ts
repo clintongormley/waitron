@@ -85,7 +85,7 @@ describe.each(["en", "es"] as const)("Sent paid facts %s", (locale) => {
         expect(q("[data-sent-line-status]").textContent!.trim()).toBe(t("table.group_held"));
         expect(q("[data-sent-line-dialog] [data-line-paid]").checkVisibility()).toBe(true);
         expect(q("[data-sent-line-dialog] [data-line-paid]").textContent!.trim()).toBe(
-          t("bill_pay.paid_part").replace("{paid}", "1").replace("{quantity}", "2"),
+          t("table.line_payment_part").replace("{paid}", "1").replace("{quantity}", "2"),
         );
         await expectNoA11yViolations(host);
         await page.screenshot({
@@ -102,7 +102,7 @@ describe.each(["en", "es"] as const)("Sent paid facts %s", (locale) => {
         };
         await el.updateComplete;
         expect(q("[data-sent-line-dialog] [data-line-paid]").textContent!.trim()).toBe(
-          t("bill_pay.paid"),
+          t("table.pick_payment_stays"),
         );
         el.billBalance = { ...balance, received: "0.00", outstanding: "6.50", paidLines: [] };
         await el.updateComplete;

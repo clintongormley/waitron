@@ -403,7 +403,7 @@ it("A803 portion grouping: the sheet of a grouped row says how much of the group
     },
   });
   expect(text(q(el, "[data-sent-line-dialog] [data-line-paid]"))).toBe(
-    t("bill_pay.paid_part").replace("{paid}", "1").replace("{quantity}", "2"),
+    t("table.line_payment_part").replace("{paid}", "1").replace("{quantity}", "2"),
   );
 });
 

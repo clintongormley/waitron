@@ -3684,7 +3684,7 @@ landed; it leaves open A1235 and A1237. Slice 3, one bill switcher with + New bi
 main bill, has landed (#2360); it leaves open A1261 and A1265–A1267. Slice
 4a, one dish picker behind the ⋮'s **Move dishes…** in place of Split by item and Transfer items,
 has landed (#2372); it leaves open A1287–A1294 and A1300. Slice 4b, waiting dishes that leave with their own copy of the course, has landed (#2454). Slice 4c, Split a table through the same picker with any whole bills and single
-dishes in one panel, has landed; it leaves open A1347–A1350, A1352, A1358–A1360, A1362 and A1365. Remaining: pre-bills through A446, which
+dishes in one panel, has landed; it leaves open A1347–A1349, A1352, A1358–A1360, A1362 and A1365. Remaining: pre-bills through A446, which
 no longer waits for asesor S2. One payment pays one bill. Station modes, pass naming and grouped cross-bill
 firing no longer wait for A773-2; the seams a cross-bill ticket changes are in the A803 plan's
 "A773-2 PR D handoff" paragraph. New Spanish wording requires approval
@@ -3692,22 +3692,6 @@ during implementation. Each new seating starts at Bill 1
 (owner, 2026-10-19); bills staying at their table retain their numbers.
 [Spec](../superpowers/specs/2026-10-18-a803-bills-and-tables-design.md);
 [plan](../superpowers/plans/2026-10-19-a803-bills-and-tables.md).
-
-## A1350. A row can read Paid on money a card in progress has only reserved
-
-**A1350. A row can read Paid on money a card in progress has only reserved (seen in A803 slice
-4c).** Split a table's bill header counts money received only (`table.split_bill_part_paid`), so a
-bill holding only money a card in progress has reserved draws no paid words there. Its rows still
-can, in Split a table and in Move dishes, which share the picker (`widgets/portion-picker.ts`):
-
-- a row a pending item payment covers reads `Paid` (`bill_pay.paid`), because `paidLines` includes
-  pending item payments (`paidQuantitiesOf`, `apps/server/src/bill-payments.ts`);
-- a row the money floor stops reads "{amount} is already paid on this bill: move fewer dishes"
-  (`table.move_dishes_floor`).
-
-So a waiter can read Paid on a dish whose card is then declined. The row's words came with slice 4a
-(`9a7efbb6b0`). The picker's floor itself still counts the reserved money, which is what keeps that
-money with its bill.
 
 ## A1261. A full invoice for a bill already paid, from the table's ⋮
 

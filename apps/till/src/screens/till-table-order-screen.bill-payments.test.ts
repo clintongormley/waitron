@@ -382,6 +382,30 @@ describe("till-table-order-screen: items already paid for", () => {
     return sent;
   };
 
+  it.each([
+    ["en", "1 of 3 have a payment", "Has a payment"],
+    ["es", "1 de 3 tienen un pago", "Tiene un pago"],
+  ])("labels reserved item money neutrally in %s", async (locale, partial, whole) => {
+    const previous = currentLocale();
+    try {
+      setLocale(locale);
+      const el = await mountScreen({
+        billBalance: balance({
+          received: "0.00",
+          reserved: "9.00",
+          outstanding: "36.00",
+          paidLines: [
+            { lineId: "line-2", lineNo: 2, paidQuantity: "1.000" },
+            { lineId: "line-3", lineNo: 3, paidQuantity: "1.000" },
+          ],
+        }),
+      });
+      expect(paidOf(el)).toEqual([partial, whole]);
+    } finally {
+      setLocale(previous);
+    }
+  });
+
   it("marks each line paid for, and how much of a line is", async () => {
     const el = await mountScreen({
       bills: [partlyPaid],
@@ -394,8 +418,8 @@ describe("till-table-order-screen: items already paid for", () => {
     });
 
     expect(paidOf(el)).toEqual([
-      t("bill_pay.paid_part").replace("{paid}", "1").replace("{quantity}", "3"),
-      t("bill_pay.paid"),
+      t("table.line_payment_part").replace("{paid}", "1").replace("{quantity}", "3"),
+      t("table.pick_payment_stays"),
     ]);
   });
 
@@ -434,14 +458,14 @@ describe("till-table-order-screen: items already paid for", () => {
       ]),
     ).toEqual([
       ["line-4", "Burger ×2"],
-      ["line-6", `Burger ×2 ${t("bill_pay.paid")}`],
+      ["line-6", `Burger ×2 ${t("table.pick_payment_stays")}`],
       [
         "line-8",
-        `Burger ×1 ${t("bill_pay.paid_part").replace("{paid}", "0.5").replace("{quantity}", "1")}`,
+        `Burger ×1 ${t("table.line_payment_part").replace("{paid}", "0.5").replace("{quantity}", "1")}`,
       ],
       [
         "line-9",
-        `Burger ×1 ${t("bill_pay.paid_part").replace("{paid}", "0.5").replace("{quantity}", "1")}`,
+        `Burger ×1 ${t("table.line_payment_part").replace("{paid}", "0.5").replace("{quantity}", "1")}`,
       ],
     ]);
   });
@@ -502,7 +526,7 @@ describe("till-table-order-screen: items already paid for", () => {
 
     const dialog = await openSentDish(el, "line-3", "held");
     expect(text(dialog.querySelector("[data-sent-line-status]"))).toBe(t("table.group_held"));
-    expect(text(dialog.querySelector("[data-line-paid]"))).toBe(t("bill_pay.paid"));
+    expect(text(dialog.querySelector("[data-line-paid]"))).toBe(t("table.pick_payment_stays"));
   });
 });
 

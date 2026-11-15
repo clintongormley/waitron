@@ -763,7 +763,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
   2026-10-18).** Owner-approved design; A773-1 has landed. Slice 4c, Split a table through the same
-  picker, has landed; it leaves open A1347–A1350, A1352, A1358–A1360, A1362 and A1365. Remaining: pre-bills through A446, which no longer
+  picker, has landed; it leaves open A1347–A1349, A1352, A1358–A1360, A1362 and A1365. Remaining: pre-bills through A446, which no longer
   waits for asesor S2.
   [Detail](backlog/till.md#a803-bills-and-tables-one-portion-per-order-line-one-bill-switcher-one-picker)
 
@@ -771,11 +771,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Take over offered where it is needed** (bundle of 2, size M). Holds A1349, A1289. [Detail](backlog/till.md#bundle-take-over-offered-where-it-is-needed)
 
-- **A1350. A row can read Paid on money a card in progress has only reserved (seen in A803 slice
-  4c).** A bill holding only reserved money draws no paid words in its header, but its rows say
-  `Paid` (`bill_pay.paid`) or "{amount} is already paid on this bill" (`table.move_dishes_floor`),
-  because `paidQuantitiesOf` counts pending item payments. The row's words came with slice 4a.
-  [Detail](backlog/till.md#a1350-a-row-can-read-paid-on-money-a-card-in-progress-has-only-reserved)
 
 - **Table screen panels that do not fit** (bundle of 3, size S). Holds A1359, A1265, A1290. [Detail](backlog/till.md#bundle-table-screen-panels-that-do-not-fit)
 

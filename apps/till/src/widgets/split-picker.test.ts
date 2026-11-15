@@ -232,7 +232,7 @@ describe("till-split-picker", () => {
     const reason = inner(el, "b1")!.shadowRoot!.getElementById(
       tick.getAttribute("aria-describedby")!,
     );
-    expect(reason!.textContent).toBe(t("bill_pay.paid"));
+    expect(reason!.textContent).toBe(t("table.pick_payment_stays"));
   });
 
   it("a part-paid bill says what is paid in its header; another bill says nothing", async () => {

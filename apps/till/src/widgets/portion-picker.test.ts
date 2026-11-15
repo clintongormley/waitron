@@ -47,13 +47,14 @@ function balance(
   total: string,
   received: string,
   paidLines: BillBalance["paidLines"] = [],
+  reserved = "0.00",
 ): BillBalance {
   return {
     workingOrderId: "bill-1",
     status: "open",
     total,
     received,
-    reserved: "0.00",
+    reserved,
     outstanding: "0.00",
     tips: "0.00",
     payments: [],
@@ -245,7 +246,7 @@ describe("till-portion-picker", () => {
     expect(q(el, '[data-pick-count="w1"]')).toBeNull();
   });
 
-  it("A803 picker: a paid row's tick is disabled and its reason reads Paid, tied to the tick", async () => {
+  it("A803 picker: a paid row's tick is disabled and its payment reason is tied to the tick", async () => {
     const lines = [
       dish("k1", 1, "Croqueta", "3.00"),
       dish("k2", 2, "Croqueta", "3.00"),
@@ -258,12 +259,35 @@ describe("till-portion-picker", () => {
     const reasonId = paidTick.getAttribute("aria-describedby");
     expect(reasonId).toBeTruthy();
     const reason = el.shadowRoot!.getElementById(reasonId!)!;
-    expect(reason.textContent!.trim()).toBe(t("bill_pay.paid"));
+    expect(reason.textContent!.trim()).toBe(t("table.pick_payment_stays"));
     expect(reason.checkVisibility()).toBe(true);
     await userEvent.click(paidTick, { force: true });
     expect(emitted).toHaveLength(0);
     expect(tick(el, "k2").disabled).toBe(false);
     expect(tick(el, "k2").hasAttribute("aria-describedby")).toBe(false);
+  });
+
+  it.each([
+    ["en", "Has a payment"],
+    ["es", "Tiene un pago"],
+  ])("a reserved item stays blocked with a neutral reason in %s", async (locale, expected) => {
+    const previous = currentLocale();
+    try {
+      setLocale(locale);
+      const { el, emitted } = await picker(
+        BEERS,
+        balance("20.00", "0.00", [{ lineId: "c1", lineNo: 1, paidQuantity: "1.000" }], "5.00"),
+      );
+      const held = tick(el, "c1");
+      expect(held.disabled).toBe(true);
+      const reason = el.shadowRoot!.getElementById(held.getAttribute("aria-describedby")!)!;
+      expect(reason.textContent!.trim()).toBe(expected);
+      expect(reason.checkVisibility()).toBe(true);
+      await userEvent.click(held, { force: true });
+      expect(emitted).toHaveLength(0);
+    } finally {
+      setLocale(previous);
+    }
   });
 
   it("A803 picker: a paid row still holding picks is drawn unticked, with no count control", async () => {
@@ -278,37 +302,44 @@ describe("till-portion-picker", () => {
     ]);
     const { el } = await picker(lines, paid, new Set(["k1", "k2"]));
     expect(q(el, '[data-pick-row="k1"]')!.querySelectorAll("input")).toHaveLength(1);
-    expect(q(el, "#pick-reason-k1")!.textContent!.trim()).toBe(t("bill_pay.paid"));
+    expect(q(el, "#pick-reason-k1")!.textContent!.trim()).toBe(t("table.pick_payment_stays"));
     expect(tick(el, "k1").checked).toBe(false);
     expect(tick(el, "k1").disabled).toBe(true);
     expect(dec(el, "k1")).toBeNull();
     expect(q(el, '[data-pick-qty="k1"]')!.textContent!.trim()).toBe("2");
   });
 
-  it("A803 picker: a floor-blocked row says what is already paid, in English and Spanish", async () => {
-    const lines = [...BEERS, dish("s1", 5, "Steak", "32.00")];
-    const paid = balance("52.00", "40.00");
-    const previous = currentLocale();
-    try {
-      setLocale("en-GB");
-      const { el } = await picker(lines, paid);
-      const steak = tick(el, "s1");
-      expect(steak.disabled).toBe(true);
-      const reason = el.shadowRoot!.getElementById(steak.getAttribute("aria-describedby")!)!;
-      expect(reason.textContent!.trim()).toBe(
-        "€40.00 is already paid on this bill: move fewer dishes",
-      );
-      setLocale("es-ES");
-      await el.updateComplete;
-      expect(reason.isConnected).toBe(true);
-      const spanish = el.shadowRoot!.getElementById(steak.getAttribute("aria-describedby")!)!;
-      expect(spanish.textContent!.trim()).toBe(
-        `Ya se han pagado ${formatMoney(decimal("40.00"), "es-ES")} en esta cuenta: mueve menos platos`,
-      );
-    } finally {
-      setLocale(previous);
-    }
-  });
+  it.each([
+    ["40.00", "0.00"],
+    ["0.00", "40.00"],
+    ["10.00", "30.00"],
+  ])(
+    "a floor-blocked row explains received %s plus reserved %s in EN/ES",
+    async (received, reserved) => {
+      const lines = [...BEERS, dish("s1", 5, "Steak", "32.00")];
+      const paid = balance("52.00", received, [], reserved);
+      const previous = currentLocale();
+      try {
+        setLocale("en-GB");
+        const { el } = await picker(lines, paid);
+        const steak = tick(el, "s1");
+        expect(steak.disabled).toBe(true);
+        const reason = el.shadowRoot!.getElementById(steak.getAttribute("aria-describedby")!)!;
+        expect(reason.textContent!.trim()).toBe(
+          "Payments keep €40.00 on this bill: move fewer dishes",
+        );
+        setLocale("es-ES");
+        await el.updateComplete;
+        expect(reason.isConnected).toBe(true);
+        const spanish = el.shadowRoot!.getElementById(steak.getAttribute("aria-describedby")!)!;
+        expect(spanish.textContent!.trim()).toBe(
+          `Los pagos retienen ${formatMoney(decimal("40.00"), "es-ES")} en esta cuenta: mueve menos platos`,
+        );
+      } finally {
+        setLocale(previous);
+      }
+    },
+  );
 
   it("A803 picker: a ticked row whose next member would break the floor has + disabled", async () => {
     const lines = [...BEERS, dish("s1", 5, "Steak", "32.00")];
@@ -323,7 +354,7 @@ describe("till-portion-picker", () => {
     expect(disabled(dec(el, "c1"))).toBe(false);
     const reasonId = tick(el, "c1").getAttribute("aria-describedby");
     const reason = el.shadowRoot!.getElementById(reasonId!)!.textContent!.trim();
-    expect(reason).toBe("€40.00 is already paid on this bill: move fewer dishes");
+    expect(reason).toBe("Payments keep €40.00 on this bill: move fewer dishes");
     const plus = inc(el, "c1") as WtButton;
     await plus.updateComplete;
     expect(plus.shadowRoot!.querySelector("button")!.getAttribute("aria-description")).toBe(reason);
@@ -622,7 +653,7 @@ describe("till-portion-picker whole", () => {
     expect(paid.checked).toBe(true);
     expect(paid.disabled).toBe(true);
     const reason = el.shadowRoot!.getElementById(paid.getAttribute("aria-describedby")!);
-    expect(reason!.textContent).toBe(t("bill_pay.paid"));
+    expect(reason!.textContent).toBe(t("table.pick_payment_stays"));
     expect(getComputedStyle(q(el, '[data-pick-row="h1"] .name')!).opacity).toBe("0.5");
     await userEvent.click(tick(el, "c1"));
     expect(emitted).toEqual([[]]);

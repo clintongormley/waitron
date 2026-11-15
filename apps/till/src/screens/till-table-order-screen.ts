@@ -5386,7 +5386,6 @@ export class TillTableOrderScreen extends LitElement {
     this.#dispatch("bill-pay", detail);
   }
 
-  /** What is paid of the line numbered `lineNo` on the bill on screen, when any is. */
   #paidMark(lineNo: number, quantity: string): TemplateResult | typeof nothing {
     const balance = this.#balanceShown();
     return this.#paidText(
@@ -5395,7 +5394,6 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  /** {@link #paidMark} for identical portions shown as one row: what is paid of them together. */
   #paidMarkOf(rows: readonly CurrentOrderRow[]): TemplateResult | typeof nothing {
     if (rows.length === 1) return this.#paidMark(rows[0]!.lineNo, rows[0]!.quantity);
     const balance = this.#balanceShown();
@@ -5413,8 +5411,8 @@ export class TillTableOrderScreen extends LitElement {
     return html`<span class="line-paid" data-line-paid
       >${
         whole
-          ? t("bill_pay.paid")
-          : t("bill_pay.paid_part")
+          ? t("table.pick_payment_stays")
+          : t("table.line_payment_part")
               .replace("{paid}", () => quantityText(paid))
               .replace("{quantity}", () => quantityText(quantity))
       }</span

@@ -140,15 +140,15 @@ it.each([false, true])(
         mark.textContent!.trim(),
       );
     expect(marks()).toEqual([
-      t("bill_pay.paid"),
-      t("bill_pay.paid"),
-      t("bill_pay.paid_part").replace("{paid}", "1").replace("{quantity}", "3"),
+      t("table.pick_payment_stays"),
+      t("table.pick_payment_stays"),
+      t("table.line_payment_part").replace("{paid}", "1").replace("{quantity}", "3"),
     ]);
     expect(
       el
         .shadowRoot!.querySelector('[data-sent-fallback-extra="stored-extra"] [data-line-paid]')!
         .textContent!.trim(),
-    ).toBe(t("bill_pay.paid"));
+    ).toBe(t("table.pick_payment_stays"));
     expect(
       el.shadowRoot!.querySelector("[data-sent-fallback] button, [data-sent-fallback] wt-button"),
     ).toBeNull();

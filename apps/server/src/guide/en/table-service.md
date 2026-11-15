@@ -581,9 +581,10 @@ weighed dish has a tick only, because it moves whole.
 
 Some ticks are grey, with the reason under the dish:
 
-- **Paid**: the dish is already paid, so it stays on this bill. Refund its payment first to move it.
-- **€40.00 is already paid on this bill: move fewer dishes**: moving this dish, or one more of the row, would leave the
-  bill owing less than has been paid on it. The other dishes can still go.
+- **Has a payment**: the dish has a payment in progress or received, so it stays on this bill.
+  Wait for a payment in progress to finish; refund a received payment before moving its dish.
+- **Payments keep €40.00 on this bill: move fewer dishes**: choose fewer dishes so the bill keeps
+  enough for its payments, including any still in progress. The other dishes can still go.
 
 Under **Move to**, choose where the dishes go: one of the table's other open bills, or **+ New
 bill**. A bill that has already taken a payment simply owes more afterwards. **Move** stays quiet until you have ticked a dish and chosen where it goes.
@@ -594,7 +595,7 @@ dishes off a part-paid bill leaves it paid in full, and its invoice is issued.
 If a bill is set for a full invoice and you move every dish to a bill that does not name the same
 customer, the till asks first: choose the customer the dishes are invoiced to, or **Do not move**.
 
-If someone pays a dish on another till while the panel is open, its row turns **Paid** when the
+If someone pays a dish on another till while the panel is open, its row turns **Has a payment** when the
 till next reads the bill, and that dish drops out of what you picked. If you tap **Move** before
 then, the move is refused with the reason, such as **This item has already been paid for, so it
 cannot be changed, moved or charged again. Refund its payment first**, and nothing moves. If the
