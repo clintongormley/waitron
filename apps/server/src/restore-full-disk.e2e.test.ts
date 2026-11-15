@@ -1,3 +1,4 @@
+import { receiveSetupArchive } from "./setup-archive-upload.js";
 // Needs its own filesystem of 64 MiB or less: the folder WAITRON_FULL_DISK_ROOT/restore names, or on
 // macOS a disk image the harness makes with hdiutil (`./testing/full-disk.ts`). Without one each case
 // is reported SKIPPED; with CI=true or WAITRON_REQUIRE_TEST_TOOLS=1 it FAILS instead (testing-guide.md,
@@ -14,7 +15,7 @@ import { type ArchiveEntry, packArchive } from "./backup-archive.js";
 import type { BackupManifest } from "./backup-manifest.js";
 import { formatEnvFile } from "./env-file.js";
 import { ALL_MODULES } from "./modules.js";
-import { restoreFromArtifact, validateArtifact } from "./restore.js";
+import { restoreFromArtifact, validateArtifact, validateArtifactFile } from "./restore.js";
 import { REQUIRE_FULL_DISK, openSmallDisk, type SmallDisk } from "./testing/full-disk.js";
 
 const KIB = 1024;
@@ -189,24 +190,82 @@ it("a disk with room for the secrets but not the database puts the identity back
   await expectOldBox(box);
 }, 120_000);
 
-it("refuses a full upload staging disk as capacity, cleans scratch and keeps the old box", async (ctx) => {
-  const small = needDisk(ctx);
-  const box = await oldBox(small, "upload-staging");
-  await rm(stagingDir!, { recursive: true, force: true });
-  stagingDir = small.folder("upload-scratch");
-  const bytes = artifact(2 * MIB);
-  small.fill(512 * KIB);
-  await expect(
-    validateArtifact({
+for (const kind of ["buffer", "file"]) {
+  it(`refuses a full ${kind} staging disk as capacity, cleans scratch and keeps the old box`, async (ctx) => {
+    const small = needDisk(ctx);
+    const box = await oldBox(small, `upload-staging-${kind}`);
+    await rm(stagingDir!, { recursive: true, force: true });
+    stagingDir = small.folder(`upload-scratch-${kind}`);
+    const bytes = artifact(2 * MIB);
+    const artifactPath = join(box.stateDir, "source.enc");
+    await writeFile(artifactPath, bytes);
+    small.fill(512 * KIB);
+    const deps = {
       ...box,
       stagingDir,
-      artifact: bytes,
       recoveryKey: KEY,
       migrationsRoot: null,
       modules: ALL_MODULES,
-      environment: "preproduction",
-    }),
+      environment: "preproduction" as const,
+    };
+    await expect(
+      kind === "file"
+        ? validateArtifactFile({ ...deps, artifactPath })
+        : validateArtifact({ ...deps, artifact: bytes }),
+    ).rejects.toMatchObject({ code: "restore.archive_resource_limit" });
+    expect(await readdir(stagingDir)).toEqual([]);
+    await expectOldBox(box);
+  });
+}
+
+it("a streamed upload stops above the reserve on the small filesystem and removes ciphertext", async (ctx) => {
+  const small = needDisk(ctx);
+  const dir = small.folder("receive");
+  small.fill(512 * KIB);
+  let cancelled = false;
+  const body = new ReadableStream({
+    pull(c) {
+      c.enqueue(new Uint8Array(64 * KIB));
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+  const request = new Request("http://localhost/upload", {
+    method: "POST",
+    body,
+    duplex: "half",
+  } as RequestInit);
+  await expect(receiveSetupArchive(request, dir, { reserveBytes: 64 * KIB })).rejects.toMatchObject(
+    { code: "restore.archive_resource_limit" },
+  );
+  expect(cancelled).toBe(true);
+  expect(await readdir(dir)).toEqual([]);
+  expect(small.free()).toBeGreaterThan(64 * KIB);
+});
+it("protects a reserve even when the whole upload would fit on the filesystem", async (ctx) => {
+  const small = needDisk(ctx);
+  const dir = small.folder("reserve-control");
+  const free = small.free();
+  expect(free).toBeGreaterThan(4 * MIB);
+  let consumed = 0;
+  const body = new ReadableStream({
+    pull(c) {
+      if (consumed === 4 * MIB) c.close();
+      else {
+        c.enqueue(new Uint8Array(64 * KIB));
+        consumed += 64 * KIB;
+      }
+    },
+  });
+  const request = new Request("http://localhost/upload", {
+    method: "POST",
+    body,
+    duplex: "half",
+  } as RequestInit);
+  await expect(
+    receiveSetupArchive(request, dir, { reserveBytes: free - MIB }),
   ).rejects.toMatchObject({ code: "restore.archive_resource_limit" });
-  expect(await readdir(stagingDir)).toEqual([]);
-  await expectOldBox(box);
+  expect(consumed).toBeLessThan(4 * MIB);
+  expect(await readdir(dir)).toEqual([]);
 });

@@ -9,6 +9,8 @@ import { mountSetupFirstFiscalApi, type FirstFiscalHost } from "./setup-first-fi
 import type { FirstSetupCoordinator, FirstSetupHold } from "@waitron/provisioning";
 import type { Context, Hono } from "hono";
 import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
+import type { ArchiveUpload, ReceiveArchive } from "./setup-archive-upload.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { VenueRequest, VenueResult } from "@waitron/provisioning";
 import { venueFiscalSelection, parseInitialVenueInput } from "@waitron/provisioning";
@@ -49,7 +51,7 @@ import type {
   SetupOperationPhase,
   SetupOperationStore,
 } from "./setup-operation.js";
-import type { ArchiveRestoreRequest } from "./restore-request.js";
+import type { ArchiveRequest } from "./restore-request.js";
 import { parseRecoveryEntryContext, type RecoveryEntryContext } from "./recovery-entry.js";
 import type { RecoveryBackupPreview } from "./recovery-backup-preview.js";
 import {
@@ -161,17 +163,15 @@ export interface SetupDeps {
   operations?: SetupOperationStore;
   firstFiscal?: FirstFiscalHost;
   firstSetup?: { coordinator: FirstSetupCoordinator; assertOtherAllowed(): Promise<void> };
-  stageRestore?: (
-    request: ArchiveRestoreRequest,
-    options: { oldBoxGone: boolean },
-  ) => Promise<void>;
+  receiveArchive?: ReceiveArchive;
+  stageRestore?: (request: ArchiveRequest, options: { oldBoxGone: boolean }) => Promise<void>;
   prepareRecovery?: PrepareRecovery;
   stageRecovery?: StageRecovery;
   discardStagedRecovery?: DiscardStagedRecovery;
   clearStagedRecovery?: () => Promise<void>;
   /** Whether a request came from a browser on the box itself; tests replace it. */
   requestFromBox?: (c: Context) => boolean;
-  previewRestore?: (request: ArchiveRestoreRequest) => Promise<RecoveryBackupPreview>;
+  previewRestore?: (request: ArchiveRequest) => Promise<RecoveryBackupPreview>;
   previewBucketRestore?: (
     input: Omit<BucketRestoreInput, "venueConfirmed">,
   ) => Promise<RecoveryBackupPreview>;
@@ -247,7 +247,6 @@ const SETUP_PLACEHOLDER_HTML = `<!doctype html>
 /** The placeholder's meaning changes the moment the box is provisioned (the setup routes stop being
  * mounted), so it must be revalidated, never pinned. */
 const REVALIDATE_CACHE_CONTROL = "no-cache";
-/** Bounds memory consumed by one unauthenticated setup upload. */
 export const MAX_RESTORE_UPLOAD_BYTES = 256 * 1024 * 1024;
 export const MAX_CONFIGURATION_UPLOAD_BYTES = 64 * 1024 * 1024;
 
@@ -711,6 +710,13 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     app.use("/setup-api/*", async (c, next) => {
       if (c.req.method !== "POST" || c.req.path.startsWith("/setup-api/first-setup/"))
         return next();
+      if (
+        setupBusy() &&
+        ["/setup-api/restore", "/setup-api/restore/preview", "/setup-api/recovery/stage"].includes(
+          c.req.path,
+        )
+      )
+        return directError(c, log, "setup.already_provisioning", 409);
       // The certificate read writes nothing, so a main box that never answers it holds no other
       // setup request back.
       if (c.req.path === "/setup-api/primary-certificate")
@@ -796,10 +802,15 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     () => provisioning || fiscalTesting || configurationStaging,
   );
 
+  const setupBusy = () => provisioning || fiscalTesting || configurationStaging || emailTesting();
+
   mountRecoveryPreparationApi(app, deps, log, {
     uploadLimit: MAX_RESTORE_UPLOAD_BYTES,
     hold: (request) => holds.get(request),
-    busy: () => provisioning || fiscalTesting || configurationStaging || emailTesting(),
+    busy: setupBusy,
+    setBusy: (value) => {
+      provisioning = value;
+    },
     run: createErrorBoundary(
       { ...BUCKET_RESTORE_STATUS, "setup.not_ready": 503, "restore.staged_copy_missing": 409 },
       "setup.restore_failed",
@@ -1314,7 +1325,8 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
 
   app.post("/setup-api/restore/preview", async (c) => {
     const preview = deps.previewRestore;
-    if (preview === undefined) return directError(c, log, "setup.not_ready", 503);
+    if (preview === undefined || deps.receiveArchive === undefined)
+      return directError(c, log, "setup.not_ready", 503);
     if (provisioning || fiscalTesting || configurationStaging || emailTesting())
       return directError(c, log, "setup.already_provisioning", 409);
     provisioning = true;
@@ -1322,18 +1334,25 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       try {
         if (!c.req.header("content-type")?.toLowerCase().startsWith("application/octet-stream"))
           invalidRequest("artifact");
-        const declaredLength = Number(c.req.header("content-length"));
-        if (Number.isFinite(declaredLength) && declaredLength > MAX_RESTORE_UPLOAD_BYTES)
-          invalidRequest("artifact");
         const recoveryKey = asString(c.req.header("x-waitron-recovery-key"), "recoveryKey");
         const environment = c.req.header("x-waitron-restore-environment");
         if (environment !== "production" && environment !== "preproduction")
           invalidRequest("environment");
-        const artifact = new Uint8Array(await c.req.arrayBuffer());
-        if (artifact.byteLength === 0 || artifact.byteLength > MAX_RESTORE_UPLOAD_BYTES)
-          invalidRequest("artifact");
-        c.header("Cache-Control", "no-store");
-        return c.json(await preview({ artifact, recoveryKey, environment }), 200);
+        const upload = await deps.receiveArchive!(c.req.raw);
+        try {
+          c.header("Cache-Control", "no-store");
+          return c.json(
+            await preview({
+              kind: "archive-file",
+              artifactPath: upload.artifactPath,
+              recoveryKey,
+              environment,
+            }),
+            200,
+          );
+        } finally {
+          await upload.dispose();
+        }
       } finally {
         provisioning = false;
       }
@@ -1343,7 +1362,11 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
   app.post("/setup-api/restore", async (c) => {
     const stageRestore = deps.stageRestore;
     const requestRestart = deps.requestRestart;
-    if (stageRestore === undefined || requestRestart === undefined) {
+    if (
+      stageRestore === undefined ||
+      requestRestart === undefined ||
+      deps.receiveArchive === undefined
+    ) {
       return directError(c, log, "setup.not_ready", 503);
     }
     if (provisioning || fiscalTesting || configurationStaging || emailTesting()) {
@@ -1352,6 +1375,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     provisioning = true;
 
     return runRestore(c, log, async () => {
+      let upload: ArchiveUpload | undefined;
       try {
         const multipart = c.req
           .header("content-type")
@@ -1362,40 +1386,34 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           !c.req.header("content-type")?.toLowerCase().startsWith("application/octet-stream")
         )
           invalidRequest("artifact");
-        const declaredLength = Number(c.req.header("content-length"));
+        const headerKey = multipart
+          ? undefined
+          : asString(c.req.header("x-waitron-recovery-key"), "recoveryKey");
+        const headerEnvironment = c.req.header("x-waitron-restore-environment");
         if (
-          Number.isFinite(declaredLength) &&
-          declaredLength > MAX_RESTORE_UPLOAD_BYTES + (multipart ? 262144 : 0)
+          !multipart &&
+          headerEnvironment !== "production" &&
+          headerEnvironment !== "preproduction"
         )
-          invalidRequest("artifact");
-        let form: FormData | undefined;
-        if (multipart) {
-          try {
-            form = await c.req.formData();
-          } catch {
-            invalidRequest("artifact");
-          }
-          for (const field of [
-            "artifact",
+          invalidRequest("environment");
+        upload = await deps.receiveArchive!(c.req.raw, {
+          fields: [
             "recoveryKey",
             "environment",
             "oldBoxGone",
             "recoveryOperation",
             "nodeRecoverySecret",
             "recoveryContext",
-          ])
-            if (form.getAll(field).length > 1) invalidRequest(field);
+          ],
+        });
+        const form = multipart ? upload.fields : undefined;
+        if (form) {
           const answer = form.get("oldBoxGone");
-          if (answer !== null && answer !== "0" && answer !== "1") invalidRequest("oldBoxGone");
+          if (answer != null && answer !== "0" && answer !== "1") invalidRequest("oldBoxGone");
         }
-        const recoveryKey = asString(
-          form === undefined ? c.req.header("x-waitron-recovery-key") : form.get("recoveryKey"),
-          "recoveryKey",
-        );
-        const rawEnvironment =
-          form === undefined
-            ? c.req.header("x-waitron-restore-environment")
-            : form.get("environment");
+        const recoveryKey =
+          form === undefined ? headerKey! : asString(form.get("recoveryKey"), "recoveryKey");
+        const rawEnvironment = form === undefined ? headerEnvironment : form.get("environment");
         if (rawEnvironment !== "production" && rawEnvironment !== "preproduction")
           invalidRequest("environment");
         const oldBoxGone =
@@ -1427,26 +1445,25 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
             }
           })(),
         );
-        const file = form?.get("artifact");
-        if (form !== undefined && !(file instanceof Blob)) invalidRequest("artifact");
-        const artifact = new Uint8Array(
-          await (file instanceof Blob ? file.arrayBuffer() : c.req.arrayBuffer()),
-        );
-        if (artifact.byteLength === 0 || artifact.byteLength > MAX_RESTORE_UPLOAD_BYTES)
-          invalidRequest("artifact");
         c.header("Cache-Control", "no-store");
-        const requestHash = createHash("sha256")
+        const hash = createHash("sha256")
           .update(rawEnvironment)
           .update(oldBoxGone ? "\0confirmed\0" : "\0")
           .update(recoveryKey)
-          .update("\0")
-          .update(artifact)
-          .update("\0")
-          .update(JSON.stringify(credentials))
-          .digest("hex");
+          .update("\0");
+        for await (const bytes of createReadStream(upload.artifactPath))
+          hash.update(bytes as Buffer);
+        const requestHash = hash.update("\0").update(JSON.stringify(credentials)).digest("hex");
         const execute = async (): Promise<Response> => {
           await stageRestore(
-            { artifact, recoveryKey, environment: rawEnvironment, ...credentials },
+            {
+              kind: "archive-file",
+              artifactPath: upload!.artifactPath,
+              signal: c.req.raw.signal,
+              recoveryKey,
+              environment: rawEnvironment,
+              ...credentials,
+            },
             { oldBoxGone },
           );
           // The restore is already recorded, so it must still answer and restart; the next start
@@ -1471,6 +1488,8 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       } catch (error) {
         provisioning = false;
         throw error;
+      } finally {
+        await upload?.dispose();
       }
     });
   });

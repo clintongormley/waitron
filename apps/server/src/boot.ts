@@ -1,3 +1,4 @@
+import { receiveSetupArchive } from "./setup-archive-upload.js";
 import { trimTrailingSlashes } from "./trim-trailing-slashes.js";
 import { disarmRestoreDiscard } from "./restore-flow.js";
 import { formerMainForReturn, startReturnRecordsDuty } from "./return-records.js";
@@ -336,7 +337,7 @@ import {
 import { stageResetRequest } from "./reset-request.js";
 import { refuseIfArchiveSourceLive } from "./restore-stream.js";
 import { boundObjectStore } from "./bounded-store.js";
-import { validateArtifact } from "./restore.js";
+import { validateArtifact, validateArtifactFile } from "./restore.js";
 import { RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
 import { assertOutsideScratchResolved, emptyScratch } from "./scratch.js";
 import { previewRecoveryArchive, previewRecoveryStream } from "./recovery-backup-preview.js";
@@ -1605,6 +1606,8 @@ async function bootServer(
         readPrimaryCertificate: (primaryUrl) =>
           fetchPrimaryCertificate(primaryUrl, { lookup: seams.boxLookup }),
         prepareRecovery: recoveryPreparation,
+        receiveArchive: (request, options) =>
+          receiveSetupArchive(request, join(config.stateDir, RESTORE_STAGING_DIR), options),
         stageRecovery: recoveryPreparation.stage,
         discardStagedRecovery: recoveryPreparation.discard,
         clearStagedRecovery: recoveryPreparation.clearStaged,
@@ -1647,15 +1650,21 @@ async function bootServer(
           }),
         stageRestore: (request, { oldBoxGone }) =>
           stageRestoreRequest(config.stateDir, request, async (candidate) => {
-            const validated = await validateArtifact({
-              artifact: candidate.artifact,
+            const validation = {
               recoveryKey: candidate.recoveryKey,
               stateDir: config.stateDir,
               stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
               migrationsRoot: config.migrationsRoot,
               modules: availableModules,
               environment: candidate.environment,
-            });
+            };
+            const validated =
+              candidate.kind === "archive-file"
+                ? await validateArtifactFile({
+                    ...validation,
+                    artifactPath: candidate.artifactPath,
+                  })
+                : await validateArtifact({ ...validation, artifact: candidate.artifact });
             try {
               await refuseIfArchiveSourceLive({
                 validated,

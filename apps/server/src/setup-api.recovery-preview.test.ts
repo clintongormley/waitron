@@ -1,9 +1,11 @@
+import { useSetupArchiveUpload } from "./testing/setup-archive-upload.js";
 import { Hono } from "hono";
 import { expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
-import { mountSetup, MAX_RESTORE_UPLOAD_BYTES } from "./setup-api.js";
+import { mountSetup } from "./setup-api.js";
 import type { RecoveryBackupPreview } from "./recovery-backup-preview.js";
 
+const receiveArchive = useSetupArchiveUpload();
 const preview: RecoveryBackupPreview = {
   sourceId: "selected-copy-id",
   createdAt: "2026-10-01T08:00:00.000Z",
@@ -35,6 +37,7 @@ it("returns selected-copy metadata without staging or restarting and keeps it ou
     app,
     {
       environment: "preproduction",
+      receiveArchive,
       previewRestore: read,
       stageRestore: stage,
       requestRestart: restart,
@@ -46,7 +49,8 @@ it("returns selected-copy metadata without staging or restarting and keeps it ou
   expect(await response.json()).toEqual(preview);
   expect(response.headers.get("cache-control")).toBe("no-store");
   expect(read).toHaveBeenCalledWith({
-    artifact: new Uint8Array([1, 2]),
+    kind: "archive-file",
+    artifactPath: expect.stringContaining("upload-"),
     recoveryKey: "archive-key",
     environment: "preproduction",
   });
@@ -56,7 +60,6 @@ it("returns selected-copy metadata without staging or restarting and keeps it ou
 });
 it.each([
   [{ "content-type": "application/json" }, new Uint8Array([1]), "artifact"],
-  [{ "content-length": String(MAX_RESTORE_UPLOAD_BYTES + 1) }, new Uint8Array([1]), "artifact"],
   [{}, new Uint8Array(), "artifact"],
   [{ "x-waitron-recovery-key": "" }, new Uint8Array([1]), "recoveryKey"],
   [{ "x-waitron-restore-environment": "dev" }, new Uint8Array([1]), "environment"],
@@ -65,7 +68,11 @@ it.each([
   async (headers, body, field) => {
     const app = new Hono();
     const read = vi.fn(async () => preview);
-    mountSetup(app, { environment: "preproduction", previewRestore: read }, () => {});
+    mountSetup(
+      app,
+      { environment: "preproduction", receiveArchive, previewRestore: read },
+      () => {},
+    );
     const response = await app.request("/setup-api/restore/preview", request(headers, body));
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
@@ -81,7 +88,7 @@ it.each([
 ] as const)("preserves %s and releases the gate after a refusal", async (code, status) => {
   const app = new Hono();
   const read = vi.fn().mockRejectedValueOnce(new AppError(code, {})).mockResolvedValue(preview);
-  mountSetup(app, { environment: "preproduction", previewRestore: read }, () => {});
+  mountSetup(app, { environment: "preproduction", receiveArchive, previewRestore: read }, () => {});
   const response = await app.request("/setup-api/restore/preview", request());
   expect(response.status).toBe(status);
   expect(await response.json()).toEqual({ error: { code, params: {} } });
@@ -93,4 +100,56 @@ it("reports unavailable preview without opening a backup", async () => {
   const response = await app.request("/setup-api/restore/preview", request());
   expect(response.status).toBe(503);
   expect(await response.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
+});
+it("previews the received file and disposes it after validation", async () => {
+  const app = new Hono();
+  const dispose = vi.fn(async () => {});
+  const received = {
+    artifactPath: "/owned/upload/artifact",
+    byteLength: 2,
+    fields: new Map(),
+    dispose,
+  };
+  const read = vi.fn(async () => preview);
+  mountSetup(
+    app,
+    {
+      environment: "preproduction",
+      previewRestore: read,
+      receiveArchive: async () => received,
+    },
+    () => {},
+  );
+  const response = await app.request("/setup-api/restore/preview", request());
+  expect(response.status).toBe(200);
+  expect(read).toHaveBeenCalledWith({
+    kind: "archive-file",
+    artifactPath: received.artifactPath,
+    recoveryKey: "archive-key",
+    environment: "preproduction",
+  });
+  expect(dispose).toHaveBeenCalledOnce();
+});
+it("refuses an upload declared above 4 GiB as capacity before validation", async () => {
+  const app = new Hono();
+  const read = vi.fn(async () => preview);
+  mountSetup(app, { environment: "preproduction", receiveArchive, previewRestore: read }, () => {});
+  const response = await app.request(
+    "/setup-api/restore/preview",
+    request({ "content-length": String(4 * 1024 ** 3 + 1) }),
+  );
+  expect(response.status).toBe(507);
+  expect(await response.json()).toEqual({
+    error: { code: "restore.archive_resource_limit", params: {} },
+  });
+  expect(read).not.toHaveBeenCalled();
+});
+it("reports a missing archive receiver as unavailable", async () => {
+  const app = new Hono();
+  const read = vi.fn(async () => preview);
+  mountSetup(app, { environment: "preproduction", previewRestore: read }, () => {});
+  const response = await app.request("/setup-api/restore/preview", request());
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
+  expect(read).not.toHaveBeenCalled();
 });

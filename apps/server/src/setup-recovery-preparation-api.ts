@@ -28,7 +28,14 @@ export type RecoveryPreparationSource =
   | { kind: "bucket"; kit: string; environment: "production" | "preproduction" }
   | { kind: "cloud"; pointId: string }
   | { kind: "staged"; stagedId: string };
-export type ArchivePreparationSource = Extract<RecoveryPreparationSource, { kind: "archive" }>;
+export type ArchivePreparationSource =
+  | Extract<RecoveryPreparationSource, { kind: "archive" }>
+  | {
+      kind: "archive-file";
+      artifactPath: string;
+      recoveryKey: string;
+      environment: "production" | "preproduction";
+    };
 export type StageRecovery = (
   eventId: string,
   source: ArchivePreparationSource,
@@ -155,6 +162,7 @@ export function mountRecoveryPreparationApi(
     uploadLimit: number;
     hold(request: Request): FirstSetupHold | undefined;
     busy(): boolean;
+    setBusy(value: boolean): void;
     run(c: Context, log: Logger, execute: () => Promise<Response>): Promise<Response>;
   },
 ): void {
@@ -162,24 +170,44 @@ export function mountRecoveryPreparationApi(
     options.run(c, log, async () => {
       c.header("Cache-Control", "no-store");
       assertOwnerTransport(c);
-      if (deps.stageRecovery === undefined || deps.firstSetup === undefined)
+      if (
+        deps.stageRecovery === undefined ||
+        deps.firstSetup === undefined ||
+        deps.receiveArchive === undefined
+      )
         throw new AppError("setup.not_ready", {});
       if (options.busy()) throw new AppError("setup.already_provisioning", {});
       if (contentType(c) !== "multipart/form-data") invalid("body");
-      const { payload, artifact } = await readUpload(c, options.uploadLimit);
-      const body = exact(payload, ["eventId", "source"]);
-      const eventId = text(body.eventId, "eventId", 256);
-      const raw = exact(body.source, ["kind", "recoveryKey", "environment"]);
-      if (raw.kind !== "archive") invalid("body");
-      if (artifact === undefined) invalid("artifact");
-      return c.json(
-        await deps.stageRecovery(eventId, {
-          kind: "archive",
-          artifact,
-          recoveryKey: text(raw.recoveryKey, "recoveryKey", 4096),
-          environment: environment(raw.environment),
-        }),
-      );
+      options.setBusy(true);
+      let upload;
+      try {
+        upload = await deps.receiveArchive(c.req.raw, { fields: ["request"], exactFields: true });
+        const rawRequest = text(upload.fields.get("request"), "body", 131072);
+        let payload: unknown;
+        try {
+          payload = JSON.parse(rawRequest);
+        } catch {
+          invalid("body");
+        }
+        const body = exact(payload, ["eventId", "source"]);
+        const eventId = text(body.eventId, "eventId", 256);
+        const raw = exact(body.source, ["kind", "recoveryKey", "environment"]);
+        if (raw.kind !== "archive") invalid("body");
+        return c.json(
+          await deps.stageRecovery(eventId, {
+            kind: "archive-file",
+            artifactPath: upload.artifactPath,
+            recoveryKey: text(raw.recoveryKey, "recoveryKey", 4096),
+            environment: environment(raw.environment),
+          }),
+        );
+      } finally {
+        try {
+          await upload?.dispose();
+        } finally {
+          options.setBusy(false);
+        }
+      }
     }),
   );
   app.post("/setup-api/recovery/stage/discard", (c) =>

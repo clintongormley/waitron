@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { useSetupArchiveUpload } from "./testing/setup-archive-upload.js";
 import { mkdirSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createHash, X509Certificate } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -17,7 +19,7 @@ import type { RestoreRequest } from "./restore-request.js";
 import type { AdoptCredential, AdoptHooks, AdoptRequest } from "./adopt.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { fetchMirrorBundle, fetchPrimaryCertificate } from "./mirror-bundle-fetch.js";
-import { mountSetup, type SetupDeps } from "./setup-api.js";
+import { mountSetup as mountSetupBase, type SetupDeps } from "./setup-api.js";
 import { makeAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import {
@@ -27,6 +29,11 @@ import {
   type BoxServer,
 } from "./testing/box-authority.js";
 import type { ConfigurationPreview } from "./configuration-import.js";
+
+const receiveArchive = useSetupArchiveUpload();
+function mountSetup(...[app, deps, log]: Parameters<typeof mountSetupBase>) {
+  mountSetupBase(app, { receiveArchive, ...deps }, log);
+}
 
 const noopLog: Logger = () => {};
 
@@ -1949,7 +1956,11 @@ describe("POST /setup-api/restore", () => {
   it("stages the encrypted artifact under the persistent operation lease and restarts", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-restore-operation-"));
     try {
-      const stageRestore = vi.fn(async () => {});
+      const stageRestore = vi.fn<NonNullable<SetupDeps["stageRestore"]>>(async (request) => {
+        expect(request.kind).toBe("archive-file");
+        if (request.kind === "archive-file")
+          expect(await readFile(request.artifactPath)).toEqual(Buffer.from([1, 2, 3]));
+      });
       const requestRestart = vi.fn();
       const app = new Hono();
       const operations = createSetupOperationStore(dir);
@@ -1962,7 +1973,9 @@ describe("POST /setup-api/restore", () => {
       expect(response.status).toBe(202);
       expect(stageRestore).toHaveBeenCalledWith(
         {
-          artifact: Uint8Array.from([1, 2, 3]),
+          kind: "archive-file",
+          artifactPath: expect.stringContaining("upload-"),
+          signal: expect.any(AbortSignal),
           recoveryKey: "recovery-secret",
           environment: "production",
         },
@@ -2299,7 +2312,13 @@ describe("POST /setup-api/restore-bucket", () => {
     const confirmed = await send({ "x-waitron-old-box-gone": "1" });
     expect(confirmed.status).toBe(202);
     expect(stageRestore).toHaveBeenLastCalledWith(
-      { artifact: Uint8Array.from([1]), recoveryKey: "key", environment: "production" },
+      {
+        kind: "archive-file",
+        artifactPath: expect.stringContaining("upload-"),
+        signal: expect.any(AbortSignal),
+        recoveryKey: "key",
+        environment: "production",
+      },
       { oldBoxGone: true },
     );
   });
@@ -2362,7 +2381,7 @@ describe("POST /setup-api/restore-bucket", () => {
       noopLog,
     );
     const archive = postRestore(app, Uint8Array.from([1]));
-    await tick();
+    await vi.waitFor(() => expect(stageRestore).toHaveBeenCalledOnce());
     const bucket = await postBucketRestore(app, { kit: "k", environment: "production" });
     expect(bucket.status).toBe(409);
     expect(await bucket.json()).toMatchObject({ error: { code: "setup.already_provisioning" } });
@@ -3663,7 +3682,7 @@ describe("setup routes — remaining refusals and resumption paths", () => {
       ["no content type", { "content-type": "" }, Uint8Array.from([1])],
       [
         "a declared size over the upload limit",
-        { "content-length": String(256 * 1024 * 1024 + 1) },
+        { "content-length": String(4 * 1024 ** 3 + 1) },
         Uint8Array.from([1]),
       ],
       ["an empty upload", {}, new Uint8Array(0)],
@@ -3683,8 +3702,13 @@ describe("setup routes — remaining refusals and resumption paths", () => {
         body: body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer,
       });
 
-      expect(res.status).toBe(400);
-      expect(await res.json()).toEqual(invalid("artifact"));
+      const oversized = _label === "a declared size over the upload limit";
+      expect(res.status).toBe(oversized ? 507 : 400);
+      expect(await res.json()).toEqual(
+        oversized
+          ? { error: { code: "restore.archive_resource_limit", params: {} } }
+          : invalid("artifact"),
+      );
       expect(deps.stageRestore).not.toHaveBeenCalled();
       // A refused upload releases the latch, so a corrected one is accepted.
       expect((await postRestore(app, Uint8Array.from([1]))).status).toBe(202);
@@ -3720,7 +3744,9 @@ describe("setup routes — remaining refusals and resumption paths", () => {
       expect(await res.json()).toEqual({ restoreStaged: true, restarting: true });
       expect(deps.stageRestore).toHaveBeenCalledWith(
         {
-          artifact: Uint8Array.from([4, 5]),
+          kind: "archive-file",
+          artifactPath: expect.stringContaining("upload-"),
+          signal: expect.any(AbortSignal),
           recoveryKey: "recovery-secret",
           environment: "preproduction",
         },

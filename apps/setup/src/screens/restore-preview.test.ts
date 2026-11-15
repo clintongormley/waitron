@@ -212,3 +212,14 @@ it.each(["en-GB", "es-ES"])(
     expect(child(el)!.shadowRoot!.querySelector("[data-test=selected-copy]")).toBeNull();
   },
 );
+it("explains an interrupted review upload and keeps the selected file for retry", async () => {
+  const { el } = await mount(async () => new Response("Request Timeout", { status: 408 }));
+  await fill(el);
+  review(el);
+  await expect
+    .poll(() => child(el)!.shadowRoot!.querySelector("wt-form-actions")!.shadowRoot!.textContent)
+    .toContain(
+      "The backup upload did not finish. Connect this device by cable or to the venue’s network, then try again.",
+    );
+  expect(child(el)!.shadowRoot!.querySelector("[data-test=selected-copy]")).toBeNull();
+});

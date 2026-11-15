@@ -342,3 +342,18 @@ it("Edit these details from the restore page goes back to choosing the backup an
   expect(el.shadowRoot!.querySelector("[data-test=preview]")).not.toBeNull();
   expect(calls).toHaveLength(sent);
 });
+it("explains an interrupted staging upload and clears the message after retry", async () => {
+  const { el, prepare } = await mounted((attempt) =>
+    attempt === 0 ? new Response("Request Timeout", { status: 408 }) : undefined,
+  );
+  await expect(prepare()(request())).rejects.toMatchObject({ code: "restore.upload_interrupted" });
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("wt-form-actions")!.shadowRoot!.textContent).toContain(
+    "The backup upload did not finish.",
+  );
+  await prepare()(request());
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("wt-form-actions")!.shadowRoot!.textContent).not.toContain(
+    "The backup upload did not finish.",
+  );
+});

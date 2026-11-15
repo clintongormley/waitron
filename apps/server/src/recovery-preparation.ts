@@ -33,6 +33,7 @@ import {
   openStagedCopy,
   readArtifactNode,
   validateArtifact,
+  validateArtifactFile,
   validateDatabaseEntries,
   type ValidatedArtifact,
   type ValidationDeps,
@@ -540,7 +541,11 @@ export function createSetupRecoveryPreparation(
     }
   };
   const stage: StageRecovery = async (eventId, source) => {
-    const copy = await validateArtifact({ ...options, ...source, stagingDir: stagedDir });
+    const deps = { ...options, ...source, stagingDir: stagedDir };
+    const copy =
+      source.kind === "archive-file"
+        ? await validateArtifactFile({ ...deps, artifactPath: source.artifactPath })
+        : await validateArtifact({ ...deps, artifact: source.artifact });
     let working: string;
     let preview: RecoveryBackupPreview;
     try {

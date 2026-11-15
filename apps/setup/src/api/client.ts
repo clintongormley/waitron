@@ -283,6 +283,18 @@ async function apiError(res: Response): Promise<ApiError> {
   };
 }
 
+async function upload(fetchImpl: typeof fetch, url: string, init: RequestInit): Promise<Response> {
+  let response: Response;
+  try {
+    response = await fetchImpl(url, init);
+  } catch {
+    throw { code: "restore.upload_interrupted" } satisfies ApiError;
+  }
+  if (response.status === 408)
+    throw { code: "restore.upload_interrupted", status: 408 } satisfies ApiError;
+  return response;
+}
+
 export interface HandoverStatus {
   operationId: string;
   role: "source" | "destination";
@@ -486,7 +498,7 @@ export class SetupApi {
         form.set("recoveryContext", JSON.stringify(recovery.recoveryContext));
       body = form;
     }
-    const res = await fetchImpl(this.#baseUrl + "/setup-api/restore", {
+    const res = await upload(fetchImpl, this.#baseUrl + "/setup-api/restore", {
       method: "POST",
       credentials: "include",
       ...(recovery === undefined
@@ -549,7 +561,7 @@ export class SetupApi {
       JSON.stringify({ eventId, source: { kind: "archive", recoveryKey, environment } }),
     );
     form.set("artifact", artifact);
-    const response = await this.#fetchImpl(this.#baseUrl + "/setup-api/recovery/stage", {
+    const response = await upload(this.#fetchImpl, this.#baseUrl + "/setup-api/recovery/stage", {
       method: "POST",
       credentials: "include",
       body: form,
@@ -572,7 +584,7 @@ export class SetupApi {
     environment: "production" | "preproduction",
   ): Promise<RecoveryBackupPreview> {
     const fetchImpl = this.#fetchImpl;
-    const response = await fetchImpl(this.#baseUrl + "/setup-api/restore/preview", {
+    const response = await upload(fetchImpl, this.#baseUrl + "/setup-api/restore/preview", {
       method: "POST",
       credentials: "include",
       headers: {

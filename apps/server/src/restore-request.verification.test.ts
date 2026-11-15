@@ -678,3 +678,53 @@ it("refuses staging a backup with no active administrator password before replac
   ).rejects.toMatchObject({ code: "restore.administrator_password_missing" });
   expect(await f.marker()).toBe(before);
 });
+
+it.each(["none", "ciphertext", "approval"])(
+  "checks file-backed snapshot binding again after validation (%s)",
+  async (change) => {
+    const f = await fixture();
+    const { artifact, ...metadata } = f.request;
+    const artifactPath = join(f.root, "received");
+    await writeFile(artifactPath, artifact);
+    const staged = stageRestoreRequest(
+      f.stateDir,
+      { ...metadata, kind: "archive-file", artifactPath },
+      async () => {
+        if (change === "ciphertext") await writeFile(artifactPath, "changed");
+        if (change === "approval")
+          await writeFile(
+            join(f.stateDir, "cloud/recovery.json"),
+            JSON.stringify({ ...f.saved, pointId: nodeId }),
+          );
+      },
+    );
+    if (change === "none") {
+      await staged;
+      expect(JSON.parse(await f.marker()).request.snapshotVerification).toEqual(f.verification);
+      expect(await readFile(join(f.stateDir, "flows/restore/artifact"))).toEqual(artifact);
+    } else {
+      await expect(staged).rejects.toThrow(unavailable);
+      await expect(f.marker()).rejects.toMatchObject({ code: "ENOENT" });
+    }
+  },
+);
+it("refuses an ordinary uploaded file beside saved v2 Cloud state", async () => {
+  const f = await fixture();
+  const artifactPath = join(f.root, "received");
+  await writeFile(artifactPath, f.request.artifact);
+  const validate = vi.fn(async () => {});
+  await expect(
+    stageRestoreRequest(
+      f.stateDir,
+      {
+        kind: "archive-file",
+        artifactPath,
+        recoveryKey: "key",
+        environment: "preproduction",
+      },
+      validate,
+    ),
+  ).rejects.toThrow(unavailable);
+  expect(validate).not.toHaveBeenCalled();
+  await expect(f.marker()).rejects.toMatchObject({ code: "ENOENT" });
+});

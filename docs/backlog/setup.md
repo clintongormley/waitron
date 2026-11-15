@@ -400,8 +400,9 @@ whole-file reads are separate work:
   the same-size replacement refusal when streaming these hashes.
 - `apps/server/src/cloud-snapshot-archive.ts` snapshots `venue.db`, caps the copy at 512 MiB,
   then reads it whole before packing and encrypting the archive. Cloud recovery downloads also
-  collect an archive of up to 512 MiB in memory (`cloud-recovery.ts`). Setup recovery uploads buffer
-  archives within their 256 MiB upload limit (`setup-api.ts`, `setup-recovery-preparation-api.ts`).
+  collect an archive of up to 512 MiB in memory (`cloud-recovery.ts`). The unused archive branch
+  of `/recovery/preparation` and emergency handover still buffer archives within 256 MiB.
+  Configuration transfer retains its separate buffer.
   These are transfer limits and buffers, not ordinary-start database admission.
 
 Measured on 14 November 2026 with bench revision `95e668a747`: 30 days at 250 bills
@@ -409,7 +410,7 @@ a day, seed 1, produced 1,061,224 rows and a 1,268,463,901-byte encrypted backup
 (1,209.70 MiB). Scaling that artifact by 12 for the bench's 360-day year gives
 15,221,566,812 bytes (14,516.42 MiB); the year figure is a linear estimate.
 The backup used synthetic identity files and empty media folders. Even the measured month
-exceeds the setup upload limit of 256 MiB. The streamed-upload plan still needs watcher clearance.
+exceeded the then-current setup upload limit of 256 MiB.
 _14 November 2026, A1533: the compressed month below fits the 256 MiB upload budget;
 this earlier raw measurement predates compression._
 
@@ -444,11 +445,13 @@ raw buffer path and 1,884 MiB with the rejected 512 MiB decoded gzip buffer. Fil
 validation with its synchronous encrypted-input snapshot measured 743 MiB raw and 743 MiB gzip
 with the same input shapes on the same image. The earlier 488/486 MiB file-path probe omitted
 that snapshot and does not describe the final validator's memory use.
-HTTP upload transport still buffers the encrypted input. Raw uploads now inherit the file
+_15 November 2026: the three browser-used upload routes now stream ciphertext to scratch;
+the [streamed-upload plan](../superpowers/plans/2026-11-15-large-backup-streamed-upload.md) supersedes
+the former 256 MiB limit and buffered-HTTP measurements above. A year remains unmeasured._
+Raw uploads inherit the file
 reader's 4096-entry, 4096-byte-name and 16 MiB metadata limits and briefly need disk space for
 encrypted input, decrypted archive and extracted database.
 
-The streamed-upload work remains open.
 
 An oversized committed attempt's Finish request now passes the readable-database gate and refuses
 later with `setup.not_ready` (HTTP 503); the old size classification refused
@@ -466,6 +469,16 @@ see [the developer convention](../developers/conventions-data.md#local-backup-an
 This inventory comes from following source reads, not large-file runtime qualification of these
 remaining paths. Next: exercise each operation above its current buffer budget before replacing
 that operation's reader. Do not remove exact-content checks to make a large file fit.
+
+## Let slow large backup uploads finish
+
+The watcher cleared the 4 GiB browser-upload ceiling with Node's current 300-second receive limit
+on 15 November 2026. A 20 Mbit/s link can carry at most 715.26 MiB in that time; 100 Mbit/s can
+carry 3.49 GiB, before overhead. The linear 360-day estimate of 1,730,120,820 bytes needs
+46.14 Mbit/s; no year was measured. The upload may be repeated for review, staging and restore.
+The client explains a 408 or dropped connection and suggests a cable or the venue network.
+Choose a receiving policy for these routes that lets slower large transfers finish without changing
+the server-wide timeout. No new timeout policy is built by the streamed-upload change.
 
 ## Bundle: Restore paths run
 

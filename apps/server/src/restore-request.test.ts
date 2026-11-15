@@ -853,3 +853,53 @@ catch (error) { process.stdout.write(error.errcode === 5 ? "busy" : String(error
     },
   );
 });
+
+it("publishes received ciphertext from a file, flushes it and permits a cold retry", async () => {
+  const stateDir = await fresh();
+  const artifactPath = join(stateDir, "received");
+  await writeFile(artifactPath, new Uint8Array([4, 7, 9]), { mode: 0o600 });
+  await stageRestoreRequest(stateDir, {
+    kind: "archive-file",
+    artifactPath,
+    recoveryKey: "key",
+    environment: "preproduction",
+  });
+  expect(await readFile(join(stateDir, "flows/restore/artifact"))).toEqual(Buffer.from([4, 7, 9]));
+  await expect(stat(artifactPath)).rejects.toMatchObject({ code: "ENOENT" });
+  const restore = vi.fn(async () => {});
+  expect(
+    await runStagedRestore(
+      { stateDir, venueDir: join(stateDir, "venue"), migrationsRoot: null, log: () => {} },
+      restore,
+    ),
+  ).toBe(true);
+  expect(restore).toHaveBeenCalledOnce();
+});
+it("validation refusal or disconnection publishes no received file", async () => {
+  for (const aborted of [false, true]) {
+    const stateDir = await fresh();
+    const artifactPath = join(stateDir, "received");
+    await writeFile(artifactPath, "received");
+    const abort = new AbortController();
+    await expect(
+      stageRestoreRequest(
+        stateDir,
+        {
+          kind: "archive-file",
+          artifactPath,
+          signal: abort.signal,
+          recoveryKey: "key",
+          environment: "preproduction",
+        },
+        async () => {
+          if (aborted) abort.abort();
+          else throw new AppError("recovery.passphrase_invalid", {});
+        },
+      ),
+    ).rejects.toMatchObject(
+      aborted ? { name: "AbortError" } : { code: "recovery.passphrase_invalid" },
+    );
+    expect(await readRestoreFlow(stateDir)).toBeNull();
+    expect(await readFile(artifactPath, "utf8")).toBe("received");
+  }
+});

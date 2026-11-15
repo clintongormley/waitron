@@ -396,9 +396,14 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   their 128 MiB budget; Start again's deletion fingerprints and Cloud snapshot creation also read
   whole database files. Replace these buffers with file-based processing while preserving their
   exact-content checks. Ordinary first-setup admission no longer uses these snapshots.
-  Setup still buffers backup uploads within 256 MiB; archive validation stages them as files.
-  Box backups compress before encryption. Streamed uploads remain open.
+  The unused archive-preparation route and emergency handover still buffer uploads within 256 MiB;
+  Cloud transfers and configuration imports keep their separate buffers.
   [Detail](backlog/setup.md#recovery-operations-still-buffer-whole-database-files).
+
+- **Let slow large backup uploads finish.** Browser recovery accepts files up to 4 GiB, but each
+  upload still has Node's 300-second receive limit. A 20 Mbit/s link allows about 715 MiB before
+  overhead; the scaled, unmeasured year needs 46.14 Mbit/s. Choose a per-route receive policy.
+  [Detail](backlog/setup.md#let-slow-large-backup-uploads-finish).
 
 - **A1186. The setup tour offers Waitron Cloud's level-2 trial (owner, 2026-10-29).**
   **Build remains open**; Cloud's qualified trial journey is prerequisite G1 in the plan.

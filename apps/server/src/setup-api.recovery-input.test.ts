@@ -1,5 +1,7 @@
+import { AppError } from "@waitron/shared";
+import { useSetupArchiveUpload } from "./testing/setup-archive-upload.js";
 import { Hono } from "hono";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
@@ -7,6 +9,7 @@ import { mountSetup, type SetupDeps } from "./setup-api.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import type { CloudRecoveryView } from "./cloud-recovery.js";
 
+const receiveArchive = useSetupArchiveUpload();
 const pointId = "9f41b8b8-b14e-472a-8eb4-f9259b80f0d1";
 const operation = {
   binding: {
@@ -52,6 +55,7 @@ function setup(operations?: SetupDeps["operations"]) {
     app,
     {
       environment: "preproduction",
+      receiveArchive,
       stageRestore,
       stageBucketRestore,
       requestRestart,
@@ -110,7 +114,13 @@ it.each(["archive", "bucket", "cloud"])(
     } else {
       expect(stageRestore).toHaveBeenCalledWith(
         {
-          artifact: kind === "archive" ? new Uint8Array([1, 2, 3]) : new Uint8Array([7, 8]),
+          ...(kind === "archive"
+            ? {
+                kind: "archive-file",
+                artifactPath: expect.stringContaining("upload-"),
+                signal: expect.any(AbortSignal),
+              }
+            : { artifact: new Uint8Array([7, 8]) }),
           recoveryKey: kind === "archive" ? "archive-key" : "archive-cloud-key",
           environment: "preproduction",
           ...credentials,
@@ -333,3 +343,63 @@ it.each(["archive", "bucket", "cloud"])(
     }
   },
 );
+it.each(["recoveryKey", "environment"])(
+  "refuses an invalid raw %s before receiving ciphertext",
+  async (field) => {
+    const app = new Hono();
+    const receiveArchive = vi.fn(async () => {
+      throw new Error("body was read");
+    });
+    mountSetup(
+      app,
+      {
+        environment: "preproduction",
+        stageRestore: async () => {},
+        requestRestart: () => {},
+        receiveArchive,
+      },
+      () => {},
+    );
+    const response = await app.request("/setup-api/restore", {
+      method: "POST",
+      body: new Uint8Array(),
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-waitron-recovery-key": field === "recoveryKey" ? "" : "key",
+        "x-waitron-restore-environment": field === "environment" ? "dev" : "preproduction",
+      },
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "setup.request_invalid", params: { field } },
+    });
+    expect(receiveArchive).not.toHaveBeenCalled();
+  },
+);
+
+it.each([false, true])("removes received ciphertext after restore refusal=%s", async (refused) => {
+  const app = new Hono();
+  let path: string | undefined;
+  const stageRestore: NonNullable<SetupDeps["stageRestore"]> = async (request) => {
+    expect(request.kind).toBe("archive-file");
+    if (request.kind === "archive-file") path = request.artifactPath;
+    if (refused) throw new AppError("recovery.passphrase_invalid", {});
+  };
+  mountSetup(
+    app,
+    { environment: "preproduction", receiveArchive, stageRestore, requestRestart: () => {} },
+    () => {},
+  );
+  const response = await app.request("/setup-api/restore", {
+    method: "POST",
+    body: new Uint8Array([1, 2]),
+    headers: {
+      "content-type": "application/octet-stream",
+      "x-waitron-recovery-key": "key",
+      "x-waitron-restore-environment": "preproduction",
+    },
+  });
+  expect(response.status).toBe(refused ? 422 : 202);
+  expect(path).toBeDefined();
+  await expect(stat(path!)).rejects.toMatchObject({ code: "ENOENT" });
+});
