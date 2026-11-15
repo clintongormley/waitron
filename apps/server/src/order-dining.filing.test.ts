@@ -223,10 +223,11 @@ describe("a takeaway tab closed by issuing its invoice unpaid", () => {
 describe("the menu republished between adding a line and switching the order", () => {
   it("files the line at the takeaway class frozen on it, not the republished one", async () => {
     const id = await parked("eat_in", [icedTea]);
-    await inTx(venue, async (tx) => {
+    const republished = await inTx(venue, async (tx) => {
       await updateProduct(tx, icedTea, { takeawayVatClass: "zero" });
-      await offerProducts(tx, venue.cfg);
+      const offers = await offerProducts(tx, venue.cfg);
       await setDining(tx, id, "takeaway");
+      return offers;
     });
 
     const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
@@ -236,5 +237,22 @@ describe("the menu republished between adding a line and switching the order", (
     });
     expect(sold.status).toBe(200);
     expect(filedRates(id)).toEqual([2100]);
+
+    // The republish did take effect: a line added after it freezes the new class.
+    const fresh = randomUUID();
+    await parkOrder({ db: venue.db }, venue.cfg, {
+      id: fresh,
+      lines: [{ menuItemId: republished.offerFor(icedTea), quantity: "1" }],
+      zoneId: republished.zoneId,
+      operatorId: venue.operatorId,
+      dining: "takeaway",
+    });
+    const freshSold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+      workingOrderId: fresh,
+      lines: [],
+      tender: { method: "cash", amount: "1.80" },
+    });
+    expect(freshSold.status).toBe(200);
+    expect(filedRates(fresh)).toEqual([0]);
   });
 });

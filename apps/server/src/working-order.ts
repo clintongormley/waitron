@@ -1141,7 +1141,7 @@ const storedLineColumns = {
   priceQuantity: workingOrderLines.priceQuantity,
   // A line files at the class for its order's way of selling, so both readers join the order.
   vatClass: sql<GetColumnData<typeof workingOrderLines.vatClass>>`case
-    when ${workingOrders.dining} = 'takeaway' then ${workingOrderLines.takeawayVatClass}
+    when ${workingOrders.dining} = ${"takeaway" satisfies Dining} then ${workingOrderLines.takeawayVatClass}
     else ${workingOrderLines.vatClass} end`,
   name: workingOrderLines.name,
   descriptions: workingOrderLines.descriptions,
