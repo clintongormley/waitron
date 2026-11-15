@@ -21,8 +21,8 @@ it("resolves offered profile settings passively", async () => {
     readerIds: ["missing"],
     defaultReaderId: null,
   };
-  const fetchImpl = vi.fn(
-    async (path: string, _init: RequestInit) => new Response(JSON.stringify(answers[path] ?? [])),
+  const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
+    async (path) => new Response(JSON.stringify(answers[path] ?? [])),
   );
   const api = new DashboardApi("", fetchImpl);
   for (const method of [
