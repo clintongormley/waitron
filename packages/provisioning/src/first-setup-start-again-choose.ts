@@ -91,6 +91,8 @@ export async function chooseStartAgainLeftovers(input: {
   choice: "keep" | "move";
   listed: string;
   now: () => Date;
+  /** The vault key variables the real environment sets non-empty; the Move's ring copy holds them. */
+  ringInUse: Readonly<Record<string, string>>;
   io?: SetAsideIo;
   verify?: (password: string, stored: string) => Promise<boolean>;
 }): Promise<{ choice: "keep" } | { choice: "move"; setAside: { state: string; venue: string } }> {
@@ -146,7 +148,7 @@ export async function chooseStartAgainLeftovers(input: {
         throw error;
       }
       try {
-        await moveStartAgainUnits(roots, { version: 1, ...move }, input.io);
+        await moveStartAgainUnits(roots, { version: 1, ...move }, input.ringInUse, input.io);
         await finishStartAgainDeletion(roots);
       } catch (error) {
         // The Move is recorded, so no refusal may say the files are unchanged or nothing was saved.

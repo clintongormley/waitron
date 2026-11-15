@@ -34,3 +34,22 @@ export async function loadBoxEnv(
   }
   return merged;
 }
+
+const KEY_RING_VARIABLES = [
+  "WAITRON_CREDENTIALS_KEY",
+  "WAITRON_CREDENTIALS_KEY_VERSION",
+  "WAITRON_CREDENTIALS_KEY_PREVIOUS",
+  "WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION",
+] as const;
+
+/** The vault key variables `env` sets non-empty: the ones that win over `secrets.env` at every start. */
+export function keyRingVariables(
+  env: Readonly<Record<string, string | undefined>>,
+): Record<string, string> {
+  const set: Record<string, string> = {};
+  for (const name of KEY_RING_VARIABLES) {
+    const value = env[name];
+    if (!isUnset(value)) set[name] = value;
+  }
+  return set;
+}

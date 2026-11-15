@@ -1,5 +1,6 @@
 import { mountSetupSpa } from "./setup-spa.js";
 import { isUnset } from "./env-value.js";
+import { keyRingVariables } from "./box-env.js";
 import { Hono } from "hono";
 import { deploymentEnvironmentFor, lockVenueDatabase } from "@waitron/db";
 import { ALL_MODULES } from "@waitron/composition";
@@ -50,7 +51,7 @@ export async function resolveFirstSetupEntry(
   log: Logger = () => {},
   spare?: SpareOption,
 ) {
-  const refused = await refusedAtStart(roots);
+  const refused = await refusedAtStart(roots, environment);
   if (refused !== undefined) return refused;
   return resolveLegacyFirstSetupEntry(roots, environment, requestRestart, log, spare);
 }
@@ -89,7 +90,10 @@ type StartRefused = {
 };
 
 /** Runs before A731's entry, which would otherwise serve its repair page from a half-deleted attempt. */
-async function refusedAtStart(roots: FirstSetupRoots): Promise<StartRefused | undefined> {
+async function refusedAtStart(
+  roots: FirstSetupRoots,
+  environment: Readonly<Record<string, string | undefined>>,
+): Promise<StartRefused | undefined> {
   let canonical: FirstSetupRoots;
   try {
     canonical = {
@@ -110,7 +114,7 @@ async function refusedAtStart(roots: FirstSetupRoots): Promise<StartRefused | un
     return refused(error);
   }
   try {
-    await resumeStartAgainSetAside(canonical);
+    await resumeStartAgainSetAside(canonical, keyRingVariables(environment));
   } catch (error) {
     // Falling through would let A731's entry open venue.db over a half-moved folder.
     if ((await recordedStartAgainMove(canonical).catch(() => null)) !== null) {

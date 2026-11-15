@@ -404,6 +404,7 @@ type StartAgainDeps = NonNullable<RecoveryDeps["startAgain"]>;
 const ROOTS = { stateDir: "/box/state", venueDir: "/box/venue" };
 const ROUTE_SURVEY = survey([fileUnit("venue", "venue.db"), folderUnit("state", "extra")]);
 const FORM = { password: "the-password", choice: "keep", listed: ROUTE_SURVEY.digest };
+const RING_IN_USE = { WAITRON_CREDENTIALS_KEY: "ZW52aXJvbm1lbnQ=" };
 
 function mounted(overrides: Partial<StartAgainDeps> = {}) {
   const choose = vi.fn<NonNullable<StartAgainDeps["choose"]>>(() =>
@@ -415,6 +416,7 @@ function mounted(overrides: Partial<StartAgainDeps> = {}) {
   const deps: StartAgainDeps = {
     roots: ROOTS,
     survey: ROUTE_SURVEY,
+    ringInUse: RING_IN_USE,
     onFinished,
     choose,
     now: () => NOW,
@@ -755,7 +757,7 @@ describe("mountStartAgainChoice", () => {
     expect(asked.sort()).toEqual([ROOTS.stateDir, ROOTS.venueDir].sort());
   });
 
-  it("passes the roots, the form and the clock to choose, and answers in the request's language", async () => {
+  it("passes the roots, the form, the clock and the ring in use to choose, and answers in the request's language", async () => {
     const { app, choose, render } = mounted();
     const response = await post(app, FORM, { headers: { "Accept-Language": "es-ES,es;q=0.9" } });
     expect(response.status).toBe(200);
@@ -765,6 +767,7 @@ describe("mountStartAgainChoice", () => {
       choice: "keep",
       listed: FORM.listed,
       now: expect.any(Function),
+      ringInUse: RING_IN_USE,
     });
     const now = choose.mock.calls[0]![0].now;
     expect(now()).toBe(NOW);
@@ -907,6 +910,7 @@ describe("mountStartAgainChoice", () => {
       {
         roots: ROOTS,
         survey: ROUTE_SURVEY,
+        ringInUse: {},
         onFinished: () => Promise.resolve(),
         choose: row.choose,
       },
@@ -950,7 +954,12 @@ describe("mountStartAgainChoice", () => {
     const log = vi.fn();
     mountStartAgainChoice(
       app,
-      { roots: attempt.roots, survey: found, onFinished: () => Promise.resolve() },
+      {
+        roots: attempt.roots,
+        survey: found,
+        ringInUse: {},
+        onFinished: () => Promise.resolve(),
+      },
       (view) => OPERATOR_WORDS[view.code]![view.locale].title,
       log,
     );
@@ -993,6 +1002,7 @@ describe("mountStartAgainChoice", () => {
       {
         roots: ROOTS,
         survey: ROUTE_SURVEY,
+        ringInUse: {},
         onFinished,
         choose: () =>
           Promise.resolve({
@@ -1061,7 +1071,7 @@ describe("mountStartAgainChoice", () => {
         const app = new Hono();
         mountStartAgainChoice(
           app,
-          { roots: ROOTS, survey: ROUTE_SURVEY, onFinished, choose, now: () => NOW },
+          { roots: ROOTS, survey: ROUTE_SURVEY, ringInUse: {}, onFinished, choose, now: () => NOW },
           render,
           log,
         );
@@ -1090,6 +1100,7 @@ describe("mountStartAgainChoice", () => {
       {
         roots: ROOTS,
         survey: ROUTE_SURVEY,
+        ringInUse: {},
         onFinished: () => Promise.reject(new Error("exit failed")),
         choose: MOVED,
         now: () => NOW,
@@ -1114,7 +1125,13 @@ describe("mountStartAgainChoice", () => {
       const app = new Hono();
       mountStartAgainChoice(
         app,
-        { roots: ROOTS, survey: ROUTE_SURVEY, onFinished: () => Promise.resolve(), choose },
+        {
+          roots: ROOTS,
+          survey: ROUTE_SURVEY,
+          ringInUse: {},
+          onFinished: () => Promise.resolve(),
+          choose,
+        },
         () => "<main></main>",
         vi.fn(),
         onKept,

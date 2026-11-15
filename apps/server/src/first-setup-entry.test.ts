@@ -38,6 +38,7 @@ import { runStagedReset } from "./reset-request.js";
 import { freePorts } from "./testing/free-ports.js";
 import { holdVenueElsewhere } from "./testing/venue-held-elsewhere.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
+import { parseEnvFile } from "./env-file.js";
 import { resumeStartAgainSetAside } from "@waitron/provisioning";
 
 vi.mock("@waitron/provisioning", async (importOriginal) => {
@@ -578,6 +579,7 @@ async function moveRecordedNothingMoved() {
       choice: "move",
       listed: f.survey.digest,
       now: () => new Date(),
+      ringInUse: {},
       io: {
         lstat: fs.lstat,
         mkdir: fs.mkdir,
@@ -640,6 +642,7 @@ it("a keep record for the marker is refused setup.start_again_kept even after th
     choice: "keep",
     listed: f.survey.digest,
     now: () => new Date(),
+    ringInUse: {},
   });
   await rm(join(f.venueDir, "venue.db"));
   const before = await boxTree(f);
@@ -660,6 +663,28 @@ it("a move record with every unit still in place is resumed and setup is served"
   await gone(join(f.stateDir, "flows/setup/record.json"));
   await gone(join(f.venueDir, "venue.db"));
   expect(await readFile(join(f.folders.venue, "venue.db"), "utf8")).toBe("found database");
+});
+
+it("a resumed Move on a box whose environment sets a vault key keeps that ring beside the set-aside files, not secrets.env's", async () => {
+  const f = await moveRecordedNothingMoved();
+  await writeFile(
+    join(f.stateDir, "secrets.env"),
+    `WAITRON_CREDENTIALS_KEY=${Buffer.alloc(32, 1).toString("base64")}\nWAITRON_CREDENTIALS_KEY_VERSION=1\n`,
+    { mode: 0o600 },
+  );
+  const environment = {
+    WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 2).toString("base64"),
+    WAITRON_CREDENTIALS_KEY_VERSION: "2",
+    WAITRON_CREDENTIALS_KEY_PREVIOUS: "",
+  };
+  const entry = await resolveFirstSetupEntry(f.roots, environment);
+  expect(entry.kind).toBe("normal");
+  const copy = join(f.folders.state, "..", "secrets.env");
+  expect(parseEnvFile(await readFile(copy, "utf8"))).toEqual({
+    WAITRON_CREDENTIALS_KEY: environment.WAITRON_CREDENTIALS_KEY,
+    WAITRON_CREDENTIALS_KEY_VERSION: "2",
+  });
+  expect((await stat(copy)).mode & 0o777).toBe(0o600);
 });
 
 it("a move record whose resume rename fails is refused setup.start_again_move_unfinished with no survey", async () => {

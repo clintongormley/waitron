@@ -38,7 +38,7 @@ import { AppError } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { makeBreakGlassSecret, mintBreakGlassKeyTx } from "./break-glass.js";
 import { keyRingEnv, type EncodedKeyRing } from "./box-secrets.js";
-import { isUnset } from "./env-value.js";
+import { keyRingVariables } from "./box-env.js";
 import { assertAuthorityKeyMatches, installVenueAuthority, markJoined } from "./box-tls-install.js";
 import type { DeploymentEnvironment } from "./config.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
@@ -95,13 +95,6 @@ export interface AdoptRequest {
    * main box. */
   confirmedCaPem?: string;
 }
-
-const KEY_RING_VARIABLES = [
-  "WAITRON_CREDENTIALS_KEY",
-  "WAITRON_CREDENTIALS_KEY_VERSION",
-  "WAITRON_CREDENTIALS_KEY_PREVIOUS",
-  "WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION",
-] as const;
 
 export interface AdoptHooks {
   /** Awaited after `adoptFromPrimary`'s own checks, immediately before its first writing step. */
@@ -238,11 +231,8 @@ export async function adoptFromPrimary(
   assertAuthorityKeyMatches(bundle.boxCaPem, bundle.boxCaKeyPem);
   const bundleEnv = keyRingEnv(bundle.credentialsRing);
   // The ring persisted below would be hidden at the next start, and the keys sealed under it lost.
-  for (const name of KEY_RING_VARIABLES) {
-    const set = deps.baseEnv[name];
-    if (!isUnset(set) && set !== bundleEnv[name]) {
-      throw new AppError("mirror.environment_key_differs", {});
-    }
+  for (const [name, set] of Object.entries(keyRingVariables(deps.baseEnv))) {
+    if (set !== bundleEnv[name]) throw new AppError("mirror.environment_key_differs", {});
   }
   const ring = loadKeyRing(bundleEnv);
   const recovery = await makeBreakGlassSecret();

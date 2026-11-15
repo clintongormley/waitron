@@ -1558,6 +1558,7 @@ describe("recoveryApp's Start again choice", () => {
     const startAgain: StartAgain = {
       roots: { stateDir: "/box/state", venueDir: "/box/venue" },
       survey: SURVEY,
+      ringInUse: {},
       onFinished,
       choose: choose ?? (() => Promise.resolve({ choice: "keep" as const })),
       now: () => new Date("2026-10-27T10:00:00.000Z"),
