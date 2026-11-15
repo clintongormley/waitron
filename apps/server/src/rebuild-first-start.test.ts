@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { deleteCredential, loadKeyRing, putCredential, type KeyRing } from "@waitron/credentials";
+import { deleteCredential, loadKeyRing, type KeyRing } from "@waitron/credentials";
 import {
   nodes,
   readMembershipTrustSet,
@@ -40,7 +40,7 @@ import { ensureBoxSecrets } from "./box-secrets.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { establishNodeIdentity } from "./node-identity.js";
-import { STREAM_PURPOSE, streamSettingsPayload, type StreamSettings } from "./stream-host.js";
+import { STREAM_PURPOSE, writeStreamSettings, type StreamSettings } from "./stream-host.js";
 import { omitStoredStreamField } from "./testing/old-stream-credential.js";
 import {
   assertRestoredMembershipReadable,
@@ -544,13 +544,7 @@ describe("readBucketPointerTerm", () => {
     },
   };
   const storeSettings = (settings: StreamSettings) =>
-    withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING, {
-        personId: null,
-        purpose: STREAM_PURPOSE,
-        value: streamSettingsPayload(settings),
-      }),
-    );
+    withTransaction(suite.db, (tx) => writeStreamSettings(tx, RING, settings.bucket, null));
   afterEach(async () => {
     await withTransaction(suite.db, (tx) =>
       deleteCredential(tx, { personId: null, purpose: STREAM_PURPOSE }),
@@ -713,19 +707,18 @@ describe("runFirstStart", () => {
   it("keeps the restore marker until missing bucket settings are repaired", async () => {
     const stateDir = await rebuiltStateDir("archive");
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING, {
-        personId: null,
-        purpose: STREAM_PURPOSE,
-        value: streamSettingsPayload({
-          bucket: {
-            region: "eu-west-1",
-            bucket: "venue-copy",
-            prefix: "",
-            accessKeyId: "AKIA",
-            secretAccessKey: "secret-0123456789",
-          },
-        }),
-      }),
+      writeStreamSettings(
+        tx,
+        RING,
+        {
+          region: "eu-west-1",
+          bucket: "venue-copy",
+          prefix: "",
+          accessKeyId: "AKIA",
+          secretAccessKey: "secret-0123456789",
+        },
+        null,
+      ),
     );
     try {
       await omitStoredStreamField(suite.db, RING, "endpoint");
@@ -747,19 +740,18 @@ describe("runFirstStart", () => {
       expect((await readNodeMembership(suite.db))!.body.term).toBe(0);
 
       await withTransaction(suite.db, (tx) =>
-        putCredential(tx, RING, {
-          personId: null,
-          purpose: STREAM_PURPOSE,
-          value: streamSettingsPayload({
-            bucket: {
-              region: "eu-west-1",
-              bucket: "venue-copy",
-              prefix: "",
-              accessKeyId: "AKIA",
-              secretAccessKey: "secret-0123456789",
-            },
-          }),
-        }),
+        writeStreamSettings(
+          tx,
+          RING,
+          {
+            region: "eu-west-1",
+            bucket: "venue-copy",
+            prefix: "",
+            accessKeyId: "AKIA",
+            secretAccessKey: "secret-0123456789",
+          },
+          null,
+        ),
       );
       await expect(runFirstStart(firstStart)).resolves.toEqual({
         mayStream: true,
@@ -795,19 +787,18 @@ describe("runFirstStart", () => {
   it("fails, keeps the marker and does not stream, when a bucket is set up but does not answer", async () => {
     const stateDir = await rebuiltStateDir("archive");
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING, {
-        personId: null,
-        purpose: STREAM_PURPOSE,
-        value: streamSettingsPayload({
-          bucket: {
-            region: "eu-west-1",
-            bucket: "venue-copy",
-            prefix: "",
-            accessKeyId: "AKIA",
-            secretAccessKey: "secret-0123456789",
-          },
-        }),
-      }),
+      writeStreamSettings(
+        tx,
+        RING,
+        {
+          region: "eu-west-1",
+          bucket: "venue-copy",
+          prefix: "",
+          accessKeyId: "AKIA",
+          secretAccessKey: "secret-0123456789",
+        },
+        null,
+      ),
     );
     try {
       const silent = { get: () => new Promise<never>(() => {}) } as unknown as ObjectStore;

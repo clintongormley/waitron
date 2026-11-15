@@ -249,7 +249,7 @@ describe("allocated fiscal standby contract", () => {
       putCredential(tx, ring, {
         personId: null,
         purpose: "backup.archive",
-        value: { settings: "held-primary-test-key" },
+        value: { accessKeyId: "held-primary-key", secretAccessKey: "held-primary-secret" },
       }),
     );
     const keysBefore = await db.select().from(venueCredentials);

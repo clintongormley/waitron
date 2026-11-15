@@ -528,3 +528,23 @@ it.each(["set", "delete"])("refuses SMTP %s and keeps the vault unchanged", asyn
   expect(h.out).toEqual([]);
   expect(await suite.db.select().from(venueCredentials)).toEqual(before);
 });
+
+describe.each(["backup.stream", "backup.archive"] as const)("%s", (purpose) => {
+  it.each(["set", "delete"])("refuses %s and keeps the vault unchanged", async (command) => {
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, RING, {
+        personId: null,
+        purpose,
+        value: { accessKeyId: "old-access", secretAccessKey: "old-secret" },
+      }),
+    );
+    const before = await suite.db.select().from(venueCredentials);
+    const h = harness(JSON.stringify({ accessKeyId: "new-access", secretAccessKey: "new-secret" }));
+    expect(await runCli([command, "--purpose", purpose], h.deps)).toBe(2);
+    expect(h.err).toEqual([
+      "Use the dashboard's Backups settings to save or remove backup settings.",
+    ]);
+    expect(h.out).toEqual([]);
+    expect(await suite.db.select().from(venueCredentials)).toEqual(before);
+  });
+});

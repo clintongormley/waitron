@@ -20,7 +20,7 @@ import {
   withNodeTransaction,
 } from "@waitron/db";
 import { useVenueDb, type VenueDb } from "@waitron/db/testing/venue-db.js";
-import { loadKeyRing, putCredential, sealNodeSigningKeyTx } from "@waitron/credentials";
+import { loadKeyRing, sealNodeSigningKeyTx } from "@waitron/credentials";
 import { Hono } from "hono";
 import { persons, startManagementSession } from "@waitron/identity";
 import type { WaitronModule } from "@waitron/module";
@@ -30,7 +30,7 @@ import { readPointer } from "@waitron/stream";
 import { mountStreamApi } from "./stream-api.js";
 import { createTurns } from "./backup-turns.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { StreamHost, STREAM_PURPOSE } from "./stream-host.js";
+import { StreamHost, writeStreamSettings } from "./stream-host.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { holdRecoveryKey } from "./testing/recovery-key.js";
 import { rememberCheckedAddressesIn } from "./mirror-bundle-fetch.js";
@@ -382,10 +382,9 @@ describe("the start check on a real start", () => {
           },
           beforeStart: async (nodeId) => {
             const settings = {
-              endpoint: "-",
               region: "eu-west-1",
               bucket: "copies",
-              prefix: "-",
+              prefix: "",
               accessKeyId: "test",
               secretAccessKey: "test-secret",
             };
@@ -393,11 +392,7 @@ describe("the start check on a real start", () => {
               saveVenueFields(tx, { streamId: "c0000000-0000-4000-8000-000000000002" }, null),
             );
             await withTransaction(suite.db, (tx) =>
-              putCredential(tx, loadKeyRing(KEY_ENV), {
-                personId: null,
-                purpose: STREAM_PURPOSE,
-                value: settings,
-              }),
+              writeStreamSettings(tx, loadKeyRing(KEY_ENV), settings, null),
             );
             const held = (await readNodeMembership(suite.db))!;
             await seedVenueSettings(spareSuite.db, {

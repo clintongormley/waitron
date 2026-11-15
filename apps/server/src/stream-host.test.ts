@@ -7,8 +7,8 @@ import { sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   loadKeyRing,
-  deleteCredential,
   putCredential,
+  deleteCredential,
   sealNodeSigningKeyTx,
   writePairLinkTx,
   type KeyRing,
@@ -19,6 +19,7 @@ import {
   createVenueSettings,
   ensureStreamId,
   VENUE_SETTINGS,
+  readSettings,
   readNodeMembership,
   withNodeTransaction,
   withTransaction,
@@ -45,9 +46,10 @@ import {
   STREAM_PURPOSE,
   StreamHost,
   streamService,
-  streamSettingsPayload,
+  writeStreamSettings,
   type StreamHostDeps,
 } from "./stream-host.js";
+import { BACKUP_SETTINGS } from "./backup-settings-document.js";
 import { LiveEvents } from "./live-api.js";
 import { STREAM_DIR, TLS_CLIENT_CERT_FILE, TLS_CLIENT_KEY_FILE, TLS_DIR } from "@waitron/store";
 import { caCertPath } from "./box-secrets.js";
@@ -71,10 +73,10 @@ const RING: KeyRing = loadKeyRing({
 const NODE_ID = "node-a";
 const AT = new Date("2026-09-15T11:00:00.000Z");
 const SETTINGS = {
-  endpoint: "-",
+  endpoint: undefined,
   region: "eu-south-2",
   bucket: "venue-copies",
-  prefix: "-",
+  prefix: "",
   accessKeyId: "AKIAEXAMPLE",
   secretAccessKey: "secret-example",
 };
@@ -153,9 +155,7 @@ describe("the live copy's wiring", () => {
         endorsement?: "missing" | "forged";
       } = {},
     ) {
-      await withTransaction(db, (tx) =>
-        putCredential(tx, RING, { personId: null, purpose: STREAM_PURPOSE, value: SETTINGS }),
-      );
+      await withTransaction(db, (tx) => writeStreamSettings(tx, RING, SETTINGS, null));
       const endorsement = endorseKey(
         "node-b",
         spareKeys.publicKey,
@@ -278,11 +278,12 @@ describe("the live copy's wiring", () => {
         await vi.waitFor(() => expect(reads.mock.calls.length).toBeGreaterThanOrEqual(3));
         expect(opened).toHaveBeenCalledTimes(1);
         await withTransaction(db, (tx) =>
-          putCredential(tx, RING, {
-            personId: null,
-            purpose: STREAM_PURPOSE,
-            value: { ...SETTINGS, secretAccessKey: "replacement-secret" },
-          }),
+          writeStreamSettings(
+            tx,
+            RING,
+            { ...SETTINGS, secretAccessKey: "replacement-secret" },
+            null,
+          ),
         );
         await vi.waitFor(() => expect(opened).toHaveBeenCalledTimes(2));
         expect(opened.mock.calls[1]![0].secretAccessKey).toBe("replacement-secret");
@@ -408,6 +409,20 @@ describe("the live copy's wiring", () => {
     expect(logs).toContain("stream.not_configured");
   });
 
+  it("refuses bucket keys saved without their stream settings", async () => {
+    await withTransaction(db, (tx) =>
+      putCredential(tx, RING, {
+        purpose: STREAM_PURPOSE,
+        personId: null,
+        value: { accessKeyId: "AKIAEXAMPLE", secretAccessKey: "secret-example" },
+      }),
+    );
+    await expect(readStreamSettings(db, RING)).rejects.toMatchObject({
+      code: "server.credential_unusable",
+      params: { purpose: "backup.stream", field: "stream" },
+    });
+  });
+
   // With nothing set up there is no copy to hold, so the log and the status say "not set up".
   it("reads plain off, not held, when no bucket is stored and a restore's first start is unfinished", async () => {
     logs = [];
@@ -418,7 +433,7 @@ describe("the live copy's wiring", () => {
     expect(logs).not.toContain("stream.first_start_pending");
   });
 
-  it("stores an absent endpoint and an empty prefix as '-', and a present one as itself", () => {
+  it("stores an absent endpoint as null and an empty prefix as itself", async () => {
     const settings = {
       streamId: "c0000000-0000-4000-8000-000000000002",
       bucket: {
@@ -429,37 +444,44 @@ describe("the live copy's wiring", () => {
         secretAccessKey: "S",
       },
     };
-    expect(streamSettingsPayload(settings)).toEqual({
-      endpoint: "-",
+    await withTransaction(db, (tx) => writeStreamSettings(tx, RING, settings.bucket, null));
+    expect((await readSettings(db, BACKUP_SETTINGS)).doc.stream).toEqual({
+      endpoint: null,
       region: "eu-south-2",
       bucket: "b",
-      prefix: "-",
-      accessKeyId: "A",
-      secretAccessKey: "S",
+      prefix: "",
     });
-    expect(
-      streamSettingsPayload({
-        ...settings,
-        bucket: { ...settings.bucket, endpoint: "https://e", prefix: "p/" },
-      }),
-    ).toMatchObject({ endpoint: "https://e", prefix: "p/" });
+    await withTransaction(db, (tx) =>
+      writeStreamSettings(
+        tx,
+        RING,
+        { ...settings.bucket, endpoint: "https://e", prefix: "p/" },
+        null,
+      ),
+    );
+    expect((await readSettings(db, BACKUP_SETTINGS)).doc.stream).toMatchObject({
+      endpoint: "https://e",
+      prefix: "p/",
+    });
   });
 
-  // "-" is how an empty prefix is stored, so a prefix of "-" would read back as none at all.
-  it("refuses a prefix of a single hyphen, naming the field", () => {
-    expect(() =>
-      streamSettingsPayload({
-        bucket: {
-          region: "eu-south-2",
-          bucket: "b",
-          prefix: "-",
-          accessKeyId: "A",
-          secretAccessKey: "S",
-        },
-      }),
-    ).toThrow(
-      expect.objectContaining({ code: "backup.request_invalid", params: { field: "prefix" } }),
-    );
+  it("refuses a prefix of a single hyphen, naming the field", async () => {
+    await expect(
+      withTransaction(db, (tx) =>
+        writeStreamSettings(
+          tx,
+          RING,
+          {
+            region: "eu-south-2",
+            bucket: "b",
+            prefix: "-",
+            accessKeyId: "A",
+            secretAccessKey: "S",
+          },
+          null,
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "backup.request_invalid", params: { field: "prefix" } });
   });
 
   it("describes an unconfigured stream service without claiming it is running", async () => {
@@ -476,12 +498,10 @@ describe("the live copy's wiring", () => {
 
   describe("with a bucket stored", () => {
     beforeEach(async () => {
-      await withTransaction(db, (tx) =>
-        putCredential(tx, RING, { personId: null, purpose: STREAM_PURPOSE, value: SETTINGS }),
-      );
+      await withTransaction(db, (tx) => writeStreamSettings(tx, RING, SETTINGS, null));
     });
 
-    it("reads the settings, with `-` read as absent", async () => {
+    it("reads the stored settings with absent endpoint and empty prefix", async () => {
       expect(await readStreamSettings(db, RING)).toEqual({
         streamId: "c0000000-0000-4000-8000-000000000002",
         bucket: {
@@ -497,11 +517,12 @@ describe("the live copy's wiring", () => {
 
     it("reads a stored endpoint and prefix back as themselves", async () => {
       await withTransaction(db, (tx) =>
-        putCredential(tx, RING, {
-          personId: null,
-          purpose: STREAM_PURPOSE,
-          value: { ...SETTINGS, endpoint: "https://s3.example", prefix: "copies/" },
-        }),
+        writeStreamSettings(
+          tx,
+          RING,
+          { ...SETTINGS, endpoint: "https://s3.example", prefix: "copies/" },
+          null,
+        ),
       );
       expect((await readStreamSettings(db, RING))?.bucket).toMatchObject({
         endpoint: "https://s3.example",
@@ -510,7 +531,7 @@ describe("the live copy's wiring", () => {
     });
 
     it.each(["endpoint", "region", "bucket", "prefix", "accessKeyId", "secretAccessKey"])(
-      "refuses an older sealed bucket missing %s",
+      "refuses stored bucket settings missing %s",
       async (field) => {
         await omitStoredStreamField(db, RING, field);
         await expect(readStreamSettings(db, RING)).rejects.toMatchObject({
@@ -981,11 +1002,7 @@ describe("the live copy's wiring", () => {
             await withTransaction(db, async (tx) => {
               await deleteCredential(tx, { personId: null, purpose: STREAM_PURPOSE });
               await ensureStreamId(tx);
-              await putCredential(tx, RING, {
-                personId: null,
-                purpose: STREAM_PURPOSE,
-                value: { ...SETTINGS, prefix },
-              });
+              await writeStreamSettings(tx, RING, { ...SETTINGS, prefix }, null);
             });
           const store = new SwitchableStore(() => new Date());
           const litestream = new FakeLitestream();
@@ -1331,9 +1348,7 @@ describe("the live copy's wiring", () => {
     }
 
     it("streams to the spare's store when the pair link says streaming", async () => {
-      await withTransaction(db, (tx) =>
-        putCredential(tx, RING, { personId: null, purpose: STREAM_PURPOSE, value: SETTINGS }),
-      );
+      await withTransaction(db, (tx) => writeStreamSettings(tx, RING, SETTINGS, null));
       await pair(await startSpare("spare.pem"));
       const litestream = new FakeLitestream();
       const store = new SwitchableStore(() => new Date());
@@ -1400,11 +1415,7 @@ describe("the live copy's wiring", () => {
 
     it("streams to the bucket when there is no pair link", async () => {
       await withTransaction(db, (tx) =>
-        putCredential(tx, RING, {
-          personId: null,
-          purpose: STREAM_PURPOSE,
-          value: { ...SETTINGS, endpoint: "https://s3.example.test" },
-        }),
+        writeStreamSettings(tx, RING, { ...SETTINGS, endpoint: "https://s3.example.test" }, null),
       );
       const litestream = new FakeLitestream();
       const rt = pairedRuntime(litestream);
@@ -1474,10 +1485,7 @@ describe("the live copy's wiring", () => {
       "preserves native refusal time only for a paired target (%s)",
       async (paired) => {
         if (paired) await pair(await startSpare("spare.pem"));
-        else
-          await withTransaction(db, (tx) =>
-            putCredential(tx, RING, { personId: null, purpose: STREAM_PURPOSE, value: SETTINGS }),
-          );
+        else await withTransaction(db, (tx) => writeStreamSettings(tx, RING, SETTINGS, null));
         const clock = new ManualClock("2026-11-14T12:00:00.000Z");
         const opened = vi.spyOn(sparePipe, "startStorePipe");
         const Supervisor = stream.StreamSupervisor;

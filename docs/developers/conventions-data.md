@@ -10,6 +10,14 @@ Node v26.7.0, in one transaction: a duplicate primary key is 1555, a null in a `
 1299, and a trigger's `RAISE(ABORT)` 1811. The tree spells it that way too
 (`packages/db/src/sql-state.ts`).
 
+## Backup choices and bucket keys are saved together
+
+Archive and bucket-copy choices share the non-transferring `backup` settings document.
+Only `accessKeyId` and `secretAccessKey` are sealed under `backup.archive` and `backup.stream`.
+`writeArchiveSettings` and `writeStreamSettings` save the document and keys in their caller's
+transaction. Archive revision, written time and digest belong to the archive part, so a stream save
+keeps them. The split-store assertions are in `archive-settings.test.ts` and `stream-api.route.test.ts`.
+
 ## State-file replacements flush the file before replacement and its folder afterward
 
 Use `writeFileDurable` when replacing a state file. It flushes the temporary file,

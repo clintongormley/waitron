@@ -21,7 +21,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   loadKeyRing,
-  putCredential,
   readPairSecret,
   setPairLinkStateTx,
   writePairLinkTx,
@@ -62,7 +61,7 @@ import { ALL_MODULES } from "./modules.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
-import { streamSettingsPayload } from "./stream-host.js";
+import { writeStreamSettings } from "./stream-host.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { clearRemovedMachine, removeStandby } from "./membership-removal.js";
 import { enrolAuthenticator, wrongTotpCode, TOTP_KEY_RING } from "./testing/authenticator.js";
@@ -1752,20 +1751,19 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const { designated } = await setupVenue();
       const app = mountApp(designated);
       await withTransaction(db, (tx) =>
-        putCredential(tx, RING, {
-          personId: null,
-          purpose: "backup.stream",
-          value: streamSettingsPayload({
-            bucket: {
-              endpoint: "https://s3.example.test",
-              region: "eu-west-1",
-              bucket: "venue-bucket",
-              prefix: "",
-              accessKeyId: "bucket-access-key",
-              secretAccessKey: "bucket-secret-key",
-            },
-          }),
-        }),
+        writeStreamSettings(
+          tx,
+          RING,
+          {
+            endpoint: "https://s3.example.test",
+            region: "eu-west-1",
+            bucket: "venue-bucket",
+            prefix: "",
+            accessKeyId: "bucket-access-key",
+            secretAccessKey: "bucket-secret-key",
+          },
+          null,
+        ),
       );
       const before = await reservedAndListed();
 
@@ -1788,20 +1786,19 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const before = await reservedAndListed();
       pause.beforeModuleConfigRead = async () => {
         await withTransaction(db, (tx) =>
-          putCredential(tx, RING, {
-            personId: null,
-            purpose: "backup.stream",
-            value: streamSettingsPayload({
-              bucket: {
-                endpoint: "https://s3.example.test",
-                region: "eu-west-1",
-                bucket: "venue-bucket",
-                prefix: "",
-                accessKeyId: "bucket-access-key",
-                secretAccessKey: "bucket-secret-key",
-              },
-            }),
-          }),
+          writeStreamSettings(
+            tx,
+            RING,
+            {
+              endpoint: "https://s3.example.test",
+              region: "eu-west-1",
+              bucket: "venue-bucket",
+              prefix: "",
+              accessKeyId: "bucket-access-key",
+              secretAccessKey: "bucket-secret-key",
+            },
+            null,
+          ),
         );
       };
 
@@ -1835,20 +1832,19 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         entered();
         await gate;
         await withTransaction(db, (tx) =>
-          putCredential(tx, RING, {
-            personId: null,
-            purpose: "backup.stream",
-            value: streamSettingsPayload({
-              bucket: {
-                endpoint: "https://s3.example.test",
-                region: "eu-west-1",
-                bucket: "venue-bucket",
-                prefix: "",
-                accessKeyId: "bucket-access-key",
-                secretAccessKey: "bucket-secret-key",
-              },
-            }),
-          }),
+          writeStreamSettings(
+            tx,
+            RING,
+            {
+              endpoint: "https://s3.example.test",
+              region: "eu-west-1",
+              bucket: "venue-bucket",
+              prefix: "",
+              accessKeyId: "bucket-access-key",
+              secretAccessKey: "bucket-secret-key",
+            },
+            null,
+          ),
         );
       });
       await ready;
@@ -1884,20 +1880,19 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         WAITRON_CREDENTIALS_KEY_VERSION: "1",
       });
       await withTransaction(db, (tx) =>
-        putCredential(tx, otherRing, {
-          personId: null,
-          purpose: "backup.stream",
-          value: streamSettingsPayload({
-            bucket: {
-              endpoint: "https://s3.example.test",
-              region: "eu-west-1",
-              bucket: "venue-bucket",
-              prefix: "",
-              accessKeyId: "bucket-access-key",
-              secretAccessKey: "bucket-secret-key",
-            },
-          }),
-        }),
+        writeStreamSettings(
+          tx,
+          otherRing,
+          {
+            endpoint: "https://s3.example.test",
+            region: "eu-west-1",
+            bucket: "venue-bucket",
+            prefix: "",
+            accessKeyId: "bucket-access-key",
+            secretAccessKey: "bucket-secret-key",
+          },
+          null,
+        ),
       );
       const before = await reservedAndListed();
 

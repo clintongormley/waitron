@@ -1,5 +1,4 @@
 import { seedModuleSettings } from "../test/module-settings.js";
-import { ensureStreamId } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import * as atomic from "./fs-atomic.js";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
@@ -25,7 +24,7 @@ import {
   type VenueDatabase,
 } from "@waitron/db";
 import { setNodeMode, writeMirrorLink } from "@waitron/node-db";
-import { loadKeyRing, putCredential } from "@waitron/credentials";
+import { loadKeyRing } from "@waitron/credentials";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
@@ -33,7 +32,7 @@ import { ensureBoxSecrets } from "./box-secrets.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { unsealNodeState } from "./sealed-state.js";
-import { STREAM_PURPOSE } from "./stream-host.js";
+import { writeStreamSettings } from "./stream-host.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import { freePort, freePorts } from "./testing/free-ports.js";
 import { readRecoveryState } from "./recovery-state.js";
@@ -525,21 +524,21 @@ describe("startServer, against a migrated venue directory", () => {
     );
     // A bucket copy set up, and no membership document: a copy that tried to start would read off
     // with the reason `no_membership`, so `first_start_pending` shows it was held first.
-    await withTransaction(db, async (tx) => {
-      await ensureStreamId(tx);
-      await putCredential(tx, loadKeyRing(KEY_ENV), {
-        personId: null,
-        purpose: STREAM_PURPOSE,
-        value: {
+    await withTransaction(db, (tx) =>
+      writeStreamSettings(
+        tx,
+        loadKeyRing(KEY_ENV),
+        {
           endpoint: "https://127.0.0.1:1",
           region: "eu-south-2",
           bucket: "venue-copies",
-          prefix: "-",
+          prefix: "",
           accessKeyId: "AKIAEXAMPLE",
           secretAccessKey: "secret-example",
         },
-      });
-    });
+        null,
+      ),
+    );
     let disarmedBeforeServing = false;
     const [server, failed] = await withCapturedStdout(async (lines) => {
       const originalSync = atomic.syncFolderHolding;

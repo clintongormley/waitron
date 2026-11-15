@@ -7,7 +7,7 @@ import { writeModuleConfig } from "../module-config.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
-import { loadKeyRing, putCredential } from "@waitron/credentials";
+import { loadKeyRing } from "@waitron/credentials";
 import {
   ensureStreamId,
   nodes,
@@ -29,7 +29,7 @@ import { ensureBoxSecrets } from "../box-secrets.js";
 import { formatEnvFile, parseEnvFile } from "../env-file.js";
 import { seedTermZeroMembership } from "../membership-seed.js";
 import { establishNodeIdentity } from "../node-identity.js";
-import { streamSettingsPayload } from "../stream-host.js";
+import { writeStreamSettings } from "../stream-host.js";
 import { copyMigrationsRoot } from "./boot-harness.js";
 
 export interface BoxDirs {
@@ -162,11 +162,7 @@ export async function switchOnStreaming(
   const store = await openVenueDatabase(dirs.venue);
   try {
     await withTransaction(store.venue, (tx) =>
-      putCredential(tx, ring, {
-        personId: null,
-        purpose: "backup.stream",
-        value: streamSettingsPayload({ bucket: streaming.bucket }),
-      }),
+      writeStreamSettings(tx, ring, streaming.bucket, null),
     );
   } finally {
     await store.close();

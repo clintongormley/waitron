@@ -804,7 +804,7 @@ describe("removing saved SMTP settings", () => {
       putCredential(tx, ring, {
         personId: null,
         purpose: "backup.archive",
-        value: { settings: "{}" },
+        value: { accessKeyId: "archive-key", secretAccessKey: "archive-secret" },
       }),
     );
     const [archive] = await suite.db

@@ -1,6 +1,5 @@
 import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { seedModuleSettings } from "../test/module-settings.js";
-import { ensureStreamId } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
@@ -102,7 +101,7 @@ import { listBoxIpv4 } from "./box-reach.js";
 import { ALL_MODULES } from "./modules.js";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 import { ensureBoxSecrets, tightenTlsDir } from "./box-secrets.js";
-import { STREAM_PURPOSE } from "./stream-host.js";
+import { deleteStreamSettings, writeStreamSettings } from "./stream-host.js";
 import { loadTillAppSettings } from "./till-config.js";
 import { loadNodeIdentity } from "./node-config.js";
 import type { TradingContext } from "./trading-context.js";
@@ -2434,21 +2433,21 @@ describe("startServer, against a migrated venue directory", () => {
   // before it runs Litestream or calls the bucket.
   it("reports a bucket copy that is set up but not running on /health", async () => {
     const port = await freePort();
-    await withTransaction(sharedDb, async (tx) => {
-      await ensureStreamId(tx);
-      await putCredential(tx, loadKeyRing(KEY_ENV), {
-        personId: null,
-        purpose: STREAM_PURPOSE,
-        value: {
+    await withTransaction(sharedDb, (tx) =>
+      writeStreamSettings(
+        tx,
+        loadKeyRing(KEY_ENV),
+        {
           endpoint: "https://127.0.0.1:1",
           region: "eu-south-2",
           bucket: "venue-copies",
-          prefix: "-",
+          prefix: "",
           accessKeyId: "AKIAEXAMPLE",
           secretAccessKey: "secret-example",
         },
-      });
-    });
+        null,
+      ),
+    );
     try {
       const server = await startServer({
         ...KEY_ENV,
@@ -2475,9 +2474,7 @@ describe("startServer, against a migrated venue directory", () => {
         await server.close();
       }
     } finally {
-      await withTransaction(sharedDb, (tx) =>
-        deleteCredential(tx, { personId: null, purpose: STREAM_PURPOSE }),
-      );
+      await withTransaction(sharedDb, (tx) => deleteStreamSettings(tx, null));
     }
   }, 60_000);
 

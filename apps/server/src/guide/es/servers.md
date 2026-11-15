@@ -242,6 +242,8 @@ Mantén este servidor encendido y conserva sus datos mientras devuelve los regis
 restablecerlo, pero eso borra sus datos del local aunque la devolución se haya detenido o no haya
 terminado.
 
+Cuando un servidor pase a ser el principal, abre **Copias de seguridad** y comprueba que cada carpeta de copias esté en este servidor.
+
 ## Activar o desactivar el acceso remoto del personal {#remote-access}
 
 Activar el acceso remoto pide la [confirmación de identidad compartida](staff.md#account-access).

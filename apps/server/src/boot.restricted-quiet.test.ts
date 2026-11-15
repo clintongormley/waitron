@@ -1,5 +1,4 @@
 import { seedModuleSettings } from "../test/module-settings.js";
-import { ensureStreamId } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { createHash, randomUUID } from "node:crypto";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -9,7 +8,7 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { withNodeTransaction, withTransaction, enqueueMail } from "@waitron/db";
 import { useVenueDb, type VenueDb } from "@waitron/db/testing/venue-db.js";
-import { loadKeyRing, putCredential } from "@waitron/credentials";
+import { loadKeyRing } from "@waitron/credentials";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { recordHandoverRestrictionTx } from "@waitron/node-db";
 import type { SpawnFn } from "@waitron/stream";
@@ -20,7 +19,7 @@ import { seedTermZeroMembership } from "./membership-seed.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { httpsVia } from "./testing/boot-harness.js";
-import { STREAM_PURPOSE } from "./stream-host.js";
+import { writeStreamSettings } from "./stream-host.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 
@@ -184,21 +183,20 @@ function observeStart(options: { restricted: boolean }): () => Observed {
       nodeId,
       "https://box.example",
     );
-    await withTransaction(suite.db, async (tx) => {
-      await ensureStreamId(tx);
-      await putCredential(tx, ring, {
-        personId: null,
-        purpose: STREAM_PURPOSE,
-        value: {
-          endpoint: "-",
+    await withTransaction(suite.db, (tx) =>
+      writeStreamSettings(
+        tx,
+        ring,
+        {
           region: "eu-south-2",
           bucket: "venue-copies",
-          prefix: "-",
+          prefix: "",
           accessKeyId: "AKIAEXAMPLE",
           secretAccessKey: "secret-example",
         },
-      });
-    });
+        null,
+      ),
+    );
     if (options.restricted) {
       await withNodeTransaction(suite.node, (tx) =>
         recordHandoverRestrictionTx(tx, {

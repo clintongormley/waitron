@@ -12,7 +12,7 @@ import { withNodeTransaction, withTransaction, type NodeDatabase } from "@waitro
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { FakeLitestream } from "@waitron/stream/testing/fake-litestream.js";
 import { SwitchableStore } from "@waitron/stream/testing/switchable-store.js";
-import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
+import { STREAM_PURPOSE, writeStreamSettings } from "./stream-host.js";
 import { setNodeModeTx } from "@waitron/node-db";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { startManagementSession } from "@waitron/identity";
@@ -157,6 +157,7 @@ afterEach(async () => {
   stall.on = false;
   stall.started = [];
   await withTransaction(venue.db, async (tx) => {
+    await tx.run(sql`delete from settings where module = ${"backup"}`);
     await deleteCredential(tx, { personId: null, purpose: ARCHIVE_PURPOSE });
     await deleteCredential(tx, { personId: null, purpose: STREAM_PURPOSE });
   });
@@ -382,6 +383,13 @@ describe("trading with dashboard archive settings the box cannot use", () => {
           WAITRON_CREDENTIALS_KEY_VERSION: "1",
         });
         await storeArchiveRecord(otherRing, join(scratch, "backups"));
+        await withTransaction(venue.db, (tx) =>
+          putCredential(tx, otherRing, {
+            purpose: ARCHIVE_PURPOSE,
+            value: { accessKeyId: "A", secretAccessKey: "S" },
+            personId: null,
+          }),
+        );
         cookie = await managerCookie();
         return {};
       },
@@ -483,19 +491,18 @@ describe("stream encryption checks at the real trading boot", () => {
         );
         await withTransaction(suite.db, ensureStreamId);
         await withTransaction(suite.db, (tx) =>
-          putCredential(tx, ring, {
-            personId: null,
-            purpose: STREAM_PURPOSE,
-            value: streamSettingsPayload({
-              bucket: {
-                region: "eu-west-1",
-                bucket: "copies",
-                prefix: "",
-                accessKeyId: "A",
-                secretAccessKey: "S",
-              },
-            }),
-          }),
+          writeStreamSettings(
+            tx,
+            ring,
+            {
+              region: "eu-west-1",
+              bucket: "copies",
+              prefix: "",
+              accessKeyId: "A",
+              secretAccessKey: "S",
+            },
+            null,
+          ),
         );
         return { WAITRON_BACKUP_RECOVERY_KEY: "backup-key-for-test-0123456789" };
       },

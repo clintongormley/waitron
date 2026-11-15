@@ -562,8 +562,11 @@ passkey and PIN login keep working when Google is unavailable.
 ## Backup archive settings
 
 Configure encrypted backup archives on the dashboard. Save stores the destinations, schedule,
-retention and time limit sealed in the credential vault under the `backup.archive` purpose, inside
-the venue database. With no saved record, no archive runs. The stale threshold is two days.
+retention and time limit in the venue database's `backup` settings document. Bucket-copy choices
+share that document. Only each bucket's access key and secret key are sealed as credentials. With no saved record, no archive runs. The stale threshold is two days.
+
+Use **Backups** to save or remove these settings. The credentials tool refuses backup changes
+because the bucket keys and the backup choices must be saved or removed together.
 
 The dashboard writes the recovery key and its rotation time to `backup.env` under `WAITRON_STATE_DIR`.
 The box reads that file along with its other env files; a process-environment key still takes precedence.

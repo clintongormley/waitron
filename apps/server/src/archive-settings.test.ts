@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { credentialRevision, putCredential, loadKeyRing } from "@waitron/credentials";
-import { withTransaction } from "@waitron/db";
+import { getCredential, tryGetCredential, putCredential, loadKeyRing } from "@waitron/credentials";
+import { readSettings, saveSettings, settings, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { isAppError } from "@waitron/shared";
@@ -10,12 +12,14 @@ import {
   parseArchiveSettings,
   readArchiveSettings,
   readArchiveSettingsWithMeta,
+  readHeldArchiveSettings,
   resolveArchiveChoice,
   resolveArchiveChoices,
   writeArchiveSettings,
   type ArchiveSettings,
 } from "./archive-settings.js";
 import { recordMetaOf } from "./backup-settings-evidence.js";
+import { BACKUP_SETTINGS } from "./backup-settings-document.js";
 import type { StreamSettings } from "./stream-host.js";
 
 const VENUE = "c0000000-0000-4000-8000-000000000002";
@@ -436,8 +440,27 @@ describe("parseArchiveSettings", () => {
   const bucket = resolveArchiveChoice(custom, { stream: null, held: null });
   const valid = settingsWith([local, bucket]);
 
+  function parseFixture(value: unknown): ArchiveSettings {
+    if (value === null || typeof value !== "object" || Array.isArray(value))
+      return parseArchiveSettings(value, null);
+    const raw = value as Record<string, unknown>;
+    let keys: { accessKeyId: string; secretAccessKey: string } | null = null;
+    const destinations = Array.isArray(raw.destinations)
+      ? raw.destinations.map((destination: unknown) => {
+          if (destination === null || typeof destination !== "object") return destination;
+          const d = destination as Record<string, unknown>;
+          if (d.kind !== "s3" || d.bucket === null || typeof d.bucket !== "object")
+            return destination;
+          const { accessKeyId, secretAccessKey, ...bucket } = d.bucket as Record<string, unknown>;
+          keys = { accessKeyId: accessKeyId as string, secretAccessKey: secretAccessKey as string };
+          return { ...d, bucket };
+        })
+      : raw.destinations;
+    return parseArchiveSettings({ ...raw, destinations }, keys);
+  }
+
   it("reads back what it was given", () => {
-    expect(parseArchiveSettings(JSON.stringify(valid))).toEqual(valid);
+    expect(parseFixture(valid)).toEqual(valid);
   });
 
   it("reads a wall-clock schedule", () => {
@@ -445,7 +468,7 @@ describe("parseArchiveSettings", () => {
       ...valid,
       schedule: { kind: "wall-clock", days: [1, 3], at: { hour: 2, minute: 30 } },
     };
-    expect(parseArchiveSettings(JSON.stringify(s))).toEqual(s);
+    expect(parseFixture(s)).toEqual(s);
   });
 
   const tampered: [string, (s: Record<string, unknown>) => unknown][] = [
@@ -505,8 +528,9 @@ describe("parseArchiveSettings", () => {
   ];
 
   it.each(tampered)("refuses %s with the domain code", (_name, tamper) => {
-    const json = JSON.stringify(tamper(valid as unknown as Record<string, unknown>));
-    const { code, params } = refusal(() => parseArchiveSettings(json));
+    const { code, params } = refusal(() =>
+      parseFixture(tamper(valid as unknown as Record<string, unknown>)),
+    );
     expect(code).toBe("backup.archive_settings_invalid");
     expect(JSON.stringify(params)).not.toContain("custom-secret");
   });
@@ -519,7 +543,7 @@ describe("parseArchiveSettings", () => {
     ["a prefix with outer spaces", { prefix: " sp " }],
   ])("refuses a stored bucket with %s as the request path would", (_name, change) => {
     const s = { ...valid, destinations: [{ ...bucket, bucket: { ...storedBucket, ...change } }] };
-    expect(refusal(() => parseArchiveSettings(JSON.stringify(s)))).toEqual({
+    expect(refusal(() => parseFixture(s))).toEqual({
       code: "backup.archive_settings_invalid",
       params: { reason: "bucket" },
     });
@@ -529,7 +553,7 @@ describe("parseArchiveSettings", () => {
     "refuses a stored folder %j that is not already resolved",
     (dir) => {
       const s = { ...valid, destinations: [{ ...local, dir }] };
-      expect(refusal(() => parseArchiveSettings(JSON.stringify(s)))).toEqual({
+      expect(refusal(() => parseFixture(s))).toEqual({
         code: "backup.archive_settings_invalid",
         params: { reason: "destination" },
       });
@@ -538,13 +562,11 @@ describe("parseArchiveSettings", () => {
 
   it("refuses one folder stored twice with and without a trailing slash", () => {
     const s = { ...valid, destinations: [local, { ...local, id: "second", dir: "/var/backups/" }] };
-    expect(refusal(() => parseArchiveSettings(JSON.stringify(s))).code).toBe(
-      "backup.archive_settings_invalid",
-    );
+    expect(refusal(() => parseFixture(s)).code).toBe("backup.archive_settings_invalid");
   });
 
   it("refuses text that is not JSON", () => {
-    expect(refusal(() => parseArchiveSettings("{not json")).code).toBe(
+    expect(refusal(() => parseArchiveSettings("{not json", null)).code).toBe(
       "backup.archive_settings_invalid",
     );
   });
@@ -558,8 +580,136 @@ describe("stored archive settings", () => {
   const bucket = resolveArchiveChoice(custom, { stream: null, held: null });
   const input = without(settingsWith([bucket]), "revision");
 
+  it("a local folder archive seals nothing and reads back its settings", async () => {
+    const local = without(
+      settingsWith([{ kind: "local-fs", id: "primary", dir: "/var/backups" }]),
+      "revision",
+    );
+    const written = await withTransaction(suite.db, (tx) =>
+      writeArchiveSettings(tx, ring, local, null),
+    );
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        tryGetCredential(tx, ring, { purpose: ARCHIVE_PURPOSE }),
+      ),
+    ).toBeNull();
+    expect(await readArchiveSettings(suite.db, ring)).toEqual(written);
+    expect((await readSettings(suite.db, BACKUP_SETTINGS)).doc.archive).toMatchObject({
+      ...local,
+      revision: written.revision,
+    });
+  });
+
+  it("a bucket archive seals only its keys and keeps the bucket copy's part", async () => {
+    const streamPart = {
+      endpoint: null,
+      region: "eu-north-1",
+      bucket: "stream-bucket",
+      prefix: "",
+    };
+    await withTransaction(suite.db, (tx) =>
+      saveSettings(tx, BACKUP_SETTINGS, {
+        doc: { archive: null, stream: streamPart },
+        expectedRevision: 0,
+        personId: null,
+      }),
+    );
+    const written = await withTransaction(suite.db, (tx) =>
+      writeArchiveSettings(tx, ring, input, null),
+    );
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        getCredential(tx, ring, { purpose: ARCHIVE_PURPOSE }),
+      ),
+    ).toEqual({
+      accessKeyId: "AKIACUSTOM",
+      secretAccessKey: "custom-secret",
+    });
+    const { doc } = await readSettings(suite.db, BACKUP_SETTINGS);
+    expect(doc.stream).toEqual(streamPart);
+    expect(doc.archive?.destinations).toEqual([
+      {
+        kind: "s3",
+        id: "bucket",
+        bucket: {
+          endpoint: "https://other.example.test",
+          region: "eu-west-1",
+          bucket: "archive-bucket",
+          prefix: "box",
+        },
+      },
+    ]);
+    expect(JSON.stringify(doc)).not.toContain("AKIACUSTOM");
+    expect(JSON.stringify(doc)).not.toContain("custom-secret");
+    expect(await readArchiveSettings(suite.db, ring)).toEqual(written);
+  });
+
+  it.each(["bucket without keys", "keys without a bucket"])(
+    "refuses %s as unreadable archive settings",
+    async (shape) => {
+      await withTransaction(suite.db, async (tx) => {
+        await saveSettings(tx, BACKUP_SETTINGS, {
+          doc: {
+            archive: {
+              ...settingsWith([]),
+              destinations:
+                shape === "bucket without keys"
+                  ? [
+                      {
+                        kind: "s3",
+                        id: "bucket",
+                        bucket: {
+                          endpoint: "https://other.example.test",
+                          region: "eu-west-1",
+                          bucket: "archive-bucket",
+                          prefix: "box",
+                        },
+                      },
+                    ]
+                  : [{ kind: "local-fs", id: "primary", dir: "/var/backups" }],
+              writtenAt: "2026-11-15T00:00:00.000Z",
+            },
+            stream: null,
+          },
+          expectedRevision: 0,
+          personId: null,
+        });
+        if (shape === "keys without a bucket")
+          await putCredential(tx, ring, {
+            purpose: ARCHIVE_PURPOSE,
+            value: { accessKeyId: "AKIACUSTOM", secretAccessKey: "custom-secret" },
+            personId: null,
+          });
+      });
+      await expect(readArchiveSettings(suite.db, ring)).rejects.toMatchObject({
+        code: "backup.archive_settings_invalid",
+        params: { reason: "keys" },
+      });
+      expect(await readHeldArchiveSettings(suite.db, ring)).toEqual({
+        unreadable: "backup.archive_settings_invalid",
+      });
+    },
+  );
+
   it("reads nothing before anything is stored", async () => {
     expect(await readArchiveSettings(suite.db, ring)).toBeNull();
+  });
+
+  it("refuses keys saved without archive settings", async () => {
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, ring, {
+        purpose: ARCHIVE_PURPOSE,
+        personId: null,
+        value: { accessKeyId: "AKIACUSTOM", secretAccessKey: "custom-secret" },
+      }),
+    );
+    await expect(readArchiveSettings(suite.db, ring)).rejects.toMatchObject({
+      code: "backup.archive_settings_invalid",
+      params: { reason: "keys" },
+    });
+    expect(await readHeldArchiveSettings(suite.db, ring)).toEqual({
+      unreadable: "backup.archive_settings_invalid",
+    });
   });
 
   it("mints a new revision on every write and reads back the latest", async () => {
@@ -584,21 +734,21 @@ describe("stored archive settings", () => {
   });
 
   it("refuses a tampered stored record with the domain code", async () => {
-    const written = await withTransaction(suite.db, (tx) =>
-      writeArchiveSettings(tx, ring, input, null),
-    );
-    await withTransaction(suite.db, (tx) =>
-      putCredential(tx, ring, {
-        personId: null,
-        purpose: ARCHIVE_PURPOSE,
-        value: { settings: JSON.stringify({ ...written, enabled: 1 }) },
-      }),
-    );
+    await withTransaction(suite.db, (tx) => writeArchiveSettings(tx, ring, input, null));
+    await withTransaction(suite.db, async (tx) => {
+      const { doc } = await readSettings(tx, BACKUP_SETTINGS);
+      await tx
+        .update(settings)
+        .set({ doc: { ...doc, archive: { ...doc.archive, enabled: 1 } } })
+        .where(eq(settings.module, "backup"));
+    });
     await expect(readArchiveSettings(suite.db, ring)).rejects.toSatisfy(isSettingsInvalid);
   });
 
-  const digest = () =>
-    withTransaction(suite.db, (tx) => credentialRevision(tx, { purpose: ARCHIVE_PURPOSE }));
+  const digest = async () =>
+    createHash("sha256")
+      .update(JSON.stringify((await readSettings(suite.db, BACKUP_SETTINGS)).doc.archive))
+      .digest("hex");
 
   it("answers the record with its metadata, and no metadata when nothing is stored", async () => {
     expect(await readArchiveSettingsWithMeta(suite.db, ring)).toEqual({
@@ -636,16 +786,14 @@ describe("stored archive settings", () => {
   });
 
   it("carries the failed row's digest when the record does not parse", async () => {
-    const written = await withTransaction(suite.db, (tx) =>
-      writeArchiveSettings(tx, ring, input, null),
-    );
-    await withTransaction(suite.db, (tx) =>
-      putCredential(tx, ring, {
-        personId: null,
-        purpose: ARCHIVE_PURPOSE,
-        value: { settings: JSON.stringify({ ...written, retention: { count: 0, days: 30 } }) },
-      }),
-    );
+    await withTransaction(suite.db, (tx) => writeArchiveSettings(tx, ring, input, null));
+    await withTransaction(suite.db, async (tx) => {
+      const { doc } = await readSettings(tx, BACKUP_SETTINGS);
+      await tx
+        .update(settings)
+        .set({ doc: { ...doc, archive: { ...doc.archive, retention: { count: 0, days: 30 } } } })
+        .where(eq(settings.module, "backup"));
+    });
     const error = await readArchiveSettingsWithMeta(suite.db, ring).catch((e: unknown) => e);
     expect(error).toMatchObject({
       code: "backup.archive_settings_invalid",

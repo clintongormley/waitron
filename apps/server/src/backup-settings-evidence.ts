@@ -17,9 +17,9 @@ import {
 import { errnoOf } from "./errno.js";
 import "./errors.js";
 
-/** Every `reason` `parseArchiveSettings` and its helpers throw; `settingsInvalid` takes only these. */
 export const ARCHIVE_SETTINGS_REASONS = [
   "not_json",
+  "keys",
   "fields",
   "revision",
   "enabled",
@@ -42,7 +42,7 @@ export type LoadFailureDetail =
 
 /** What the saved record reveals without being opened. */
 export interface ArchiveRecordMeta {
-  keyVersion: number;
+  keyVersion: number | null;
   writtenAt: string;
   digest: string;
 }

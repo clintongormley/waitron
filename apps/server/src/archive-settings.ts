@@ -1,13 +1,21 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { isAbsolute, resolve } from "node:path";
 import {
+  deleteCredential,
   getCredential,
   putCredential,
   readCredentialMeta,
   tryGetCredential,
   type KeyRing,
 } from "@waitron/credentials";
-import { withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  nowIso,
+  readSettings,
+  saveSettings,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { normalisePrefix, readBucketConfig, type BucketConfig } from "@waitron/stream";
 import {
@@ -23,6 +31,7 @@ import {
 import { credentialField, UNREADABLE_CREDENTIAL } from "./credentials.js";
 import type { BackupDestination } from "./storage-backend.js";
 import type { StreamSettings } from "./stream-host.js";
+import { BACKUP_SETTINGS, type StoredArchive } from "./backup-settings-document.js";
 import "./errors.js";
 
 export const ARCHIVE_PURPOSE = "backup.archive";
@@ -174,7 +183,9 @@ function parseStoredBucket(raw: unknown): BucketConfig {
   }
 }
 
-function parseStoredDestination(raw: unknown): BackupDestination {
+type ArchiveKeys = Pick<BucketConfig, "accessKeyId" | "secretAccessKey">;
+
+function parseStoredDestination(raw: unknown, keys: ArchiveKeys | null): BackupDestination {
   const invalid = () => settingsInvalid("destination");
   if (!isRecord(raw)) throw invalid();
   if (raw.kind === "local-fs") {
@@ -186,7 +197,13 @@ function parseStoredDestination(raw: unknown): BackupDestination {
   if (raw.kind !== "s3" || !hasExactKeys(raw, ["kind", "id", "bucket"])) throw invalid();
   const { id } = raw;
   if (!isText(id)) throw invalid();
-  const bucket = parseStoredBucket(raw.bucket);
+  if (
+    !isRecord(raw.bucket) ||
+    !hasExactKeys(raw.bucket, ["region", "bucket", "prefix"], ["endpoint"])
+  )
+    throw settingsInvalid("bucket");
+  if (keys === null) throw settingsInvalid("keys");
+  const bucket = parseStoredBucket({ ...raw.bucket, ...keys });
   try {
     archiveNamespace(bucket.prefix);
   } catch {
@@ -204,28 +221,24 @@ const SETTINGS_FIELDS = [
   "destinationTimeoutMs",
 ] as const;
 
-/** The stored record, exactly as `writeArchiveSettings` wrote it: nothing is coerced or defaulted. */
-export function parseArchiveSettings(json: string): ArchiveSettings {
-  let raw: unknown;
-  try {
-    raw = JSON.parse(json);
-  } catch {
-    throw settingsInvalid("not_json");
-  }
-  if (!isRecord(raw) || !hasExactKeys(raw, SETTINGS_FIELDS)) throw settingsInvalid("fields");
+export function parseArchiveSettings(raw: unknown, keys: ArchiveKeys | null): ArchiveSettings {
+  if (!isRecord(raw) || !hasExactKeys(raw, SETTINGS_FIELDS, ["writtenAt"]))
+    throw settingsInvalid("fields");
   const { revision, enabled, destinations, retention, destinationTimeoutMs } = raw;
   if (typeof revision !== "string" || !UUID.test(revision)) throw settingsInvalid("revision");
   if (typeof enabled !== "boolean") throw settingsInvalid("enabled");
   if (!Array.isArray(destinations) || destinations.length === 0) {
     throw settingsInvalid("destinations");
   }
-  const parsed = destinations.map(parseStoredDestination);
+  const parsed = destinations.map((destination) => parseStoredDestination(destination, keys));
   if (new Set(parsed.map((d) => d.id)).size !== parsed.length) {
     throw settingsInvalid("duplicate_id");
   }
   const dirs = parsed.flatMap((d) => (d.kind === "local-fs" ? [d.dir] : []));
   if (new Set(dirs).size !== dirs.length) throw settingsInvalid("duplicate_dir");
-  if (parsed.filter((d) => d.kind === "s3").length > 1) throw settingsInvalid("buckets");
+  const buckets = parsed.filter((d) => d.kind === "s3");
+  if (buckets.length > 1) throw settingsInvalid("buckets");
+  if (buckets.length === 0 && keys !== null) throw settingsInvalid("keys");
   if (
     !isRecord(retention) ||
     !hasExactKeys(retention, ["count", "days"]) ||
@@ -262,9 +275,27 @@ export async function readArchiveSettingsIn(
   tx: Transaction,
   ring: KeyRing,
 ): Promise<ArchiveSettings | null> {
+  const { doc } = await readSettings(tx, BACKUP_SETTINGS);
   const value = await tryGetCredential(tx, ring, { purpose: ARCHIVE_PURPOSE });
-  if (value === null) return null;
-  return parseArchiveSettings(credentialField(value, ARCHIVE_PURPOSE, "settings"));
+  return joinArchiveSettings(doc.archive, value);
+}
+
+function joinArchiveSettings(
+  stored: StoredArchive | null,
+  value: Record<string, string> | null,
+): ArchiveSettings | null {
+  const keys =
+    value === null
+      ? null
+      : {
+          accessKeyId: credentialField(value, ARCHIVE_PURPOSE, "accessKeyId"),
+          secretAccessKey: credentialField(value, ARCHIVE_PURPOSE, "secretAccessKey"),
+        };
+  if (stored === null) {
+    if (keys !== null) throw settingsInvalid("keys");
+    return null;
+  }
+  return parseArchiveSettings(stored, keys);
 }
 
 /**
@@ -279,14 +310,17 @@ export async function readArchiveSettingsWithMeta(
   let meta: ArchiveRecordMeta | null = null;
   try {
     return await withTransaction(db, async (tx) => {
+      const { doc } = await readSettings(tx, BACKUP_SETTINGS);
       const row = await readCredentialMeta(tx, { purpose: ARCHIVE_PURPOSE });
-      if (row === null) return { meta: null, settings: null };
-      meta = { keyVersion: row.keyVersion, writtenAt: row.updatedAt, digest: row.digest };
-      const value = await getCredential(tx, ring, { purpose: ARCHIVE_PURPOSE });
-      return {
-        meta,
-        settings: parseArchiveSettings(credentialField(value, ARCHIVE_PURPOSE, "settings")),
-      };
+      if (doc.archive !== null)
+        meta = {
+          keyVersion: row?.keyVersion ?? null,
+          writtenAt: doc.archive.writtenAt,
+          digest: createHash("sha256").update(JSON.stringify(doc.archive)).digest("hex"),
+        };
+      const value =
+        row === null ? null : await getCredential(tx, ring, { purpose: ARCHIVE_PURPOSE });
+      return { meta, settings: joinArchiveSettings(doc.archive, value) };
     });
   } catch (error) {
     attachRecordMeta(error, meta);
@@ -322,25 +356,45 @@ export async function readHeldArchiveSettingsIn(
   }
 }
 
-/** The record `writeArchiveSettings` would store, under a new revision, as a read would return
- * it; throws what that read would. */
+function splitArchiveSettings(settings: ArchiveSettings): {
+  archive: StoredArchive;
+  keys: ArchiveKeys | null;
+} {
+  let keys: ArchiveKeys | null = null;
+  const destinations = settings.destinations.map((destination) => {
+    if (destination.kind !== "s3") return destination;
+    const { accessKeyId, secretAccessKey, ...bucket } = destination.bucket;
+    keys = { accessKeyId, secretAccessKey };
+    return { ...destination, bucket };
+  });
+  return { archive: { ...settings, destinations, writtenAt: nowIso() }, keys };
+}
+
 export function archiveRecord(settings: Omit<ArchiveSettings, "revision">): {
   json: string;
   stored: ArchiveSettings;
 } {
-  const json = JSON.stringify({ ...settings, revision: randomUUID() });
-  return { json, stored: parseArchiveSettings(json) };
+  const { archive, keys } = splitArchiveSettings({ ...settings, revision: randomUUID() });
+  const stored = parseArchiveSettings(archive, keys);
+  return { json: JSON.stringify(stored), stored };
 }
 
-/** Stores the settings under a new revision; what is stored is what a read will accept. */
 export async function writeArchiveSettings(
   tx: Transaction,
   ring: KeyRing,
   settings: Omit<ArchiveSettings, "revision">,
   personId: string | null,
 ): Promise<ArchiveSettings> {
-  const { json, stored } = archiveRecord(settings);
-  await putCredential(tx, ring, { personId, purpose: ARCHIVE_PURPOSE, value: { settings: json } });
+  const { stored } = archiveRecord(settings);
+  const { archive, keys } = splitArchiveSettings(stored);
+  const saved = await readSettings(tx, BACKUP_SETTINGS);
+  if (keys === null) await deleteCredential(tx, { purpose: ARCHIVE_PURPOSE, personId });
+  else await putCredential(tx, ring, { purpose: ARCHIVE_PURPOSE, value: keys, personId });
+  await saveSettings(tx, BACKUP_SETTINGS, {
+    doc: { ...saved.doc, archive },
+    expectedRevision: saved.revision,
+    personId,
+  });
   return stored;
 }
 

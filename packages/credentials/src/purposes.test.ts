@@ -50,32 +50,23 @@ describe("PURPOSES", () => {
 });
 
 describe("backup.stream purpose", () => {
-  it("accepts the bucket and its key without a venue id", () => {
+  it("accepts only the bucket keys", () => {
     expect(() =>
       validatePayload("backup.stream", {
-        endpoint: "-",
-        region: "eu-west-1",
-        bucket: "copies",
-        prefix: "-",
         accessKeyId: "A",
         secretAccessKey: "S",
       }),
     ).not.toThrow();
-    expect([...PURPOSES["backup.stream"]].sort()).toEqual([
-      "accessKeyId",
-      "bucket",
-      "endpoint",
-      "prefix",
-      "region",
-      "secretAccessKey",
-    ]);
+    expect([...PURPOSES["backup.stream"]].sort()).toEqual(["accessKeyId", "secretAccessKey"]);
   });
 });
 
 describe("backup.archive purpose", () => {
-  it("holds the whole archive configuration as one settings document", () => {
-    expect(PURPOSES["backup.archive"]).toEqual(["settings"]);
-    expect(() => validatePayload("backup.archive", { settings: "{}" })).not.toThrow();
+  it("holds only the archive bucket keys", () => {
+    expect(PURPOSES["backup.archive"]).toEqual(["accessKeyId", "secretAccessKey"]);
+    expect(() =>
+      validatePayload("backup.archive", { accessKeyId: "A", secretAccessKey: "S" }),
+    ).not.toThrow();
   });
 });
 

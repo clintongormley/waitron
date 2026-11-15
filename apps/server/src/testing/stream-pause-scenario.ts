@@ -21,7 +21,7 @@ import { eq } from "drizzle-orm";
 import { Agent } from "undici";
 import { expect } from "vitest";
 import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
-import { loadKeyRing, putCredential } from "@waitron/credentials";
+import { loadKeyRing } from "@waitron/credentials";
 import {
   deviceProfiles,
   devices,
@@ -57,7 +57,7 @@ import { formatEnvFile, parseEnvFile } from "../env-file.js";
 import { seedTermZeroMembership } from "../membership-seed.js";
 import { ALL_MODULES } from "../modules.js";
 import { establishNodeIdentity } from "../node-identity.js";
-import { streamSettingsPayload, type StreamHostDeps } from "../stream-host.js";
+import { writeStreamSettings, type StreamHostDeps } from "../stream-host.js";
 import { freePort } from "./free-ports.js";
 import { stageClock, waitUntil } from "./scenario-stages.js";
 import { bootEnv, copyMigrations } from "./stream-box.js";
@@ -332,13 +332,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
         venue.nodeId,
         `https://127.0.0.1:${port}`,
       );
-      await withTransaction(seeding.venue, (tx) =>
-        putCredential(tx, ring, {
-          personId: null,
-          purpose: "backup.stream",
-          value: streamSettingsPayload({ bucket }),
-        }),
-      );
+      await withTransaction(seeding.venue, (tx) => writeStreamSettings(tx, ring, bucket, null));
       const [admin] = await seeding.venue
         .select({ id: persons.id })
         .from(persons)

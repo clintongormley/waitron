@@ -29,7 +29,7 @@ import {
   type Database,
   type VenueDatabase,
 } from "@waitron/db";
-import { loadKeyRing, putCredential } from "@waitron/credentials";
+import { loadKeyRing } from "@waitron/credentials";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules, parseModuleConfig } from "@waitron/module";
 import { savePrivacyContact } from "@waitron/provisioning";
@@ -56,7 +56,7 @@ import { provisionAllocatedTestVenue as provisionVenue } from "./testing/allocat
 import { venueModuleConfig } from "./provision.js";
 import { readModuleConfig } from "./module-config.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
-import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
+import { writeStreamSettings } from "./stream-host.js";
 import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
 import { MAIN_AUTHORITY } from "./testing/main-authority.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
@@ -1748,19 +1748,14 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         });
         await withTransaction(source.store.venue, ensureStreamId);
         await withTransaction(source.store.venue, (tx) =>
-          putCredential(
+          writeStreamSettings(
             tx,
             loadKeyRing({
               WAITRON_CREDENTIALS_KEY: vaultKey,
               WAITRON_CREDENTIALS_KEY_VERSION: "1",
             }),
-            {
-              personId: null,
-              purpose: STREAM_PURPOSE,
-              value: streamSettingsPayload({
-                bucket: { ...SILENT_BUCKET, endpoint },
-              }),
-            },
+            { ...SILENT_BUCKET, endpoint },
+            null,
           ),
         );
         const dump = join(await mkdtemp(join(tmpdir(), "waitron-boot-archive-")), "venue.db");

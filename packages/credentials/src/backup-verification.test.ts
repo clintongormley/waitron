@@ -81,12 +81,16 @@ describe("read-only backup vault authentication", () => {
         value: email,
       }),
     );
-    await row("backup.archive", '{"settings":"old-private-sentinel"}', { key: key1, version: 1 });
+    await row("backup.archive", '{"accessKeyId":"A","secretAccessKey":"old-private-sentinel"}', {
+      key: key1,
+      version: 1,
+    });
     const before = suite.db.all(sql`select * from venue_credentials order by purpose`);
     expect(await verify()).toBe("passed");
     expect(await query((q) => readBackupCredential(q, inputs, "email.smtp"))).toEqual(email);
     expect(await query((q) => readBackupCredential(q, inputs, "backup.archive"))).toEqual({
-      settings: "old-private-sentinel",
+      accessKeyId: "A",
+      secretAccessKey: "old-private-sentinel",
     });
     expect(suite.db.all(sql`select * from venue_credentials order by purpose`)).toEqual(before);
   });
@@ -114,7 +118,10 @@ describe("read-only backup vault authentication", () => {
 
   it("every older row must authenticate rather than only the newest/current row", async () => {
     await row();
-    await row("backup.archive", '{"settings":"older"}', { key: key1, version: 1 });
+    await row("backup.archive", '{"accessKeyId":"A","secretAccessKey":"older"}', {
+      key: key1,
+      version: 1,
+    });
     expect(await verify()).toBe("passed");
     expect(await verify(current)).toBe("unavailable");
     suite.db.run(
@@ -154,8 +161,16 @@ describe("read-only backup vault authentication", () => {
     ).rejects.toMatchObject({ status: "unsupported" });
   });
 
+  it("refuses the retired whole-archive payload", async () => {
+    await row("backup.archive", '{"settings":"old-private-sentinel"}');
+    expect(await verify()).toBe("invalid");
+    await expect(
+      query((q) => readBackupCredential(q, inputs, "backup.archive")),
+    ).rejects.toMatchObject({ status: "invalid" });
+  });
+
   it("archive credentials remain covered", async () => {
-    await row("backup.archive", '{"settings":"kept"}');
+    await row("backup.archive", '{"accessKeyId":"A","secretAccessKey":"kept"}');
     expect(await verify()).toBe("passed");
     suite.db.run(sql`update venue_credentials set ciphertext = x'00'`);
     expect(await verify()).toBe("unavailable");
@@ -210,7 +225,10 @@ describe("read-only backup vault authentication", () => {
     await row("email.smtp", "null");
     await row("future.purpose", "{}");
     expect(await verify()).toBe("unsupported");
-    await row("backup.archive", '{"settings":"old"}', { key: key1, version: 1 });
+    await row("backup.archive", '{"accessKeyId":"A","secretAccessKey":"old"}', {
+      key: key1,
+      version: 1,
+    });
     expect(await verify(current)).toBe("unavailable");
   });
 

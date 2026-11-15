@@ -1,3 +1,4 @@
+import { SERVER_SETTINGS_KEYS } from "./mail-settings.js";
 import type { WaitronModule } from "@waitron/module";
 import { settingsChangeType, type ChangeSource } from "@waitron/shared";
 
@@ -29,6 +30,9 @@ export function liveResourceTypesForModules(
 ): string[] {
   return liveResourceTypes(
     modules.flatMap((module) => module.changes ?? []),
-    modules.flatMap((module) => (module.settings ?? []).map((document) => document.module)),
+    [
+      ...SERVER_SETTINGS_KEYS,
+      ...modules.flatMap((module) => (module.settings ?? []).map((document) => document.module)),
+    ],
   );
 }

@@ -20,14 +20,8 @@ export const PURPOSES = {
    * it is re-provisioned.
    */
   "fiscal.aeat": ["pfxBase64", "passphrase", "certKind"],
-  /**
-   * An absent `endpoint` (Amazon itself) or `prefix` is sealed as `-` because every field must be non-empty.
-   */
-  "backup.stream": ["endpoint", "region", "bucket", "prefix", "accessKeyId", "secretAccessKey"],
-  /** The venue's archive configuration as one JSON document, bucket credentials included;
-   * validated by its reader (`parseArchiveSettings`, `apps/server/src/archive-settings.ts`), not
-   * here. */
-  "backup.archive": ["settings"],
+  "backup.stream": ["accessKeyId", "secretAccessKey"],
+  "backup.archive": ["accessKeyId", "secretAccessKey"],
 } as const satisfies Record<string, readonly string[]>;
 
 export type Purpose = keyof typeof PURPOSES;

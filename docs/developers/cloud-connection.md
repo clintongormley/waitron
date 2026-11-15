@@ -385,9 +385,9 @@ choose **Start a new request**; a network failure leaves the existing request in
 browser receives the code, link, deadline and approved snapshot details, while the archive key
 and temporary storage credentials stay on the server. A managed restore excludes the captured
 `backup.env`, so the replacement does not inherit the backup settings kept in that file. It does
-inherit the database and the vault key, and with them the settings the database holds sealed: the
-bucket copy's settings (`backup.stream`) with its bucket's access keys, and the archive settings
-saved from the dashboard (`backup.archive`) with the access keys of any bucket they name.
+inherit the database and the vault key, and with them the archive and bucket-copy choices in the
+`backup` settings document. Their bucket access keys stay sealed under `backup.archive` and
+`backup.stream`.
 
 The Cloud account page authorizes a target to read one snapshot. It does not confirm that local
 restore has finished. Waitron stages and validates the encrypted archive, restarts, runs cold

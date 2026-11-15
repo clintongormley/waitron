@@ -534,8 +534,8 @@ export const QUERY_DEPENDENCIES = {
   getEmailInbox: ["email_inbox"],
   // `removable` reads whether the machine has a `nodes` row here, so a new row moves it too.
   listServers: ["node_membership", "nodes"],
-  getBackupStatus: ["backup_status"],
-  getStreamSettings: ["backup_status"],
+  getBackupStatus: ["backup_status", "settings.backup"],
+  getStreamSettings: ["backup_status", "settings.backup"],
   // The answer is built from the box's own files and the process's role, not from any table.
   getCloudStatus: [],
   // Read from Cloud, which no table change reports; the server lets one read a minute through.

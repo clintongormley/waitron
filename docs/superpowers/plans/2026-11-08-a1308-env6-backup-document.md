@@ -49,6 +49,14 @@ flight on `stream-api.ts`, stop and ask the watcher (rules §5.5).
 **Owner lands:** no. Read, not run: no sale, invoice number, fiscal record, fiscal identity, AEAT
 sending or hashed value is touched.
 
+> **2026-11-15 review correction (watcher cleared at 03:43):** the old-payload account in
+> **No venue reset** below is superseded. Reading a credential does not validate the purpose's
+> current field list. The archive reader refuses the old `{ settings }` shape as
+> `server.credential_unusable`; the stream reader refuses sealed keys without a stream part with
+> that same code. Backups shows its existing unreadable-settings state until the choices are saved
+> again. The same unusable-credential path can refuse a restore's source check or keep its first
+> start waiting. Before go-live, installations with these records may be reset. No conversion is added.
+
 **No venue reset:** no starting migration changes. A box that saved backup or bucket-copy settings
 before this lands holds sealed payloads in the old shape, which the narrowed purposes refuse
 (`credentials.invalid_payload`); the Backups screen then shows its existing "settings cannot be read"
@@ -318,3 +326,38 @@ EQUAL. Any line is a stop.
 
 Nothing to change: Cloud calls `PUT` and `GET /api/backup/stream` with today's body and reads today's
 answer (`integration-stream.mjs:59,65` in its repository, at `d4451d227`), both unchanged here.
+
+## Current-main correction, 2026-11-15
+
+Watcher 01:12 cleared required `personId: string | null` on `writeStreamSettings` and
+`deleteStreamSettings`, preserving vb2's request actor through their credential and settings writes.
+Keep `writeArchiveSettings`'s existing actor argument and the existing actor assertions.
+No new mechanism or compatibility path is added.
+
+Watcher 02:13 cleared repointing the three archive metadata expectations from the sealed-row
+fingerprint to an independently computed hash of the stored archive part, as Interfaces specifies.
+All exact keyVersion, writtenAt and digest checks and the error assertions remain. List this under
+Changed test checks; stream credential revisions and evidence/recovery-pack assertions stay.
+
+The local-folder apply/rotate actor checks now read the two settings.saved entries (revisions 1
+and 2), because those writes seal nothing. Their exact actor and two-entry checks remain; the
+old credential-history check failed with no events before this port. Local-only evidence metadata
+uses keyVersion:null; unknown-key/decryption fixtures include a bucket to retain those failures.
+Malformed settings fixtures now damage the document, and credential failures still damage sealed
+keys. The same domain-code, written-time and independently computed digest assertions remain.
+
+Watcher 02:28 cleared the nullable-key dashboard consumer: the client record field accepts null,
+and the widget uses the existing written_then translation only for null, retaining the key-number
+sentence for a number. The existing rewritten-record case covers both languages and key shapes.
+No other widget behavior changes.
+
+> **2026-11-15 03:14, watcher clearance:** finish the same planned scope up to about
+> 1,500 gross lines, including the existing malformed fixtures moving to their owning store.
+> Backup-verification's positive archive fixtures and exact payload assertion use literal two-key
+> objects; every passed/unavailable, key-version, frozen/no-write and refusal assertion stays.
+> An old whole-archive payload remains an invalid input. No runtime backup-verification or
+> compatibility change is included.
+
+> **2026-11-15 03:24, watcher clearance:** same scope up to about 1,800 gross lines;
+> move DELETE, stream-id and revision checks into their existing route cases, retaining the new
+> split-storage assertions. No new production idea. The implementation follows that reduction.

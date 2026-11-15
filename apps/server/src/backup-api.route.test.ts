@@ -1,3 +1,4 @@
+import { storeArchivePart } from "./testing/backup-settings.js";
 import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
@@ -15,7 +16,7 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { SingletonRole } from "@waitron/db";
-import { readActivityForSubject, withTransaction } from "@waitron/db";
+import { readActivityForSubject, settings, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin } from "@waitron/identity";
@@ -26,7 +27,7 @@ import { mountBackupApi, type BackupApiDeps } from "./backup-api.js";
 import { eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { backupArchiveKey, parseBackupArchiveKey } from "./backup-keys.js";
-import { readStreamSettings, streamSettingsPayload } from "./stream-host.js";
+import { readStreamSettings, writeStreamSettings } from "./stream-host.js";
 import { createTurns, type Turns } from "./backup-turns.js";
 import {
   deleteCredential,
@@ -334,6 +335,7 @@ afterEach(async () => {
   for (const stop of cleanup.splice(0)) await stop().catch(() => {});
   // The suite shares one database, and both records are one per venue.
   await withTransaction(suite.db, async (tx) => {
+    await tx.delete(settings).where(eq(settings.module, "backup"));
     await deleteCredential(tx, { personId: null, purpose: ARCHIVE_PURPOSE });
     await deleteCredential(tx, { personId: null, purpose: "backup.stream" });
   });
@@ -702,12 +704,12 @@ describe("backup admin routes", () => {
       sql`select id from persons where email = ${MANAGER_EMAIL}`,
     )[0]!;
     const events = await readActivityForSubject(suite.db, {
-      kind: "credential",
-      id: ARCHIVE_PURPOSE,
+      kind: "settings",
+      id: "backup",
     });
     expect(events.slice(-2).map(({ kind, personId, data }) => ({ kind, personId, data }))).toEqual([
-      { kind: "credentials.saved", personId: manager.id, data: { keyVersion: 1 } },
-      { kind: "credentials.saved", personId: manager.id, data: { keyVersion: 1 } },
+      { kind: "settings.saved", personId: manager.id, data: { revision: 1 } },
+      { kind: "settings.saved", personId: manager.id, data: { revision: 2 } },
     ]);
 
     const body = await rot.json();
@@ -1634,13 +1636,7 @@ describe("backup admin routes", () => {
     } as const;
 
     async function storeStream(): Promise<void> {
-      await withTransaction(suite.db, (tx) =>
-        putCredential(tx, RING, {
-          personId: null,
-          purpose: "backup.stream",
-          value: streamSettingsPayload({ bucket: STREAM_BUCKET }),
-        }),
-      );
+      await withTransaction(suite.db, (tx) => writeStreamSettings(tx, RING, STREAM_BUCKET, null));
     }
 
     async function primaryApp(
@@ -1860,25 +1856,18 @@ describe("backup admin routes", () => {
       ).toBe(200);
       const held = (await readSealed())!;
       const [destination] = held.destinations as Extract<BackupDestination, { kind: "s3" }>[];
-      // Written as the sealed credential: `writeArchiveSettings` would refuse this record.
       await withTransaction(suite.db, (tx) =>
-        putCredential(tx, RING, {
-          personId: null,
-          purpose: ARCHIVE_PURPOSE,
-          value: {
-            settings: JSON.stringify({
-              ...held,
-              destinations: [
-                {
-                  ...destination,
-                  bucket: {
-                    ...destination!.bucket,
-                    endpoint: `https://backup-user:${password}@s3.example.net`,
-                  },
-                },
-              ],
-            }),
-          },
+        storeArchivePart(tx, {
+          ...held,
+          destinations: [
+            {
+              ...destination,
+              bucket: {
+                ...destination!.bucket,
+                endpoint: `https://backup-user:${password}@s3.example.net`,
+              },
+            },
+          ],
         }),
       );
       await expect(readSealed()).rejects.toMatchObject({
@@ -2122,14 +2111,13 @@ describe("backup admin routes", () => {
       expect(await readSealed()).toEqual(before);
     }, 60_000);
 
-    /** Seals `plaintext` as the whole archive record under the ring's own key, as no writer here
-     * would: `putCredential` refuses a payload that is not the purpose's fields. */
+    /** Bypasses payload validation to exercise malformed sealed bucket keys. */
     async function storeRawArchive(plaintext: string): Promise<void> {
       await withTransaction(suite.db, (tx) =>
         putCredential(tx, RING, {
           personId: null,
           purpose: ARCHIVE_PURPOSE,
-          value: { settings: "{}" },
+          value: { accessKeyId: "A", secretAccessKey: "S" },
         }),
       );
       const iv = randomBytes(12);
@@ -2153,7 +2141,7 @@ describe("backup admin routes", () => {
         putCredential(tx, other, {
           personId: null,
           purpose: ARCHIVE_PURPOSE,
-          value: { settings: "{}" },
+          value: { accessKeyId: "A", secretAccessKey: "S" },
         }),
       );
     };
@@ -2162,14 +2150,7 @@ describe("backup admin routes", () => {
     const UNREADABLE: [string, () => Promise<void>][] = [
       [
         "backup.archive_settings_invalid",
-        () =>
-          withTransaction(suite.db, (tx) =>
-            putCredential(tx, RING, {
-              personId: null,
-              purpose: ARCHIVE_PURPOSE,
-              value: { settings: "{}" },
-            }),
-          ),
+        () => withTransaction(suite.db, (tx) => storeArchivePart(tx, {})),
       ],
       ["credentials.decrypt_failed", sealedUnder("1")],
       ["credentials.key_version_unknown", sealedUnder("2")],
@@ -2222,11 +2203,7 @@ describe("backup admin routes", () => {
       const held = (await readSealed())!;
       // Readable as a sealed payload, but refused as settings because of its time limit alone.
       await withTransaction(suite.db, (tx) =>
-        putCredential(tx, RING, {
-          personId: null,
-          purpose: ARCHIVE_PURPOSE,
-          value: { settings: JSON.stringify({ ...held, destinationTimeoutMs: 1 }) },
-        }),
+        storeArchivePart(tx, { ...held, destinationTimeoutMs: 1 }),
       );
       await expect(readSealed()).rejects.toMatchObject({
         code: "backup.archive_settings_invalid",
@@ -2570,11 +2547,7 @@ describe("backup admin routes", () => {
             WAITRON_CREDENTIALS_KEY_VERSION: "2",
           });
           await withTransaction(suite.db, (tx) =>
-            putCredential(tx, other, {
-              personId: null,
-              purpose: "backup.stream",
-              value: streamSettingsPayload({ bucket: STREAM_BUCKET }),
-            }),
+            writeStreamSettings(tx, other, STREAM_BUCKET, null),
           );
         },
       ],
@@ -2728,8 +2701,8 @@ describe("backup admin routes", () => {
       const { sc, sup, post, status } = await primaryApp({ sealedState });
       stateDir = sc.stateDir;
       suite.db.run(
-        sql.raw(`create trigger refuse_archive_settings before insert on venue_credentials
-          when new.purpose = '${ARCHIVE_PURPOSE}' begin select raise(abort, 'refused'); end`),
+        sql.raw(`create trigger refuse_archive_settings before insert on settings
+          when new.module = 'backup' begin select raise(abort, 'refused'); end`),
       );
       try {
         const res = await post(
@@ -2800,7 +2773,7 @@ describe("backup admin routes", () => {
       expect(loaded).toEqual([KEY_1, KEY_2]);
       suite.db.run(
         sql.raw(
-          `create trigger refuse_rotation before insert on venue_credentials when new.purpose = '${ARCHIVE_PURPOSE}' begin select raise(abort, 'refused'); end`,
+          `create trigger refuse_rotation before update on settings when new.module = 'backup' begin select raise(abort, 'refused'); end`,
         ),
       );
       try {
@@ -3089,8 +3062,12 @@ describe("backup admin routes", () => {
         };
         const { sc, sup, post } = await primaryApp({ ring });
         expect(
-          (await post("/api/backup/apply", applyBody({ kind: "local-fs", dir: makeDestDir() })))
-            .status,
+          (
+            await post(
+              "/api/backup/apply",
+              applyBody({ ...CUSTOM, secretAccessKey: CUSTOM_SECRET }),
+            )
+          ).status,
         ).toBe(200);
         const sealed = (await readSealed())!;
         broken.on = true;
@@ -3105,13 +3082,7 @@ describe("backup admin routes", () => {
       it("an unreadable record is left as it is, and its code is reported beside the new key", async () => {
         const { sc, post } = await primaryApp();
         await writeRecoveryKey(sc.stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
-        await withTransaction(suite.db, (tx) =>
-          putCredential(tx, RING, {
-            personId: null,
-            purpose: ARCHIVE_PURPOSE,
-            value: { settings: "{}" },
-          }),
-        );
+        await withTransaction(suite.db, (tx) => storeArchivePart(tx, {}));
         const stored = () =>
           withTransaction(suite.db, (tx) =>
             tryGetCredential(tx, RING, { purpose: ARCHIVE_PURPOSE }),

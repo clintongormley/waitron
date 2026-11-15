@@ -303,10 +303,15 @@ export class BackupSettingsEvidenceDialog extends LitElement {
       ${
         e.record
           ? html`<p>
-              ${fill("backup_evidence.written", {
-                time: when(e.record.writtenAt),
-                n: String(e.record.keyVersion),
-              })}
+              ${fill(
+                e.record.keyVersion === null
+                  ? "backup_evidence.written_then"
+                  : "backup_evidence.written",
+                {
+                  time: when(e.record.writtenAt),
+                  n: String(e.record.keyVersion),
+                },
+              )}
             </p>`
           : e.now.state === "absent"
             ? html`<p>${t("backup_evidence.absent")}</p>`
