@@ -353,9 +353,7 @@ called weaker than its name, the topic file lists what it does not see.
   `color:` declarations as text, in tracked files only; what it misses is in
   [design-system.md](docs/developers/design-system.md).
 - **A new `wt-*` primitive needs two specific tests**, not "some tests": a token-painting test, and an
-  axe accessibility test in a sibling `*.a11y.test.ts` covering each distinct state in both themes;
-  one that draws an edge, a focus mark or a state with a box-shadow, a background or a transparent
-  border also needs a `*.forced-colors.test.ts` screenshot test; nothing guards the third.
+  axe accessibility test in a sibling `*.a11y.test.ts` covering each distinct state in both themes.
 - **A shared `wt-*` component's custom events are named `wt-*`, carry `detail`, and are dispatched
   `bubbles: true, composed: true` — and the triggering event is stopped with
   `event.stopPropagation()` before re-emitting**, or, for a composed trigger such as `input`, the

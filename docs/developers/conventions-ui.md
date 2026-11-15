@@ -1121,10 +1121,6 @@ A new `wt-*` primitive under `packages/ui/src/components/` is incomplete review-
    state (open/closed, checked/unchecked, invalid, disabled, icon-only, ...) in both light and
    dark themes.
 
-One that draws an edge, a focus mark or a state with a box-shadow, a background or a transparent
-border also needs a `*.forced-colors.test.ts` screenshot test (see
-[design-system.md](design-system.md#forced-colours-windows-contrast-themes)). Nothing checks this.
-
 ## Event discipline
 
 This rule is the contract for shared `wt-*` components. Their custom events are named `wt-*`, carry
