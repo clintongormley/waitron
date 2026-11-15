@@ -1,40 +1,37 @@
 # Selective bundle test setup
 
-Lane I draft, 15 November 2026. Separate Sol/high draft, checked and shortened by the driver; Claude review and watcher clearance are pending. No owner design approval is claimed.
+Lane I draft, 15 November 2026: separate Sol/high draft, driver corrections, Claude review (282 s), watcher clearance pending. No owner design approval is claimed.
 
-**Ask:** “Measure selective shared setup that serves focused runs and shards without building unused fixtures or retaining stale outputs”, including the caller audit (`docs/backlog/ci.md`, Real-source bundle tests; Lane I queue BUNDLE-TEST-SETUP).
+**Ask:** “Measure selective shared setup that serves focused runs and shards without building unused fixtures or retaining stale outputs”, including the caller audit (docs/backlog/ci.md, Real-source bundle tests; Lane I queue BUNDLE-TEST-SETUP).
 
-**Finish line:** focused runs and shards compile only their needed certificate fixtures, without collecting appliance metadata for generated test wrappers. Real shipped-entry CLI stamps, notices and permission checks remain. Each file owns fresh temporary output and removes it at teardown; no cross-run cache or global setup.
+**Result:** focused runs/shards build their needed certificate fixtures without appliance metadata for generated test wrappers. Keep per-file temporary output and cleanup. No cross-file shared build/cache: static pairs already batch, while wrappers repeat metadata; Claude recommends this smaller route.
 
-**Measurement:** local source `983a3908ee`, 33/33 profiled tests pass. Nine CLI invocations: descriptor subprocesses 11.646 s, 27 Git reads 0.190 s, eleven compilations 2.048 s. Static entry pairs already batch. These are overlapping work totals, not promised wall-time savings. Full JSON/logs and the caller audit are in Lane I `receipts/bundle-setup-20261115/`.
+**Measurement:** local source 983a3908ee; 33/33 profiled tests pass. Nine CLI invocations spend 11.646 s in descriptors, 0.190 s in 27 Git reads and 2.048 s in eleven compilations. These overlapping work totals predict no wall-time saving. Lane I receipts/bundle-setup-20261115/ holds raw logs/JSON. A retained PDF control fails the existing build-status assertion after 60.008 s with all three Git reads completing (19–20 s each); its first, invalid control exhausted Git's own deadline and is not evidence for the outer limit.
 
-## Build and tests
+## Implementation and behavioral checks
 
-- [ ] In `apps/server/src/fiscal-certificate-diagnosis-bundle.test.ts`, lazily build the shipped entry/host through the real CLI only when a case needs them. Keep one build per file and the existing temporary root/cleanup. A run selecting only a local-wrapper case must not build the shipped pair.
-- [ ] In that file, `apps/server/src/fiscal-certificate-diagnosis-parent.test.ts` and `apps/server/src/testing/certificate-diagnosis-snapshot.ts`, compile generated test wrappers through the existing `bundle(pairs)` API in bounded Node subprocesses, following `testing/zone-process-matrix.ts`. Keep default notices, request-specific builds after server binding, and existing cleanup. No new shared helper is needed; the bundler API is the reused setup.
-- [ ] First run an external trace check requiring zero metadata calls for generated wrappers and zero shipped entries for a dynamic-only selection: current code must fail it. Then make the smallest changes and rerun. Preserve every existing behavioral assertion; no committed timing test or production instrumentation.
-- [ ] Certificate bundle tests own shipped entry/no-source-loader/notices and local mTLS/socket/process behavior; parent tests own unchanged persistent state. Run both whole files plus `backup-verification.permission.test.ts` (worker refusal and ordinary-open controls).
-- [ ] Exercise the shared snapshot builder through its four consumers: `fiscal-certificate-diagnosis-api.verifactu.test.ts`, `fiscal-certificate-diagnosis-api.abort.test.ts`, `fiscal-certificate-diagnosis-cleanup.test.ts` and `certificate-diagnosis.browser.test.ts`. Retain their authorization, no-write and cleanup checks; check memory before Chromium.
+- [ ] In apps/server/src/fiscal-certificate-diagnosis-bundle.test.ts, put the shipped pair's CLI build and its three shipped-entry cases in their own describe/beforeAll. Keep root creation/cleanup file-wide and local-wrapper cases outside that build group; avoid reindenting unrelated cases. Preserve the 190 s hook and all assertions.
+- [ ] For generated wrappers in that file, apps/server/src/fiscal-certificate-diagnosis-parent.test.ts, apps/server/src/testing/certificate-diagnosis-snapshot.ts and packages/fiscal-verifactu/src/recovery-pdf-node.test.ts, retain their bounded subprocess calls but replace CLI arguments with --input-type=module --eval importing the existing bundle(pairs) by absolute URL. Retain pnpm exec node where used, compiler PATH, default notices and existing deadlines.
+- [ ] These test-only API builds are unstamped; no wrapper assertion reads a stamp. Keep the real CLI for shipped certificate entry/host, permission verifier/control, provisioning entry and upgrade entry. Keep TLS-wrapper compilation in a child so synchronous bundling cannot block its already-running test server. Add no symlinks or helper.
+- [ ] Before changes, the retained trace control fails: five generated certificate builds each collect a descriptor instead of zero. Repeat the trace on the candidate, plus a dynamic-only filter: require zero wrapper metadata and no shipped-pair build. Run the certificate bundle/parent files and permission file unchanged; their original mTLS, no-write, notices, worker refusal and ordinary-open assertions remain.
+- [ ] Run snapshot consumers fiscal-certificate-diagnosis-api.verifactu.test.ts, fiscal-certificate-diagnosis-api.abort.test.ts, fiscal-certificate-diagnosis-cleanup.test.ts and certificate-diagnosis.browser.test.ts (check memory first). Run recovery-PDF's complete Node file: its relocated font/attachment assertions must pass under the same slow-Git control through the API.
 
-## Caller budgets
+## Caller audit and configuration bounds
 
-The CLI permits three 20 s Git reads and a 60 s descriptor before compilation. Keep production limits; retained CLI builds get 180 s including 60 s compilation headroom, with containing deadlines above their total waits.
+Production stays at three 20 s Git reads plus a 60 s descriptor before compilation. Retained CLI calls allow 180 s with compilation headroom; containing bounds clear their total waits. Numeric maintenance is justified by this audit, not a claim those callers have failed.
 
-| Caller | Current build / container seconds | Planned seconds |
-| --- | --- | --- |
-| fiscal `recovery-pdf-node.test.ts`, relocated-bundle case | 60 / 120 | 180 / 240; two executions allow 15 s each |
-| provisioning `cli-entry.test.ts`, setup hook | 120 / 180 | 180 / 190 |
-| server `boot.upgrade.test.ts`, executable-entry case | 120 / 220 | 180 / 320; other child waits total 110 s |
-| server permission and shipped certificate builders | 180 / 300 or 190 | unchanged |
-| generated certificate parent/snapshot wrappers | 180 / 190; 90 / 100 | unchanged; API avoids metadata |
-| fiscal `emergency-attempt-crash.test.ts` | 180 / 240 | unchanged |
+| Caller | Build / containing seconds: before → after |
+| --- | --- |
+| provisioning cli-entry.test.ts (the package's real CLI build) | 120/180 → 180/190 hook |
+| server boot.upgrade.test.ts, executable-entry case | 120/220 → 180/320 case; other child waits total 110 |
+| server certificate-diagnosis.browser.test.ts | snapshot 90 + Vite 90 + Chromium 15: hook 120 → 210 |
+| fiscal recovery-PDF generated runner | API removes metadata; retain 60 build / 120 case |
+| permission, shipped certificate, parent and snapshot | retain 180/300, 180/190, 180/190 and 90/100 respectively |
+| fiscal emergency-attempt-crash.test.ts | retain 180/240 |
 
-- [ ] Before numeric edits, reproduce each short caller's outer timeout with controlled metadata/compile delays; verify individual metadata subprocesses still complete within their own limits. Then pass with revised bounds and original assertions. Remove probe-owned files/children. No production delay switches.
-- [ ] Keep fixed-release API builders (`first-fiscal-launch`, `restore-emergency-crash`, provisioning `cli-owned-entry`/`cli-same-hour-entry`) unchanged. Root `backup-verification-runtime.test.mjs` owns real runtime stamps; `generate-hour-release.test.mjs` owns stale-stamp replacement: run their existing real-CLI cases unchanged. Audit `useBuiltServer`; retain its deliberately unstamped, notice-free asset-copying contract.
+- [ ] Run both changed numeric-bound suites with their original assertions; no additional per-caller delay experiment. Root scripts/backup-verification-runtime.test.mjs owns real runtime stamps and scripts/generate-hour-release.test.mjs owns stale-stamp replacement: run their existing real-CLI cases unchanged.
+- [ ] Keep fixed-release API builders (first-fiscal-launch, restore-emergency-crash, provisioning cli-owned-entry/cli-same-hour-entry) and useBuiltServer's unstamped, notice-free asset-copying contract unchanged.
+- [ ] Retain setup elapsed time, trace counts, exact test counts and exits; qualify the filtered run and full consumer files only. Existing fresh mkdtemp/cleanup assertions stay. No watch-mode, reverse-order timing or forced-refusal matrix, no extra hosted dispatch.
+- [ ] Record the measured API/CLI distinction in docs/developers/testing-guide.md and the commit; remove the completed entry from both backlog files. No fiscal implementation, expected-value change, registry, cache, daemon, flag, global setup, routing or capacity change.
 
-## Qualification and scope
-
-- [ ] Record setup elapsed time, metadata/compile counts and test results in both baseline/candidate run orders. Run a dynamic-only filter, a full certificate file, a selected server shard and a Vitest watch rerun after a temporary wrapper-source edit; inspect actual built entries, fresh output and teardown. Force one compile refusal to check cleanup. Return to the watcher if repeated work is not removed or a material redesign is needed; no extra hosted dispatch.
-- [ ] Update `docs/developers/testing-guide.md` with the wrapper/CLI distinction and delete the finished entry from both `docs/backlog.md` and `docs/backlog/ci.md`. No fiscal implementation, assertion changes, new cache, registry, daemon, production flag, global setup, routing or CI capacity change.
-
-**Expected diff, added/removed:** production 0/0; tests 70/25; support 8/5; docs including this plan 60/20: about 188 physical lines. Outside opinion past 282, before more implementation. Claude reviews the plan first; the watcher clears build. Focused tests, normal hook, finish-branch reviews and current-head CI precede authorised landing.
+**Expected added/removed lines:** production 0/0; tests 85/55; support 8/5; docs including plan 50/20: about 223 physical lines, outside opinion past 335. Claude reviewed the approach; watcher clearance precedes building. Focused checks, normal hook, finish-branch reviews and current-head CI precede authorised landing.
