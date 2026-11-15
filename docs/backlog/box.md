@@ -1462,11 +1462,18 @@ except the last, added 2026-11-14.
 
 ## Decisions and deliberate limits
 
-- **After freeing space on the full-disk recovery page, choose Retry.** The page does not retry
-  startup automatically. The watcher retained this limit at 01:48 on 15 November 2026 when
-  clearing the [full-disk plan](../superpowers/plans/2026-11-15-full-disk-words.md), and confirmed
-  recording it at 02:18. It is the watcher's decision, not owner approval. The same-folder reboot
-  after freeing space is exercised by `apps/server/src/start-full-disk.e2e.test.ts`.
+### Retry after a full-disk stop
+
+After freeing space on the recovery page, choose Retry. The page does not retry startup
+automatically. The watcher cleared a plan that kept this behavior at 01:48 on 15 November 2026,
+and explicitly confirmed recording it as a deliberate limit at 02:18. This is the watcher's
+decision, not owner approval. See the [full-disk plan](../superpowers/plans/2026-11-15-full-disk-words.md)
+and the same-folder reboot case in `apps/server/src/start-full-disk.e2e.test.ts`.
+
+The bell retries the module staff-notice check on its next read. The Box status page's separate
+outbox detail, box/clock sources and device-specific printer checks do not feed that alert.
+The watcher cleared this canonical module read at 02:18; this leaves the additional Box status
+notes on that page.
 
 ### The bucket client's limits (A44, #676)
 

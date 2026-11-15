@@ -1023,6 +1023,7 @@ export interface StartServerSeams {
   appendOnlyWatch?: { intervalMs?: number };
   /** The spare file's size; defaults to SPARE_SPACE_BYTES. */
   spareBytes?: number;
+  /** Shares its filesystem reader with the spare-room check and request error boundary. */
   freeSpaceWatch?: { intervalMs?: number; statfs?: Statfs };
   testClock?: ModuleOperationHost["testClock"];
   /** Replaces `requestFromBox`, the check for what a request from the box only withholds. */

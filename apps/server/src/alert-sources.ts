@@ -345,10 +345,7 @@ export function appendOnlyRestoredAlertSource(holder: { restoredAt: string | nul
   };
 }
 
-/**
- * The box's disk: `storage.disk_full` while the full-disk stop is noted, else `storage.space_low`
- * while the free-space warning is on. Never both: the warning says everything still works.
- */
+/** The registry supplies the generic unavailable-check alert when this read throws. */
 export function staffNoticeAlertSource(read: () => Promise<StaffNoticesRead>): AlertSource {
   return {
     area: "box",

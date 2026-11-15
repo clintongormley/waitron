@@ -244,7 +244,7 @@ async function venueName(): Promise<string> {
   return (await readVenue(suite.db)).name;
 }
 
-describe("the running server's managers' email check", () => {
+describe("the running server's notice and email checks", () => {
   it("boot wires venue-space errors and retries failed notice checks through the bell", async () => {
     const venue = await setupVenue(suite.db);
     const booted: Booted = {};
