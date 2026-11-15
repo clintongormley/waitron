@@ -357,8 +357,8 @@ On the map, unless something more urgent is showing, the table turns blue with a
 details to read the step and use **Done** if you may take orders. A table shows one
 step at a time: the one that fell due last.
 
-Use the amber outline and the step’s elapsed wait to spot a table needing a visit. Read **5′**
-beside the map’s bell as five minutes; open the table’s details for the step’s name.
+A step waiting five minutes gets an amber outline unless a stronger warning takes priority. Open
+the table’s details for the step and its wait; **5′** beside the map’s bell means five minutes.
 
 Tap **Done** when you have been to the table and the guests want nothing. It clears the step on show
 and any earlier step it was hiding. Often you don't need to tap it, because these clear a step too:

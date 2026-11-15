@@ -375,9 +375,9 @@ tomar pedidos. En el plano, si no hay nada más urgente, la mesa se vuelve azul 
 detalles de la mesa muestran el paso, con **Hecho** si puedes tomar pedidos.
 Una mesa muestra un paso cada vez: el último que ha vencido.
 
-Usa el contorno ámbar y el tiempo de espera del paso para detectar una mesa que necesita atención.
-**5′** junto a la campana del plano significa cinco minutos; abre los detalles de la mesa para leer
-el nombre del paso.
+Un paso que lleva cinco minutos esperando recibe un contorno ámbar, salvo que tenga prioridad un
+aviso más urgente. Abre los detalles de la mesa para leer el paso y su espera; **5′** junto a la
+campana del plano significa cinco minutos.
 
 Toca **Hecho** cuando hayas pasado por la mesa y los clientes no quieran nada. Quita el paso que se
 ve y cualquier paso anterior que estuviera tapando. Muchas veces no hace falta tocarlo, porque estas
