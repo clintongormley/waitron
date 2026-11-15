@@ -874,7 +874,9 @@ for (const source of ["settings", "stream"] as const)
             );
     request();
     await choose(app, "keep");
-    expect(field(screen, "destination").value).toBe("/mnt/dirty");
+    expect(
+      field(screen, "destination").shadowRoot!.querySelector<HTMLInputElement>("input")!.value,
+    ).toBe("/mnt/dirty");
     expect(unload()).toBe(true);
     request();
     await choose(app, "discard");

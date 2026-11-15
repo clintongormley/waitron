@@ -1231,6 +1231,7 @@ export class BackupScreen extends LitElement {
   #adminAction(): TemplateResult {
     return html`<wt-button
       variant="secondary"
+      slot="secondary"
       data-test="backup-admin-sign-in"
       @click=${() => this.dispatchEvent(new CustomEvent("admin-sign-in", { bubbles: true, composed: true }))}
       >${t("staff.sign_in_as_admin")}</wt-button

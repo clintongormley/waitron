@@ -2823,7 +2823,11 @@ it("offers administrator sign-in when only the stream panel refuses permission",
     ),
   });
   await flush(el);
-  expect(q(el, "[data-test=backup-admin-sign-in]")).not.toBeNull();
+  expect(
+    q(el, "dashboard-stream-settings")!.parentElement!.querySelector(
+      "[data-test=backup-admin-sign-in]",
+    ),
+  ).not.toBeNull();
 });
 it("does not offer administrator sign-in for a connection failure", async () => {
   const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
@@ -2853,20 +2857,27 @@ it("a settings short-key refusal leads to the existing key-change action", async
   expect(api.applyBackup).toHaveBeenCalledOnce();
 });
 
-it("offers administrator sign-in beside a refused settings Save", async () => {
-  const api = stubApi(
-    { applyBackup: vi.fn().mockRejectedValue({ code: "permission.denied" }) },
-    ENABLED,
-  );
-  const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
-  await flush(el);
-  q(el, "[data-test=edit-settings]")!.click();
-  await vi.waitFor(() => expect(q(el, "[data-test=save-settings]")).not.toBeNull());
-  await editDestination(el);
-  q(el, "[data-test=save-settings]")!.click();
-  await vi.waitFor(() =>
-    expect(q(el, "[data-test=settings-actions] [data-test=backup-admin-sign-in]")).not.toBeNull(),
-  );
-  expect(q(el, "[data-test=backup-admin-sign-in]")!.getAttribute("variant")).toBe("secondary");
-  expect(el.shadowRoot!.querySelectorAll("[data-test=backup-admin-sign-in]")).toHaveLength(1);
-});
+it.each(["settings", "turn-on"])(
+  "offers administrator sign-in beside a refused %s Save",
+  async (source) => {
+    const api = stubApi(
+      { applyBackup: vi.fn().mockRejectedValue({ code: "permission.denied" }) },
+      source === "settings" ? ENABLED : { ...OFF, recoveryKeySet: true },
+    );
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    if (source === "settings") {
+      q(el, "[data-test=edit-settings]")!.click();
+      await vi.waitFor(() => expect(q(el, "[data-test=save-settings]")).not.toBeNull());
+    }
+    const action = source === "settings" ? "save-settings" : "apply";
+    const actions = source === "settings" ? "settings-actions" : "apply-actions";
+    await editDestination(el);
+    q(el, `[data-test=${action}]`)!.click();
+    await vi.waitFor(() =>
+      expect(q(el, `[data-test=${actions}] [data-test=backup-admin-sign-in]`)).not.toBeNull(),
+    );
+    expect(q(el, "[data-test=backup-admin-sign-in]")!.getAttribute("variant")).toBe("secondary");
+    expect(el.shadowRoot!.querySelectorAll("[data-test=backup-admin-sign-in]")).toHaveLength(1);
+  },
+);
