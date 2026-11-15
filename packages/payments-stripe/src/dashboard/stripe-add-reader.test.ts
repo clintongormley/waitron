@@ -92,6 +92,18 @@ registerCodeMessages({
 });
 
 describe("stripe-add-reader", () => {
+  it("turns off autocorrect, the capital first letter and spellcheck on the reader id", async () => {
+    const { el } = await mountWidget<StripeAddReader>("stripe-add-reader", {
+      request: vi.fn() as unknown as DashboardRequest,
+    });
+    const field = q(el, "[data-test=reader-id]") as StripeAddReader;
+    await field.updateComplete;
+    const input = field.shadowRoot!.querySelector("input")!;
+    expect(
+      ["autocapitalize", "autocorrect", "spellcheck"].map((name) => input.getAttribute(name)),
+    ).toEqual(["none", "off", "false"]);
+  });
+
   it("posts the reader reference and emits onAdded then closes", async () => {
     const request = vi.fn(async () => ({
       id: "row-1",

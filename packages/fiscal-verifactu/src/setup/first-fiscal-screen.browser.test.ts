@@ -142,6 +142,34 @@ it("keeps both outside custody routes explicit and contains no secret or key-gen
   expect(el.shadowRoot!.textContent).toContain("separate computer");
   expect(calls).toEqual([]);
 });
+it("turns off autocorrect, the capital first letter and spellcheck on the serials, fingerprint and record reference", async () => {
+  const { el, calls } = await mount();
+  const attributes = async (test: string, tag: "input" | "textarea") => {
+    const field = el.shadowRoot!.querySelector<FirstFiscalScreen>(`[data-test=${test}]`)!;
+    await field.updateComplete;
+    const control = field.shadowRoot!.querySelector(tag)!;
+    return ["autocapitalize", "autocorrect", "spellcheck"].map((name) =>
+      control.getAttribute(name),
+    );
+  };
+  await click(el, "existing");
+  expect(await attributes("serials", "input")).toEqual(["none", "off", "false"]);
+  await field(el, "serials", "1, 2");
+  await click(el, "candidates");
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("[data-test=allocation-file]"))
+    .not.toBeNull();
+  await file(el, "allocation-file", input);
+  await click(el, "import");
+  await expect.poll(() => el.shadowRoot!.querySelector("[data-test=key-file]")).not.toBeNull();
+  expect(await attributes("fingerprint", "textarea")).toEqual(["none", "off", "false"]);
+  await file(el, "key-file", publicKey);
+  await field(el, "fingerprint", publicKey.fingerprint);
+  await click(el, "enrol");
+  await expect.poll(() => calls.at(-1)?.action).toBe("enrol");
+  await expect.poll(() => el.shadowRoot!.querySelector("[data-test=incident]")).not.toBeNull();
+  expect(await attributes("incident", "input")).toEqual(["none", "off", "false"]);
+});
 it("checks proposed serials locally and sends exact values only on an explicit action", async () => {
   const { el, calls } = await mount();
   await click(el, "existing");

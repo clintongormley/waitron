@@ -242,7 +242,9 @@ export class OfflineCustodyApp extends LitElement {
           .value=${this.values[name] ?? ""}
           .error=${this.fieldErrors[name] ? this.fieldError(name) : ""}
           autocomplete="off"
-          .spellcheck=${false}
+          autocapitalize="none"
+          autocorrect="off"
+          spellcheck="false"
           @wt-change=${change}
         ></wt-textarea>`
       : html`<wt-input
@@ -253,6 +255,9 @@ export class OfflineCustodyApp extends LitElement {
           .value=${this.values[name] ?? ""}
           .error=${this.fieldErrors[name] ? this.fieldError(name) : ""}
           autocomplete="off"
+          autocapitalize=${name === "fingerprint" ? "none" : nothing}
+          autocorrect=${name === "fingerprint" ? "off" : nothing}
+          spellcheck=${name === "fingerprint" ? "false" : nothing}
           @wt-change=${change}
           @keydown=${(event: KeyboardEvent) => this.submitField(name, event)}
         ></wt-input>`;

@@ -212,6 +212,9 @@ export class StripeAddReader extends LitElement {
         <wt-input
           class="field"
           name="reference"
+          autocapitalize="none"
+          autocorrect="off"
+          spellcheck="false"
           data-test="reader-id"
           label=${t("payments.stripe.reader_id")}
           hint=${t("payments.stripe.reader_id_hint")}

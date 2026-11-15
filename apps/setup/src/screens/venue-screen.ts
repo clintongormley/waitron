@@ -87,6 +87,13 @@ const FIELD_AUTOCOMPLETE: Record<TextField, string> = {
   rectificativeSeriesCode: "off",
 };
 
+const CODE_FIELDS: ReadonlySet<TextField> = new Set([
+  "taxId",
+  "seriesCode",
+  "fullSeriesCode",
+  "rectificativeSeriesCode",
+]);
+
 type FormField = TextField | "invoiceLocales";
 /** A value the server can refuse that this form does not hold; its refusal is shown above Next. */
 type FieldKey = FormField | "staffLanguage";
@@ -814,12 +821,16 @@ export class SetupVenueScreen extends LitElement {
     const error = this.#errors.get(key) ?? "";
     const demoName = this.#demo && key === "name";
     const help = !hasHint(key) ? this.#help(key) : demoName ? this.#help("name") : nothing;
+    const code = CODE_FIELDS.has(key);
     return html`<wt-input
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=next]"))}
       class="field"
       label=${label}
       name=${key}
       autocomplete=${FIELD_AUTOCOMPLETE[key]}
+      autocapitalize=${code ? "none" : nothing}
+      autocorrect=${code ? "off" : nothing}
+      spellcheck=${code ? "false" : nothing}
       data-test=${key}
       type=${type}
       hint=${hasHint(key) && !demoName ? t(FIELD_HINT[key]) : ""}

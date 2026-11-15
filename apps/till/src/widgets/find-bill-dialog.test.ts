@@ -72,6 +72,17 @@ describe("Find a bill", () => {
     ]);
   });
 
+  it("turns off autocorrect, the capital first letter and spellcheck on the card terminal's reference", async () => {
+    const el = await mount();
+    await click(el, "[data-card]");
+    const field = input(el, "terminal-reference");
+    await field.updateComplete;
+    const control = field.shadowRoot!.querySelector("input")!;
+    expect(
+      ["autocapitalize", "autocorrect", "spellcheck"].map((name) => control.getAttribute(name)),
+    ).toEqual(["none", "off", "false"]);
+  });
+
   it("refuses cash below the debt and sends a card reference with the exact debt", async () => {
     const el = await mount();
     const paid: unknown[] = [];

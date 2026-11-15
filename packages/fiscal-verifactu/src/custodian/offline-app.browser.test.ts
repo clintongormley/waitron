@@ -45,6 +45,14 @@ async function fill(el: Element, name: string, value: string) {
     value,
   );
 }
+/** The paper and fingerprint fields turn off autocorrect, the capital first letter and spellcheck. */
+function typingAids(el: Element, name: string) {
+  const field = el.shadowRoot!.querySelector(
+    `wt-input[name="${name}"], wt-textarea[name="${name}"]`,
+  )!;
+  const control = field.shadowRoot!.querySelector("input, textarea")!;
+  return ["autocapitalize", "autocorrect", "spellcheck"].map((attr) => control.getAttribute(attr));
+}
 
 it("uses actual file selection, asks about an existing master first and offers no replacement creation", async () => {
   const el = await mount();
@@ -290,6 +298,8 @@ for (const theme of ["light", "dark"] as const)
     await click("Check secret paper");
     await upload(el, "kit-request", publicKit);
     await click("Load check request");
+    await expect.poll(() => typingAids(el, "paper")).toEqual(["none", "off", "false"]);
+    await expect.poll(() => typingAids(el, "fingerprint")).toEqual(["none", "off", "false"]);
     await fill(el, "paper", paper);
     await fill(el, "fingerprint", "0".repeat(64));
     enter("fingerprint");

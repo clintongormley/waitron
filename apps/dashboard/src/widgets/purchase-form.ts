@@ -624,6 +624,9 @@ export class PurchaseForm extends LitElement {
           class="field"
           ?disabled=${this.busy}
           name="supplier-invoice-number"
+          autocapitalize="none"
+          autocorrect="off"
+          spellcheck="false"
           data-test="supplier-invoice-number"
           required
           error=${errors["supplier-invoice-number"] ?? ""}
