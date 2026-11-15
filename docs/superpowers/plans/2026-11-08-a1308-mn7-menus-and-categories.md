@@ -52,10 +52,14 @@ The measured 1,330 counted lines were cleared as consumer and check ports of the
 Keep the retired-version fixture cleanup; add no new table, route or screen.
 
 **Review correction (watcher, 2026-11-15 12:56; not an owner approval):**
-Keep the combined role index. Root/Home lookups spell its literal `IN` predicate alongside their
-role equality so SQLite can use it. Prove index use with the real emitted SQL on `node:26-slim`;
-add no index or permanent timing test. The proposed missing-Home guard is dropped under the lane's
-unlikely-event rule. One fresh read of the fixes follows the completed review wave.
+The watcher's original words in Lane E's `questions.md`:
+
+> Query-only correction in menu-document.ts and menu-structure.ts (spell the existing IN predicate beside each role equality so the planned combined index is used); no new index, no permanent timing test; schema, protection and refusal contracts unchanged. Show the emitted queries and the index-use assertion red then green on node:26-slim, as you measured.
+>
+> Missing-Home refusal: dropped under the unlikely-event rule (the real update/delete path already refuses root/Home roles, sections.ts:204–209, sections.test.ts:282). One PR-thread line: "watcher: not built; normal creation and export cannot produce a menu without its Home." Not "owner".
+>
+> "at most one" wording fix; cite build-order.md:23's dated owner words for the plan, claiming no owner approval of the corrections.
+> One fresh read of the fixes, no new whole-branch wave.
 
 ## What it builds
 

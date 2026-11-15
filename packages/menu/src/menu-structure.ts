@@ -49,7 +49,7 @@ export async function menuRoots(
   tx: Transaction,
   menuIds: readonly string[],
 ): Promise<Map<string, string>> {
-  // Keep the partial index’s literal predicate alongside the role equality.
+  // Match sections_one_root_per_menu_uq's literal predicate; the equality alone misses it.
   const roots = new Map<string, string>();
   for (const batch of batches(menuIds)) {
     const rows = await tx

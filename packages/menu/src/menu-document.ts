@@ -138,7 +138,7 @@ export async function buildMenuDocuments(
 ): Promise<BuiltMenus> {
   const root = alias(sections, "root");
   const home = alias(sections, "home");
-  // Keep the partial index’s literal predicate alongside each role equality.
+  // Match sections_one_root_per_menu_uq's literal predicate; each equality alone misses it.
   const readDetails = (where?: SQL) =>
     tx
       .select({
