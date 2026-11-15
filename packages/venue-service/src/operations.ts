@@ -622,7 +622,7 @@ export async function setDepartmentSalePolicyField<K extends keyof DepartmentPol
   if (department === undefined) throw new AppError("department.not_found", { departmentId });
   await tx
     .insert(departmentSalePolicies)
-    .values({ departmentId, [field]: value })
+    .values({ departmentId, printTradingName: false, [field]: value })
     .onConflictDoUpdate({
       target: departmentSalePolicies.departmentId,
       set: { [field]: value },

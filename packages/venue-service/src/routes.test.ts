@@ -1763,6 +1763,70 @@ describe("venue service management routes", () => {
     ]);
   });
 
+  it("writes one field on a department with no policy row without printing the trading name", async () => {
+    const fx = await fixture();
+    const department = await withTransaction(db, async (tx) => {
+      const row = await createDepartment(tx, { name: "No policy row", orderStart: "counter" });
+      await configureZone(tx, { zoneId: fx.zoneId, departmentId: row.id });
+      return row;
+    });
+    await db.execute(
+      sql`delete from department_sale_policies where department_id = ${department.id}`,
+    );
+    const readPolicies = async () =>
+      (await (await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)).json())
+        .salePolicies;
+    const before = await readPolicies();
+    expect(
+      before.zones.find((row: { zoneId: string }) => row.zoneId === fx.zoneId).effective,
+    ).toMatchObject({ printTradingName: false });
+    const path = `/management-api/venue-service/departments/${department.id}/sale-policy/orderStart`;
+    expect((await send(fx.app, "PATCH", path, fx.managerCookie, { value: "table" })).status).toBe(
+      204,
+    );
+    const after = await readPolicies();
+    expect(
+      after.departments.find((row: { departmentId: string }) => row.departmentId === department.id),
+    ).toMatchObject({ orderStart: "table", printTradingName: false });
+    expect(
+      after.zones.find((row: { zoneId: string }) => row.zoneId === fx.zoneId).effective,
+    ).toMatchObject({ printTradingName: false });
+    expect(
+      db.all(sql`select * from department_sale_policies where department_id = ${department.id}`),
+    ).toEqual([
+      {
+        department_id: department.id,
+        order_start: "table",
+        paid_when: "prepay",
+        collection_number: "none",
+        print_trading_name: 0,
+      },
+    ]);
+  });
+
+  it("turns the trading name on for a department with no policy row", async () => {
+    const fx = await fixture();
+    const department = await withTransaction(db, (tx) =>
+      createDepartment(tx, { name: "No policy row", orderStart: "counter" }),
+    );
+    await db.execute(
+      sql`delete from department_sale_policies where department_id = ${department.id}`,
+    );
+    const path = `/management-api/venue-service/departments/${department.id}/sale-policy/printTradingName`;
+    expect((await send(fx.app, "PATCH", path, fx.managerCookie, { value: true })).status).toBe(204);
+    expect(
+      db.all(sql`select * from department_sale_policies where department_id = ${department.id}`),
+    ).toEqual([
+      {
+        department_id: department.id,
+        order_start: "counter",
+        paid_when: "prepay",
+        collection_number: "none",
+        print_trading_name: 1,
+      },
+    ]);
+  });
+
   it.each(["department", "zone"] as const)(
     "refuses retired %s receipt policy writes without changing rows",
     async (kind) => {
