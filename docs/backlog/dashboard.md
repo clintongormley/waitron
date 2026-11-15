@@ -237,6 +237,17 @@ screens still need checking against the Typography roles in `docs/developers/des
 The floor-plan editor's modal heading keeps the LG role. Left alone on purpose, sized in `rem`: the till's enrolment number and setup's
 cloud-recovery code.
 
+Department service-step names still need a CI-width repair: at 356 px, row 4's native
+name input has `scrollWidth 118 > clientWidth 112` in
+`department-service-steps.test.ts:389`. The same assertion failed in unrelated
+[runs 43747716175](https://github.com/clintongormley/waitron/actions/runs/43747716175),
+[43747973222](https://github.com/clintongormley/waitron/actions/runs/43747973222) and
+[A1546's 43752466969](https://github.com/clintongormley/waitron/actions/runs/43752466969).
+The local focused pair (this file and the Calendar unsaved-form fixture) passes 21 cases.
+Retain the CI font/geometry evidence and reproduce the clipping before changing the layout;
+its root cause is unverified, and a clean rerun is not a repair.
+
+
 ## Bundle: One session with real phones and password managers
 
 13 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
