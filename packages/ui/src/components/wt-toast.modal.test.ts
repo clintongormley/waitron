@@ -74,13 +74,18 @@ test("a held toast's countdown starts only once the window closes", async () => 
   // Opened from a button, as a person opens one, so closing hands focus back there.
   modal.parentElement!.querySelector("button")!.focus();
   await setOpen(modal, true);
+  vi.useFakeTimers();
   toast.show();
-  await new Promise((resolve) => setTimeout(resolve, 400));
+  await toast.updateComplete;
+  vi.advanceTimersByTime(5_000);
   expect(toast.open).toBe(true);
   await setOpen(modal, false);
   await toast.updateComplete;
   expect(shown(toast)).toBe(true);
-  await expect.poll(() => toast.open, { timeout: 2000 }).toBe(false);
+  vi.advanceTimersByTime(149);
+  expect(toast.open).toBe(true);
+  vi.advanceTimersByTime(1);
+  expect(toast.open).toBe(false);
 });
 
 test("a toast the pointer was on when a window opened counts down once the window closes", async () => {
