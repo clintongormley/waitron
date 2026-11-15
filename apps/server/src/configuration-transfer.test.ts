@@ -203,6 +203,71 @@ useTestProducer();
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const targetSuite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
+it("an export carrying kitchen printer rows imports without assigning kitchen equipment", async () => {
+  const source = await applyVenue(planVenue(venue("B16734129"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const [kitchen] = await suite.db
+    .select()
+    .from(deviceProfiles)
+    .where(eq(deviceProfiles.formFactor, "kds"));
+  const [till] = await suite.db
+    .select()
+    .from(deviceProfiles)
+    .where(eq(deviceProfiles.formFactor, "till"));
+  const [printer] = await suite.db
+    .insert(printers)
+    .values({ name: "Configuration printer", transport: "network_tcp", host: "10.0.0.9" })
+    .returning();
+  await suite.db.insert(deviceProfilePrinters).values([
+    {
+      deviceProfileId: kitchen!.id,
+      printerId: printer!.id,
+      role: "receipt",
+      position: 0,
+      isDefault: true,
+    },
+    {
+      deviceProfileId: till!.id,
+      printerId: printer!.id,
+      role: "receipt",
+      position: 0,
+      isDefault: true,
+    },
+  ]);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-11-15T10:00:00Z"),
+    versions,
+  );
+  expect(
+    transferred.tables.device_profile_printers!.some(
+      (row) => row.device_profile_id === kitchen!.id,
+    ),
+  ).toBe(true);
+  await applyVenue(planVenue(venue("B16734130"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
+  });
+  const rows = await targetSuite.db
+    .select({
+      formFactor: deviceProfiles.formFactor,
+      role: deviceProfilePrinters.role,
+      printerName: printers.name,
+    })
+    .from(deviceProfilePrinters)
+    .innerJoin(deviceProfiles, eq(deviceProfiles.id, deviceProfilePrinters.deviceProfileId))
+    .innerJoin(printers, eq(printers.id, deviceProfilePrinters.printerId));
+  expect(rows).toEqual([
+    { formFactor: "till", role: "receipt", printerName: "Configuration printer" },
+  ]);
+});
+
 it("transfers two photo identities sharing replacement bytes with framing, names and printable logos", async () => {
   const originalA = await samplePreparedImage({ width: 31 });
   const originalB = await samplePreparedImage({ width: 37 });

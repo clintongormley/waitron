@@ -15,6 +15,7 @@ import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { AppError } from "@waitron/shared";
 import { and, asc, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { getDeviceProfileWithPrinters, listDeviceProfiles } from "./device-profile-store.js";
 import {
   clearUnlistedPrinterChoices,
   readPrinterEquipment,
@@ -209,6 +210,11 @@ describe("which printer each of a device's roles resolves to", () => {
         resolvedId: null,
       }),
     );
+    expect(await inTx((tx) => readProfilePrinterLists(tx, profile))).toEqual(lists({}));
+    expect(await inTx((tx) => getDeviceProfileWithPrinters(tx, profile))).toMatchObject(lists({}));
+    expect(
+      (await inTx((tx) => listDeviceProfiles(tx))).find((row) => row.id === profile),
+    ).toMatchObject(lists({}));
     expect(await inTx((tx) => readPrinterRoles(tx, a))).toEqual(emptyRoles);
     const equipment = await inTx((tx) => readPrinterEquipment(tx, [a], { lists: true }));
     expect(equipment.devices).toEqual([{ id: a, profileId: profile }]);
@@ -220,6 +226,9 @@ describe("which printer each of a device's roles resolves to", () => {
       expect((await inTx((tx) => resolveDevicePrinterIds(tx, [a], role))).get(a)).toBeNull();
       expect(await choose(a, role, { id: p1 })).toEqual({ ok: false, refusal: "not_permitted" });
     }
+    await suite.db.insert(printerHolders).values({ printerId: p1, deviceId: a });
+    await inTx((tx) => clearUnlistedPrinterChoices(tx, a));
+    expect(await columns(a)).toEqual({ receipt: null, slip: null, drawer: null });
     await inTx((tx) => settleDevicePrinters(tx, a, { acquire: true }));
     expect(await holders()).toEqual([]);
   });

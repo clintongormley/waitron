@@ -141,6 +141,9 @@ describe("a profile's printer lists and each device's current printers", () => {
       await inTx((tx) =>
         selectDevicePrinter(tx, { deviceId, role, selection: { id: p1 }, via: "manage" }),
       );
+    expect(
+      await suite.db.select({ deviceId: printerHolders.deviceId }).from(printerHolders),
+    ).toEqual([{ deviceId }]);
     await suite.db
       .update(devices)
       .set({ active: false })

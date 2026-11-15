@@ -2922,6 +2922,15 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
     return vi.mocked(api.updateDeviceProfile).mock.calls[0]![6];
   }
 
+  it("changing an edited printer default to a kitchen profile sends no hidden default", async () => {
+    const { api, el } = await editListed();
+    await chooseOption(field(el, "receipt-printers-default"), "pr2");
+    await chooseOption(field(el, "profile-form-factor"), "kds");
+    await save(el);
+    expect(api.updateDeviceProfile).toHaveBeenCalledTimes(1);
+    expect(savedExtras(api) ?? {}).not.toHaveProperty("receiptPrinterDefaultId");
+  });
+
   it("a kitchen profile offers no payment or receipt equipment and saves empty printer lists", async () => {
     const { api, el } = await editListed(
       {},

@@ -166,7 +166,7 @@ fila para editarlo. Usa su menú **⋮** para duplicarlo o eliminarlo.
 Elige **Qué puede hacer** para las acciones y pantallas. Elige una pantalla de cocina y sus estaciones y zonas; todos los dispositivos que usan el perfil la heredan. Abre una pestaña marcada para corregir su campo
 y pulsa **Guardar**.
 
-Para una pantalla de cocina, elige su pantalla en **Pantallas de estación**. Su perfil y su dispositivo no tienen opciones de impresora de tickets, justificantes de pago, cajón ni facturas; esas celdas quedan vacías en **Dispositivos**. Configura las impresoras de comandas en la estación de preparación.
+Para imprimir comandas, elige la impresora en **Estaciones de preparación**.
 
 ## Quién puede iniciar sesión en un dispositivo {#device-profile-sign-in}
 

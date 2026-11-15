@@ -525,6 +525,20 @@ for (const locale of ["en", "es"] as const) {
     expected.seeded = madridWithRenamedColumns(expected.seeded, RENAMED_COLUMNS);
     const phases = structuredClone(manifest.phases[locale]!);
     for (const phase of ["before", "provisioned", "seeded"] as const) {
+      const profilePrinters = expected[phase].tables.device_profile_printers!;
+      const kitchenProfiles = new Set(
+        Object.values(expected[phase].tables.device_profiles!.rows)
+          .filter((profile) => profile.form_factor === "kds")
+          .map((profile) => profile.id),
+      );
+      const kitchenPrinterRows = Object.entries(profilePrinters.rows).filter(([, row]) =>
+        kitchenProfiles.has(row.device_profile_id),
+      );
+      expect(kitchenPrinterRows.map(([, row]) => row.role).sort()).toEqual(
+        phase === "seeded" ? ["cash_drawer", "invoice", "payment_slip", "receipt"] : [],
+      );
+      for (const [id] of kitchenPrinterRows) delete profilePrinters.rows[id];
+      phases[phase]!.device_profile_printers! -= kitchenPrinterRows.length;
       for (const [old, next] of Object.entries(tableRenames)) {
         phases[phase]![next] = phases[phase]![old]!;
         delete phases[phase]![old];

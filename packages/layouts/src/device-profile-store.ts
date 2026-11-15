@@ -228,7 +228,7 @@ export async function updateDeviceProfile(
     inactivityTimeoutSeconds?: number | null;
     /** Absent keeps the stored one, which must still be a screen the new capabilities show. */
     startingScreen?: unknown;
-    /** Absent leaves every list and default as it is. */
+    /** Absent preserves an ordering profile's lists; kitchen profiles keep none. */
     printerLists?: ProfilePrinterLists;
   },
 ): Promise<DeviceProfileRow> {

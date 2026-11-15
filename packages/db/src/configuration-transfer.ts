@@ -1,6 +1,8 @@
 import type { Transaction } from "./client.js";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { kitchenStations } from "./schema/kitchen-stations.js";
+import { deviceProfiles } from "./schema/device-profiles.js";
+import { deviceProfilePrinters } from "./schema/device-profile-printers.js";
 import {
   AppError,
   isBumpMode,
@@ -16,15 +18,6 @@ import "./errors.js";
 export function validateCoreConfiguration(
   tables: Readonly<Record<string, readonly Record<string, unknown>[]>>,
 ): void {
-  const kitchenProfiles = new Set(
-    (tables.device_profiles ?? []).filter((row) => row.form_factor === "kds").map((row) => row.id),
-  );
-  if (
-    (tables.device_profile_printers ?? []).some((row) => kitchenProfiles.has(row.device_profile_id))
-  )
-    throw new AppError("setup.request_invalid", {
-      field: "device_profile_printers.device_profile_id",
-    });
   for (const row of tables.kitchen_stations ?? []) {
     if (row.colour !== undefined && !isStationColour(row.colour))
       throw new AppError("setup.request_invalid", { field: "kitchen_stations.colour" });
@@ -146,6 +139,17 @@ export const CORE_CONFIGURATION_TRANSFER = {
   ],
   validate: validateCoreConfiguration,
   afterImport: async (tx: Transaction) => {
+    await tx
+      .delete(deviceProfilePrinters)
+      .where(
+        inArray(
+          deviceProfilePrinters.deviceProfileId,
+          tx
+            .select({ id: deviceProfiles.id })
+            .from(deviceProfiles)
+            .where(eq(deviceProfiles.formFactor, "kds")),
+        ),
+      );
     await storeTableShortNameKeys(tx);
     for (const station of await tx
       .select({ id: kitchenStations.id, printerIds: kitchenStations.printerIds })

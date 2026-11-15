@@ -188,6 +188,12 @@ describe("device-profile store against a real migrated database", () => {
       paymentSlipPrinterIds: [],
       ...NO_DRAWERS_OR_DEFAULTS,
     });
+    expect(
+      await suite.db
+        .select()
+        .from(deviceProfilePrinters)
+        .where(eq(deviceProfilePrinters.deviceProfileId, created.id)),
+    ).toEqual([]);
     expect(await inTx((tx) => getDeviceProfileWithPrinters(tx, created.id))).toEqual(updated);
     expect(await inTx((tx) => listDeviceProfiles(tx))).toContainEqual(updated);
   });

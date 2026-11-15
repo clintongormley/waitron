@@ -460,11 +460,6 @@ export async function settleDevicePrinters(
 ): Promise<void> {
   const state = await readState(tx, deviceId);
   if (state === undefined) return;
-  if (state.device.formFactor === "kds") {
-    await clearUnlisted(tx, state.device, []);
-    await releaseDevicePrinters(tx, deviceId);
-    return;
-  }
   const used: string[] = [];
   for (const role of HELD_ROLES) {
     const chosenId = state.device[COLUMN[role]];
