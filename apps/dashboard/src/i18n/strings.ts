@@ -1800,7 +1800,6 @@ export const en = {
   "devices.kitchen_screen_none_offered": "This profile offers none yet",
   "devices.station_screen_shows": "Station screen shows",
   "devices.pass_screen_shows": "Pass shows",
-  "devices.use_profile_setting": "Use the profile's setting",
   "devices.other_stations_show": "Show",
   "devices.other_stations_hide": "Hide",
   "devices.every_station_profile": "Every station the profile allows",
@@ -3814,9 +3813,9 @@ export const en = {
     "A printer added to this list has no cash drawer attached. Say it has one on the Printers screen first",
   "device_profiles.card_readers": "Card readers",
   "device_profiles.reader_default": "Default card reader",
-  "devices.use_default": "Use profile default: {name}",
+  "devices.section.identity": "Name and profile",
+  "devices.section.station": "Made here",
   "devices.cash_drawer_now": "Cash drawer",
-  "devices.default_mark": "default",
   "devices.err_equipment_held":
     "{device} has it now. Choose another, or take it on the device itself",
   "devices.err_reader_busy":
@@ -6152,7 +6151,6 @@ export const es: Record<StringKey, string> = {
   "devices.kitchen_screen_none_offered": "Este perfil aún no ofrece ninguna",
   "devices.station_screen_shows": "La pantalla de estación muestra",
   "devices.pass_screen_shows": "La vista de pase muestra",
-  "devices.use_profile_setting": "Usar la configuración del perfil",
   "devices.other_stations_show": "Mostrar",
   "devices.other_stations_hide": "Ocultar",
   "devices.every_station_profile": "Todas las estaciones que permite el perfil",
@@ -8198,9 +8196,9 @@ export const es: Record<StringKey, string> = {
     "Una impresora añadida a esta lista no tiene cajón conectado. Indica primero que lo tiene en la pantalla de Impresoras",
   "device_profiles.card_readers": "Lectores de tarjetas",
   "device_profiles.reader_default": "Lector de tarjetas predeterminado",
-  "devices.use_default": "Usar el predeterminado del perfil: {name}",
+  "devices.section.identity": "Nombre y perfil",
+  "devices.section.station": "Se prepara aquí",
   "devices.cash_drawer_now": "Cajón portamonedas",
-  "devices.default_mark": "predeterminado",
   "devices.err_equipment_held":
     "Ahora lo tiene {device}. Elige otro, o cógelo desde el propio dispositivo",
   "devices.err_reader_busy":

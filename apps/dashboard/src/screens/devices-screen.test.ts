@@ -1038,11 +1038,10 @@ describe("the device table", () => {
     const api = stubApi({ listDevices: vi.fn().mockResolvedValue([equipped]) });
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
-    const mark = t("devices.default_mark");
-    expect(deepText(el, "[data-test=device-receipt-d1]")).toBe(`Kitchen (${mark})`);
+    expect(deepText(el, "[data-test=device-receipt-d1]")).toBe("Kitchen");
     expect(deepText(el, "[data-test=device-slip-d1]")).toBe("Terrace");
-    expect(deepText(el, "[data-test=device-drawer-d1]")).toBe(`${t("equipment.none")} (${mark})`);
-    expect(deepText(el, "[data-test=device-reader-d1]")).toBe(`Front counter (${mark})`);
+    expect(deepText(el, "[data-test=device-drawer-d1]")).toBe(t("equipment.none"));
+    expect(deepText(el, "[data-test=device-reader-d1]")).toBe("Front counter");
   });
 
   it("draws no card reader column for a session that cannot manage readers", async () => {
@@ -1163,7 +1162,7 @@ describe("the Edit dialog", () => {
 
   const field = (el: DevicesScreen, id: string) => q(el, `[data-test=${id}]`) as Field;
   /** Use default on a profile with no default for the role. */
-  const useDefaultNone = () => t("devices.use_default").replace("{name}", t("equipment.none"));
+  const useDefaultNone = () => t("equipment.none");
 
   async function openEdit(api: DashboardApi, id = "t1"): Promise<DevicesScreen> {
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
@@ -1487,7 +1486,7 @@ describe("the Edit dialog", () => {
     for (const id of ["edit-receipt-printer", "edit-slip-printer"]) {
       expect(field(el, id).value).toBe("");
       expect(shown(id).textContent!.trim()).toBe(useDefaultNone());
-      expect(shown(id).classList.contains("placeholder")).toBe(false);
+      expect(shown(id).classList.contains("placeholder")).toBe(true);
     }
   });
 
@@ -1499,7 +1498,7 @@ describe("the Edit dialog", () => {
     )!;
     expect(field(el, "edit-reader").value).toBe("");
     expect(shown.textContent!.trim()).toBe(useDefaultNone());
-    expect(shown.classList.contains("placeholder")).toBe(false);
+    expect(shown.classList.contains("placeholder")).toBe(true);
   });
 
   it("changing the profile puts both printers on Use default", async () => {
@@ -2860,7 +2859,6 @@ describe("the Edit dialog", () => {
       cashDrawerPrinterIds: ["pr1"],
     };
     const onDefault: DeviceRow = { ...till, receiptPrinterId: null, paymentSlipPrinterId: null };
-    const useDefault = (name: string) => t("devices.use_default").replace("{name}", name);
 
     function equipmentApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
       return editApi({
@@ -2873,15 +2871,134 @@ describe("the Edit dialog", () => {
       });
     }
 
+    it.each(["light", "dark"] as const)(
+      "paints inherited equipment itself in grey italics and explicit choices normally in %s",
+      async (theme) => {
+        const device: DeviceRow = {
+          ...onDefault,
+          equipment: [
+            {
+              role: "receipt",
+              selection: "default",
+              chosenId: null,
+              resolved: { id: "pr1", name: "Kitchen", available: true },
+            },
+            {
+              role: "payment_slip",
+              selection: "item",
+              chosenId: "pr2",
+              resolved: { id: "pr2", name: "Terrace", available: true },
+            },
+            { role: "cash_drawer", selection: "default", chosenId: null, resolved: null },
+            {
+              role: "card_terminal",
+              selection: "default",
+              chosenId: null,
+              resolved: { id: "r1", name: "Front counter", available: true },
+            },
+          ],
+        };
+        const { el } = await mountWidget<DevicesScreen>(
+          "dashboard-devices-screen",
+          {
+            api: equipmentApi({
+              listDevices: vi.fn().mockResolvedValue([device]),
+              getDeviceReader: vi.fn().mockResolvedValue({ readerId: null }),
+            }),
+            panels: PANELS,
+          },
+          theme,
+        );
+        await flush(el);
+        const probe = document.createElement("span");
+        probe.style.color = "var(--wt-color-text-muted)";
+        el.shadowRoot!.appendChild(probe);
+        const muted = getComputedStyle(probe).color;
+        probe.remove();
+        for (const [role, name, inherited] of [
+          ["receipt", "Kitchen", true],
+          ["slip", "Terrace", false],
+          ["drawer", t("equipment.none"), true],
+          ["reader", "Front counter", true],
+        ] as const) {
+          const cell = dq(el.shadowRoot!, `[data-test=device-${role}-t1]`)!;
+          expect(cell.textContent!.trim()).toBe(name);
+          expect(getComputedStyle(cell).fontStyle).toBe(inherited ? "italic" : "normal");
+          if (inherited) expect(getComputedStyle(cell).color).toBe(muted);
+        }
+        dq(el.shadowRoot!, "[data-test=edit-device-t1]")!.click();
+        await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).not.toBeNull());
+        await flush(el);
+        for (const [id, name] of [
+          ["edit-receipt-printer", "Kitchen"],
+          ["edit-slip-printer", t("equipment.none")],
+          ["edit-cash-drawer", t("equipment.none")],
+          ["edit-invoice-printer", t("equipment.none")],
+          ["edit-reader", t("equipment.none")],
+        ]) {
+          const control = field(el, id!);
+          const value = control.shadowRoot!.querySelector<HTMLElement>("button.trigger .value")!;
+          expect(control.value).toBe("");
+          expect(value.textContent!.trim()).toBe(name);
+          expect(getComputedStyle(value).fontStyle).toBe("italic");
+          expect(getComputedStyle(value).color).toBe(muted);
+        }
+        const receipt = field(el, "edit-receipt-printer");
+        await chooseOption(receipt, "pr1");
+        await flush(el);
+        const explicit = receipt.shadowRoot!.querySelector<HTMLElement>("button.trigger .value")!;
+        expect(explicit.textContent!.trim()).toBe("Kitchen");
+        expect(getComputedStyle(explicit).fontStyle).toBe("normal");
+        await chooseOption(receipt, "");
+        await flush(el);
+        expect(getComputedStyle(explicit).fontStyle).toBe("italic");
+        expect(q(el, "[data-test=edit-save]")!.hasAttribute("disabled")).toBe(true);
+      },
+    );
+
+    it("groups the existing device fields under headings without tabs", async () => {
+      const el = await openEdit(
+        equipmentApi({
+          listDeviceProfiles: vi
+            .fn()
+            .mockResolvedValue([
+              withDefaults,
+              { ...withDefaults, id: "pa2", name: "Other counter" },
+              ...editProfiles.slice(1),
+            ]),
+        }),
+      );
+      const modal = q(el, "[data-test=edit-device-modal]")!;
+      const groups = [...modal.querySelectorAll<HTMLElement>("[data-edit-section]")];
+      expect(groups.map((group) => group.dataset.editSection)).toEqual([
+        "identity",
+        "printers",
+        "reader",
+        "station",
+      ]);
+      for (const group of groups) {
+        const heading = group.querySelector("h3");
+        expect(heading?.textContent?.trim()).toBeTruthy();
+        expect(group.getAttribute("aria-labelledby")).toBe(heading?.id);
+      }
+      expect(groups[0]!.querySelector("[data-test=edit-name]")).not.toBeNull();
+      expect(groups[0]!.querySelector("[data-test=edit-approved-profiles]")).not.toBeNull();
+      expect(groups[1]!.querySelectorAll("wt-combobox")).toHaveLength(4);
+      expect(groups[2]!.querySelector("[data-test=edit-reader]")).not.toBeNull();
+      expect(groups[3]!.querySelector("[data-test=edit-made-here]")).not.toBeNull();
+      expect(modal.querySelector("wt-tabs, [role=tablist]")).toBeNull();
+      expect(q(el, "[data-test=edit-save]")!.hasAttribute("disabled")).toBe(true);
+    });
+
     it("a device on Use default shows the profile default it resolves to, and None", async () => {
       const el = await openEdit(equipmentApi());
       const receipt = field(el, "edit-receipt-printer");
       expect(receipt.value).toBe("");
-      expect(receipt.options[0]).toEqual({ value: "", label: useDefault("Kitchen") });
+      expect(receipt.options[0]).toEqual({ value: "", label: "Kitchen" });
       // The slip default is carried by another device, so Use default prints no slip here.
       expect(field(el, "edit-slip-printer").options[0]).toEqual({
         value: "",
-        label: useDefault(t("equipment.none")),
+        label: t("equipment.none"),
       });
       const drawer = field(el, "edit-cash-drawer");
       expect([drawer.name, drawer.label, drawer.value]).toEqual([
@@ -2890,7 +3007,7 @@ describe("the Edit dialog", () => {
         "",
       ]);
       expect(drawer.options).toEqual([
-        { value: "", label: useDefault(t("equipment.none")) },
+        { value: "", label: t("equipment.none") },
         { value: "pr1", label: "Kitchen" },
       ]);
     });
@@ -2953,7 +3070,7 @@ describe("the Edit dialog", () => {
         const el = await openEdit(invoiceApi(device));
         const name = test.name ?? t("equipment.none");
         expect(deepText(el, "[data-test=device-invoice-t1]")).toBe(
-          `${name}${test.a4 ? " · A4" : ""}${test.defaulted ? ` (${t("devices.default_mark")})` : ""}`,
+          `${name}${test.a4 ? " · A4" : ""}`,
         );
         const invoice = devicesTable(el).columns.find((column) => column.key === "invoice")!;
         expect(invoice.sortValue!(device)).toBe(deepText(el, "[data-test=device-invoice-t1]"));
@@ -2973,15 +3090,11 @@ describe("the Edit dialog", () => {
           ),
         });
         await vi.waitFor(() =>
-          expect(deepText(el, "[data-test=device-invoice-t1]")).toBe(
-            `Office (${t("devices.default_mark")})`,
-          ),
+          expect(deepText(el, "[data-test=device-invoice-t1]")).toBe("Office"),
         );
         resolvePages([office]);
         await vi.waitFor(() =>
-          expect(deepText(el, "[data-test=device-invoice-t1]")).toBe(
-            `Office · A4 (${t("devices.default_mark")})`,
-          ),
+          expect(deepText(el, "[data-test=device-invoice-t1]")).toBe("Office · A4"),
         );
       });
 
@@ -2995,7 +3108,7 @@ describe("the Edit dialog", () => {
         ]);
         // Terrace is portable and another device carries it; an invoice printer ignores that.
         expect(invoice.options).toEqual([
-          { value: "", label: useDefault("Office · A4") },
+          { value: "", label: "Office · A4" },
           { value: "pg1", label: "Office · A4" },
           { value: "pr2", label: "Terrace" },
         ]);
@@ -3169,7 +3282,7 @@ describe("the Edit dialog", () => {
       const receipt = field(el, "edit-receipt-printer");
       expect(receipt.options[0]).toEqual({
         value: "",
-        label: t("devices.use_default").split("{name}").join("Kitchen $&"),
+        label: "Kitchen $&",
       });
       expect(receipt.options.find((option) => option.value === "pr2")).toEqual({
         value: "pr2",
@@ -3192,7 +3305,7 @@ describe("the Edit dialog", () => {
         }),
       );
       expect(field(el, "edit-slip-printer").options).toEqual([
-        { value: "", label: useDefault("Terrace") },
+        { value: "", label: "Terrace" },
         { value: "pr2", label: "Terrace" },
       ]);
     });
@@ -3214,7 +3327,7 @@ describe("the Edit dialog", () => {
         }),
       );
       expect(field(el, "edit-reader").options).toEqual([
-        { value: "", label: useDefault(t("equipment.none")) },
+        { value: "", label: t("equipment.none") },
         {
           value: "r2",
           label: `Bar (Zeta Pay) (${t("equipment.carried_by").replace("{device}", "Mobile 2")})`,
@@ -3294,15 +3407,13 @@ describe("the Edit dialog", () => {
         "edit-cash-drawer",
         "edit-reader",
       ])
-        expect(field(el, id).options).toEqual([
-          { value: "", label: useDefault(t("equipment.none")) },
-        ]);
+        expect(field(el, id).options).toEqual([{ value: "", label: t("equipment.none") }]);
       expect(api.getProfileReaders).not.toHaveBeenCalled();
 
       await chooseOption(q(el, "[data-test=edit-profile]")!, "pa");
       await vi.waitFor(() =>
         expect(field(el, "edit-reader").options).toEqual([
-          { value: "", label: useDefault("Bar (Zeta Pay)") },
+          { value: "", label: "Bar (Zeta Pay)" },
           { value: "r2", label: "Bar (Zeta Pay)" },
         ]),
       );
@@ -3363,9 +3474,7 @@ describe("the Edit dialog", () => {
       expect(await bottom(el)).toBe("");
       await chooseOption(q(el, "[data-test=edit-profile]")!, "pb");
       await vi.waitFor(async () => expect(await bottom(el)).toBe(codeMessage("connection.failed")));
-      expect(field(el, "edit-reader").options).toEqual([
-        { value: "", label: useDefault(t("equipment.none")) },
-      ]);
+      expect(field(el, "edit-reader").options).toEqual([{ value: "", label: t("equipment.none") }]);
     });
 
     describe("a chosen profile's readers answering after Edit was saved and opened again", () => {

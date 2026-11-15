@@ -253,7 +253,6 @@ const EQUIPMENT_COLUMNS = [
   { key: "reader", role: "card_terminal", label: "devices.default_reader" },
 ] as const satisfies readonly { key: string; role: EquipmentRole; label: StringKey }[];
 
-/** What the role uses now, or None, marked when it comes from the profile's default. */
 function equipmentName(
   device: DeviceRow,
   role: EquipmentRole,
@@ -264,9 +263,7 @@ function equipmentName(
   let name = equipment?.resolved?.name ?? t("equipment.none");
   if (role === "invoice" && pagePrinters.some((p) => p.id === equipment?.resolved?.id))
     name = a4PrinterName(name);
-  return equipment === undefined || equipment.selection === "default"
-    ? `${name} (${t("devices.default_mark")})`
-    : name;
+  return name;
 }
 
 /** A battery report older than this is greyed and says when it was taken (spec §6). */
@@ -340,10 +337,20 @@ export class DevicesScreen extends LitElement {
         ${visuallyHiddenStyles}
       }
       .pair-fields,
-      .edit-fields {
+      .edit-fields,
+      .edit-section {
         display: grid;
         grid-template-columns: minmax(0, 1fr);
         gap: var(--wt-space-3);
+      }
+      .edit-section h3 {
+        margin: var(--wt-space-3) 0 0;
+        font-size: var(--wt-font-size-md);
+        font-weight: var(--wt-font-weight-bold);
+      }
+      wt-data-table::part(inherited) {
+        color: var(--wt-color-text-muted);
+        font-style: italic;
       }
       .made-here {
         min-inline-size: 0;
@@ -1329,11 +1336,6 @@ export class DevicesScreen extends LitElement {
       : `${printerLabel(printer)} (${fill("equipment.carried_by", { device: holder })})`;
   }
 
-  /** What Use default gives this device: the profile's default, unless another device carries it. */
-  #useDefaultLabel(name: string | null): string {
-    return fill("devices.use_default", { name: name ?? t("equipment.none") });
-  }
-
   /**
    * Use default first, naming what it resolves to; then the profile's switched-on printers, each
    * another device carries marked. While the profile is unchanged the device keeps the printer it
@@ -1361,7 +1363,7 @@ export class DevicesScreen extends LitElement {
         ? null
         : printerLabel(fallback);
     return [
-      { value: "", label: this.#useDefaultLabel(resolved) },
+      { value: "", label: resolved ?? t("equipment.none") },
       ...listed.map((p) => ({ value: p.id, label: this.#printerChoiceLabel(p, drawer) })),
       ...(unlisted === undefined
         ? []
@@ -1405,7 +1407,7 @@ export class DevicesScreen extends LitElement {
         ? null
         : this.#readerLabel(fallback);
     return [
-      { value: "", label: this.#useDefaultLabel(resolved) },
+      { value: "", label: resolved ?? t("equipment.none") },
       ...listed.map((reader) => ({ value: reader.id, label: this.#readerChoiceLabel(reader) })),
     ];
   }
@@ -1718,7 +1720,9 @@ export class DevicesScreen extends LitElement {
         label: t(column.label),
         sortValue: (d) => equipmentName(d, column.role, this.pagePrinters),
         cell: (d) =>
-          html`<span data-test=${`device-${column.key}-${d.id}`}
+          html`<span
+            part=${d.equipment.find((entry) => entry.role === column.role)?.selection === "item" ? nothing : "inherited"}
+            data-test=${`device-${column.key}-${d.id}`}
             >${equipmentName(d, column.role, this.pagePrinters)}</span
           >`,
       })),
@@ -2116,54 +2120,95 @@ export class DevicesScreen extends LitElement {
       }}
     >
       <div class="edit-fields">
-        ${this.#renderIdentityFields(
-          "edit",
-          form,
-          errors,
-          {
-            name: (value) => {
-              if (this.isConnected && epoch === this.#editEpoch)
-                this.#setEdit({ name: value }, "name");
+        <section
+          class="edit-section"
+          data-edit-section="identity"
+          aria-labelledby="edit-identity-heading"
+        >
+          <h3 id="edit-identity-heading">${t("devices.section.identity")}</h3>
+          ${this.#renderIdentityFields(
+            "edit",
+            form,
+            errors,
+            {
+              name: (value) => {
+                if (this.isConnected && epoch === this.#editEpoch)
+                  this.#setEdit({ name: value }, "name");
+              },
+              profile: (value) => {
+                if (this.isConnected && epoch === this.#editEpoch) this.#onEditProfile(value);
+              },
             },
-            profile: (value) => {
-              if (this.isConnected && epoch === this.#editEpoch) this.#onEditProfile(value);
-            },
-          },
-          this.editSaving,
-        )}
-        ${(kitchen ? [] : PRINTER_ROLES).map((role) => {
-          const loading = this.printerListsRead.size < 2;
-          return html`<wt-combobox
-            data-test=${role.test}
-            name=${role.form}
-            ?show-empty-option=${!loading}
-            label=${t(role.label)}
-            search="auto"
-            searchPlaceholder=${t("categories.combobox_search")}
-            noResultsLabel=${t("categories.combobox_no_results")}
-            .placeholder=${
-              !loading
-                ? ""
-                : this.#queries.failing("listPrinters") || this.#queries.failing("listPagePrinters")
-                  ? t("printers.refresh_failed")
-                  : t("device_profiles.printers_loading")
-            }
-            .options=${
-              loading ? [] : this.#printerOptions(role, profile, this.#storedChoice(device, role))
-            }
-            .value=${form[role.form]}
-            ?disabled=${loading || this.editSaving}
-            .error=${errors[role.field]}
-            .invalid=${errors[role.field] !== ""}
-            @wt-change=${(e: CustomEvent<{ value: string }>) =>
-              this.isConnected &&
-              epoch === this.#editEpoch &&
-              this.#setEdit({ [role.form]: e.detail.value }, role.field)}
-          ></wt-combobox>`;
-        })}
-        ${this.#renderApproved(errors.approved)}
-        ${this.deviceProfiles.find((profile) => profile.id === this.editForm.profileId)?.formFactor === "till" ? this.#renderMadeHere() : nothing}
-        ${this.readerState === "hidden" ? nothing : this.#renderReader(errors.reader)}
+            this.editSaving,
+          )}
+          ${this.#renderApproved(errors.approved)}
+        </section>
+        ${
+          kitchen
+            ? nothing
+            : html`<section
+                class="edit-section"
+                data-edit-section="printers"
+                aria-labelledby="edit-printers-heading"
+              >
+                <h3 id="edit-printers-heading">${t("printers.list_title")}</h3>
+                ${PRINTER_ROLES.map((role) => {
+                  const loading = this.printerListsRead.size < 2;
+                  const options = loading
+                    ? []
+                    : this.#printerOptions(role, profile, this.#storedChoice(device, role));
+                  return html`<wt-combobox
+                    data-test=${role.test}
+                    name=${role.form}
+                    label=${t(role.label)}
+                    search="auto"
+                    searchPlaceholder=${t("categories.combobox_search")}
+                    noResultsLabel=${t("categories.combobox_no_results")}
+                    .placeholder=${
+                      !loading
+                        ? options[0]!.label
+                        : this.#queries.failing("listPrinters") ||
+                            this.#queries.failing("listPagePrinters")
+                          ? t("printers.refresh_failed")
+                          : t("device_profiles.printers_loading")
+                    }
+                    .options=${options}
+                    .value=${form[role.form]}
+                    ?disabled=${loading || this.editSaving}
+                    .error=${errors[role.field]}
+                    .invalid=${errors[role.field] !== ""}
+                    @wt-change=${(e: CustomEvent<{ value: string }>) =>
+                      this.isConnected &&
+                      epoch === this.#editEpoch &&
+                      this.#setEdit({ [role.form]: e.detail.value }, role.field)}
+                  ></wt-combobox>`;
+                })}
+              </section>`
+        }
+        ${
+          this.readerState === "hidden"
+            ? nothing
+            : html`<section
+                class="edit-section"
+                data-edit-section="reader"
+                aria-labelledby="edit-reader-heading"
+              >
+                <h3 id="edit-reader-heading">${t("devices.default_reader")}</h3>
+                ${this.#renderReader(errors.reader)}
+              </section>`
+        }
+        ${
+          profile?.formFactor !== "till"
+            ? nothing
+            : html`<section
+                class="edit-section"
+                data-edit-section="station"
+                aria-labelledby="edit-station-heading"
+              >
+                <h3 id="edit-station-heading">${t("devices.section.station")}</h3>
+                ${this.#renderMadeHere()}
+              </section>`
+        }
       </div>
       <wt-form-actions
         slot="footer"
@@ -2250,7 +2295,7 @@ export class DevicesScreen extends LitElement {
     return html`<wt-combobox
       data-test="edit-reader"
       name="defaultReaderId"
-      show-empty-option
+      .placeholder=${this.#readerOptions()[0]!.label}
       label=${t("devices.default_reader")}
       search="auto"
       searchPlaceholder=${t("categories.combobox_search")}
