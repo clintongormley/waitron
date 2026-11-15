@@ -50,6 +50,14 @@ it("shares display reads separately from billing and keeps dated facts only in m
       stale: false,
       emergency: { open: false, closedReason: "setting_off" },
     });
+    const replacement = JSON.parse(await readFile(file, "utf8"));
+    replacement.view.registration.installationId = "44444444-4444-4444-8444-444444444444";
+    delete replacement.lifecycle;
+    await writeFile(file, JSON.stringify(replacement));
+    unavailable = true;
+    await expect(f.client.emergency("https://staff.test")).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
   } finally {
     await f.close();
   }
@@ -109,7 +117,11 @@ it("respects display Retry-After, retains dated hints for unknown state and drop
       reads++;
       const r = (saved.view as { registration: { installationId: string; venueId: string } })
         .registration;
-      const value = emergencyReply(r.installationId, r.venueId, new Date().toISOString());
+      const value = emergencyReply(
+        r.installationId,
+        r.venueId,
+        new Date(Date.now() + (mode === "older" ? -60000 : 30000)).toISOString(),
+      );
       if (mode === "limited") {
         res.writeHead(429, { "retry-after": "120" });
         res.end('{"error":"rate_limited"}');
@@ -142,6 +154,12 @@ it("respects display Retry-After, retains dated hints for unknown state and drop
     const open = await f.client.emergency("https://staff.test");
     expect(open.stale).toBe(false);
     expect(reads).toBe(2);
+    mode = "older";
+    vi.setSystemTime(Date.now() + 60000);
+    expect(await f.client.emergency("https://staff.test")).toMatchObject({
+      stale: true,
+      asOf: open.asOf,
+    });
     mode = "unknown";
     vi.setSystemTime(Date.now() + 60000);
     expect(await f.client.emergency("https://staff.test")).toMatchObject({

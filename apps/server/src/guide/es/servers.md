@@ -263,7 +263,7 @@ que detiene permanentemente todos los servicios de Cloud.
 
 Abre **Sistema → Servicios Cloud** en el servidor principal y consulta **Inicio de emergencia
 en Cloud**. La tarjeta muestra la dirección de emergencia, cuándo se consultaron los datos
-y cuándo se emitió el código actual. Compara esa fecha de emisión con tu paquete de recuperación.
+y cuándo se emitió el código actual.
 
 Si el inicio está desactivado, el plan Conectado no está activo o falta un método de pago,
 abre la cuenta de Cloud para corregirlo. **Cloud aún no puede iniciar este local** indica que el

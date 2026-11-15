@@ -1189,6 +1189,7 @@ it("returns only emergency display facts and rechecks permission and primary aft
       app.request("/management-api/cloud/emergency", { headers: { cookie: manager.cookie } });
     const success = await request();
     expect(success.status).toBe(200);
+    expect(success.headers.get("cache-control")).toBe("no-store");
     expect(await success.json()).toEqual({
       asOf: "2026-11-10T12:00:00.000Z",
       emergency: { status: "unavailable", reason: "state_not_ready" },

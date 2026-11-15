@@ -237,7 +237,7 @@ you can connect; this page does not test that connection. If a change fails, che
 
 Open **System → Cloud services** on the main box to check **Emergency start in Cloud**.
 The card shows the emergency address, when the details were checked and when the current code
-was issued. Compare that issuance date with your recovery pack.
+was issued.
 
 If emergency start is switched off, your Connected plan is inactive or a payment method is
 missing, open the Cloud account to put it right. **Cloud cannot start this venue yet** means the

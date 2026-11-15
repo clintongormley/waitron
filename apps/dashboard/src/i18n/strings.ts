@@ -637,7 +637,7 @@ export const en = {
   "cloud.emergency_not_provisioned":
     "Cloud cannot start this venue yet. Check availability in the Cloud account.",
   "cloud.emergency_unavailable":
-    "Emergency-start details could not be read. Check the connection and try again, or open the Cloud account.",
+    "Emergency-start details are not available. Cloud may not provide emergency hosting for this venue yet. Open the Cloud account to check availability, or try again later.",
   "cloud.emergency_stale":
     "These details may have changed. Cloud checks again before starting the venue.",
   "cloud.emergency_checked": "Last checked",
@@ -4911,7 +4911,7 @@ export const es: Record<StringKey, string> = {
   "cloud.emergency_not_provisioned":
     "Cloud aún no puede iniciar este local. Consulta la disponibilidad en la cuenta de Cloud.",
   "cloud.emergency_unavailable":
-    "No se han podido consultar los datos del inicio de emergencia. Comprueba la conexión y vuelve a intentarlo, o abre la cuenta de Cloud.",
+    "Los datos del inicio de emergencia no están disponibles. Es posible que Cloud aún no ofrezca alojamiento de emergencia para este local. Consulta la disponibilidad en la cuenta de Cloud o vuelve a intentarlo más tarde.",
   "cloud.emergency_stale":
     "Estos datos pueden haber cambiado. Cloud los comprueba de nuevo antes de iniciar el local.",
   "cloud.emergency_checked": "Última consulta",
