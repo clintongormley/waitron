@@ -2319,6 +2319,7 @@ describe("a sale files in the receipt language saved on its order", () => {
       });
       const managerSid = await inTx(venue, async (tx) => {
         await putCredential(tx, ring, {
+          personId: null,
           purpose: "payments.stripe",
           value: {
             secretKey: "sk_test_ok",

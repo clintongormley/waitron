@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "86d30d50-2ce4-4677-9237-421c2d7d0aed",
+  "id": "ace830a4-7860-42dc-8045-1acf3e873062",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -278,20 +278,6 @@
         },
         "taxpayer_domicile": {
           "name": "taxpayer_domicile",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "privacy_notice_url": {
-          "name": "privacy_notice_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "privacy_email": {
-          "name": "privacy_email",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

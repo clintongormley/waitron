@@ -337,9 +337,10 @@ export async function writeArchiveSettings(
   tx: Transaction,
   ring: KeyRing,
   settings: Omit<ArchiveSettings, "revision">,
+  personId: string | null,
 ): Promise<ArchiveSettings> {
   const { json, stored } = archiveRecord(settings);
-  await putCredential(tx, ring, { purpose: ARCHIVE_PURPOSE, value: { settings: json } });
+  await putCredential(tx, ring, { personId, purpose: ARCHIVE_PURPOSE, value: { settings: json } });
   return stored;
 }
 

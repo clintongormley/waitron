@@ -48,6 +48,7 @@ describe("one composed pass against a migrated database", () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
+        personId: null,
         purpose: "payments.stripe",
         value: {
           secretKey: "sk_test_probe",
@@ -124,6 +125,7 @@ describe("one composed pass against a migrated database", () => {
     // even without `credentialProvisioned`'s `purpose` filter.
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
+        personId: null,
         purpose: "fiscal.aeat",
         value: { pfxBase64: "AAAA", passphrase: "p", certKind: "sello" },
       }),

@@ -114,6 +114,7 @@ describe("readCertificateCard", () => {
     await seedTenantNodeSif(suite.db);
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, testRing(), {
+        personId: null,
         purpose: "fiscal.aeat",
         value: { pfxBase64: "AAAA", passphrase: "x", certKind: "sello" },
       }),

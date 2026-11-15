@@ -3,7 +3,7 @@ import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/perso
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { settings as documents, withTransaction } from "@waitron/db";
+import { readActivityForSubject, settings as documents, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -679,7 +679,7 @@ it("reads stored settings and delivery mode from the same turn before a queued r
   await started;
   const reading = request(app, venue.admin);
   const removing = withTransaction(suite.db, (tx) =>
-    deleteCredential(tx, { purpose: "email.smtp" }),
+    deleteCredential(tx, { personId: null, purpose: "email.smtp" }),
   );
   release();
   await held;
@@ -801,7 +801,11 @@ describe("removing saved SMTP settings", () => {
     const app = mount();
     expect((await request(app, venue.admin, settings)).status).toBe(200);
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, ring, { purpose: "backup.archive", value: { settings: "{}" } }),
+      putCredential(tx, ring, {
+        personId: null,
+        purpose: "backup.archive",
+        value: { settings: "{}" },
+      }),
     );
     const [archive] = await suite.db
       .select()
@@ -810,6 +814,14 @@ describe("removing saved SMTP settings", () => {
 
     const response = await remove(app, venue.admin);
     expect(response.status).toBe(200);
+    const [admin] = await suite.db
+      .select({ id: persons.id })
+      .from(persons)
+      .where(eq(persons.email, "owner@example.test"));
+    expect(
+      (await readActivityForSubject(suite.db, { kind: "credential", id: "email.smtp" })).at(-1),
+    ).toMatchObject({ kind: "credentials.removed", personId: admin!.id });
+
     expect(await response.json()).toEqual({ removed: true });
     expect(
       (await suite.db.select().from(documents)).find((row) => row.module === "mail")?.doc,

@@ -157,8 +157,8 @@ afterEach(async () => {
   stall.on = false;
   stall.started = [];
   await withTransaction(venue.db, async (tx) => {
-    await deleteCredential(tx, { purpose: ARCHIVE_PURPOSE });
-    await deleteCredential(tx, { purpose: STREAM_PURPOSE });
+    await deleteCredential(tx, { personId: null, purpose: ARCHIVE_PURPOSE });
+    await deleteCredential(tx, { personId: null, purpose: STREAM_PURPOSE });
   });
   await Promise.all(scratches.splice(0).map((d) => rm(d, { recursive: true, force: true })));
 });
@@ -321,13 +321,18 @@ describe("trading with an archive destination the box cannot use", () => {
 async function storeArchiveRecord(ring: KeyRing, dir: string): Promise<void> {
   beforeServerStarts();
   await withTransaction(venue.db, (tx) =>
-    writeArchiveSettings(tx, ring, {
-      enabled: true,
-      destinations: [{ kind: "local-fs", id: "primary", dir }],
-      schedule: { kind: "interval", ms: 60 * 60 * 1000 },
-      retention: { count: 7, days: 30 },
-      destinationTimeoutMs: 15 * 60 * 1000,
-    }),
+    writeArchiveSettings(
+      tx,
+      ring,
+      {
+        enabled: true,
+        destinations: [{ kind: "local-fs", id: "primary", dir }],
+        schedule: { kind: "interval", ms: 60 * 60 * 1000 },
+        retention: { count: 7, days: 30 },
+        destinationTimeoutMs: 15 * 60 * 1000,
+      },
+      null,
+    ),
   );
 }
 
@@ -406,24 +411,29 @@ describe("trading with a saved archive bucket", () => {
       async () => {
         beforeServerStarts();
         await withTransaction(venue.db, (tx) =>
-          writeArchiveSettings(tx, boxRing(), {
-            enabled: true,
-            destinations: [
-              {
-                kind: "s3",
-                id: "bucket",
-                bucket: {
-                  ...place,
-                  prefix: "",
-                  accessKeyId: "AKIAENV",
-                  secretAccessKey: "env-secret-access-key",
+          writeArchiveSettings(
+            tx,
+            boxRing(),
+            {
+              enabled: true,
+              destinations: [
+                {
+                  kind: "s3",
+                  id: "bucket",
+                  bucket: {
+                    ...place,
+                    prefix: "",
+                    accessKeyId: "AKIAENV",
+                    secretAccessKey: "env-secret-access-key",
+                  },
                 },
-              },
-            ],
-            schedule: { kind: "interval", ms: 3_600_000 },
-            retention: { count: 7, days: 30 },
-            destinationTimeoutMs: 900_000,
-          }),
+              ],
+              schedule: { kind: "interval", ms: 3_600_000 },
+              retention: { count: 7, days: 30 },
+              destinationTimeoutMs: 900_000,
+            },
+            null,
+          ),
         );
         cookie = await managerCookie();
         return {
@@ -474,6 +484,7 @@ describe("stream encryption checks at the real trading boot", () => {
         await withTransaction(suite.db, ensureStreamId);
         await withTransaction(suite.db, (tx) =>
           putCredential(tx, ring, {
+            personId: null,
             purpose: STREAM_PURPOSE,
             value: streamSettingsPayload({
               bucket: {

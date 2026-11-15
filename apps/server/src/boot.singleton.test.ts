@@ -87,13 +87,18 @@ async function seedIdentity(db: Database): Promise<void> {
     .values({ id: 1, country: "ES", taxId: "90333333P", legalName: "Secondary SL" })
     .onConflictDoNothing();
   await withTransaction(db, (tx) =>
-    writeArchiveSettings(tx, loadKeyRing(KEY_ENV), {
-      enabled: true,
-      destinations: [{ kind: "local-fs", id: "primary", dir: backupDir }],
-      schedule: { kind: "interval", ms: 3_600_000 },
-      retention: { count: 7, days: 30 },
-      destinationTimeoutMs: 900_000,
-    }),
+    writeArchiveSettings(
+      tx,
+      loadKeyRing(KEY_ENV),
+      {
+        enabled: true,
+        destinations: [{ kind: "local-fs", id: "primary", dir: backupDir }],
+        schedule: { kind: "interval", ms: 3_600_000 },
+        retention: { count: 7, days: 30 },
+        destinationTimeoutMs: 900_000,
+      },
+      null,
+    ),
   );
   await seedVenueSettings(db, {
     name: "Loc",

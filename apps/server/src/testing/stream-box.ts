@@ -163,6 +163,7 @@ export async function switchOnStreaming(
   try {
     await withTransaction(store.venue, (tx) =>
       putCredential(tx, ring, {
+        personId: null,
         purpose: "backup.stream",
         value: streamSettingsPayload({ bucket: streaming.bucket }),
       }),

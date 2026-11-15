@@ -154,7 +154,7 @@ describe("the live copy's wiring", () => {
       } = {},
     ) {
       await withTransaction(db, (tx) =>
-        putCredential(tx, RING, { purpose: STREAM_PURPOSE, value: SETTINGS }),
+        putCredential(tx, RING, { personId: null, purpose: STREAM_PURPOSE, value: SETTINGS }),
       );
       const endorsement = endorseKey(
         "node-b",
@@ -279,6 +279,7 @@ describe("the live copy's wiring", () => {
         expect(opened).toHaveBeenCalledTimes(1);
         await withTransaction(db, (tx) =>
           putCredential(tx, RING, {
+            personId: null,
             purpose: STREAM_PURPOSE,
             value: { ...SETTINGS, secretAccessKey: "replacement-secret" },
           }),
@@ -476,7 +477,7 @@ describe("the live copy's wiring", () => {
   describe("with a bucket stored", () => {
     beforeEach(async () => {
       await withTransaction(db, (tx) =>
-        putCredential(tx, RING, { purpose: STREAM_PURPOSE, value: SETTINGS }),
+        putCredential(tx, RING, { personId: null, purpose: STREAM_PURPOSE, value: SETTINGS }),
       );
     });
 
@@ -497,6 +498,7 @@ describe("the live copy's wiring", () => {
     it("reads a stored endpoint and prefix back as themselves", async () => {
       await withTransaction(db, (tx) =>
         putCredential(tx, RING, {
+          personId: null,
           purpose: STREAM_PURPOSE,
           value: { ...SETTINGS, endpoint: "https://s3.example", prefix: "copies/" },
         }),
@@ -977,9 +979,10 @@ describe("the live copy's wiring", () => {
         async (prefix) => {
           if (prefix)
             await withTransaction(db, async (tx) => {
-              await deleteCredential(tx, { purpose: STREAM_PURPOSE });
+              await deleteCredential(tx, { personId: null, purpose: STREAM_PURPOSE });
               await ensureStreamId(tx);
               await putCredential(tx, RING, {
+                personId: null,
                 purpose: STREAM_PURPOSE,
                 value: { ...SETTINGS, prefix },
               });
@@ -1329,7 +1332,7 @@ describe("the live copy's wiring", () => {
 
     it("streams to the spare's store when the pair link says streaming", async () => {
       await withTransaction(db, (tx) =>
-        putCredential(tx, RING, { purpose: STREAM_PURPOSE, value: SETTINGS }),
+        putCredential(tx, RING, { personId: null, purpose: STREAM_PURPOSE, value: SETTINGS }),
       );
       await pair(await startSpare("spare.pem"));
       const litestream = new FakeLitestream();
@@ -1398,6 +1401,7 @@ describe("the live copy's wiring", () => {
     it("streams to the bucket when there is no pair link", async () => {
       await withTransaction(db, (tx) =>
         putCredential(tx, RING, {
+          personId: null,
           purpose: STREAM_PURPOSE,
           value: { ...SETTINGS, endpoint: "https://s3.example.test" },
         }),
@@ -1472,7 +1476,7 @@ describe("the live copy's wiring", () => {
         if (paired) await pair(await startSpare("spare.pem"));
         else
           await withTransaction(db, (tx) =>
-            putCredential(tx, RING, { purpose: STREAM_PURPOSE, value: SETTINGS }),
+            putCredential(tx, RING, { personId: null, purpose: STREAM_PURPOSE, value: SETTINGS }),
           );
         const clock = new ManualClock("2026-11-14T12:00:00.000Z");
         const opened = vi.spyOn(sparePipe, "startStorePipe");

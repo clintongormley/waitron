@@ -349,6 +349,7 @@ async function holdReader(deviceId: string, readerId: string): Promise<void> {
 async function connectStripe(): Promise<void> {
   await withTransaction(suite.db, (tx) =>
     putCredential(tx, RING, {
+      personId: null,
       purpose: "payments.stripe",
       value: {
         secretKey: "sk_test_x",

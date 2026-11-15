@@ -5,6 +5,7 @@ import { Hono } from "hono";
 import { beforeAll, describe, expect, it, vi, type Mock } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import {
+  readActivityForSubject,
   saveVenueFields,
   readStreamId,
   nodes,
@@ -248,7 +249,9 @@ function harness(overrides: Partial<StreamApiDeps> = {}, startKey?: string): Har
 }
 
 async function clearBucket(): Promise<void> {
-  await withTransaction(suite.db, (tx) => deleteCredential(tx, { purpose: "backup.stream" }));
+  await withTransaction(suite.db, (tx) =>
+    deleteCredential(tx, { personId: null, purpose: "backup.stream" }),
+  );
 }
 
 async function storedBucket(): Promise<Record<string, string> | null> {
@@ -595,6 +598,19 @@ describe("stream settings routes", () => {
     const cookie = await login(app);
     const res = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
     expect(res.status).toBe(200);
+    const events = await readActivityForSubject(suite.db, {
+      kind: "credential",
+      id: STREAM_PURPOSE,
+    });
+    const manager = suite.db.all<{ id: string }>(
+      sql`select id from persons where email = ${MANAGER_EMAIL}`,
+    )[0]!;
+    expect(events.at(-1)).toMatchObject({
+      kind: "credentials.saved",
+      personId: manager.id,
+      data: { keyVersion: 1 },
+    });
+
     // randomBytes(32).toString("base64url"), as /api/backup/mint-key mints (backup-api.ts).
     expect(key.value).toMatch(/^[A-Za-z0-9_-]{43}$/);
     // The row must be locked under the key BEFORE the first generation opens, or a rebuild from
@@ -667,6 +683,7 @@ describe("stream settings routes", () => {
   it("keeps Change and Turn off available when stored bucket settings lack a field", async () => {
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING, {
+        personId: null,
         purpose: STREAM_PURPOSE,
         value: streamSettingsPayload({ bucket: BUCKET }),
       }),
@@ -776,6 +793,7 @@ describe("stream settings routes", () => {
   it("switching off is refused when this node stops being the primary while it waits its turn", async () => {
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING, {
+        personId: null,
         purpose: "backup.stream",
         value: streamSettingsPayload({ bucket: BUCKET }),
       }),
@@ -916,6 +934,13 @@ describe("stream settings routes", () => {
     await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
     const res = await app.request("/api/backup/stream", { method: "DELETE", headers: { cookie } });
     expect(res.status).toBe(200);
+    const manager = suite.db.all<{ id: string }>(
+      sql`select id from persons where email = ${MANAGER_EMAIL}`,
+    )[0]!;
+    expect(
+      (await readActivityForSubject(suite.db, { kind: "credential", id: STREAM_PURPOSE })).at(-1),
+    ).toMatchObject({ kind: "credentials.removed", personId: manager.id });
+
     expect(await res.json()).toMatchObject({ configured: false, bucket: null });
     expect(reload).toHaveBeenCalledTimes(2);
     // The second reload found the settings already gone.
@@ -1022,6 +1047,7 @@ describe("stream settings routes", () => {
       // Started from outside the view's read, as another request's Save would be.
       write = withTransaction(suite.db, (tx) =>
         putCredential(tx, RING, {
+          personId: null,
           purpose: STREAM_PURPOSE,
           value: streamSettingsPayload({
             bucket: { ...BUCKET, bucket: "moved-copy" },
@@ -1055,18 +1081,25 @@ describe("stream settings routes", () => {
 
     async function holdArchive(): Promise<void> {
       await withTransaction(suite.db, (tx) =>
-        writeArchiveSettings(tx, RING, {
-          enabled: true,
-          destinations: [{ kind: "s3", id: "bucket", bucket: archiveBucket }],
-          schedule: { kind: "interval", ms: 3_600_000 },
-          retention: { count: 7, days: 30 },
-          destinationTimeoutMs: 900_000,
-        }),
+        writeArchiveSettings(
+          tx,
+          RING,
+          {
+            enabled: true,
+            destinations: [{ kind: "s3", id: "bucket", bucket: archiveBucket }],
+            schedule: { kind: "interval", ms: 3_600_000 },
+            retention: { count: 7, days: 30 },
+            destinationTimeoutMs: 900_000,
+          },
+          null,
+        ),
       );
     }
 
     async function dropArchive(): Promise<void> {
-      await withTransaction(suite.db, (tx) => deleteCredential(tx, { purpose: ARCHIVE_PURPOSE }));
+      await withTransaction(suite.db, (tx) =>
+        deleteCredential(tx, { personId: null, purpose: ARCHIVE_PURPOSE }),
+      );
     }
 
     it("Save refuses a stream folder overlapping the held archive folder, before any probe", async () => {
@@ -1144,7 +1177,11 @@ describe("stream settings routes", () => {
      * would: `putCredential` refuses a payload that is not the purpose's fields. */
     async function storeRawArchive(plaintext: string): Promise<void> {
       await withTransaction(suite.db, (tx) =>
-        putCredential(tx, RING, { purpose: ARCHIVE_PURPOSE, value: { settings: "{}" } }),
+        putCredential(tx, RING, {
+          personId: null,
+          purpose: ARCHIVE_PURPOSE,
+          value: { settings: "{}" },
+        }),
       );
       const iv = randomBytes(12);
       const cipher = createCipheriv("aes-256-gcm", RING_KEY, iv);
@@ -1164,7 +1201,11 @@ describe("stream settings routes", () => {
         WAITRON_CREDENTIALS_KEY_VERSION: version,
       });
       await withTransaction(suite.db, (tx) =>
-        putCredential(tx, other, { purpose: ARCHIVE_PURPOSE, value: { settings: "{}" } }),
+        putCredential(tx, other, {
+          personId: null,
+          purpose: ARCHIVE_PURPOSE,
+          value: { settings: "{}" },
+        }),
       );
     };
 
@@ -1174,7 +1215,11 @@ describe("stream settings routes", () => {
         "backup.archive_settings_invalid",
         () =>
           withTransaction(suite.db, (tx) =>
-            putCredential(tx, RING, { purpose: ARCHIVE_PURPOSE, value: { settings: "{}" } }),
+            putCredential(tx, RING, {
+              personId: null,
+              purpose: ARCHIVE_PURPOSE,
+              value: { settings: "{}" },
+            }),
           ),
       ],
       ["credentials.decrypt_failed", sealedUnder("1")],
@@ -1213,6 +1258,7 @@ describe("stream settings routes", () => {
       await clearBucket();
       await withTransaction(suite.db, (tx) =>
         putCredential(tx, RING, {
+          personId: null,
           purpose: STREAM_PURPOSE,
           value: streamSettingsPayload({ bucket: BUCKET }),
         }),
@@ -1245,6 +1291,7 @@ describe("stream settings routes", () => {
     async function storeBucketSettings(): Promise<void> {
       await withTransaction(suite.db, (tx) =>
         putCredential(tx, RING, {
+          personId: null,
           purpose: STREAM_PURPOSE,
           value: streamSettingsPayload({ bucket: BUCKET }),
         }),

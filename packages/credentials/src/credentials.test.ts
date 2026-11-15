@@ -22,7 +22,7 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 describe("the vault through the venue store", () => {
   it("round-trips a sealed credential", async () => {
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING, { purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING, { personId: null, purpose: "payments.stripe", value: STRIPE }),
     );
     const actual = await withTransaction(suite.db, (tx) =>
       getCredential(tx, RING, { purpose: "payments.stripe" }),
@@ -38,6 +38,7 @@ describe("credentialProvisioned", () => {
     // the answer looks at the purpose rather than at whether any row exists.
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING, {
+        personId: null,
         purpose: "fiscal.aeat",
         value: { pfxBase64: "AAAA", passphrase: "p", certKind: "sello" },
       }),
@@ -45,7 +46,7 @@ describe("credentialProvisioned", () => {
     expect(await credentialProvisioned(suite.db, "payments.stripe")).toBe(false);
 
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING, { purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING, { personId: null, purpose: "payments.stripe", value: STRIPE }),
     );
     expect(await credentialProvisioned(suite.db, "payments.stripe")).toBe(true);
   });
@@ -61,7 +62,7 @@ describe("credentialProvisioned", () => {
     // after each test (`packages/db/src/testing/venue-db.ts`'s `applyReset`), so `taxpayer` really
     // is empty here whatever the cases above seeded.
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING, { purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING, { personId: null, purpose: "payments.stripe", value: STRIPE }),
     );
     expect(await credentialProvisioned(suite.db, "payments.stripe")).toBe(false);
   });

@@ -165,6 +165,7 @@ function observeStart(options: StartCase): () => Observed {
     const ring = loadKeyRing(KEY_ENV);
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
+        personId: null,
         purpose: "payments.stripe",
         value: {
           secretKey: "sk_test_collection",

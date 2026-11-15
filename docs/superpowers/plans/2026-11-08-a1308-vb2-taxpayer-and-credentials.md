@@ -273,3 +273,35 @@ unexported `sealCredentialRowTx(tx: Transaction, ring: KeyRing, purpose: Purpose
 - [ ] **Step 4: Run** Finish-line items 2, 4, 5 — PASS.
 - [ ] **Step 5:** `pnpm protection-list list --out <B>`; `compare`; paste and mark the report.
 - [ ] **Step 6: Commit** `git commit -s -m "credentials: saves and removals leave an activity entry; two dead purposes go"`.
+
+## Build corrections, 2026-11-15
+
+The watcher cleared actor threading and the retired-purpose assertions on 14 November at 21:25,
+and the required venue defaults and reset notice at 22:57 (Lane H questions.md).
+The first reset line is "Every venue is reset: core; database backups from before this cannot be restored".
+Configuration format 31 and the bundle shape stay unchanged; no old-export compatibility claim is made.
+The stream and archive authorization helpers return their existing authorizedBy result for the
+settings save and recovery-key settings rewrite. SMTP passes the existing personId through env4's
+shared saveSmtpSettings. The purpose inventory removes the two retired names and their acceptance
+cases become isPurpose=false cases. Existing sample rows use backup.archive with the same sentinel
+in its settings field; node-key absence checks read the vault row count directly.
+The venue document's exact defaults and fixtures gain the two required nullable privacy fields.
+Privacy storage assertions read the document while retaining the identity and stored-value checks.
+The watcher cleared up to 1,200 gross handwritten lines on 15 November at 00:19 for this scope,
+including explicit null actor arguments in existing fixtures and formatter reflows. Mechanical
+argument changes are counted separately in the pull request.
+
+At 00:30 the watcher cleared the three live-query dependency assertions to name settings.venue;
+the exact dependency equality and real invalidation/refetch checks stay.
+
+At 00:33 the watcher cleared the missing-taxpayer README's two notice-presence expectations
+(the notice remains in the venue document), the pinned formatter output up to 1,800 gross lines,
+and ACTIVATION_ROWS 126 to 127. The read-only activation probe found exactly one new
+credentials.saved entry for email.smtp with no person and keyVersion 1. All existing exact
+holdings counts, kept/record/accepted checks, and copy checks stay.
+
+At 00:47 the watcher corrected item 4: getLocales stays on taxpayer because its venueName is the legal name; only getVenuePrivacy and getGoogleConfig move to settings.venue.
+
+After the initial rebase onto 4ffb0fe9bb, the base and candidate both use configuration format 32; vb2 still changes neither its version nor its bundle shape.
+
+At 00:52 the watcher cleared the backup-policy steadyPin update because the two retired purpose names leave its secrets list, with all equality and negative controls retained. The same note cleared six actor assertions in existing successful route/install cases, each checked against a null-actor mutation before the real code.

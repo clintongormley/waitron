@@ -54,6 +54,7 @@ async function seed() {
       amount: decimal("12.10"),
     });
     await putCredential(tx, ring, {
+      personId: null,
       purpose: "payments.stripe",
       value: {
         secretKey: "sk_test_zone_admission",

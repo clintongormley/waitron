@@ -71,10 +71,14 @@ function withContact(privacyContact: ConfigurationBundle["privacyContact"]): Con
 it("exports the stored privacy contact at the top level, never inside the venue", async () => {
   const bundle = await exported(async () => {
     await withTransaction(suite.db, (tx) =>
-      savePrivacyContact(tx, {
-        privacyNoticeUrl: "https://example.com/privacy",
-        privacyEmail: "privacy@example.com",
-      }),
+      savePrivacyContact(
+        tx,
+        {
+          privacyNoticeUrl: "https://example.com/privacy",
+          privacyEmail: "privacy@example.com",
+        },
+        null,
+      ),
     );
   });
   expect(bundle.version).toBe(33);
@@ -158,7 +162,9 @@ async function targetVenue(taxId = "123456789") {
 }
 
 async function taxpayerRows(db: Database) {
-  return db.select().from(taxpayer);
+  const rows = await db.select().from(taxpayer);
+  const contact = await withTransaction(db, readPrivacyContact);
+  return rows.map((row) => ({ ...row, ...contact }));
 }
 
 it.each(["123456789", "987654321"])(
@@ -192,7 +198,7 @@ it("an import stores the privacy contact trimmed and composed", async () => {
 
 it("an import with an unset privacy contact clears a stored privacy contact", async () => {
   await targetVenue();
-  await withTransaction(suite.db, (tx) => savePrivacyContact(tx, stored));
+  await withTransaction(suite.db, (tx) => savePrivacyContact(tx, stored, null));
   const [before] = await taxpayerRows(suite.db);
   expect(before).toMatchObject(stored);
   await withTransaction(suite.db, (tx) =>

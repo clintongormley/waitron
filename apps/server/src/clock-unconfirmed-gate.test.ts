@@ -112,6 +112,7 @@ useVenueDb({
     // under the Stripe seat's credential, which the webhook's secret also comes from.
     await withTransaction(db, (tx) =>
       putCredential(tx, RING, {
+        personId: null,
         purpose: "payments.stripe",
         value: {
           secretKey: "sk_test_ok",

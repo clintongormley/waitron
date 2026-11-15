@@ -234,8 +234,9 @@ it.each([
   ["getReceiptLanguage", [], "settings.business_day"],
   ["getVenueDefaults", [], "settings.business_day"],
   ["getVenueDefaults", [], "settings.menu"],
-  ["getVenuePrivacy", [], "taxpayer"],
-  ["getGoogleConfig", [], "taxpayer"],
+  ["getLocales", [], "taxpayer"],
+  ["getVenuePrivacy", [], "settings.venue"],
+  ["getGoogleConfig", [], "settings.venue"],
   ["getFloorPlan", ["s1", "z1"], "floor_plans"],
   ["getFloorPlan", ["s1", "z1"], "floor_plan_tables"],
   ["getFloorPlan", ["s1", "z1"], "dining_tables"],
@@ -801,9 +802,11 @@ it("subscribes the venue defaults to the clock document, venue document and menu
   ]);
 });
 
-it("subscribes the venue's privacy contact to the taxpayer row alone", () => {
+it("subscribes the venue's privacy contact to its venue settings document alone", () => {
   const api = new DashboardApi("", async () => new Response("{}"));
-  expect(dashboardQuery(api, "getVenuePrivacy", []).dependencies).toEqual([{ type: "taxpayer" }]);
+  expect(dashboardQuery(api, "getVenuePrivacy", []).dependencies).toEqual([
+    { type: "settings.venue" },
+  ]);
 });
 
 it.each([

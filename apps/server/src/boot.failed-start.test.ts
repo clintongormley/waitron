@@ -781,13 +781,18 @@ describe("a start that fails after the venue folder is opened gives the folder b
     const store = await openVenueDatabase(venueDir);
     try {
       await withTransaction(store.venue, (tx) =>
-        writeArchiveSettings(tx, loadKeyRing(env), {
-          enabled: true,
-          destinations: [{ kind: "local-fs", id: "primary", dir: backupDir }],
-          schedule: { kind: "interval", ms: 3_600_000 },
-          retention: { count: 7, days: 30 },
-          destinationTimeoutMs: 900_000,
-        }),
+        writeArchiveSettings(
+          tx,
+          loadKeyRing(env),
+          {
+            enabled: true,
+            destinations: [{ kind: "local-fs", id: "primary", dir: backupDir }],
+            schedule: { kind: "interval", ms: 3_600_000 },
+            retention: { count: 7, days: 30 },
+            destinationTimeoutMs: 900_000,
+          },
+          null,
+        ),
       );
     } finally {
       await store.close();

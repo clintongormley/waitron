@@ -516,6 +516,7 @@ it.each(["set", "delete"])("refuses SMTP %s and keeps the vault unchanged", asyn
   if (command === "delete")
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING, {
+        personId: null,
         purpose: "email.smtp",
         value: { url: "smtp://old.example.test:587" },
       }),

@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { randomBytes } from "node:crypto";
 import {
   credentialRevision,
@@ -5,11 +6,11 @@ import {
   tryGetCredential,
   type KeyRing,
 } from "@waitron/credentials";
-import { captureError, withTransaction } from "@waitron/db";
+import { readActivityForSubject, captureError, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
-import { afterEach, describe, expect, it } from "vitest";
+import { beforeEach, afterEach, describe, expect, it } from "vitest";
 import {
   makeAuthority,
   SIN_DATOS_BODY,
@@ -34,6 +35,11 @@ import { sealAeatSecret } from "./provisioning-secret.js";
 import { fiscalCertificateInstalls } from "./schema/index.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS, timeoutMs: 120_000 });
+
+beforeEach(async () => {
+  await seedPerson(suite.db, { id: "p-1", displayName: "Installing manager" });
+  await seedPerson(suite.db, { id: "p-2", displayName: "Final manager" });
+});
 
 const authority = makeAuthority();
 const installed = authority.issue();
@@ -516,6 +522,9 @@ describe("installCertificate's write", () => {
     await installCertificate(depsFor(v, server, { authorize }), bodyFor(v, candidate), NOW);
     const latest = await withTransaction(suite.db, (tx) => latestInstall(tx, TENANT_A.nodeId));
     expect(latest?.personId).toBe("p-2");
+    expect(
+      (await readActivityForSubject(suite.db, { kind: "credential", id: "fiscal.aeat" })).at(-1),
+    ).toMatchObject({ kind: "credentials.saved", personId: "p-2" });
   });
 });
 

@@ -146,6 +146,7 @@ it.each([
     const inputs = { WAITRON_CREDENTIALS_KEY: key, WAITRON_CREDENTIALS_KEY_VERSION: "1" };
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, loadKeyRing(inputs), {
+        personId: null,
         purpose: "payments.stripe",
         value: {
           secretKey,

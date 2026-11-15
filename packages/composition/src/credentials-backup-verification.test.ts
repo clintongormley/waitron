@@ -27,7 +27,7 @@ beforeEach(async () => {
           WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 2).toString("base64"),
           WAITRON_CREDENTIALS_KEY_VERSION: "2",
         }),
-        { purpose: "email.smtp", value: payload },
+        { personId: null, purpose: "email.smtp", value: payload },
       ),
     );
   }
@@ -91,7 +91,7 @@ describe("credentials backup owner", () => {
     expect(ALL_MODULES.find((m) => m.name === "credentials")?.backup?.verification).toBe(
       CREDENTIALS_BACKUP_VERIFICATION,
     );
-    expect(owner.secrets).toContain("vault:sync.mirror_token");
+    expect(owner.secrets).toContain("vault:backup.archive");
     expect(owner.entries).toEqual([
       { name: "secrets/secrets.env", presence: "required" },
       { name: "secrets/trading.env", presence: "required" },

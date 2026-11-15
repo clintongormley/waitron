@@ -119,10 +119,14 @@ async function configurationArtifact() {
       unitPrice: "7.25",
       vatClass: "general",
     });
-    await savePrivacyContact(tx, {
-      privacyNoticeUrl: "https://example.com/privacy",
-      privacyEmail: "privacy@example.com",
-    });
+    await savePrivacyContact(
+      tx,
+      {
+        privacyNoticeUrl: "https://example.com/privacy",
+        privacyEmail: "privacy@example.com",
+      },
+      null,
+    );
   });
   const bundle = await buildConfigurationBundle(
     source.db,
@@ -451,7 +455,7 @@ it.each([
         expect(
           db
             .prepare(
-              "select privacy_notice_url as privacyNoticeUrl, privacy_email as privacyEmail from taxpayer",
+              "select json_extract(doc, '$.privacyNoticeUrl') as privacyNoticeUrl, json_extract(doc, '$.privacyEmail') as privacyEmail from settings where module = 'venue'",
             )
             .all(),
         ).toEqual([

@@ -160,6 +160,7 @@ describe("certificate diagnosis parent", () => {
           await tx.run(sql`update venue_credentials set ciphertext = x'00'`);
         if (failure === "bad-shape" || failure === "bad-base64")
           await putCredential(tx, f.deps.ring, {
+            personId: null,
             purpose: "fiscal.aeat",
             value: {
               pfxBase64: "!!!!private",

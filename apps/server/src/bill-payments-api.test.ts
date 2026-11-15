@@ -2285,7 +2285,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
           ],
         ]);
       } finally {
-        await inTx((tx) => deleteCredential(tx, { purpose: "email.smtp" }));
+        await inTx((tx) => deleteCredential(tx, { personId: null, purpose: "email.smtp" }));
       }
     });
 
@@ -2529,7 +2529,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
           );
           expect(after).toEqual(before);
         } finally {
-          await inTx((tx) => deleteCredential(tx, { purpose: "email.smtp" }));
+          await inTx((tx) => deleteCredential(tx, { personId: null, purpose: "email.smtp" }));
         }
       });
     });
@@ -2565,7 +2565,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
               recipient: "customer@example.test",
               personId: venue.staffId,
             });
-            await inTx((tx) => deleteCredential(tx, { purpose: "email.smtp" }));
+            await inTx((tx) => deleteCredential(tx, { personId: null, purpose: "email.smtp" }));
             expect(
               await request(
                 "PUT",
@@ -2581,7 +2581,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
             );
             expect(after).toEqual(saved);
           } finally {
-            await inTx((tx) => deleteCredential(tx, { purpose: "email.smtp" }));
+            await inTx((tx) => deleteCredential(tx, { personId: null, purpose: "email.smtp" }));
           }
         });
       },

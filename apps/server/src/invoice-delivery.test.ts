@@ -2191,7 +2191,9 @@ describe("invoice email worker pass", () => {
         },
       });
     const store = (privacyEmail: string | null, privacyNoticeUrl: string | null) =>
-      withTransaction(suite.db, (tx) => savePrivacyContact(tx, { privacyEmail, privacyNoticeUrl }));
+      withTransaction(suite.db, (tx) =>
+        savePrivacyContact(tx, { privacyEmail, privacyNoticeUrl }, null),
+      );
     const queueCopy = async () => {
       const copy = await withTransaction(suite.db, (tx) =>
         reserveInvoiceDelivery(tx, sale.saleId, email()),
@@ -2263,7 +2265,7 @@ describe("invoice email worker pass", () => {
     // Bound here, outside the pass, so the write queues as another caller's rather than the body's.
     const writeOutside = AsyncResource.bind(() =>
       withTransaction(suite.db, (outside) =>
-        savePrivacyContact(outside, { privacyEmail: "privacy@example.com" }),
+        savePrivacyContact(outside, { privacyEmail: "privacy@example.com" }, null),
       ),
     );
     await runInvoiceEmailPass({

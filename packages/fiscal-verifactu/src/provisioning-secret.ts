@@ -100,6 +100,7 @@ export async function sealAeatSecret(
 
   await withTransaction(deps.db, async (tx) => {
     await putCredential(tx, deps.ring, {
+      personId: null,
       purpose: "fiscal.aeat",
       value: {
         pfxBase64: cert.pfxBase64,

@@ -1751,6 +1751,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
               WAITRON_CREDENTIALS_KEY_VERSION: "1",
             }),
             {
+              personId: null,
               purpose: STREAM_PURPOSE,
               value: streamSettingsPayload({
                 bucket: { ...SILENT_BUCKET, endpoint },
@@ -2077,10 +2078,14 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       );
       await withTransaction(source.store.venue, async (tx) => {
         await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "fr"] });
-        await savePrivacyContact(tx, {
-          privacyNoticeUrl: "https://example.com/privacy",
-          privacyEmail: "privacy@example.com",
-        });
+        await savePrivacyContact(
+          tx,
+          {
+            privacyNoticeUrl: "https://example.com/privacy",
+            privacyEmail: "privacy@example.com",
+          },
+          null,
+        );
       });
       const [exporter] = await source.store.venue.select({ id: persons.id }).from(persons);
       const artifact = encodeConfigurationBundle(
@@ -2157,7 +2162,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       );
       expect(imported).toEqual({ defaultLanguage: "es", languages: ["es", "fr"] });
       expect(
-        target.store.venue.all(sql`select privacy_notice_url, privacy_email from taxpayer`),
+        target.store.venue.all(
+          sql`select json_extract(doc, '$.privacyNoticeUrl') as privacy_notice_url, json_extract(doc, '$.privacyEmail') as privacy_email from settings where module = 'venue'`,
+        ),
       ).toEqual([
         { privacy_notice_url: "https://example.com/privacy", privacy_email: "privacy@example.com" },
       ]);
@@ -2315,10 +2322,14 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       );
       await withTransaction(source.store.venue, async (tx) => {
         await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "fr"] });
-        await savePrivacyContact(tx, {
-          privacyNoticeUrl: "https://example.com/privacy",
-          privacyEmail: "privacy@example.com",
-        });
+        await savePrivacyContact(
+          tx,
+          {
+            privacyNoticeUrl: "https://example.com/privacy",
+            privacyEmail: "privacy@example.com",
+          },
+          null,
+        );
       });
       await source.store.venue.execute(
         sql`update settings set doc = json_set(doc, '$.invoiceLocales', json('["es-ES","en-GB"]')) where module = 'venue'`,
@@ -2399,7 +2410,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         },
       ]);
       expect(
-        target.store.venue.all(sql`select privacy_notice_url, privacy_email from taxpayer`),
+        target.store.venue.all(
+          sql`select json_extract(doc, '$.privacyNoticeUrl') as privacy_notice_url, json_extract(doc, '$.privacyEmail') as privacy_email from settings where module = 'venue'`,
+        ),
       ).toEqual([
         { privacy_notice_url: "https://example.com/privacy", privacy_email: "privacy@example.com" },
       ]);

@@ -165,6 +165,7 @@ const PERIOD_CHANGES: Record<"en" | "es", MadridPeriodChange> = {
 };
 
 const DROPPED_COLUMNS: MadridColumnDrops = {
+  taxpayer: ["privacy_notice_url", "privacy_email"],
   node_membership: ["term"],
   persons: ["role"],
   device_profile_admission_roles: ["role"],
@@ -549,6 +550,10 @@ for (const locale of ["en", "es"] as const) {
             contentLanguages: null,
             defaultContentLanguage: null,
             holidayArea: null,
+            privacyNoticeUrl:
+              Object.values(expected[phase].tables.taxpayer!.rows)[0]?.privacy_notice_url ?? null,
+            privacyEmail:
+              Object.values(expected[phase].tables.taxpayer!.rows)[0]?.privacy_email ?? null,
           },
         },
       );

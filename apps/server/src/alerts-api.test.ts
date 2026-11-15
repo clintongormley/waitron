@@ -662,6 +662,7 @@ describe("ongoing alert sources through the route", () => {
     });
     await withTransaction(db, (tx) =>
       putCredential(tx, ring, {
+        personId: null,
         purpose: "payments.sumup",
         value: {
           apiKey: "sup_sk_x",

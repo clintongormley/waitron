@@ -247,8 +247,9 @@ describe("allocated fiscal standby contract", () => {
     });
     await withTransaction(db, (tx) =>
       putCredential(tx, ring, {
-        purpose: "membership.node_key",
-        value: { privateKey: "held-primary-test-key" },
+        personId: null,
+        purpose: "backup.archive",
+        value: { settings: "held-primary-test-key" },
       }),
     );
     const keysBefore = await db.select().from(venueCredentials);

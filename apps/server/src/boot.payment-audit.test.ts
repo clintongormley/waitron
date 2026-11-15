@@ -37,6 +37,7 @@ describe("boot payment audits", () => {
     await seedSharedVenue(suite.db);
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, loadKeyRing(KEY_ENV), {
+        personId: null,
         purpose: "payments.sumup",
         value: { apiKey: "synthetic", merchantCode: "MC" },
       }),

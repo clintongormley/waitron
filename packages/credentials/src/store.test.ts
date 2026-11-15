@@ -1,6 +1,11 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTransaction, venueCredentials } from "@waitron/db";
+import {
+  readActivityForSubject,
+  CORE_MIGRATIONS,
+  withTransaction,
+  venueCredentials,
+} from "@waitron/db";
 import { hasCode } from "@waitron/shared";
 import { aadFor, seal } from "./cipher.js";
 import { loadKeyRing } from "./keyring.js";
@@ -41,7 +46,11 @@ beforeEach(async () => {
 describe("the seal binds each credential to its purpose", () => {
   it("round-trips a credential through the seal and the store", async () => {
     await withTransaction(suite.db, async (tx) => {
-      await putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE });
+      await putCredential(tx, RING_V1, {
+        personId: null,
+        purpose: "payments.stripe",
+        value: STRIPE,
+      });
     });
     const actual = await withTransaction(suite.db, async (tx) => {
       return getCredential(tx, RING_V1, { purpose: "payments.stripe" });
@@ -79,7 +88,7 @@ describe("the seal binds each credential to its purpose", () => {
     // `payments.` prefix, so a binding to that prefix alone would also open the row.
     const sumup = { apiKey: "sup_x", merchantCode: "M1" };
     await withTransaction(suite.db, async (tx) => {
-      await putCredential(tx, RING_V1, { purpose: "payments.sumup", value: sumup });
+      await putCredential(tx, RING_V1, { personId: null, purpose: "payments.sumup", value: sumup });
       await tx.execute(sql`
         update venue_credentials set purpose = 'payments.stripe' where purpose = 'payments.sumup'`);
     });
@@ -96,7 +105,7 @@ describe("the seal binds each credential to its purpose", () => {
 describe("putCredential and getCredential", () => {
   it("round-trips a payload through the database", async () => {
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { personId: null, purpose: "payments.stripe", value: STRIPE }),
     );
     const actual = await withTransaction(suite.db, (tx) =>
       getCredential(tx, RING_V1, { purpose: "payments.stripe" }),
@@ -106,7 +115,7 @@ describe("putCredential and getCredential", () => {
 
   it("stores no plaintext in the row", async () => {
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { personId: null, purpose: "payments.stripe", value: STRIPE }),
     );
     // `latin1` maps every byte to one character, so any ASCII run present in the ciphertext
     // appears verbatim in the string being searched.
@@ -117,11 +126,11 @@ describe("putCredential and getCredential", () => {
 
   it("overwrites an existing purpose rather than failing on the primary key", async () => {
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { personId: null, purpose: "payments.stripe", value: STRIPE }),
     );
     const updated = { ...STRIPE, secretKey: "sk_test_rotated" };
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: updated }),
+      putCredential(tx, RING_V1, { personId: null, purpose: "payments.stripe", value: updated }),
     );
     const actual = await withTransaction(suite.db, (tx) =>
       getCredential(tx, RING_V1, { purpose: "payments.stripe" }),
@@ -131,7 +140,11 @@ describe("putCredential and getCredential", () => {
 
   it("stamps the ring's current key version", async () => {
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V2_ONLY, { purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V2_ONLY, {
+        personId: null,
+        purpose: "payments.stripe",
+        value: STRIPE,
+      }),
     );
     const rows = await suite.db.execute<{ key_version: number }>(sql`
       select key_version from venue_credentials`);
@@ -147,7 +160,7 @@ describe("putCredential and getCredential", () => {
     // `updated_at` is BACKDATED rather than compared across two clock reads: `nowIso` carries
     // milliseconds and no more, and two round trips can land inside the same one.
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { personId: null, purpose: "payments.stripe", value: STRIPE }),
     );
     const BACKDATED = "2020-01-01T00:00:00Z";
     await suite.db.execute(sql`
@@ -163,7 +176,7 @@ describe("putCredential and getCredential", () => {
     });
     const updated = { ...STRIPE, secretKey: "sk_test_rotated" };
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, rotated, { purpose: "payments.stripe", value: updated }),
+      putCredential(tx, rotated, { personId: null, purpose: "payments.stripe", value: updated }),
     );
     const after = await suite.db.execute<{ key_version: number; updated_at: string }>(sql`
       select key_version, updated_at from venue_credentials`);
@@ -182,6 +195,7 @@ describe("putCredential and getCredential", () => {
     const n = await withTransaction(suite.db, async (tx) => {
       const error = await captured(() =>
         putCredential(tx, RING_V1, {
+          personId: null,
           purpose: "payments.stripe",
           value: { secretKey: "sk_test_x" },
         }),
@@ -203,7 +217,7 @@ describe("putCredential and getCredential", () => {
 
   it("raises credentials.decrypt_failed when the ring's key is wrong", async () => {
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { personId: null, purpose: "payments.stripe", value: STRIPE }),
     );
     // Same VERSION, different key material — the operator replaced the key without rotating.
     const wrong = loadKeyRing({
@@ -218,7 +232,7 @@ describe("putCredential and getCredential", () => {
 
   it("raises credentials.key_version_unknown when the ring lost the row's key", async () => {
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { personId: null, purpose: "payments.stripe", value: STRIPE }),
     );
     const error = await captured(() =>
       withTransaction(suite.db, (tx) =>
@@ -232,7 +246,7 @@ describe("putCredential and getCredential", () => {
     // The reason key_version is a column and not a constant. A rotate killed half-way leaves rows
     // on both versions, and the vault must keep serving both until it is re-run.
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { personId: null, purpose: "payments.stripe", value: STRIPE }),
     );
     const both = loadKeyRing({
       WAITRON_CREDENTIALS_KEY: K2,
@@ -242,6 +256,7 @@ describe("putCredential and getCredential", () => {
     });
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, both, {
+        personId: null,
         purpose: "fiscal.aeat",
         value: { pfxBase64: "AAAA", passphrase: "p", certKind: "sello" },
       }),
@@ -333,10 +348,10 @@ describe("tryGetCredential", () => {
 describe("deleteCredential", () => {
   it("removes the row and reports that it did", async () => {
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { personId: null, purpose: "payments.stripe", value: STRIPE }),
     );
     const deleted = await withTransaction(suite.db, (tx) =>
-      deleteCredential(tx, { purpose: "payments.stripe" }),
+      deleteCredential(tx, { personId: null, purpose: "payments.stripe" }),
     );
     expect(deleted).toBe(true);
     const after = await withTransaction(suite.db, (tx) =>
@@ -347,7 +362,7 @@ describe("deleteCredential", () => {
 
   it("reports false when there was nothing to delete", async () => {
     const deleted = await withTransaction(suite.db, (tx) =>
-      deleteCredential(tx, { purpose: "payments.stripe" }),
+      deleteCredential(tx, { personId: null, purpose: "payments.stripe" }),
     );
     expect(deleted).toBe(false);
   });
@@ -356,7 +371,7 @@ describe("deleteCredential", () => {
 describe("listCredentials", () => {
   it("returns metadata and never a value", async () => {
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { personId: null, purpose: "payments.stripe", value: STRIPE }),
     );
     const rows = await withTransaction(suite.db, async (tx) => {
       return listCredentials(tx);
@@ -380,7 +395,7 @@ describe("credentialRevision", () => {
   it("changes on every write, even of the same value", async () => {
     const put = () =>
       withTransaction(suite.db, (tx) =>
-        putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
+        putCredential(tx, RING_V1, { personId: null, purpose: "payments.stripe", value: STRIPE }),
       );
     await put();
     const first = await revision();
@@ -394,7 +409,7 @@ describe("credentialRevision", () => {
 
   it("reveals neither the value nor the stored ciphertext", async () => {
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { personId: null, purpose: "payments.stripe", value: STRIPE }),
     );
     const rows = await suite.db.execute<{ blob: Uint8Array; iv: Uint8Array; tag: Uint8Array }>(
       sql`select ciphertext as blob, iv, auth_tag as tag from venue_credentials`,
@@ -415,7 +430,7 @@ describe("readCredentialMeta", () => {
     withTransaction(suite.db, (tx) => readCredentialMeta(tx, { purpose: "payments.stripe" }));
   const put = () =>
     withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { personId: null, purpose: "payments.stripe", value: STRIPE }),
     );
 
   it("is null when nothing is stored", async () => {
@@ -444,4 +459,37 @@ describe("readCredentialMeta", () => {
     expect(second.digest).not.toBe(first.digest);
     expect(second.updatedAt > backdated.updatedAt).toBe(true);
   });
+});
+
+it("records credential saves and removals with only their key version", async () => {
+  await withTransaction(suite.db, (tx) =>
+    putCredential(tx, RING_V2_ONLY, {
+      purpose: "email.smtp",
+      value: { url: "smtp://synthetic-secret" },
+      personId: null,
+    }),
+  );
+  expect(
+    await withTransaction(suite.db, (tx) =>
+      deleteCredential(tx, { purpose: "email.smtp", personId: null }),
+    ),
+  ).toBe(true);
+  expect(
+    await withTransaction(suite.db, (tx) =>
+      deleteCredential(tx, { purpose: "email.smtp", personId: null }),
+    ),
+  ).toBe(false);
+  const entries = await readActivityForSubject(suite.db, { kind: "credential", id: "email.smtp" });
+  expect(
+    entries.map(({ kind, personId, subjectId, data }) => ({ kind, personId, subjectId, data })),
+  ).toEqual([
+    { kind: "credentials.saved", subjectId: "email.smtp", personId: null, data: { keyVersion: 2 } },
+    {
+      kind: "credentials.removed",
+      subjectId: "email.smtp",
+      personId: null,
+      data: { keyVersion: 2 },
+    },
+  ]);
+  expect(JSON.stringify(entries)).not.toContain("smtp://synthetic-secret");
 });

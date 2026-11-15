@@ -75,14 +75,18 @@ describe("read-only backup vault authentication", () => {
 
   it("authenticates all rows including previous key versions without reseal or writes", async () => {
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, loadKeyRing(inputs), { purpose: "email.smtp", value: email }),
+      putCredential(tx, loadKeyRing(inputs), {
+        personId: null,
+        purpose: "email.smtp",
+        value: email,
+      }),
     );
-    await row("sync.mirror_token", '{"token":"old-private-sentinel"}', { key: key1, version: 1 });
+    await row("backup.archive", '{"settings":"old-private-sentinel"}', { key: key1, version: 1 });
     const before = suite.db.all(sql`select * from venue_credentials order by purpose`);
     expect(await verify()).toBe("passed");
     expect(await query((q) => readBackupCredential(q, inputs, "email.smtp"))).toEqual(email);
-    expect(await query((q) => readBackupCredential(q, inputs, "sync.mirror_token"))).toEqual({
-      token: "old-private-sentinel",
+    expect(await query((q) => readBackupCredential(q, inputs, "backup.archive"))).toEqual({
+      settings: "old-private-sentinel",
     });
     expect(suite.db.all(sql`select * from venue_credentials order by purpose`)).toEqual(before);
   });
@@ -110,11 +114,11 @@ describe("read-only backup vault authentication", () => {
 
   it("every older row must authenticate rather than only the newest/current row", async () => {
     await row();
-    await row("sync.mirror_token", '{"token":"older"}', { key: key1, version: 1 });
+    await row("backup.archive", '{"settings":"older"}', { key: key1, version: 1 });
     expect(await verify()).toBe("passed");
     expect(await verify(current)).toBe("unavailable");
     suite.db.run(
-      sql`update venue_credentials set auth_tag = zeroblob(16) where purpose = 'sync.mirror_token'`,
+      sql`update venue_credentials set auth_tag = zeroblob(16) where purpose = 'backup.archive'`,
     );
     expect(await verify()).toBe("unavailable");
   });
@@ -150,8 +154,8 @@ describe("read-only backup vault authentication", () => {
     ).rejects.toMatchObject({ status: "unsupported" });
   });
 
-  it("deprecated purposes remain covered", async () => {
-    await row("sync.mirror_token", '{"token":"kept"}');
+  it("archive credentials remain covered", async () => {
+    await row("backup.archive", '{"settings":"kept"}');
     expect(await verify()).toBe("passed");
     suite.db.run(sql`update venue_credentials set ciphertext = x'00'`);
     expect(await verify()).toBe("unavailable");
@@ -206,7 +210,7 @@ describe("read-only backup vault authentication", () => {
     await row("email.smtp", "null");
     await row("future.purpose", "{}");
     expect(await verify()).toBe("unsupported");
-    await row("sync.mirror_token", '{"token":"old"}', { key: key1, version: 1 });
+    await row("backup.archive", '{"settings":"old"}', { key: key1, version: 1 });
     expect(await verify(current)).toBe("unavailable");
   });
 

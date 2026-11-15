@@ -776,6 +776,7 @@ describe("refuseIfArchiveSourceLive", () => {
       try {
         await withTransaction(store.venue, (tx) =>
           putCredential(tx, ring, {
+            personId: null,
             purpose: STREAM_PURPOSE,
             value: streamSettingsPayload({ bucket: settingsBucket }),
           }),

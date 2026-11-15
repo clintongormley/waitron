@@ -2,10 +2,10 @@ import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { taxpayer } from "@waitron/db";
+import { settings, withTransaction, taxpayer } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { venueFiscalSelection } from "@waitron/provisioning";
+import { readPrivacyContact, venueFiscalSelection } from "@waitron/provisioning";
 import { ALL_MODULES } from "./modules.js";
 import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
@@ -33,7 +33,7 @@ function save(body: unknown, cookie: string | null = venue.managerCookie) {
 }
 async function taxpayerRow() {
   const [row] = await suite.db.select().from(taxpayer).where(eq(taxpayer.id, 1));
-  return row!;
+  return { ...row!, ...(await withTransaction(suite.db, readPrivacyContact)) };
 }
 const unset = { privacyNoticeUrl: null, privacyEmail: null };
 const stored = {
@@ -59,6 +59,13 @@ describe("the venue's privacy contact", () => {
       privacyEmail: "  privacy@example.com  ",
     });
     expect(response.status).toBe(200);
+    const [document] = await suite.db.select().from(settings).where(eq(settings.module, "venue"));
+    expect(document!.updatedBy).toBe(
+      suite.db.all<{ id: string }>(
+        sql`select id from persons where display_name = 'The Manager'`,
+      )[0]!.id,
+    );
+
     expect(await response.json()).toEqual(stored);
     expect(await (await read()).json()).toEqual(stored);
     expect(await taxpayerRow()).toEqual({ ...before, ...stored });
@@ -81,7 +88,7 @@ describe("the venue's privacy contact", () => {
     expect(await response.json()).toEqual(unset);
     expect(await taxpayerRow()).toEqual({ ...before, ...unset });
     const { rows } = await suite.db.execute<{ url: string | null; email: string | null }>(
-      sql`select privacy_notice_url as url, privacy_email as email from taxpayer where id = 1`,
+      sql`select json_extract(doc, '$.privacyNoticeUrl') as url, json_extract(doc, '$.privacyEmail') as email from settings where module = 'venue'`,
     );
     expect(rows).toEqual([{ url: null, email: null }]);
   });
@@ -204,8 +211,8 @@ describe("the venue's privacy contact", () => {
     expect(await taxpayerRow()).toEqual(before);
   });
 
-  it("answers both routes with the venue refusal when there is no taxpayer row", async () => {
-    await suite.db.execute(sql`delete from taxpayer`);
+  it("answers both routes with the venue refusal when there is no venue document", async () => {
+    await suite.db.execute(sql`delete from settings where module = 'venue'`);
     for (const response of [await read(), await save(stored)]) {
       expect(response.status).toBe(409);
       expect(await response.json()).toEqual({

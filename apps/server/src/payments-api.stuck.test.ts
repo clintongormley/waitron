@@ -239,6 +239,7 @@ async function setup(
       role: "staff",
     });
     await putCredential(tx, RING, {
+      personId: null,
       purpose: "payments.stripe",
       value: {
         secretKey: "sk_test_ok",
@@ -1541,7 +1542,9 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
     const v = await setup();
     const orderId = await openOrder(v);
     const { paymentId } = await strandPayment(v, orderId, { status: "requires_payment_method" });
-    await withTransaction(suite.db, (tx) => deleteCredential(tx, { purpose: "payments.stripe" }));
+    await withTransaction(suite.db, (tx) =>
+      deleteCredential(tx, { personId: null, purpose: "payments.stripe" }),
+    );
 
     const res = await send(v, "POST", resolvePath(paymentId));
 

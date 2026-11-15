@@ -1240,6 +1240,7 @@ describe("a deleted reader", () => {
     duringRemove = async () => {};
     await inTx((tx) =>
       putCredential(tx, RING, {
+        personId: null,
         purpose: "payments.stripe",
         value: {
           secretKey: "sk_test_deleted_reader",

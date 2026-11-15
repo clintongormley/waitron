@@ -52,7 +52,7 @@ const memberships = (items: { resource_id: string; resource: { name: string } }[
 async function seedSumUp(value: { apiKey: string; merchantCode: string }): Promise<void> {
   await seedTaxpayer(suite.db);
   await withTransaction(suite.db, (tx) =>
-    putCredential(tx, ring, { purpose: "payments.sumup", value }),
+    putCredential(tx, ring, { personId: null, purpose: "payments.sumup", value }),
   );
 }
 
@@ -565,6 +565,7 @@ describe("deferredClient", () => {
     await expect(client.memberships()).rejects.toMatchObject({ code: "credentials.missing" });
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
+        personId: null,
         purpose: "payments.sumup",
         value: { apiKey: "k", merchantCode: "M" },
       }),

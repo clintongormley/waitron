@@ -119,10 +119,14 @@ describe("the README in a person's own personal-data download", () => {
 
   it("ends with the privacy notice's address when one is set, and names none otherwise", async () => {
     const app = mounted();
-    await withTransaction(suite.db, (tx) => savePrivacyContact(tx, { privacyNoticeUrl: PRIVACY }));
+    await withTransaction(suite.db, (tx) =>
+      savePrivacyContact(tx, { privacyNoticeUrl: PRIVACY }, null),
+    );
     const withNotice = lines(await readme(app));
     expect(withNotice.at(-1)!.endsWith(PRIVACY)).toBe(true);
-    await withTransaction(suite.db, (tx) => savePrivacyContact(tx, { privacyNoticeUrl: null }));
+    await withTransaction(suite.db, (tx) =>
+      savePrivacyContact(tx, { privacyNoticeUrl: null }, null),
+    );
     const without = lines(await readme(app));
     expect(without.some((line) => line.includes("https://"))).toBe(false);
   });
@@ -145,13 +149,15 @@ describe("the README in a person's own personal-data download", () => {
     },
   );
 
-  it("names the venue generically when there is no taxpayer row", async () => {
-    await withTransaction(suite.db, (tx) => savePrivacyContact(tx, { privacyNoticeUrl: PRIVACY }));
+  it("keeps the venue privacy notice with a generic title when there is no taxpayer row", async () => {
+    await withTransaction(suite.db, (tx) =>
+      savePrivacyContact(tx, { privacyNoticeUrl: PRIVACY }, null),
+    );
     suite.db.run(sql`delete from taxpayer`);
     const text = lines(await readme(mounted()));
     expect(text[0]).toBe("Your data held by the venue");
     const noticeWords = PERSONAL_DATA_README_WORDS.en.notice.replace("{url}", "");
-    expect(text.some((line) => line.includes(noticeWords))).toBe(false);
-    expect(text.some((line) => line.includes(PRIVACY))).toBe(false);
+    expect(text.some((line) => line.includes(noticeWords))).toBe(true);
+    expect(text.some((line) => line.includes(PRIVACY))).toBe(true);
   });
 });

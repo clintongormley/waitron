@@ -166,6 +166,7 @@ describe("real certificate diagnosis through HTTP and the isolated module child"
               await setBuiltInRoleForTest(tx, f.session.personId, "supervisor");
             if (mode === "stale")
               await putCredential(tx, f.deps.ring, {
+                personId: null,
                 purpose: "fiscal.aeat",
                 value: material(candidate, "representante"),
               });

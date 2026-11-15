@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { createServer, type Socket, type AddressInfo } from "node:net";
 import { once } from "node:events";
@@ -301,7 +302,9 @@ describe("invoice SMTP transport", () => {
       expect(second.messages[0]).toContain("To: second@example.test");
       expect(second.messages[0]).toContain("From: Dining Room <new@example.test>");
       expect(await attachmentText(second.messages[0]!)).toContain("DUPLICADO");
-      await withTransaction(suite.db, (tx) => deleteCredential(tx, { purpose: "email.smtp" }));
+      await withTransaction(suite.db, (tx) =>
+        deleteCredential(tx, { personId: null, purpose: "email.smtp" }),
+      );
       expect(await send({ recipient: "third@example.test", document: fixture })).toEqual({
         status: "failed",
         failureCode: "transport_failed",
@@ -699,11 +702,16 @@ describe("readInvoiceEmailPrivacy reads the privacy facts", () => {
   ])("reads $name", async ({ taxpayer, receipt, expected }) => {
     if (taxpayer) {
       await seedTaxpayer(suite.db);
+      await seedVenueSettings(suite.db);
       await withTransaction(suite.db, async (tx) => {
-        await savePrivacyContact(tx, {
-          privacyNoticeUrl: "https://example.com/privacy",
-          privacyEmail: "privacy@example.com",
-        });
+        await savePrivacyContact(
+          tx,
+          {
+            privacyNoticeUrl: "https://example.com/privacy",
+            privacyEmail: "privacy@example.com",
+          },
+          null,
+        );
       });
     }
     const { backend, asked } = backendAnswering(receipt);

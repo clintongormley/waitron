@@ -1675,7 +1675,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
     const off = await mountWith({}).request("/management-api/google/config");
     expect(await off.json()).toEqual({ configured: false });
     await withTransaction(suite.db, (tx) =>
-      savePrivacyContact(tx, { privacyNoticeUrl: "https://example.test/privacy" }),
+      savePrivacyContact(tx, { privacyNoticeUrl: "https://example.test/privacy" }, null),
     );
     const on = await mountWith({ googleOidc: GOOGLE_OIDC }).request(
       "/management-api/google/config",
@@ -1694,7 +1694,9 @@ describe("Management API — Google sign-in edges, credential checks and staff l
       return res.json();
     };
     const store = (privacyNoticeUrl: string | null, privacyEmail?: string) =>
-      withTransaction(suite.db, (tx) => savePrivacyContact(tx, { privacyNoticeUrl, privacyEmail }));
+      withTransaction(suite.db, (tx) =>
+        savePrivacyContact(tx, { privacyNoticeUrl, privacyEmail }, null),
+      );
 
     expect(await config()).toEqual({ configured: true });
     await setupVenue();

@@ -28,7 +28,7 @@ export async function saveSmtpSettings(
   value: { url: string; from: string },
   personId: string | null,
 ): Promise<void> {
-  await putCredential(tx, ring, { purpose: "email.smtp", value: { url: value.url } });
+  await putCredential(tx, ring, { personId, purpose: "email.smtp", value: { url: value.url } });
   const { revision } = await readSettings(tx, MAIL_SETTINGS);
   await saveSettings(tx, MAIL_SETTINGS, {
     doc: { from: value.from },

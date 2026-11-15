@@ -260,7 +260,7 @@ export function mountVenueSettingsApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<unknown>(c);
-      const result = await gated(sessionId, async (tx) => {
+      const result = await gated(sessionId, async (tx, personId) => {
         await requireFreshManagementSignIn(tx, sessionId);
         const { legalName, expected } = legalNameRequest(body);
         const refuse = (reason: string) =>
@@ -285,6 +285,7 @@ export function mountVenueSettingsApi(
         const { renamed } = await renameTaxpayer(tx, {
           expected: expected === stored ? issuer.legalName : expected,
           legalName,
+          personId,
         });
         if (!renamed) throw new AppError("venue.detail_changed", { field: "legalName" });
         return { model: await readVenueDetails(tx, at, businessDayClock) };
@@ -322,8 +323,8 @@ export function mountVenueSettingsApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<unknown>(c);
-      const answer = await gated(sessionId, async (tx) =>
-        withTaxpayer(await savePrivacyContact(tx, privacyContactRequest(body))),
+      const answer = await gated(sessionId, async (tx, personId) =>
+        withTaxpayer(await savePrivacyContact(tx, privacyContactRequest(body), personId)),
       );
       return c.json(answer);
     }),
