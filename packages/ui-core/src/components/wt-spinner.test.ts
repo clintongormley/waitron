@@ -4,16 +4,18 @@ import "./wt-spinner.js";
 
 afterEach(cleanup);
 
-test("is a live status region with an accessible name by default", async () => {
+test("is a named progress bar of unknown amount, never an empty live region, by default", async () => {
   const el = await mount("<wt-spinner></wt-spinner>");
-  const ring = el.shadowRoot!.querySelector("[role=status]")!;
+  expect(el.shadowRoot!.querySelector("[role=status]")).toBeNull();
+  const ring = el.shadowRoot!.querySelector("[role=progressbar]")!;
   expect(ring).toBeTruthy();
   expect(ring.getAttribute("aria-label")).toBe("Loading");
+  expect(ring.hasAttribute("aria-valuenow")).toBe(false);
 });
 
-test("the label property names the status for assistive tech", async () => {
+test("the label property names the progress bar for assistive tech", async () => {
   const el = await mount('<wt-spinner label="Buscando"></wt-spinner>');
-  expect(el.shadowRoot!.querySelector("[role=status]")!.getAttribute("aria-label")).toBe(
+  expect(el.shadowRoot!.querySelector("[role=progressbar]")!.getAttribute("aria-label")).toBe(
     "Buscando",
   );
 });
@@ -22,7 +24,7 @@ test("decorative drops the status role and hides the ring from assistive tech", 
   // Inside a wt-button the button's own aria-busy + label carry the state; a second, English
   // "Loading" live region inside a Spanish "Buscando…" button would be announced too.
   const el = await mount("<wt-spinner decorative></wt-spinner>");
-  expect(el.shadowRoot!.querySelector("[role=status]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[role]")).toBeNull();
   expect(el.shadowRoot!.querySelector(".ring")!.getAttribute("aria-hidden")).toBe("true");
 });
 

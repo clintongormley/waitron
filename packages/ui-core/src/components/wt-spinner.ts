@@ -6,10 +6,11 @@ export type WtSpinnerSize = "sm" | "md" | "lg";
 
 /**
  * An indeterminate progress indicator: a ring drawn in `currentColor` whose one solid arc rotates.
- * On its own it is a live `role="status"` region named by `label`, so assistive tech announces that
- * something is in progress. Inside a control that already carries the state (`wt-button loading`:
- * `aria-busy` plus its own localized label) it is `decorative` — hidden from assistive tech — so the
- * control is not announced twice, once in the caller's language and once in this element's default.
+ * On its own it is a `role="progressbar"` of unknown amount named by `label`, never a live region,
+ * which would announce nothing because it has no text. Inside a control that already carries the
+ * state (`wt-button loading`: `aria-busy` plus its own localized label) it is `decorative` — hidden
+ * from assistive tech — so the control is not announced twice, once in the caller's language and
+ * once in this element's default.
  * Under `prefers-reduced-motion` the ring stays still (the arc is still visible, so the state is
  * conveyed without motion). Sizes follow the font-size tokens exactly as `wt-icon` does, so a
  * spinner sits beside text or inside a button at the text's own size.
@@ -64,16 +65,16 @@ export class WtSpinner extends LitElement {
   ];
 
   @property({ reflect: true }) size: WtSpinnerSize = "md";
-  /** The accessible name of the status region — what a screen reader announces. */
+  /** The accessible name of the progress bar — what a screen reader reads on reaching it. */
   @property() label = "Loading";
-  /** Purely visual: no status role, hidden from assistive tech (a host control, or a status text
+  /** Purely visual: no role, hidden from assistive tech (a host control, or a status text
    * beside it, carries the state). */
   @property({ type: Boolean, reflect: true }) decorative = false;
 
   override render() {
     return this.decorative
       ? html`<span class="ring" aria-hidden="true"></span>`
-      : html`<span class="ring" role="status" aria-label=${this.label}></span>`;
+      : html`<span class="ring" role="progressbar" aria-label=${this.label}></span>`;
   }
 }
 
