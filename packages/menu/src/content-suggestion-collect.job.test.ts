@@ -334,7 +334,7 @@ describe("the house style", () => {
   it("leaves out a name Cloud would refuse, a language the venue does not use, and anything gone", async () => {
     await inVenue(async (tx) => {
       const blankStaff = await product(tx, "Blank", { ca: "CLIENT-CA Blanc" });
-      await rename(tx, blankStaff, "   ");
+      await rename(tx, blankStaff, "\t");
       const longStaff = await product(tx, "Long", { ca: "CLIENT-CA Llarg" });
       await rename(tx, longStaff, "S".repeat(TEXT_LIMIT + 1));
       await product(tx, "Pa", {
