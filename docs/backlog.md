@@ -1629,10 +1629,6 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 
 - **Resetting a box without a terminal** — owner, 2026-10-02. Wanted: a reset offered on the dashboard, and probably on the recovery page as well, because a box that will not start is the one an operator most wants to reset. Open: who may press it (the owner only?), and whether a reset started from inside the app container can remove the Docker volumes the script removes, or has to empty them instead. [Detail](backlog/box.md#resetting-a-box-without-a-terminal)
 
-- **Creation/provisioning `dayCutover` still needs input validation.** The W6 review (#1104) passed `"24:00"` and `"99:99"`
-  through `planVenue`; both emerged with seconds appended. **Next action:** choose the validation
-  boundary and a domain refusal, then test invalid values before they reach storage.
-
 - **A venue preparing to go live sends real email through SMTP (A987) — BUILD.** Prepare now
   requires SMTP outside development and uses it for account and invoice email. Settings lets admins
   save and remove the relay, with manager reads and actionable SMTP tests. Users and Account settings

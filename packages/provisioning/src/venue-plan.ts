@@ -32,7 +32,7 @@ export interface VenueRequest {
   city: string;
   province: string;
   timeZone: string;
-  dayCutover: string; // "HH:MM" or "HH:MM:SS"
+  dayCutover: string; // "HH:MM" or "HH:MM:00"
   seriesCode: string;
   fullSeriesCode?: string;
   rectificativeSeriesCode: string;
@@ -120,7 +120,10 @@ export const DEFAULT_STATION_NAME = "Kitchen";
 
 /** Keep the two accepted spellings equal when an existing venue is provisioned again. */
 export function normalizeDayCutover(value: string): string {
-  return /^\d{2}:\d{2}$/.test(value) ? `${value}:00` : value;
+  if (!/^([01]\d|2[0-3]):[0-5]\d(?::00)?$/.test(value)) {
+    throw new AppError("venue.detail_invalid", { field: "dayCutover", reason: "cutover" });
+  }
+  return value.length === 5 ? `${value}:00` : value;
 }
 
 /**
