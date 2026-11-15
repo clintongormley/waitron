@@ -1335,8 +1335,7 @@ it. A press held 500 ms marks its table `data-held`. Each of its shapes' edges i
 `--wt-color-primary`, except that a `clearing` outline keeps its `--wt-color-warning` dashes with a
 1 px `--wt-color-primary` line inside them. `--wt-selected-ring` is drawn `--wt-focus-offset` outside
 a single table's edge, or once around a merge's whole box, and the held table is drawn above every
-table that is neither held nor showing keyboard focus, though the allergy mark of a table that is
-neither held nor showing keyboard focus is still drawn over it where they overlap. When the held table, single or merged, also
+table that is neither held nor showing keyboard focus. When the held table, single or merged, also
 shows keyboard focus, its focus ring moves out to twice `--wt-focus-offset`, outside the selected
 ring; the two stay apart only while the selected ring is no wider than `--wt-focus-offset`. The
 press's release sends `wt-table-details`; a second finger or a cancelled pointer clears the mark and
@@ -1368,9 +1367,9 @@ is prevented, pans the target into view by the least distance (a table wider tha
 moved only to close a gap at one edge; within the pan limit, and counting as a pan, so a resize then
 keeps the view) and focuses it with `focus({ preventScroll: true })`, because the map
 cannot scroll and a focus left to scroll moves the page around it instead (the "arrowing to a
-table below the edge…" case in `wt-floor-map.keys.test.ts`). A focused table is drawn above every
-table beside it that is neither held nor focused, though such a table's allergy mark is still drawn
-over its ring where they overlap. The host has no
+table below the edge…" case in `wt-floor-map.keys.test.ts`). A focused or held table is drawn above every
+table beside it that is neither held nor focused, and above such a table's allergy mark, so the mark
+does not cover its ring where they overlap; the drag's ghost and line are drawn above it. The host has no
 `delegatesFocus`, unlike "Adding a primitive" item 4, and clips its overflow (`overflow: clip`)
 rather than hiding it. Probed in headless Chromium 153: a click on empty space in a `delegatesFocus`
 host focused its first button, and with `overflow: hidden` the browser scrolled the host when an

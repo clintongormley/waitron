@@ -281,7 +281,7 @@ it("rings a held merge once around its whole box, drawn above a table touching i
   expect([merge.outlineStyle, merge.outlineWidth, merge.outlineColor, merge.outlineOffset]).toEqual(
     ["solid", "2px", "rgb(1, 2, 3)", "2px"],
   );
-  expect(merge.zIndex).toBe("1");
+  expect(merge.zIndex).toBe("3");
   const shapes = [...button(el, "m1").querySelectorAll<HTMLElement>('[part="shape"]')];
   expect(shapes.map((m) => getComputedStyle(m).outlineStyle)).toEqual(["none", "none"]);
   expect(shapes.map((m) => getComputedStyle(m).borderTopColor)).toEqual([

@@ -616,3 +616,73 @@ describe("a single table reached by Tab", () => {
     expect(nearest.indexOf("selected")).toBeLessThan(nearest.lastIndexOf("focus"));
   });
 });
+
+describe("a neighbour's allergy mark", () => {
+  const FOCUS = "2px solid rgb(220, 0, 120)";
+  const SELECTED = "2px solid rgb(0, 160, 0)";
+
+  /** `a`, with `b` touching its right edge and carrying an allergy mark, which hangs over `a`'s
+   * top-right corner. */
+  async function beside(): Promise<WtFloorMap> {
+    const el = (await mountThemed(
+      '<wt-floor-map style="width: 400px; height: 200px"></wt-floor-map>',
+      "light",
+    )) as WtFloorMap;
+    el.style.setProperty("--wt-focus-ring", FOCUS);
+    el.style.setProperty("--wt-selected-ring", SELECTED);
+    el.reducedMotion = true;
+    el.tables = [t("a", { x: 0 }), { ...t("b", { x: 4 }), allergy: true }];
+    await settled(el);
+    return el;
+  }
+
+  /** Expects the ring 2 to 4 px right of `a`, 4 px below its top, where the mark overlaps it, to
+   * be nearer `ring` than the mark's colour somewhere across it; the screenshot is scaled. */
+  async function expectRingShown(el: WtFloorMap, ring: string): Promise<void> {
+    const a = button(el, "a").getBoundingClientRect();
+    const mark = el.shadowRoot!.querySelector('[part="allergy"]')!;
+    const danger = rgb(getComputedStyle(mark).backgroundColor);
+    const colour = rgb(ring.slice(ring.indexOf("rgb")));
+    const read = await pixels(el);
+    const across = [2, 3, 4].map((d) => read(a.right + d, a.top + 4));
+    expect(
+      across.some((p) => distance(p, colour) < distance(p, danger)),
+      `${JSON.stringify(across)}: ring ${colour}, mark ${danger}`,
+    ).toBe(true);
+  }
+
+  it("is drawn under a held table's selected ring", async () => {
+    const el = await beside();
+    const shape = button(el, "a").querySelector('[part="shape"]')!;
+    const box = shape.getBoundingClientRect();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      shape.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          composed: true,
+          cancelable: true,
+          pointerId: 1,
+          pointerType: "touch",
+          clientX: box.left + box.width / 2,
+          clientY: box.top + box.height / 2,
+        }),
+      );
+      vi.advanceTimersByTime(500);
+    } finally {
+      vi.useRealTimers();
+    }
+    await el.updateComplete;
+    expect(button(el, "a").hasAttribute("data-held")).toBe(true);
+    await expectRingShown(el, SELECTED);
+  });
+
+  it("is drawn under a focused table's focus ring", async () => {
+    const el = await beside();
+    const a = button(el, "a");
+    a.focus();
+    await press("Shift");
+    expect(a.matches(":focus-visible")).toBe(true);
+    await expectRingShown(el, FOCUS);
+  });
+});

@@ -275,7 +275,7 @@ export class WtFloorMap extends LitElement {
       }
 
       button[part="table"]:focus-visible {
-        z-index: 1;
+        z-index: 3;
       }
 
       [part="shape"] {
@@ -330,11 +330,11 @@ export class WtFloorMap extends LitElement {
         pointer-events: none;
       }
 
-      /* Above every table that is neither held nor focused, so a moving table is not hidden under the
-         one it is dragged onto and a held table's rings are not cut by a table touching it; the allergy
-         mark (z-index 2) of a table that is neither held nor focused still paints over them. */
+      /* Above every table that is neither held nor focused, and above that table's allergy mark
+         (z-index 2), as a focused table is, so a moving table is not hidden under the one it is dragged
+         onto and a held table's ring is not cut by such a table or its mark. */
       [part="table"][data-held] {
-        z-index: 1;
+        z-index: 3;
       }
 
       [part="ghost"],

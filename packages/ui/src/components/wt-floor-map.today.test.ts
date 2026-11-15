@@ -611,3 +611,31 @@ it("a party's link stays put while a fixed table's copy is dragged", async () =>
   expect(part(el, "ghost")).not.toBeNull();
   expect(lineEnds(line())).toEqual([...at1, ...at2]);
 });
+
+// Neither takes taps; they are made hittable here so the hit test reads the paint order.
+it("a fixed table's ghost is drawn above the held table it overlaps", async () => {
+  const el = await map([fixedT1]);
+  hold(el, 300, 150);
+  move(el, 375, 150);
+  await el.updateComplete;
+  expect(button(el, "t1").hasAttribute("data-held")).toBe(true);
+  const ghost = part(el, "ghost")!;
+  ghost.style.pointerEvents = "auto";
+  const shape = ghost.querySelector<HTMLElement>('[part="shape"]')!;
+  shape.style.pointerEvents = "auto";
+  const client = at(el, 400, 150);
+  expect(el.shadowRoot!.elementFromPoint(client.clientX, client.clientY)).toBe(shape);
+});
+
+it("the drag line is drawn above the held table it crosses", async () => {
+  const el = await map([fixedT1, t2]);
+  hold(el, 375, 150);
+  move(el, 150, 150);
+  await el.updateComplete;
+  expect(button(el, "t1").hasAttribute("data-held")).toBe(true);
+  const line = part(el, "drag-link")!.querySelector("line")!;
+  line.style.pointerEvents = "stroke";
+  line.style.strokeWidth = "10px";
+  const client = at(el, 330, 150);
+  expect(el.shadowRoot!.elementFromPoint(client.clientX, client.clientY)).toBe(line);
+});
