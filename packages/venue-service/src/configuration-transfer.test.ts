@@ -162,6 +162,7 @@ describe("the menu timetable rows of a bundle", () => {
           name: "Mañanas",
           colour: "blue",
           menu_id: "m-desayunos",
+          staff_menu_ids: '["m-cafe"]',
           floor_plan_set_id: "s-dinner",
         },
         {
@@ -170,6 +171,7 @@ describe("the menu timetable rows of a bundle", () => {
           name: "Madrugada",
           colour: "red",
           menu_id: "m-copas",
+          staff_menu_ids: "[]",
         },
         {
           id: DELI_PERIOD,
@@ -177,10 +179,8 @@ describe("the menu timetable rows of a bundle", () => {
           name: "Mañanas",
           colour: "blue",
           menu_id: "m-deli",
+          staff_menu_ids: "[]",
         },
-      ],
-      menu_period_staff_menus: [
-        { period_id: MANANAS, department_id: RESTAURANT, menu_id: "m-cafe", display_order: 0 },
       ],
       floor_plan_sets: [
         { id: "s-standard", department_id: RESTAURANT, name: "Standard", is_default: 1 },
@@ -196,10 +196,13 @@ describe("the menu timetable rows of a bundle", () => {
     dayCutover: "06:00",
   });
 
-  it("are transferred after the zone sale policies, with staff rows after their periods", () => {
+  it("transfers each period with its staff-menu JSON references after departments", () => {
     const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
     const at = names.indexOf("menu_periods");
-    expect(names.slice(at, at + 2)).toEqual(["menu_periods", "menu_period_staff_menus"]);
+    expect(names.filter((name) => name === "menu_periods")).toHaveLength(1);
+    expect(
+      VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.find((table) => table.name === "menu_periods"),
+    ).toMatchObject({ jsonReferences: [{ column: "staff_menu_ids", paths: [["*"]] }] });
     expect(at).toBeGreaterThan(names.indexOf("departments"));
   });
 
@@ -254,25 +257,11 @@ describe("the menu timetable rows of a bundle", () => {
       "menu_periods.menu_id",
     ],
     [
-      "a staff menu filed under another department than its period's",
-      (t: Tables) => {
-        t.menu_period_staff_menus![0]!.department_id = DELI;
-      },
-      "menu_period_staff_menus.department_id",
-    ],
-    [
-      "a staff menu naming a missing period",
-      (t: Tables) => {
-        t.menu_period_staff_menus![0]!.period_id = "gone";
-      },
-      "menu_period_staff_menus.period_id",
-    ],
-    [
       "a staff menu the bundle does not hold",
       (t: Tables) => {
-        t.menu_period_staff_menus![0]!.menu_id = "m-gone";
+        t.menu_periods![0]!.staff_menu_ids = '["m-gone"]';
       },
-      "menu_period_staff_menus.menu_id",
+      "menu_periods.staff_menu_ids",
     ],
     [
       "a floor plan set of a department the bundle lacks",
@@ -643,8 +632,20 @@ describe("validateRoutingConfiguration", () => {
     function periodTables() {
       const tables = routingTables();
       tables.menu_periods = [
-        { id: LUNCH, department_id: RESTAURANT, name: "Lunch", menu_id: "m-empty" },
-        { id: BREAKFAST, department_id: DELI, name: "Breakfast", menu_id: "m-empty" },
+        {
+          id: LUNCH,
+          department_id: RESTAURANT,
+          name: "Lunch",
+          menu_id: "m-empty",
+          staff_menu_ids: "[]",
+        },
+        {
+          id: BREAKFAST,
+          department_id: DELI,
+          name: "Breakfast",
+          menu_id: "m-empty",
+          staff_menu_ids: "[]",
+        },
       ];
       const terrace = tables.routing_cells!.find(
         (row) => row.category_id === DRINKS && row.zone_id === TERRACE,
@@ -857,10 +858,8 @@ describe("service-period configuration", () => {
           name: "Night",
           colour: "blue",
           menu_id: "customer",
+          staff_menu_ids: '["staff"]',
         },
-      ],
-      menu_period_staff_menus: [
-        { period_id: periodId, department_id: RESTAURANT, menu_id: "staff", display_order: 0 },
       ],
     };
   }
@@ -892,51 +891,23 @@ describe("service-period configuration", () => {
     [
       "an absent staff menu",
       (t: Tables) => {
-        t.menu_period_staff_menus![0]!.menu_id = "gone";
+        t.menu_periods![0]!.staff_menu_ids = '["gone"]';
       },
-      "menu_period_staff_menus.menu_id",
-    ],
-    [
-      "a staff row belonging to another department",
-      (t: Tables) => {
-        t.menu_period_staff_menus![0]!.department_id = DELI;
-      },
-      "menu_period_staff_menus.department_id",
-    ],
-    [
-      "an absent staff period",
-      (t: Tables) => {
-        t.menu_period_staff_menus![0]!.period_id = "gone";
-      },
-      "menu_period_staff_menus.period_id",
+      "menu_periods.staff_menu_ids",
     ],
     [
       "the customer menu repeated as staff",
       (t: Tables) => {
-        t.menu_period_staff_menus![0]!.menu_id = "customer";
+        t.menu_periods![0]!.staff_menu_ids = '["customer"]';
       },
-      "menu_period_staff_menus.menu_id",
+      "menu_periods.staff_menu_ids",
     ],
     [
       "a repeated staff menu",
       (t: Tables) => {
-        t.menu_period_staff_menus!.push({ ...t.menu_period_staff_menus![0]! });
+        t.menu_periods![0]!.staff_menu_ids = '["staff","staff"]';
       },
-      "menu_period_staff_menus.menu_id",
-    ],
-    [
-      "a fractional staff position",
-      (t: Tables) => {
-        t.menu_period_staff_menus![0]!.display_order = 0.5;
-      },
-      "menu_period_staff_menus.display_order",
-    ],
-    [
-      "a negative staff position",
-      (t: Tables) => {
-        t.menu_period_staff_menus![0]!.display_order = -1;
-      },
-      "menu_period_staff_menus.display_order",
+      "menu_periods.staff_menu_ids",
     ],
   ])("refuses %s", (_, edit, field) => {
     const t = tables();
@@ -1092,8 +1063,22 @@ describe("season weeks in a configuration bundle", () => {
 
       menus: [{ id: "m-lunch" }, { id: "m-late" }],
       menu_periods: [
-        { id: LUNCH, department_id: RESTAURANT, name: "Lunch", colour: "blue", menu_id: "m-lunch" },
-        { id: LATE, department_id: RESTAURANT, name: "Late", colour: "red", menu_id: "m-late" },
+        {
+          id: LUNCH,
+          department_id: RESTAURANT,
+          name: "Lunch",
+          colour: "blue",
+          menu_id: "m-lunch",
+          staff_menu_ids: "[]",
+        },
+        {
+          id: LATE,
+          department_id: RESTAURANT,
+          name: "Late",
+          colour: "red",
+          menu_id: "m-late",
+          staff_menu_ids: "[]",
+        },
       ],
       seasons: [
         {
@@ -1395,8 +1380,22 @@ describe("special days in a configuration bundle", () => {
 
       menus: [{ id: "m-bar" }, { id: "m-lunch" }],
       menu_periods: [
-        { id: BAR_PERIOD, department_id: RESTAURANT, name: "Bar", colour: "red", menu_id: "m-bar" },
-        { id: LUNCH, department_id: RESTAURANT, name: "Lunch", colour: "blue", menu_id: "m-lunch" },
+        {
+          id: BAR_PERIOD,
+          department_id: RESTAURANT,
+          name: "Bar",
+          colour: "red",
+          menu_id: "m-bar",
+          staff_menu_ids: "[]",
+        },
+        {
+          id: LUNCH,
+          department_id: RESTAURANT,
+          name: "Lunch",
+          colour: "blue",
+          menu_id: "m-lunch",
+          staff_menu_ids: "[]",
+        },
       ],
       special_days: [{ id: "fiesta", name: "Fiesta", repeats_yearly: 1 }],
       special_day_dates: [
@@ -1869,4 +1868,27 @@ it("refuses course overrides with invalid references and values", () => {
     expect(() => validate({ ...base, department_courses: [{ ...row, ...patch }] })).toThrow(
       refusal(`department_courses.${field}`),
     );
+});
+
+it.each([
+  ["an object", "{}"],
+  ["malformed JSON", "nope"],
+  ["a non-string id", "[42]"],
+])("refuses a period staff-menu list holding %s", (_case, staffMenuIds) => {
+  expect(() =>
+    validateMenuTimetables({
+      departments: [{ id: RESTAURANT }],
+      menus: [{ id: "customer" }, { id: "staff" }],
+      menu_periods: [
+        {
+          id: "period",
+          department_id: RESTAURANT,
+          name: "Lunch",
+          colour: "blue",
+          menu_id: "customer",
+          staff_menu_ids: staffMenuIds,
+        },
+      ],
+    }),
+  ).toThrowError(refusal("menu_periods.staff_menu_ids"));
 });

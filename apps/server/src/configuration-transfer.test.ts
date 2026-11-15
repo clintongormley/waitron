@@ -31,6 +31,7 @@ import {
   deleteSection,
   readMenuHome,
   createMenu,
+  createMenuShell,
   setVenueDefaultMenu,
   createCategory,
   createExtraList,
@@ -476,7 +477,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 41,
+  version: 42,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -5574,7 +5575,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(41);
+  expect(exported.version).toBe(42);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)
@@ -5676,11 +5677,11 @@ it("transfers a department's customer and staff period menus to its zone under n
     period_id: string;
     staff_id: string;
   }>(sql`
-    select c.name as customer, s.name as staff, p.colour, p.id as period_id, x.menu_id as staff_id
+    select c.name as customer, s.name as staff, p.colour, p.id as period_id, x.value as staff_id
     from menu_periods p join departments d on d.id=p.department_id
-    join menus c on c.id=p.menu_id join menu_period_staff_menus x on x.period_id=p.id
-    join menus s on s.id=x.menu_id
-    where d.name='Menus restaurant' and p.name='Menus service' order by x.display_order`);
+    join menus c on c.id=p.menu_id join json_each(p.staff_menu_ids) x
+    join menus s on s.id=x.value
+    where d.name='Menus restaurant' and p.name='Menus service' order by x.key`);
   expect(periodMenus.rows).toEqual([
     {
       customer: "Transferred drinks",
@@ -6525,13 +6526,20 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
       orderStart: "table",
     });
     const customer = await createMenu(tx, { name: "Period customer" });
-    const staffFirst = await createMenu(tx, { name: "Period staff first" });
-    const staffSecond = await createMenu(tx, { name: "Period staff second" });
+    const staff = [
+      { id: "00000000-0000-4000-8000-000000000003", name: "Period staff first" },
+      { id: "00000000-0000-4000-8000-000000000001", name: "Period staff second" },
+      { id: "00000000-0000-4000-8000-000000000002", name: "Period staff third" },
+    ];
+    for (const menu of staff) {
+      await tx.insert(menus).values(menu);
+      await createMenuShell(tx, menu.id, menu.name);
+    }
     const period = await saveMenuPeriod(tx, department.id, {
       name: "Night transfer",
       colour: "blue",
       menuId: customer.id,
-      staffMenuIds: [staffSecond.id, staffFirst.id],
+      staffMenuIds: staff.map((menu) => menu.id),
     });
     await replaceMenuWeek(
       tx,
@@ -6543,7 +6551,7 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
       new Date("2026-10-07T10:00:00Z"),
       1,
     );
-    return [department.id, customer.id, staffFirst.id, staffSecond.id, period.id];
+    return [department.id, customer.id, ...staff.map((menu) => menu.id), period.id];
   });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const bundle = await buildConfigurationBundle(
@@ -6558,22 +6566,7 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
     colour: "blue",
     menu_id: original[1],
   });
-  expect(bundle.tables.menu_period_staff_menus).toEqual(
-    expect.arrayContaining([
-      {
-        period_id: original[4],
-        department_id: original[0],
-        menu_id: original[3],
-        display_order: 0,
-      },
-      {
-        period_id: original[4],
-        department_id: original[0],
-        menu_id: original[2],
-        display_order: 1,
-      },
-    ]),
-  );
+  expect(JSON.parse(period.staff_menu_ids as string)).toEqual(original.slice(2, 5));
   const decoded = decodeConfigurationBundle(
     encodeConfigurationBundle(bundle, "a strong passphrase"),
     "a strong passphrase",
@@ -6583,20 +6576,33 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
   });
+  const importedStaff = (
+    await targetSuite.db.execute<{ staff_menu_ids: string }>(sql`
+    select staff_menu_ids from menu_periods where name = 'Night transfer'`)
+  ).rows[0]!;
+  const importedMenus = (
+    await targetSuite.db.execute<{ id: string; name: string }>(sql`
+    select id, name from menus where name like 'Period staff %'`)
+  ).rows;
+  expect(JSON.parse(importedStaff.staff_menu_ids)).toEqual(
+    ["Period staff first", "Period staff second", "Period staff third"].map(
+      (name) => importedMenus.find((menu) => menu.name === name)!.id,
+    ),
+  );
   const seasonsHolding = await targetSuite.db.execute(sql`
     select count(distinct t.season_id) as seasons
     from department_day_ranges x join department_days t on t.id=x.day_id
     join menu_periods p on p.id=x.period_id where p.name='Night transfer'`);
   expect(seasonsHolding.rows).toEqual([{ seasons: 4 }]);
   const rows = await targetSuite.db.execute(sql`
-    select distinct p.id as period_id, d.id as department_id, c.id as customer_id, s.menu_id as staff_id,
-      p.name, p.colour, c.name as customer, sc.name as staff, s.display_order,
+    select distinct p.id as period_id, d.id as department_id, c.id as customer_id, s.value as staff_id,
+      p.name, p.colour, c.name as customer, sc.name as staff, s.key as display_order,
       t.weekday, x.starts_at, x.ends_at
     from menu_periods p join departments d on d.id=p.department_id
-    join menus c on c.id=p.menu_id join menu_period_staff_menus s on s.period_id=p.id
-    join menus sc on sc.id=s.menu_id join department_days t on t.department_id=d.id
+    join menus c on c.id=p.menu_id join json_each(p.staff_menu_ids) s
+    join menus sc on sc.id=s.value join department_days t on t.department_id=d.id
     join department_day_ranges x on x.day_id=t.id and x.period_id=p.id
-    where p.name='Night transfer' order by s.display_order`);
+    where p.name='Night transfer' order by s.key`);
   expect(rows.rows).toEqual([
     {
       period_id: expect.any(String),
@@ -6607,7 +6613,7 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
       name: "Night transfer",
       colour: "blue",
       customer: "Period customer",
-      staff: "Period staff second",
+      staff: "Period staff first",
       display_order: 0,
       weekday: 5,
       starts_at: "21:00:00",
@@ -6622,8 +6628,23 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
       name: "Night transfer",
       colour: "blue",
       customer: "Period customer",
-      staff: "Period staff first",
+      staff: "Period staff second",
       display_order: 1,
+      weekday: 5,
+      starts_at: "21:00:00",
+      ends_at: "03:00:00",
+    },
+    {
+      period_id: expect.any(String),
+      department_id: expect.any(String),
+      customer_id: expect.any(String),
+      staff_id: expect.any(String),
+
+      name: "Night transfer",
+      colour: "blue",
+      customer: "Period customer",
+      staff: "Period staff third",
+      display_order: 2,
       weekday: 5,
       starts_at: "21:00:00",
       ends_at: "03:00:00",
@@ -6633,7 +6654,7 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
     for (const key of ["period_id", "department_id", "customer_id", "staff_id"])
       expect(original).not.toContain(row[key]);
   const bad = structuredClone(bundle);
-  const range = bad.tables.department_day_ranges!.find((row) => row.period_id === original[4])!;
+  const range = bad.tables.department_day_ranges!.find((row) => row.period_id === original[5])!;
   range.ends_at = "05:00:00";
   expect(() => validateConfigurationBundle(bad, ALL_MODULES, versions)).toThrowError(
     expect.objectContaining({

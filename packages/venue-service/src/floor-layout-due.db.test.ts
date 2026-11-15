@@ -248,7 +248,7 @@ describe("which floor layout is due", () => {
           periodName: null,
         });
         const sql = spy.mock.calls.map(([q]) => (q as unknown as { sql: string }).sql);
-        expect(sql.filter((q) => q.includes('from "menu_period_staff_menus"'))).toEqual([]);
+        expect(sql.filter((q) => q.includes("json_each"))).toEqual([]);
       } finally {
         spy.mockRestore();
       }

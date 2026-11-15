@@ -21,10 +21,10 @@ describe("VENUE_SERVICE_CLASSIFICATION", () => {
   });
   it("copies a period's staff-only menu choices as state", () => {
     expect(
-      VENUE_SERVICE_CLASSIFICATION.filter((entry) => entry.table === "menu_period_staff_menus").map(
+      VENUE_SERVICE_CLASSIFICATION.filter((entry) => entry.table === "menu_periods").map(
         (entry) => [entry.table, entry.class],
       ),
-    ).toEqual([["menu_period_staff_menus", "state"]]);
+    ).toEqual([["menu_periods", "state"]]);
   });
   it("replicates opening hours, station fallbacks and today's state", () => {
     const timing = ["station_hours", "department_hours", "kitchen_stations"];

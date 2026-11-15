@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c766a32f-8d84-4f37-b286-ad48a84f7d1a",
+  "id": "7c577837-dedf-497d-8cc8-8c8f3d2913ba",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -16088,82 +16088,6 @@
         }
       }
     },
-    "menu_period_staff_menus": {
-      "name": "menu_period_staff_menus",
-      "columns": {
-        "period_id": {
-          "name": "period_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "department_id": {
-          "name": "department_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "menu_id": {
-          "name": "menu_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "display_order": {
-          "name": "display_order",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "menu_period_staff_menus_period_fk": {
-          "name": "menu_period_staff_menus_period_fk",
-          "tableFrom": "menu_period_staff_menus",
-          "tableTo": "menu_periods",
-          "columnsFrom": [
-            "period_id",
-            "department_id"
-          ],
-          "columnsTo": [
-            "id",
-            "department_id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "menu_period_staff_menus_menu_fk": {
-          "name": "menu_period_staff_menus_menu_fk",
-          "tableFrom": "menu_period_staff_menus",
-          "tableTo": "menus",
-          "columnsFrom": [
-            "menu_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "menu_period_staff_menus_pk": {
-          "columns": [
-            "period_id",
-            "menu_id"
-          ],
-          "name": "menu_period_staff_menus_pk"
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "menu_periods": {
       "name": "menu_periods",
       "columns": {
@@ -16209,6 +16133,14 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "staff_menu_ids": {
+          "name": "staff_menu_ids",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[]'"
         }
       },
       "indexes": {
@@ -16280,6 +16212,10 @@
         "menu_periods_colour_ck": {
           "name": "menu_periods_colour_ck",
           "value": "\"menu_periods\".\"colour\" in ('red', 'orange', 'amber', 'yellow', 'lime', 'green', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'purple', 'magenta', 'pink', 'brown', 'grey')"
+        },
+        "menu_periods_staff_menu_ids_ck": {
+          "name": "menu_periods_staff_menu_ids_ck",
+          "value": "json_valid(\"menu_periods\".\"staff_menu_ids\") and json_type(\"menu_periods\".\"staff_menu_ids\") = 'array'"
         }
       }
     },

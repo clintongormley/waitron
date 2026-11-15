@@ -459,19 +459,16 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       sql`update menu_periods set name = 'Authored hours', colour = 'blue' where id = ${periodId}`,
     );
     const [staff] = await db.insert(menus).values({ name: "Staff" }).returning({ id: menus.id });
-    await db.execute(sql`insert into menu_period_staff_menus (period_id, department_id, menu_id, display_order)
-      select id, department_id, ${staff!.id}, 5 from menu_periods where id = ${periodId}`);
+    await db.execute(
+      sql`update menu_periods set staff_menu_ids=${JSON.stringify([staff!.id])} where id=${periodId}`,
+    );
     await runSeed();
     expect(await listed()).toEqual([
       { id: periodId, menu_id: menu!.id, name: "Authored hours", colour: "blue" },
     ]);
     expect(
-      (
-        await db.execute(
-          sql`select period_id, menu_id, display_order from menu_period_staff_menus where period_id = ${periodId}`,
-        )
-      ).rows,
-    ).toEqual([{ period_id: periodId, menu_id: staff!.id, display_order: 5 }]);
+      (await db.execute(sql`select staff_menu_ids from menu_periods where id = ${periodId}`)).rows,
+    ).toEqual([{ staff_menu_ids: JSON.stringify([staff!.id]) }]);
   });
 
   it("leaves no service settings table", async () => {

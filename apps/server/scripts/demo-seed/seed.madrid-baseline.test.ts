@@ -1818,6 +1818,13 @@ for (const locale of ["en", "es"] as const) {
               for (const field of ["addAllergens", "suitableFor"]) delete item[field];
         },
       });
+      const staffMenuFold = {
+        from: "menu_period_staff_menus",
+        into: "menu_periods",
+        match: { from: "period_id", into: "id" },
+        columns: {},
+        collect: { from: "menu_id", into: "staff_menu_ids", orderBy: "display_order" },
+      };
       if (phase === "seeded") {
         const periods = madridWithPeriodChanges(expected.seeded, PERIOD_CHANGES[locale]);
         expected.seeded = periods.semantics;
@@ -1840,7 +1847,7 @@ for (const locale of ["en", "es"] as const) {
           Object.entries(closureRows).sort(([a], [b]) => a.localeCompare(b)),
         );
         const { semantics, added } = madridWithAddedRows(
-          madridWithDroppedColumns(expected.seeded, {
+          madridWithDroppedColumns(madridWithFoldedTables(expected.seeded, [staffMenuFold]), {
             products: ["catalogue_id", "name_key", "manual_allergens", "diet"],
           }),
           historicalSeeded,
@@ -1911,6 +1918,10 @@ for (const locale of ["en", "es"] as const) {
       delete phases[phase]!.menu_publications;
       delete phases[phase]!.menu_scheduled_publications;
       phases[phase] = byName(phases[phase]!);
+
+      if (phase !== "seeded")
+        expected[phase] = madridWithFoldedTables(expected[phase], [staffMenuFold]);
+      delete phases[phase]!.menu_period_staff_menus;
 
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(expected[phase].tables));
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(phases[phase]!));

@@ -86,8 +86,6 @@ export function validateHolidayConfiguration(
 export function validateMenuTimetables(tables: Tables): void {
   const departments = ids(tables.departments);
   const menus = ids(tables.menus);
-  const periodDepartment = new Map<unknown, unknown>();
-  const customerMenus = new Map<unknown, unknown>();
   const setDepartment = new Map<unknown, unknown>();
   const setNames = new Set<string>();
   const defaults = new Map<unknown, number>();
@@ -116,28 +114,21 @@ export function validateMenuTimetables(tables: Tables): void {
     names.add(name);
     if (!CALENDAR_COLOURS.includes(row.colour as CalendarColour)) refuse("menu_periods.colour");
     if (!menus.has(row.menu_id)) refuse("menu_periods.menu_id");
-    periodDepartment.set(row.id, row.department_id);
-    customerMenus.set(row.id, row.menu_id);
-  }
-  const staffMenus = new Set<string>();
-  for (const row of tables.menu_period_staff_menus ?? []) {
-    if (!periodDepartment.has(row.period_id)) refuse("menu_period_staff_menus.period_id");
-    if (periodDepartment.get(row.period_id) !== row.department_id)
-      refuse("menu_period_staff_menus.department_id");
-    const key = JSON.stringify([row.period_id, row.menu_id]);
+    const field = "menu_periods.staff_menu_ids";
+    if (typeof row.staff_menu_ids !== "string") refuse(field);
+    let staff: unknown;
+    try {
+      staff = JSON.parse(row.staff_menu_ids);
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error;
+      refuse(field);
+    }
     if (
-      !menus.has(row.menu_id) ||
-      customerMenus.get(row.period_id) === row.menu_id ||
-      staffMenus.has(key)
+      !Array.isArray(staff) ||
+      staff.some((id) => typeof id !== "string" || !menus.has(id) || id === row.menu_id) ||
+      new Set(staff).size !== staff.length
     )
-      refuse("menu_period_staff_menus.menu_id");
-    staffMenus.add(key);
-    if (
-      typeof row.display_order !== "number" ||
-      !Number.isInteger(row.display_order) ||
-      row.display_order < 0
-    )
-      refuse("menu_period_staff_menus.display_order");
+      refuse(field);
   }
 }
 
@@ -685,8 +676,7 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "device_profile_kitchen_screen_zones" },
     { name: "department_transfer_destinations" },
     { name: "routing_cells" },
-    { name: "menu_periods" },
-    { name: "menu_period_staff_menus" },
+    { name: "menu_periods", jsonReferences: [{ column: "staff_menu_ids", paths: [["*"]] }] },
     { name: "routing_cell_periods" },
     { name: "special_days" },
     { name: "special_day_dates" },

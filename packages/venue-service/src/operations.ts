@@ -28,7 +28,6 @@ import {
   floorZones,
   insertInChunks,
   menuPeriods,
-  menuPeriodStaffMenus,
   orderServiceContexts,
   refusalOn,
   routingCellPeriods,
@@ -785,20 +784,15 @@ async function zonePeriodMembership(tx: Transaction, zoneId?: string) {
   const staff = await tx
     .select({
       zoneId: floorZones.id,
-      menuId: menuPeriodStaffMenus.menuId,
+      menuId: sql<string>`staff.value`,
       periodId: menuPeriods.id,
     })
-    .from(menuPeriodStaffMenus)
-    .innerJoin(menuPeriods, eq(menuPeriods.id, menuPeriodStaffMenus.periodId))
+    .from(menuPeriods)
+    .innerJoin(sql`json_each(${menuPeriods.staffMenuIds}) as staff`, sql`true`)
     .innerJoin(floorZones, eq(floorZones.departmentId, menuPeriods.departmentId))
-    .innerJoin(menus, eq(menus.id, menuPeriodStaffMenus.menuId))
+    .innerJoin(menus, eq(menus.id, sql`staff.value`))
     .where(where)
-    .orderBy(
-      asc(menuPeriods.name),
-      asc(menuPeriods.id),
-      asc(menuPeriodStaffMenus.displayOrder),
-      asc(menuPeriodStaffMenus.menuId),
-    );
+    .orderBy(asc(menuPeriods.name), asc(menuPeriods.id), sql`staff.key`);
   return [
     ...customer.map((row) => ({ ...row, audience: "customer" as const })),
     ...staff.map((row) => ({ ...row, audience: "staff" as const })),

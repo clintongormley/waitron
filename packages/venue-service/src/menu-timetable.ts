@@ -13,7 +13,6 @@ import {
   departments,
   floorZones,
   menuPeriods,
-  menuPeriodStaffMenus,
   products,
   readVenueClock,
   routingCellPeriods,
@@ -115,6 +114,7 @@ export async function requirePeriod(tx: Transaction, periodId: string) {
       name: menuPeriods.name,
       menuId: menuPeriods.menuId,
       floorPlanSetId: menuPeriods.floorPlanSetId,
+      staffMenuIds: menuPeriods.staffMenuIds,
     })
     .from(menuPeriods)
     .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
@@ -173,20 +173,27 @@ export async function departmentDay(
   clock: BusinessDayClock,
   plan?: DayPlan,
 ) {
-  const periods = await tx
+  const rows = await tx
     .select({
       id: menuPeriods.id,
       name: menuPeriods.name,
       menuId: menuPeriods.menuId,
+      staffMenuIds: menuPeriods.staffMenuIds,
     })
     .from(menuPeriods)
     .where(eq(menuPeriods.departmentId, departmentId))
     .orderBy(asc(menuPeriods.name), asc(menuPeriods.id));
-  const staff = await tx
-    .select({ periodId: menuPeriodStaffMenus.periodId, menuId: menuPeriodStaffMenus.menuId })
-    .from(menuPeriodStaffMenus)
-    .where(eq(menuPeriodStaffMenus.departmentId, departmentId))
-    .orderBy(asc(menuPeriodStaffMenus.displayOrder), asc(menuPeriodStaffMenus.menuId));
+  const periods = rows.map(({ staffMenuIds: _, ...period }) => period);
+  const staff = rows
+    .flatMap((row) =>
+      row.staffMenuIds.map((menuId, position) => ({
+        periodId: row.id,
+        menuId,
+        position,
+      })),
+    )
+    .sort((a, b) => a.position - b.position || a.menuId.localeCompare(b.menuId))
+    .map(({ position: _, ...entry }) => entry);
   if (moment === null) return { periods, staff, ranges: [] };
   const days = await resolveDepartmentDays(tx, departmentId, [moment.businessDay], clock, plan);
   return { periods, staff, ranges: days.get(moment.businessDay)!.ranges };
@@ -398,7 +405,7 @@ async function writeMenuPeriod(
       );
     if (own === undefined) throw new AppError("menu_period.invalid", { field: "floorPlanSetId" });
   }
-  const values = { name, menuId: period.menuId, colour, floorPlanSetId };
+  const values = { name, menuId: period.menuId, staffMenuIds, colour, floorPlanSetId };
   let id = periodId;
   if (periodId === null) {
     const [row] = await tx
@@ -408,17 +415,7 @@ async function writeMenuPeriod(
     id = row!.id;
   } else {
     await tx.update(menuPeriods).set(values).where(eq(menuPeriods.id, periodId));
-    await tx.delete(menuPeriodStaffMenus).where(eq(menuPeriodStaffMenus.periodId, periodId));
   }
-  if (staffMenuIds.length > 0)
-    await tx.insert(menuPeriodStaffMenus).values(
-      staffMenuIds.map((menuId, displayOrder) => ({
-        periodId: id!,
-        departmentId,
-        menuId,
-        displayOrder,
-      })),
-    );
   return { id: id! };
 }
 
@@ -428,13 +425,8 @@ export async function updateMenuPeriod(
   period: Partial<MenuPeriodInput>,
 ): Promise<void> {
   const stored = await requirePeriod(tx, periodId);
-  const staff = await tx
-    .select({ menuId: menuPeriodStaffMenus.menuId })
-    .from(menuPeriodStaffMenus)
-    .where(eq(menuPeriodStaffMenus.periodId, periodId))
-    .orderBy(asc(menuPeriodStaffMenus.displayOrder));
   const [appearance] = await tx
-    .select({ colour: menuPeriods.colour })
+    .select({ colour: menuPeriods.colour, staffMenuIds: menuPeriods.staffMenuIds })
     .from(menuPeriods)
     .where(eq(menuPeriods.id, periodId));
   await writeMenuPeriod(tx, stored.departmentId, periodId, {
@@ -442,7 +434,7 @@ export async function updateMenuPeriod(
     menuId: period.menuId === undefined ? stored.menuId : period.menuId,
     colour: period.colour === undefined ? appearance!.colour : period.colour,
     staffMenuIds:
-      period.staffMenuIds === undefined ? staff.map((row) => row.menuId) : period.staffMenuIds,
+      period.staffMenuIds === undefined ? appearance!.staffMenuIds : period.staffMenuIds,
     floorPlanSetId:
       period.floorPlanSetId === undefined ? stored.floorPlanSetId : period.floorPlanSetId,
   });
@@ -664,6 +656,7 @@ export async function readActivePeriods(tx: Transaction) {
       colour: menuPeriods.colour,
       menuId: menuPeriods.menuId,
       floorPlanSetId: menuPeriods.floorPlanSetId,
+      staffMenuIds: menuPeriods.staffMenuIds,
     })
     .from(menuPeriods)
     .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
@@ -679,12 +672,6 @@ export async function readOpeningHoursModel(tx: Transaction, at: Date): Promise<
     moment === null ? clock.dayCutover : serviceDayContext(clock, moment.businessDay).dayCutover;
   const departmentRows = await readActiveDepartments(tx);
   const periods = await readActivePeriods(tx);
-  const staff = await tx
-    .select({ periodId: menuPeriodStaffMenus.periodId, menuId: menuPeriodStaffMenus.menuId })
-    .from(menuPeriodStaffMenus)
-    .innerJoin(departments, eq(departments.id, menuPeriodStaffMenus.departmentId))
-    .where(eq(departments.active, true))
-    .orderBy(asc(menuPeriodStaffMenus.displayOrder), asc(menuPeriodStaffMenus.menuId));
   const seasonList = await readSeasons(tx);
   const currentSeasonId =
     moment === null ? null : (seasonOn(seasonList, moment.businessDay)?.id ?? null);
@@ -723,15 +710,13 @@ export async function readOpeningHoursModel(tx: Transaction, at: Date): Promise<
           .map(({ id, name, seasonWeeks }) => ({ id, name, seasonWeeks })),
         periods: periods
           .filter((period) => period.departmentId === department.id)
-          .map(({ id, name, colour, menuId, floorPlanSetId }) => ({
+          .map(({ id, name, colour, menuId, floorPlanSetId, staffMenuIds }) => ({
             id,
             name,
             colour,
             menuId,
             floorPlanSetId,
-            staffMenuIds: staff
-              .filter((entry) => entry.periodId === id)
-              .map((entry) => entry.menuId),
+            staffMenuIds,
             weekdays: [0, 1, 2, 3, 4, 5, 6].filter((weekday) =>
               [...(stored?.values() ?? [])].some((week) =>
                 week[weekday]!.some((range) => range.periodId === id),

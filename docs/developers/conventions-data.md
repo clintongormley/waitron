@@ -2124,6 +2124,11 @@ bundle's `createdAt` (`refuseSkippedPaint`). The menu validator takes only the t
 
 ### Service-period configuration
 
+(2026-11-16, A1308 mn12: staff-menu ids now live in display order in
+`menu_periods.staff_menu_ids`. Configuration transfer declares those ids through
+`jsonReferences`; `apps/server/src/configuration-transfer.test.ts` checks that a second venue
+receives new menu ids in the same order.)
+
 (2026-10-21, A789: the period end offset is gone. The first measurement below tested it; the
 second's `-t` filter names a test since renamed "round-trips service periods with colours, ordered
 staff menus and remapped business-day ranges".)

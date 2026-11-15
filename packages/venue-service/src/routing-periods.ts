@@ -1,11 +1,5 @@
 import { asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
-import {
-  departments,
-  menuPeriods,
-  menuPeriodStaffMenus,
-  products,
-  type Transaction,
-} from "@waitron/db";
+import { departments, menuPeriods, products, type Transaction } from "@waitron/db";
 import { loadSectionGraph, reachableProducts } from "@waitron/menu";
 import type { RoutingPeriod } from "./routing-types.js";
 import { readDepartmentSeasonWeeks } from "./season-weeks.js";
@@ -46,11 +40,10 @@ export async function periodProductIds(
   if (periods.length === 0) return found;
   const menusOf = new Map(periods.map((period) => [period.id, [period.menuId]]));
   for (const row of await tx
-    .select({ periodId: menuPeriodStaffMenus.periodId, menuId: menuPeriodStaffMenus.menuId })
-    .from(menuPeriodStaffMenus)
-    .where(inArray(menuPeriodStaffMenus.periodId, [...menusOf.keys()]))
-    .orderBy(asc(menuPeriodStaffMenus.displayOrder), asc(menuPeriodStaffMenus.menuId)))
-    menusOf.get(row.periodId)!.push(row.menuId);
+    .select({ periodId: menuPeriods.id, staffMenuIds: menuPeriods.staffMenuIds })
+    .from(menuPeriods)
+    .where(inArray(menuPeriods.id, [...menusOf.keys()])))
+    menusOf.get(row.periodId)!.push(...row.staffMenuIds);
   const graph = await loadSectionGraph(tx);
   const rootOf = new Map(graph.roots().map((root) => [root.menuId, root.sectionId]));
   const parentOf = new Map(

@@ -4,7 +4,7 @@ export interface MadridFold {
   into: string;
   match: { from: string; into: string };
   columns: Readonly<Record<string, string>>;
-  collect?: { from: string; into: string };
+  collect?: { from: string; into: string; orderBy?: string };
 }
 export function madridWithFoldedTables(
   original: CanonicalMadridSemantics,
@@ -15,13 +15,23 @@ export function madridWithFoldedTables(
     const source = result.tables[fold.from]!;
     const target = result.tables[fold.into]!;
     if (fold.collect) {
-      const { from, into } = fold.collect;
+      const { from, into, orderBy } = fold.collect;
       target.columns.push({ name: into, type: "TEXT", notnull: 1, dflt_value: "'[]'", pk: 0 });
-      for (const row of Object.values(target.rows))
-        row[into] = Object.values(source.rows)
-          .filter((child) => child[fold.match.from] === row[fold.match.into])
-          .map((child) => child[from])
-          .sort();
+      for (const row of Object.values(target.rows)) {
+        const children = Object.values(source.rows).filter(
+          (child) => child[fold.match.from] === row[fold.match.into],
+        );
+        row[into] =
+          orderBy === undefined
+            ? children.map((child) => child[from]).sort()
+            : children
+                .sort(
+                  (a, b) =>
+                    Number(a[orderBy]) - Number(b[orderBy]) ||
+                    String(a[from]).localeCompare(String(b[from])),
+                )
+                .map((child) => child[from]);
+      }
     }
     const byKey = new Map(Object.values(source.rows).map((row) => [row[fold.match.from], row]));
     for (const [from, into] of Object.entries(fold.columns)) {

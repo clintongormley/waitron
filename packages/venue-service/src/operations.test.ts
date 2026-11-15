@@ -1,4 +1,4 @@
-import { taxpayer } from "@waitron/db";
+import { taxpayer, menus } from "@waitron/db";
 import { deleteDepartment } from "./service-delete.js";
 import * as settingsOperations from "./operations.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -8,6 +8,7 @@ import {
   addShortcut,
   buildMenuDocument,
   createMenu,
+  createMenuShell,
   setVenueDefaultMenu,
   createCategory,
   createExtraList,
@@ -110,6 +111,37 @@ const suite = useVenueDb({
 });
 beforeEach(async () => {
   await seedPerson(suite.db, { id: "person-1", displayName: "Test person-1" });
+});
+
+it("lists a zone's staff menus in the period's order, active ones only", async () => {
+  await seedFixtureVenue("Ordered staff menus");
+  await scoped(async (tx) => {
+    const zone = await seedZoneRow(tx, { name: "Staff zone" });
+    const customer = await createMenu(tx, { name: "Customer" });
+    const staffIds = [
+      "00000000-0000-4000-8000-000000000003",
+      "00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+    ];
+    for (const [i, id] of staffIds.entries()) {
+      await tx.insert(menus).values({ id, name: `Staff ${i}` });
+      await createMenuShell(tx, id, `Staff ${i}`);
+    }
+    for (const id of [customer.id, ...staffIds]) {
+      const { document } = await buildMenuDocument(tx, id);
+      await publishMenu(tx, id, menuDocumentHash(document), "person-1");
+    }
+    await saveMenuPeriod(tx, zone.departmentId, {
+      name: "Lunch",
+      menuId: customer.id,
+      staffMenuIds: staffIds,
+    });
+    await tx.update(menus).set({ active: false }).where(eq(menus.id, staffIds[1]!));
+    const offers = await listZoneOffers(tx, zone.id, { withDefault: false });
+    expect(offers.menus.filter((menu) => menu.audience === "staff").map((menu) => menu.id)).toEqual(
+      [staffIds[0], staffIds[2]],
+    );
+  });
 });
 
 describe("order flow from sale policies", () => {
@@ -2672,7 +2704,7 @@ describe("zone offers from the published menus", () => {
       // The bar zone sells All day alone; with only an unpublished menu it sells nothing.
       await offerMenuThroughZone(tx, venue.barZone, brunch.id, { makeDefault: true });
       await tx.execute(
-        sql`delete from menu_period_staff_menus where department_id = ${venue.barId} and menu_id = ${venue.menuId}`,
+        sql`update menu_periods set staff_menu_ids=(select json_group_array(value) from json_each(staff_menu_ids) where value <> ${venue.menuId}) where department_id=${venue.barId}`,
       );
       await expect(listZoneOffers(tx, venue.barZone)).resolves.toEqual({
         defaultMenuId: null,
@@ -2704,7 +2736,7 @@ describe("zone offers from the published menus", () => {
       const brunch = await createMenu(tx, { name: "Brunch" });
       await offerMenuThroughZone(tx, venue.barZone, brunch.id, { makeDefault: true });
       await tx.execute(
-        sql`delete from menu_period_staff_menus where department_id = ${venue.barId} and menu_id = ${venue.menuId}`,
+        sql`update menu_periods set staff_menu_ids=(select json_group_array(value) from json_each(staff_menu_ids) where value <> ${venue.menuId}) where department_id=${venue.barId}`,
       );
       // The dining room's unpublished Brunch is beside published menus, so it is not reported.
       await offerMenuThroughZone(tx, venue.diningZone, brunch.id);
@@ -2909,7 +2941,7 @@ describe("zone offers from the published menus", () => {
 
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
       const { menus: served, unavailable } = await menuState(tx, venue.diningZone);
-      expect(prepared).toHaveBeenCalledTimes(16);
+      expect(prepared).toHaveBeenCalledTimes(15);
       expect(served.map(stateVersionOf)).toEqual(menus);
       expect({ ...unavailable, products: [...unavailable.products].sort() }).toEqual({
         products: [venue.productId, venue.burger, venue.large, venue.extraMint].sort(),
@@ -2991,8 +3023,8 @@ describe("zone offers from the published menus", () => {
       await expect(listVenueReadiness(tx)).resolves.toEqual([]);
       const sqlOf = prepared.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
       expect(sqlOf.filter((text) => /from "menu_releases"/.test(text))).toHaveLength(1);
-      expect(sqlOf.filter((text) => /from "menu_period_staff_menus"/.test(text))).toHaveLength(1);
-      expect(sqlOf.filter((text) => /from "menu_periods"/.test(text))).toHaveLength(1);
+      expect(sqlOf.filter((text) => /join json_each/.test(text))).toHaveLength(1);
+      expect(sqlOf.filter((text) => /from "menu_periods"/.test(text))).toHaveLength(2);
     });
   });
 });
