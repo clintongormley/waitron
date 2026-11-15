@@ -118,7 +118,7 @@ predeterminada del local.
 La lista de Productos no muestra dónde se prepara cada plato; eso lo muestra la pestaña **Rutas**.
 Un asterisco rojo tras el nombre de una categoría en la lista indica que su ruta de **Todas las
 zonas** no llega a ninguna estación activa. Otras rutas de la pestaña **Rutas** aún pueden enviar
-algunos de sus platos a una estación. Cuando no se puede leer el envío a la estación y la lista tiene
+algunos de sus platos a una estación. Cuando falla la carga del envío a la estación y la lista tiene
 categorías, una línea sobre la lista lo dice y no se marca ninguna categoría.
 
 Puedes crear una unidad, una lista de extras o una lista de opciones sin abandonar el producto que estás

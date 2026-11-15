@@ -1082,7 +1082,8 @@ retain the earlier scope and the six follow-ups.
   category's name stays, and a routing read that fails shows one line above the list. Allergens and
   Dietary info start hidden. The ordering column is headed Standalone (Spanish «Por separado»), and
   the editor field and the filter are "Standalone ordering by" (Spanish «Pedir por separado»). A
-  Course column and a Course filter join the list, and "Default course" is "Course".
+  Course column and a Course filter join the list, and "Default course" is "Course". (2026-11-15: a
+  read refused because the person may not see routing shows no line.)
 
 - **Optional customer text and unit staff identity (A682, owner, 2026-10-17).** Every customer
   translation is optional, including the default. Units have a required staff name and abbreviation;

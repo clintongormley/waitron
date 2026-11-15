@@ -98,7 +98,7 @@ export class ProductBrowser extends LitElement {
   @property({ attribute: false }) products: Product[] = [];
   @property({ attribute: false }) courses: Course[] = [];
   @property({ attribute: false }) routing: RoutingModel | null = null;
-  /** Whether the routing read failed, as against not having answered yet. */
+  /** Whether the routing read failed for a reason other than a refusal. */
   @property({ type: Boolean }) routingFailed = false;
   @property({ attribute: false }) categories: CategorySummary[] = [];
   @property({ attribute: false }) extraLists: ExtraList[] = [];

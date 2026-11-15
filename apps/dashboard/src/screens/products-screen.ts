@@ -176,9 +176,9 @@ export class ProductsScreen extends LitElement {
   readonly #routingQueries = new DashboardQueries(
     this,
     () => this.api,
-    () => {
+    (error) => {
       this.routing = null;
-      this.routingFailed = true;
+      this.routingFailed = codeOf(error) !== "authorization.not_permitted";
     },
   );
   // A re-read that fails after the step's first load keeps the menus it already shows.

@@ -362,9 +362,11 @@ describe("menu-screen", () => {
     });
     const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
+    expect(api.getFolderRouting).toHaveBeenCalledOnce();
     expect(list(el).products).toEqual(products);
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
     expect(list(el).routing).toBeNull();
+    expect(list(el).routingFailed).toBe(false);
   });
 
   it("tells the browser the routing read failed, and clears that once a later read succeeds", async () => {
@@ -383,13 +385,16 @@ describe("menu-screen", () => {
     expect(list(el).routing).toEqual(routing);
   });
 
-  it("counts a refused routing read as failed too", async () => {
-    const api = stubApi({
-      getFolderRouting: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
-    });
+  it("drops routing without marking it failed when a refresh after a good read is refused", async () => {
+    const api = Object.assign(stubApi(), { liveData: new LiveData() });
     const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
-    expect(list(el).routingFailed).toBe(true);
+    expect(list(el).routing).not.toBeNull();
+    vi.mocked(api.getFolderRouting).mockRejectedValue({ code: "authorization.not_permitted" });
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(list(el).routing).toBeNull());
+    expect(api.getFolderRouting).toHaveBeenCalledTimes(2);
+    expect(list(el).routingFailed).toBe(false);
   });
 
   it("marks routing failed when a refresh after a good read fails, and not before", async () => {
