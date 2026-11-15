@@ -5,6 +5,7 @@ import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, mountInShadowRoot } from "@waitron/ui/src/test-helpers.js";
 import type { DepartmentServiceSteps } from "./department-service-steps.js";
 import type { ServiceStepDraft } from "./service-step-draft.js";
+import { STARTER_COURSE_NAMES, STARTER_STEP_NAMES } from "../starter-content.js";
 
 import "./department-service-steps.js";
 
@@ -372,15 +373,67 @@ function expectInFull(box: Element | null | undefined, what: string): void {
   expect.soft(box ? box.scrollWidth <= box.clientWidth : false, `${what}: ${widths}`).toBe(true);
 }
 
+const STARTER_STEP_OF: Record<string, keyof typeof STARTER_STEP_NAMES> = {
+  s1: "Set up",
+  s2: "Take order",
+  s3: "Dessert?",
+  s4: "Coffee or bill?",
+  s5: "Take order",
+};
+const STARTER_COURSE_OF: Record<string, keyof typeof STARTER_COURSE_NAMES> = {
+  "c-starters": "Starters",
+  "c-mains": "Mains",
+};
+// Verdana is about as wide as CI's Linux system font (DejaVu Sans).
+const WIDE = 'Verdana, "DejaVu Sans"';
+
 it.each([
-  { width: 576, startsInFull: true },
-  { width: 356, startsInFull: false },
-])(
-  "at the $width px the department dialog gives the list, a three-digit minutes value and each name read in full",
-  async ({ width, startsInFull }) => {
-    const el = await mount({
-      steps: copy(STEPS).map((step) => (step.key === "s3" ? { ...step, minutes: "120" } : step)),
-    });
+  { locale: "en", width: 576, font: "", startsInFull: true, tableFits: true },
+  { locale: "en", width: 356, font: "", startsInFull: false, tableFits: true },
+  { locale: "en", width: 576, font: WIDE, startsInFull: true, tableFits: true },
+  { locale: "en", width: 540, font: WIDE, startsInFull: true, tableFits: true },
+  { locale: "en", width: 356, font: WIDE, startsInFull: true, tableFits: true },
+  { locale: "en", width: 320, font: WIDE, startsInFull: true, tableFits: true },
+  { locale: "en", width: 286, font: WIDE, startsInFull: true, tableFits: false },
+  { locale: "es", width: 576, font: WIDE, startsInFull: true, tableFits: true },
+  { locale: "es", width: 540, font: WIDE, startsInFull: true, tableFits: true },
+  { locale: "es", width: 356, font: WIDE, startsInFull: true, tableFits: true },
+  { locale: "es", width: 320, font: WIDE, startsInFull: true, tableFits: true },
+  { locale: "es", width: 286, font: WIDE, startsInFull: true, tableFits: false },
+] as const)(
+  "at the $width px the department dialog gives the list, a three-digit minutes value and each name read in full ($locale, font $font)",
+  async ({ locale, width, font, startsInFull, tableFits }) => {
+    setLocale(locale);
+    const steps: ServiceStepDraft[] = [
+      ...copy(STEPS).map((step) => (step.key === "s3" ? { ...step, minutes: "120" } : step)),
+      {
+        key: "s5",
+        id: "s5",
+        name: "Take order",
+        start: "since_last_order",
+        courseId: null,
+        minutes: "15",
+      },
+    ];
+    const el = await mount(
+      locale === "es"
+        ? {
+            steps: steps.map((step) => ({
+              ...step,
+              name: STARTER_STEP_NAMES[STARTER_STEP_OF[step.key]!].es,
+            })),
+            courses: COURSES.map((course) => ({
+              ...course,
+              name: STARTER_COURSE_NAMES[STARTER_COURSE_OF[course.id]!].es,
+            })),
+          }
+        : { steps },
+    );
+    if (font) {
+      const family = getComputedStyle(el).getPropertyValue("--wt-font-family");
+      expect(family).not.toBe("");
+      el.style.setProperty("--wt-font-family", `${font}, ${family}`);
+    }
     el.style.width = `${width}px`;
     await settle(el);
     rows(el).forEach((_, index) => {
@@ -392,8 +445,9 @@ it.each([
         expectInFull(start, `start in ${row}`);
       }
     });
+    // At 286 px the table scrolls sideways; names and starts are still checked in full.
     const wrap = q(el, ".table-wrap")!;
-    expect(wrap.scrollWidth).toBeLessThanOrEqual(wrap.clientWidth);
+    if (tableFits) expect(wrap.scrollWidth).toBeLessThanOrEqual(wrap.clientWidth);
   },
 );
 
@@ -446,6 +500,17 @@ it("marks Step and Starts as required", async () => {
     .map((head) => head.querySelector(".required"));
   expect(marks.map((mark) => mark?.textContent)).toEqual(["*", "*"]);
   expect(marks.map((mark) => mark!.getAttribute("aria-hidden"))).toEqual(["true", "true"]);
+});
+
+it("names the Minutes and Actions columns for screen readers without drawing the words", async () => {
+  const el = await mount();
+  const labels = [...el.shadowRoot!.querySelectorAll<HTMLElement>("thead .visually-hidden")];
+  expect(labels.map((label) => label.textContent)).toEqual(["Minutes", "Actions"]);
+  for (const label of labels) {
+    expect(label.checkVisibility(), label.textContent!).toBe(true);
+    const box = label.getBoundingClientRect();
+    expect(box.width * box.height, label.textContent!).toBeLessThanOrEqual(1);
+  }
 });
 
 it("reads a course or step name holding a replacement pattern literally", async () => {

@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import { ReorderController, baseStyles } from "@waitron/ui";
+import { ReorderController, baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -79,11 +79,14 @@ export class DepartmentServiceSteps extends LitElement {
         min-width: 0;
       }
       .name {
-        flex: 1 1 calc(var(--wt-tap-min) * 3);
+        flex: 1 1 100%;
         min-width: 0;
       }
+      /* Where the fields are narrower than nine tap widths the second term outgrows them, so the
+         start takes a line of its own rather than be cut short beside the minutes. Not a
+         container query, which cannot read --wt-tap-min. */
       .start {
-        flex: 4 1 calc(var(--wt-tap-min) * 3);
+        flex: 4 1 max(calc(var(--wt-tap-min) * 3), calc((var(--wt-tap-min) * 9 - 100%) * 999));
         min-width: 0;
       }
       .minutes {
@@ -92,6 +95,9 @@ export class DepartmentServiceSteps extends LitElement {
       }
       .empty {
         color: var(--wt-color-text-muted);
+      }
+      .visually-hidden {
+        ${visuallyHiddenStyles}
       }
       .required,
       .error {
