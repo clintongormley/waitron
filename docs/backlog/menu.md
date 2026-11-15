@@ -594,17 +594,6 @@ republishes the menus that carry the list, or the published menu drops a deleted
 test deletes each kind of list and the till can still add the dish and change an open order holding
 it, before and after a republish.
 
-## A885. Say that lines already on an open order keep their VAT class after a republish
-
-Found while checking the Products guide for A582 slice 3. The VAT help (`help.products.vat`,
-`apps/dashboard/src/i18n/strings.ts`, English and Spanish) and the guide's opening
-(`apps/server/src/guide/en/products.md` and its Spanish twin) say a change of VAT class reaches the
-tills when the menu is published again. Neither says that a line already on a held order or a tab
-keeps the class it was added with, and only a line added after the publish takes the new one (the
-"a new version published with the new class" cases in
-`apps/server/src/vat-class-at-line-add.test.ts`). Add that to the help text and the guide, in both
-languages. Done when both say it.
-
 ## A dish in a measure unit is still rung up one unit per tap
 
 Left open by A821f. A 250 ml line is 1 ml per tap with ±1 steps, the split control turns it into
