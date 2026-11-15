@@ -2106,10 +2106,16 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       if (dining === undefined)
         throw new AppError("management.request_invalid", { field: "dining" });
       const revision = await withTransaction(deps.db, (tx) =>
-        switchOrderDining(tx, id, dining, requireRevision(body.revision), {
-          operatorId: session.personId,
-          expectedEdit: body.expectedEdit,
-        }),
+        switchOrderDining(
+          tx,
+          id,
+          dining,
+          requireRevision(body.revision),
+          { operatorId: session.personId, expectedEdit: body.expectedEdit },
+          deps.attendance === undefined
+            ? undefined
+            : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },
+        ),
       );
       return c.json({ revision });
     }),

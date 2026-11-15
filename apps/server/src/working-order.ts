@@ -351,6 +351,7 @@ export async function captureOrderEdit(
     | "save"
     | "line"
     | "label"
+    | "dining"
     | "discard"
     | "invoice-choice"
     | "receipt-language"

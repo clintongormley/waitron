@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import {
+  floorZones,
   newId,
   orderAmendments,
   parties,
@@ -17,11 +18,18 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
+import { setDepartmentSalePolicyField } from "@waitron/venue-service";
 import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { mountTillApi } from "./till-api.js";
 import { parkOrder } from "./working-order.js";
-import { provisionBillVenue, seatedWith, send, type BillVenue } from "./testing/bill-venue.js";
+import {
+  inTx,
+  provisionBillVenue,
+  seatedWith,
+  send,
+  type BillVenue,
+} from "./testing/bill-venue.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -61,7 +69,7 @@ function api(attendance?: AttendanceRecorder) {
   );
   return app;
 }
-const actions = ["place", "cancel", "invoice-choice", "receipt-language"] as const;
+const actions = ["place", "cancel", "invoice-choice", "receipt-language", "dining"] as const;
 type Action = (typeof actions)[number];
 async function prepare(action: Action) {
   const id = newId();
@@ -71,6 +79,14 @@ async function prepare(action: Action) {
     zoneId: v.zoneId,
     lines: [{ menuItemId: v.offerFor("House salad"), quantity: "1" }],
   });
+  if (action === "dining")
+    await inTx(v, async (tx) => {
+      const [zone] = await tx
+        .select({ departmentId: floorZones.departmentId })
+        .from(floorZones)
+        .where(eq(floorZones.id, v.zoneId));
+      await setDepartmentSalePolicyField(tx, zone!.departmentId!, "dining", "till_choice");
+    });
   if (action === "cancel")
     await placeOrder(
       { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
@@ -94,7 +110,9 @@ function command(app: Hono, id: string, action: Action) {
         ? { revision: 0, invoiceType: "F2", recipient: null, delivery: { medium: "receipt" } }
         : action === "receipt-language"
           ? { revision: 0, language: "es-ES" }
-          : {};
+          : action === "dining"
+            ? { revision: 0, dining: "takeaway", expectedEdit: null }
+            : {};
   return send(
     app,
     v.cookie,
@@ -154,11 +172,12 @@ describe("accepted till order command attendance", () => {
       const [order] = await suite.db.select().from(workingOrders).where(eq(workingOrders.id, id));
       expect([order!.status, order!.revision]).toEqual([
         action === "place" ? "placed" : action === "cancel" ? "abandoned" : "open",
-        action === "invoice-choice" || action === "receipt-language" ? 1 : 0,
+        ["invoice-choice", "receipt-language", "dining"].includes(action) ? 1 : 0,
       ]);
       if (action === "invoice-choice")
         expect(order!.invoiceDelivery).toEqual({ medium: "receipt" });
       if (action === "receipt-language") expect(order!.receiptLocale).toBe("es-ES");
+      if (action === "dining") expect(order!.dining).toBe("takeaway");
     },
   );
   it.each(actions)(

@@ -20,6 +20,7 @@ import {
   setDepartmentSalePolicyField,
   writePartyAllergy,
 } from "@waitron/venue-service";
+import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { splitTable } from "./table-actions.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -377,20 +378,7 @@ describe("switching an order's way of selling", () => {
 
   it("decides by the order's own department, as the till's read does, when its zone moves", async () => {
     const id = await parked(menu.cola);
-    const [zone] = await inTx(venue, (tx) =>
-      tx
-        .select({ departmentId: floorZones.departmentId })
-        .from(floorZones)
-        .where(eq(floorZones.id, counter.zoneId)),
-    );
-    const eatIn = await inTx(venue, (tx) =>
-      createDepartment(tx, { name: `Eaten here ${randomUUID().slice(0, 8)}` }),
-    );
-    await inTx(venue, (tx) => setDepartmentSalePolicyField(tx, eatIn.id, "dining", "eat_in"));
-    await inTx(venue, (tx) =>
-      configureZone(tx, { zoneId: counter.zoneId, departmentId: eatIn.id }),
-    );
-    try {
+    await withCounterIn("eat_in", async () => {
       const shown = await send(venue.app, venue.cookie, "GET", `/api/working-orders/${id}`);
       expect(shown.json).toMatchObject({ dining: "eat_in", diningChoice: "open" });
 
@@ -398,13 +386,82 @@ describe("switching an order's way of selling", () => {
 
       expect(switched.status).toBe(200);
       expect((await orderOf(id)).dining).toBe("takeaway");
-    } finally {
-      await inTx(venue, (tx) =>
-        configureZone(tx, { zoneId: counter.zoneId, departmentId: zone!.departmentId! }),
-      );
-    }
+    });
+  });
+
+  it("says a takeaway order may still switch for a set lunch when its zone moves to a department eaten here", async () => {
+    const id = await parked(menu.cola);
+    expect((await switchTo(id, "takeaway")).status).toBe(200);
+    await withCounterIn("eat_in", async () => {
+      const saved = await addSetLunch(id);
+      expect(saved.status).toBe(409);
+      expect(saved.json).toEqual({ code: "order.set_lunch_takeaway", params: { canSwitch: true } });
+
+      const switched = await switchTo(id, "eat_in");
+
+      expect(switched.status).toBe(200);
+      expect((await orderOf(id)).dining).toBe("eat_in");
+    });
+  });
+
+  it("says a takeaway order fixed by its department cannot switch for a set lunch when its zone moves to a till-choice one", async () => {
+    await departmentsSell("takeaway");
+    const id = await parked(menu.cola);
+    expect((await orderOf(id)).dining).toBe("takeaway");
+    await withCounterIn("till_choice", async () => {
+      const saved = await addSetLunch(id);
+      expect(saved.status).toBe(409);
+      expect(saved.json).toEqual({
+        code: "order.set_lunch_takeaway",
+        params: { canSwitch: false },
+      });
+
+      const switched = await switchTo(id, "eat_in");
+
+      expect(switched.status).toBe(409);
+      expect(switched.json).toEqual({ code: "order.dining_fixed", params: { dining: "takeaway" } });
+    });
   });
 });
+
+/**
+ * Run `body` with the counter zone moved to a new department selling `dining` and offering the
+ * counter's menu, then move the zone back.
+ */
+async function withCounterIn(dining: DiningPolicy, body: () => Promise<void>): Promise<void> {
+  const [zone] = await inTx(venue, (tx) =>
+    tx
+      .select({ departmentId: floorZones.departmentId })
+      .from(floorZones)
+      .where(eq(floorZones.id, counter.zoneId)),
+  );
+  const moved = await inTx(venue, (tx) =>
+    createDepartment(tx, { name: `Moved ${randomUUID().slice(0, 8)}` }),
+  );
+  await inTx(venue, (tx) => setDepartmentSalePolicyField(tx, moved.id, "dining", dining));
+  await inTx(venue, async (tx) => {
+    await configureZone(tx, { zoneId: counter.zoneId, departmentId: moved.id });
+    await offerMenuThroughZone(tx, counter.zoneId, counter.menuId);
+  });
+  try {
+    await body();
+  } finally {
+    await inTx(venue, (tx) =>
+      configureZone(tx, { zoneId: counter.zoneId, departmentId: zone!.departmentId! }),
+    );
+  }
+}
+
+/** Save a parked cola order with a set lunch added. */
+async function addSetLunch(id: string) {
+  return send(venue.app, venue.cookie, "PUT", `/api/working-orders/${id}`, {
+    lines: [menu.cola, menu.setLunch].map((productId) => ({
+      menuItemId: counter.offerFor(productId),
+      quantity: "1",
+    })),
+    revision: (await orderOf(id)).revision,
+  });
+}
 
 describe("moving dishes between a party's bills", () => {
   /** A party whose main bill keeps the cola (line 1) and whose second bill has the cheese board. */

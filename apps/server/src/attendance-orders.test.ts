@@ -8,15 +8,17 @@ import {
 } from "./testing/order-writer-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { newId, withTransaction, workingOrderLines, workingOrders } from "@waitron/db";
+import { floorZones, newId, withTransaction, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
 import { createExtraList, createOptionList, writeProductModifiers } from "@waitron/menu";
 import { AppError } from "@waitron/shared";
+import { setDepartmentSalePolicyField } from "@waitron/venue-service";
 import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { readAttendanceFacts } from "./attendance-facts.js";
+import { switchOrderDining } from "./order-dining.js";
 import { parkOrder } from "./working-order.js";
 import { setupPartyVenue, OPERATOR, type PartyVenue } from "./testing/party-venue.js";
 import { republishMenus } from "./testing/publish-menu.js";
@@ -100,7 +102,7 @@ async function expectActivity(id: string, revision: number, action: string, pers
     (await suite.db.select().from(attendanceDayWork)).map((r) => [r.businessDay, r.dirtyRevision]),
   ).toEqual([["2026-01-05", 1]]);
 }
-type Action = "park" | "save" | "line" | "label" | "discard";
+type Action = "park" | "save" | "line" | "label" | "dining" | "discard";
 async function act(
   action: Action,
   id: string,
@@ -147,6 +149,25 @@ async function act(
       { label: "New name", revision: 0 },
       { ...attendance, personId: worker },
     );
+  if (action === "dining") {
+    await run(async (tx) => {
+      const [zone] = await tx
+        .select({ departmentId: floorZones.departmentId })
+        .from(floorZones)
+        .where(eq(floorZones.id, v.counter.zoneId));
+      await setDepartmentSalePolicyField(tx, zone!.departmentId!, "dining", "till_choice");
+    });
+    return run((tx) =>
+      switchOrderDining(
+        tx,
+        id,
+        "takeaway",
+        0,
+        { operatorId: worker, expectedEdit: null },
+        { ...attendance, personId: worker },
+      ),
+    );
+  }
   return abandonHeldOrder({ db: suite.db }, v.cfg, id, { ...attendance, personId: worker });
 }
 
@@ -275,7 +296,7 @@ describe("accepted order attendance", () => {
     ]);
     await expectActivity(id, 1, "line");
   });
-  it.each(["park", "save", "line", "label", "discard"] as const)(
+  it.each(["park", "save", "line", "label", "dining", "discard"] as const)(
     "captures %s under the editor at the trusted instant",
     async (action) => {
       const id = action === "park" ? newId() : await parked();
@@ -286,7 +307,7 @@ describe("accepted order attendance", () => {
       if (action !== "park") expect((await line(id)).creditedTo).toBe(OPERATOR);
     },
   );
-  it.each(["park", "save", "line", "label", "discard"] as const)(
+  it.each(["park", "save", "line", "label", "dining", "discard"] as const)(
     "a recorder refusal rolls back %s and its day work",
     async (action) => {
       const id = action === "park" ? newId() : await parked();
@@ -313,7 +334,7 @@ describe("accepted order attendance", () => {
     await expectActivity(req.id, 0, "park", OPERATOR);
     expect(await state()).toEqual(before);
   });
-  it("unchanged label, quantity and basket are not new work", async () => {
+  it("unchanged label, way of selling, quantity and basket are not new work", async () => {
     const id = await parked();
     await setWorkingOrderLabel(suite.db, id, { label: "Name", revision: 0 });
     const row = await line(id);
@@ -327,6 +348,18 @@ describe("accepted order attendance", () => {
         id,
         { label: "Name", revision: 1 },
         { ...capture(), personId: worker },
+      ),
+    ).toBe(1);
+    expect(
+      await run((tx) =>
+        switchOrderDining(
+          tx,
+          id,
+          "eat_in",
+          1,
+          { operatorId: worker, expectedEdit: null },
+          { ...capture(), personId: worker },
+        ),
       ),
     ).toBe(1);
     expect(

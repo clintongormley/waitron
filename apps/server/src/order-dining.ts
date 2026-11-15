@@ -8,6 +8,7 @@ import {
 import { AppError, DININGS, type Dining } from "@waitron/shared";
 import { requireOrderBillEditor, type OrderEditAuthority } from "./bill-editing.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { captureOrderEdit, type OrderAttendance } from "./working-order.js";
 import "./errors.js";
 
 /** `dining` from a request body, or undefined when it is absent; an explicit null is refused. */
@@ -87,19 +88,20 @@ export async function storedOrderDining(tx: Transaction, workingOrderId: string)
 
 /**
  * Refuse `order.set_lunch_takeaway`, saying whether staff may still switch the order to eaten here:
- * its zone's department leaves the way to the till, the region charges takeaway VAT, and nothing is
- * sent or paid. An order not yet written has nothing sent or paid.
+ * an existing order as {@link readOrderDinings} offers it, and an order not yet written by whether
+ * its zone's department takes both ways.
  */
 export async function refuseTakeawaySetLunch(
   tx: Transaction,
   workingOrderId: string,
   zoneId: string | undefined,
 ): Promise<never> {
+  const existing = (await readOrderDinings(tx, [workingOrderId])).get(workingOrderId);
   throw new AppError("order.set_lunch_takeaway", {
     canSwitch:
-      zoneId !== undefined &&
-      (await orderDiningLocked(tx, workingOrderId)) === null &&
-      (await takesEitherWay(tx, zoneId)),
+      existing === undefined
+        ? zoneId !== undefined && (await takesEitherWay(tx, zoneId))
+        : existing.diningChoice === "open",
   });
 }
 
@@ -130,6 +132,7 @@ export async function switchOrderDining(
   dining: Dining,
   revision: number,
   authority: OrderEditAuthority,
+  attendance?: OrderAttendance & { personId: string },
 ): Promise<number> {
   const [order] = await tx
     .select({
@@ -157,5 +160,13 @@ export async function switchOrderDining(
     .update(workingOrders)
     .set({ dining, revision: revision + 1 })
     .where(eq(workingOrders.id, workingOrderId));
+  await captureOrderEdit(
+    tx,
+    attendance,
+    workingOrderId,
+    attendance?.personId,
+    revision + 1,
+    "dining",
+  );
   return revision + 1;
 }
