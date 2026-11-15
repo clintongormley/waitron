@@ -47,7 +47,7 @@ it("writes the English question in the agreed words", () => {
     "Delete reason",
     "Delete",
     "Past voids and comps keep its name. This cannot be undone.",
-    "Checking whether this reason can be deleted…",
+    "Checking what changes…",
   ]);
 });
 

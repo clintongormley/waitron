@@ -113,7 +113,9 @@ it("sends null for the default and the chosen set's id otherwise", async () => {
 
 it("draws Delete quiet and inert while the impact loads", async () => {
   const el = await mount();
-  expect(el.shadowRoot!.querySelector("[role=status]")!.textContent!.trim()).toBe("Loading…");
+  expect(el.shadowRoot!.querySelector("[role=status]")!.textContent!.trim()).toBe(
+    "Checking what changes…",
+  );
   expect(confirm(el).variant).toBe("secondary");
   expect(confirm(el).disabled).toBe(true);
 });

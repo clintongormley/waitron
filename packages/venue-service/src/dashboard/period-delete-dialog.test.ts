@@ -340,7 +340,9 @@ it("while loading Confirm is quiet (secondary) and disabled; a failed read shows
   const el = await mount();
   expect(confirm(el).variant).toBe("secondary");
   expect(confirm(el).disabled).toBe(true);
-  expect(el.shadowRoot!.querySelector("[role=status]")!.textContent!.trim()).toBe("Loading…");
+  expect(el.shadowRoot!.querySelector("[role=status]")!.textContent!.trim()).toBe(
+    "Checking what changes…",
+  );
   expect(el.shadowRoot!.querySelector("[data-test=retry-delete]")).toBeNull();
 
   el.readError = "The deletion impact could not be loaded. Try again.";
