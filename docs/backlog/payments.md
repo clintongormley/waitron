@@ -325,10 +325,9 @@ confirmation when the payment settled the bill, and Comprobar de nuevo shows the
 
 ## Tip display gaps
 
-(found by A793's design, read): the dashboard's order detail shows a bill payment's applied
-amount without its tip (`apps/dashboard/src/widgets/order-detail-dialog.ts:429`); and the Spanish
-refund slip says "Propina" where the English says "Tip returned"
-(`packages/country-es/src/receipt-labels.ts:61` and `:121`, printed by
+(found by A793's design, read): the Spanish refund slip says "Propina" where the English says
+"Tip returned"
+(`packages/country-es/src/receipt-labels.ts:64` and `:127`, printed by
 `apps/server/src/tender-refund-receipt.ts:110`).
 
 ## Loose ends left by A633
