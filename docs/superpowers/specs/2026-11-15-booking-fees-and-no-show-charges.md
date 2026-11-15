@@ -1,45 +1,52 @@
-# Booking fees and no-show charges
+# Booking prepayments refunded on arrival
 
-You want an €80 no-show charge to be possible without taking an €80 booking payment. Saving a card and reserving funds give you different protection. This proposed comparison keeps SumUp as your current till provider; it authorises no implementation.
+You chose **Prepay, refund on arrival** in the watcher's window on 15 November 2026. Both SumUp and Stripe offer online payment followed by a later refund, independently of a Solo reader [S1–S2, T1–T2]. Either supports this approach within the refund constraints below. No provider choice is recorded here; SumUp remains your till provider.
 
-## Eight guests on Saturday
+## Eight guests, one €80 payment
 
-Suppose you accept eight guests for Saturday with a €10-per-person no-show charge. In the proposed booking flow, you show the €80 total, cancellation deadline and circumstances for charging before the guest accepts. You keep the accepted terms available beside the booking so you can review them before any charge.
+For eight guests at €10 each, your guest pays **€80 now as one booking and one charge**. On arrival, you refund the full €80 to the original payment method, and the guest pays for the meal separately. You bear the original processing fee rather than subtracting it from the guest's refund [S2, T3].
 
-With SumUp's documented online Payment Widget route, the guest goes through a €1 transaction that is reimbursed, consent and card authentication. You receive a saved payment instrument token, a reference for later payment. This is an online flow, not a Solo reader feature; it does not reserve €80 [S1–S2].
+Requesting a refund through the provider's software interface does not mean the refund has completed or reached the guest's bank. Funds can take time to arrive; a pending or refused refund is not money returned [S2, T2]. You cannot promise immediate money back.
 
-With Stripe, a SetupIntent saves the card without an initial payment or reserving €80. The guest explicitly accepts when, why and how much you may charge later without their presence, called an off-session payment [T1].
+If the guests do not arrive and you retain the prepayment, you already hold their €80; there is no new charge attempted without them. Unlike saving a card or reserving funds temporarily, this choice takes the money when they book. The VAT treatment of keeping it is still open below.
 
-If the party attends or cancels before your stated deadline, you make no later no-show charge. If nobody arrives, you review the booking against the accepted terms before attempting €80 using the saved method. SumUp requires a new checkout [S1–S2]. With either provider, a pending attempt, failure or request for further card authentication must remain visibly unpaid. Stripe may need the guest to return to the payment page [S2, T1].
+## Which provider fits?
 
-For bookings that week or weeks ahead, either saved-card route supports a later attempt, with no guarantee of collection [S1–S2, T1]. Your proposed confirmation distinguishes card setup from a completed no-show payment, so neither you nor your guest mistake permission for money received.
+**SumUp:** You can take an online payment through its hosted payment page and later request a refund [S1–S2]. Its Spain support text says some payments more than 90 days old may be impossible to refund because of third-party technical limits. This is neither a blanket 90-day cutoff nor a guarantee that every younger payment can be refunded. You need enough balance in deposits not yet paid out [S3]. For a booking months ahead, that possible refusal matters to your promise of a full refund on arrival.
 
-## A hold is a separate choice
+**Stripe:** You can take an online one-off payment through Checkout and later request a refund [T1–T2]. The evidence boundary is: **no card-payment age deadline stated in the reviewed Stripe pages; whether any age is refundable is unverified**. You also need usable available balance: pending funds do not count. With insufficient balance, Stripe can leave a card refund pending rather than pay it automatically [T2].
 
-A Stripe manual authorisation temporarily reserves €80. You later capture it, meaning collect the reserved money, before its returned `capture_before` deadline, or cancel it to release the hold. Windows vary. Even that week's booking needs a deadline beyond the intended charge date; an ordinary hold taken now cannot be assumed to last until a booking weeks ahead [T2].
+## Cost of this booking
 
-No equivalent hold operation was identified in the reviewed public SumUp paths. That finding does not establish what SumUp might offer privately. Neither a zero-amount verification route nor a hold lifetime should be promised from these documents [S1–S3].
+This table illustrates booking-prepayment/refund processing at published Spain prices, excluding the separate meal payment and optional extras [S4, T3].
 
-## What remains to design
+| Provider | Published processing price | Fee on one €80 charge | Cost retained after full €80 refund |
+| --- | --- | --- | --- |
+| SumUp online | 1.95% | €80 × 1.95% = **€1.56** | **€1.56**; original processing fees are not returned [S2] |
+| Stripe, standard European Economic Area cards | 1.5% + €0.25 | €80 × 1.5% + €0.25 = **€1.45** | **€1.45**; original processing fees remain, with no extra issuance fee for a standard card refund [T3] |
 
-Staff booking operations are declared (`packages/bookings/src/bookings.ts:163` and `routes.ts:111`); the guest page remains proposed under [A1013](../../backlog/till.md#a1013-online-booking-for-customers-owner-2026-10-22).
+SumUp's SDK/API price may be negotiated; its published price is illustrative, not your venue tariff [S4]. Stripe's other card, custom and currency-conversion prices may differ [T3].
 
-SumUp's reader adapter (`packages/payments-sumup/src/provider.ts:118`) and Stripe's one-off hosted checkout adapter (`packages/payments-stripe/src/hosted-provider.ts:28`) do not supply this booking/card-saving flow. `CollectParams` and `InitiateParams` require `workingOrderId` (`packages/payments/src/provider.ts:30,302`). Your no-show booking has no bill: payment linkage remains a design gap, not permission to invent a sale.
+## The ticket and VAT still need settling
 
-Any future design must follow [A951 §8](2026-10-22-a951-box-public-access-design.md#8-expose-customer-functions-only-after-their-products-agree-a-manifest): constrained public routes, authenticated provider callbacks and no Cloud payment settlement. Fiscal treatment stays open under [A275's S8 scope](2026-10-20-a275-invoice-now-transfer-later-design.md#10-research-premise-and-the-attached-asesor-question); you should not infer that no-show compensation is automatically an invoiced sale. A1013 stays open.
+In [the adviser answers, Part C, Deposits (his 1.8)](../../compliance/2026-11-15-adviser-answers.md#part-c-to-remember-when-these-are-built), money for an identified booking is an advance payment and receives its own ticket, a simplified invoice. His final-bill example keeps that advance: the final ticket deducts its pre-VAT amount and VAT, and the record sent to AEAT, Spain's tax agency, carries the remainder.
+
+Your chosen flow returns the whole advance on arrival. Applying his answer to this refunded guarantee requires the advance ticket's refund or corrective treatment to be settled. His deduction example supplies no mechanism for that reversal. You must not also deduct the already refunded €80 from the meal payment.
+
+[Question 18 in the adviser meeting](../../compliance/2026-11-19-adviser-meeting.md) remains unanswered: when you keep a deposit as no-show compensation, does its original VAT ticket stand, or do you issue a corrective removing VAT despite refunding no money? Do not treat the compensation's VAT treatment as settled.
+
+Online booking is not built, [A1013 remains open](../../backlog/till.md#a1013-online-booking-for-customers-owner-2026-10-22), and this comparison and its tax qualification authorise no implementation.
 
 ## Provenance
 
-Public documentation read by the driver on 15 November 2026; supplied evidence only.
+Provider documentation checked by the driver on 15 November 2026. SumUp Spain support is first-party indexed text; direct open showed only a loading shell, without live-browser validation.
 
-| ID / source | Exact quote, then bounded interpretation |
+| Source | Exact excerpt and scope |
 | --- | --- |
-| [S1: SumUp tokenisation](https://developer.sumup.com/online-payments/guides/tokenization-with-payment-sdk/) | “transaction amount is instantly reimbursed”. The €1 EUR setup example saves a token with consent and 3D Secure; later payment needs a new checkout. No zero-amount route documented here. |
-| [S2: SumUp process](https://developer.sumup.com/api/checkouts/process/) | “Processing a checkout will attempt to charge”. Token/customer payments may need further authentication; acceptance is not payment confirmation. Reviewed public paths identified no authorise/capture/release operation. |
-| [S3: SumUp create](https://developer.sumup.com/api/checkouts/create/) | “The checkout must be processed before this moment”. `valid_until` expires an unprocessed checkout, not reserved funds. |
-| [T1: Stripe save/reuse](https://docs.stripe.com/payments/save-and-reuse) | “without an initial payment”; “explicitly collect consent”. SetupIntent saves details for later use without reserving funds; later collection can fail or need authentication and a return visit. |
-| [T2: Stripe holds](https://docs.stripe.com/payments/place-a-hold-on-a-payment-method) | “before the authorization expires”; “cancel the PaymentIntent”. Separate manual authorisation/capture has varying windows; use the actual capture deadline or release the hold. |
-
-**Recommendation:** Subject to your choice, prefer Stripe for a future online booking card guarantee because SetupIntent takes no initial payment [T1]. Keep SumUp at the till; call the guarantee permission to attempt collection.
-
-**Owner question:** Should Stripe provide that future online booking card guarantee while SumUp remains your till provider, or do you prefer SumUp's documented €1-and-reimbursement route [S1]?
+| [S1: SumUp hosted checkout](https://developer.sumup.com/online-payments/checkouts/hosted-checkout/) | “accept online payments with a SumUp-hosted payment page”. Online collection independent of Solo. |
+| [S2: SumUp refunds](https://developer.sumup.com/online-payments/guides/refund/) | “The processing fees associated with the original transaction are not returned.” Refunds return funds to the original method. |
+| [S3: SumUp Spain refunds](https://help.sumup.com/es-ES/articles/3IXN9yTldqaeEMcM0nUTDp-reembolsar-transacciones) | “puede que no sea posible”; “más de 90 días de antigüedad”; “depósitos todavía no retirados”. Possible older-payment refusal and unwithdrawn-balance condition. |
+| [S4: SumUp Spain online pricing](https://www.sumup.com/es-es/pagos-online/) | “1,95 % por transacción”; “puedes acordar precios personalizados”. Published illustration; SDK/API tariff can differ. |
+| [T1: Stripe Checkout](https://docs.stripe.com/payments/checkout) | “Accept one-time and subscription payments”. Checkout accepts a real online payment. |
+| [T2: Stripe refunds](https://docs.stripe.com/refunds.md) | “Refunds use your available Stripe balance”; “Stripe holds the refund as pending for card transactions”. No card-payment age deadline found in the reviewed pages. |
+| [T3: Stripe Spain pricing](https://stripe.com/en-es/pricing) | “1.5% + €0.25”; “standard European Economic Area cards”; “original transaction are not returned”. Standard card refunds have no extra issuance fee; other tariffs differ. |
