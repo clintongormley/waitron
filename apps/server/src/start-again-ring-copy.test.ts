@@ -96,7 +96,7 @@ async function joinAsSpare(stateDir: string, venueDir: string): Promise<void> {
         {
           ownerDb: store.venue,
           ownerNode: store.node,
-          baseEnv: {},
+          environmentKeys: {},
           ring: await ringIn(join(stateDir, "secrets.env")),
           fetchBundle: async (_url, _credential, standby) => ({
             ...BUNDLE,
@@ -257,7 +257,7 @@ async function moveSealedUnder(
       sealNodeSigningKeyTx(tx, ring, MOVED_NODE_ID, signing.privateKey),
     );
     await withTransaction(found.venue, (tx) =>
-      putCredential(tx, ring, { purpose: "payments.sumup", value: SUMUP }),
+      putCredential(tx, ring, { personId: null, purpose: "payments.sumup", value: SUMUP }),
     );
   } finally {
     await found.close();

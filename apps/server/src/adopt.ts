@@ -38,7 +38,6 @@ import { AppError } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { makeBreakGlassSecret, mintBreakGlassKeyTx } from "./break-glass.js";
 import { keyRingEnv, type EncodedKeyRing } from "./box-secrets.js";
-import { keyRingVariables } from "./box-env.js";
 import { assertAuthorityKeyMatches, installVenueAuthority, markJoined } from "./box-tls-install.js";
 import type { DeploymentEnvironment } from "./config.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
@@ -110,9 +109,9 @@ export interface AdoptDeps {
   ownerNode: NodeDatabase;
   /** The ring this box booted with. Adopt replaces it with the bundle's and seals nothing under it. */
   ring: KeyRing;
-  /** The real environment, whose non-empty vault key variables win over `secrets.env` at every
-   * start (`loadBoxEnv`). */
-  baseEnv: NodeJS.ProcessEnv;
+  /** The vault key variables the real environment sets (`keyRingVariables`), which win over
+   * `secrets.env` at every start. */
+  environmentKeys: Readonly<Record<string, string>>;
   /** Replaces `secrets.env` whole with the main box's ring, so the next boot opens what it sealed. */
   persistCredentialsRing: (ring: EncodedKeyRing) => Promise<void>;
   /** Sends the standby identity so the primary can reserve and endorse it. */
@@ -231,7 +230,7 @@ export async function adoptFromPrimary(
   assertAuthorityKeyMatches(bundle.boxCaPem, bundle.boxCaKeyPem);
   const bundleEnv = keyRingEnv(bundle.credentialsRing);
   // The ring persisted below would be hidden at the next start, and the keys sealed under it lost.
-  for (const [name, set] of Object.entries(keyRingVariables(deps.baseEnv))) {
+  for (const [name, set] of Object.entries(deps.environmentKeys)) {
     if (set !== bundleEnv[name]) throw new AppError("mirror.vault_key_differs", {});
   }
   const ring = loadKeyRing(bundleEnv);

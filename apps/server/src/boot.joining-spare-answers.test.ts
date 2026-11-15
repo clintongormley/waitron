@@ -211,7 +211,7 @@ async function joinedPair() {
     {
       ownerDb: spareBox.db,
       ownerNode: spareBox.node,
-      baseEnv: {},
+      environmentKeys: {},
       ring: RING,
       persistCredentialsRing: async () => {},
       fetchBundle: async (_url, credential: AdoptCredential, sent) => {

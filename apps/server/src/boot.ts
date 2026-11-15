@@ -483,7 +483,7 @@ import { recordStartDeletions } from "./start-backup-room-record.js";
 import { lowSpaceBackupDeletion, runningLocalBackends } from "./low-space-backups.js";
 import { BackupSupervisor } from "./backup-supervisor.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
-import { loadBoxEnv } from "./box-env.js";
+import { keyRingVariables, loadBoxEnv } from "./box-env.js";
 import { readOnlyGate } from "./read-only-gate.js";
 import { isReadOnlyExempt } from "./read-only-exemptions.js";
 import { isFenced } from "./membership-fence.js";
@@ -1827,7 +1827,7 @@ async function bootServer(
               ownerDb: db,
               ownerNode: store.node,
               ring,
-              baseEnv: base,
+              environmentKeys: keyRingVariables(base),
               persistCredentialsRing: (r) => writeCredentialsRing(config.stateDir, r),
               persistBackupSettings: (s) => replaceBackupSettings(config.stateDir, s),
               fetchBundle: (primaryUrl, credential, standby, confirmedCaPem) =>

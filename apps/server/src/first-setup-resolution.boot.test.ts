@@ -1,5 +1,15 @@
 import { dirname, join } from "node:path";
-import { mkdtemp, mkdir, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import type { IncomingHttpHeaders } from "node:http";
 import { request as httpsRequest } from "node:https";
@@ -169,6 +179,25 @@ it("direct entry still boots a normal unclaimed workspace", async () => {
     { startServer: boot },
   );
   expect(boot).toHaveBeenCalledOnce();
+});
+
+it("a launch given only the environment hands its vault key to the start as the real environment", async () => {
+  const f = await torn();
+  await rm(join(f.stateDir, "flows/setup/record.json"));
+  const boot =
+    vi.fn<(env: NodeJS.ProcessEnv, base: NodeJS.ProcessEnv) => ReturnType<typeof stopped>>(stopped);
+  // Canonical paths, so the start runs under the directories it was given rather than chosen ones.
+  const env = {
+    WAITRON_STATE_DIR: await realpath(f.stateDir),
+    WAITRON_VENUE_DIR: await realpath(f.venueDir),
+    WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
+  };
+  // `undefined` is how a caller passing only the environment reaches the second parameter.
+  await entry.startServerOrFirstSetupResolution(env, undefined, { startServer: boot });
+  expect(boot).toHaveBeenCalledOnce();
+  expect(boot.mock.calls[0]![1]).toMatchObject({
+    WAITRON_CREDENTIALS_KEY: env.WAITRON_CREDENTIALS_KEY,
+  });
 });
 
 it("a normal start's failure after waiting for its peers reaches the returned handle", async () => {

@@ -21,7 +21,8 @@ import { recoveryApp } from "./recovery-surface.js";
 
 export async function startServerOrFirstSetupResolution(
   env: NodeJS.ProcessEnv,
-  base: NodeJS.ProcessEnv = {},
+  /** The real environment, which the box's own env files sit beneath; `env` itself unless merged. */
+  base: NodeJS.ProcessEnv = env,
   seams: {
     startServer?: (
       env: NodeJS.ProcessEnv,

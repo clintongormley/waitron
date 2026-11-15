@@ -41,7 +41,7 @@ import type { PendingAdoption } from "./finish-adoption.js";
 import { verifyBreakGlass } from "./break-glass.js";
 import { keyRingEnv, writeCredentialsRing } from "./box-secrets.js";
 import { parseEnvFile } from "./env-file.js";
-import { loadBoxEnv } from "./box-env.js";
+import { keyRingVariables, loadBoxEnv } from "./box-env.js";
 import { MAIN_AUTHORITY } from "./testing/main-authority.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { tlsSetMatches } from "./testing/box-tls.js";
@@ -172,7 +172,7 @@ function deps(
     ownerDb: suite.db,
     ownerNode: suite.node,
     ring: RING,
-    baseEnv: extra.baseEnv ?? {},
+    environmentKeys: keyRingVariables(extra.baseEnv ?? {}),
     advertisedOrigin: extra.advertisedOrigin ?? ADVERTISED_ORIGIN,
     spareStorePort: 7443,
     environment: extra.environment ?? ("preproduction" as const),

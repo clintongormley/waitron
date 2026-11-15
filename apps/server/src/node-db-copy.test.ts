@@ -135,7 +135,7 @@ beforeAll(async () => {
     {
       ownerDb: bStore.venue,
       ownerNode: bStore.node,
-      baseEnv: {},
+      environmentKeys: {},
       ring: RING_B_OWN,
       advertisedOrigin: "https://spare.test",
       spareStorePort: 7443,
