@@ -342,3 +342,10 @@ Watcher 02:28 cleared the nullable-key dashboard consumer: the client record fie
 and the widget uses the existing written_then translation only for null, retaining the key-number
 sentence for a number. The existing rewritten-record case covers both languages and key shapes.
 No other widget behavior changes.
+
+> **2026-11-15 03:14, watcher clearance:** finish the same planned scope up to about
+> 1,500 gross lines, including the existing malformed fixtures moving to their owning store.
+> Backup-verification's positive archive fixtures and exact payload assertion use literal two-key
+> objects; every passed/unavailable, key-version, frozen/no-write and refusal assertion stays.
+> An old whole-archive payload remains an invalid input. No runtime backup-verification or
+> compatibility change is included.

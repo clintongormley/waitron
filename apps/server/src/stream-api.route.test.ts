@@ -6,6 +6,8 @@ import { beforeAll, describe, expect, it, vi, type Mock } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import {
   readActivityForSubject,
+  readSettings,
+  saveSettings,
   saveVenueFields,
   readStreamId,
   nodes,
@@ -15,6 +17,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  credentialRevision,
   deleteCredential,
   deletePairLinkTx,
   loadKeyRing,
@@ -45,14 +48,15 @@ import { mountStreamApi, type StreamApiDeps } from "./stream-api.js";
 import {
   readStreamSettings,
   STREAM_PURPOSE,
-  streamSettingsPayload,
+  writeStreamSettings,
+  deleteStreamSettings,
   type StreamSettings,
 } from "./stream-host.js";
+import { storeArchivePart } from "./testing/backup-settings.js";
+import { BACKUP_SETTINGS } from "./backup-settings-document.js";
 import { omitStoredStreamField } from "./testing/old-stream-credential.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
-// The route calls `putCredential` itself, so the harness sees the credential write through this
-// pass-through wrapper.
 const credentialWrites = vi.hoisted(() => ({
   onPut: (): void => {},
   afterGet: async (): Promise<void> => {},
@@ -249,9 +253,7 @@ function harness(overrides: Partial<StreamApiDeps> = {}, startKey?: string): Har
 }
 
 async function clearBucket(): Promise<void> {
-  await withTransaction(suite.db, (tx) =>
-    deleteCredential(tx, { personId: null, purpose: "backup.stream" }),
-  );
+  await withTransaction(suite.db, (tx) => deleteStreamSettings(tx, null));
 }
 
 async function storedBucket(): Promise<Record<string, string> | null> {
@@ -266,6 +268,79 @@ const json = (cookie: string, body: unknown) => ({
 });
 
 describe("stream settings routes", () => {
+  it("keeps choices in the backup document and re-seals every stream save without changing archives", async () => {
+    await clearBucket();
+    await withTransaction(suite.db, (tx) =>
+      writeArchiveSettings(
+        tx,
+        RING,
+        {
+          enabled: false,
+          destinations: [{ kind: "local-fs", id: "primary", dir: "/tmp/archives" }],
+          schedule: { kind: "interval", ms: 3_600_000 },
+          retention: { count: 7, days: 30 },
+          destinationTimeoutMs: 900_000,
+        },
+        null,
+      ),
+    );
+    const archive = (await readSettings(suite.db, BACKUP_SETTINGS)).doc.archive;
+    const { app } = harness({}, "recovery-key-one-strong");
+    const cookie = await login(app);
+    const revisions = new Set<string | null>();
+    let streamId: string | null = null;
+    for (const body of [
+      BODY,
+      { ...BODY, secretAccessKey: "changed-secret" },
+      { ...BODY, bucket: "other-copy" },
+      { ...BODY, prefix: "different/" },
+    ]) {
+      const res = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, body) });
+      expect(res.status).toBe(200);
+      expect(await storedBucket()).toEqual({
+        accessKeyId: body.accessKeyId,
+        secretAccessKey: body.secretAccessKey,
+      });
+      const doc = (await readSettings(suite.db, BACKUP_SETTINGS)).doc;
+      expect(doc).toEqual({
+        archive,
+        stream: {
+          endpoint: body.endpoint,
+          region: body.region,
+          bucket: body.bucket,
+          prefix: body.prefix,
+        },
+      });
+      const saved = await readStreamSettings(suite.db, RING);
+      expect(saved?.bucket).toEqual(body);
+      streamId ??= await readStreamId(suite.db);
+      expect(streamId).toMatch(/^[0-9a-f-]{36}$/);
+      expect(saved?.streamId).toBe(streamId);
+      revisions.add(
+        await withTransaction(suite.db, (tx) =>
+          credentialRevision(tx, { purpose: STREAM_PURPOSE }),
+        ),
+      );
+    }
+    expect(revisions.size).toBe(4);
+    const off = await app.request("/api/backup/stream", { method: "DELETE", headers: { cookie } });
+    expect(off.status).toBe(200);
+    expect(await storedBucket()).toBeNull();
+    expect((await readSettings(suite.db, BACKUP_SETTINGS)).doc).toEqual({ archive, stream: null });
+    const again = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
+    expect(again.status).toBe(200);
+    expect((await readStreamSettings(suite.db, RING))?.streamId).toBe(streamId);
+    await withTransaction(suite.db, async (tx) => {
+      const saved = await readSettings(tx, BACKUP_SETTINGS);
+      await saveSettings(tx, BACKUP_SETTINGS, {
+        doc: { ...saved.doc, archive: null },
+        expectedRevision: saved.revision,
+        personId: null,
+      });
+    });
+    await clearBucket();
+  });
+
   it("refuses every route without a manager session", async () => {
     const { app } = harness();
     for (const [method, path] of [
@@ -495,7 +570,6 @@ describe("stream settings routes", () => {
     expect(await storedBucket()).toBeNull();
   });
 
-  // The vault stores an absent prefix as "-", so a prefix of "-" would read back as none at all.
   it("refuses a prefix of a single hyphen, which would be stored as no prefix", async () => {
     const { app, deps } = harness();
     const cookie = await login(app);
@@ -635,11 +709,13 @@ describe("stream settings routes", () => {
       revision: expect.stringMatching(/^[0-9a-f]{16}$/),
     });
     expect(JSON.stringify(view)).not.toContain(BODY.secretAccessKey);
-    // The chosen prefix is stored as "-" when absent.
-    expect(await storedBucket()).toMatchObject({
+    expect(await storedBucket()).toEqual({
+      accessKeyId: BODY.accessKeyId,
       secretAccessKey: BODY.secretAccessKey,
+    });
+    expect((await readSettings(suite.db, BACKUP_SETTINGS)).doc.stream).toMatchObject({
       endpoint: "https://s3.example.net",
-      prefix: "-",
+      prefix: "",
     });
   });
 
@@ -681,13 +757,7 @@ describe("stream settings routes", () => {
   });
 
   it("keeps Change and Turn off available when stored bucket settings lack a field", async () => {
-    await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING, {
-        personId: null,
-        purpose: STREAM_PURPOSE,
-        value: streamSettingsPayload({ bucket: BUCKET }),
-      }),
-    );
+    await withTransaction(suite.db, (tx) => writeStreamSettings(tx, RING, BUCKET, null));
     await omitStoredStreamField(suite.db, RING, "endpoint");
     const { app } = harness();
     const cookie = await login(app);
@@ -752,7 +822,9 @@ describe("stream settings routes", () => {
     expect(res.status).toBe(200);
     expect(deps.writeRecoveryKey).not.toHaveBeenCalled();
     expect(reload).toHaveBeenCalledTimes(1);
-    expect(await storedBucket()).toMatchObject({ bucket: BUCKET.bucket });
+    expect((await readStreamSettings(suite.db, RING))?.bucket).toMatchObject({
+      bucket: BUCKET.bucket,
+    });
   });
 
   /** A queue held shut by an earlier turn, and a promise that settles once a request joins it. */
@@ -791,13 +863,7 @@ describe("stream settings routes", () => {
   });
 
   it("switching off is refused when this node stops being the primary while it waits its turn", async () => {
-    await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING, {
-        personId: null,
-        purpose: "backup.stream",
-        value: streamSettingsPayload({ bucket: BUCKET }),
-      }),
-    );
+    await withTransaction(suite.db, (tx) => writeStreamSettings(tx, RING, BUCKET, null));
     const queue = heldTurns();
     let primary = true;
     const { app, reload } = harness({ isPrimary: () => primary, turns: queue.turns });
@@ -1046,13 +1112,7 @@ describe("stream settings routes", () => {
       await readDone;
       // Started from outside the view's read, as another request's Save would be.
       write = withTransaction(suite.db, (tx) =>
-        putCredential(tx, RING, {
-          personId: null,
-          purpose: STREAM_PURPOSE,
-          value: streamSettingsPayload({
-            bucket: { ...BUCKET, bucket: "moved-copy" },
-          }),
-        }),
+        writeStreamSettings(tx, RING, { ...BUCKET, bucket: "moved-copy" }, null),
       );
       await new Promise((resolve) => setTimeout(resolve, 200));
       release();
@@ -1097,6 +1157,7 @@ describe("stream settings routes", () => {
     }
 
     async function dropArchive(): Promise<void> {
+      await withTransaction(suite.db, (tx) => storeArchivePart(tx, null));
       await withTransaction(suite.db, (tx) =>
         deleteCredential(tx, { personId: null, purpose: ARCHIVE_PURPOSE }),
       );
@@ -1173,14 +1234,13 @@ describe("stream settings routes", () => {
       }
     });
 
-    /** Seals `plaintext` as the whole archive record under the ring's own key, as no writer here
-     * would: `putCredential` refuses a payload that is not the purpose's fields. */
+    /** Bypasses payload validation to exercise malformed sealed bucket keys. */
     async function storeRawArchive(plaintext: string): Promise<void> {
       await withTransaction(suite.db, (tx) =>
         putCredential(tx, RING, {
           personId: null,
           purpose: ARCHIVE_PURPOSE,
-          value: { settings: "{}" },
+          value: { accessKeyId: "A", secretAccessKey: "S" },
         }),
       );
       const iv = randomBytes(12);
@@ -1204,7 +1264,7 @@ describe("stream settings routes", () => {
         putCredential(tx, other, {
           personId: null,
           purpose: ARCHIVE_PURPOSE,
-          value: { settings: "{}" },
+          value: { accessKeyId: "A", secretAccessKey: "S" },
         }),
       );
     };
@@ -1213,14 +1273,7 @@ describe("stream settings routes", () => {
     const UNREADABLE: [string, () => Promise<void>][] = [
       [
         "backup.archive_settings_invalid",
-        () =>
-          withTransaction(suite.db, (tx) =>
-            putCredential(tx, RING, {
-              personId: null,
-              purpose: ARCHIVE_PURPOSE,
-              value: { settings: "{}" },
-            }),
-          ),
+        () => withTransaction(suite.db, (tx) => storeArchivePart(tx, {})),
       ],
       ["credentials.decrypt_failed", sealedUnder("1")],
       ["credentials.key_version_unknown", sealedUnder("2")],
@@ -1256,13 +1309,7 @@ describe("stream settings routes", () => {
 
     it("Save replaces stored bucket copy settings that cannot be read", async () => {
       await clearBucket();
-      await withTransaction(suite.db, (tx) =>
-        putCredential(tx, RING, {
-          personId: null,
-          purpose: STREAM_PURPOSE,
-          value: streamSettingsPayload({ bucket: BUCKET }),
-        }),
-      );
+      await withTransaction(suite.db, (tx) => writeStreamSettings(tx, RING, BUCKET, null));
       await withTransaction(suite.db, (tx) =>
         tx
           .update(venueCredentials)
@@ -1278,7 +1325,9 @@ describe("stream settings routes", () => {
           ...json(cookie, { ...BODY, bucket: "replacement-copy" }),
         });
         expect(res.status).toBe(200);
-        expect(await storedBucket()).toMatchObject({ bucket: "replacement-copy" });
+        expect((await readStreamSettings(suite.db, RING))?.bucket).toMatchObject({
+          bucket: "replacement-copy",
+        });
       } finally {
         await clearBucket();
       }
@@ -1289,13 +1338,7 @@ describe("stream settings routes", () => {
     const STOPPED: StreamStatus = { ...STREAMING, state: "off", reason: "supervisor_failed" };
 
     async function storeBucketSettings(): Promise<void> {
-      await withTransaction(suite.db, (tx) =>
-        putCredential(tx, RING, {
-          personId: null,
-          purpose: STREAM_PURPOSE,
-          value: streamSettingsPayload({ bucket: BUCKET }),
-        }),
-      );
+      await withTransaction(suite.db, (tx) => writeStreamSettings(tx, RING, BUCKET, null));
     }
 
     it("refuses without a manager session", async () => {

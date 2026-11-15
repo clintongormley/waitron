@@ -1,3 +1,4 @@
+import { storeArchivePart } from "./testing/backup-settings.js";
 import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
@@ -17,7 +18,6 @@ import { AppError } from "@waitron/shared";
 import {
   deleteCredential,
   loadKeyRing,
-  putCredential,
   venueCredentials,
   type KeyRing,
 } from "@waitron/credentials";
@@ -43,7 +43,7 @@ import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import { mountStreamApi } from "./stream-api.js";
-import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
+import { STREAM_PURPOSE, writeStreamSettings } from "./stream-host.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 // Lets one case make the record's read throw a settings error whose params no stored record can
@@ -557,19 +557,18 @@ describe("GET /api/backup/settings-evidence proofs", () => {
       destinations: [...settings.destinations, { kind: "s3", id: "bucket", bucket: BUCKET }],
     });
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING, {
-        personId: null,
-        purpose: STREAM_PURPOSE,
-        value: streamSettingsPayload({
-          bucket: {
-            region: "eu-west-1",
-            bucket: "venue-copy",
-            prefix: "",
-            accessKeyId: COPY_ACCESS_KEY,
-            secretAccessKey: COPY_SECRET,
-          },
-        }),
-      }),
+      writeStreamSettings(
+        tx,
+        RING,
+        {
+          region: "eu-west-1",
+          bucket: "venue-copy",
+          prefix: "",
+          accessKeyId: COPY_ACCESS_KEY,
+          secretAccessKey: COPY_SECRET,
+        },
+        null,
+      ),
     );
     const messageSecret = "error-message-secret-0123456789";
     const paramSecret = "error-param-secret-0123456789";
@@ -610,28 +609,21 @@ describe("GET /api/backup/settings-evidence proofs", () => {
 
   it("leaks nothing: a stored bucket endpoint carrying a password reads as unreadable, and the password is absent from the answer and the read's log lines", async () => {
     const endpointPassword = "review-password-secret";
-    // Written as the sealed credential: `writeArchiveSettings` refuses this record.
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING, {
-        personId: null,
-        purpose: ARCHIVE_PURPOSE,
-        value: {
-          settings: JSON.stringify({
-            ...folderSettings(destDir()),
-            revision: "00000000-0000-4000-8000-000000000001",
-            destinations: [
-              {
-                kind: "s3",
-                id: "bucket",
-                bucket: {
-                  ...BUCKET,
-                  endpoint: `https://backup-user:${endpointPassword}@s3.example.test`,
-                },
-                venueId: VENUE,
-              },
-            ],
-          }),
-        },
+      storeArchivePart(tx, {
+        ...folderSettings(destDir()),
+        revision: "00000000-0000-4000-8000-000000000001",
+        destinations: [
+          {
+            kind: "s3",
+            id: "bucket",
+            bucket: {
+              ...BUCKET,
+              endpoint: `https://backup-user:${endpointPassword}@s3.example.test`,
+            },
+            venueId: VENUE,
+          },
+        ],
       }),
     );
     const sc = await scenario();
@@ -651,7 +643,10 @@ describe("GET /api/backup/settings-evidence proofs", () => {
   }, 60_000);
 
   it("leaks nothing when the record does not read now: no param of the read's error in the answer or the read's log lines", async () => {
-    await write(folderSettings(destDir()));
+    await write({
+      ...folderSettings(destDir()),
+      destinations: [{ kind: "s3", id: "bucket", bucket: BUCKET }],
+    });
     const sc = await scenario();
     await writeRecoveryKey(sc.stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
     const sup = makeSupervisor(sc);

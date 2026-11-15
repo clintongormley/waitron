@@ -328,6 +328,7 @@ import {
   resolveMailDeliveryIn,
 } from "./email-delivery.js";
 import { mountEmailInboxApi } from "./email-inbox-api.js";
+import { SERVER_SETTINGS_KEYS } from "./mail-settings.js";
 import { mountEmailSettingsApi } from "./email-settings-api.js";
 import { mountFiscalCertificateApi } from "./fiscal-certificate-api.js";
 import { createCertificateDiagnosisRunner } from "./fiscal-certificate-diagnosis-runner.js";
@@ -2638,12 +2639,12 @@ async function bootServer(
   undoOnFailure.push(async () => printStop.abort());
   const liveEvents = new LiveEvents();
   const changeSources = migrationModules.flatMap((module) => module.changes ?? []);
-  const resourceTypes = liveResourceTypes(
-    changeSources,
-    availableModules.flatMap((module) =>
+  const resourceTypes = liveResourceTypes(changeSources, [
+    ...SERVER_SETTINGS_KEYS,
+    ...availableModules.flatMap((module) =>
       (module.settings ?? []).map((document) => document.module),
     ),
-  );
+  ]);
   await installChangeFeed(db, changeSources);
   mountLiveApi(
     app,

@@ -1,19 +1,13 @@
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import {
-  ensureStreamId,
   withNodeTransaction,
   withTransaction,
   type Database,
   type NodeDatabase,
   type NodeTransaction,
 } from "@waitron/db";
-import {
-  credentialRevision,
-  deleteCredential,
-  putCredential,
-  type KeyRing,
-} from "@waitron/credentials";
+import { credentialRevision, type KeyRing } from "@waitron/credentials";
 import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
 import { readPairLink } from "@waitron/node-db";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
@@ -38,7 +32,8 @@ import type { Turns } from "./backup-turns.js";
 import {
   STREAM_PURPOSE,
   readStreamSettingsIn,
-  streamSettingsPayload,
+  writeStreamSettings,
+  deleteStreamSettings,
   type StreamHost,
 } from "./stream-host.js";
 import "./errors.js";
@@ -133,7 +128,7 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
     const bucket = readBucketConfig(await readJsonBody<unknown>(c), (field) => {
       throw new AppError("backup.request_invalid", { field });
     });
-    streamSettingsPayload({ bucket });
+    if (bucket.prefix === "-") throw new AppError("backup.request_invalid", { field: "prefix" });
     return bucket;
   };
   const bucketWait = (c: Context): AbortSignal =>
@@ -259,12 +254,7 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
         await withNodeTransaction(deps.node, async (nodeTx) => {
           await refuseWhilePaired(nodeTx);
           await withTransaction(deps.db, async (tx) => {
-            await ensureStreamId(tx);
-            await putCredential(tx, deps.ring, {
-              personId,
-              purpose: STREAM_PURPOSE,
-              value: streamSettingsPayload({ bucket }),
-            });
+            await writeStreamSettings(tx, deps.ring, bucket, personId);
           });
         });
         await deps.stream.reload();
@@ -306,9 +296,7 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
       await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
       return deps.turns(async () => {
         guardPrimary();
-        await withTransaction(deps.db, (tx) =>
-          deleteCredential(tx, { personId, purpose: STREAM_PURPOSE }),
-        );
+        await withTransaction(deps.db, (tx) => deleteStreamSettings(tx, personId));
         await deps.stream.reload();
         return c.json(await view());
       });

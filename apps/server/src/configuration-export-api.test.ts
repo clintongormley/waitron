@@ -3,7 +3,7 @@ import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js"
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { loadKeyRing, putCredential } from "@waitron/credentials";
+import { loadKeyRing } from "@waitron/credentials";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { startManagementSession } from "@waitron/identity";
@@ -17,7 +17,7 @@ import { mountConfigurationExportApi } from "./configuration-export-api.js";
 import { decodeConfigurationBundle } from "./configuration-transfer.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
-import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
+import { writeStreamSettings } from "./stream-host.js";
 
 const encoding = vi.hoisted(() => ({
   observe: false,
@@ -333,13 +333,12 @@ describe("configuration export API", () => {
     const archiveSecret = "archive-secret-for-export-0123456789";
     const bucket = { region: "eu-west-1", bucket: "venue-copy", prefix: "", accessKeyId: "AKIAX" };
     await withTransaction(suite.db, async (tx) => {
-      await putCredential(tx, ring, {
-        personId: null,
-        purpose: STREAM_PURPOSE,
-        value: streamSettingsPayload({
-          bucket: { ...bucket, secretAccessKey: originalStreamSecret },
-        }),
-      });
+      await writeStreamSettings(
+        tx,
+        ring,
+        { ...bucket, secretAccessKey: originalStreamSecret },
+        null,
+      );
       await writeArchiveSettings(
         tx,
         ring,

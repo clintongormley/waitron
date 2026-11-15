@@ -6,12 +6,17 @@ import { isDeepStrictEqual } from "node:util";
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  deleteCredential,
+  putCredential,
   nodeSigningPublicKey,
   readPairSecret,
   tryGetCredential,
   type KeyRing,
 } from "@waitron/credentials";
 import {
+  ensureStreamId,
+  readSettings,
+  saveSettings,
   readNodeMembership,
   readStreamId,
   withTransaction,
@@ -47,36 +52,59 @@ import { credentialField } from "./credentials.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 import type { SealedStateOutcome } from "./sealed-state.js";
 import { deriveStreamKey } from "./stream-key.js";
+import { BACKUP_SETTINGS } from "./backup-settings-document.js";
 import "./errors.js";
 
-/** The vault purpose holding the owner's bucket. */
 export const STREAM_PURPOSE = "backup.stream";
 
 /** The reason a copy set up here reads off while a restore's first start is unfinished. */
 export const FIRST_START_PENDING = "first_start_pending";
-
-/** How the vault stores an absent optional field: it refuses empty strings. */
-const ABSENT = "-";
 
 export interface StreamSettings {
   streamId: string;
   bucket: BucketConfig;
 }
 
-/** What `putCredential` stores for `settings`: the inverse of {@link readStreamSettings}. */
-export function streamSettingsPayload(
-  settings: Pick<StreamSettings, "bucket">,
-): Record<string, string> {
-  const { bucket } = settings;
-  if (bucket.prefix === ABSENT) throw new AppError("backup.request_invalid", { field: "prefix" });
-  return {
-    endpoint: bucket.endpoint ?? ABSENT,
-    region: bucket.region,
-    bucket: bucket.bucket,
-    prefix: bucket.prefix === "" ? ABSENT : bucket.prefix,
-    accessKeyId: bucket.accessKeyId,
-    secretAccessKey: bucket.secretAccessKey,
-  };
+export async function writeStreamSettings(
+  tx: Transaction,
+  ring: KeyRing,
+  bucket: BucketConfig,
+  personId: string | null,
+): Promise<void> {
+  if (bucket.prefix === "-") throw new AppError("backup.request_invalid", { field: "prefix" });
+  await ensureStreamId(tx);
+  const saved = await readSettings(tx, BACKUP_SETTINGS);
+  await putCredential(tx, ring, {
+    personId,
+    purpose: STREAM_PURPOSE,
+    value: { accessKeyId: bucket.accessKeyId, secretAccessKey: bucket.secretAccessKey },
+  });
+  await saveSettings(tx, BACKUP_SETTINGS, {
+    doc: {
+      ...saved.doc,
+      stream: {
+        endpoint: bucket.endpoint ?? null,
+        region: bucket.region,
+        bucket: bucket.bucket,
+        prefix: bucket.prefix,
+      },
+    },
+    expectedRevision: saved.revision,
+    personId,
+  });
+}
+
+export async function deleteStreamSettings(
+  tx: Transaction,
+  personId: string | null,
+): Promise<void> {
+  const saved = await readSettings(tx, BACKUP_SETTINGS);
+  await deleteCredential(tx, { personId, purpose: STREAM_PURPOSE });
+  await saveSettings(tx, BACKUP_SETTINGS, {
+    doc: { ...saved.doc, stream: null },
+    expectedRevision: saved.revision,
+    personId,
+  });
 }
 
 export async function readStreamSettings(
@@ -90,13 +118,16 @@ export async function readStreamSettingsIn(
   tx: Transaction,
   ring: KeyRing,
 ): Promise<StreamSettings | null> {
+  const { doc } = await readSettings(tx, BACKUP_SETTINGS);
+  if (doc.stream === null) return null;
   const value = await tryGetCredential(tx, ring, { purpose: STREAM_PURPOSE });
-  if (value === null) return null;
-  const field = (
-    name: "endpoint" | "region" | "bucket" | "prefix" | "accessKeyId" | "secretAccessKey",
-  ) => credentialField(value, STREAM_PURPOSE, name);
+  const field = (name: "endpoint" | "region" | "bucket" | "prefix") => {
+    const value = doc.stream![name];
+    if (value === undefined)
+      throw new AppError("server.credential_unusable", { purpose: STREAM_PURPOSE, field: name });
+    return value;
+  };
   const endpoint = field("endpoint");
-  const prefix = field("prefix");
   const streamId = await readStreamId(tx);
   if (streamId === null)
     throw new AppError("server.credential_unusable", {
@@ -106,12 +137,12 @@ export async function readStreamSettingsIn(
   return {
     streamId,
     bucket: {
-      endpoint: endpoint === ABSENT ? undefined : endpoint,
-      region: field("region"),
-      bucket: field("bucket"),
-      prefix: prefix === ABSENT ? "" : prefix,
-      accessKeyId: field("accessKeyId"),
-      secretAccessKey: field("secretAccessKey"),
+      endpoint: endpoint === null ? undefined : endpoint,
+      region: field("region")!,
+      bucket: field("bucket")!,
+      prefix: field("prefix")!,
+      accessKeyId: credentialField(value ?? {}, STREAM_PURPOSE, "accessKeyId"),
+      secretAccessKey: credentialField(value ?? {}, STREAM_PURPOSE, "secretAccessKey"),
     },
   };
 }

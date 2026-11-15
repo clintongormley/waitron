@@ -1,6 +1,7 @@
+import { storeArchivePart } from "./testing/backup-settings.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { credentialRevision, loadKeyRing, putCredential } from "@waitron/credentials";
+import { credentialRevision, loadKeyRing } from "@waitron/credentials";
 import { saveVenueFields, setNodePublicKey, withTransaction, type Transaction } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -21,7 +22,7 @@ import {
   type ServerKeyInput,
   type ServerKeySeat,
 } from "./backup-recovery-pack-parts.js";
-import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
+import { STREAM_PURPOSE, writeStreamSettings } from "./stream-host.js";
 
 const RING = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
@@ -71,14 +72,7 @@ beforeEach(async () => {
 });
 
 const inTx = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
-const storeStream = () =>
-  inTx((tx) =>
-    putCredential(tx, RING, {
-      personId: null,
-      purpose: STREAM_PURPOSE,
-      value: streamSettingsPayload({ bucket: BUCKET }),
-    }),
-  );
+const storeStream = () => inTx((tx) => writeStreamSettings(tx, RING, BUCKET, null));
 const storeArchives = (settings: Omit<ArchiveSettings, "revision"> = ARCHIVES) =>
   inTx((tx) => writeArchiveSettings(tx, RING, settings, null));
 
@@ -132,13 +126,7 @@ describe("the bucket part", () => {
 
   it("names the bucket's own address when it has one, in Spanish", async () => {
     await inTx((tx) =>
-      putCredential(tx, RING, {
-        personId: null,
-        purpose: STREAM_PURPOSE,
-        value: streamSettingsPayload({
-          bucket: { ...BUCKET, endpoint: "https://s3.example.net:9000" },
-        }),
-      }),
+      writeStreamSettings(tx, RING, { ...BUCKET, endpoint: "https://s3.example.net:9000" }, null),
     );
     const built = await inTx((tx) => buildBucketPart(tx, { ...context, locale: "es" }));
     expect(built.part.page!.rows[0]).toEqual({
@@ -239,13 +227,7 @@ describe("the archives part", () => {
   });
 
   it("fails as backup.archive_settings_unreadable when the stored record cannot be read", async () => {
-    await inTx((tx) =>
-      putCredential(tx, RING, {
-        personId: null,
-        purpose: ARCHIVE_PURPOSE,
-        value: { settings: "{not json" },
-      }),
-    );
+    await inTx((tx) => storeArchivePart(tx, {}));
     const built = await inTx((tx) => buildArchivesPart(tx, context));
     expect(built.part.failure).toEqual(partFailure("en", "backup.archive_settings_unreadable", {}));
     expect(built.record).toEqual({ part: "archives", state: "failed" });
@@ -293,13 +275,7 @@ describe("the archives part", () => {
   it("with no backup key, says archives are absent when there are none and names an unreadable record", async () => {
     const keyless = { ...context, env: {} };
     expect((await inTx((tx) => buildArchivesPart(tx, keyless))).part.state).toBe("absent");
-    await inTx((tx) =>
-      putCredential(tx, RING, {
-        personId: null,
-        purpose: ARCHIVE_PURPOSE,
-        value: { settings: "{not json" },
-      }),
-    );
+    await inTx((tx) => storeArchivePart(tx, {}));
     expect((await inTx((tx) => buildArchivesPart(tx, keyless))).failedWith).toBe(
       "backup.archive_settings_unreadable",
     );

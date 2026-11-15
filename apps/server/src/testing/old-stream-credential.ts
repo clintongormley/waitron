@@ -1,7 +1,9 @@
 import { createCipheriv, randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { getCredential, venueCredentials, type KeyRing } from "@waitron/credentials";
-import { withTransaction, type Database } from "@waitron/db";
+import { readSettings, saveSettings, withTransaction, type Database } from "@waitron/db";
+
+import { BACKUP_SETTINGS, type StoredStream } from "../backup-settings-document.js";
 
 export async function omitStoredStreamField(
   db: Database,
@@ -9,6 +11,17 @@ export async function omitStoredStreamField(
   field: string,
 ): Promise<void> {
   await withTransaction(db, async (tx) => {
+    if (["endpoint", "region", "bucket", "prefix"].includes(field)) {
+      const saved = await readSettings(tx, BACKUP_SETTINGS);
+      const stream: Record<string, unknown> = { ...saved.doc.stream };
+      delete stream[field];
+      await saveSettings(tx, BACKUP_SETTINGS, {
+        doc: { ...saved.doc, stream: stream as unknown as StoredStream },
+        expectedRevision: saved.revision,
+        personId: null,
+      });
+      return;
+    }
     const value = await getCredential(tx, ring, { purpose: "backup.stream" });
     delete value[field];
     const iv = randomBytes(12);

@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { eq, sql } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { loadKeyRing, putCredential } from "@waitron/credentials";
+import { loadKeyRing } from "@waitron/credentials";
 import {
   invoiceSeries,
   nodes,
@@ -31,7 +31,7 @@ import type { StartedServer } from "./boot.js";
 import type { Turns } from "./backup-turns.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
-import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
+import { writeStreamSettings } from "./stream-host.js";
 import { awaitListening, copyMigrationsRoot, httpsVia } from "./testing/boot-harness.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { freePorts } from "./testing/free-ports.js";
@@ -100,11 +100,7 @@ async function seedVenueWithBackupSettings(): Promise<void> {
   const ring = loadKeyRing(KEY_ENV);
   await withTransaction(suite.db, async (tx) => {
     await ensureStreamId(tx);
-    await putCredential(tx, ring, {
-      personId: null,
-      purpose: STREAM_PURPOSE,
-      value: streamSettingsPayload({ bucket: BUCKET }),
-    });
+    await writeStreamSettings(tx, ring, BUCKET, null);
     await writeArchiveSettings(
       tx,
       ring,

@@ -6,7 +6,7 @@ import { mkdtempSync } from "node:fs";
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { loadKeyRing, putCredential } from "@waitron/credentials";
+import { loadKeyRing } from "@waitron/credentials";
 import { openVenueDatabase, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -31,7 +31,7 @@ import { ALL_MODULES } from "./modules.js";
 import type { RestoreFileDeps, ValidatedArtifact } from "./restore.js";
 import { runRestore } from "./restore-command.js";
 import { publishRestoreFlow } from "./restore-flow.js";
-import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
+import { writeStreamSettings } from "./stream-host.js";
 import type { restoreFromStream, RestoredVenue } from "./restore-stream.js";
 
 const RECOVERY_KEY = "s3cr3t-recovery-key-value";
@@ -1004,13 +1004,7 @@ describe("waitron-restore restore <artifact>, the old server's bucket", () => {
         operationDescription: "Restaurant",
       });
       await withTransaction(copy.venue, ensureStreamId);
-      await withTransaction(copy.venue, (tx) =>
-        putCredential(tx, ring, {
-          personId: null,
-          purpose: STREAM_PURPOSE,
-          value: streamSettingsPayload({ bucket: KIT.bucket }),
-        }),
-      );
+      await withTransaction(copy.venue, (tx) => writeStreamSettings(tx, ring, KIT.bucket, null));
     } finally {
       await copy.close();
     }

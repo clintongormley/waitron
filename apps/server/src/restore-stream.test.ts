@@ -12,7 +12,7 @@ import { DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
-import { loadKeyRing, putCredential } from "@waitron/credentials";
+import { loadKeyRing } from "@waitron/credentials";
 import { invoiceSeries, nodes, openVenueDatabase, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { generateNodeKeyPair } from "@waitron/membership";
@@ -50,7 +50,7 @@ import {
 import { runRestore } from "./restore-command.js";
 import { runStagedRestore, stageStreamRestore } from "./restore-request.js";
 import { sealNodeState, writeSealedStateRow } from "./sealed-state.js";
-import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
+import { writeStreamSettings } from "./stream-host.js";
 import { omitStoredStreamField } from "./testing/old-stream-credential.js";
 
 const bulkReadGuard = vi.hoisted(() => ({ stateDir: "" }));
@@ -775,11 +775,7 @@ describe("refuseIfArchiveSourceLive", () => {
       const store = await openVenueDatabase(dirname(file));
       try {
         await withTransaction(store.venue, (tx) =>
-          putCredential(tx, ring, {
-            personId: null,
-            purpose: STREAM_PURPOSE,
-            value: streamSettingsPayload({ bucket: settingsBucket }),
-          }),
+          writeStreamSettings(tx, ring, settingsBucket, null),
         );
         if (missingField !== undefined) {
           await omitStoredStreamField(store.venue, ring, missingField);

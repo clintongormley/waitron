@@ -1,3 +1,4 @@
+import { storeArchivePart } from "./testing/backup-settings.js";
 import { ensureStreamId } from "@waitron/db";
 import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
@@ -12,7 +13,7 @@ import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { loadKeyRing, putCredential } from "@waitron/credentials";
+import { loadKeyRing } from "@waitron/credentials";
 import {
   insertRecoveryPack,
   readRecoveryPacks,
@@ -38,13 +39,13 @@ import { PART_WORDS, readRecoveryPackPdf, type RecoveryPackPage } from "@waitron
 import { AppError } from "@waitron/shared";
 import { parseRecoveryKit } from "@waitron/stream";
 import { decodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
-import { ARCHIVE_PURPOSE, writeArchiveSettings, type ArchiveSettings } from "./archive-settings.js";
+import { writeArchiveSettings, type ArchiveSettings } from "./archive-settings.js";
 import { mountBackupRecoveryPackMakeApi } from "./backup-recovery-pack-api.js";
 import { createTurns, type Turns } from "./backup-turns.js";
 import { mintBreakGlassKey } from "./break-glass.js";
 import { invoiceFontBytes } from "./invoice-font.js";
 import { readRecoveryDocumentEvidence } from "./recovery-document-evidence.js";
-import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
+import { writeStreamSettings } from "./stream-host.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { createStaffApp } from "./cloud-remote.js";
 
@@ -115,11 +116,7 @@ beforeEach(async () => {
   keyInForce = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, nodeId);
   await withTransaction(suite.db, async (tx) => {
     await ensureStreamId(tx);
-    await putCredential(tx, RING, {
-      personId: null,
-      purpose: STREAM_PURPOSE,
-      value: streamSettingsPayload({ bucket: BUCKET }),
-    });
+    await writeStreamSettings(tx, RING, BUCKET, null);
     await writeArchiveSettings(tx, RING, ARCHIVES, null);
   });
   admin = await openManagementSession(suite.db, "admin");
@@ -702,13 +699,7 @@ describe("a made pack", () => {
         ],
       },
     ]);
-    await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING, {
-        personId: null,
-        purpose: ARCHIVE_PURPOSE,
-        value: { settings: "{not json" },
-      }),
-    );
+    await withTransaction(suite.db, (tx) => storeArchivePart(tx, {}));
     const failing = await fixture({
       evidence: async () => {
         throw new Error("could not read /home/jane-doe/evidence.json");
@@ -1153,13 +1144,7 @@ describe("the status route", () => {
     await (await f.make()).arrayBuffer();
     await f.received(1);
     expect((await read(f)).upToDate).toBe(true);
-    await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING, {
-        personId: null,
-        purpose: ARCHIVE_PURPOSE,
-        value: { settings: "{not json" },
-      }),
-    );
+    await withTransaction(suite.db, (tx) => storeArchivePart(tx, {}));
     const answer = await read(f);
     expect(answer.upToDate).toBe(false);
     expect(answer.reasons).toContainEqual({ part: "archives", kind: "settings_changed" });
