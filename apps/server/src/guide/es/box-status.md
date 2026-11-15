@@ -227,8 +227,9 @@ El permiso de administración del servidor, que tiene Admin de forma predetermin
 Si el reloj marca una fecha anterior al 28 de octubre de 2024, los terminales muestran
 **No se pueden registrar ventas: la hora del servidor es incorrecta**, y la campana también lo dice,
 con la fecha que marca el reloj del servidor. Entonces nada puede confirmar la hora.
-La salida es poner la hora bien: en un servidor que se pone en hora por internet, conectándolo a
-internet; si no, un administrador la pone con **Comprobar con la hora de este dispositivo** o,
+La salida es poner la hora bien. Si el [servicio de hora](box-status.md#clock-service) del servidor
+funciona, corrige la hora en cuanto contacta con un servidor de hora por internet; mientras tanto, o
+si el servicio no funciona, un administrador la pone con **Comprobar con la hora de este dispositivo** o,
 durante el [arranque](box-status.md#clock-at-start), un empleado desde una caja.
 
 La fila **Reloj** muestra entonces a los administradores un botón

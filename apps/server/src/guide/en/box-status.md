@@ -210,7 +210,8 @@ Box administration, held by Admin by default, lets you set the clock from your o
 If the clock reads a date before 28 October 2024, the tills show **Sales can't be recorded: the
 server's clock is wrong**, and the bell says so too, with the date the box's clock reads.
 Nothing can confirm the clock then. The way out is to set the
-clock right: on a box kept in time over the internet, by connecting it to the internet; otherwise
+clock right. If the box's [time service](box-status.md#clock-service) is running, it puts the clock
+right once it reaches a time server over the internet; until then, or if the service is not running,
 an administrator sets it with **Check with this device's time**, or, during
 [start-up](box-status.md#clock-at-start), a staff member from a till.
 
