@@ -126,6 +126,20 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
       return c.json({ asOf, calendarTimeZone, billing, prices, accountUrl });
     }),
   );
+  app.get("/management-api/cloud/emergency", (c) =>
+    run(c, log, async () => {
+      await authorize(c, true);
+      primary();
+      const { asOf, emergency, prices, stale } = await connection().emergency(
+        deps.managementOrigin,
+        c.req.raw.signal,
+      );
+      await authorize(c, true);
+      primary();
+      c.header("Cache-Control", "no-store");
+      return c.json({ asOf, emergency, prices, stale });
+    }),
+  );
   for (const action of ["prepare", "check", "reissue"] as const)
     app.post(`/management-api/cloud/replacement/${action}`, (c) =>
       run(c, log, async () => {

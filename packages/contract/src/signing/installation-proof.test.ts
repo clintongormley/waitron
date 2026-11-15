@@ -214,3 +214,23 @@ it.each([1, "x".repeat(257)])("refuses an origin outside its wire type or size",
     InstallationError,
   );
 });
+
+it.each(["emergency-hosting-display", "emergency-hosting-code"] as const)(
+  "authenticates %s separately from billing and the other emergency action",
+  (action) => {
+    const value = { ...claims, action },
+      signed = proof(value);
+    expect(verifyMachine(signed, publicKey, claims.origin, action, now)).toEqual(value);
+    expect(() =>
+      verifyMachine(
+        signed,
+        publicKey,
+        claims.origin,
+        action === "emergency-hosting-display"
+          ? "emergency-hosting-code"
+          : "emergency-hosting-display",
+        now,
+      ),
+    ).toThrowError(expect.objectContaining({ code: "invalid_proof" }));
+  },
+);

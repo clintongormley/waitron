@@ -1,4 +1,5 @@
 import { createPrivateKey, randomUUID, sign } from "node:crypto";
+import type { MachineAction } from "@waitron/contract";
 import { AppError } from "@waitron/shared";
 import type { SavedCloudState } from "./cloud-client.js";
 import { machinePayload } from "./cloud-installation.js";
@@ -56,12 +57,15 @@ const SIGNED_BODY = JSON.stringify({ version: 1 });
 // Contract: "limits the complete response read to eight seconds/16,384 bytes".
 const REPLY_BYTES = 16_384;
 
-function unavailable(): never {
+export function unavailable(): never {
   throw new AppError("cloud.unavailable", {});
 }
-const object = (v: unknown): v is Record<string, unknown> =>
+export const object = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
-function exactKeys(v: unknown, keys: readonly string[]): asserts v is Record<string, unknown> {
+export function exactKeys(
+  v: unknown,
+  keys: readonly string[],
+): asserts v is Record<string, unknown> {
   if (!object(v) || Object.keys(v).sort().join() !== [...keys].sort().join()) unavailable();
 }
 const whole = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) >= 0;
@@ -79,7 +83,7 @@ function zoneName(v: unknown): v is string {
     return false;
   }
 }
-function dayIn(instant: string, timeZone: string): string {
+export function dayIn(instant: string, timeZone: string): string {
   const parts = new Intl.DateTimeFormat("en", {
     timeZone,
     year: "numeric",
@@ -138,7 +142,7 @@ function readBilling(v: unknown, today: string): BillingFacts {
   return { status: "ready", level, state, period: p };
 }
 
-function readPrices(v: unknown, today: string): BillingPrices {
+export function readPrices(v: unknown, today: string): BillingPrices {
   if (object(v) && v.status === "unavailable") {
     exactKeys(v, ["status", "reason"]);
     if (v.reason !== "not_published") unavailable();
@@ -230,12 +234,9 @@ export function billingEnvelope(
   operationId: string,
   lease: string,
   now = Date.now(),
+  action: MachineAction = "billing-display",
 ): { payload: string; signature: string } {
-  const bytes = machinePayload(
-    state,
-    { action: "billing-display", operationId, lease, body: SIGNED_BODY },
-    now,
-  );
+  const bytes = machinePayload(state, { action, operationId, lease, body: SIGNED_BODY }, now);
   const key = createPrivateKey({
     key: Buffer.from(state.privateKey, "base64url"),
     format: "der",
@@ -258,10 +259,12 @@ function refusal(status: number, retryAfter: string | null): BillingRefusal {
 
 /** One signed read. It writes nothing itself; `onRefusal` decides what a refusal means for the
  * connection. */
-export async function fetchBillingDisplay(
+export async function fetchCloudDisplay<T>(
   state: SavedCloudState,
+  action: MachineAction,
+  read: (value: unknown, exchange: { sentAt: number; receivedAt: number }) => T,
   options: { signal?: AbortSignal; onRefusal?: OnRefusal; timeoutMs?: number } = {},
-): Promise<BillingDisplay> {
+): Promise<T> {
   const registration = state.view?.registration;
   const lease = state.lifecycle?.lease;
   if (!registration || state.lifecycle?.revoked || !lease)
@@ -270,10 +273,10 @@ export async function fetchBillingDisplay(
   const bound = AbortSignal.timeout(options.timeoutMs ?? 8000);
   const sentAt = Date.now();
   try {
-    const response = await fetch(`${state.origin}/api/installations/billing-display`, {
+    const response = await fetch(`${state.origin}/api/installations/${action}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(billingEnvelope(state, randomUUID(), used)),
+      body: JSON.stringify(billingEnvelope(state, randomUUID(), used, sentAt, action)),
       redirect: "error",
       signal: options.signal ? AbortSignal.any([options.signal, bound]) : bound,
     });
@@ -302,17 +305,30 @@ export async function fetchBillingDisplay(
         await options.onRefusal?.("invalid_proof", used, state.publicKey);
       throw refusal(response.status, response.headers.get("retry-after"));
     }
-    return readBillingDisplay(
-      value,
-      {
-        installationId: registration.installationId,
-        venueId: registration.venueId,
-        accountUrl: `${state.origin}/account`,
-      },
-      { sentAt, receivedAt },
-    );
+    return read(value, { sentAt, receivedAt });
   } catch (error) {
     if (error instanceof AppError) throw error;
     return unavailable();
   }
+}
+
+export async function fetchBillingDisplay(
+  state: SavedCloudState,
+  options: { signal?: AbortSignal; onRefusal?: OnRefusal; timeoutMs?: number } = {},
+): Promise<BillingDisplay> {
+  return fetchCloudDisplay(
+    state,
+    "billing-display",
+    (value, exchange) =>
+      readBillingDisplay(
+        value,
+        {
+          installationId: state.view!.registration!.installationId,
+          venueId: state.view!.registration!.venueId,
+          accountUrl: `${state.origin}/account`,
+        },
+        exchange,
+      ),
+    options,
+  );
 }
