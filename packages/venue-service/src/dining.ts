@@ -81,8 +81,7 @@ export async function resolveOrderDining(
     .innerJoin(departments, eq(departments.id, floorZones.departmentId))
     .where(eq(floorZones.id, zoneId));
   if (zone === undefined) throw new AppError("service_zone.not_found", { zoneId });
-  const policy = zone.dining ?? "eat_in";
-  let fixed: Dining | null = policy === "till_choice" ? null : policy;
+  let fixed: Dining | null = zone.dining === "till_choice" ? null : zone.dining;
   if (fixed !== "eat_in" && !(await venueChargesTakeawayVat(tx))) fixed = "eat_in";
   if (fixed !== null) {
     if (requested !== undefined && requested !== fixed) {
@@ -91,7 +90,7 @@ export async function resolveOrderDining(
     return fixed;
   }
   const atTable = (zone.zoneOrderStart ?? zone.departmentOrderStart) === "table";
-  return requested ?? (atTable ? "eat_in" : (zone.startsAs ?? "eat_in"));
+  return requested ?? (atTable ? "eat_in" : zone.startsAs);
 }
 
 /**
@@ -114,11 +113,7 @@ export async function applyDepartmentDining(
     .where(eq(workingOrders.id, workingOrderId));
   if (order === undefined) throw new AppError("working_order.not_found", { workingOrderId });
   if (order.dining === "takeaway" && to.serviceMode === "table_tab") return;
-  const [policy] = await tx
-    .select({ dining: departments.dining })
-    .from(departments)
-    .where(eq(departments.id, to.departmentId));
-  const dining = policy?.dining ?? "eat_in";
+  const { dining } = await departmentDining(tx, to.departmentId);
   if (dining === "till_choice" || dining === order.dining) return;
   if (dining === "takeaway" && (await orderHasSetLunch(tx, workingOrderId)))
     throw new AppError("order.set_lunch_takeaway", { canSwitch: false });
