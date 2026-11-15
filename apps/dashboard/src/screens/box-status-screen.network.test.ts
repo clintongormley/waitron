@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { BoxNetwork, DashboardApi } from "../api/client.js";
@@ -29,7 +29,11 @@ async function mount(client = api()) {
   return el;
 }
 const card = (el: BoxStatusScreen) => el.shadowRoot!.querySelector("[data-test=box-network]");
+beforeEach(() => {
+  vi.spyOn(document, "URL", "get").mockReturnValue("https://box.example/manage/box-status");
+});
 afterEach(() => {
+  vi.restoreAllMocks();
   cleanupWidgets();
   setLocale("en");
 });
@@ -194,3 +198,23 @@ it("does not retire acceptance on a read that began before Join was accepted", a
   await expect.poll(() => card(el)?.textContent).not.toContain("accepted");
   expect(card(el)!.querySelector("[data-test=wifi-scan]")?.hasAttribute("disabled")).toBe(true);
 });
+
+it.each(["connection.failed", "box_network.busy"])(
+  "refreshes Last change after %s without resending",
+  async (code) => {
+    const read = vi.fn().mockResolvedValue(observation);
+    const client = api(read);
+    const el = await mount(client);
+    await expect.poll(() => card(el)?.textContent).toContain("192.0.2.8");
+    const { button } = await join(el, client);
+    vi.mocked(client.joinBoxNetwork).mockRejectedValue({ code });
+    read.mockResolvedValue({
+      ...observation,
+      change: { kind: "join", ssidHex: "426172", state: "running", reason: null },
+    });
+    await userEvent.click(button);
+    await expect.poll(() => read.mock.calls.length).toBe(2);
+    await expect.poll(() => card(el)?.textContent).toContain("in progress");
+    expect(client.joinBoxNetwork).toHaveBeenCalledOnce();
+  },
+);

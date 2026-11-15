@@ -28,10 +28,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The box cannot change its network here. Use its local screen.",
     es: "El servidor no puede cambiar su red desde aquí. Usa su pantalla local.",
   },
-  "box_network.not_saved": {
-    en: "This network is no longer saved. Check the latest network display.",
-    es: "Esta red ya no está guardada. Consulta los datos de red actuales.",
-  },
+
   "box_network.join_connection_insecure": {
     en: "Open this dashboard over HTTPS at the box’s own address before entering a Wi-Fi password.",
     es: "Abre este panel por HTTPS en la dirección del servidor antes de introducir una contraseña Wi-Fi.",

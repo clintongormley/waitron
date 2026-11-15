@@ -4067,6 +4067,10 @@ export const en = {
   "disk_stop.sign_in_as_manager": "Sign in as a manager",
   "box_status.title": "Box status",
   "box_status.network.title": "Network",
+  "box_status.network.password_wpa":
+    "Use 8–63 printable ASCII characters (English letters, numbers, spaces and punctuation), or a 64-digit hexadecimal key. Then try Join again.",
+  "box_status.network.password_sae":
+    "Use a password of 1–256 UTF-8 bytes, without control characters. Then try Join again.",
   "box_status.network.forget": "Forget saved Wi-Fi",
   "box_status.network.accepted":
     "The box accepted the request. The outcome can take a couple of minutes to appear here.",
@@ -8419,6 +8423,10 @@ export const es: Record<StringKey, string> = {
   "disk_stop.sign_in_as_manager": "Iniciar sesión como encargado",
   "box_status.title": "Estado del servidor",
   "box_status.network.title": "Red",
+  "box_status.network.password_wpa":
+    "Usa 8–63 caracteres ASCII imprimibles (letras sin acentos, números, espacios y puntuación), o una clave hexadecimal de 64 dígitos. Después pulsa Conectar de nuevo.",
+  "box_status.network.password_sae":
+    "Usa una contraseña de 1–256 bytes UTF-8, sin caracteres de control. Después pulsa Conectar de nuevo.",
   "box_status.network.forget": "Olvidar la Wi-Fi guardada",
   "box_status.network.accepted":
     "El servidor ha aceptado la solicitud. El resultado puede tardar un par de minutos en aparecer aquí.",

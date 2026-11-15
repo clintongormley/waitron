@@ -118,6 +118,10 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
   ];
   it.each(["en", "es"] as const)("Wi-Fi controls and dialogs (%s)", async (locale) => {
     setLocale(locale);
+    const address = vi
+      .spyOn(document, "URL", "get")
+      .mockReturnValue("https://box.example/manage/box-status");
+    onTestFinished(() => address.mockRestore());
     const api = Object.assign(stubApi(health()), {
       getBoxNetwork: vi.fn().mockResolvedValue({
         wired: { connected: false, address: null },

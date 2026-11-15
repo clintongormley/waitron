@@ -5,8 +5,13 @@ import { formatIsoMinute } from "../date-utils.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { es } from "../i18n/strings.js";
 import { fill, setLocale, t } from "../i18n/t.js";
-import * as networkRows from "./box-status-rows.js";
-import { boxStatusRows, partOfAlert, partsOfNotice, type PartRow } from "./box-status-rows.js";
+import {
+  networkOutcome,
+  boxStatusRows,
+  partOfAlert,
+  partsOfNotice,
+  type PartRow,
+} from "./box-status-rows.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(() => setLocale("en"));
@@ -789,13 +794,16 @@ it.each([
   ],
   ["refused", "current", "failed", "", "could not join", "up to date"],
   ["refused", "absent", "password-rejected", "", "may be wrong", "no Wi-Fi copy"],
-])(
+] as const)(
   "distinguishes join %s and copy %s",
   (state, copy, reason, failure, connectionWords, copyWords) => {
-    const result = (
-      networkRows as unknown as { networkOutcome?: (n: unknown) => string }
-    ).networkOutcome?.({
-      change: { kind: "join", ssidHex: "426172", state, reason: reason || null },
+    const result = networkOutcome({
+      change: {
+        kind: "join",
+        ssidHex: "426172",
+        state,
+        reason: state === "refused" ? (reason === "password-rejected" ? reason : "failed") : null,
+      },
       bootCopy: {
         state: copy,
         reason: copy === "absent" ? "password-unavailable" : null,
@@ -808,13 +816,36 @@ it.each([
   },
 );
 it("does not call Forget durable until its boot copy is absent", () => {
-  const result = (
-    networkRows as unknown as { networkOutcome?: (n: unknown) => string }
-  ).networkOutcome?.({
+  const result = networkOutcome({
     change: { kind: "forget", ssidHex: "426172", state: "applied", reason: null },
     bootCopy: { state: "current", reason: null, failure: null },
   });
   expect(result).toContain("removed from the running configuration");
   expect(result).toContain("up to date");
   expect(result).not.toContain("complete");
+});
+
+it.each([
+  ["network-not-found", "absent", "cable-only", null, "not found", "cable-only"],
+  ["timed-out", "absent", "enterprise", null, "timed out", "security cannot be copied"],
+  ["failed", "failed", null, "publication-unverified", "could not join", "could not be verified"],
+  ["failed", "failed", null, "path-unsafe", "could not join", "could not be verified for writing"],
+] as const)(
+  "names the refusal %s and boot-copy problem",
+  (reason, state, copyReason, failure, actionWords, copyWords) => {
+    const result = networkOutcome({
+      change: { kind: "join", ssidHex: "426172", state: "refused", reason },
+      bootCopy: { state, reason: copyReason, failure },
+    });
+    expect(result).toContain(actionWords);
+    expect(result).toContain(copyWords);
+  },
+);
+it("reports a refused Forget without claiming removal", () => {
+  expect(
+    networkOutcome({
+      change: { kind: "forget", ssidHex: "426172", state: "refused", reason: "failed" },
+      bootCopy: { state: "current", reason: null, failure: null },
+    }),
+  ).toContain("could not forget");
 });

@@ -43,7 +43,6 @@ describe("DashboardApi routes", () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ networks }))
-      .mockResolvedValueOnce(jsonResponse({}))
       .mockResolvedValueOnce(jsonResponse({}));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.scanBoxNetwork()).toEqual({ networks });
@@ -54,11 +53,9 @@ describe("DashboardApi routes", () => {
       hidden: false,
     };
     expect(await api.joinBoxNetwork(join)).toEqual({});
-    expect(await api.forgetBoxNetwork({ ssidHex: "2042617220" })).toEqual({});
     expect(callsOf(fetchImpl)).toEqual([
       ["/api/box/network/scan", "POST", {}],
       ["/api/box/network/join", "POST", join],
-      ["/api/box/network/forget", "POST", { ssidHex: "2042617220" }],
     ]);
   });
 

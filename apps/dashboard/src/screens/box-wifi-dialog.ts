@@ -44,6 +44,7 @@ export class BoxWifiDialog extends LitElement {
   @state() private wired = false;
   @state() private networks: BoxWifiNetwork[] = [];
   @state() private scanning = false;
+  @state() private scanFailed = false;
   @state() private busy = false;
   @state() private choice = "";
   @state() private password = "";
@@ -57,6 +58,10 @@ export class BoxWifiDialog extends LitElement {
   show(wired: boolean): void {
     if (this.opened) return;
     this.opened = true;
+    if (!this.#secure()) {
+      this.bottom = codeMessage("box_network.join_connection_insecure");
+      return;
+    }
     this.wired = wired;
     this.networks = [];
     const { coordinator, scope } = draftScopeFor<Draft>(this, {
@@ -78,6 +83,10 @@ export class BoxWifiDialog extends LitElement {
     this.#close();
     super.disconnectedCallback();
   }
+  // A route refusal cannot keep an HTTP request’s password off the wire.
+  #secure(): boolean {
+    return new URL(this.ownerDocument.URL).protocol === "https:";
+  }
   #dialog(): WtDialog | null {
     return this.renderRoot.querySelector("wt-dialog");
   }
@@ -94,6 +103,7 @@ export class BoxWifiDialog extends LitElement {
     this.opened = false;
     this.busy = false;
     this.scanning = false;
+    this.scanFailed = false;
     this.attempted = false;
     this.refusal = "";
     this.bottom = "";
@@ -106,6 +116,7 @@ export class BoxWifiDialog extends LitElement {
     if (this.scanning || this.busy || this.blocked) return;
     const generation = this.#generation;
     this.scanning = true;
+    this.scanFailed = false;
     this.bottom = "";
     try {
       const { networks } = await this.api.scanBoxNetwork();
@@ -116,7 +127,10 @@ export class BoxWifiDialog extends LitElement {
         this.#scope?.changed();
       }
     } catch (error) {
-      if (generation === this.#generation) this.bottom = codeMessage(codeOf(error));
+      if (generation === this.#generation) {
+        this.scanFailed = true;
+        this.bottom = codeMessage(codeOf(error));
+      }
     } finally {
       if (generation === this.#generation) this.scanning = false;
     }
@@ -169,10 +183,22 @@ export class BoxWifiDialog extends LitElement {
           ? (error as { params?: { field?: unknown } }).params
           : undefined;
       if (params?.field === "psk") {
-        this.refusal = codeMessage(codeOf(error));
+        this.refusal =
+          codeOf(error) === "box_network.password_invalid"
+            ? t(
+                network.security === "sae"
+                  ? "box_status.network.password_sae"
+                  : "box_status.network.password_wpa",
+              )
+            : codeMessage(codeOf(error));
         await this.updateComplete;
         this.#dialog()?.querySelector<WtInput>("wt-input")?.focus();
-      } else this.bottom = wifiRequestError(error);
+      } else {
+        const code = codeOf(error);
+        this.bottom = wifiRequestError(error);
+        if (!WIFI_REFUSALS.has(code) || code === "box_network.busy" || code === "box_host.busy")
+          this.api.liveData.refresh();
+      }
     } finally {
       if (generation === this.#generation) this.busy = false;
     }
@@ -193,7 +219,7 @@ export class BoxWifiDialog extends LitElement {
       }}
     >
       ${
-        this.opened
+        this.opened && this.#secure()
           ? html`<div class="fields">
               <p>
                 ${t("box_status.network.warning")}
@@ -207,7 +233,7 @@ export class BoxWifiDialog extends LitElement {
                 @click=${() => void this.#scan()}
                 >${t("box_status.network.scan_again")}</wt-button
               >
-              ${!this.scanning && this.networks.length === 0 ? html`<p role="status">${t("box_status.network.empty")}</p>` : nothing}
+              ${!this.scanning && !this.scanFailed && this.networks.length === 0 ? html`<p role="status">${t("box_status.network.empty")}</p>` : nothing}
               <wt-combobox
                 name="network"
                 required
@@ -251,11 +277,22 @@ export class BoxWifiDialog extends LitElement {
     </wt-dialog>`;
   }
 }
-export function wifiRequestError(error: unknown): string {
+const WIFI_REFUSALS = new Set([
+  "management_session.required",
+  "management_session.expired",
+  "person.suspended",
+  "authorization.not_permitted",
+  "management.request_invalid",
+  "box_host.unavailable",
+  "box_host.busy",
+  "box_network.busy",
+  "box_network.no_wifi",
+  "box_network.password_invalid",
+  "box_network.join_connection_insecure",
+]);
+function wifiRequestError(error: unknown): string {
   const code = codeOf(error);
-  return !code || code === "connection.failed" || code === "box_host.failed"
-    ? t("box_status.network.unknown")
-    : codeMessage(code);
+  return WIFI_REFUSALS.has(code) ? codeMessage(code) : t("box_status.network.unknown");
 }
 declare global {
   interface HTMLElementTagNameMap {

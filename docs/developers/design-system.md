@@ -6495,13 +6495,13 @@ alert list.
   Null addresses and saved names say they were not reported; disconnected connections
   say Not connected. Names are decoded as UTF-8 and rendered as text. Its guide link opens
   the page's `network` section. After a successful read, Scan Wi-Fi opens a staged-input dialog
-  with a `wt-combobox` and password `wt-input`; unsupported security is listed but disabled.
+  with a `wt-combobox` and password `wt-input` on HTTPS; HTTP shows the secure-connection refusal before collecting credentials. Unsupported security is listed but disabled.
   Join closes and clears the password on acceptance before refreshing. It warns about losing
   the page's connection, with cable/local-screen recovery when unwired. Running changes and
   unobserved acceptance hold new actions. Only a successful read begun after acceptance retires
   that local notice. Last change names the host's operation, network and outcome on reopening;
   its running-configuration outcome and the durable boot-copy outcome are worded separately.
-  A read's recovery never clears an action refusal. Lost requests advise checking Last change
+  A read's recovery never clears an action refusal. Lost or busy requests refresh the existing network read; lost requests advise checking Last change
   before resending. The existing minute watch supplies later outcomes.
 
 - **Rows.** One card per part, in order: Sales, Tax agency, Bucket copy, Spare box (only while
