@@ -4,7 +4,7 @@ import {
   automaticNames,
   baseStyles,
   draftScopeFor,
-  focusFirstInvalid,
+  FormFeedback,
   leaveCoordinatorFor,
   saveActionState,
   type DraftScope,
@@ -119,8 +119,7 @@ export class FloorPlanAddTables extends LitElement {
   @property({ attribute: false }) draftParent: object | undefined;
 
   @state() private addForm: AddForm | null = null;
-  /** Set by a refused Save; from then on the dialog shows its problems as they are fixed. */
-  @state() private addChecked = false;
+  readonly #feedback = new FormFeedback(this);
 
   readonly #addId = {};
   #addScope?: DraftScope<AddForm>;
@@ -152,7 +151,7 @@ export class FloorPlanAddTables extends LitElement {
 
   show(): void {
     if (this.addForm !== null) return;
-    this.addChecked = false;
+    this.#feedback.reset();
     this.addForm = {
       count: "1",
       seats: "4",
@@ -168,7 +167,7 @@ export class FloorPlanAddTables extends LitElement {
     this.#addScope?.dispose();
     this.#addScope = undefined;
     this.addForm = null;
-    this.addChecked = false;
+    this.#feedback.reset();
   }
 
   #modal(): WtModal | null {
@@ -279,11 +278,8 @@ export class FloorPlanAddTables extends LitElement {
     const form = this.addForm;
     if (form === null) return;
     if (this.#failing(this.#errors(form))) {
-      this.addChecked = true;
-      void this.updateComplete.then(() => {
-        const modal = this.#modal();
-        if (modal !== null) void focusFirstInvalid(modal);
-      });
+      this.#feedback.press();
+      void this.#feedback.focus(this.shadowRoot!);
       return;
     }
     const count = wholeWithin(form.count, 1, MAX_TABLES)!;
@@ -322,7 +318,7 @@ export class FloorPlanAddTables extends LitElement {
   override render() {
     const form = this.addForm;
     const errors = form === null ? null : this.#errors(form);
-    const shown = this.addChecked ? errors : null;
+    const shown = this.#feedback.attempted ? errors : null;
     const failing = shown !== null && this.#failing(shown);
     const action = saveActionState(this.#addScope, { savableAtOpen: true });
     const value = (event: CustomEvent<{ value: string }>) => {

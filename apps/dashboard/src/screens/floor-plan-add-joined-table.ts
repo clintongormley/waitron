@@ -3,7 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
   draftScopeFor,
-  focusFirstInvalid,
+  FormFeedback,
   leaveCoordinatorFor,
   saveActionState,
   type ComboboxOption,
@@ -85,8 +85,7 @@ export class FloorPlanAddJoinedTable extends LitElement {
   @property({ attribute: false }) draftParent: object | undefined;
 
   @state() private form: JoinedForm | null = null;
-  /** Set by a refused Save; from then on the dialog shows its problems as they are fixed. */
-  @state() private checked = false;
+  readonly #feedback = new FormFeedback(this);
   @state() private noRoom = false;
 
   #seatsEdited = false;
@@ -120,7 +119,7 @@ export class FloorPlanAddJoinedTable extends LitElement {
 
   show(): void {
     if (this.form !== null) return;
-    this.checked = false;
+    this.#feedback.reset();
     this.noRoom = false;
     this.#seatsEdited = false;
     this.form = { name: "", shortName: "", seats: "", parts: [] };
@@ -130,7 +129,7 @@ export class FloorPlanAddJoinedTable extends LitElement {
     this.#scope?.dispose();
     this.#scope = undefined;
     this.form = null;
-    this.checked = false;
+    this.#feedback.reset();
     this.noRoom = false;
   }
 
@@ -223,11 +222,8 @@ export class FloorPlanAddJoinedTable extends LitElement {
     const form = this.form;
     if (form === null || saveActionState(this.#scope).unchanged) return;
     if (this.#failing(this.#errors(form))) {
-      this.checked = true;
-      void this.updateComplete.then(() => {
-        const modal = this.#modal();
-        if (modal !== null) void focusFirstInvalid(modal);
-      });
+      this.#feedback.press();
+      void this.#feedback.focus(this.shadowRoot!);
       return;
     }
     const key = this.nextKey();
@@ -262,7 +258,7 @@ export class FloorPlanAddJoinedTable extends LitElement {
 
   override render() {
     const form = this.form;
-    const shown = this.checked && form !== null ? this.#errors(form) : null;
+    const shown = this.#feedback.attempted && form !== null ? this.#errors(form) : null;
     const failing = shown !== null && this.#failing(shown);
     const action = saveActionState(this.#scope);
     const options = form === null ? [] : this.#options();
