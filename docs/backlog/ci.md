@@ -619,6 +619,7 @@ historical wait cause remains unknown; these observations do not measure a
   Cloud PR #1115 publishes the matching 30-record reader in v41; six slots remain. **2026-11-09 17:19:**
   the owner replaced initial-wave fit with whole-run queue pressure; qualify the count variable and route before activation.
   **2026-11-10, A1470:** the owner chose “Unsure → GitHub (Recommended)”. New-run routing uses GitHub when inventory, capacity or its module cannot be read; normal ratios and server ties remain. Degraded reads may leave the server idle; retain the first natural blind decision’s source, route and runner results before claiming live qualification.
+  **2026-11-15 15:55, watcher:** two agreeing queued CI-workflow row sets count as readable, including empty sets; both reads could miss the same run. The watcher has told the owner and will reverse this interpretation if they say so. Every other list stays strict; live qualification remains open.
   **2026-11-12 20:47, watcher:** after successful server-health and capacity checks, idle positive server capacity needs no hosted-count read: all hosted counts select server. Busy and zero-capacity paths retain their checks; the earlier planner diagnosis stays open under A1473.
 
 - **A1459: measured shared startup, with child internals still unknown (2026-11-08).**

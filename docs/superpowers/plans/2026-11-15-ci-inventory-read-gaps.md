@@ -2,7 +2,7 @@
 
 **Request:** Watcher, 2026-11-15 14:04, recorded in Lane I's queue.md and questions.md: “5 of 29 runs since 12:30 fell back to GitHub because the capacity inventory read was incomplete ("empty page after 2 of 3 entries"), sometimes while our server had room. Name the failing endpoint from existing evidence, fix that read (retry inside the existing time budget, or read the pages correctly) with a test reproducing the empty page. No routing-rule change. One-page plan first.”
 
-**Reviewed and cleared:** Claude reviewed the original plan and its sole corrections read (187 and 176 seconds; Lane I receipts/inventory-read-gaps-20261115/plan-review.md and timed/plan-fixes-review.md). Neither delayed retry proposal was cleared or built. Watcher 15:10 replaced those proposals and explicitly directed “No further plan read: build it.” No owner design approval is recorded.
+**Reviewed and cleared:** Claude reviewed the original plan and its sole corrections read (187 and 176 seconds; Lane I receipts/inventory-read-gaps-20261115/plan-review.md and timed/plan-fixes-review.md). Neither delayed retry proposal was cleared or built. Watcher 15:10 replaced those proposals and explicitly directed “No further plan read: build it.” No owner design approval is recorded. After both built reviewers questioned A1470's scope, the watcher reaffirmed the rule at 15:55, including its limitation that both reads could miss the same run, and said the owner had been told.
 
 > Rule instead: read once; if rows fall short of the count, read again at once; if both reads list the same rows, use those rows as the inventory and log the stale count (run ids, rows, count) instead of falling back blind; if the two reads differ, keep today's fallback. Test: equal rows with a higher count are used and logged; differing rows still fall back. No added waits, one list only, every other reader unchanged.
 
@@ -10,7 +10,7 @@
 
 ## Smallest result and implementation
 
-Routing can use two agreeing short reads of its queued CI-workflow list, logging their IDs, row count and advertised counts. Two agreeing snapshots cannot prove that GitHub omitted no row; live qualification remains open.
+Routing can use agreeing queued CI-workflow row sets ending on empty pages, logging IDs, row count, starting counts and the date cutoff. Two agreeing snapshots cannot prove that GitHub omitted no row; live qualification remains open.
 
 - Reuse `inventory`, its existing immediate whole-list restart, and the `serverHealth` call in `serverRoute`, in scripts/ci-server-health.mjs. Add an optional private stable-short-read context to the reader, enabled only by an optional third `serverHealth` argument from routing and only for status=queued. Keep request as inventory's first argument.
 - On an empty page before the total, retain the first enumeration's rows/count only for that context. The existing restart runs immediately. If the second also ends short and both row sets agree by complete values (order-independent), report the stale counts and return the second set. Different rows still refuse. A complete second read continues to replace the first. Built-review correction: retain the first rows if its empty page changes the count, too; a changing count within the second read remains a refusal. Log both starting counts and the request's date cutoff.

@@ -552,6 +552,7 @@ describe("queue-pressure routing", () => {
     "same",
     "reordered",
     "first count drift",
+    "first populated drift",
     "second count drift",
     "different id",
     "changed row",
@@ -580,6 +581,8 @@ describe("queue-pressure routing", () => {
           if (change === "different id") rows[1] = { ...rows[1], id: 53 };
           if (change === "changed row") rows[1] = { ...rows[1], run_attempt: 3 };
         }
+        if (change === "first populated drift" && reads === 1)
+          return { total_count: page === 1 ? 3 : 4, workflow_runs: [rows[page - 1]] };
         return {
           total_count:
             reads === 1
