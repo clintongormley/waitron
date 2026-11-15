@@ -32,3 +32,9 @@ display/pass/station, settled-sale/receipt and theme-logo reads. Invoice-deliver
 claim-expiry write and its 507; genuine floor reconciliation also stays transactional. Past that
 size, land the completed portion and leave the remainder in the same bundle. These are watcher
 clearances in Lane K’s `questions.md`, not owner design approval.
+
+**2026-11-15 cut 4 wording clearance:** the watcher at 11:02 cleared adapting the recovery action
+for the connection page's existing controls: “Once more space is free, choose Check again, then
+set up the secure connection.” Keep the existing explanation of what the disk holds and the
+reinstall data-loss warning, with a Spanish twin. Read space on each page load so freeing space
+clears the warning. No new control or endpoint; no owner design approval is claimed.

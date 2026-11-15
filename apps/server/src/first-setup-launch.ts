@@ -18,6 +18,7 @@ import {
 import { closeListener } from "./close-listener.js";
 import { readRecoveryState, refusedAtStart } from "./recovery-state.js";
 import { recoveryApp } from "./recovery-surface.js";
+import { lowestFreeBytes } from "./start-space.js";
 
 export async function startServerOrFirstSetupResolution(
   env: NodeJS.ProcessEnv,
@@ -108,6 +109,7 @@ export async function startServerOrFirstSetupResolution(
     const port = httpPortFrom(effectiveEnv);
     const options: RecoveryServeOptions = {
       stateDir: admission.roots.stateDir,
+      freeSpace: () => lowestFreeBytes([admission.roots.stateDir, admission.roots.venueDir]),
       port,
       log,
       httpHost: isUnset(effectiveEnv.WAITRON_HTTP_HOST)

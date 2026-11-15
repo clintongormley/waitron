@@ -203,6 +203,10 @@ straight away. A bell open on another computer catches up within about a minute.
 If **Free** does not free enough, follow the line at the bottom of the page about freeing more
 space.
 
+If **Set up secure connection** warns about disk space, free space first. Choose
+**Check again** on that page to read the space again, then follow its connection instructions.
+Reinstalling starts the box fresh and loses its contents unless you restore a backup.
+
 ## Restart the box {#restart}
 
 **Restart the box** restarts Waitron on the box without switching the box off. Every till stops selling

@@ -15,6 +15,7 @@ export interface TrustPageInput {
     /** The repair is offered, but only to a request from the server itself, and this is not one. */
     serverOnly?: boolean;
     continuationRequired?: boolean;
+    storageFreeBytes?: number;
   };
   locale?: "en" | "es";
   reachUrls: string[];

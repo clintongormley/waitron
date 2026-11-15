@@ -11,6 +11,8 @@ import { CA_CONTENT_TYPE, CA_FILENAME, renderTrustPage } from "./trust-page.js";
 import { trustDeviceForRequest } from "./detect-device.js";
 import { connectionLocale } from "./connection-bootstrap-page.js";
 import type { Logger } from "./logger.js";
+import { FULL_DISK_BYTES } from "./boot-failure.js";
+import { errnoOf } from "./errno.js";
 
 export interface ConnectionBootstrapDeps extends BoxTlsRepairDeps {
   origins: string[];
@@ -21,6 +23,7 @@ export interface ConnectionBootstrapDeps extends BoxTlsRepairDeps {
    * the certificate downloads follow only whether a repair is offered at all. */
   repairAllowed?: boolean | ((c: Context) => boolean);
   continuationRequired?: boolean;
+  freeSpace?: () => Promise<number | null>;
 }
 
 async function emptyBody(request: Request): Promise<boolean> {
@@ -78,6 +81,11 @@ export function mountConnectionBootstrap(
         offered && status.caAvailable
           ? await readBoxPublicCa(deps.stateDir, deps.now()).catch(() => null)
           : null;
+      const free = await deps.freeSpace?.().catch((error: unknown) => {
+        deps.log("warn", "recovery.free_space_unreadable", { errno: errnoOf(error) ?? null });
+        return undefined;
+      });
+      if (free === null) deps.log("warn", "recovery.free_space_unreadable", { errno: null });
       const html = renderTrustPage({
         caCertificate: caCertificate ?? undefined,
         caAvailable: status.caAvailable,
@@ -87,6 +95,8 @@ export function mountConnectionBootstrap(
         device: trustDeviceForRequest(c.req),
         connection: {
           ...status,
+          storageFreeBytes:
+            free !== undefined && free !== null && free < FULL_DISK_BYTES ? free : undefined,
           repairAllowed: offered,
           serverOnly: offered && !offeredTo(c),
           continuationRequired: bootstrapOnly || transitionFailed || deps.continuationRequired,

@@ -221,6 +221,10 @@ menos.
 Si **Liberar** no libera bastante, sigue la línea del final de la página sobre cómo ganar más
 espacio.
 
+Si **Configurar conexión segura** avisa del espacio en disco, libera espacio primero.
+Elige **Comprobar de nuevo** en esa página para volver a leer el espacio y sigue sus instrucciones de conexión.
+Reinstalar deja el equipo como nuevo y pierde su contenido salvo que restaures una copia de seguridad.
+
 ## Reinicia el servidor {#restart}
 
 **Reiniciar el servidor** reinicia Waitron en el servidor sin apagarlo. Ninguna caja

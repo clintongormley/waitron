@@ -2,13 +2,26 @@ import { and, eq, isNull, lt, or } from "drizzle-orm";
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { AppError, isUuid } from "@waitron/shared";
-import { deviceProfiles, devices } from "@waitron/db";
+import { deviceProfiles, devices, nowIso } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { profileAllows } from "@waitron/layouts";
 import type { CapabilityFlag, FormFactor, ProfileAction } from "@waitron/layouts";
 import { signInWithToken, staleBefore } from "@waitron/identity";
 // Side-effect only: keeps `device.unauthorized` (errors.ts) reachable from the file that throws it.
 import "./errors.js";
+
+// The transaction handle is the database handle (withTransaction); sightings stay with that
+// open venue and remain useful when the full disk refuses the persisted stamp.
+const liveSightings = new WeakMap<Transaction, Map<string, string>>();
+
+export function lastDeviceSighting(
+  tx: Transaction,
+  deviceId: string,
+  saved: string | null,
+): string | null {
+  const live = liveSightings.get(tx)?.get(deviceId);
+  return live !== undefined && (saved === null || live > saved) ? live : saved;
+}
 
 /** The trusted-device cookie: a long-lived DEVICE identity, unlike the session cookies. */
 export const DEVICE_COOKIE = "waitron_device";
@@ -191,6 +204,14 @@ async function readDeviceProof(
     passive: options.passive,
   });
   if (row === null) return null;
+  if (options.passive !== true) {
+    let sightings = liveSightings.get(deps.db);
+    if (sightings === undefined) {
+      sightings = new Map();
+      liveSightings.set(deps.db, sightings);
+    }
+    sightings.set(deviceId, nowIso());
+  }
   return { device: toDeviceBinding(deviceId, row), tokenHash: row.tokenHash };
 }
 

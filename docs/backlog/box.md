@@ -403,13 +403,6 @@ The public page offers retry, read-only Check again and Stop (A1089); support fo
 linked layouts remains open. Found by A733's whole-branch review; see the server README's
 secure-connection section.
 
-## On a full disk, a box whose kept certificates cannot be used shows the connection set-up page, with no word of the full disk.
-
-The connection-bootstrap branch (`needsConnectionBootstrap`,
-`apps/server/src/node-entry.ts`) returns before the count check, as A798-B slice 2's plan
-decided. Its pre-merge review ran `runEntry` on a filled 32 MiB HFS+ image with an empty TLS
-folder, and `/` answered "Set up secure connection" and did not contain "disk is full". Open:
-should that page also say the disk is full and show the free space?
 
 ## Guide replacement address settings after a cold restore.
 
@@ -1350,10 +1343,6 @@ once released. Belongs with A1016.
 Remaining work from the 6 November backlog bundle. The four-cut plan is
 [Full disk: reads and words](../superpowers/plans/2026-11-15-full-disk-words.md).
 
-- **On a full disk, a box whose kept certificates cannot be used shows the connection set-up page,
-  with no word of the full disk.**
-  Open: should that page also say the disk is full and show the free space?
-  [Detail](box.md#on-a-full-disk-a-box-whose-kept-certificates-cannot-be-used-shows-the-connection-set-up-page-with-no-word-of-the-full-disk)
 - **The floor-state and invoice-delivery status reads still answer 507 on a full disk while a
   notification waits, even when no reconciliation is due.** Their write-capable transactions remain;
   the pure-read cut does not close this part of the original read entry.
@@ -1361,13 +1350,6 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
   named for the tints and `color-mix()` is refused; tint tokens with their contrast checks would let
   it. Left open by A798-B slice 6 (#1977).
 - **Clock-in and attendance:** storage notices show; other notices still do not.
-- **A till nobody has signed in to shows no strip on a full disk, and PIN sign-in is refused
-  then.** The sign-in page shows only the refusal's own sentence. Left open by A798-B slice 6
-  (#1977).
-- **A kitchen screen on a full disk can be reported dark while it works.** Since slice 6 its
-  requests are served on a full disk but its last-seen time is not saved, so the dark-screen check
-  (`SCREEN_DARK_MS`, `apps/server/src/station-outputs-down.ts`) raises it after three minutes,
-  beside the full disk's own alert. Left open by A798-B slice 6 (#1977).
 - **The full-disk bar waits for the owner's answers.**
   The seven questions are in #2223's description. Left open by A1127 slice 3 (#2223).
   [Detail](box.md#the-full-disk-bar-waits-for-the-owners-answers).

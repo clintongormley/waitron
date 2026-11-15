@@ -2173,7 +2173,10 @@ At the PIN screen a second `EquipmentPoll` (`#pinScreenPoll`) reads every 15 sec
 signed in, not through `#readDeviceEquipment`. `waitingStartNotice`
 (`apps/till/src/state/staff-notices.ts`) keeps only a well-formed `clock.unconfirmed` from
 `box-clock`, and keeps it while `box-clock` is unavailable; it is drawn as one line without its
-action, and cleared on `device.unauthorized`, at sign-in and at boot. Pinned under "a till or
+action, and cleared on `device.unauthorized`, at sign-in and at boot. The same poll keeps the box's
+`storage.disk_full` and `storage.space_low` notices through `nextNotices`, including an unavailable
+box source, and draws their FIXED words with the manager hint above the waiting-start line.
+These storage lines are also cleared when the device is refused or the PIN poll stops. Pinned under "a till or
 handheld at the PIN screen" in `apps/till/src/till-app.notices.test.ts`.
 
 **A notice code's words.** The till words a notice by its `code` (`staffNoticeText`,

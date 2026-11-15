@@ -196,6 +196,7 @@ export class TillLockScreen extends LitElement {
   @property({ type: Boolean }) mainServerRefused = false;
 
   @property({ attribute: false }) clockNotice?: StaffNotice;
+  @property({ attribute: false }) storageNotices: readonly StaffNotice[] = [];
 
   /** `undefined` while the fetch is in flight. */
   @state() private staff?: StaffMember[];
@@ -380,6 +381,12 @@ export class TillLockScreen extends LitElement {
       </div>
       <div class="screen">
         ${this.#renderLogo()} ${this.selected ? this.#renderPin(this.selected) : this.#renderList()}
+        ${this.storageNotices.map((notice) => {
+          const words = staffNoticeText(notice);
+          return html`<p class="clock status" role="status" data-storage-notice>
+            ${words.main} · ${words.hint}
+          </p>`;
+        })}
         ${
           this.clockNotice === undefined
             ? nothing

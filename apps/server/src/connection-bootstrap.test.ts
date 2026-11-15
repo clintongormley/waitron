@@ -9,6 +9,7 @@ import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
 import { mountConnectionBootstrap } from "./connection-bootstrap.js";
 import { CONNECTION_TEXT } from "./connection-bootstrap-strings.js";
+import { RECOVERY_PAGE_WORDS } from "./i18n/recovery-page.js";
 
 const now = new Date("2026-10-21T00:00:00Z");
 let material: SelfSignedMaterial;
@@ -26,6 +27,7 @@ afterEach(async () => {
 async function fixture(
   healthy = false,
   repairAllowed?: Parameters<typeof mountConnectionBootstrap>[1]["repairAllowed"],
+  freeSpace?: () => Promise<number | null>,
 ) {
   const stateDir = await mkdtemp(join(tmpdir(), "public-connection-"));
   dirs.push(stateDir);
@@ -39,6 +41,7 @@ async function fixture(
   await writeFile(join(stateDir, "secrets.env"), "retained vault material");
   const onRepaired = vi.fn(async () => {});
   const app = new Hono();
+  const log = vi.fn();
   mountConnectionBootstrap(app, {
     stateDir,
     hostnames: ["waitron.local", "localhost"],
@@ -47,10 +50,11 @@ async function fixture(
     origins: ["http://waitron.local:8080", "http://127.0.0.1:8080"],
     reachUrls: ["https://waitron.local:8080"],
     onRepaired,
-    log: () => {},
+    log,
     repairAllowed,
+    freeSpace,
   });
-  return { stateDir, app, onRepaired };
+  return { stateDir, app, onRepaired, log };
 }
 const url = "http://waitron.local:8080/setup-api/connection/repair";
 const allowed = { Origin: "http://waitron.local:8080" };
@@ -388,5 +392,67 @@ it.each(["repair reply", "public page"])(
       ]);
     }
     expect(await readFile(join(f.stateDir, "tls/ca.crt"), "utf8")).toBe(combined);
+  },
+);
+
+it.each(["en", "es"] as const)(
+  "rereads low disk space on the public connection page in %s",
+  async (lang) => {
+    let bytes: number | null = 500_000;
+    let fail = false;
+    const f = await fixture(false, undefined, async () => {
+      if (fail) throw Object.assign(new Error("Space cannot be read"), { code: "EIO" });
+      return bytes;
+    });
+    const page = async () =>
+      (await f.app.request(`http://waitron.local:8080/?lang=${lang}`)).text();
+    const html = await page();
+    expect(html).toContain("data-storage-warning");
+    expect(html).toContain(CONNECTION_TEXT[lang].spaceRetry);
+    expect(html).not.toContain(RECOVERY_PAGE_WORDS[lang === "en" ? "en-GB" : "es-ES"].retry);
+    expect(html).toContain(
+      RECOVERY_PAGE_WORDS[lang === "en" ? "en-GB" : "es-ES"].freeSpace(
+        lang === "en" ? "0.5 MB" : "0,5 MB",
+      ),
+    );
+    expect(html).toContain('id="connection-check"');
+    bytes = 32 * 1024 * 1024;
+    expect(await page()).not.toContain("data-storage-warning");
+    bytes = null;
+    expect(await page()).not.toContain("data-storage-warning");
+    expect(f.log).toHaveBeenLastCalledWith("warn", "recovery.free_space_unreadable", {
+      errno: null,
+    });
+    fail = true;
+    expect(await page()).not.toContain("data-storage-warning");
+    expect(f.log).toHaveBeenCalledTimes(2);
+    expect(f.log).toHaveBeenLastCalledWith("warn", "recovery.free_space_unreadable", {
+      errno: "EIO",
+    });
+  },
+);
+
+it.each([
+  ["healthy", "en"],
+  ["operator", "en"],
+  ["elsewhere", "en"],
+  ["healthy", "es"],
+  ["operator", "es"],
+  ["elsewhere", "es"],
+] as const)(
+  "names only an available next step in the %s connection-space warning (%s)",
+  async (state, lang) => {
+    const f = await fixture(
+      state === "healthy",
+      state === "operator" ? false : state === "elsewhere" ? () => false : undefined,
+      async () => 1000,
+    );
+    const html = await (await f.app.request(`http://waitron.local:8080/?lang=${lang}`)).text();
+    const warning = html.match(/<section data-storage-warning[^>]*>(.*?)<\/section>/s)?.[1];
+    expect(warning).toContain(CONNECTION_TEXT[lang].spaceCheckAgain);
+    expect(warning).toContain(
+      `<p>${CONNECTION_TEXT[lang].spaceAction.replace("{retry}", CONNECTION_TEXT[lang].spaceCheckAgain)}</p>`,
+    );
+    expect(warning).not.toContain(CONNECTION_TEXT[lang].spaceRetry);
   },
 );
