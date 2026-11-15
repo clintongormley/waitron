@@ -4055,36 +4055,49 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       const lineNo = requireLineNo(id, c.req.param("lineNo"));
-      const { revision, expectedEdit, ...patch } = await readJsonBody<
-        OrderLinePatch & { revision?: unknown; expectedEdit: BillEditExpected | null }
+      const {
+        revision,
+        expectedEdit,
+        lateSend: lateSendBody,
+        ...patch
+      } = await readJsonBody<
+        OrderLinePatch & {
+          revision?: unknown;
+          expectedEdit: BillEditExpected | null;
+          lateSend?: unknown;
+        }
       >(c);
       const copy = requireRevision(revision);
+      const lateSend = parseLateSend(lateSendBody);
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const saved = await withIssuanceTransaction(
-        deps.db,
-        async (tx) => {
-          await requireEconomicWrite(tx, deps.cfg, deps.admission);
-          await checkZones(tx, session, [{ orderId: id }]);
-          const revision = await updateOrderLine(
-            tx,
-            sendCfg,
-            id,
-            lineNo,
-            patch,
-            copy,
-            { operatorId: personId, expectedEdit, admission: deps.admission },
-            deps.attendance === undefined
-              ? undefined
-              : { recorder: deps.attendance, clock: deps.clock },
-          );
-          const invoice = await issueIfFullyPaid(tx, fiscal, sendCfg, id, personId);
-          return {
-            revision,
-            party: await partyRevisionOfOrder(tx, id),
-            ...(invoice === null ? {} : { invoice }),
-          };
-        },
-        log,
+      const saved = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
+        withIssuanceTransaction(
+          deps.db,
+          async (tx) => {
+            await requireEconomicWrite(tx, deps.cfg, deps.admission);
+            await checkZones(tx, session, [{ orderId: id }]);
+            const revision = await updateOrderLine(
+              tx,
+              sendCfg,
+              id,
+              lineNo,
+              patch,
+              copy,
+              { operatorId: personId, expectedEdit, admission: deps.admission },
+              deps.attendance === undefined
+                ? undefined
+                : { recorder: deps.attendance, clock: deps.clock },
+              late,
+            );
+            const invoice = await issueIfFullyPaid(tx, fiscal, sendCfg, id, personId);
+            return {
+              revision,
+              party: await partyRevisionOfOrder(tx, id),
+              ...(invoice === null ? {} : { invoice }),
+            };
+          },
+          log,
+        ),
       );
       return c.json(saved);
     }),

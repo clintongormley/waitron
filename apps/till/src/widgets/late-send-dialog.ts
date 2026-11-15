@@ -5,17 +5,21 @@ import { baseStyles } from "@waitron/ui";
 import { currentLocale, t } from "../i18n/t.js";
 import { dishLine } from "./dish-format.js";
 
+export type LateSendPurpose = "send" | "save" | "extras" | "extras-save";
+
 export interface LateSendDish {
   quantity: string;
   name: string;
   unitName?: Record<string, string> | null;
   soldInEach?: boolean;
+  /** The extras a change adds to the dish, by name; absent on a dish asked about itself. */
+  extras?: readonly string[];
 }
 
 /**
- * Lists dishes whose period has ended and changes nothing itself: Remove them sends
- * `wt-late-send-removed`, Kitchen agreed sends `wt-late-send-agreed`, and dismissing it sends
- * `wt-late-send-cancelled`.
+ * Lists dishes whose period has ended and changes nothing itself: Remove them (Don't add them, for
+ * extras) sends `wt-late-send-removed`, Kitchen agreed sends `wt-late-send-agreed`, and dismissing
+ * it sends `wt-late-send-cancelled`.
  */
 @customElement("till-late-send-dialog")
 export class TillLateSendDialog extends LitElement {
@@ -42,8 +46,10 @@ export class TillLateSendDialog extends LitElement {
   /** In the order they first appear among the dishes. */
   @property({ attribute: false }) periodNames: readonly [string, ...string[]] = [""];
 
-  /** `save`: a Park, which stores the order without sending it to the kitchen. */
-  @property() purpose: "send" | "save" = "send";
+  /** `save`: a Park, which stores the order without sending it to the kitchen. `extras`: a change
+   * adding extras to a sent dish, which the secondary choice abandons; `extras-save`: the same, for
+   * a change that is saved without being sent. */
+  @property() purpose: LateSendPurpose = "send";
 
   #emit(type: "wt-late-send-removed" | "wt-late-send-agreed" | "wt-late-send-cancelled"): void {
     this.dispatchEvent(new CustomEvent(type, { bubbles: true, composed: true }));
@@ -70,7 +76,14 @@ export class TillLateSendDialog extends LitElement {
     >
       <p>${t("late_send.check")}</p>
       <ul>
-        ${this.dishes.map((dish) => html`<li>${dishLine(dish, dish.name)}</li>`)}
+        ${this.dishes.map(
+          (dish) =>
+            html`<li>
+              ${dishLine(dish, dish.name)}${
+                dish.extras?.length ? ` + ${dish.extras.join(", ")}` : ""
+              }
+            </li>`,
+        )}
       </ul>
       <wt-button
         slot="footer"
@@ -78,7 +91,11 @@ export class TillLateSendDialog extends LitElement {
         variant="secondary"
         @click=${() => this.#emit("wt-late-send-removed")}
       >
-        ${t("late_send.remove")}
+        ${t(
+          this.purpose === "extras" || this.purpose === "extras-save"
+            ? "late_send.dont_add"
+            : "late_send.remove",
+        )}
       </wt-button>
       <wt-button
         slot="footer"
@@ -86,7 +103,11 @@ export class TillLateSendDialog extends LitElement {
         variant="primary"
         @click=${() => this.#emit("wt-late-send-agreed")}
       >
-        ${t(this.purpose === "save" ? "late_send.agreed_save" : "late_send.agreed")}
+        ${t(
+          this.purpose === "save" || this.purpose === "extras-save"
+            ? "late_send.agreed_save"
+            : "late_send.agreed",
+        )}
       </wt-button>
     </wt-dialog>`;
   }

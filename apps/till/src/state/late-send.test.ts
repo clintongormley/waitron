@@ -158,6 +158,17 @@ describe("refusedLines", () => {
     expect(result).toHaveLength(1);
     expect(result[0]).toBe(fresh);
   });
+
+  it("lists a stored line the request adds extras to, and still leaves out one it does not", () => {
+    const changed = line("toast-breakfast", { workingOrderLineId: "wol-1" });
+    const untouched = line("toast-breakfast", { workingOrderLineId: "wol-2" });
+    expect(refusedLines([changed, untouched], refusal, new Set(["wol-1"]))).toEqual([changed]);
+  });
+
+  it("leaves out a stored line the request adds extras to when the refusal does not name it", () => {
+    const changed = line("beer-lunch", { workingOrderLineId: "wol-1" });
+    expect(refusedLines([changed], refusal, new Set(["wol-1"]))).toEqual([]);
+  });
 });
 
 describe("lateSendAsked", () => {
@@ -180,6 +191,18 @@ describe("lateSendAsked", () => {
     expect(asked?.periods).toEqual(menus);
     expect(asked?.listed).toHaveLength(1);
     expect(asked?.listed[0]).toBe(toastLine);
+  });
+
+  it("lists a stored line the request adds extras to, and not a stored line it leaves alone", () => {
+    const changed = line("toast-breakfast", { workingOrderLineId: "wol-1" });
+    const untouched = line("toast-breakfast", { workingOrderLineId: "wol-2" });
+    const asked = lateSendAsked(
+      ended(["toast-breakfast"]),
+      [untouched, changed],
+      new Set(["wol-1"]),
+    );
+    expect(asked?.listed).toEqual([changed]);
+    expect(lateSendAsked(ended(["toast-breakfast"]), [untouched, changed])).toBeUndefined();
   });
 
   it("is undefined when the refusal names none of the lines", () => {

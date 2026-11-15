@@ -3403,11 +3403,13 @@ export class TillApi {
     patch: OrderLinePatch,
     revision: number,
     expectedEdit: BillEditExpected | null,
+    /** Confirms the extras the change adds to a dish whose period ended earlier today. */
+    lateSend?: LateSend,
   ): Promise<{ revision: number; party: BillParty; invoice?: TillSaleResult }> {
     return this.#request<{ revision: number; party: BillParty; invoice?: TillSaleResult }>(
       `/api/working-orders/${orderId}/lines/${lineNo}`,
       "PUT",
-      { ...patch, revision, expectedEdit },
+      { ...patch, revision, expectedEdit, ...(lateSend === undefined ? {} : { lateSend }) },
     );
   }
 

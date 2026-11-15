@@ -581,6 +581,13 @@ async function readBasketOffers(
  * so it orders no new portion of the dish. A symbol, so no JSON body can set it.
  */
 const ADDED_EXTRAS_ONLY = Symbol("addedExtrasOnly");
+/**
+ * Marks an {@link ADDED_EXTRAS_ONLY} line whose stored dish, or one of its extras, has been sent:
+ * stamped sent or holding a ticket item, held or fired. A set lunch's own row is never either, so
+ * its courses answer for it. Only such extras take the period-ended check. A symbol, so no JSON
+ * body can set it.
+ */
+const ON_SENT_DISH = Symbol("onSentDish");
 const RECORDED_OFFER = Symbol("recordedOffer");
 
 /**
@@ -613,6 +620,7 @@ export async function priceOrderLines(
     [FROZEN_OPTIONS]?: OptionSnapshot[];
     [FROZEN_EXTRAS]?: ExtraChild[];
     [ADDED_EXTRAS_ONLY]?: true;
+    [ON_SENT_DISH]?: true;
     [RECORDED_OFFER]?: { offer: ZoneMenuOffer; versionId: string };
     [STORED_RISE]?: true;
   } & LineExtras &
@@ -673,22 +681,28 @@ export async function priceOrderLines(
     ));
   const offerById = new Map(offers.offers.map((offer) => [offer.id, offer]));
   let service: Awaited<ReturnType<typeof VENUE_SERVICE.resolveDepartmentService>> | null = null;
-  // New dishes whose menu is not orderable but ended earlier today, each with its period's name.
+  // New dishes, and extras added to sent ones, whose menu is not orderable but ended earlier today,
+  // each with its period's name.
   const ended = new Map<(typeof requestedLines)[number], string>();
   let alsoSold: ReadonlySet<string> = new Set();
-  if (periodCheck === "added" && requestedLines.some((line) => line[ADDED_EXTRAS_ONLY] !== true)) {
+  const checked = (line: (typeof requestedLines)[number]) =>
+    line[ADDED_EXTRAS_ONLY] !== true || line[ON_SENT_DISH] === true;
+  if (periodCheck === "added" && requestedLines.some(checked)) {
     const context = await VENUE_SERVICE.resolveZoneContext(tx, zoneId!);
     const at = new Date();
-    await VENUE_SERVICE.assertZoneTakesNewOrders(tx, context.zoneId, at);
+    // Extras added to a stored dish are not new service, so a closed zone does not refuse them;
+    // after a sent dish's period they are late like a new dish of it.
+    if (requestedLines.some((line) => line[ADDED_EXTRAS_ONLY] !== true))
+      await VENUE_SERVICE.assertZoneTakesNewOrders(tx, context.zoneId, at);
     service = await VENUE_SERVICE.resolveDepartmentService(tx, context.departmentId, at);
     const periodOf = new Map(service.endedMenus.map((menu) => [menu.menuId, menu.periodName]));
     const items: { productId: string; variantId: string | null }[] = [];
     for (const line of requestedLines) {
-      const offer = offerById.get(line.menuItemId);
+      const offer = line[RECORDED_OFFER]?.offer ?? offerById.get(line.menuItemId);
       const periodName = offer === undefined ? undefined : periodOf.get(offer.menuId);
       if (
         periodName === undefined ||
-        line[ADDED_EXTRAS_ONLY] === true ||
+        !checked(line) ||
         line[STORED_RISE] === true ||
         service.orderableMenuIds.includes(offer!.menuId)
       )
@@ -5351,7 +5365,10 @@ export interface UpdateHeldOrderRequest {
   revision: number;
   /** Who saves: credited with the lines the save adds, and named by a group it starts or removes. */
   operatorId?: string;
-  /** The request's confirmation of the save's fresh dishes whose period ended earlier today. */
+  /**
+   * The request's confirmation of the save's fresh dishes, and extras added to stored dishes, whose
+   * period ended earlier today.
+   */
   lateSend?: LateSendConfirmation;
 }
 
@@ -6129,6 +6146,11 @@ async function applyLineEdits(
         [FROZEN_OPTIONS]: [],
         [FROZEN_EXTRAS]: extras.added,
         [ADDED_EXTRAS_ONLY]: true,
+        ...([parent, ...parent.children].some(
+          (part) => part.sentAt !== null || part.ticket !== null,
+        )
+          ? { [ON_SENT_DISH]: true }
+          : {}),
         ...(lunches.has(parent.id) ? { [RECORDED_OFFER]: lunches.get(parent.id)! } : {}),
       });
       pricedAs.push({ kind: "extras" });
@@ -7050,6 +7072,8 @@ export async function updateOrderLine(
   revision: number,
   authority: OrderEditAuthority & { admission: TradingAdmission },
   attendance?: OrderAttendance,
+  /** The request's confirmation of extras it adds to a dish whose period ended earlier today. */
+  lateSend?: LateSendConfirmation,
 ): Promise<number> {
   // Admission follows the writing node.
   await requireEconomicWrite(tx, { nodeId: cfg.nodeId }, authority.admission);
@@ -7089,6 +7113,7 @@ export async function updateOrderLine(
     },
     operatorId,
     attendance,
+    lateSend,
   );
   const saved = await countEdit(tx, orderId, revision, changed, chargesUnchanged);
   if (changed) await captureOrderEdit(tx, attendance, orderId, operatorId, saved, "line", at);

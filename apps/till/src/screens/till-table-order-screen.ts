@@ -501,6 +501,8 @@ export interface BillPayDetail {
 /** `change-line`: one sent line's edit, from the copy of the order read at `revision`. */
 export interface ChangeLineDetail {
   completed?: (saved: boolean, refusal?: string | TemplateResult) => void;
+  /** The person chose not to make the change after its refusal: a window still holding it closes. */
+  abandoned?: () => void;
   expectedEdit: BillEditExpected | null;
   lineNo: number;
   /** The line's staff name, for a message about the change. */
@@ -509,6 +511,8 @@ export interface ChangeLineDetail {
   revision: number;
   /** The complete edited dish for a station check after a routing refusal. */
   saleLine?: SaleLine;
+  /** A set lunch's choices: the course is saved and waits for Send to prep, rather than sent. */
+  waitsForSend?: boolean;
 }
 
 /**
@@ -3393,6 +3397,10 @@ export class TillTableOrderScreen extends LitElement {
               if (saved) this.lunchPending = null;
               else this.lunchRefusal = refusal ?? nothing;
             },
+            abandoned: () => {
+              if (this.lunchPending === pending) this.lunchPending = null;
+            },
+            waitsForSend: true,
           } satisfies ChangeLineDetail);
         }}
         @wt-modifier-cancel=${(event: Event) => {

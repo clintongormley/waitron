@@ -36,7 +36,7 @@ import {
   server as allergyServer,
   tableOrder as allergyOrder,
 } from "../test/allergy-app-fixture.js";
-import { showView } from "./screens/till-table-order-screen.test-helpers.js";
+import { burger, showView } from "./screens/till-table-order-screen.test-helpers.js";
 
 interface Menu {
   id: string;
@@ -322,6 +322,8 @@ let store: WorkingOrderStore;
 const windowOf = (el: TillApp) => el.shadowRoot!.querySelector("till-late-send-dialog");
 const windowDishes = (el: TillApp) =>
   [...windowOf(el)!.shadowRoot!.querySelectorAll("li")].map((li) => li.textContent?.trim());
+const buttonText = (el: TillApp, button: "data-late-remove" | "data-late-agreed") =>
+  windowOf(el)!.shadowRoot!.querySelector(`[${button}]`)!.textContent?.trim();
 const names = () => store.lines.map((line) => line.product.name);
 const submissions = () => api.submitDraft!.mock.calls.map((call) => call[2] as DraftSubmission);
 
@@ -2537,3 +2539,330 @@ it.each(["late-send window", "manager PIN"])(
     expect(approval(el)).toBeNull();
   },
 );
+
+describe("extras added to a sent dish after its period", () => {
+  /** Table 2's Omelette, sent at Breakfast; Lunch is running now. */
+  const sentOmelette = {
+    id: "line-omelette",
+    groupId: null,
+    lineNo: 1,
+    productId: "Omelette",
+    name: "Omelette",
+    quantity: "1",
+    unitPriceGross: "3.00",
+    servedAt: null,
+    courseId: null,
+    sentAt: "2026-10-12T09:00:00.000Z",
+    firedAt: null,
+    state: null,
+    note: null,
+    listId: null,
+    menuItemId: offerId(BREAKFAST_MENU, "Omelette"),
+    parentProductId: null,
+  };
+  const bacon = [{ listId: "list-extras", picks: [{ productId: "p-bacon", quantity: 1 }] }];
+  const SAVED = { revision: 3, party: { id: "party-a", revision: 1 } };
+
+  /** The Omelette's offer, which lists Bacon among its extras. */
+  const extrasOffered: TillMenuOffer["offeredModifiers"] = burger
+    .offeredModifiers!.filter((list) => list.kind === "extras")
+    .map((list) => ({
+      ...list,
+      items: list.items.map((item) => ({
+        ...item,
+        image: null,
+        available: true,
+        maxQuantity: 1,
+        preselected: false,
+      })),
+    }));
+
+  /** The same extras list with Cheese after Bacon. */
+  const withCheese: TillMenuOffer["offeredModifiers"] = extrasOffered.map((list) =>
+    list.kind === "extras"
+      ? {
+          ...list,
+          items: [
+            ...list.items,
+            {
+              ...list.items[0]!,
+              presentation: { ...list.items[0]!.presentation, name: "Cheese" },
+              productId: "p-cheese",
+              name: "Cheese",
+              preselected: false,
+            },
+          ],
+        }
+      : list,
+  );
+
+  async function sentTable(
+    updateOrderLine: ReturnType<typeof vi.fn>,
+    rows: unknown[] = [sentOmelette],
+    {
+      omeletteOffered = true,
+      lists = extrasOffered,
+    }: { omeletteOffered?: boolean; lists?: TillMenuOffer["offeredModifiers"] } = {},
+  ): Promise<TillApp> {
+    current = menu("lunch");
+    current.offers = current.offers.flatMap((each) =>
+      each.id !== offerId(BREAKFAST_MENU, "Omelette")
+        ? [each]
+        : omeletteOffered
+          ? [{ ...each, offeredModifiers: lists }]
+          : [],
+    );
+    const { el } = await mountApp({
+      updateOrderLine,
+      getTabLines: vi.fn().mockResolvedValue({ lines: rows, revision: 2 }),
+    });
+    await flush(el);
+    emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
+      tableId: "t2",
+      seated: true,
+    });
+    await flush(el, 6);
+    return el;
+  }
+
+  /** Change dish on the sent Omelette, adding bacon, as the order screen sends it. */
+  async function addBacon(el: TillApp): Promise<void> {
+    const order = el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
+    emit(order, "change-line", {
+      lineNo: 1,
+      lineName: "Omelette",
+      patch: { note: null, portionLineNos: [], extras: bacon },
+      revision: 2,
+      expectedEdit: order.billEdit,
+      saleLine: {
+        menuItemId: offerId(BREAKFAST_MENU, "Omelette"),
+        quantity: "1",
+        options: [],
+        extras: bacon,
+      },
+    });
+    await flush(el, 6);
+  }
+
+  it("opens the window naming the period, and Kitchen agreed saves the extra with the refused menu", async () => {
+    const updateOrderLine = vi
+      .fn()
+      .mockRejectedValueOnce(BREAKFAST_ENDED)
+      .mockResolvedValueOnce(SAVED);
+    const el = await sentTable(updateOrderLine);
+
+    await addBacon(el);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette + Bacon"]);
+    expect(heading(el)).toBe("Breakfast has ended");
+    expect(buttonText(el, "data-late-remove")).toBe("Don't add them");
+    expect(buttonText(el, "data-late-agreed")).toBe("Station agreed — send");
+    expect(updateOrderLine).toHaveBeenCalledTimes(1);
+    expect(updateOrderLine.mock.calls[0]).toHaveLength(5);
+
+    await choose(el, "data-late-agreed");
+
+    expect(windowOf(el)).toBeNull();
+    expect(updateOrderLine).toHaveBeenCalledTimes(2);
+    expect(updateOrderLine.mock.calls[1]![2]).toEqual({
+      note: null,
+      portionLineNos: [],
+      extras: bacon,
+    });
+    expect(updateOrderLine.mock.calls[1]![5]).toEqual({ menuIds: [BREAKFAST_MENU.id] });
+    expect(el.shadowRoot!.querySelector(".error")?.textContent?.trim()).not.toBe(
+      codeMessage("menu_period.ended"),
+    );
+  });
+
+  it("asks for a manager's PIN on the retry when the department needs one", async () => {
+    const updateOrderLine = vi
+      .fn()
+      .mockRejectedValueOnce(BREAKFAST_ENDED)
+      .mockRejectedValueOnce(MANAGER_NEEDED)
+      .mockResolvedValueOnce(SAVED);
+    const el = await sentTable(updateOrderLine);
+    api.serviceDayAuthorizers = vi.fn().mockResolvedValue([MARTA]);
+    await addBacon(el);
+    await choose(el, "data-late-agreed");
+    await vi.waitFor(() => expect(approval(el)).not.toBeNull());
+
+    await authorize(el, "0123");
+
+    expect(updateOrderLine.mock.calls.map((call) => call[5])).toEqual([
+      undefined,
+      { menuIds: [BREAKFAST_MENU.id] },
+      { menuIds: [BREAKFAST_MENU.id], override: { personId: MARTA.personId, pin: "0123" } },
+    ]);
+    expect(approval(el)).toBeNull();
+  });
+
+  it("names the dish and its extras in Spanish, with No añadirlos", async () => {
+    const el = await sentTable(vi.fn().mockRejectedValueOnce(BREAKFAST_ENDED));
+    setLocale("es-ES");
+    await addBacon(el);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette + Bacon"]);
+    expect(buttonText(el, "data-late-remove")).toBe("No añadirlos");
+    expect(buttonText(el, "data-late-agreed")).toBe("La estación acepta — enviar");
+  });
+
+  it("closes a set lunch's choices on Don't add them, so the abandoned course is not left picked", async () => {
+    const updateOrderLine = vi.fn().mockRejectedValueOnce(BREAKFAST_ENDED);
+    const lunchOffer = {
+      ...offer(BREAKFAST_MENU, "Omelette"),
+      setLunch: true,
+      offeredModifiers: extrasOffered,
+    };
+    const el = await sentTable(updateOrderLine, [{ ...sentOmelette, lunchOffer }]);
+    const order = el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
+    await showView(order, "order", { scripted: true });
+    await flush(el, 6);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-lunch-choices]")!.click();
+    await flush(el, 6);
+    const picker = () => order.shadowRoot!.querySelector<HTMLElement>("[data-lunch-picker]");
+    await userEvent.click(
+      picker()!.shadowRoot!.querySelector<HTMLInputElement>("input[type=checkbox]")!,
+    );
+    await flush(el, 3);
+    expect(
+      picker()!.shadowRoot!.querySelector<HTMLInputElement>("input[type=checkbox]")!.checked,
+    ).toBe(true);
+    await userEvent.click(picker()!.shadowRoot!.querySelector<HTMLElement>(".confirm")!);
+    await flush(el, 6);
+    expect(windowDishes(el)).toEqual(["1× Omelette + Bacon"]);
+
+    await choose(el, "data-late-remove");
+
+    expect(windowOf(el)).toBeNull();
+    expect(picker()).toBeNull();
+    expect(updateOrderLine).toHaveBeenCalledTimes(1);
+  });
+
+  /** The Omelette as a set lunch, whose recorded offer lists Bacon and Cheese among its courses. */
+  const recordedLunch = {
+    ...offer(BREAKFAST_MENU, "Omelette"),
+    setLunch: true,
+    offeredModifiers: withCheese,
+  };
+
+  /** A stored Cheese course or extra on the Omelette, already sent. */
+  const sentCheese = {
+    ...sentOmelette,
+    id: "line-cheese",
+    lineNo: 2,
+    productId: "p-cheese",
+    name: "Cheese",
+    unitPriceGross: "1.00",
+    listId: "list-extras",
+    menuItemId: null,
+    parentLineNo: 1,
+    parentProductId: "Omelette",
+  };
+
+  /** Ticks Bacon in the set lunch's choices and confirms them. */
+  async function chooseBaconCourse(el: TillApp): Promise<void> {
+    const order = el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
+    await showView(order, "order", { scripted: true });
+    await flush(el, 6);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-lunch-choices]")!.click();
+    await flush(el, 6);
+    const picker = order.shadowRoot!.querySelector<HTMLElement>("[data-lunch-picker]")!;
+    await userEvent.click(
+      picker.shadowRoot!.querySelector<HTMLInputElement>("input[type=checkbox]")!,
+    );
+    await flush(el, 3);
+    await userEvent.click(picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!);
+    await flush(el, 6);
+  }
+
+  /** The change a dish's extras edit sends with `extras` picked, as a set lunch's choices send it. */
+  async function pickExtras(el: TillApp, productIds: string[]): Promise<void> {
+    const order = el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
+    emit(order, "change-line", {
+      lineNo: 1,
+      lineName: "Omelette",
+      patch: {
+        note: null,
+        portionLineNos: [],
+        options: [],
+        extras: [
+          {
+            listId: "list-extras",
+            picks: productIds.map((productId) => ({ productId, quantity: 1 })),
+          },
+        ],
+      },
+      revision: 2,
+      expectedEdit: order.billEdit,
+    });
+    await flush(el, 6);
+  }
+
+  it("opens the window from a set lunch's choices whose offer has left the menu, from the offer the line recorded", async () => {
+    const updateOrderLine = vi.fn().mockRejectedValueOnce(BREAKFAST_ENDED);
+    const el = await sentTable(updateOrderLine, [{ ...sentOmelette, lunchOffer: recordedLunch }], {
+      omeletteOffered: false,
+    });
+
+    await chooseBaconCourse(el);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette + Bacon"]);
+    expect(updateOrderLine).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads Station agreed — save on a set lunch's choices, whose course waits for Send to prep", async () => {
+    const el = await sentTable(vi.fn().mockRejectedValueOnce(BREAKFAST_ENDED), [
+      { ...sentOmelette, lunchOffer: recordedLunch },
+    ]);
+
+    await chooseBaconCourse(el);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette + Bacon"]);
+    expect(buttonText(el, "data-late-remove")).toBe("Don't add them");
+    expect(buttonText(el, "data-late-agreed")).toBe("Station agreed — save");
+  });
+
+  it("lists only the extra the dish does not already carry", async () => {
+    const el = await sentTable(
+      vi.fn().mockRejectedValueOnce(BREAKFAST_ENDED),
+      [sentOmelette, sentCheese],
+      { lists: withCheese },
+    );
+
+    await pickExtras(el, ["p-cheese", "p-bacon"]);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette + Bacon"]);
+  });
+
+  it("lists a set lunch's cancelled course picked again as added, as the server counts it", async () => {
+    const el = await sentTable(vi.fn().mockRejectedValueOnce(BREAKFAST_ENDED), [
+      { ...sentOmelette, lunchOffer: recordedLunch },
+      { ...sentCheese, cancelledQuantity: "1" },
+    ]);
+
+    await pickExtras(el, ["p-cheese", "p-bacon"]);
+
+    expect(windowDishes(el)).toEqual(["1× Omelette + Cheese, Bacon"]);
+  });
+
+  it("takes back only the extra on Don't add them: the sent dish stays and nothing is sent again", async () => {
+    const updateOrderLine = vi.fn().mockRejectedValueOnce(BREAKFAST_ENDED);
+    const el = await sentTable(updateOrderLine);
+    await addBacon(el);
+    const reads = api.getTabLines!.mock.calls.length;
+
+    await choose(el, "data-late-remove");
+
+    expect(windowOf(el)).toBeNull();
+    expect(updateOrderLine).toHaveBeenCalledTimes(1);
+    expect(api.getTabLines!.mock.calls.length).toBeGreaterThan(reads);
+    expect(screen(el).textContent).toContain("Omelette");
+    expect(screen(el).textContent).not.toContain("bacon");
+    expect(el.shadowRoot!.querySelector(".error")?.textContent?.trim() ?? "").toBe("");
+  });
+});

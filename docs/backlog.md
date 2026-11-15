@@ -671,12 +671,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   kitchen agreed for**
   [Detail](backlog/service-periods.md#a1084-a-confirmed-late-dish-routes-by-the-period-running-when-it-is-sent-not-the-period-the-kitchen-agreed-for)
 
-- **A1085. Extras added later to a dish sent after its period carry no mark.** An extras-only edit
-  is priced as `ADDED_EXTRAS_ONLY` and skips the late check
-  (`priceOrderLines`, `apps/server/src/working-order.ts`), so such an extra made at its own station
-  prints and shows unmarked. Left open by A789 slice 3, #2051 (plan D25).
-
-
 - **Opening the Year from a station's Week may keep `/station/<id>` in the address**, though the
   Year shows no station. Found by reading, not run — left open by A722 Part 3, #1834.
 

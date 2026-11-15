@@ -364,6 +364,10 @@ la estación. **La estación acepta — enviar** los envía y **Quitarlos** los 
 el botón dice **La estación acepta — guardar**. La misma ventana se abre cuando el servidor encuentra un
 plato así antes de que el terminal lo haya marcado.
 
+Añadir un extra a un plato ya enviado después de que acabe su periodo abre la misma ventana:
+**La estación acepta — enviar** añade el extra (desde **Elegir platos** dice
+**La estación acepta — guardar**), y **No añadirlos** deja el plato como estaba.
+
 Si el terminal dice que ha terminado el periodo de un plato sin mostrar una lista, revisa el
 pedido y quita los platos de periodos terminados antes de volver a enviarlo.
 

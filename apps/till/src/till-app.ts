@@ -88,6 +88,7 @@ import {
   compareDecimal,
   decimal,
   formatMoney,
+  multiplyDecimal,
   resolveActiveLocale,
   sumDecimals,
   toScale,
@@ -306,7 +307,7 @@ import {
 } from "./state/bill-payment.js";
 import "./widgets/basket-refresh-dialog.js";
 import "./widgets/late-send-dialog.js";
-import type { LateSendDish } from "./widgets/late-send-dialog.js";
+import type { LateSendDish, LateSendPurpose } from "./widgets/late-send-dialog.js";
 import "./widgets/reprint-language-dialog.js";
 import type { ReprintLanguageDetail } from "./widgets/reprint-language-dialog.js";
 import { dialogOpenUnder } from "./widgets/track-dialog.js";
@@ -396,6 +397,7 @@ import type {
   StationQueueGroup,
   StaffMember,
   SubmittedDraft,
+  OrderLinePatch,
   TabLine,
   TableState,
   TableParty,
@@ -458,7 +460,7 @@ import {
   withUnavailable,
 } from "./state/menu-refresh.js";
 import type { ShellAffordance } from "./widgets/till-shell.js";
-import type { BasketRefusal, OrderLine } from "./state/working-order.js";
+import type { BasketRefusal, OrderLine, SelectedExtra } from "./state/working-order.js";
 import type { StoredLines } from "./widgets/basket.js";
 import { adjustableListing } from "./state/adjust-target.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
@@ -3156,7 +3158,7 @@ export class TillApp extends LitElement {
     dishes: readonly LateSendDish[];
     periodNames: readonly [string, ...string[]];
     menuIds: string[];
-    purpose: "send" | "save";
+    purpose: LateSendPurpose;
     retry: (lateSend: LateSend) => Promise<void>;
     remove: () => void;
   } | null = null;
@@ -14134,7 +14136,7 @@ export class TillApp extends LitElement {
   #openLateSend(
     listed: readonly OrderLine[],
     periods: readonly [EndedPeriod, ...EndedPeriod[]],
-    purpose: "send" | "save",
+    purpose: LateSendPurpose,
     retry: (lateSend: LateSend) => Promise<void>,
     remove: (listed: readonly OrderLine[]) => void,
   ): void {
@@ -14147,6 +14149,13 @@ export class TillApp extends LitElement {
         name: lineProductName(line.product),
         unitName: productUnit(line.product).name,
         soldInEach: soldByTheUnit(line.product),
+        ...((purpose === "extras" || purpose === "extras-save") && line.extras !== undefined
+          ? {
+              extras: line.extras.map((extra) =>
+                extra.quantity > 1 ? `${extra.name} x${extra.quantity}` : extra.name,
+              ),
+            }
+          : {}),
       })),
       periodNames: [first, ...rest],
       menuIds: [...new Set(periods.map((period) => period.menuId))],
@@ -16242,14 +16251,18 @@ export class TillApp extends LitElement {
     }
   }
 
-  async #onChangeLine(event: Event): Promise<void> {
+  async #onChangeLine(event: Event, lateSend?: LateSend): Promise<void> {
     const change = (event as CustomEvent<ChangeLineDetail>).detail;
     let saved = false;
     try {
-      await this.#applyLineChange(event, () => {
-        saved = true;
-        change.completed?.(true);
-      });
+      await this.#applyLineChange(
+        event,
+        () => {
+          saved = true;
+          change.completed?.(true);
+        },
+        lateSend,
+      );
     } finally {
       if (!saved)
         change.completed?.(
@@ -16262,7 +16275,7 @@ export class TillApp extends LitElement {
     }
   }
 
-  async #applyLineChange(event: Event, onSaved: () => void): Promise<void> {
+  async #applyLineChange(event: Event, onSaved: () => void, lateSend?: LateSend): Promise<void> {
     const change = (event as CustomEvent<ChangeLineDetail>).detail;
     const { lineNo, lineName, patch, revision } = change;
     const orderId = this.activeTabId;
@@ -16297,6 +16310,7 @@ export class TillApp extends LitElement {
           patch,
           revision,
           change.expectedEdit,
+          ...(lateSend === undefined ? [] : [lateSend]),
         ),
       };
     } catch (error) {
@@ -16353,6 +16367,32 @@ export class TillApp extends LitElement {
       };
       return;
     }
+    const dish = this.#lateExtrasDish(change);
+    const asked =
+      dish === undefined
+        ? undefined
+        : lateSendAsked(outcome.error, [dish], new Set([dish.workingOrderLineId!]));
+    const retry = (confirmed: LateSend) => this.#onChangeLine(event, confirmed);
+    if (asked !== undefined) {
+      // Don't add them only abandons the change: the dish was never changed, so Sent is read as it
+      // stands.
+      const purpose = change.waitsForSend === true ? "extras-save" : "extras";
+      this.#openLateSend(asked.listed, asked.periods, purpose, retry, () => {
+        change.abandoned?.();
+        if (identity() && !left()) void this.#loadTabLines();
+      });
+      return;
+    }
+    const approval = lateSendApprovalAsked(outcome.error, lateSend);
+    if (approval !== undefined) {
+      await this.#askLateSendApproval(
+        approval.lateSend,
+        approval.pinError,
+        retry,
+        () => identity() && !left(),
+      );
+      return;
+    }
     if (code === "station.no_replacement" && change.saleLine !== undefined) {
       const question = limited(3_000);
       try {
@@ -16399,6 +16439,83 @@ export class TillApp extends LitElement {
     else await this.#loadTabLines();
     if (!identity()) return;
     if (code !== undefined && DRAFT_REFUSALS.has(code)) await this.#refreshBillDraft();
+  }
+
+  /** The sent dish a change adds extras to, for the late-send window; undefined when the change sets
+   * no extras, or the dish is not in the till's lists, or its offer is neither offered now nor
+   * recorded on a set lunch. */
+  #lateExtrasDish(change: ChangeLineDetail): OrderLine | undefined {
+    if (change.patch.extras === undefined) return undefined;
+    const line = this.tabLines.find((each) => each.lineNo === change.lineNo);
+    const offer =
+      this.#tableOffers.byId.get(change.saleLine?.menuItemId ?? line?.menuItemId ?? "") ??
+      line?.lunchOffer;
+    if (line === undefined || offer === undefined) return undefined;
+    // The line's staff name already names its variant.
+    const product = {
+      ...menuOfferToTillProduct(offer, this.#tableOffers.versions.get(offer.menuId)),
+      name: change.lineName,
+    };
+    delete product.variantName;
+    const extras = this.#addedExtras(line, change.patch.extras, [
+      ...(line.lunchOffer?.offeredModifiers ?? []),
+      ...offer.offeredModifiers,
+    ]);
+    return {
+      product,
+      quantity: change.saleLine?.quantity ?? line.quantity,
+      workingOrderLineId: line.id,
+      ...(extras.length === 0 ? {} : { extras }),
+    };
+  }
+
+  /** The picks `requested` adds to the stored dish: as the server reads it (`editLineExtras`), every
+   * pick no stored extra holds at the same list, product and total quantity. */
+  #addedExtras(
+    dish: TabLine,
+    requested: NonNullable<OrderLinePatch["extras"]>,
+    lists: TillMenuOffer["offeredModifiers"],
+  ): SelectedExtra[] {
+    const remaining = this.tabLines.filter(
+      (child) =>
+        child.parentLineNo === dish.lineNo &&
+        (dish.lunchOffer === undefined ||
+          compareDecimal(decimal(child.cancelledQuantity ?? "0"), decimal(child.quantity)) < 0),
+    );
+    const added: SelectedExtra[] = [];
+    for (const { listId, picks } of requested)
+      for (const pick of picks) {
+        const index = remaining.findIndex(
+          (child) =>
+            child.listId === listId &&
+            child.productId === pick.productId &&
+            compareDecimal(
+              multiplyDecimal(
+                multiplyDecimal(decimal(dish.quantity), decimal(String(pick.quantity))),
+                decimal(child.priceQuantity ?? "1"),
+              ),
+              decimal(child.quantity),
+            ) === 0,
+        );
+        if (index >= 0) {
+          remaining.splice(index, 1);
+          continue;
+        }
+        const list = lists.find((each) => each.kind === "extras" && each.id === listId);
+        const item =
+          list?.kind === "extras"
+            ? list.items.find((each) => each.productId === pick.productId)
+            : undefined;
+        if (item !== undefined)
+          added.push({
+            listId,
+            productId: pick.productId,
+            name: item.name,
+            price: item.price,
+            quantity: pick.quantity,
+          });
+      }
+    return added;
   }
 
   #releaseEditDeadEnds(): void {
