@@ -4944,6 +4944,10 @@ export class DashboardApi {
     return this.#request("/api/box/network/join", "POST", input);
   }
 
+  forgetBoxNetwork(input: { ssidHex: string }): Promise<Record<string, never>> {
+    return this.#request("/api/box/network/forget", "POST", input);
+  }
+
   async getBoxHealth(): Promise<BoxHealth> {
     const health = await this.#request<BoxHealth>("/api/box/health", "GET");
     return health.spare === undefined

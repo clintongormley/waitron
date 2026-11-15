@@ -287,10 +287,11 @@ const WIFI_REFUSALS = new Set([
   "box_host.busy",
   "box_network.busy",
   "box_network.no_wifi",
+  "box_network.not_saved",
   "box_network.password_invalid",
   "box_network.join_connection_insecure",
 ]);
-function wifiRequestError(error: unknown): string {
+export function wifiRequestError(error: unknown): string {
   const code = codeOf(error);
   return WIFI_REFUSALS.has(code) ? codeMessage(code) : t("box_status.network.unknown");
 }

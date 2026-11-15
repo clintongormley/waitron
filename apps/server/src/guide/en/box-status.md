@@ -86,6 +86,10 @@ Changing Wi-Fi can disconnect this page. If you have no wired connection, keep a
 or the box's local screen available so you can reconnect. Enter passwords only through the
 box's own HTTPS dashboard address.
 
+To remove the saved network, choose **Forget saved Wi-Fi** and check the name in the
+confirmation. **Stop** keeps it; **Forget saved Wi-Fi** asks the box to remove it.
+To use that network again, scan and enter its password again.
+
 Acceptance means the request reached the box. **Last change** reports what happened to the
 running connection; the boot copy is reported separately. A pending or failed boot copy does
 not promise Wi-Fi at the next boot. The card refreshes about once a minute, so the outcome can

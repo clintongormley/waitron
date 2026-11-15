@@ -103,6 +103,10 @@ cada minuto, por lo que el resultado puede tardar un par de minutos en aparecer.
 el resultado de la solicitud, consulta **Último cambio** antes de reintentar. Si falla una lectura,
 espera al siguiente intento automático. Si falta la tarjeta, vuelve a abrir **Estado del servidor**.
 
+Para eliminar la red guardada, pulsa **Olvidar la Wi-Fi guardada** y comprueba el nombre en
+la confirmación. **Parar** la conserva; **Olvidar la Wi-Fi guardada** pide al servidor que la
+elimine. Para volver a usarla, busca la red e introduce su contraseña de nuevo.
+
 ## Vuelve a intentar los registros que esperan {#retry-now}
 
 En un servidor que envía registros a Hacienda, la fila **Hacienda** tiene un botón **Reintentar

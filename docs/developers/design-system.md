@@ -6526,6 +6526,10 @@ alert list.
   its running-configuration outcome and the durable boot-copy outcome are worded separately.
   A read's recovery never clears an action refusal. Lost or busy requests refresh the existing network read; lost requests advise checking Last change
   before resending. The existing minute watch supplies later outcomes.
+  Forget saved Wi-Fi appears only for the reported saved network. Its confirmation names
+  that network, warns of connection loss and offers safe Stop before danger Forget.
+  Acceptance closes the confirmation before refreshing, using the same separate running
+  and boot-copy outcomes as Join.
 
 - **Rows.** One card per part, in order: Sales, Tax agency, Bucket copy, Spare box (only while
   this box copies to a paired spare), Printers, Card readers (left out when the payments module is

@@ -1,3 +1,4 @@
+import type { WtDialog } from "@waitron/ui/src/components/wt-dialog.js";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
@@ -218,3 +219,127 @@ it.each(["connection.failed", "box_network.busy"])(
     expect(client.joinBoxNetwork).toHaveBeenCalledOnce();
   },
 );
+
+async function forgetQuestion(el: BoxStatusScreen) {
+  await expect.poll(() => card(el)?.querySelector("[data-test=wifi-forget]")).toBeTruthy();
+  await userEvent.click(card(el)!.querySelector<HTMLElement>("[data-test=wifi-forget]")!);
+  const dialog = el.shadowRoot!.querySelector<WtDialog>("wt-dialog[data-test=wifi-forget-dialog]")!;
+  await expect.poll(() => dialog.open).toBe(true);
+  return dialog;
+}
+
+it("names the saved network before Forget, explains unwired recovery, and Stop sends nothing", async () => {
+  const client = Object.assign(
+    api(
+      vi.fn().mockResolvedValue({
+        ...observation,
+        wired: { connected: false, address: null },
+      }),
+    ),
+    { forgetBoxNetwork: vi.fn().mockResolvedValue({}) },
+  );
+  const el = await mount(client);
+  const dialog = await forgetQuestion(el);
+  expect(dialog.heading).toContain("Bar");
+  expect(dialog.textContent).toContain("local screen");
+  expect(dialog.textContent).toContain("disconnect");
+  const { dialogClosed } = await import("../widgets/test-helpers.js");
+  const closed = dialogClosed(dialog);
+  await userEvent.click(dialog.querySelector<HTMLElement>("[data-test=wifi-forget-stop]")!);
+  await closed;
+  expect(client.forgetBoxNetwork).not.toHaveBeenCalled();
+});
+
+it("forgets the named saved network, closes before reading the outcome and retains acceptance on read failure", async () => {
+  const read = vi.fn().mockResolvedValue(observation);
+  let accepted!: () => void;
+  const client = Object.assign(api(read), {
+    forgetBoxNetwork: vi.fn(
+      () =>
+        new Promise<void>((done) => {
+          accepted = done;
+        }),
+    ),
+  });
+  const el = await mount(client);
+  const dialog = await forgetQuestion(el);
+  expect(dialog.textContent).not.toContain("local screen");
+  const opensAtRefresh: boolean[] = [];
+  read.mockImplementation(() => {
+    opensAtRefresh.push(dialog.open);
+    return Promise.reject({ code: "box_host.failed" });
+  });
+  await userEvent.click(dialog.querySelector<HTMLElement>("[data-test=wifi-forget-confirm]")!);
+  expect(client.forgetBoxNetwork).toHaveBeenCalledExactlyOnceWith({ ssidHex: "426172" });
+  expect(dialog.querySelector("[data-test=wifi-forget-stop]")?.hasAttribute("disabled")).toBe(true);
+  expect(card(el)!.querySelector("[data-test=wifi-scan]")?.hasAttribute("disabled")).toBe(true);
+  const { dialogClosed } = await import("../widgets/test-helpers.js");
+  const closed = dialogClosed(dialog);
+  accepted();
+  await closed;
+  await expect.poll(() => card(el)?.textContent).toContain("Couldn't read");
+  expect(card(el)!.textContent).toContain("accepted");
+  expect(opensAtRefresh.length).toBeGreaterThan(0);
+  expect(opensAtRefresh).not.toContain(true);
+  read.mockResolvedValue({
+    ...observation,
+    wifi: { connectedSsidHex: null, savedSsidHex: null },
+    change: { kind: "forget", ssidHex: "426172", state: "applied", reason: null },
+    bootCopy: { state: "absent", reason: "cable-only", failure: null },
+  });
+  client.liveData.refresh();
+  await expect.poll(() => card(el)?.textContent).toContain("Last change");
+  expect(card(el)!.textContent).not.toContain("accepted");
+  expect(card(el)!.querySelector("[data-test=wifi-forget]")).toBeNull();
+});
+
+it("shows a lost Forget answer as unknown, refreshes Last change and never resends", async () => {
+  const read = vi.fn().mockResolvedValue(observation);
+  const client = Object.assign(api(read), {
+    forgetBoxNetwork: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+  });
+  const el = await mount(client);
+  const dialog = await forgetQuestion(el);
+  read.mockResolvedValue({
+    ...observation,
+    change: { kind: "forget", ssidHex: "426172", state: "running", reason: null },
+  });
+  await userEvent.click(dialog.querySelector<HTMLElement>("[data-test=wifi-forget-confirm]")!);
+  await expect.poll(() => dialog.querySelector("wt-form-actions")?.error).toContain("unknown");
+  await expect.poll(() => card(el)?.textContent).toContain("in progress");
+  expect(client.forgetBoxNetwork).toHaveBeenCalledOnce();
+  expect(dialog.querySelector("[data-test=wifi-forget-confirm]")?.hasAttribute("disabled")).toBe(
+    true,
+  );
+});
+
+it("keeps a Forget refusal through a recovered read and lets the person retry", async () => {
+  const read = vi.fn().mockResolvedValue(observation);
+  const client = Object.assign(api(read), {
+    forgetBoxNetwork: vi.fn().mockRejectedValue({ code: "box_host.busy" }),
+  });
+  const el = await mount(client);
+  const dialog = await forgetQuestion(el);
+  const confirm = dialog.querySelector<HTMLElement>("[data-test=wifi-forget-confirm]")!;
+  await userEvent.click(confirm);
+  await expect.poll(() => read.mock.calls.length).toBe(2);
+  await expect.poll(() => dialog.querySelector("wt-form-actions")?.error).toContain("busy");
+  expect(confirm.hasAttribute("disabled")).toBe(false);
+  client.forgetBoxNetwork.mockResolvedValue({});
+  await userEvent.click(confirm);
+  await expect.poll(() => dialog.open).toBe(false);
+  expect(client.forgetBoxNetwork).toHaveBeenCalledTimes(2);
+});
+
+it("explains a definite not-saved refusal instead of calling the outcome unknown", async () => {
+  const client = Object.assign(api(), {
+    forgetBoxNetwork: vi.fn().mockRejectedValue({ code: "box_network.not_saved" }),
+  });
+  const el = await mount(client);
+  const dialog = await forgetQuestion(el);
+  await userEvent.click(dialog.querySelector<HTMLElement>("[data-test=wifi-forget-confirm]")!);
+  await expect
+    .poll(() => dialog.querySelector("wt-form-actions")?.error)
+    .toContain("no longer has this network saved");
+  expect(dialog.querySelector("wt-form-actions")?.error).not.toContain("unknown");
+});

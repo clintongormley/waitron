@@ -12,6 +12,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Choose a valid dietary contains tag",
     es: "Elige una etiqueta dietética válida",
   },
+  "box_network.not_saved": {
+    en: "The box no longer has this network saved. Stop and check the latest network display before trying again.",
+    es: "El servidor ya no tiene guardada esta red. Pulsa Parar y consulta la información de red actual antes de reintentar.",
+  },
   "box_network.no_wifi": {
     en: "No Wi-Fi adapter is available. Connect an adapter and scan again.",
     es: "No hay adaptador Wi-Fi disponible. Conecta uno y busca de nuevo.",
