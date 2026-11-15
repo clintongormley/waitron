@@ -6,6 +6,12 @@ import { expect, it } from "vitest";
 import * as notices from "./npm-bundle-notices.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
+const LIT_VERSION = JSON.parse(
+  readFileSync(
+    join(realpathSync(join(ROOT, "apps/till/node_modules/lit")), "package.json"),
+    "utf8",
+  ),
+).version;
 
 it("emits the licence of a package that Vite put in a JavaScript chunk", () => {
   const lit = realpathSync(join(ROOT, "apps/till/node_modules/lit/index.js"));
@@ -17,7 +23,7 @@ it("emits the licence of a package that Vite put in a JavaScript chunk", () => {
     { "assets/index.js": { type: "chunk", modules: { [lit]: {} } } },
   );
   expect(emitted).toHaveLength(1);
-  expect(emitted[0].source).toContain("lit 3.3.3");
+  expect(emitted[0].source).toContain(`===== lit ${LIT_VERSION} — LICENSE =====`);
   expect(emitted[0].source).toContain(
     readFileSync(join(ROOT, "apps/till/node_modules/lit/LICENSE"), "utf8"),
   );
@@ -61,7 +67,7 @@ it("refuses a bundled package with no local or pinned licence", () => {
 it("lists a bundled package only once when several modules use it", () => {
   const lit = realpathSync(join(ROOT, "apps/till/node_modules/lit/index.js"));
   const content = notices.bundledNpmNotices([lit, lit]);
-  expect(content.match(/===== lit 3\.3\.3 — LICENSE =====/g)).toHaveLength(1);
+  expect(content.split(`===== lit ${LIT_VERSION} — LICENSE =====`)).toHaveLength(2);
 });
 
 it("walks past a manifest that only sets the module type to the package's own manifest", () => {
@@ -82,10 +88,12 @@ it("walks past a manifest that only sets the module type to the package's own ma
 });
 
 it.each([
-  ["stripe 23.1.0", "stripe", ["cjs/stripe.cjs.node.js", "esm/stripe.esm.node.js"]],
-  ["nodemailer 10.3.1", "nodemailer", ["dist/cjs/nodemailer.js", "dist/esm/nodemailer.js"]],
-])("emits %s's licence for its CommonJS and ESM entries", (label, name, entries) => {
+  ["stripe", ["cjs/stripe.cjs.node.js", "esm/stripe.esm.node.js"]],
+  ["nodemailer", ["dist/cjs/nodemailer.js", "dist/esm/nodemailer.js"]],
+])("emits %s's licence for its CommonJS and ESM entries", (name, entries) => {
   const pkg = realpathSync(join(ROOT, "apps/server/node_modules", name));
+  const { version } = JSON.parse(readFileSync(join(pkg, "package.json"), "utf8"));
+  const label = `${name} ${version}`;
   for (const entry of entries) {
     const content = notices.bundledNpmNotices([join(pkg, entry)]);
     expect(

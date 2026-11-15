@@ -120,7 +120,7 @@ What still needs a person:
 - **A bundled package with no licence file of its own fails every bundle build that includes it,
   Node or front-end, once it moves to a version with no fallback.**
   `scripts/npm-bundle-notices.mjs` looks in `deploy/third-party/npm-fallback/` for a file named
-  after the package and version, with `/` written as `+` (`@aws-sdk+nested-clients@3.997.50.txt`,
+  after the package and version, with `/` written as `+` (`@nodable+entities@3.1.0.txt`,
   `brotli@1.3.3.txt`), and throws `No licence notices found for: …` when there is none. An
   `@aws-sdk/client-s3` bump can move three such internal AWS SDK packages: #1760 renamed their
   fallbacks, and #2061's first CI run hit that error. Check that each new tarball still has no
