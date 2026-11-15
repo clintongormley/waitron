@@ -963,11 +963,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   when the till's void screen is designed.
   [Detail](backlog/till.md#cash-handed-back-for-a-voided-cash-sale-is-recorded-nowhere)
 
-- **On the till, opening a section from lower on the screen leaves the page scrolled**, so the
-  breadcrumb is out of view. I believe this predates W93: neither `main`'s nor W93's
-  `apps/till/src/widgets/menu-browser.ts` scrolls on opening a section (read, not bisected). Left
-  open by W93 (#1287).
-
 - **Loose ends left by A429 slice 5.** Tighten the till's `TableState.today` type: slice 5 keeps it
   nullable for now (`apps/till/src/api/client.ts`), even though the floor's in-service read requires
   today's row.
