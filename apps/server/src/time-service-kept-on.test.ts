@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { BoxHostClient, ClockServiceStatus, TimeServiceOnAnswer } from "./box-host-client.js";
 import type { Logger } from "./logger.js";
-import { keepTimeServiceOn } from "./time-service-kept-on.js";
+import { keepTimeServiceOn, SWITCH_ON_BACK_OFF_MS } from "./time-service-kept-on.js";
 
 const OFF: ClockServiceStatus = {
   available: true,
@@ -23,11 +23,22 @@ function fakeHost(status: ClockServiceStatus, answers: Array<TimeServiceOnAnswer
   return host satisfies BoxHostClient;
 }
 
+/** A clock the test moves; it starts at an arbitrary fixed time. */
+function testClock() {
+  let ms = Date.parse("2026-11-15T10:00:00.000Z");
+  return {
+    now: () => new Date(ms),
+    advance: (by: number) => {
+      ms += by;
+    },
+  };
+}
+
 describe("keepTimeServiceOn", () => {
   it("switches a time service it reads as off back on, logs it, and answers the reading", async () => {
     const host = fakeHost(OFF, [{ available: true }]);
     const log = vi.fn<Logger>();
-    expect(await keepTimeServiceOn(host, log).clockStatus()).toEqual(OFF);
+    expect(await keepTimeServiceOn(host, log, testClock().now).clockStatus()).toEqual(OFF);
     expect(host.timeServiceOn).toHaveBeenCalledTimes(1);
     expect(log.mock.calls).toEqual([["info", "time_service.switched_on"]]);
   });
@@ -39,7 +50,7 @@ describe("keepTimeServiceOn", () => {
   ])("asks nothing for a reading of %o", async (status) => {
     const host = fakeHost(status, []);
     const log = vi.fn<Logger>();
-    expect(await keepTimeServiceOn(host, log).clockStatus()).toEqual(status);
+    expect(await keepTimeServiceOn(host, log, testClock().now).clockStatus()).toEqual(status);
     expect(host.timeServiceOn).not.toHaveBeenCalled();
     expect(log).not.toHaveBeenCalled();
   });
@@ -50,13 +61,13 @@ describe("keepTimeServiceOn", () => {
       setClock: async () => ({ available: false, reason: "missing" }),
     };
     const log = vi.fn<Logger>();
-    expect(await keepTimeServiceOn(host, log).clockStatus()).toEqual(OFF);
+    expect(await keepTimeServiceOn(host, log, testClock().now).clockStatus()).toEqual(OFF);
     expect(log).not.toHaveBeenCalled();
   });
 
   it("shares one switch-on between readings that arrive together", async () => {
     const host = fakeHost(OFF, []);
-    const kept = keepTimeServiceOn(host, vi.fn<Logger>());
+    const kept = keepTimeServiceOn(host, vi.fn<Logger>(), testClock().now);
     await Promise.all([kept.clockStatus(), kept.clockStatus()]);
     expect(host.timeServiceOn).toHaveBeenCalledTimes(1);
     await kept.clockStatus();
@@ -73,8 +84,14 @@ describe("keepTimeServiceOn", () => {
       { available: false, reason: "missing", detail: "ENOENT" },
     ]);
     const log = vi.fn<Logger>();
-    const kept = keepTimeServiceOn(host, log);
-    for (let i = 0; i < 6; i++) await kept.clockStatus();
+    const clock = testClock();
+    const kept = keepTimeServiceOn(host, log, clock.now);
+    // Each reading past the back-off, so every one asks.
+    for (let i = 0; i < 6; i++) {
+      await kept.clockStatus();
+      clock.advance(SWITCH_ON_BACK_OFF_MS);
+    }
+    expect(host.timeServiceOn).toHaveBeenCalledTimes(6);
     expect(log.mock.calls).toEqual([
       ["warn", "time_service.switch_on_failed", { reason: "refused", refusal: "sync_on_failed" }],
       ["warn", "time_service.switch_on_failed", { reason: "missing", detail: "ENOENT" }],
@@ -87,11 +104,97 @@ describe("keepTimeServiceOn", () => {
   it("passes a clock set straight to the host", async () => {
     const host = fakeHost(ON, []);
     const input = { targetMs: 1793425531250, requester: { source: "aeat" } };
-    expect(await keepTimeServiceOn(host, vi.fn<Logger>()).setClock(input)).toEqual({
-      available: true,
-      beforeMs: 1,
-      afterMs: 2,
-    });
+    expect(await keepTimeServiceOn(host, vi.fn<Logger>(), testClock().now).setClock(input)).toEqual(
+      {
+        available: true,
+        beforeMs: 1,
+        afterMs: 2,
+      },
+    );
     expect(host.setClock).toHaveBeenCalledWith(input);
+  });
+
+  it("answers the reading and warns lost when the switch-on throws before it returns a promise", async () => {
+    const host: BoxHostClient = {
+      clockStatus: async () => OFF,
+      setClock: async () => ({ available: false, reason: "missing" }),
+      timeServiceOn: () => {
+        throw new Error("thrown synchronously");
+      },
+    };
+    const log = vi.fn<Logger>();
+    expect(await keepTimeServiceOn(host, log, testClock().now).clockStatus()).toEqual(OFF);
+    expect(log.mock.calls).toEqual([["warn", "time_service.switch_on_failed", { reason: "lost" }]]);
+  });
+
+  it("asks no more for an hour after a failed switch-on, then asks again", async () => {
+    const host = fakeHost(OFF, [
+      { available: false, reason: "refused", refusal: "sync_on_failed" },
+      { available: false, reason: "refused", refusal: "sync_on_failed" },
+    ]);
+    const clock = testClock();
+    const kept = keepTimeServiceOn(host, vi.fn<Logger>(), clock.now);
+    expect(await kept.clockStatus()).toEqual(OFF);
+    expect(host.timeServiceOn).toHaveBeenCalledTimes(1);
+    clock.advance(SWITCH_ON_BACK_OFF_MS - 1);
+    // Still answered as read.
+    expect(await kept.clockStatus()).toEqual(OFF);
+    expect(host.timeServiceOn).toHaveBeenCalledTimes(1);
+    clock.advance(1);
+    await kept.clockStatus();
+    expect(host.timeServiceOn).toHaveBeenCalledTimes(2);
+    expect(SWITCH_ON_BACK_OFF_MS).toBe(60 * 60_000);
+  });
+
+  it.each([
+    ["a timeout", { available: false as const, reason: "timeout" as const }],
+    ["a lost connection", new Error("socket gone")],
+  ])("backs off after %s too", async (_name, failure) => {
+    const host = fakeHost(OFF, [failure]);
+    const kept = keepTimeServiceOn(host, vi.fn<Logger>(), testClock().now);
+    await kept.clockStatus();
+    await kept.clockStatus();
+    expect(host.timeServiceOn).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks again at the next reading after a busy refusal, which a clock set in flight causes", async () => {
+    const host = fakeHost(OFF, [{ available: false, reason: "refused", refusal: "busy" }]);
+    const kept = keepTimeServiceOn(host, vi.fn<Logger>(), testClock().now);
+    await kept.clockStatus();
+    await kept.clockStatus();
+    expect(host.timeServiceOn).toHaveBeenCalledTimes(2);
+  });
+
+  it("asks again within the hour once the service has been read as not off in between", async () => {
+    let status: ClockServiceStatus = OFF;
+    const host = fakeHost(OFF, [
+      { available: false, reason: "refused", refusal: "sync_on_failed" },
+    ]);
+    host.clockStatus.mockImplementation(async () => status);
+    const kept = keepTimeServiceOn(host, vi.fn<Logger>(), testClock().now);
+    await kept.clockStatus();
+    status = { available: false, reason: "missing" };
+    await kept.clockStatus();
+    status = OFF;
+    await kept.clockStatus();
+    // An unavailable reading says nothing of the service, so the back-off still holds.
+    expect(host.timeServiceOn).toHaveBeenCalledTimes(1);
+    status = ON;
+    await kept.clockStatus();
+    status = OFF;
+    await kept.clockStatus();
+    expect(host.timeServiceOn).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not stretch the back-off when the clock is set back", async () => {
+    const host = fakeHost(OFF, [
+      { available: false, reason: "refused", refusal: "sync_on_failed" },
+    ]);
+    const clock = testClock();
+    const kept = keepTimeServiceOn(host, vi.fn<Logger>(), clock.now);
+    await kept.clockStatus();
+    clock.advance(-24 * 60 * 60_000);
+    await kept.clockStatus();
+    expect(host.timeServiceOn).toHaveBeenCalledTimes(2);
   });
 });
