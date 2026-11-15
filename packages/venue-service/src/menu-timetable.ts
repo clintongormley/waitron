@@ -182,7 +182,7 @@ export async function departmentDay(
     .from(menuPeriods)
     .where(eq(menuPeriods.departmentId, departmentId))
     .orderBy(asc(menuPeriods.name), asc(menuPeriods.id));
-  const periods = rows.map(({ staffMenuIds: _, ...period }) => period);
+  const periods = rows.map(({ id, name, menuId }) => ({ id, name, menuId }));
   const staff = rows
     .flatMap((row) =>
       row.staffMenuIds.map((menuId, position) => ({
@@ -192,7 +192,7 @@ export async function departmentDay(
       })),
     )
     .sort((a, b) => a.position - b.position || a.menuId.localeCompare(b.menuId))
-    .map(({ position: _, ...entry }) => entry);
+    .map(({ periodId, menuId }) => ({ periodId, menuId }));
   if (moment === null) return { periods, staff, ranges: [] };
   const days = await resolveDepartmentDays(tx, departmentId, [moment.businessDay], clock, plan);
   return { periods, staff, ranges: days.get(moment.businessDay)!.ranges };
