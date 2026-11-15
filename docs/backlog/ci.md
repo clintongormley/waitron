@@ -529,10 +529,12 @@ statement/branch/function/line coverage of 98.26/96.13/98.61/98.95. That include
 all 24 server shards and the stream job. The six other coverage merges and shared
 mutation summary also pass. The incident-history read found no overlapping
 Actions, Git Operations, API Requests or Webhooks incident across the measured
-run, and the log scan identified no download HTTP 5xx. Setup's separate gap is
-still open: its 2,792 tests pass but statement coverage is 97.95%, below 98%.
-This closes the watcher's remaining A1398-2 qualification; it does not make the
-whole full run green.
+run, and the log scan identified no download HTTP 5xx. In that run setup's
+2,792 tests passed but its statement coverage was 97.95%, below 98%. With the
+tests that the pull request "Cover the handover screen's paths #3219 left
+untested" adds, setup's statement coverage measured 98.52% locally; the first
+full main run after it lands is the check. This closes the watcher's remaining
+A1398-2 qualification; it does not make the whole full run green.
 
 Earlier cuts and their limits remain in their dated plans:
 [dashboard packing](../superpowers/plans/2026-11-14-a1398-next-browser-cut.md),
