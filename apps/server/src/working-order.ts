@@ -695,7 +695,7 @@ export async function priceOrderLines(
     const periodOf = new Map(service.endedMenus.map((menu) => [menu.menuId, menu.periodName]));
     const items: { productId: string; variantId: string | null }[] = [];
     for (const line of requestedLines) {
-      const offer = offerById.get(line.menuItemId);
+      const offer = line[RECORDED_OFFER]?.offer ?? offerById.get(line.menuItemId);
       const periodName = offer === undefined ? undefined : periodOf.get(offer.menuId);
       if (
         periodName === undefined ||
