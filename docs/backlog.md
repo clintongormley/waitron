@@ -2153,7 +2153,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A974. Finish the remaining English names in general code.**
   Private dish helpers remain in `collect-by-invoice.test.ts` and `take-payment-permission.test.ts`.
-  A private person binding remains in `clock-set.route.test.ts`.
+  A private person binding (`marta`, shown as Martha) remains in the protected
+  `clock-set.route.test.ts`; check the clock-suite boundary before renaming.
   Protected fiscal and receipt helpers still need their boundary audit.
   Counter-group display text in `today-names.test.ts` and station display samples in
   `former-numbers.test.ts` stay with A976.
