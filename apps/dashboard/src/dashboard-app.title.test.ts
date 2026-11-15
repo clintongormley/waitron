@@ -1,8 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi } from "./api/client.js";
 import { DashboardApp } from "./dashboard-app.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
+import { stubShellApi } from "./testing/venue-logo-fixture.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 
 const original = { locale: currentLocale(), path: location.href, title: document.title };
@@ -16,45 +16,6 @@ afterEach(() => {
   document.title = original.title;
 });
 
-const LOCALES = [
-  { code: "en-GB", label: "English" },
-  { code: "es-ES", label: "Español" },
-];
-
-function signedIn(locale: string): DashboardApi {
-  const api = {
-    liveData: new LiveData(),
-    getMe: async () => ({
-      personId: "owner",
-      roleIds: ["manager"],
-      email: "owner@example.test",
-      locale,
-      venueLocale: locale,
-      sessionDefault: locale,
-      venueName: "Test venue",
-      modules: [],
-      permissions: ["venue.view", "node.manage"],
-      sessionExpiresInSeconds: 1800,
-      sessionIdleTimeoutSeconds: 1800,
-    }),
-    getGoogleConfig: async () => ({ configured: false }),
-    getVenueTheme: async () => ({ hash: "waitron", css: "", logo: null }),
-    getLegalAbout: async () => ({ release: null, build: "test" }),
-    getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
-    getLocales: async () => ({
-      locales: LOCALES,
-      venueDefault: locale,
-      loginDefault: locale,
-      venueName: "Test venue",
-    }),
-    listAlerts: async () => ({ visible: false, alerts: [] }),
-    getDiskStop: async () => ({ stopped: false, deleted: null }),
-    listServers: async () => ({ term: 2, authorityFingerprint: null, nodes: [] }),
-  } as unknown as DashboardApi;
-  Object.defineProperty(api, "background", { get: () => api });
-  return api;
-}
-
 async function mount(api: DashboardApi, path: string): Promise<DashboardApp> {
   history.replaceState(null, "", path);
   const { el } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -67,14 +28,14 @@ async function mount(api: DashboardApi, path: string): Promise<DashboardApp> {
 }
 
 it.each([
-  { locale: "en-GB", servers: "Servers · Waitron", overview: "Overview · Waitron" },
-  { locale: "es-ES", servers: "Servidores · Waitron", overview: "Resumen · Waitron" },
-])(
+  { locale: "en-GB", diagnostics: "Diagnostics · Waitron", overview: "Overview · Waitron" },
+  { locale: "es-ES", diagnostics: "Diagnóstico · Waitron", overview: "Resumen · Waitron" },
+] as const)(
   "the browser tab names the open screen in $locale and follows navigation",
-  async ({ locale, servers, overview }) => {
+  async ({ locale, diagnostics, overview }) => {
     setLocale(locale);
-    const el = await mount(signedIn(locale), "/manage/servers");
-    await vi.waitFor(() => expect(document.title).toBe(servers));
+    const el = await mount(stubShellApi(true, locale), "/manage/diagnostics");
+    await vi.waitFor(() => expect(document.title).toBe(diagnostics));
     let link: HTMLElement | null = null;
     await vi.waitFor(() => {
       link = el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]");
@@ -87,34 +48,19 @@ it.each([
 
 it("the browser tab's title changes language with the dashboard", async () => {
   setLocale("en-GB");
-  await mount(signedIn("en-GB"), "/manage/servers");
-  await vi.waitFor(() => expect(document.title).toBe("Servers · Waitron"));
+  await mount(stubShellApi(true, "en-GB"), "/manage/diagnostics");
+  await vi.waitFor(() => expect(document.title).toBe("Diagnostics · Waitron"));
   setLocale("es-ES");
-  await vi.waitFor(() => expect(document.title).toBe("Servidores · Waitron"));
+  await vi.waitFor(() => expect(document.title).toBe("Diagnóstico · Waitron"));
 });
 
 it.each([
   { locale: "en-GB", title: "Waitron Dashboard" },
   { locale: "es-ES", title: "Panel de Waitron" },
-])("the sign-in page's tab reads $title in $locale", async ({ locale, title }) => {
+] as const)("the sign-in page's tab reads $title in $locale", async ({ locale, title }) => {
   setLocale(locale);
-  const api = {
-    getMe: async () => {
-      throw { code: "management_session.required" };
-    },
-    getVenueTheme: async () => ({ hash: "waitron", css: "", logo: null }),
-    getLegalAbout: async () => ({ release: null, build: "test" }),
-    getGoogleConfig: async () => ({ configured: false }),
-    forgetLocales: () => {},
-    getLocales: async () => ({
-      locales: LOCALES,
-      venueDefault: locale,
-      loginDefault: locale,
-      venueName: "Venue",
-    }),
-  } as unknown as DashboardApi;
   document.title = "";
-  const el = await mount(api, "/manage/");
+  const el = await mount(stubShellApi(false, locale), "/manage/");
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("dashboard-login-screen")).not.toBeNull(),
   );
