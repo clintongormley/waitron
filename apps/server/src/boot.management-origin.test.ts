@@ -10,7 +10,12 @@ import type { serve } from "@hono/node-server";
 import { eq, sql } from "drizzle-orm";
 import type { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
-import { menus } from "@waitron/db";
+import { menus, withTransaction, workingOrderLines, ticketItems } from "@waitron/db";
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { enrolDeviceForTest } from "./testing/enrol.js";
+import { offerProducts } from "./testing/zone-offers.js";
+import { createOpenOrder, fireableLineColumns, fireLines } from "./working-order.js";
+import { holdChartNamingMainBox } from "./testing/membership-doc-fixture.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartServerSeams, StartedServer } from "./boot.js";
@@ -82,6 +87,7 @@ interface Started {
 async function withServer(
   env: Record<string, string>,
   body: (started: Started) => Promise<void>,
+  beforeStart?: (venue: Venue) => Promise<void>,
 ): Promise<void> {
   served.listeners = [];
   const venue = await setupVenue(suite.db);
@@ -90,6 +96,8 @@ async function withServer(
   let seen: Hono | undefined;
   const seams: StartServerSeams = {
     boxHostRequests: host,
+    // The listed peer is not running; this fixture tests origin acceptance, not peer liveness.
+    peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
     restart,
     requestFromBox: () => false,
     observeApp: (app) => {
@@ -129,6 +137,7 @@ async function withServer(
       await mkdir(join(scratch, "cloud"), { recursive: true });
       await writeFile(join(scratch, "cloud/staff.crt"), material.serverCertPem);
     }
+    await beforeStart?.(venue);
     server = await startServer(full, full, seams);
     await vi.waitFor(async () => {
       expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
@@ -249,6 +258,9 @@ describe("a management change in the running server", () => {
           }
         };
         withCookie[port] = await ask({ cookie: venue.managerCookie, ...headers });
+        expect(await ask({ cookie: `waitron_device=${randomUUID()}`, ...headers })).toEqual(
+          await ask(headers),
+        );
         without[port] = await ask(headers);
       }
       expect(withCookie).toEqual(without);
@@ -276,25 +288,32 @@ describe("a management change in the running server", () => {
         ]),
       );
       const uncovered: string[] = [];
-      for (const write of writes) {
-        const [method, path] = write.split(" ") as [string, string];
-        const concrete = path
-          .split("/")
-          .map((segment) => (segment.startsWith(":") ? id : segment === "*" ? "x" : segment))
-          .join("/");
-        const answer = await answerOf(
-          await fetch(url(concrete), {
-            method,
-            headers: {
-              cookie: `waitron_management_session=${randomUUID()}`,
-              origin: otherPort(),
-              "sec-fetch-site": "same-site",
-            },
-          }),
-        );
-        const refused =
-          answer.status === 403 && JSON.stringify(answer.body) === JSON.stringify(REFUSED);
-        if (!refused) uncovered.push(write);
+      for (const [cookieName, code] of [
+        ["waitron_management_session", "management.origin_refused"],
+        ["waitron_till_session", "till.origin_refused"],
+        ["waitron_device", "till.origin_refused"],
+      ]) {
+        for (const write of writes) {
+          const [method, path] = write.split(" ") as [string, string];
+          const concrete = path
+            .split("/")
+            .map((segment) => (segment.startsWith(":") ? id : segment === "*" ? "x" : segment))
+            .join("/");
+          const answer = await answerOf(
+            await fetch(url(concrete), {
+              method,
+              headers: {
+                cookie: `${cookieName}=${randomUUID()}`,
+                origin: otherPort(),
+                "sec-fetch-site": "same-site",
+              },
+            }),
+          );
+          const refused =
+            answer.status === 403 &&
+            JSON.stringify(answer.body) === JSON.stringify({ error: { code, params: {} } });
+          if (!refused) uncovered.push(`${cookieName}: ${write}`);
+        }
       }
       expect(uncovered).toEqual([]);
     });
@@ -355,4 +374,68 @@ it("lets a till on an allowed origin read the device live endpoint's answer", as
     expect(response.headers.get("access-control-allow-origin")).toBe(TRUSTED);
     expect(response.headers.get("access-control-allow-credentials")).toBe("true");
   });
+});
+
+it("protects a real Ready write while accepting own and membership-listed pages", async () => {
+  const orderId = randomUUID();
+  let cookie: string;
+  const listed = "https://spare.venue.test";
+  const unlisted = "https://other.venue.test";
+  const states = () => suite.db.select({ state: ticketItems.state }).from(ticketItems).all();
+  await withServer(
+    {},
+    async () => {
+      const path = `/api/device/orders/${orderId}/ready`;
+      for (const origin of [otherPort(), unlisted]) {
+        const response = await fetch(url(path), {
+          method: "POST",
+          headers: { cookie, origin, "sec-fetch-site": "same-site" },
+        });
+        expect(await answerOf(response)).toEqual({
+          status: 403,
+          body: { error: { code: "till.origin_refused", params: {} } },
+        });
+        expect(states()).toEqual([{ state: "queued" }]);
+      }
+      for (const origin of [new URL(url(path)).origin, listed]) {
+        const response = await fetch(url(path), { method: "POST", headers: { cookie, origin } });
+        expect(await answerOf(response)).toEqual({ status: 200, body: "" });
+        expect(states()).toEqual([{ state: "ready" }]);
+      }
+    },
+    async (venue) => {
+      const [profile] = await seedDeviceProfiles(suite.db, {
+        name: "Origin check pass",
+        formFactor: "kds",
+        capabilities: ["prepare-orders", "run-the-pass"],
+      });
+      const device = await enrolDeviceForTest(suite.db, venue.cfg, {
+        name: "Origin check pass",
+        profileId: profile!.id,
+        kitchenScreen: { kind: "pass", stationIds: null, zoneIds: null },
+      });
+      cookie = `waitron_device=${device.deviceId}.${device.token}`;
+      await withTransaction(suite.db, async (tx) => {
+        const offers = await offerProducts(tx, venue.cfg);
+        await createOpenOrder(
+          tx,
+          venue.cfg,
+          orderId,
+          offers.toOfferLines([{ productId: venue.coffeeId, quantity: "1" }]),
+          null,
+          { zoneId: offers.zoneId },
+        );
+        const lines = await tx
+          .select(fireableLineColumns)
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, orderId));
+        await fireLines(tx, venue.cfg, orderId, lines);
+      });
+      await holdChartNamingMainBox(
+        suite.db,
+        { nodeId: venue.cfg.nodeId, contactUrl: "https://primary.venue.test" },
+        { nodeId: randomUUID(), contactUrl: listed },
+      );
+    },
+  );
 });

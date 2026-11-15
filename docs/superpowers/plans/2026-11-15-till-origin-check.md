@@ -1,6 +1,6 @@
 # Till changes check which page sent them
 
-Sol-high draft, corrected by the Codex driver after Claude's 2026-11-15 source review. **Awaiting watcher clearance; no build authorised by this plan yet.** No owner design approval claimed. Review and dispositions: Lane K `receipts/till-origin-check/plan-review-{report,triage}.md`.
+Sol-high draft, corrected by the Codex driver after Claude's 2026-11-15 source review. **Cleared by the watcher on 2026-11-15 at 22:41 (Lane K questions.md).** No owner design approval claimed. Review and dispositions: Lane K `receipts/till-origin-check/plan-review-{report,triage}.md`.
 **Ask:** Lane K queue, TILL-ORIGIN-CHECK: “survey the till's change routes, then add a trusted-pages list for them, keeping the venue's other servers and the domain-wide device cookie working”; repository entry: `docs/backlog/box.md` → “Till changes do not check which page sent them”. One PR.
 **Finish line:** untrusted pages cannot make `/api/*` changes carrying a till or device cookie; own pages, trusted venue servers and development pages retain legitimate access.
 **Reuse:** widen `requireManagementChangeFromOwnPage` in `own-page.ts`, retaining its name, existing global mount and `createOriginAllowlist` in `boot.ts`. Keep session/device exports and cookie attributes unchanged.
@@ -25,4 +25,4 @@ Read the TDD skill and testing guide before code. Each new behavior gets an obse
 Run server Vitest on `src/{own-page,allowed-origins,boot.management-origin,boot.start-check,waiting-start,device-session}.test.ts`; till Vitest on `src/i18n/codes.test.ts`; root guards `scripts/{errors-reachable,alert-codes}.test.ts`. Read actual counts. Prove refusal by deleting the new cookie gate in a disposable copy and observing the assertion fail, then restore. No golden/fiscal assertions change. Focused tests, normal hook, two Claude run-it reviews for permissions, one fixes read and current-head scoped CI precede landing.
 
 **Expected additions/removals:** production +25/−5; tests +180/−20; support 0/0; prose including plan +55/−15, total about 300 changed lines. Past about 450 lines, or a material scope change, return to the watcher before further build; not a ceiling.
-**Next:** commit the corrected plan and submit Claude's simpler-route finding and this plan for watcher clearance. No implementation or test edit has begun.
+**Clearance:** the watcher wrote at 22:41, “Widen the existing own-page check as planned (~300 lines). It touches auth, so finish-branch runs both run-it angles. Not an owner approval.”

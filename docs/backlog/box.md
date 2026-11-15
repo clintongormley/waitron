@@ -491,17 +491,6 @@ A listing with an unknown access key returned HTTP 404, named `XAdminUserNotFoun
 the client retained `other` as the fixed-list error name. These observations qualify those two
 loopback responses only; other providers and the remaining log paths above remain unqualified.
 
-## Till changes do not check which page sent them
-
-OPEN (left open by A1371, #2507). The till's sign-in cookie and the device cookie are `SameSite=Strict`
-(`apps/server/src/till-session.ts:45-51`, `apps/server/src/device-session.ts:60-67`), and SameSite
-ignores the port, so a page on another port of the box's name is sent them with a change it posts
-to a till route. The server-wide page check judges only a change that carries the dashboard's
-sign-in cookie (`apps/server/src/own-page.ts`), so it lets such a post through; whether any till
-route checks the page itself was not surveyed. A fix needs a till-side list of trusted pages that
-keeps the venue's other servers (the CORS allow-list, `apps/server/src/allowed-origins.ts`) and the
-device cookie shared across the tenant's domain working.
-
 ## A917 — the owner chooses the server's `.local` name instead of `waitron.local`
 
 DESIGNED
@@ -937,7 +926,7 @@ client. No screen calls them yet.
   are taken ([which ones](../developers/conventions-data.md#a-change-carrying-the-dashboards-sign-in-cookie-is-checked-for-the-page-that-sent-it)). Of the box's
   network and screen routes, only the join still demands the box's own page. None of the three
   needs an encrypted connection, since none carries a secret. A change from another page that
-  carries no dashboard cookie passes that check and is refused by the session check as 401
+  carries none of the dashboard, till or device cookies passes that check and is refused by the session check as 401
   `management_session.required`, or, when its body is over the size limit, by that limit first as
   400 `management.request_invalid` `{ field: "body" }` (the limit runs ahead of the session check,
   `apps/server/src/box-host-api.ts:173-174`, and reads a body sent without a `Content-Length` to
@@ -1438,6 +1427,7 @@ The owner's four answers: no reserved
 - **B3 keeps slice 9b's clock requests on their wire and shell handler (B3 PR 7's D1; the lane's decision of 2026-11-05, open to the owner).** They have landed, the start's time check and the clock set use them, and a box installed by `waitron.sh` has no Node on its host. B3's requests will share the socket, the one-line framing and `apps/server/src/box-host-client.ts`; the shell handler is to forward them to the Node host in slice 3's Linux pull request. The host knows its caller by the socket alone (D2): only root and the app's group can connect, one request per connection, so there is no token to replay; the server is to mint an ids-only actor from a session it authorised, and the host checks its form and logs it, and a compromised server can send any actor, as with slice 9b's requester. ([PR 7's plan](../superpowers/plans/2026-11-05-b3-7-host-protocol.md), D1, D2.)
 - **The box's network and screen routes send at most two requests to the host service at once, and refuse a third with `box_host.busy` rather than queue it (B3 PR 9's D7; the lane's decision of 2026-11-06, open to the owner).** The host's socket serves four connections (`deploy/box/waitron-box.socket`, `MaxConnections=4`) and how many the clock side holds at once is not measured (PR 9's plan, finding 11). Two rather than one, so a page's read is not refused while a scan runs; refused rather than queued, so no request waits behind a change, which can hold its place for up to 20 seconds. Two places do not hold the total to four; what is still to measure on Linux is in [PR 9's plan](../superpowers/plans/2026-11-06-b3-9-host-routes.md), D7.
 - **The server-wide page check looks only at whether a change carries the dashboard's sign-in cookie, not at whether its session is live (A1371, 2026-11-06).** Checking the session would cost a database read on every change, and nothing but a browser sends that cookie: outside tests, its name appears only in `packages/server-kit/src/management-cookie.ts` and that package's index (a search of `apps`, `packages` and `scripts`, 2026-11-06), and `git grep` for it in Waitron Cloud's repository at `6eeb0d953` printed nothing. A change without the cookie passes, so a till on another server, Stripe's webhook and the print agent keep working. [Detail](../developers/conventions-data.md#a-change-carrying-the-dashboards-sign-in-cookie-is-checked-for-the-page-that-sent-it)
+  **2026-11-15:** the [till origin check](../superpowers/plans/2026-11-15-till-origin-check.md) extends this presence check to till and device cookies. Trusted venue origins retain access; only requests with none of these cookies bypass it.
 - **The page check leaves `GET`, `HEAD` and `OPTIONS` alone (A1371, 2026-11-06).** Another page cannot read their answers, and a CORS preflight must reach the CORS middleware. Two kinds of `GET` still change something when another page sends them: every signed-in `GET` that is not a passive read moves the session's last-seen time (`packages/identity/src/management-session.ts:86-91`), so a page on another port left open in the same browser can keep a session from going idle, though it changes no venue data; and the Google sign-in's return, `GET /management-api/google/callback`, sets a session cookie, as a sign-in arriving from Google must, guarded by its own state cookie. No route takes a WebSocket. [Detail](../developers/conventions-data.md#a-change-carrying-the-dashboards-sign-in-cookie-is-checked-for-the-page-that-sent-it)
 - **Four routes keep their own stricter page check (A1371, 2026-11-06).** `cloud-api.ts`, `content-suggestions-api.ts`, `content-translations-api.ts` and `venue-zone-repair-api.ts` (all in `apps/server/src/`) require `Origin` to be exactly `managementOrigin`, so they also refuse a tool that sends no `Origin`, and the box's own address when it is not `managementOrigin`. Loosening them to the shared check was not part of A1371. [Detail](../developers/conventions-data.md#a-change-carrying-the-dashboards-sign-in-cookie-is-checked-for-the-page-that-sent-it)
 - **A page served by another of the venue's servers is trusted through the CORS allow-list, and no started-server test sends one (A1371, 2026-11-06).** The page check trusts every routable server address in the held membership document (`apps/server/src/allowed-origins.ts`), because a till may be served by another of the venue's servers under a shared domain and carry this server's dashboard cookie. Only the allow-list's own unit test sends such an address (`apps/server/src/allowed-origins.test.ts`, "allows the advertised origin and every contactUrl origin, and nothing else"). [Detail](../developers/conventions-data.md#a-change-carrying-the-dashboards-sign-in-cookie-is-checked-for-the-page-that-sent-it)

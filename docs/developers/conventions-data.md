@@ -1724,8 +1724,10 @@ are tried as a token; a new login table is seen by nothing.
 
 **The rule.** `requireManagementChangeFromOwnPage` (`apps/server/src/own-page.ts`) judges every
 request whose method is not `GET`, `HEAD` or `OPTIONS` and that carries a
-`waitron_management_session` cookie, whatever its value. It takes the request when it came from the
-box's own page or a trusted one, and otherwise answers 403 `management.origin_refused` and logs a
+`waitron_management_session`, `waitron_till_session` or `waitron_device` cookie, including an empty
+or malformed value. It takes the request when it came from the box's own page or a trusted one.
+Otherwise it answers 403 `management.origin_refused` when the dashboard cookie is present, or
+`till.origin_refused` for the till/device cookies, and logs a
 warning with the method, `origin` and `site` (the `Sec-Fetch-Site` value), and `lookupFailed: true`
 when the trusted-page lookup failed. On the waiting start's app the logged `requestId` is
 `undefined`: that app mounts no request-id middleware (`grep -n requestId
@@ -1782,15 +1784,22 @@ can still move a session's last-seen time, and the Google sign-in's return is a 
 design; `cloud-api.ts`, `content-suggestions-api.ts`, `content-translations-api.ts` and
 `venue-zone-repair-api.ts` keep their own stricter checks, which require `Origin` to be exactly
 `managementOrigin`; and a page on another of the venue's servers is trusted through the allow-list
-with no started-server test sending one.
+with a started-server Ready test sending one listed sibling and one unlisted sibling. That fixture
+uses `peerCheck` to let the primary start without a running peer; it proves origin acceptance,
+not cookie delivery between two running servers. Cookie Domain/Strict attributes remain covered
+by `device-session.test.ts`.
 
-**Left open:** the till's sign-in cookie and the device cookie are `SameSite=Strict` too, and the
-check does not look at them; see the backlog entry "Till changes do not check which page sent them".
+**Till route survey (2026-11-15):** till-api and its children, schedule-api and device-api use
+`/api/*` for cookie-authenticated changes. Signed-in requests require the person header; device-only
+Ready requires no body. The Ready case below checks one real change, not every route's own
+credentials. Machine-authenticated print agents and webhooks retain their separate paths. Safe
+GET/HEAD reads may still update last-seen stamps.
 
 **Guards, weaker than their names:** the "refuses the attack on every write route" cases in
 `apps/server/src/boot.management-origin.test.ts` and `apps/server/src/waiting-start.test.ts` send
 one attack shape (a random cookie, another port's `Origin`, `Sec-Fetch-Site: same-site`) to every
-write route in their own app's route table, as their harness mounts it:
+write route in their own app's route table, as their harness mounts it. The main-app sweep uses
+each of the dashboard, till and device cookies; the waiting sweep uses the dashboard cookie:
 
 - The main-app sweep runs over a full start only, so a module the harness leaves off, and a route
   mounted only on the restricted or setup start, is swept by nothing.

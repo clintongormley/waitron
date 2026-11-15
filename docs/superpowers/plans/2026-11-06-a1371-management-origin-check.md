@@ -1,5 +1,7 @@
 # A1371: every management change checks which page sent it
 
+2026-11-15: the [till origin check](2026-11-15-till-origin-check.md) extends the global check to till and device cookies; the no-dashboard-cookie bypass below is historical.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Every implementer is dispatched as `subagent_type: "implementer"`.
 
 > 2026-11-06, after the fresh-context plan review (0 critical, 4 important, 8 minor): the waiting

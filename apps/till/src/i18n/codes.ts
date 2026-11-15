@@ -774,6 +774,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "New devices aren't being accepted right now. Ask a manager to open Add a device in the dashboard.",
     es: "Ahora mismo no se aceptan dispositivos nuevos. Pide a un responsable que abra «Añadir un dispositivo» en el panel.",
   },
+  "till.origin_refused": {
+    en: "This page cannot change the till. Open the till from the venue's address and try again.",
+    es: "Esta página no puede hacer cambios en el TPV. Abre el TPV desde la dirección del local e inténtalo de nuevo.",
+  },
   "device.unauthorized": {
     en: "This device could not be verified for this action. Reload or reopen Waitron on this device, then try again.",
     es: "No se ha podido verificar este dispositivo para esta acción. Recarga o vuelve a abrir Waitron en este dispositivo y vuelve a intentarlo.",

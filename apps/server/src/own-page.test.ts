@@ -6,8 +6,13 @@ import { requireManagementChangeFromOwnPage, sentFromThisOrigin } from "./own-pa
 
 const BOX = "https://box.test";
 const TRUSTED = "https://till.example.test";
-const COOKIE = `waitron_management_session=${randomUUID()}`;
-const REFUSED = { error: { code: "management.origin_refused", params: {} } };
+const CREDENTIALS = [
+  ["manager", `waitron_management_session=${randomUUID()}`, "management.origin_refused"],
+  ["till", `waitron_till_session=${randomUUID()}`, "till.origin_refused"],
+  ["device", `waitron_device=${randomUUID()}`, "till.origin_refused"],
+] as const;
+let cookieText: string;
+let refusalCode: string;
 
 let trusted: ReturnType<typeof vi.fn<(origin: string) => Promise<boolean>>>;
 let log: ReturnType<typeof vi.fn<Logger>>;
@@ -32,7 +37,7 @@ function send(
   const { method = "POST", url = `${BOX}/x`, cookie = true, body } = init;
   return build().request(url, {
     method,
-    headers: { ...(cookie ? { cookie: COOKIE } : {}), ...headers },
+    headers: { ...(cookie ? { cookie: cookieText } : {}), ...headers },
     ...(body === undefined ? {} : { body }),
     ...(body instanceof ReadableStream ? { duplex: "half" } : {}),
   });
@@ -51,10 +56,10 @@ async function expectRefused(
   extra: Record<string, unknown> = {},
 ) {
   expect(response.status).toBe(403);
-  expect(await response.json()).toEqual(REFUSED);
+  expect(await response.json()).toEqual({ error: { code: refusalCode, params: {} } });
   expect(calls[method] ?? 0).toBe(0);
   expect(log).toHaveBeenCalledTimes(1);
-  expect(log).toHaveBeenCalledWith("warn", "management.origin_refused", {
+  expect(log).toHaveBeenCalledWith("warn", refusalCode, {
     requestId: undefined,
     method,
     origin: headers.origin ?? null,
@@ -89,7 +94,11 @@ const REFUSED_ROWS: [string, Record<string, string>, { noLookup?: boolean }][] =
   ["a null origin", { origin: "null" }, { noLookup: true }],
 ];
 
-describe("requireManagementChangeFromOwnPage refuses a change carrying the manager's cookie", () => {
+describe.each(CREDENTIALS)("refuses a change carrying the %s cookie", (_name, cookie, code) => {
+  beforeEach(() => {
+    cookieText = cookie;
+    refusalCode = code;
+  });
   for (const [name, headers, { noLookup }] of REFUSED_ROWS) {
     it(name, async () => {
       await expectRefused(await send(headers), "POST", headers);
@@ -128,7 +137,11 @@ describe("requireManagementChangeFromOwnPage refuses a change carrying the manag
   });
 });
 
-describe("requireManagementChangeFromOwnPage takes", () => {
+describe.each(CREDENTIALS)("takes requests with the %s cookie", (_name, cookie, code) => {
+  beforeEach(() => {
+    cookieText = cookie;
+    refusalCode = code;
+  });
   it("the box's own page", async () => {
     await expectTaken(await send({ origin: BOX, "sec-fetch-site": "same-origin" }));
   });
@@ -215,4 +228,20 @@ describe("sentFromThisOrigin", () => {
       expect(await judge(headers)).toBe(false);
     });
   }
+});
+
+it.each([
+  ["waitron_till_session=", "till.origin_refused"],
+  ["waitron_device=", "till.origin_refused"],
+  ["waitron_device=malformed", "till.origin_refused"],
+  ["waitron_management_session=; waitron_device=present", "management.origin_refused"],
+  [
+    "waitron_management_session=present; waitron_till_session=present; waitron_device=present",
+    "management.origin_refused",
+  ],
+])("judges presence and precedence for %s", async (cookie, code) => {
+  cookieText = cookie;
+  refusalCode = code;
+  const headers = { origin: `${BOX}:8443` };
+  await expectRefused(await send(headers), "POST", headers);
 });
