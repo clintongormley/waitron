@@ -227,6 +227,14 @@ describe("weekStationRows", () => {
     });
   });
 
+  it("retains grouped rows when their station has an empty stored name", () => {
+    const grouped = monthNames(
+      DEPARTMENTS.map((row) => ({ ...row, station: true, stationGroup: "" })),
+    );
+    for (const row of weekStationRows(grillDay(), grouped))
+      expect(row).toHaveProperty("stationGroup", "");
+  });
+
   it("draws no rows when no department sends, and no zones ever", () => {
     expect(weekStationRows({ ...grillDay(), departments: [] }, names)).toEqual([]);
     const withZone = grillDay();

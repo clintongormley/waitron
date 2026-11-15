@@ -3047,8 +3047,8 @@ a department's opening periods are faint bands in their own colours,
 labelled with their names and times. A prep station shows the sending ranges of the periods whose
 menus route it dishes, ending at the period's end, in one stable lane per sending department. A long
 department name is truncated to one line so it leaves room for the period; the day's accessible
-description keeps every full department name, period and time. Empty guides read Closed for a
-department and No orders for a station. The paint row explains the shading for the selected area;
+description keeps every full department name, period and time. Empty department and station
+guides read Closed. The paint row explains the shading for the selected area;
 a viewer gets the same explanation without paint controls. One draft holds every area,
 so the picker keeps edits; Save stays quiet until the draft changes and sends only the days that
 differ from what is saved. The staffing is read when the painter opens, when ‹ › step, and after

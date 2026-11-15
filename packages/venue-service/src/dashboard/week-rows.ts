@@ -159,7 +159,7 @@ export function weekStationRows(day: Day, names: MonthNames): WeekRow[] {
       ...(names.stationHeading(read.departmentId)
         ? { stationHeading: names.stationHeading(read.departmentId) }
         : {}),
-      ...(names.stationGroup(read.departmentId)
+      ...(names.stationGroup(read.departmentId) !== undefined
         ? { stationGroup: names.stationGroup(read.departmentId) }
         : {}),
       zone: false,

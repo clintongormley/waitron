@@ -411,7 +411,7 @@ export class OpeningHoursMonthView extends LitElement {
     if (day.closedAllDay) return [];
     if (this.#noOrders(rows)) return [t("month.no_orders")];
     return rows.map((row) => {
-      const label = `${names.station(row.key) ? t("opening.prep_station") + " " : ""}${row.stationGroup ? row.stationGroup + ": " : ""}${row.name}`;
+      const label = `${names.station(row.key) ? t("opening.prep_station") + " " : ""}${row.stationGroup !== undefined ? row.stationGroup + ": " : ""}${row.name}`;
       if ((this.#orders || row.station) && !row.ranges.length)
         return `${label}: ${t("month.no_orders")}`;
       if (!row.ranges.length) return format("month.department_closed", { name: row.name });
@@ -496,7 +496,7 @@ export class OpeningHoursMonthView extends LitElement {
         return html`${row.stationHeading ? html`<span class="station-heading" title=${row.stationHeading} aria-hidden="true">${stationIcon()}<span class="row-name">${row.stationHeading}</span></span>` : nothing}
           <span class="named-track" title=${row.name} aria-hidden="true">
             <span class="row-name" data-test="row-name"
-              >${row.station && !row.stationGroup ? stationIcon() : nothing}${row.name}</span
+              >${row.station && row.stationGroup === undefined ? stationIcon() : nothing}${row.name}</span
             >
             ${track}
           </span>`;
@@ -604,7 +604,7 @@ export class OpeningHoursMonthView extends LitElement {
       this.show
         ? html`<p class="rows" data-test="rows">
             ${t("month.rows")}
-            ${station.departments.filter((row) => !row.stationGroup || row.stationHeading).map((row, index) => html`${index ? " · " : ""}${row.station ? stationIcon() : nothing}${row.stationHeading || row.name}`)}
+            ${station.departments.filter((row) => row.stationGroup === undefined || row.stationHeading).map((row, index) => html`${index ? " · " : ""}${row.station ? stationIcon() : nothing}${row.stationHeading || row.name}`)}
           </p>`
         : nothing
     }
