@@ -9,8 +9,12 @@ function inTabOrder(element: HTMLElement): boolean {
   return element.tabIndex >= 0 || element.isContentEditable;
 }
 
+function renderedParent(node: Node): Node | null {
+  return node instanceof Element && node.assignedSlot ? node.assignedSlot : composedParent(node);
+}
+
 function insideInert(element: Element): boolean {
-  for (let at: Node | null = element; at; at = composedParent(at))
+  for (let at: Node | null = element; at; at = renderedParent(at))
     if (at instanceof HTMLElement && at.inert) return true;
   return false;
 }
