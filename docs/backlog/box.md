@@ -1354,6 +1354,9 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
   with no word of the full disk.**
   Open: should that page also say the disk is full and show the free space?
   [Detail](box.md#on-a-full-disk-a-box-whose-kept-certificates-cannot-be-used-shows-the-connection-set-up-page-with-no-word-of-the-full-disk)
+- **The floor-state and invoice-delivery status reads still answer 507 on a full disk while a
+  notification waits, even when no reconciliation is due.** Their write-capable transactions remain;
+  the pure-read cut does not close this part of the original read entry.
 - **Till write surfaces other than the draft save, the unpaid departure and the station screen were
   not checked for a full-disk refusal's words**
   [Detail](box.md#till-write-surfaces-not-checked-for-a-full-disk-refusals-words)
@@ -1453,7 +1456,12 @@ except the last, added 2026-11-14.
   delayed-sending alert and Fiscal filing's "Oldest waiting" read, though over more records: stopped
   and held ones count too. Open to the owner.
 
-Full-disk reads that reconcile state keep their writes: the floor-state read can reset today’s layout, and invoice-delivery status expires delivery claims. They can still answer `507 storage.disk_full`. The read audit leaves those transactions in place; the watcher explicitly retained invoice expiry on 15 November 2026 at 06:10 in Lane K’s `questions.md`. New sign-ins also need to save their sessions.
+The full-disk read cut retains the floor-state and invoice-delivery status transactions, because
+their bodies can reset today’s layout or expire delivery claims. With a pending notification their
+closing drain still answers `507 storage.disk_full`, even when no reconciliation is due. Without a
+pending row, the real-disk control answers 200 for both. The watcher explicitly retained invoice
+expiry on 15 November 2026 at 06:10 in Lane K’s `questions.md`. New sign-ins also need to save their
+sessions.
 
 ### Retry after a full-disk stop
 
@@ -1951,7 +1959,6 @@ disk space…" (the paths measured 2026-10-22, slice 6's plan; the words since A
 kitchen display and on a till's Station tab. The rest were not checked: audit the catch sites in
 `apps/till/src` that do not fall back to `codeMessage(code)`. The pass screens on a kitchen display,
 which has no strip, were not checked either.
-
 
 ## Backup data verification and Cloud release
 

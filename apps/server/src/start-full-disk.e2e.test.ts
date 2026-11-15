@@ -580,44 +580,47 @@ describe("the Box status read and free-space deletion on a real full disk", () =
     return at;
   };
 
-  it.each([
+  it.for([
     ["/api/theme", { css: "", logo: null }],
     ["/api/content-languages", { defaultLanguage: "en", languages: ["en"] }],
     ["/management-api/locales", { venueName: "Test SL", venueDefault: "en-GB" }],
     ["/management-api/session/me", { venueName: "Test SL", modules: ["core"] }],
     ["/management-api/themes", { themes: [], inUse: null }],
     ["/api/till", { venueName: "Test SL", nif: "40000001K" }],
-  ])("%s answers with a change waiting, passive and active", async (path, expected, ctx) => {
-    const small = needDisk(ctx);
-    await withTransaction(db, () => {});
-    let stamp = seenAMinuteAgo();
-    const read = (passive: boolean) =>
-      bootstrapApp.request(path, {
-        headers: { cookie: manager.cookie, ...(passive ? { "x-waitron-live": "1" } : {}) },
-      });
-    const healthy = await read(false);
-    expect(healthy.status).toBe(200);
-    expect(await healthy.json()).toMatchObject(expected);
-    if (path === "/management-api/themes") expect(lastSeen()).not.toBe(stamp);
-    stamp = seenAMinuteAgo();
-    db.run(
-      sql`insert into change_log (id, payload) values ('read-pending', '{"resources":[{"type":"persons","id":"pending"}]}')`,
-    );
-    db.all(sql`pragma wal_checkpoint(truncate)`);
-    small.fill(0);
-    for (const passive of [true, false]) {
-      const response = await read(passive);
-      expect(response.status).toBe(200);
-      expect(await response.json()).toMatchObject(expected);
-    }
-    expect(lastSeen()).toBe(stamp);
-    expect(db.all(sql`select id from change_log`)).toEqual([{ id: "read-pending" }]);
-    small.unfill();
-    if (path === "/management-api/themes") {
-      expect((await read(false)).status).toBe(200);
-      expect(lastSeen()).not.toBe(stamp);
-    }
-  });
+  ] as const)(
+    "%s answers with a change waiting, passive and active",
+    async ([path, expected], ctx) => {
+      const small = needDisk(ctx);
+      await withTransaction(db, () => {});
+      let stamp = seenAMinuteAgo();
+      const read = (passive: boolean) =>
+        bootstrapApp.request(path, {
+          headers: { cookie: manager.cookie, ...(passive ? { "x-waitron-live": "1" } : {}) },
+        });
+      const healthy = await read(false);
+      expect(healthy.status).toBe(200);
+      expect(await healthy.json()).toMatchObject(expected);
+      if (path === "/management-api/themes") expect(lastSeen()).not.toBe(stamp);
+      stamp = seenAMinuteAgo();
+      db.run(
+        sql`insert into change_log (id, payload) values ('read-pending', '{"resources":[{"type":"persons","id":"pending"}]}')`,
+      );
+      db.all(sql`pragma wal_checkpoint(truncate)`);
+      small.fill(0);
+      for (const passive of [true, false]) {
+        const response = await read(passive);
+        expect(response.status).toBe(200);
+        expect(await response.json()).toMatchObject(expected);
+      }
+      expect(lastSeen()).toBe(stamp);
+      expect(db.all(sql`select id from change_log`)).toEqual([{ id: "read-pending" }]);
+      small.unfill();
+      if (path === "/management-api/themes") {
+        expect((await read(false)).status).toBe(200);
+        expect(lastSeen()).not.toBe(stamp);
+      }
+    },
+  );
 
   it("the theme logo preview reads an actual image on a full disk with a stamp due", async (ctx) => {
     const small = needDisk(ctx);
@@ -655,14 +658,14 @@ describe("the Box status read and free-space deletion on a real full disk", () =
     expect(db.all(sql`select id from change_log`)).toEqual([{ id: "logo-pending" }]);
   });
 
-  it.each([
+  it.for([
     ["ended", 401, "management_session.required"],
     ["expired", 401, "management_session.expired"],
     ["suspended", 403, "person.suspended"],
     ["staff", 403, "authorization.not_permitted"],
   ] as const)(
     "the full-disk theme read still refuses %s authority",
-    async (state, status, code, ctx) => {
+    async ([state, status, code], ctx) => {
       const small = needDisk(ctx);
       const person = await seedPerson(state === "staff" ? "staff" : "manager", `Theme ${state}`);
       if (state === "ended")
@@ -1677,6 +1680,11 @@ describe("a start on a real full disk", () => {
       const kitchenBefore = [];
       for (const { path, cookie } of kitchenReads) kitchenBefore.push(await read(path, cookie));
       expect(kitchenBefore.map(({ status }) => status)).toEqual([200, 200, 200, 200]);
+      db.all(sql`pragma wal_checkpoint(truncate)`);
+      small.fill(0);
+      expect((await read("/api/tables/state")).status).toBe(200);
+      expect((await read(`/api/sales/${paidId}/deliveries`)).status).toBe(200);
+      small.unfill();
       db.run(
         sql`update devices set last_seen_at = '2020-01-01T00:00:00.000Z' where id = ${venue.deviceId}`,
       );
