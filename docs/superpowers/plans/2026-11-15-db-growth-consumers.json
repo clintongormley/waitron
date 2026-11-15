@@ -87,5 +87,51 @@
     "apps/server/src/party-move-bill.test.ts",
     "apps/server/src/collect-at-counter.test.ts",
     "apps/server/src/housekeeping.test.ts"
+  ],
+  "indirectAttendanceConsumers": [
+    "apps/server/scripts/a1308/time-today-wake.ts",
+    "apps/server/scripts/bench/bench-venue.ts",
+    "apps/server/src/attendance-email.test.ts",
+    "apps/server/src/attendance-integrated.read-plans.test.ts",
+    "apps/server/src/attendance-loop.ts",
+    "apps/server/src/attendance-obligations.test.ts",
+    "apps/server/src/boot.ts",
+    "apps/server/src/invoice-correction-alerts.test.ts",
+    "apps/server/src/invoice-correction-cards.test.ts",
+    "apps/server/src/invoice-corrections.test.ts",
+    "apps/server/src/tender-refund-links.test.ts",
+    "apps/server/src/till-attendance-api.test.ts",
+    "apps/server/src/workforce-api.ts"
+  ],
+  "questionEvidenceConsumers": [
+    "apps/server/src/attendance-obligations.test.ts",
+    "apps/server/src/management-hours-api.test.ts",
+    "apps/server/src/personal-data-export-api.workforce.test.ts",
+    "apps/server/src/till-attendance-api.test.ts",
+    "packages/workforce/src/attendance-questions.test.ts",
+    "packages/workforce/src/attendance-questions.ts",
+    "packages/workforce/src/attendance-reads.test.ts",
+    "packages/workforce/src/attendance-response-commands.test.ts",
+    "packages/workforce/src/attendance-response-schema.test.ts",
+    "packages/workforce/src/attendance-rota.test.ts",
+    "packages/workforce/src/attendance-types.ts",
+    "packages/workforce/src/end-of-day.obligations.test.ts",
+    "packages/workforce/src/end-of-day.targeted.test.ts",
+    "packages/workforce/src/end-of-day.test.ts",
+    "packages/workforce/src/end-of-day.ts",
+    "packages/workforce/src/hours-reads.test.ts",
+    "packages/workforce/src/migrations.test.ts",
+    "packages/workforce/src/personal-data.test.ts",
+    "packages/workforce/src/schema/attendance.ts"
+  ],
+  "coreRetentionConsumers": [
+    "packages/module/src/module.ts",
+    "packages/store/src/append-only.ts",
+    "packages/composition/src/modules.ts",
+    "packages/composition/src/composition.test.ts",
+    "packages/db/src/schema/activity-log.test.ts",
+    "scripts/behavioural-triggers.test.ts",
+    "apps/server/src/first-setup-database-holdings.ts",
+    "docs/developers/conventions-data.md"
   ]
 }
