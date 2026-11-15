@@ -805,7 +805,7 @@ describe("the box's time service not keeping its clock right", () => {
 
 describe("the box waiting for its start's time", () => {
   const WAITING_EN =
-    "The box has not confirmed its time since it started, so it is not taking payments. It is waiting for tills or handhelds to connect and agree with its time (1 of 2 so far), and confirms by itself once two do or once it reaches the internet. You can confirm or correct the date and time now on the Box status page; staff can use “Check the time” on a till.";
+    "The box has not confirmed its time since it started, so it is not taking payments. It is waiting for tills or handhelds to connect and agree with its time (1 of 2 so far), and confirms by itself once two do or once its time service reaches a time server over the internet. You can confirm or correct the date and time now on the Box status page; staff can use “Check the time” on a till.";
   const SILENT_EN =
     "It cannot see its internet time, because the part of the box that reads it is not answering, so it waits like this at every start, and its clock cannot be corrected from Waitron until that part answers.";
 
@@ -820,7 +820,7 @@ describe("the box waiting for its start's time", () => {
 
   it("says the same in Spanish", () => {
     expect(alertMessage("clock.unconfirmed", { agreed: 0, hostSilent: true }, "es")).toBe(
-      "El servidor no ha confirmado su hora desde que arrancó, así que no acepta cobros. Está esperando a que se conecten cajas o terminales y coincidan con su hora (0 de 2 por ahora), y la confirma solo en cuanto lo hacen dos o en cuanto llega a internet. Puedes confirmar o corregir la fecha y la hora ahora en Estado del servidor; el personal puede usar «Comprobar la hora» en una caja. No puede ver su hora de internet porque la parte del servidor que la lee no responde, así que espera así en cada arranque, y su reloj no se puede corregir desde Waitron hasta que esa parte responda.",
+      "El servidor no ha confirmado su hora desde que arrancó, así que no acepta cobros. Está esperando a que se conecten cajas o terminales y coincidan con su hora (0 de 2 por ahora), y la confirma por sí solo en cuanto lo hacen dos o en cuanto su servicio de hora contacta con un servidor de hora por internet. Puedes confirmar o corregir la fecha y la hora ahora en Estado del servidor; el personal puede usar «Comprobar la hora» en una caja. No puede ver su hora de internet porque la parte del servidor que la lee no responde, así que espera así en cada arranque, y su reloj no se puede corregir desde Waitron hasta que esa parte responda.",
     );
   });
 
@@ -833,7 +833,7 @@ describe("the box waiting for its start's time", () => {
 
   it("says the clock jumped when that is why it waits, never that it waits at every start", () => {
     const JUMPED_EN =
-      "The box's clock jumped and it cannot check the time over the internet, so it is not taking payments. It is waiting for tills or handhelds to connect and agree with its time (1 of 2 so far), and confirms by itself once two do or once it reaches the internet. You can confirm or correct the date and time now on the Box status page; staff can use “Check the time” on a till.";
+      "The box's clock jumped and it cannot check the time over the internet, so it is not taking payments. It is waiting for tills or handhelds to connect and agree with its time (1 of 2 so far), and confirms by itself once two do or once its time service reaches a time server over the internet. You can confirm or correct the date and time now on the Box status page; staff can use “Check the time” on a till.";
     const params = { agreed: 1, cause: "clock_jumped" };
     expect(alertMessage("clock.unconfirmed", { ...params, hostSilent: false }, "en")).toBe(
       JUMPED_EN,
@@ -845,7 +845,7 @@ describe("the box waiting for its start's time", () => {
 
   it("says the clock jumped in Spanish", () => {
     const JUMPED_ES =
-      "El reloj del servidor ha saltado y no puede comprobar la hora por internet, así que no acepta cobros. Está esperando a que se conecten cajas o terminales y coincidan con su hora (0 de 2 por ahora), y la confirma solo en cuanto lo hacen dos o en cuanto llega a internet. Puedes confirmar o corregir la fecha y la hora ahora en Estado del servidor; el personal puede usar «Comprobar la hora» en una caja.";
+      "El reloj del servidor ha saltado y no puede comprobar la hora por internet, así que no acepta cobros. Está esperando a que se conecten cajas o terminales y coincidan con su hora (0 de 2 por ahora), y la confirma por sí solo en cuanto lo hacen dos o en cuanto su servicio de hora contacta con un servidor de hora por internet. Puedes confirmar o corregir la fecha y la hora ahora en Estado del servidor; el personal puede usar «Comprobar la hora» en una caja.";
     const params = { agreed: 0, cause: "clock_jumped" };
     expect(alertMessage("clock.unconfirmed", { ...params, hostSilent: false }, "es")).toBe(
       JUMPED_ES,

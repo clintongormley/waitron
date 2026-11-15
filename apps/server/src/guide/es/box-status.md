@@ -245,8 +245,9 @@ Este dispositivo marca …**
   diálogo dice **El servidor ya está en hora.** El servidor solo puede poner su reloj en hora mientras
   no se pone en hora por internet.
 - Si no, dice **El servidor no ha podido comprobar que su hora está a menos de un minuto de la de tu
-  dispositivo. Comprueba que tu dispositivo tiene la hora bien; si la tiene, conecta el servidor a
-  internet para que corrija la hora.** y solo ofrece **Cerrar**. Por el tiempo que tarda la
+  dispositivo. Comprueba que tu dispositivo tiene la hora bien; si la tiene, puede que el servicio
+  de hora del servidor aún corrija su reloj por sí solo en cuanto contacte con un servidor de hora
+  por internet.** y solo ofrece **Cerrar**. Por el tiempo que tarda la
   respuesta, dos horas separadas por algo menos de un minuto también pueden recibir este mensaje.
   Mientras los cobros [esperan la hora del servidor](box-status.md#clock-waiting) y no responde la
   parte del servidor que lee su hora de internet, dice en cambio que la hora del servidor no se puede
@@ -325,7 +326,8 @@ no se pone en hora por internet: la fila **Reloj** empieza entonces con **Hacien
 venta**. Que los dispositivos coincidan con el servidor no termina esta espera: confirma o corrige la
 hora en esta página, o el personal usa **Comprobar la hora** en una caja.
 
-El servidor confirma su hora solo en cuanto llega a internet, o, salvo si espera por una venta
+El servidor confirma su hora por sí solo en cuanto su [servicio de hora](box-status.md#clock-service)
+contacta con un servidor de hora por internet, o, salvo si espera por una venta
 rechazada, en cuanto dos cajas o terminales encendidos y conectados coinciden con su reloj, aunque
 estén en la pantalla de inicio de sesión.
 

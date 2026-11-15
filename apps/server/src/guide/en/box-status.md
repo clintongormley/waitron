@@ -226,8 +226,9 @@ This device says …**
   clock to your device's time and payments restart. The dialog says **The box's clock is
   set.** The box can set its clock only while it is not kept in time over the internet.
 - Otherwise it says **The box could not show that its clock is within a minute of your device's.
-  Check that your device's time is right; if it is, connect the box to the internet so it can
-  correct its clock.** and offers only **Close**. Because of the time the answer takes, two times a
+  Check that your device's time is right; if it is, the box's time service may still put its clock
+  right by itself once it reaches a time server over the internet.** and offers only **Close**.
+  Because of the time the answer takes, two times a
   little under a minute apart can still get this message. While payments
   [wait for the box's time](box-status.md#clock-waiting) and the part of the box that reads its
   internet time is not answering, it says instead that the box's time cannot be corrected until that
@@ -300,7 +301,8 @@ kept in time over the internet: the **Clock** row then starts with **The tax age
 sale**. Devices agreeing with the box do not end this wait: confirm or correct the time on this page,
 or staff use **Check the time** on a till.
 
-The box confirms its time by itself as soon as it reaches the internet, or, unless it waits because
+The box confirms its time by itself as soon as its [time service](box-status.md#clock-service)
+reaches a time server over the internet, or, unless it waits because
 of a refused sale, once two tills or handhelds that are switched on and connected agree with its
 clock, even at the sign-in screen.
 

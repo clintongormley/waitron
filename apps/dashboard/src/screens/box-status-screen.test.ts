@@ -810,7 +810,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     const el = await mountClock(clockApi());
     await open(el);
     expect(text(q(el, "[data-test=clock-check-verdict]"))).toBe(
-      "The box could not show that its clock is within a minute of your device's. Check that your device's time is right; if it is, connect the box to the internet so it can correct its clock.",
+      "The box could not show that its clock is within a minute of your device's. Check that your device's time is right; if it is, the box's time service may still put its clock right by itself once it reaches a time server over the internet.",
     );
     expect(buttons(el)).toEqual([["clock-check-close", "secondary", "Close"]]);
   });

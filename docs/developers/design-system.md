@@ -6559,8 +6559,9 @@ alert list.
   (`primary`, with `loading` while it is sent; both disabled, and the dialog not dismissible, while
   it is sent). Otherwise it shows "The box's clock says {box}. This device says {device}.", to the
   second, with, when they differ, "The box could not show that its clock is within a minute of your
-  device's. Check that your device's time is right; if it is, connect the box to the internet so it
-  can correct its clock.", and Close alone. A refusal shows in the dialog's footer, worded by its
+  device's. Check that your device's time is right; if it is, the box's time service may still put
+  its clock right by itself once it reaches a time server over the internet.", and Close alone. A
+  refusal shows in the dialog's footer, worded by its
   reason, and reads every open read again. The button carries a `help-mode`
   `wt-help-tooltip` ("What this check does") that says what the check does and links to the
   guide's `box-status#clock-own-device` section, its badge hung over the button's top trailing corner
