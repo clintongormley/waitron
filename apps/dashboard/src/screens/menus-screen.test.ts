@@ -1353,7 +1353,11 @@ describe("a menus list row", () => {
     for (const cell of cells) expect(getComputedStyle(cell).backgroundColor).toBe(highlight);
     await commands.parkPointer();
     for (const cell of cells) expect(getComputedStyle(cell).backgroundColor).not.toBe(highlight);
-    live.querySelector<HTMLButtonElement>(".row-activate")!.focus();
+    const activator = live.querySelector<HTMLButtonElement>(".row-activate")!;
+    activator.focus();
+    await userEvent.keyboard("{Shift>}{Tab}{/Shift}{Tab}");
+    expect(table(el).shadowRoot.activeElement).toBe(activator);
+    expect(activator.matches(":focus-visible")).toBe(true);
     for (const cell of cells) expect(getComputedStyle(cell).backgroundColor).toBe(highlight);
     expect(cells).toHaveLength(4);
   }
