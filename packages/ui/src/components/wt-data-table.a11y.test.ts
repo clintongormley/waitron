@@ -1047,7 +1047,7 @@ describe.each(["light", "dark"] as const)("row focus modes (%s)", (theme) => {
       { id: "bar", name: "Bar" },
     ];
     table.rowKey = (row) => row.id;
-    table.rowLabel = (row) => row.name;
+    table.rowClickLabel = (row) => row.name;
     table.rowClick = () => undefined;
     await table.updateComplete;
     const [first, second] = [
