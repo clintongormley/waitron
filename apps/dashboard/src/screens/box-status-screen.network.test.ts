@@ -250,7 +250,7 @@ it("names the saved network before Forget, explains unwired recovery, and Stop s
   expect(client.forgetBoxNetwork).not.toHaveBeenCalled();
 });
 
-it("forgets the named saved network, closes before refresh and retains acceptance on read failure", async () => {
+it("forgets the named saved network, closes before reading the outcome and retains acceptance on read failure", async () => {
   const read = vi.fn().mockResolvedValue(observation);
   let accepted!: () => void;
   const client = Object.assign(api(read), {
@@ -264,9 +264,9 @@ it("forgets the named saved network, closes before refresh and retains acceptanc
   const el = await mount(client);
   const dialog = await forgetQuestion(el);
   expect(dialog.textContent).not.toContain("local screen");
-  let openAtRefresh: boolean | undefined;
+  const opensAtRefresh: boolean[] = [];
   read.mockImplementation(() => {
-    openAtRefresh = dialog.open;
+    opensAtRefresh.push(dialog.open);
     return Promise.reject({ code: "box_host.failed" });
   });
   await userEvent.click(dialog.querySelector<HTMLElement>("[data-test=wifi-forget-confirm]")!);
@@ -279,7 +279,8 @@ it("forgets the named saved network, closes before refresh and retains acceptanc
   await closed;
   await expect.poll(() => card(el)?.textContent).toContain("Couldn't read");
   expect(card(el)!.textContent).toContain("accepted");
-  expect(openAtRefresh).toBe(false);
+  expect(opensAtRefresh.length).toBeGreaterThan(0);
+  expect(opensAtRefresh).not.toContain(true);
   read.mockResolvedValue({
     ...observation,
     wifi: { connectedSsidHex: null, savedSsidHex: null },
