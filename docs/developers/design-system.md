@@ -116,6 +116,14 @@ its typeface, sizes and Bold weight, and the recovery sheet its typeface and siz
 own token file (`WAITRON_DEFAULTS.structure`), never from the page; the sheet sets no weight, so it
 draws the browser's own. A venue's text size, typeface and weights therefore do not reach paper.
 
+**Before any code runs, each app's `index.html` declares `<meta name="color-scheme" content="light
+dark">`**, so a device set to dark paints the empty page dark rather than white. Once the tokens
+apply, the theme root's own `color-scheme` wins, so a saved Light choice on a dark device gets a
+brief dark page instead. Measured by loading each `index.html` in Playwright's Chromium set to dark
+and reading the centre pixel: `rgb(255,255,255)` without the line, `rgb(18,18,18)` with it, and
+`rgb(247,247,248)` with it plus `data-theme="light"` and `colors.css` on the page. Guard:
+`scripts/color-scheme-meta.test.ts`, weaker than its name: reads text.
+
 **Every rule in the token layer — the `prefers-color-scheme` block and both `data-theme` blocks —
 is wrapped in `:where(...)`, which contributes zero specificity.** `data-theme` still wins over
 `prefers-color-scheme` in both directions, but purely by **source order** (the `data-theme` rules
