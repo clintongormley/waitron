@@ -395,6 +395,12 @@ avoided, it is a small addition to PR 4d-1, not a redesign.
 - `docs/backlog/replication-cloud.md`, the A947 entry: 4d-1 built; 4d-2, 4d-3 and the measurements
   left.
 - The design's §11 4d line: a dated pointer to this plan naming departures 1–6.
+- As built (2026-11-15, after the finish-branch review): the page's check runs under one 3-second
+  limit covering both the `GET /api/node/main` read and the main-box fetch, and runs again before
+  "Check this copy", before "Declare" and when the browser restores the page from its back-forward
+  cache. Its still-answering message links to the main server's Servers page: "The main server is
+  still answering. Open its Servers page to hand over, or switch it off and check again." The words,
+  test names and `fetch` call in Task 3 above are the plan's, not the build's.
 
 ## PR 4d-2: the switch labels
 
