@@ -157,6 +157,7 @@ function menu(version: string, offers: TillMenuOffer[]): ZoneOffers {
       zoneKeepOpen: null,
     },
     context: {
+      dining: null,
       departmentName: "Restaurant",
       zoneId: "zone-counter",
       departmentId: "department-bar",
@@ -963,6 +964,7 @@ describe("a refresh overtaken by a change of service area", () => {
         zoneId: "zone-terrace",
         departmentId: "department-bar",
         serviceMode: "prepay" as const,
+        dining: null,
       },
     };
     const listZoneOffers = vi.fn((zoneId: string) =>
@@ -1375,6 +1377,7 @@ describe("the poll's own costs", () => {
         zoneId: "zone-terrace",
         departmentId: "department-bar",
         serviceMode: "prepay" as const,
+        dining: null,
       },
     };
     const zone = (id: string) => ({

@@ -378,6 +378,8 @@ const anaParty: TableParty = {
   reminder: null,
 };
 const bill = (over: Partial<PartyBill>): PartyBill => ({
+  dining: "eat_in",
+  diningChoice: "none",
   workingOrderId: "wo-4",
   revision: 0,
   invoiceType: "F2",

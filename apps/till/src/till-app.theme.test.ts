@@ -153,6 +153,7 @@ const counterOffers: ZoneOffers = {
     zoneKeepOpen: null,
   },
   context: {
+    dining: null,
     departmentName: "Restaurant",
     zoneId: "zone-counter",
     departmentId: "department-default",

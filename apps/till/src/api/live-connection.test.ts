@@ -158,3 +158,8 @@ it("keeps floor and kitchen live on today events without adding them to timed re
     expect(TILL_LIVE_TYPES[name]!.filter((type) => type.endsWith(".today"))).toEqual([]);
   }
 });
+
+it("refreshes the menu group when a department's way of selling or the venue's region changes (A1522)", () => {
+  expect(TILL_LIVE_TYPES.menu).toContain("departments");
+  expect(TILL_LIVE_TYPES.menu).toContain("settings.venue");
+});

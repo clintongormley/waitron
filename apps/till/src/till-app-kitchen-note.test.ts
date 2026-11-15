@@ -54,6 +54,7 @@ const offers: ZoneOffers = {
     zoneKeepOpen: null,
   },
   context: {
+    dining: null,
     departmentName: "Restaurant",
     zoneId: "zone-counter",
     departmentId: "department-default",
@@ -1129,6 +1130,7 @@ it.each(["send-lines", "pay-tab", "bill-pay"])(
         undefined,
         undefined,
         { billId: "bill-table", editorVersion: 0, draftId: null, draftRevision: null },
+        "eat_in",
       );
     if (action === "bill-pay") expect(api.getBillBalance).toHaveBeenCalled();
   },

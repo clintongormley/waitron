@@ -94,6 +94,7 @@ import {
   resolveActiveLocale,
   sumDecimals,
   toScale,
+  type Dining,
 } from "@waitron/shared";
 import {
   clockReadingOf,
@@ -424,6 +425,7 @@ import type {
   BillRevisions,
   MoveBillResult,
   TillZoneMenu,
+  ZoneDining,
   ZoneOffers,
 } from "./api/client.js";
 import { menuOfferToTillProduct } from "./api/client.js";
@@ -1317,6 +1319,8 @@ interface PresentedPaying {
 
 interface WholePayment {
   presented: boolean;
+  /** The way the screen showed the bill; sent with an open bill's sale. */
+  dining?: Dining;
   invoiced: boolean;
   outstanding: string;
   bill: BillLookupRow | null;
@@ -3155,6 +3159,8 @@ export class TillApp extends LitElement {
   #zoneOffersGeneration = 0;
   /** The zone {@link tableProducts} came from, polled beside the counter's while it is set. */
   #tableZoneId?: string;
+  /** How the open table's zone sells, from its offers; null where the region has no distinction. */
+  #tableDining: ZoneDining | null = null;
   /** The basket-refresh dialog's contents while it is open (D9): the counter's basket or a table's
    * round, and the lines it would re-price. */
   @state() private basketRefresh?: BasketRefresh & {
@@ -6540,6 +6546,8 @@ export class TillApp extends LitElement {
         : zoneOffers.defaultMenuId;
     this.counterService = loaded ? zoneOffers.service : null;
     this.counterDepartmentName = loaded ? (zoneOffers.context?.departmentName ?? "") : "";
+    if (loaded && zoneOffers.context !== undefined)
+      this.#store.setDiningStart(zoneOffers.context.dining ?? null);
     if (loaded) {
       const known = this.counterLines?.orderId === this.#store.id ? this.counterLines.lines : null;
       const keep = new Set(
@@ -6603,6 +6611,8 @@ export class TillApp extends LitElement {
         : zoneOffers.defaultMenuId;
     this.tableService = loaded ? zoneOffers.service : null;
     this.tableDepartmentName = loaded ? (zoneOffers.context?.departmentName ?? "") : "";
+    if (loaded && zoneOffers.context !== undefined)
+      this.#tableDining = zoneOffers.context.dining ?? null;
     this.tableProducts = this.#tableGridOffers.products();
     if (!loaded) return;
     const { versions, byId } = this.#tableOffers;
@@ -7224,6 +7234,7 @@ export class TillApp extends LitElement {
         this.#store.kitchenNote ?? undefined,
         guestCount,
         this.#counterExpectedEdit(id),
+        this.#store.dining,
         ...(lateSend === undefined ? [] : ([lateSend] as const)),
       );
       if (session !== this.#operatorSession) return;
@@ -7386,6 +7397,7 @@ export class TillApp extends LitElement {
             expectedEdit: this.#counterExpectedEdit(id),
             id,
             lines,
+            dining: this.#store.dining,
             ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
             ...(this.invoiceChoice?.orderId === id ? this.invoiceChoice.invoice : {}),
             ...(language === undefined ? {} : { receiptLanguage: language }),
@@ -8146,6 +8158,7 @@ export class TillApp extends LitElement {
         lines: sent,
         label,
         revision: this.#store.revision,
+        dining: this.#store.dining,
         ...(lateSend === undefined ? {} : { lateSend }),
       });
       if (movedOn()) return false;
@@ -8320,6 +8333,7 @@ export class TillApp extends LitElement {
             id,
             lines,
             label,
+            dining: this.#store.dining,
             ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
             ...(lateSend === undefined ? {} : { lateSend }),
           });
@@ -9210,6 +9224,16 @@ export class TillApp extends LitElement {
     </div>`;
   }
 
+  /** A table bill's own way as the party's bills read it; a bill not read yet starts as the zone
+   * starts a new order. */
+  #tableBillDining(billId: string): Dining {
+    return (
+      this.partyBills.find((bill) => bill.workingOrderId === billId)?.dining ??
+      this.#tableDining?.startsAs ??
+      "eat_in"
+    );
+  }
+
   #sendWholePayment(api: TillApi, billId: string, payment: WholePayment): Promise<TillSaleResult> {
     if (!payment.presented)
       return api.recordSale(
@@ -9222,6 +9246,7 @@ export class TillApp extends LitElement {
         undefined,
         payment.guestCount,
         payment.expectedEdit,
+        payment.dining ?? this.#tableBillDining(billId),
       );
     return api.collectOrder(
       billId,
@@ -9583,6 +9608,7 @@ export class TillApp extends LitElement {
           id,
           lines,
           label,
+          dining: this.#store.dining,
           ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
           ...(lateSend === undefined ? {} : { lateSend }),
         });
@@ -9743,6 +9769,7 @@ export class TillApp extends LitElement {
             ? `party:${order.kitchenNote.scope.partyId}`
             : `order:${order.kitchenNote.scope.workingOrderId}`,
       },
+      order.dining,
     );
     this.#counterBillEdit = {
       id: order.id,
@@ -14499,6 +14526,7 @@ export class TillApp extends LitElement {
       const command: DraftSubmission = {
         ...(allergy.patch === undefined ? {} : { allergy: allergy.patch }),
         expectedEdit: sync.expectedEdit!,
+        dining: this.#tableBillDining(sync.expectedEdit!.billId),
         submissionId: crypto.randomUUID(),
         expectedPartyRevision: allergy.revision,
         draftRevision: sync.revision,
@@ -20260,6 +20288,7 @@ export class TillApp extends LitElement {
         if (expectedEdit == null) throw { code: "draft.out_of_date" };
         payment = structuredClone({
           presented,
+          dining: this.#tableBillDining(id),
           tender,
           guestCount,
           expectedEdit,
@@ -20482,6 +20511,7 @@ export class TillApp extends LitElement {
               expectedEdit,
               id: billId,
               lines: [],
+              dining: this.#tableBillDining(billId),
               ...(readerId === undefined ? {} : { readerId }),
               ...(printCardSlip === undefined ? {} : { printCardSlip }),
               ...(guestCount === undefined ? {} : { guestCount }),
@@ -20621,6 +20651,7 @@ export class TillApp extends LitElement {
           id,
           lines: this.#currentSaleLines(),
           label: this.#store.label,
+          dining: this.#store.dining,
           ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
           ...(lateSend === undefined ? {} : { lateSend }),
         });

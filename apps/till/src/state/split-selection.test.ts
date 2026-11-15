@@ -106,6 +106,8 @@ const keyFor = (lines: readonly TabLine[], balance: BillBalance) => (row: TabLin
 
 function bill(id: string, number: number | null, over: Partial<PartyBill> = {}): PartyBill {
   return {
+    dining: "eat_in",
+    diningChoice: "none",
     workingOrderId: id,
     revision: 0,
     invoiceType: "F2",

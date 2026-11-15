@@ -843,6 +843,8 @@ export function partyBillOf(
 ): PartyBill {
   const outstanding = over.outstanding ?? "0.00";
   return {
+    dining: "eat_in",
+    diningChoice: "none",
     workingOrderId,
     revision: 1,
     invoiceType: "F2",

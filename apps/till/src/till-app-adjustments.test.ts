@@ -101,6 +101,8 @@ const table4: TableState = {
 };
 
 const bill: PartyBill = {
+  dining: "eat_in",
+  diningChoice: "none",
   workingOrderId: "wo-4",
   revision: 0,
   invoiceType: "F2",
@@ -185,6 +187,7 @@ const offers: ZoneOffers = {
     zoneKeepOpen: null,
   },
   context: {
+    dining: null,
     departmentName: "Restaurant",
     zoneId: zone.id,
     departmentId: "department-default",

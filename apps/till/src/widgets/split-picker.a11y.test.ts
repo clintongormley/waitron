@@ -75,6 +75,8 @@ function source(
     tabLinePortionKey(row, DISHES, paidQuantities(balance).get(row.lineNo) ?? null);
   return {
     bill: {
+      dining: "eat_in",
+      diningChoice: "none",
       workingOrderId: "b1",
       revision: 0,
       invoiceType: "F2",

@@ -207,6 +207,8 @@ const openTable: TableState = {
 };
 
 const smallPartyBill: PartyBill = {
+  dining: "eat_in",
+  diningChoice: "none",
   workingOrderId: "wo-7",
   revision: 0,
   invoiceType: "F2",
@@ -407,6 +409,7 @@ function fixtureOffers(
       zoneKeepOpen: null,
     },
     context: {
+      dining: null,
       departmentName: "Restaurant",
       zoneId: "zone-counter",
       departmentId: "department-default",
@@ -1880,6 +1883,7 @@ describe("till-app", () => {
       undefined,
       undefined,
       null,
+      "eat_in",
     );
   });
 
@@ -1932,6 +1936,7 @@ describe("till-app", () => {
       products: [{ ...ham, menuId: "menu-deli", menuName: "Deli" }],
     });
     deliMenu.context = {
+      dining: null,
       departmentName: "Restaurant",
       zoneId: "zone-deli",
       departmentId: "department-deli",
@@ -1981,6 +1986,7 @@ describe("till-app", () => {
       products: [{ ...ham, menuId: "menu-deli", menuName: "Deli" }],
     });
     deliMenu.context = {
+      dining: null,
       departmentName: "Restaurant",
       zoneId: "zone-deli",
       departmentId: "department-deli",
@@ -3525,6 +3531,7 @@ describe("till-app", () => {
       undefined,
       undefined,
       null,
+      "eat_in",
     );
     // A FRESH walk-up (never persisted) is filed straight from its lines — no pre-pay re-lock. Only a
     // RETRIEVED/parked basket is synced first (see the retrieve→edit→pay test); syncing a walk-up here
@@ -3596,6 +3603,7 @@ describe("till-app", () => {
       undefined,
       undefined,
       null,
+      "eat_in",
     );
   });
 
@@ -4068,6 +4076,7 @@ describe("till-app", () => {
       undefined,
       undefined,
       null,
+      "eat_in",
     );
   });
 
@@ -4108,6 +4117,7 @@ describe("till-app", () => {
 
     expect(pay).toHaveBeenCalledTimes(2);
     expect(pay).toHaveBeenNthCalledWith(1, {
+      dining: "eat_in",
       expectedEdit: null,
       id,
       lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
@@ -4115,6 +4125,7 @@ describe("till-app", () => {
       recipient,
     });
     expect(pay).toHaveBeenNthCalledWith(2, {
+      dining: "eat_in",
       expectedEdit: null,
       id,
       lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
@@ -4162,6 +4173,7 @@ describe("till-app", () => {
       undefined,
       undefined,
       null,
+      "eat_in",
     );
   });
 
@@ -4205,6 +4217,7 @@ describe("till-app", () => {
       undefined,
       undefined,
       null,
+      "eat_in",
     );
   });
 
@@ -4258,6 +4271,7 @@ describe("till-app", () => {
       undefined,
       undefined,
       null,
+      "eat_in",
     );
   });
 
@@ -4317,6 +4331,7 @@ describe("till-app", () => {
       undefined,
       undefined,
       null,
+      "eat_in",
     );
     expect(ticket(el)).not.toBeNull();
 
@@ -4558,6 +4573,7 @@ describe("till-app", () => {
         undefined,
         undefined,
         null,
+        "eat_in",
       );
     });
 
@@ -4751,6 +4767,7 @@ describe("till-app", () => {
         undefined,
         undefined,
         null,
+        "eat_in",
       );
     });
 
@@ -4790,6 +4807,7 @@ describe("till-app", () => {
         undefined,
         undefined,
         null,
+        "eat_in",
       );
     });
 
@@ -6193,6 +6211,7 @@ describe("till-app", () => {
       undefined,
       undefined,
       { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+      "eat_in",
     );
     ticket(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=open-drawer]")!.click();
     await flush(el);
@@ -6511,6 +6530,7 @@ describe("till-app", () => {
       undefined,
       undefined,
       null,
+      "eat_in",
     );
     const view = ticket(el)!;
     expect(view).not.toBeNull();
@@ -6598,6 +6618,7 @@ describe("till-app", () => {
       undefined,
       undefined,
       null,
+      "eat_in",
     );
     // The order was retrieved but NOT edited, so it must NOT be re-synced: an unedited retrieve→pay
     // files from the stored lines (recordSale straight through).
@@ -6628,6 +6649,7 @@ describe("till-app", () => {
     // The edited composition was re-locked: café×2 (retrieved) + café×1 (the edit), under the order's
     // id, from the copy at the revision it was retrieved at.
     expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
+      dining: "eat_in",
       lines: [
         { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" },
         { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" },
@@ -6651,6 +6673,7 @@ describe("till-app", () => {
       undefined,
       undefined,
       null,
+      "eat_in",
     );
     expect(updateWorkingOrder.mock.invocationCallOrder[0]!).toBeLessThan(
       recordSale.mock.invocationCallOrder[0]!,
@@ -7023,6 +7046,7 @@ describe("till-app", () => {
     await flush(el);
 
     expect(updateWorkingOrder).toHaveBeenCalledWith("wo-stable", {
+      dining: "eat_in",
       lines: [
         {
           makeAt: null,
@@ -7155,6 +7179,7 @@ describe("till-app", () => {
     emit(counter, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
     expect(currentApi.updateWorkingOrder).toHaveBeenCalledWith("wo-customised", {
+      dining: "eat_in",
       label: "Takeaway",
       revision: 0,
       lines: [
@@ -7342,6 +7367,7 @@ describe("till-app", () => {
       undefined,
       undefined,
       null,
+      "eat_in",
     );
 
     emit(counter, "new-sale");
@@ -7351,6 +7377,7 @@ describe("till-app", () => {
     emit(counter, "park-order", { label: undefined });
     await flush(el);
     expect(currentApi.updateWorkingOrder).toHaveBeenCalledWith("wo-customised", {
+      dining: "eat_in",
       label: "Takeaway",
       revision: 0,
       lines: [plainLine("3")],
@@ -7588,6 +7615,7 @@ describe("till-app", () => {
     emit(counter, "confirm-payment", { method: "cash", amount: "10" });
     await flush(el);
     expect(currentApi.updateWorkingOrder).toHaveBeenCalledWith("wo-answered", {
+      dining: "eat_in",
       label: "Table 2",
       revision: 0,
       lines: [
@@ -7632,6 +7660,7 @@ describe("till-app", () => {
       undefined,
       undefined,
       null,
+      "eat_in",
     );
   });
 
@@ -7694,6 +7723,7 @@ describe("till-app", () => {
       undefined,
       undefined,
       null,
+      "eat_in",
     );
     expect(ticket(el)).not.toBeNull();
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
@@ -7833,6 +7863,7 @@ describe("till-app", () => {
     await flush(el);
 
     expect(currentApi.parkOrder).toHaveBeenCalledWith({
+      dining: "eat_in",
       id: parkedId,
       lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
       label: "Table 4",
@@ -7854,6 +7885,7 @@ describe("till-app", () => {
     await flush(el);
 
     expect(currentApi.parkOrder).toHaveBeenCalledWith({
+      dining: "eat_in",
       id: expect.any(String),
       lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
       label: undefined,
@@ -8009,6 +8041,7 @@ describe("till-app", () => {
     // The edit is re-locked via updateWorkingOrder (café×2 retrieved + café×1 edit), under the order's
     // id and label — NOT re-parked (a re-park would idempotently replay and discard the edit).
     expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
+      dining: "eat_in",
       lines: [
         { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" },
         { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" },
@@ -8035,6 +8068,7 @@ describe("till-app", () => {
     emit(c, "park-order", { label: "Ana" });
     await flush(el);
     expect(currentApi.updateWorkingOrder).toHaveBeenCalledExactlyOnceWith("wo-1", {
+      dining: "eat_in",
       lines: [
         { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" },
         { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" },
@@ -8200,6 +8234,7 @@ describe("till-app", () => {
 
     // The stored "Table 4" is preserved, NOT wiped — updateWorkingOrder carries the name, not undefined.
     expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
+      dining: "eat_in",
       lines: [
         { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" },
         { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" },
@@ -8282,6 +8317,7 @@ describe("till-app", () => {
         zoneKeepOpen: null,
       },
       context: {
+        dining: null,
         departmentName: "Restaurant",
         zoneId: "zone-counter",
         departmentId: "department-bar",
@@ -9834,6 +9870,7 @@ describe("till-app", () => {
           "v-2",
           "draft-1",
           {
+            dining: "eat_in",
             submissionId: expect.any(String),
             expectedPartyRevision: 3,
             draftRevision: 1,
@@ -10461,6 +10498,7 @@ describe("till-app", () => {
           undefined,
           undefined,
           { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+          "eat_in",
         );
         emit(ticket(el)!, "reprint");
         await flush(el);
@@ -10556,6 +10594,7 @@ describe("till-app", () => {
           undefined,
           undefined,
           { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+          "eat_in",
         );
         expect(updateWorkingOrder).not.toHaveBeenCalled();
         expect(ticket(el)).not.toBeNull();
@@ -11152,6 +11191,7 @@ describe("till-app", () => {
       await flush(el);
 
       expect(pay).toHaveBeenCalledWith({
+        dining: "eat_in",
         expectedEdit: null,
         id: workingOrderId,
         lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
@@ -11173,6 +11213,7 @@ describe("till-app", () => {
       await flush(el);
 
       expect(pay).toHaveBeenCalledWith({
+        dining: "eat_in",
         expectedEdit: null,
         id: c.store.id,
         lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" }],
@@ -11770,6 +11811,7 @@ describe("till-app", () => {
       await flush(el);
 
       expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
+        dining: "eat_in",
         lines: [
           { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" },
           { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" },
@@ -11779,6 +11821,7 @@ describe("till-app", () => {
         expectedEdit: null,
       });
       expect(pay).toHaveBeenCalledWith({
+        dining: "eat_in",
         expectedEdit: null,
         id: "wo-1",
         lines: [
@@ -11807,6 +11850,7 @@ describe("till-app", () => {
 
       expect(updateWorkingOrder).not.toHaveBeenCalled();
       expect(pay).toHaveBeenCalledWith({
+        dining: "eat_in",
         expectedEdit: null,
         id: "wo-1",
         lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
@@ -11986,6 +12030,7 @@ describe("till-app", () => {
       await flush(el);
 
       expect(currentApi.parkOrder).toHaveBeenCalledWith({
+        dining: "eat_in",
         id,
         lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
         label: undefined,
@@ -12051,6 +12096,7 @@ describe("till-app", () => {
 
       expect(currentApi.parkOrder).not.toHaveBeenCalled();
       expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
+        dining: "eat_in",
         lines: [
           { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }, // retrieved
           { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" }, // the edit
@@ -17558,6 +17604,7 @@ describe("a failed list refresh after a successful write", () => {
   function mountWithPrepayZone(getStationQueue: ReturnType<typeof vi.fn>) {
     const counterZone = fixtureOffers({ menus: [defaultMenu], products: [coffee] });
     counterZone.context = {
+      dining: null,
       departmentName: "Restaurant",
       zoneId: "zone-counter",
       departmentId: "department-default",
@@ -17581,6 +17628,7 @@ describe("a failed list refresh after a successful write", () => {
     ];
     const deli = fixtureOffers({ menus: [defaultMenu], products: [coffee] });
     deli.context = {
+      dining: null,
       departmentName: "Restaurant",
       zoneId: "zone-deli",
       departmentId: "department-deli",
@@ -18978,6 +19026,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       undefined,
       undefined,
       null,
+      "eat_in",
     );
   });
 
@@ -21865,6 +21914,7 @@ describe("switching the device's profile from the header", () => {
       await flush(el);
       if (answer === "reply")
         finish({
+          takeawayVat: true,
           ...till,
           formFactor: "till",
           courses: till.courses.map((course) => ({ ...course, fireNowZoneIds: ["dining"] })),
@@ -23266,6 +23316,7 @@ describe("basket protection lifetimes", () => {
     emit(c, "confirm-payment", { method: "cash", amount: "3" });
     await expect.poll(() => currentApi.recordSale).toHaveBeenCalledOnce();
     expect(currentApi.updateWorkingOrder).toHaveBeenCalledExactlyOnceWith("wo-1", {
+      dining: "eat_in",
       lines: [{ menuItemId: "menu-item-cafe-0", quantity: "2", makeAt: null, note: "No sugar" }],
       label: "Table 4",
       revision: 3,
@@ -24026,6 +24077,8 @@ describe("A737 Find a bill page", () => {
     counter.store.addProduct(coffee, "2");
     const id = counter.store.id;
     finish({
+      dining: "eat_in",
+      diningChoice: "none",
       expectedEdit: null,
       kitchenNote: {
         scope: { workingOrderId: "bill-1" },

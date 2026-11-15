@@ -92,6 +92,7 @@ function menu(
       zoneKeepOpen: null,
     },
     context: {
+      dining: null,
       departmentName: "Restaurant",
       zoneId: "z1",
       departmentId: "department-bar",
@@ -2160,6 +2161,8 @@ describe("A803 opening bill", () => {
     billNumber: number,
     status: PartyBill["status"] = "open",
   ): PartyBill => ({
+    dining: "eat_in",
+    diningChoice: "none",
     workingOrderId,
     revision: 0,
     invoiceType: "F2",

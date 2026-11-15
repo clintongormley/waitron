@@ -471,6 +471,7 @@ describe("a presented bill on a handheld", () => {
     await takeOnReader(el);
     expect(vi.mocked(api.pay)).toHaveBeenCalledOnce();
     expect(vi.mocked(api.pay).mock.calls[0]![0]).toEqual({
+      dining: "eat_in",
       expectedEdit: editOfBill,
       id: "wo-4",
       lines: [],
@@ -486,6 +487,7 @@ describe("a presented bill on a handheld", () => {
 
     expect(vi.mocked(api.pay)).toHaveBeenCalledOnce();
     expect(vi.mocked(api.pay).mock.calls[0]![0]).toEqual({
+      dining: "eat_in",
       expectedEdit: editOfBill,
       id: "wo-4",
       lines: [],

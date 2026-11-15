@@ -1726,3 +1726,89 @@ describe("WorkingOrderStore.adoptSaved (A1208)", () => {
     expect(changes).toBe(1);
   });
 });
+
+describe("the way an order sells (A1522)", () => {
+  it("a draft starts eaten here until the zone says otherwise", () => {
+    expect(new WorkingOrderStore().dining).toBe("eat_in");
+  });
+
+  it("a draft in a takeaway department starts takeaway, and a cleared basket starts takeaway again", () => {
+    const store = new WorkingOrderStore();
+    store.setDiningStart({ policy: "takeaway", startsAs: "takeaway" });
+    expect(store.dining).toBe("takeaway");
+    store.addProduct(coffee, "1");
+    store.clear();
+    expect(store.dining).toBe("takeaway");
+  });
+
+  it.each([
+    ["takeaway", "takeaway"],
+    ["eat_in", "eat_in"],
+  ] as const)("a draft in a till-choice department starting %s starts %s", (startsAs, starts) => {
+    const store = new WorkingOrderStore();
+    store.setDiningStart({ policy: "till_choice", startsAs });
+    expect(store.dining).toBe(starts);
+  });
+
+  it("a region without takeaway VAT starts every draft eaten here", () => {
+    const store = new WorkingOrderStore();
+    store.setDiningStart({ policy: "takeaway", startsAs: "takeaway" });
+    store.setDiningStart(null);
+    expect(store.dining).toBe("eat_in");
+  });
+
+  it("staff's choice on an unsaved draft holds while the department leaves the way to the till", () => {
+    const store = new WorkingOrderStore();
+    store.setDiningStart({ policy: "till_choice", startsAs: "eat_in" });
+    let changes = 0;
+    store.subscribe(() => changes++);
+    store.setDining("takeaway");
+    expect(store.dining).toBe("takeaway");
+    expect(changes).toBe(1);
+    store.setDiningStart({ policy: "till_choice", startsAs: "eat_in" });
+    expect(store.dining).toBe("takeaway");
+    store.clear();
+    expect(store.dining).toBe("eat_in");
+  });
+
+  it("a department since fixed one way gives the unsaved draft and the next draft that way", () => {
+    const store = new WorkingOrderStore();
+    store.setDiningStart({ policy: "till_choice", startsAs: "eat_in" });
+    store.setDining("takeaway");
+    store.setDiningStart({ policy: "eat_in", startsAs: "eat_in" });
+    expect(store.dining).toBe("eat_in");
+    store.setDiningStart({ policy: "takeaway", startsAs: "takeaway" });
+    store.clear();
+    expect(store.dining).toBe("takeaway");
+  });
+
+  it("a retrieved takeaway order in a department since set to eat in holds takeaway", () => {
+    const store = new WorkingOrderStore();
+    store.setDiningStart({ policy: "eat_in", startsAs: "eat_in" });
+    store.loadFrom(
+      "held",
+      [{ product: coffee, quantity: "1" }],
+      undefined,
+      3,
+      undefined,
+      "takeaway",
+    );
+    expect(store.dining).toBe("takeaway");
+    store.setDiningStart({ policy: "eat_in", startsAs: "eat_in" });
+    expect(store.dining).toBe("takeaway");
+  });
+
+  it("reloading an order's lines without naming its way keeps the way it has", () => {
+    const store = new WorkingOrderStore();
+    store.loadFrom("held", [], undefined, 1, undefined, "takeaway");
+    store.loadFrom("held", [{ product: coffee, quantity: "1" }]);
+    expect(store.dining).toBe("takeaway");
+  });
+
+  it("refuses setDining on a saved order, which switches through the server", () => {
+    const store = new WorkingOrderStore();
+    store.loadFrom("held", [], undefined, 1, undefined, "eat_in");
+    expect(() => store.setDining("takeaway")).toThrow(/saved order/);
+    expect(store.dining).toBe("eat_in");
+  });
+});

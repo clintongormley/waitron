@@ -8,6 +8,8 @@ import type { PartyBill } from "../api/client.js";
 import "./till-table-order-screen.js";
 
 const bill = (workingOrderId: string, billNumber: number, billName: string | null): PartyBill => ({
+  dining: "eat_in",
+  diningChoice: "none",
   workingOrderId,
   revision: 0,
   invoiceType: "F2",

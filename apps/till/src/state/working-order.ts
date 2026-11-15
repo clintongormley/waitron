@@ -20,12 +20,18 @@ import {
 import { prepareUnitSnapshot } from "@waitron/menu/src/unit-presentation.js";
 import { currentContentLanguages } from "@waitron/ui";
 import { assertQuantityPrecision } from "@waitron/menu/src/unit-validation.js";
-import type { Decimal, OptionSelection, OptionSnapshot } from "@waitron/shared";
+import type { Decimal, Dining, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { lineGross, takesExtras } from "./order-line.js";
 import { orderLineMergeKey } from "./draft-lines.js";
 import { refreshProductDeclarations, type BlockReason } from "./menu-refresh.js";
 import type { EndedPeriod } from "./late-send.js";
-import type { KitchenNoteSnapshot, HeldExtra, TillCourse, TillProduct } from "../api/client.js";
+import type {
+  KitchenNoteSnapshot,
+  HeldExtra,
+  TillCourse,
+  TillProduct,
+  ZoneDining,
+} from "../api/client.js";
 import { productUnit, toPresentation } from "../widgets/product-name.js";
 import type { Place, placeFor } from "./draft-place.js";
 
@@ -240,6 +246,10 @@ export class WorkingOrderStore {
   #lastAddition = 0;
   #limit: Decimal | null = null;
   #fullInvoiceOrderId?: string;
+  #dining: Dining = "eat_in";
+  #diningStart: ZoneDining | null = null;
+  /** Whether staff chose this unsaved draft's way, which a till-choice department keeps. */
+  #diningChosen = false;
   canSelectProduct: ((product: TillProduct) => boolean) | undefined;
 
   constructor(price: typeof priceBasket = priceBasket) {
@@ -853,6 +863,39 @@ export class WorkingOrderStore {
     if (changed && notify) this.emit("changed");
   }
 
+  /** The way the order sells: a saved order's own, whatever its department now says. */
+  get dining(): Dining {
+    return this.#dining;
+  }
+
+  get #startingDining(): Dining {
+    return this.#diningStart?.startsAs ?? "eat_in";
+  }
+
+  /**
+   * How the zone's department sells, from its offers; null where the region charges no takeaway VAT.
+   * An unsaved draft follows it, keeping staff's choice only while the department leaves the way to
+   * the till. A saved order keeps its own way.
+   */
+  setDiningStart(start: ZoneDining | null): void {
+    this.#diningStart = start;
+    if (this.#persisted) return;
+    if (this.#diningChosen && start?.policy === "till_choice") return;
+    this.#diningChosen = false;
+    if (this.#dining === this.#startingDining) return;
+    this.#dining = this.#startingDining;
+    this.emit("changed");
+  }
+
+  /** An unsaved draft's way; a saved order switches through the server. */
+  setDining(dining: Dining): void {
+    if (this.#persisted) throw new Error("setDining: a saved order switches through the server");
+    this.#diningChosen = true;
+    if (this.#dining === dining) return;
+    this.#dining = dining;
+    this.emit("changed");
+  }
+
   /** Mints a FRESH {@link id}: a cleared basket is a new working order, so its next park or pay does
    * not collide with the settled one. */
   clear(): void {
@@ -862,6 +905,8 @@ export class WorkingOrderStore {
     this.#id = crypto.randomUUID();
     this.#fullInvoiceOrderId = undefined;
     this.#label = undefined;
+    this.#dining = this.#startingDining;
+    this.#diningChosen = false;
     this.#kitchenNote = null;
     this.#savedKitchenNote = null;
     this.#kitchenNoteRevision = 0;
@@ -887,6 +932,7 @@ export class WorkingOrderStore {
       scopeKey: string;
       ownerRevision?: number;
     },
+    dining?: Dining,
   ): void {
     const last = id === this.#id ? this.lastAdded : undefined;
     this.#lastAdded =
@@ -901,6 +947,8 @@ export class WorkingOrderStore {
     this.#lines.length = 0;
     this.#lines.push(...lines);
     this.#label = label;
+    if (dining !== undefined) this.#dining = dining;
+    this.#diningChosen = false;
     this.#kitchenNote = kitchenNote?.note ?? null;
     this.#savedKitchenNote = this.#kitchenNote;
     this.#kitchenNoteRevision = kitchenNote?.revision ?? 0;

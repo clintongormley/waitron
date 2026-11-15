@@ -252,6 +252,8 @@ it.each([
     if (change === "paid-bill" || change === "abandoned-bill") {
       el.bills = [
         {
+          dining: "eat_in",
+          diningChoice: "none",
           workingOrderId: "wo-4",
           revision: 1,
           invoiceType: "F2",

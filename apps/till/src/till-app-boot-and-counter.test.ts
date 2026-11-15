@@ -124,6 +124,7 @@ function zoneOffers(
       zoneKeepOpen: null,
     },
     context: {
+      dining: null,
       departmentName: "Restaurant",
       zoneId,
       departmentId: "department-default",
@@ -2356,14 +2357,14 @@ describe("till-app counter: the guests the receipt prints", () => {
     const call = vi.mocked(api.recordSale).mock.calls[0]!;
     expect(call[1]).toStrictEqual({ method: "cash", amount: "5" });
     expect(call[2]).toBe(c.store.id);
-    expect(call).toHaveLength(9);
+    expect(call).toHaveLength(10);
     expect(call[7]).toBeNull();
   });
 
   it("identifies a zero-total Counter completion as having no table editor", async () => {
     const { el } = await counterWithCoffee();
     await payCash(el);
-    expect(vi.mocked(api.recordSale).mock.calls[0]).toHaveLength(9);
+    expect(vi.mocked(api.recordSale).mock.calls[0]).toHaveLength(10);
     expect(vi.mocked(api.recordSale).mock.calls[0]![8]).toBeNull();
   });
 
@@ -2430,6 +2431,7 @@ describe("till-app counter: the guests the receipt prints", () => {
       undefined,
       undefined,
       null,
+      "eat_in",
     );
   });
 });
@@ -2535,6 +2537,80 @@ describe("till-app retrieving a held order", () => {
     expect(c.store.lines[0]!.product).toMatchObject({ id: "retired", name: "Antiguo" });
     expect(c.store.lines[0]!.quantity).toBe("1");
     expect(banner(el)).toBeNull();
+  });
+});
+
+describe("till-app sends the way the counter order sells (A1522)", () => {
+  const cashTill = { ...till, capabilities: ["print-receipt", "take-cash"] as CapabilityFlag[] };
+  const offersSelling = (dining: ZoneOffers["context"]["dining"]): ZoneOffers => {
+    const body = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
+    return { ...body, context: { ...body.context, dining } };
+  };
+
+  async function payCash(el: TillApp): Promise<void> {
+    emit(el.shadowRoot!.querySelector("till-counter-screen")!, "confirm-payment", {
+      method: "cash",
+      amount: "5",
+      guestCount: null,
+    });
+    await flush(el);
+  }
+
+  it.each([
+    [{ policy: "takeaway", startsAs: "takeaway" }, "takeaway"],
+    [{ policy: "till_choice", startsAs: "takeaway" }, "takeaway"],
+    [{ policy: "eat_in", startsAs: "eat_in" }, "eat_in"],
+    [null, "eat_in"],
+  ] as const)("a new draft in a zone selling %j is sold %s", async (dining, sold) => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(cashTill),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(offersSelling(dining)),
+    });
+    const c = await toCounter(el);
+    expect(c.store.dining).toBe(sold);
+    c.store.addProduct(c.products[0]!, "1");
+    await flush(el);
+
+    await payCash(el);
+
+    expect(vi.mocked(api.recordSale).mock.calls[0]![9]).toBe(sold);
+  });
+
+  it("a retrieved takeaway order in a department since set to eat in holds and sends takeaway", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(cashTill),
+      listDefaultZoneOffers: vi
+        .fn()
+        .mockResolvedValue(offersSelling({ policy: "eat_in", startsAs: "eat_in" })),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-1" },
+          note: null,
+          revision: 0,
+          ownerRevision: 0,
+        },
+        id: "wo-1",
+        orderNumber: 5,
+        label: null,
+        revision: 2,
+        expectedEdit: null,
+        invoiceType: "F2",
+        dining: "takeaway",
+        diningChoice: "none",
+        lines: [{ menuItemId: coffee.menuItemId, quantity: "1.000" }],
+      }),
+    });
+    const c = await toCounter(el);
+
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    expect(c.store.dining).toBe("takeaway");
+
+    await payCash(el);
+
+    const call = vi.mocked(api.recordSale).mock.calls[0]!;
+    expect(call[2]).toBe("wo-1");
+    expect(call[9]).toBe("takeaway");
   });
 });
 

@@ -96,6 +96,8 @@ function source(
   const balance = balanceOf(id, lines, options);
   return {
     bill: {
+      dining: "eat_in",
+      diningChoice: "none",
       workingOrderId: id,
       revision: 0,
       invoiceType: "F2",

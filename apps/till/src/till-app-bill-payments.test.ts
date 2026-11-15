@@ -1926,6 +1926,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
               undefined,
               4,
               expectedEdit,
+              "eat_in",
             ]
           : ["wo-4", { method: "cash", amount: "120.00" }, undefined, 4, expectedEdit],
       );
@@ -1984,7 +1985,18 @@ describe("till-app: a bill payment's refusals and retries", () => {
       const expectedEdit = { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null };
       expect(original).toEqual(
         status === "open"
-          ? [[], tender, "wo-4", undefined, undefined, undefined, undefined, 4, expectedEdit]
+          ? [
+              [],
+              tender,
+              "wo-4",
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              4,
+              expectedEdit,
+              "eat_in",
+            ]
           : ["wo-4", tender, undefined, 4, expectedEdit],
       );
       const confirmation = () => tableOrder(el).shadowRoot!.querySelector("till-tender-pay")!;
@@ -2117,6 +2129,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
           undefined,
           4,
           { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          "eat_in",
         ],
         [
           [],
@@ -2128,6 +2141,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
           undefined,
           4,
           { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          "eat_in",
         ],
       ]);
     },

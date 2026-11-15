@@ -45,6 +45,8 @@ const party: TableParty = {
   reminder: null,
 };
 const bills: PartyBill[] = ["wo-main", "wo-other"].map((workingOrderId, index) => ({
+  dining: "eat_in",
+  diningChoice: "none",
   workingOrderId,
   revision: 0,
   invoiceType: "F2",

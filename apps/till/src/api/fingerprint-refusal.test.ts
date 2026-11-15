@@ -26,6 +26,7 @@ it.each(["en-GB", "es-ES"])("decodes a 409 into the selected refusal in %s", asy
       undefined,
       undefined,
       null,
+      "eat_in",
     )
     .catch((error: unknown) => error);
   expect(error).toMatchObject({ code: "fiscal.fingerprint_mismatch", status: 409 });

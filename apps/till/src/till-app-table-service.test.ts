@@ -177,6 +177,7 @@ function zoneOffers(
       zoneKeepOpen: null,
     },
     context: {
+      dining: null,
       departmentName: "Restaurant",
       zoneId: floorZone.id,
       departmentId: "department-default",
@@ -1475,6 +1476,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
       undefined,
       undefined,
       { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+      "eat_in",
     );
   });
 
@@ -1487,6 +1489,8 @@ describe("till-app table ordering: refused and failed table actions", () => {
       getTablesState,
       getPartyBills: vi.fn().mockResolvedValue([
         {
+          dining: "eat_in",
+          diningChoice: "none",
           workingOrderId: "wo-7",
           revision: 0,
           invoiceType: "F2",
@@ -3189,6 +3193,8 @@ describe("till-app table ordering: the guests the receipt prints", () => {
     party: { ...openTable.party!, guestCount, billCount },
   });
   const bill = (overrides: Partial<PartyBill> = {}): PartyBill => ({
+    dining: "eat_in",
+    diningChoice: "none",
     workingOrderId: "wo-7",
     revision: 0,
     invoiceType: "F2",
@@ -3581,6 +3587,8 @@ describe("A803 action results: the bill on screen after a table action", () => {
     billNumber: number,
     status: PartyBill["status"] = "open",
   ): PartyBill => ({
+    dining: "eat_in",
+    diningChoice: "none",
     workingOrderId,
     revision: 0,
     invoiceType: "F2",
@@ -4136,6 +4144,8 @@ describe("A803 new bill: the switcher's + New bill and switching bills", () => {
     billNumber: number,
     over: Partial<PartyBill> = {},
   ): PartyBill => ({
+    dining: "eat_in",
+    diningChoice: "none",
     workingOrderId,
     revision: 0,
     invoiceType: "F2",

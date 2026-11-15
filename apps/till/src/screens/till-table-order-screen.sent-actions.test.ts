@@ -20,6 +20,8 @@ afterEach(() => {
 
 function bill(status: PartyBill["status"]): PartyBill {
   return {
+    dining: "eat_in",
+    diningChoice: "none",
     workingOrderId: "wo-4",
     revision: 0,
     invoiceType: "F2",

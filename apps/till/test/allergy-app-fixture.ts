@@ -81,6 +81,7 @@ export function menu(version: string, prices: Record<string, string> = {}): Zone
       zoneKeepOpen: null,
     },
     context: {
+      dining: null,
       departmentName: "Restaurant",
       zoneId: "z1",
       departmentId: "department-bar",

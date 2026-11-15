@@ -267,6 +267,66 @@ describe("a new order's way of selling", () => {
   );
 });
 
+describe("the way a zone's offers say a new order starts", () => {
+  async function contextDining(zoneId: string): Promise<unknown> {
+    const answer = await send(
+      venue.app,
+      venue.cookie,
+      "GET",
+      `/api/service-zones/${zoneId}/offers`,
+    );
+    expect(answer.status).toBe(200);
+    return (answer.json.context as { dining: unknown }).dining;
+  }
+
+  it.each([
+    ["eat_in", "takeaway", "eat_in"],
+    ["takeaway", "eat_in", "takeaway"],
+    ["till_choice", "takeaway", "takeaway"],
+    ["till_choice", "eat_in", "eat_in"],
+  ] as const)(
+    "a counter zone in a %s department starting %s starts %s",
+    async (policy, startsAs, starts) => {
+      await departmentsSell(policy, startsAs);
+      expect(await contextDining(counterZoneId)).toEqual({ policy, startsAs: starts });
+    },
+  );
+
+  it("a table zone in a till-choice department starting takeaway starts eaten here", async () => {
+    await departmentsSell("till_choice", "takeaway");
+    expect(await contextDining(tables.zoneId)).toEqual({
+      policy: "till_choice",
+      startsAs: "eat_in",
+    });
+  });
+
+  it("the default zone's offers say the same", async () => {
+    await departmentsSell("takeaway");
+    const answer = await send(venue.app, venue.cookie, "GET", "/api/default-service-zone/offers");
+    expect(answer.status).toBe(200);
+    expect((answer.json.context as { dining: unknown }).dining).toEqual({
+      policy: "takeaway",
+      startsAs: "takeaway",
+    });
+  });
+
+  it("answers null in a region that charges no takeaway VAT", async () => {
+    await departmentsSell("takeaway");
+    await venue.db.execute(sql`update taxpayer set country = 'GB'`);
+    await venue.db.execute(
+      sql`update settings set doc = json_set(doc, '$.fiscalTerritory', 'GB-vat') where module = 'venue'`,
+    );
+    try {
+      expect(await contextDining(counterZoneId)).toBeNull();
+    } finally {
+      await venue.db.execute(sql`update taxpayer set country = 'ES'`);
+      await venue.db.execute(
+        sql`update settings set doc = json_set(doc, '$.fiscalTerritory', 'ES-common') where module = 'venue'`,
+      );
+    }
+  });
+});
+
 describe("a request naming a way an existing order does not have", () => {
   beforeEach(() => departmentsSell("till_choice"));
 

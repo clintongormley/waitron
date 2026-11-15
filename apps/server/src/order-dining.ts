@@ -1,15 +1,37 @@
 import { eq, inArray } from "drizzle-orm";
+import { chargesTakeawayVat } from "@waitron/country-packs";
 import {
   orderDiningLocked,
   ordersDiningLocked,
+  readTaxpayer,
+  readVenue,
   workingOrders,
   type Transaction,
 } from "@waitron/db";
-import { AppError, DININGS, type Dining } from "@waitron/shared";
+import { AppError, DININGS, type Dining, type DiningPolicy } from "@waitron/shared";
 import { requireOrderBillEditor, type OrderEditAuthority } from "./bill-editing.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { captureOrderEdit, type OrderAttendance } from "./working-order.js";
 import "./errors.js";
+
+/** Whether the venue's region charges a different VAT class on food taken away. */
+export async function venueTakeawayVat(tx: Transaction): Promise<boolean> {
+  return chargesTakeawayVat(
+    (await readTaxpayer(tx))?.country ?? "",
+    (await readVenue(tx)).fiscalTerritory,
+  );
+}
+
+/** How a zone's department sells and the way a new order there starts; null where the region
+ * charges no takeaway VAT, so every order is eaten here. */
+export async function zoneDining(
+  tx: Transaction,
+  zoneId: string,
+  policy: DiningPolicy,
+): Promise<{ policy: DiningPolicy; startsAs: Dining } | null> {
+  if (!(await venueTakeawayVat(tx))) return null;
+  return { policy, startsAs: await VENUE_SERVICE.resolveOrderDining(tx, zoneId, undefined) };
+}
 
 /** `dining` from a request body, or undefined when it is absent; an explicit null is refused. */
 export function parseDining(value: unknown): Dining | undefined {
