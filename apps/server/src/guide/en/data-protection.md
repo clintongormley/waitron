@@ -413,7 +413,7 @@ own, can also make scheduled backups, and can export your setup to start another
   as that passphrase. A recovery pack made on **Backups** after you set up the bucket copy or
   scheduled backups opens them, so keep every recovery pack locked away, off the box.
 
-The recovery pack can also hold the emergency address and code for a locked copy in Cloud. Keep your Waitron password and, if set up, your authenticator or recovery codes available separately. See [Emergency start in Cloud](servers.md#cloud-emergency).
+The recovery pack can also hold the emergency address and code for a locked copy in Cloud. Keep your Waitron password and your authenticator or recovery codes available separately. See [Emergency start in Cloud](servers.md#cloud-emergency).
 
 ## If personal data is lost or exposed {#breach}
 

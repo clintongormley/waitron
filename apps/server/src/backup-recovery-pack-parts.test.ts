@@ -642,7 +642,7 @@ describe("the server key's page number on the other pages", () => {
   });
 });
 
-it("keeps both authenticator groups in bounded rows and reserves server-key hints for backups", async () => {
+it("keeps both authenticator groups and reserves server-key hints for backups", async () => {
   const emergency = buildEmergencyPart(
     context,
     {
@@ -665,8 +665,8 @@ it("keeps both authenticator groups in bounded rows and reserves server-key hint
   );
   expect(emergency.part.page!.rows).toEqual([
     { label: "Code issued", value: "20 October 2026 10:00" },
-    { label: "With an authenticator", value: "Alex Smith" },
-    { label: "Without an authenticator", value: "Robin Jones" },
+    { label: "Have permission and an authenticator", value: "Alex Smith" },
+    { label: "Need to set up an authenticator first", value: "Robin Jones" },
   ]);
   const serverKey: BuiltPart = {
     part: {

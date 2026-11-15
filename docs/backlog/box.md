@@ -1238,7 +1238,7 @@ once released. Belongs with A1016.
 
 ## A1187 part 2: the recovery pack's emergency start page (owner, 2026-10-29).
 
-- **A1187 part 2: status and Cloud shortcut.** Backups can print the emergency page, with Cloud’s address/code, QR codes, issue date, eligible people and steps. Codes require Cloud’s deployed endpoint and hosting eligibility. PR 2 still adds the Cloud shortcut opening the existing maker, current-code status checks and missing-code wording. Before PR 2, the watcher decides whether to keep the changed-code warning, after a two-line explanation of its benefit. No hosted activation is delivered here.
+- **A1187 part 2: status and Cloud shortcut.** Backups can print the emergency page, with Cloud’s address/code, QR codes, issue date, eligible people and steps. Codes require Cloud’s deployed endpoint and hosting eligibility. PR 2 still adds the Cloud shortcut opening the existing maker, current-code status checks and missing-code wording. The watcher retained the changed-code warning on 16 November; PR 2 follows this printing slice. No hosted activation is delivered here.
   [Plan](../superpowers/plans/2026-11-15-a1187-2-emergency-page.md).
 
 ## A1187: wording part 1's reviews left on the restore command and setup.
@@ -2011,12 +2011,11 @@ Two slices from those answers are open, each its own pull request: 9b, the box s
 
 ## A1187 part 1: what its reviews left open
 
-- Setup’s first pack still needs an absent-emergency cover row, so the reader can see that the page was not left out. A1187-2 adds the row only to packs made on Backups; setup’s fiscal path remains in this bundle.
-
-
 Part 1 of the recovery pack (design: [A1187](../superpowers/specs/2026-10-29-a1187-one-recovery-pack-design.md))
 landed in pull requests from #2250 to setup's first pack (PR E). What their reviews left, by the
 pull request that left it:
+
+- Setup’s first pack still needs an absent-emergency cover row, so the reader can see that the page was not left out. A1187-2 adds the row only to packs made on Backups; setup’s fiscal path remains in this bundle.
 
 - **#2250 (the pack format and its readers).** `waitron-restore`'s usage line still says
   `<pack-file>` for `--from-archive`, which a test pins. The restore command's refusals for a file

@@ -285,5 +285,4 @@ If the main box stops answering, keep the till open. When the red strip offers *
 
 Have the emergency code, your Waitron password and an authenticator or recovery code ready. The dialog lists the roles allowed to start the venue; Cloud checks availability before continuing. The option stays hidden until Cloud has made emergency hosting available for your venue.
 
-
-From **Backups**, choose **Make recovery pack** on the main box while Cloud is available. With permission to manage the box, the pack includes the emergency address and code, their QR codes, and the code’s issue date. Keep it locked away off the box. The code starts a locked copy; you still need your password and, if set up, your authenticator or a recovery code. Passkeys do not work there. If the emergency page is missing or failed, read its cover line and make a new pack when it is available.
+From **Backups**, choose **Make recovery pack** on the main box while Cloud is available. With permission to manage the box, the pack includes the emergency address and code, their QR codes, and the code’s issue date. Keep it locked away off the box. The code starts a locked copy; you still need your password and your authenticator or a recovery code. Passkeys do not work there. If the emergency page is missing or failed, read its cover line and make a new pack when it is available.

@@ -34,8 +34,8 @@ export type PackStatusInput = {
 type Reason =
   | { part: "bucket" | "archives"; kind: "key_changed"; at: string }
   | { part: "bucket" | "archives"; kind: "settings_changed" }
-  | { part: RecoveryPackPartRecord["part"]; kind: "set_up_after" }
-  | { part: RecoveryPackPartRecord["part"]; kind: "removed" }
+  | { part: "bucket" | "archives" | "server-key"; kind: "set_up_after" }
+  | { part: "bucket" | "archives" | "server-key"; kind: "removed" }
   | { part: "server-key"; kind: "key_replaced" };
 
 type Keep = {

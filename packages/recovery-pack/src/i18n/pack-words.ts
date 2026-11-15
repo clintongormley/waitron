@@ -43,7 +43,7 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
   en: {
     title: "Waitron recovery pack",
     emergencyWarning:
-      "The emergency code starts a locked copy in the cloud. You still need your password and, when set up, your authenticator or a recovery code. Passkeys do not work there.",
+      "The emergency code starts a locked copy in the cloud. You also need your password and your authenticator or a recovery code. Passkeys do not work there.",
     header: (venue, number, day) => `${venue} · Recovery pack ${number} · ${day}`,
     page: (n, of) => `Page ${n} of ${of}`,
     madeBy: (day, time, person) => `Made on ${day} at ${time} by ${person}.`,
@@ -106,7 +106,7 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
   es: {
     title: "Paquete de recuperación de Waitron",
     emergencyWarning:
-      "El código de emergencia inicia una copia bloqueada en la nube. Aún necesitas tu contraseña y, si lo tienes configurado, tu autenticador o un código de recuperación. Las llaves de acceso no funcionan allí.",
+      "El código de emergencia inicia una copia bloqueada en la nube. También necesitas tu contraseña y tu autenticador o un código de recuperación. Las llaves de acceso no funcionan allí.",
     header: (venue, number, day) => `${venue} · Paquete de recuperación ${number} · ${day}`,
     page: (n, of) => `Página ${n} de ${of}`,
     madeBy: (day, time, person) => `Hecho el ${day} a las ${time} por ${person}.`,
@@ -238,12 +238,12 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
     emergency: {
       title: "Emergency start in the cloud",
       intro:
-        "This code starts a locked copy of the venue. Sign in with your password and, if set up, your authenticator or a recovery code. Passkeys do not work there.",
+        "This code starts a locked copy of the venue. Sign in with your password and your authenticator or a recovery code. Passkeys do not work there.",
       address: "Emergency address",
       code: "Emergency code",
       issued: "Code issued",
-      ready: "With an authenticator",
-      notEnrolled: "Without an authenticator",
+      ready: "Have permission and an authenticator",
+      notEnrolled: "Need to set up an authenticator first",
       nobody: "Nobody",
       steps: [
         "1. Unplug the old box so it cannot start again.",
@@ -357,12 +357,12 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
     emergency: {
       title: "Inicio de emergencia en la nube",
       intro:
-        "Este código inicia una copia bloqueada del local. Entra con tu contraseña y, si lo tienes configurado, tu autenticador o un código de recuperación. Las llaves de acceso no funcionan allí.",
+        "Este código inicia una copia bloqueada del local. Entra con tu contraseña y tu autenticador o un código de recuperación. Las llaves de acceso no funcionan allí.",
       address: "Dirección de emergencia",
       code: "Código de emergencia",
       issued: "Código emitido",
-      ready: "Con autenticador",
-      notEnrolled: "Sin autenticador",
+      ready: "Tienen permiso y autenticador",
+      notEnrolled: "Necesitan configurar un autenticador primero",
       nobody: "Nadie",
       steps: [
         "1. Desenchufa el servidor antiguo para que no pueda volver a arrancar.",
