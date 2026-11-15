@@ -3,6 +3,7 @@ import { afterEach, beforeAll, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanup, mount, host } from "./test-helpers.js";
 import { startWithPopover } from "./popover-startup.js";
+import type { WtAddressLookup } from "./components/wt-address-lookup.js";
 import type { WtCombobox } from "./components/wt-combobox.js";
 import type { WtColourChooser } from "./components/wt-colour-chooser.js";
 import type { WtDialog } from "./components/wt-dialog.js";
@@ -206,10 +207,10 @@ test("help inside an action menu keeps the parent open and both light-dismiss", 
 });
 
 test("address suggestions can be chosen with no native Popover", async () => {
-  const { WtAddressLookup } = await import("./components/wt-address-lookup.js");
+  await import("./components/wt-address-lookup.js");
   const lookup = (await mount(
     '<wt-address-lookup label="Address" country-code="GB"></wt-address-lookup>',
-  )) as InstanceType<typeof WtAddressLookup>;
+  )) as WtAddressLookup;
   const address = {
     lines: ["1 High Street"],
     locality: "Oxford",
