@@ -1093,7 +1093,20 @@ Its cost entry is 397.2 seconds: each original table run's three range costs wer
 the median of the two totals was rounded to one decimal. The six inputs are 70.2800, 160.6283
 and 101.4127 seconds in run 43159064593, and 58.9374, 218.9710 and 184.2398 in run 42963449689.
 These older range reports omit boundary-spanning mutants; their sum is a model input, not a
-measurement of a whole-file run. Every other committed cost-table entry remains unchanged.
+measurement of a whole-file run. At that point, every other cost-table entry remained unchanged.
+
+**15 November refresh.** Scheduled run `43679554218` cancelled db shard 9 at its
+25-minute job limit, after 839 of 848 mutants. The current weights use the medians
+from its twelve completed reports and all thirteen reports of successful run
+`43559793352`; both runs follow the whole-file change. The failed shard supplied
+no cost samples, so its files use the preceding run's samples only;
+`src/schema/menu/index.ts` has no sample under its current name and now uses the
+byte fallback. The failed shard's phase had already run 1,350.217 seconds against
+816.708 newly estimated seconds (at least 1.653 times). Repacking spreads those
+files over ten shards but does not explain that slowdown; roughly 716 estimated
+seconds per shard is not a measured finishing time. Verify the mitigation with a
+manual `mutation.yml` run on main using `packages=db`, retaining the slowest
+shard's job and mutation-phase times.
 
 **Refreshing the table.** Use reports only from runs after this whole-file change. Earlier runs
 split `sales.ts` into three reports, and `costTable` no longer excludes it: feeding those reports
@@ -1109,7 +1122,8 @@ gh run download <nightly run> -p 'mutation-report-db-shard-*' -D <scratch dir>
 node scripts/mutation-costs.mjs db packages/db/mutation-costs.json <scratch dir>/*/mutation.json
 ```
 
-Several runs can be given at once; each file takes its median. A report made locally can be given
+Several runs can be given at once; download each into a separate scratch directory
+and pass all their report paths to the builder. Each file takes its median. A report made locally can be given
 too, cut as below, but its durations and timeouts were measured on that machine, not CI's runners,
 and each timeout weighs 82.2 s. Before using one from a run
 that followed another in the same checkout, keep only the files its own `config.mutate` names:
