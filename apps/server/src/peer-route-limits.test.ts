@@ -6,7 +6,7 @@ import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { PEER_ROUTES } from "../test/peer-route-inventory.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
-import { mountNodeApi } from "./node-api.js";
+import { mountMainServerApi, mountNodeApi } from "./node-api.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import { mountNodeMembershipApi } from "./node-membership-api.js";
 import { mountHandoverStatusApi } from "./handover-status-api.js";
@@ -44,6 +44,7 @@ function mounted() {
   }
   mount(mountPeerStatusApi);
   mount(mountNodeApi);
+  mount(mountMainServerApi);
   mount(mountNodeEnrolApi);
   mount(mountNodeMembershipApi);
   mount(mountHandoverStatusApi);
