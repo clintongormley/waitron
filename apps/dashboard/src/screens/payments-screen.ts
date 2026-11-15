@@ -2677,7 +2677,9 @@ export class PaymentsScreen extends LitElement {
   @state() private backupOpen = false;
 
   override render(): TemplateResult {
-    return html`<h1 tabindex="-1">${t(this.surface === "checks" ? "payments.checks_title" : "payments.title")}</h1>
+    return html`<h1 tabindex="-1">
+        ${t(this.surface === "checks" ? "payments.checks_title" : "payments.title")}
+      </h1>
       ${this.surface === "checks" ? this.#renderChecks() : this.#renderReaders()}`;
   }
 

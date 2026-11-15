@@ -62,7 +62,12 @@ describe("Card payments reader tools", () => {
   );
 });
 
-const readerReads = ["listPaymentProviders", "listReaders", "listReaderHolders", "readerStatus"] as const;
+const readerReads = [
+  "listPaymentProviders",
+  "listReaders",
+  "listReaderHolders",
+  "readerStatus",
+] as const;
 const recoveryReads = [
   "listStuckPayments",
   "listStuckBillPayments",
