@@ -261,19 +261,61 @@ it("a passkey take signs in against the staged copy's passkey rows, and writes n
 
 it.each([
   ["accepts this box's proof in place of a password", true, { state: "restarting" }],
-  ["refuses a proof that fails its check", false, { error: { code: "password.invalid" } }],
+  [
+    "refuses a proof whose person the followed copy has suspended",
+    false,
+    { error: { code: "password.invalid" } },
+  ],
 ] as const)("the take %s", async (_name, valid, expected) => {
-  const proof = valid
-    ? await makeSwitchProof(
-        { db: placed.venue, node: placed.node, ring, nodeId: standby.nodeId },
-        ADMIN,
-      )
-    : "not-a-proof";
+  const proof = await makeSwitchProof(
+    { db: placed.venue, node: placed.node, ring, nodeId: standby.nodeId },
+    ADMIN,
+  );
+  if (!valid) {
+    const followed = new DatabaseSync(followedVenue());
+    followed.prepare("update persons set status = 'suspended' where id = ?").run(ADMIN);
+    followed.close();
+  }
   const s = service();
   const answer = await s.post({}, "followed", { cookie: `${SWITCH_PROOF_COOKIE}=${proof}` });
   expect(answer.body).toMatchObject(expected);
   await restarted(s);
 });
+
+it.each([
+  ["a passkey whose challenge", "passkey.challenge_expired"],
+  ["a proof that", "password.invalid"],
+] as const)(
+  "a take that waited while catching up refuses %s has lapsed before it stops following",
+  async (credential, code) => {
+    const seen = progress({ uploadedTXID: "00000000000000b2" });
+    const s = service({ progress: seen });
+    const challenge = (await s.post({}, "passkey-challenge")).body.options!.challenge;
+    const proof = await makeSwitchProof(
+      { db: placed.venue, node: placed.node, ring, nodeId: standby.nodeId },
+      ADMIN,
+    );
+    const [body, headers] = credential.includes("passkey")
+      ? [
+          {
+            signIn: {
+              passkey: signingPasskey("spare.example").assert(challenge, "https://spare.example"),
+            },
+          },
+          {},
+        ]
+      : [{}, { cookie: `${SWITCH_PROOF_COOKIE}=${proof}` }];
+    expect((await s.post(body, "followed", headers)).body).toEqual({ state: "catching-up" });
+    vi.setSystemTime(Date.now() + 15 * 60_000);
+    seen.uploadedTXID = seen.appliedTXID;
+    expect((await s.post(body, "followed", headers)).body.error?.code).toBe(code);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(s.stopForSwitch).not.toHaveBeenCalled();
+    expect(s.restart).not.toHaveBeenCalled();
+    expect(await readTakeFailures(placed.node, standby.nodeId)).toBeNull();
+    await expect(readFile(readyFile())).rejects.toMatchObject({ code: "ENOENT" });
+  },
+);
 
 it("answers taken without stopping when the placed copy is at the follower's position", async () => {
   await marker("placed.json", "followed-copy", followedCopyId(POSITION));

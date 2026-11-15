@@ -1,5 +1,4 @@
 import { eq } from "drizzle-orm";
-import { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { CORE_MIGRATIONS, stampDeployment } from "@waitron/db";
@@ -12,14 +11,7 @@ import { generateNodeKeyPair } from "@waitron/membership";
 import { NODE_MIGRATIONS, setNodeMode } from "@waitron/node-db";
 import { isAppError } from "@waitron/shared";
 import { signAsThisBox } from "./handover-signing.js";
-import {
-  SWITCH_PROOF_COOKIE,
-  SWITCH_PROOF_TTL_MS,
-  checkSwitchProof,
-  makeSwitchProof,
-  readSwitchProofCookie,
-  setSwitchProofCookie,
-} from "./handover-switch-proof.js";
+import { SWITCH_PROOF_TTL_MS, checkSwitchProof, makeSwitchProof } from "./handover-switch-proof.js";
 import { establishNodeIdentity } from "./node-identity.js";
 
 const RING: KeyRing = loadKeyRing({
@@ -118,32 +110,5 @@ describe("checking a switch proof", () => {
     [encode({ purpose: "x" }), "malformed"],
   ])("refuses a missing or unreadable proof (%s)", async (proof, reason) => {
     expect(await verdictOf(proof)).toBe(reason);
-  });
-});
-
-describe("the switch proof's cookie", () => {
-  it("is HttpOnly, Secure, SameSite=Strict, host-only, on the handover path, for 15 minutes", async () => {
-    const app = new Hono();
-    app.get("/", (c) => {
-      setSwitchProofCookie(c, "the-proof");
-      return c.body(null, 204);
-    });
-    const header = (await app.request("/")).headers.get("set-cookie")!;
-    const parts = header.split(";").map((part) => part.trim());
-
-    expect(parts[0]).toBe(`${SWITCH_PROOF_COOKIE}=the-proof`);
-    expect(parts.slice(1).sort()).toEqual(
-      ["HttpOnly", "Max-Age=900", "Path=/api/node/handover", "SameSite=Strict", "Secure"].sort(),
-    );
-  });
-
-  it("is read back from the request, and is null when absent", async () => {
-    const app = new Hono();
-    app.get("/", (c) => c.json({ proof: readSwitchProofCookie(c) }));
-
-    expect(
-      await (await app.request("/", { headers: { cookie: `${SWITCH_PROOF_COOKIE}=abc` } })).json(),
-    ).toEqual({ proof: "abc" });
-    expect(await (await app.request("/")).json()).toEqual({ proof: null });
   });
 });

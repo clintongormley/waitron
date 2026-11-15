@@ -64,6 +64,7 @@ import { checkEmergencyCopy, type EmergencyCopy } from "./handover-emergency-che
 import { handoverSignInAttempt, signInCredentials } from "./handover-preparation.js";
 import {
   createSwitchChallenges,
+  precheckSwitchCredentials,
   readSwitchProofCookie,
   type SwitchSignIn,
 } from "./handover-switch-proof.js";
@@ -501,6 +502,8 @@ export function mountHandoverEmergencyApi(
     )
       return { state: "catching-up" as const };
     await refuseRepeatedFailures();
+    // A lapsed passkey challenge or proof is refused here, not after the stop restarts the box.
+    await precheckSwitchCredentials(c, switchSignIn, signIn);
     await sourceSilent(sourceNodeId, false);
     let stopping = true;
     try {

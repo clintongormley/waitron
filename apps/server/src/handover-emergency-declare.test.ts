@@ -803,6 +803,16 @@ describe("the switch's passkey and proof", () => {
     expect((await s.post({}, true, "preview", { cookie: pair! })).status).toBe(200);
   });
 
+  it("refuses a passkey whose person does not hold node.manage", async () => {
+    const passkey = await enrolledPasskey();
+    await setBuiltInRoleForTest(placed.venue, ADMIN, "staff");
+    const s = service();
+    const assertion = passkey.assert(await challenge(s), "https://spare.example");
+    const answer = await s.post({ signIn: { passkey: assertion } }, true, "preview");
+    expect(answer.body.error?.code).toBe("authorization.not_permitted");
+    expect(answer.setCookie).toBeNull();
+  });
+
   it("a passkey challenge is used once, and refused once older than two minutes", async () => {
     const passkey = await enrolledPasskey();
     const s = service();

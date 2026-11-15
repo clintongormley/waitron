@@ -54,14 +54,11 @@ function refuse(reason: string): never {
   throw new AppError("password.invalid", {}, { reason });
 }
 
-/**
- * The person a switch proof names, once it is this box's own, unexpired, this box is still a
- * spare, and the person is active and holds `node.manage` in `deps.db`.
- */
-export async function checkSwitchProof(
-  deps: SwitchProofDeps,
+/** The person a proof names, once it is this box's own, unexpired, and this box is still a spare. */
+async function readSwitchProof(
+  deps: Omit<SwitchProofDeps, "db">,
   proof: string | null,
-): Promise<{ personId: string }> {
+): Promise<string> {
   if (proof === null || proof === "") refuse("missing");
   let raw: unknown;
   try {
@@ -89,16 +86,25 @@ export async function checkSwitchProof(
     refuse("malformed");
   if ((deps.now ?? Date.now)() >= body.expiresAtMs) refuse("expired");
   if ((await readNodeMode(deps.node, deps.nodeId)).mode !== "mirror") refuse("not_a_spare");
+  return body.personId;
+}
+
+/** As `readSwitchProof`, once the person is also active and holds `node.manage` in `deps.db`. */
+export async function checkSwitchProof(
+  deps: SwitchProofDeps,
+  proof: string | null,
+): Promise<{ personId: string }> {
+  const personId = await readSwitchProof(deps, proof);
   const [person] = await deps.db
     .select({ status: persons.status })
     .from(persons)
-    .where(eq(persons.id, body.personId));
+    .where(eq(persons.id, personId));
   if (
     person?.status !== "active" ||
-    !holds(await readPersonAuthority(deps.db, body.personId), "node.manage")
+    !holds(await readPersonAuthority(deps.db, personId), "node.manage")
   )
     refuse("not_permitted");
-  return { personId: body.personId };
+  return { personId };
 }
 
 export function setSwitchProofCookie(c: Context, proof: string): void {
@@ -121,11 +127,15 @@ export function readSwitchProofCookie(c: Context): string | null {
  */
 export function createSwitchChallenges() {
   const made = new Map<string, number>();
+  const live = (challenge: string) => {
+    const at = made.get(challenge);
+    return at !== undefined && Date.now() - at < SWITCH_CHALLENGE_TTL_MS;
+  };
   return {
+    live,
     async make(rpId: string) {
-      for (const [challenge, at] of made)
-        if (made.size >= MAX_SWITCH_CHALLENGES || Date.now() - at >= SWITCH_CHALLENGE_TTL_MS)
-          made.delete(challenge);
+      for (const challenge of made.keys())
+        if (made.size >= MAX_SWITCH_CHALLENGES || !live(challenge)) made.delete(challenge);
       const options = await generateAuthenticationOptions({
         rpID: rpId,
         userVerification: "required",
@@ -134,9 +144,9 @@ export function createSwitchChallenges() {
       return options;
     },
     take(challenge: string): boolean {
-      const at = made.get(challenge);
+      const ok = live(challenge);
       made.delete(challenge);
-      return at !== undefined && Date.now() - at < SWITCH_CHALLENGE_TTL_MS;
+      return ok;
     },
   };
 }
@@ -155,6 +165,28 @@ function challengeOf(response: AuthenticationResponseJSON): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * What a take checks before it stops following, needing no copy and using up nothing: a passkey's
+ * challenge is still live, or the proof cookie passes all but its person check. Each refuses with
+ * the code `switchCredentials` would.
+ */
+export async function precheckSwitchCredentials(
+  c: Context,
+  sw: SwitchSignIn,
+  signIn: unknown,
+): Promise<void> {
+  const fields =
+    typeof signIn === "object" && signIn !== null ? (signIn as Record<string, unknown>) : {};
+  if (fields.email !== undefined) return;
+  if (fields.passkey === undefined) {
+    await readSwitchProof(sw, readSwitchProofCookie(c));
+    return;
+  }
+  const challenge = challengeOf(fields.passkey as AuthenticationResponseJSON);
+  if (challenge === undefined || !sw.challenges.live(challenge))
+    throw new AppError("passkey.challenge_expired", {});
 }
 
 /**
