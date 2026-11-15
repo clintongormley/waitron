@@ -1,3 +1,4 @@
+import type { WtDialog } from "@waitron/ui/src/components/wt-dialog.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { formatBytes } from "@waitron/dashboard-kit";
@@ -21,7 +22,7 @@ import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { goToLabel, wholeTimes, wholeTimesStyles } from "../widgets/alert-format.js";
 import { guideHref } from "../help-guide.js";
-import "./box-wifi-dialog.js";
+import { wifiRequestError } from "./box-wifi-dialog.js";
 import { boxStatusRows, ssidName, networkOutcome, type PartRow } from "./box-status-rows.js";
 
 /** The least `formatBytes` writes as "1 MB" rather than "0 MB". */
@@ -256,6 +257,9 @@ export class BoxStatusScreen extends LitElement {
 
   @state() private networkAccepted = false;
   #networkEpoch = 0;
+  @state() private forgetTarget: { ssidHex: string; wired: boolean } | null = null;
+  @state() private forgetting = false;
+  @state() private forgetError = "";
   @state() private network: BoxNetwork | null = null;
   @state() private networkState: "loading" | "ready" | "failed" | "unavailable" = "loading";
   @state() private health: BoxHealth | null = null;
@@ -1030,12 +1034,68 @@ export class BoxStatusScreen extends LitElement {
   }
 
   #networkBusy(): boolean {
-    return this.networkAccepted || this.network?.change?.state === "running";
+    return this.forgetting || this.networkAccepted || this.network?.change?.state === "running";
   }
   #networkAccepted(): void {
     this.#networkEpoch++;
     this.networkAccepted = true;
     this.api.liveData.refresh();
+  }
+  async #forgetNetwork(): Promise<void> {
+    const target = this.forgetTarget;
+    if (!target || this.#networkBusy() || this.networkState !== "ready") return;
+    this.forgetting = true;
+    this.forgetError = "";
+    try {
+      await this.api.forgetBoxNetwork({ ssidHex: target.ssidHex });
+      this.renderRoot
+        .querySelector<WtDialog>('wt-dialog[data-test="wifi-forget-dialog"]')
+        ?.closeAfter("saved");
+      this.forgetTarget = null;
+      this.#networkAccepted();
+    } catch (error) {
+      this.forgetError = wifiRequestError(error);
+      this.api.liveData.refresh();
+    } finally {
+      this.forgetting = false;
+    }
+  }
+  #renderForgetDialog(): TemplateResult {
+    const target = this.forgetTarget;
+    return html`<wt-dialog
+      data-test="wifi-forget-dialog"
+      heading=${fill("box_status.network.forget_question", { name: target ? ssidName(target.ssidHex) : "" })}
+      .open=${target !== null}
+      .dismissible=${!this.forgetting}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        this.forgetTarget = null;
+      }}
+    >
+      <p>${t("box_status.network.forget_what")}</p>
+      <p>
+        ${t("box_status.network.warning")}
+        ${target && !target.wired ? t("box_status.network.recovery") : nothing}
+      </p>
+      <wt-form-actions slot="footer" .error=${this.forgetError}>
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          data-test="wifi-forget-stop"
+          ?disabled=${this.forgetting}
+          @click=${() => void this.renderRoot.querySelector<WtDialog>('wt-dialog[data-test="wifi-forget-dialog"]')?.requestClose("cancel")}
+          >${t("box_status.network.stop")}</wt-button
+        >
+        <wt-button
+          variant="danger"
+          data-test="wifi-forget-confirm"
+          ?disabled=${this.#networkBusy() || this.networkState !== "ready"}
+          ?loading=${this.forgetting}
+          @click=${() => void this.#forgetNetwork()}
+          >${t("box_status.network.forget")}</wt-button
+        >
+      </wt-form-actions>
+    </wt-dialog>`;
   }
   #renderNetwork(): TemplateResult | typeof nothing {
     if (this.networkState === "unavailable") return nothing;
@@ -1074,6 +1134,23 @@ export class BoxStatusScreen extends LitElement {
                   @click=${() => this.renderRoot.querySelector("dashboard-box-wifi-dialog")?.show(network.wired.connected)}
                   >${t("box_status.network.scan")}</wt-button
                 >
+                ${
+                  network.wifi.savedSsidHex === null
+                    ? nothing
+                    : html`<wt-button
+                        data-test="wifi-forget"
+                        variant="secondary"
+                        ?disabled=${this.#networkBusy()}
+                        @click=${() => {
+                          this.forgetError = "";
+                          this.forgetTarget = {
+                            ssidHex: network.wifi.savedSsidHex!,
+                            wired: network.wired.connected,
+                          };
+                        }}
+                        >${t("box_status.network.forget")}</wt-button
+                      >`
+                }
               </div>`
       }
       ${this.networkAccepted ? html`<p role="status">${t("box_status.network.accepted")}</p>` : nothing}
@@ -1087,7 +1164,7 @@ export class BoxStatusScreen extends LitElement {
     return html`
       <h1 class="title">${t("box_status.title")}</h1>
       ${this.#renderError()} ${this.#renderBody()} ${this.#renderNetwork()} ${this.#renderRestart()}
-      ${this.#renderClockCheckDialog()} ${this.#renderRestartDialog()}
+      ${this.#renderClockCheckDialog()} ${this.#renderRestartDialog()} ${this.#renderForgetDialog()}
       <dashboard-box-wifi-dialog
         .api=${this.api}
         .blocked=${this.#networkBusy()}

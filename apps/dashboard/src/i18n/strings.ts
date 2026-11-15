@@ -4094,6 +4094,10 @@ export const en = {
   "box_status.network.password_sae":
     "Use a password of 1–256 UTF-8 bytes, without control characters. Then try Join again.",
   "box_status.network.forget": "Forget saved Wi-Fi",
+  "box_status.network.forget_question": "Forget {name}?",
+  "box_status.network.forget_what":
+    "Remove this saved network from the box. To use it again, scan and enter its password again.",
+  "box_status.network.stop": "Stop",
   "box_status.network.accepted":
     "The box accepted the request. The outcome can take a couple of minutes to appear here.",
   "box_status.network.last_change": "Last change",
@@ -8473,6 +8477,10 @@ export const es: Record<StringKey, string> = {
   "box_status.network.password_sae":
     "Usa una contraseña de 1–256 bytes UTF-8, sin caracteres de control. Después pulsa Conectar de nuevo.",
   "box_status.network.forget": "Olvidar la Wi-Fi guardada",
+  "box_status.network.forget_question": "¿Olvidar {name}?",
+  "box_status.network.forget_what":
+    "Elimina esta red guardada del servidor. Para volver a usarla, busca la red e introduce su contraseña de nuevo.",
+  "box_status.network.stop": "Parar",
   "box_status.network.accepted":
     "El servidor ha aceptado la solicitud. El resultado puede tardar un par de minutos en aparecer aquí.",
   "box_status.network.last_change": "Último cambio",

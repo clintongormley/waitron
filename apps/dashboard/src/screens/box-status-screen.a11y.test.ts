@@ -1,3 +1,4 @@
+import type { WtDialog } from "@waitron/ui/src/components/wt-dialog.js";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { setLocale } from "../i18n/t.js";
@@ -162,6 +163,21 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
       const closed = dialogClosed(dialog);
       void dialog.requestClose("cancel");
       await closed;
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=wifi-forget]")!);
+      const confirmation = el.shadowRoot!.querySelector<WtDialog>(
+        'wt-dialog[data-test="wifi-forget-dialog"]',
+      )!;
+      await expect.poll(() => confirmation.open).toBe(true);
+      await expectNoA11yViolations(host);
+      if (import.meta.env.VITE_WIFI_LOOK)
+        await page.screenshot({
+          path: `__screenshots__/wifi-look/${locale}-${theme}-${width}-forget.png`,
+        });
+      const stopped = dialogClosed(confirmation);
+      await userEvent.click(
+        confirmation.querySelector<HTMLElement>("[data-test=wifi-forget-stop]")!,
+      );
+      await stopped;
     }
     await page.viewport(1280, 768);
   });
