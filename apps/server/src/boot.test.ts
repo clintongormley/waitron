@@ -3256,6 +3256,41 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
     });
   }, 60_000);
 
+  it("the equipment read tells a device two hours off that its time is wrong, while the box is synchronised", async () => {
+    await withCapturedStdout(async () => {
+      const port = await freePort();
+      const server = await startServer(
+        {
+          ...KEY_ENV,
+          WAITRON_VENUE_DIR: sharedVenueDir,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_HTTP_HOST: "0.0.0.0",
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_ENV: "dev",
+        },
+        {},
+        {
+          timings: { minTickMs: 50, maxTickMs: 200, skipRetryMs: 100 },
+          requestFromBox: () => false,
+          boxHost: synchronisedBoxHost(),
+        },
+      );
+      try {
+        const deviceMs = Date.now() + 2 * 3_600_000;
+        const res = await fetch(`http://127.0.0.1:${httpPort()}/api/device/equipment`, {
+          headers: { [DEV_DEVICE_HEADER]: deviceId1, [DEVICE_CLOCK_HEADER]: String(deviceMs) },
+        });
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as { notices: { code: string }[] };
+        expect(body.notices.filter((n) => n.code === "clock.device_wrong")).toEqual([
+          expect.objectContaining({ code: "clock.device_wrong", severity: "warning" }),
+        ]);
+      } finally {
+        await server.close();
+      }
+    });
+  }, 60_000);
+
   it("the equipment read names a stuck kitchen printer", async () => {
     const [printer] = await sharedDb
       .insert(printers)

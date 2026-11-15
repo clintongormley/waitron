@@ -2006,6 +2006,7 @@ export const en = {
   "staff_notice.clock.unusable": "Sales can't be recorded: the server's clock is wrong",
   "staff_notice.storage.space_low": "The server is nearly out of space",
   "staff_notice.clock.check_time": "The server's time needs checking",
+  "staff_notice.clock.device_wrong": "This device's time is wrong",
   "staff_notice.clock.unconfirmed":
     "Payments wait: the server is waiting for devices to connect and agree with its time ({agreed} of 2 so far)",
   "staff_notice.clock.unconfirmed_jumped":
@@ -2021,6 +2022,7 @@ export const en = {
   "staff_notice.unknown": "The server needs attention",
   "staff_notice.tell_manager": "Tell a manager",
   "staff_notice.check_time": "Check the time",
+  "staff_notice.correct_device_time": "Correct it in this device's settings",
   "box_time.title": "Check the time",
   "box_time.loading": "Reading the server's time…",
   "box_time.important": "It is very important that the time on the server is correct.",
@@ -4056,6 +4058,7 @@ export const es: Record<StringKey, string> = {
     "No se pueden registrar ventas: la hora del servidor es incorrecta",
   "staff_notice.storage.space_low": "Queda poco espacio en el servidor",
   "staff_notice.clock.check_time": "Hay que comprobar la hora del servidor",
+  "staff_notice.clock.device_wrong": "La hora de este dispositivo es incorrecta",
   "staff_notice.clock.unconfirmed":
     "Los cobros esperan: el servidor espera a que se conecten dispositivos y coincidan con su hora ({agreed} de 2 por ahora)",
   "staff_notice.clock.unconfirmed_jumped":
@@ -4071,6 +4074,7 @@ export const es: Record<StringKey, string> = {
   "staff_notice.unknown": "El servidor necesita atención",
   "staff_notice.tell_manager": "Avisa al encargado",
   "staff_notice.check_time": "Comprobar la hora",
+  "staff_notice.correct_device_time": "Corrígela en los ajustes del dispositivo",
   "box_time.title": "Comprobar la hora",
   "box_time.loading": "Leyendo la hora del servidor…",
   "box_time.important": "Es muy importante que la hora del servidor sea correcta.",

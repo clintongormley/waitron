@@ -49,7 +49,13 @@ import {
   sealedStateAlertSource,
 } from "./alert-sources.js";
 import { createTtlCache } from "./ttl-cache.js";
+import { clockDisagreesAlertSource } from "./clock-disagrees-alert.js";
+import { sharedClockServiceReading } from "./clock-service-reading.js";
+import { clockSyncAlertSource } from "./clock-sync-alert.js";
+import { createClockWitnessStore } from "./clock-witnesses.js";
 import { createAlertRegistry } from "./alerts.js";
+import { expectWriteRunsWhileHostHeld, heldClockStatus } from "./testing/held-clock-status.js";
+import { clockServiceAnswer } from "./testing/synchronised-box-host.js";
 import { ALL_ALERT_CLAIMS } from "./modules.js";
 import "./errors.js";
 
@@ -776,6 +782,38 @@ describe("ongoing alert sources through the route", () => {
         params: { area: "card_reader" },
       }),
     ]);
+  });
+
+  it("waits for the box's time service without holding the write lock", async () => {
+    const v = await seedVenueWithStaff();
+    const held = heldClockStatus();
+    const reading = sharedClockServiceReading({ clockStatus: held.status }, () => NOW);
+    const witnesses = createClockWitnessStore({
+      wall: () => NOW.getTime(),
+      monotonic: () => 0,
+    });
+    for (const [id, address] of [
+      ["till-a", "192.168.10.31"],
+      ["till-b", "192.168.10.32"],
+    ] as const) {
+      witnesses.noteDevice(id, address, NOW.getTime() + 2 * 3_600_000, {
+        wallMs: NOW.getTime(),
+        monoMs: 0,
+      });
+    }
+    const registry = createAlertRegistry({
+      claims: ALL_ALERT_CLAIMS,
+      sources: [
+        clockSyncAlertSource({ status: reading.read, production: true }),
+        clockDisagreesAlertSource(witnesses, reading.read),
+      ],
+    });
+    const response = get(appFor(registry), "/management-api/alerts", v.admin);
+    await expectWriteRunsWhileHostHeld(db, held, clockServiceAnswer(false));
+    const res = await response;
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { alerts: { code: string }[] };
+    expect(body.alerts.map((a) => a.code).sort()).toEqual(["clock.disagrees", "clock.sync_off"]);
   });
 
   it("shows one unavailable alert when transaction and external sources fail in the same area", async () => {

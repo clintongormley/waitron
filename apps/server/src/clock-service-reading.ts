@@ -13,3 +13,28 @@ export function sharedClockServiceReading(
     clear: () => cache.clear(),
   };
 }
+
+/** Whether the host's answer says the box's clock is synchronised, whatever it reports of the
+ * service: the host refuses a clock set on that flag alone. */
+export function answersSynchronised(answer: ClockServiceStatus): boolean {
+  return answer.available && answer.synchronised;
+}
+
+/** `clockStatus`'s answer; a host that throws answers as lost. */
+export async function clockServiceAnswerOf(
+  clockStatus: () => Promise<ClockServiceStatus>,
+): Promise<ClockServiceStatus> {
+  try {
+    return await clockStatus();
+  } catch {
+    return { available: false, reason: "lost" };
+  }
+}
+
+/** {@link answersSynchronised} of `status`'s answer; a host that does not answer, or throws,
+ * counts as not synchronised. */
+export async function clockServiceSynchronised(
+  status: () => Promise<ClockServiceStatus>,
+): Promise<boolean> {
+  return answersSynchronised(await clockServiceAnswerOf(status));
+}

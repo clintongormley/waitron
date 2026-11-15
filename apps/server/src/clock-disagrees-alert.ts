@@ -1,16 +1,23 @@
 import { judgeClockWitnesses } from "@waitron/fiscal";
 import type { AlertSource } from "@waitron/module";
+import type { ClockServiceStatus } from "./box-host-client.js";
+import { clockServiceSynchronised } from "./clock-service-reading.js";
 import type { ClockWitnessStore } from "./clock-witnesses.js";
 
+/** While the box's time service is synchronised the owner trusts it over every device, so device
+ * readings are left out (a till over a minute off is told its own time is wrong); the other box's
+ * still counts. */
 export function clockDisagreesAlertSource(
   store: Pick<ClockWitnessStore, "witnesses">,
+  status: () => Promise<ClockServiceStatus>,
   readPeer?: () => Promise<{ boxAt: string; peerAt: string } | null>,
 ): AlertSource {
   return {
     area: "box",
     permission: "system.manage",
+    readOutsideTransaction: true,
     async read({ now }) {
-      const witnesses = store.witnesses();
+      const witnesses = (await clockServiceSynchronised(status)) ? [] : store.witnesses();
       const group = judgeClockWitnesses(witnesses).devicesDisagreeing;
       if (group.length === 0) {
         const peer = await readPeer?.();

@@ -145,8 +145,11 @@ export interface DeviceApiDeps {
   /** What the equipment read tells staff about the box. Absent, it answers no notices. */
   notices?: {
     sources: readonly OwnedStaffNoticeSource[];
-    /** Sources that depend on which device asks; read after `sources`. */
-    deviceSources?: (deviceId: string) => readonly OwnedStaffNoticeSource[];
+    /** Sources that depend on which device asks; read after `sources`. Settled before the first
+     * source's turn, so a wait here holds no write lock. */
+    deviceSources?: (
+      deviceId: string,
+    ) => readonly OwnedStaffNoticeSource[] | Promise<readonly OwnedStaffNoticeSource[]>;
     clock: Pick<TrustedClock, "now">;
     filing: () => { enabled: boolean };
   };
@@ -448,7 +451,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       const { clock } = deps.notices;
       const sources = [
         ...deps.notices.sources,
-        ...(deps.notices.deviceSources?.(device.deviceId) ?? []),
+        ...((await deps.notices.deviceSources?.(device.deviceId)) ?? []),
       ];
       const reading = clock.now();
       const filing = deps.notices.filing();

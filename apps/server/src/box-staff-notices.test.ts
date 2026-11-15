@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
+import type { ClockWitness } from "@waitron/fiscal";
 import type { StaffNoticeReadContext } from "@waitron/module";
 import {
   BOX_CLOCK_NOTICE_OWNER,
   BOX_NOTICE_OWNER,
   boxStaffNoticeSource,
   clockCheckNoticeSource,
+  DEVICE_CLOCK_NOTICE_OWNER,
+  deviceClockNoticeSource,
   deviceNoticeSources,
   devicePrinterNoticeSources,
   printerStaffNoticeSource,
@@ -12,6 +15,7 @@ import {
 import type { FreeSpaceReading } from "./free-space-watch.js";
 import type { PrinterInTrouble } from "./print-job-trouble.js";
 import { ALL_MODULES } from "./modules.js";
+import { clockServiceAnswer } from "./testing/synchronised-box-host.js";
 import { readStaffNotices } from "./staff-notices.js";
 
 const AT = new Date("2026-10-22T10:00:00.000Z");
@@ -372,5 +376,85 @@ describe("printer notices", () => {
     now = new Date(AT.getTime() + 10_000);
     await one[0]!.source.read(CTX);
     expect(trouble).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("this device's own clock", () => {
+  it("has an owner of its own, which no module is named", () => {
+    expect(DEVICE_CLOCK_NOTICE_OWNER).toBe("device-clock");
+    expect(ALL_MODULES.map((module) => module.name)).not.toContain(DEVICE_CLOCK_NOTICE_OWNER);
+  });
+
+  const witness = (id: string, differenceMs: number) => ({
+    id,
+    boxAt: AT.toISOString(),
+    witnessAt: new Date(AT.getTime() + differenceMs).toISOString(),
+    uncertaintyMs: 0,
+  });
+  const WITNESSES = [witness("till-a", 60_001), witness("till-b", 60_000)];
+  const lookUp = (witnesses: readonly ClockWitness[]) => (id: string) =>
+    witnesses.find((w) => w.id === id);
+  const SYNCED = clockServiceAnswer(true);
+  const status = () => Promise.resolve(SYNCED);
+  const WRONG = {
+    key: "clock.device_wrong",
+    code: "clock.device_wrong",
+    severity: "warning",
+    params: {},
+  };
+
+  it.each([
+    { name: "more than a minute off", witnesses: WITNESSES, id: "till-a", expected: [WRONG] },
+    { name: "exactly a minute off", witnesses: WITNESSES, id: "till-b", expected: [] },
+    { name: "with no reading", witnesses: WITNESSES, id: "till-c", expected: [] },
+    {
+      name: "off in the other direction",
+      witnesses: [witness("till-a", -3_600_000)],
+      id: "till-a",
+      expected: [WRONG],
+    },
+  ])(
+    "tells a device $name what the box's synchronised time service makes of it",
+    async ({ witnesses, id, expected }) => {
+      const off = await deviceClockNoticeSource({ witness: lookUp(witnesses), status }, id);
+      expect(off.owner).toBe(DEVICE_CLOCK_NOTICE_OWNER);
+      expect(await off.source.read(CTX)).toEqual(expected);
+    },
+  );
+
+  it("tells nobody while the time service is not synchronised or does not answer", async () => {
+    for (const status of [
+      () => Promise.resolve({ ...SYNCED, synchronised: false }),
+      () => Promise.resolve({ ...SYNCED, service: "off" as const, synchronised: false }),
+      () => Promise.resolve({ available: false as const, reason: "missing" as const }),
+      () => Promise.reject(new Error("host gone")),
+    ]) {
+      const off = await deviceClockNoticeSource({ witness: lookUp(WITNESSES), status }, "till-a");
+      expect(await off.source.read(CTX)).toEqual([]);
+    }
+  });
+
+  it("judges synchronised as the start check does, whatever the service reports", async () => {
+    for (const service of ["off", "stopped"] as const) {
+      const off = await deviceClockNoticeSource(
+        { witness: lookUp(WITNESSES), status: () => Promise.resolve({ ...SYNCED, service }) },
+        "till-a",
+      );
+      expect(await off.source.read(CTX)).toEqual([WRONG]);
+    }
+  });
+
+  it("a failing look at the readings fails only the source's own read", async () => {
+    const failing = new Error("witnesses gone");
+    const source = await deviceClockNoticeSource(
+      {
+        witness: () => {
+          throw failing;
+        },
+        status,
+      },
+      "till-a",
+    );
+    await expect(source.source.read(CTX)).rejects.toBe(failing);
   });
 });

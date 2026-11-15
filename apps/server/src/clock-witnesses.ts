@@ -23,6 +23,8 @@ export interface ClockWitnessStore {
   /** Every fresh reading (at most five minutes old by the steady clock, with no step of the wall
    * clock since), agreeing or not. */
   witnesses(): ClockWitness[];
+  /** `deviceId`'s reading, while {@link witnesses} would hand it out; forgets stale ones as it does. */
+  witness(deviceId: string): ClockWitness | undefined;
   /** The clock was set: forget every reading `witnesses()` would hand out. */
   clear(): void;
 }
@@ -51,6 +53,13 @@ export function createClockWitnessStore(
     );
   }
 
+  /** Forgets every reading that is no longer fresh, so one a step made stale stays forgotten
+   * once the step is undone. */
+  function prune(): void {
+    const now = { wallMs: wall(), monoMs: monotonic() };
+    for (const [id, kept] of devices) if (!fresh(kept, now)) devices.delete(id);
+  }
+
   return {
     noteDevice(deviceId, address, deviceMs, arrived) {
       if (!Number.isSafeInteger(deviceMs) || !writable(deviceMs) || !writable(arrived.wallMs))
@@ -69,9 +78,12 @@ export function createClockWitnessStore(
       });
     },
     witnesses() {
-      const now = { wallMs: wall(), monoMs: monotonic() };
-      for (const [id, kept] of devices) if (!fresh(kept, now)) devices.delete(id);
+      prune();
       return [...devices.values()].map((kept) => kept.witness);
+    },
+    witness(deviceId) {
+      prune();
+      return devices.get(deviceId)?.witness;
     },
     clear() {
       devices.clear();

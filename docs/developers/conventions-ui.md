@@ -2158,7 +2158,11 @@ while it is stuck (no later document on it has printed), and as `printer.ticket_
 document has printed but a ticket it gave up on has no printed reprint or resend: a kitchen printer for
 every device, another only for the
 devices whose receipts, payment slips or full invoices resolve to it (`printerStaffNoticeSource`,
-`apps/server/src/box-staff-notices.ts`). Logging out clears the till's notices (`#endOperatorSession`), so nothing
+`apps/server/src/box-staff-notices.ts`), and the device's own clock (`device-clock`,
+`deviceClockNoticeSource`), which names `clock.device_wrong` while the box's time service is
+synchronised and that device's latest fresh reading (at most five minutes old, with no step of
+the box's wall clock since) is more than a minute from the box's; the time service is asked
+before the first source's write-lock turn. Logging out clears the till's notices (`#endOperatorSession`), so nothing
 carries from one session to the next. A kitchen display in device mode signs no one in, runs no
 equipment poll and draws no strip. Pinned by `apps/till/src/till-app.notices.test.ts`, under "the
 staff notices an open till keeps", and `apps/till/src/state/staff-notices.test.ts`. The printer source is pinned by

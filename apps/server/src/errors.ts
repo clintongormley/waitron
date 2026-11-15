@@ -1668,9 +1668,12 @@ declare module "@waitron/shared" {
     /** Ongoing alert built as data by the clock-disagrees alert source, never thrown. */
     "clock.peer_disagrees": { peer: boolean; differenceMs: number };
     /** Two or more fresh devices agree with each other that the box's clock is more than a minute
-     * off. `deviceAt` is the box's time moved by their mean difference. Built as data by the
-     * clock-disagrees alert source, never thrown. */
+     * off, and the box's time service is not synchronised. `deviceAt` is the box's time moved by
+     * their mean difference. Built as data by the clock-disagrees alert source, never thrown. */
     "clock.disagrees": { count: number; deviceAt: string; boxAt: string };
+    /** The box's time service is synchronised and this device's latest reading is more than a
+     * minute from the box's clock. A staff notice for that device alone, never thrown. */
+    "clock.device_wrong": Record<string, never>;
     /** The box's time service is switched off (`off`), on with no time unit running (`stopped`),
      * running but not synchronised (`unsynchronised`), or the box's clock service did not answer in
      * production (`unreachable`). Built as data by the clock-sync alert source, never thrown. */

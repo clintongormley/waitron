@@ -63,6 +63,48 @@ describe("createClockWitnessStore", () => {
     expect(dropped.witnesses()).toEqual([]);
   });
 
+  it("hands out one device's fresh reading under the same rules, and none for an unknown id", () => {
+    const clock = clocks();
+    const store = storeWith(clock);
+    store.noteDevice("till-1", "192.168.10.31", START_WALL + 3_000, clock.arrived());
+    store.noteDevice("till-2", "192.168.10.31", START_WALL + 4_000, clock.arrived());
+    clock.advance(299_000);
+    expect(store.witness("till-1")).toEqual({
+      id: "till-1",
+      address: "192.168.10.31",
+      boxAt: iso(START_WALL),
+      witnessAt: iso(START_WALL + 3_000),
+      uncertaintyMs: 0,
+    });
+    expect(store.witness("till-2")).toEqual(
+      expect.objectContaining({ id: "till-2", witnessAt: iso(START_WALL + 4_000) }),
+    );
+    expect(store.witness("till-3")).toBeUndefined();
+    clock.advance(2_000);
+    expect(store.witness("till-1")).toBeUndefined();
+    expect(store.witness("till-2")).toBeUndefined();
+
+    const stepped = clocks();
+    const afterStep = storeWith(stepped);
+    afterStep.noteDevice("till-1", "192.168.10.31", START_WALL, stepped.arrived());
+    stepped.advance(10_000);
+    stepped.stepWall(900);
+    expect(afterStep.witness("till-1")).toEqual(expect.objectContaining({ id: "till-1" }));
+    stepped.stepWall(1_100);
+    expect(afterStep.witness("till-1")).toBeUndefined();
+  });
+
+  it("forgets every reading a step made stale when one device's reading is looked up", () => {
+    const clock = clocks();
+    const store = storeWith(clock);
+    store.noteDevice("till-1", "192.168.10.31", START_WALL, clock.arrived());
+    store.noteDevice("till-2", "192.168.10.32", START_WALL, clock.arrived());
+    clock.stepWall(2_000);
+    expect(store.witness("till-1")).toBeUndefined();
+    clock.stepWall(-2_000);
+    expect(store.witnesses()).toEqual([]);
+  });
+
   it("keeps only the later of two readings from one device", () => {
     const clock = clocks();
     const store = storeWith(clock);

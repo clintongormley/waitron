@@ -45,6 +45,12 @@ export function staffNoticeText(
   if (notice.code === "print_job.drawer_expired") {
     return { main: t("staff_notice.print_job.drawer_expired"), hint: "" };
   }
+  if (notice.code === "clock.device_wrong") {
+    return {
+      main: t("staff_notice.clock.device_wrong"),
+      hint: t("staff_notice.correct_device_time"),
+    };
+  }
   if (Object.hasOwn(FIXED, notice.code)) {
     return {
       main: t(FIXED[notice.code as keyof typeof FIXED]),

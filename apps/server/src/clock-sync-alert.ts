@@ -14,6 +14,7 @@ export function clockSyncAlertSource(deps: {
   return {
     area: "box",
     permission: "system.manage",
+    readOutsideTransaction: true,
     async read() {
       const status = await deps.status();
       let reason: Reason | null;

@@ -5,6 +5,7 @@ import {
   type FutureDateRefusal,
 } from "@waitron/fiscal";
 import type { ClockServiceStatus } from "./box-host-client.js";
+import { answersSynchronised, clockServiceAnswerOf } from "./clock-service-reading.js";
 
 /** How close two devices' clocks must be to the box's, and to each other, to confirm a start. */
 export const START_CLOCK_MARGIN_MS = 5_000;
@@ -109,16 +110,6 @@ export interface StartClockCheckDeps {
   heads(): Promise<ChainHeads>;
 }
 
-async function clockServiceAnswerOf(
-  clockStatus: () => Promise<ClockServiceStatus>,
-): Promise<ClockServiceStatus> {
-  try {
-    return await clockStatus();
-  } catch {
-    return { available: false, reason: "lost" };
-  }
-}
-
 /** Sends the box back to waiting unless the time service answers synchronised; a host that
  * throws or does not answer counts as not synchronised. Answers whether it moved. */
 export async function backToWaitingUnlessSynchronised(
@@ -127,7 +118,7 @@ export async function backToWaitingUnlessSynchronised(
 ): Promise<boolean> {
   const answer = await clockServiceAnswerOf(deps.clockStatus);
   deps.state.noteHost(answer.available);
-  if (answer.available && answer.synchronised) return false;
+  if (answersSynchronised(answer)) return false;
   deps.state.backToWaiting(cause);
   return true;
 }
@@ -155,7 +146,7 @@ export async function backToWaitingForRefusal(
   if (!applies()) return "unchanged";
   const answer = await clockServiceAnswerOf(deps.clockStatus);
   deps.state.noteHost(answer.available);
-  if (answer.available && answer.synchronised) return "synchronised";
+  if (answersSynchronised(answer)) return "synchronised";
   // A person may have confirmed while the time service was read.
   if (!applies()) return "unchanged";
   deps.state.backToWaiting("future_date_refused", refusal.issuedOn);
@@ -168,8 +159,7 @@ export async function lookAtClockService(deps: StartClockCheckDeps): Promise<voi
   if (deps.state.status === "by_internet") return;
   const answer = await clockServiceAnswerOf(deps.clockStatus);
   deps.state.noteHost(answer.available);
-  if (answer.available && answer.synchronised)
-    deps.state.confirm("by_internet", await deps.heads());
+  if (answersSynchronised(answer)) deps.state.confirm("by_internet", await deps.heads());
 }
 
 /** The start's own look, on the state the process has just made. */
