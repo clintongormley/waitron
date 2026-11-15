@@ -712,13 +712,19 @@ it("refuses an ordinary uploaded file beside saved v2 Cloud state", async () => 
   const f = await fixture();
   const artifactPath = join(f.root, "received");
   await writeFile(artifactPath, f.request.artifact);
+  const validate = vi.fn(async () => {});
   await expect(
-    stageRestoreRequest(f.stateDir, {
-      kind: "archive-file",
-      artifactPath,
-      recoveryKey: "key",
-      environment: "preproduction",
-    }),
+    stageRestoreRequest(
+      f.stateDir,
+      {
+        kind: "archive-file",
+        artifactPath,
+        recoveryKey: "key",
+        environment: "preproduction",
+      },
+      validate,
+    ),
   ).rejects.toThrow(unavailable);
+  expect(validate).not.toHaveBeenCalled();
   await expect(f.marker()).rejects.toMatchObject({ code: "ENOENT" });
 });

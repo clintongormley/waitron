@@ -462,3 +462,40 @@ it("releases the upload gate even when removing the received file fails", async 
   expect((await send()).status).toBe(500);
   expect((await send()).status).toBe(500);
 });
+it("refuses an upload before the setup queue while configuration staging is busy", async () => {
+  let release!: () => void;
+  const waiting = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const stageConfiguration = vi.fn(async () => {
+    await waiting;
+    return { venue: {} as never, counts: {}, reconnect: [] };
+  });
+  const { app } = fixture({ stageConfiguration, stageRecovery: async () => ({ stagedId }) });
+  const first = app.request("/setup-api/configuration", {
+    method: "POST",
+    headers: {
+      "content-type": "application/octet-stream",
+      "x-waitron-export-passphrase": "export-key",
+    },
+    body: new Uint8Array([1]),
+  });
+  await vi.waitFor(() => expect(stageConfiguration).toHaveBeenCalledOnce());
+  let status: number | undefined;
+  const second = Promise.resolve(
+    app.request(
+      "/setup-api/recovery/stage",
+      stageForm({ eventId: "interactive-restore", source: archiveSource }),
+      tls(),
+    ),
+  ).then((response) => {
+    status = response.status;
+  });
+  try {
+    await expect.poll(() => status).toBe(409);
+  } finally {
+    release();
+    await first;
+    await second;
+  }
+});

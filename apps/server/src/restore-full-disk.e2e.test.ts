@@ -243,3 +243,29 @@ it("a streamed upload stops above the reserve on the small filesystem and remove
   expect(await readdir(dir)).toEqual([]);
   expect(small.free()).toBeGreaterThan(64 * KIB);
 });
+it("protects a reserve even when the whole upload would fit on the filesystem", async (ctx) => {
+  const small = needDisk(ctx);
+  const dir = small.folder("reserve-control");
+  const free = small.free();
+  expect(free).toBeGreaterThan(4 * MIB);
+  let consumed = 0;
+  const body = new ReadableStream({
+    pull(c) {
+      if (consumed === 4 * MIB) c.close();
+      else {
+        c.enqueue(new Uint8Array(64 * KIB));
+        consumed += 64 * KIB;
+      }
+    },
+  });
+  const request = new Request("http://localhost/upload", {
+    method: "POST",
+    body,
+    duplex: "half",
+  } as RequestInit);
+  await expect(
+    receiveSetupArchive(request, dir, { reserveBytes: free - MIB }),
+  ).rejects.toMatchObject({ code: "restore.archive_resource_limit" });
+  expect(consumed).toBeLessThan(4 * MIB);
+  expect(await readdir(dir)).toEqual([]);
+});

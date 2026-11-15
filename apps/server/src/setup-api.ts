@@ -711,7 +711,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       if (c.req.method !== "POST" || c.req.path.startsWith("/setup-api/first-setup/"))
         return next();
       if (
-        provisioning &&
+        (provisioning || fiscalTesting || configurationStaging || emailTesting()) &&
         ["/setup-api/restore", "/setup-api/restore/preview", "/setup-api/recovery/stage"].includes(
           c.req.path,
         )
@@ -1271,8 +1271,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
 
   app.post("/setup-api/restore-bucket/preview", async (c) => {
     const preview = deps.previewBucketRestore;
-    if (preview === undefined || deps.receiveArchive === undefined)
-      return directError(c, log, "setup.not_ready", 503);
+    if (preview === undefined) return directError(c, log, "setup.not_ready", 503);
     if (provisioning || fiscalTesting || configurationStaging || emailTesting())
       return directError(c, log, "setup.already_provisioning", 409);
     provisioning = true;
@@ -1324,7 +1323,8 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
 
   app.post("/setup-api/restore/preview", async (c) => {
     const preview = deps.previewRestore;
-    if (preview === undefined) return directError(c, log, "setup.not_ready", 503);
+    if (preview === undefined || deps.receiveArchive === undefined)
+      return directError(c, log, "setup.not_ready", 503);
     if (provisioning || fiscalTesting || configurationStaging || emailTesting())
       return directError(c, log, "setup.already_provisioning", 409);
     provisioning = true;
@@ -1384,6 +1384,16 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           !c.req.header("content-type")?.toLowerCase().startsWith("application/octet-stream")
         )
           invalidRequest("artifact");
+        const headerKey = multipart
+          ? undefined
+          : asString(c.req.header("x-waitron-recovery-key"), "recoveryKey");
+        const headerEnvironment = c.req.header("x-waitron-restore-environment");
+        if (
+          !multipart &&
+          headerEnvironment !== "production" &&
+          headerEnvironment !== "preproduction"
+        )
+          invalidRequest("environment");
         upload = await deps.receiveArchive!(c.req.raw, {
           fields: [
             "recoveryKey",
@@ -1399,14 +1409,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           const answer = form.get("oldBoxGone");
           if (answer != null && answer !== "0" && answer !== "1") invalidRequest("oldBoxGone");
         }
-        const recoveryKey = asString(
-          form === undefined ? c.req.header("x-waitron-recovery-key") : form.get("recoveryKey"),
-          "recoveryKey",
-        );
-        const rawEnvironment =
-          form === undefined
-            ? c.req.header("x-waitron-restore-environment")
-            : form.get("environment");
+        const recoveryKey =
+          form === undefined ? headerKey! : asString(form.get("recoveryKey"), "recoveryKey");
+        const rawEnvironment = form === undefined ? headerEnvironment : form.get("environment");
         if (rawEnvironment !== "production" && rawEnvironment !== "preproduction")
           invalidRequest("environment");
         const oldBoxGone =

@@ -188,3 +188,12 @@ it.each(["duplicate", "oversized"])(
     ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field: "body" } });
   },
 );
+it("counts multipart artifact bytes separately from the overhead budget", async () => {
+  const dir = await root();
+  const form = new FormData();
+  form.set("artifact", new Blob(["123456789"]));
+  await expect(receiveSetupArchive(request(form), dir, { maxBytes: 8 })).rejects.toMatchObject({
+    code: "restore.archive_resource_limit",
+  });
+  expect(await readdir(dir)).toEqual([]);
+});

@@ -144,3 +144,12 @@ it("refuses an upload declared above 4 GiB as capacity before validation", async
   });
   expect(read).not.toHaveBeenCalled();
 });
+it("reports a missing archive receiver as unavailable", async () => {
+  const app = new Hono();
+  const read = vi.fn(async () => preview);
+  mountSetup(app, { environment: "preproduction", previewRestore: read }, () => {});
+  const response = await app.request("/setup-api/restore/preview", request());
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
+  expect(read).not.toHaveBeenCalled();
+});
