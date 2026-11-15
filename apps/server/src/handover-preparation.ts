@@ -11,7 +11,11 @@ import { readHandoverEvent, readHandoverOperation, type HandoverOperation } from
 import { createErrorBoundary, readJsonBody } from "@waitron/server-kit";
 import { AppError, isAppError } from "@waitron/shared";
 import { HANDOVER_EVENT } from "./handover-store.js";
-import { switchCredentials, type SwitchSignIn } from "./handover-switch-proof.js";
+import {
+  parseSwitchSignIn,
+  switchCredentials,
+  type SwitchSignIn,
+} from "./handover-switch-proof.js";
 import type { Logger } from "./logger.js";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
@@ -106,8 +110,11 @@ export async function signInCredentials(
   emergency?: { c: Context; switchSignIn: SwitchSignIn },
 ): Promise<{ personId: string; password?: unknown; totp?: unknown }> {
   if (emergency !== undefined) {
-    const person = await switchCredentials(emergency.c, emergency.switchSignIn, db, signIn);
-    if (person !== undefined) return person;
+    const request = parseSwitchSignIn(emergency.c, signIn);
+    if (request.kind !== "password")
+      return switchCredentials(emergency.c, emergency.switchSignIn, db, request);
+    const { email, password, totp } = request;
+    return { personId: await personIdForLoginEmail(db, email), password, totp };
   }
   if (typeof signIn !== "object" || signIn === null) throw new AppError("password.invalid", {});
   const { email, password, totp } = signIn as Record<string, unknown>;

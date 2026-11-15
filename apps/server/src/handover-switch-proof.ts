@@ -11,6 +11,7 @@ import { AppError } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import type { Context } from "hono";
 import { getCookie, setCookie } from "hono/cookie";
+import { isRecord } from "./boot-peer-check.js";
 import { signAsThisBox } from "./handover-signing.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 import { switchSignedInAs, type SwitchSignedIn } from "./operation-authentication.js";
@@ -89,21 +90,23 @@ async function readSwitchProof(
   return body.personId;
 }
 
+/** Refuses unless the person is active and holds `node.manage` in `db`. */
+async function requireSwitchPerson(db: Database, personId: string): Promise<void> {
+  const [person] = await db
+    .select({ status: persons.status })
+    .from(persons)
+    .where(eq(persons.id, personId));
+  if (person?.status !== "active" || !holds(await readPersonAuthority(db, personId), "node.manage"))
+    refuse("not_permitted");
+}
+
 /** As `readSwitchProof`, once the person is also active and holds `node.manage` in `deps.db`. */
 export async function checkSwitchProof(
   deps: SwitchProofDeps,
   proof: string | null,
 ): Promise<{ personId: string }> {
   const personId = await readSwitchProof(deps, proof);
-  const [person] = await deps.db
-    .select({ status: persons.status })
-    .from(persons)
-    .where(eq(persons.id, personId));
-  if (
-    person?.status !== "active" ||
-    !holds(await readPersonAuthority(deps.db, personId), "node.manage")
-  )
-    refuse("not_permitted");
+  await requireSwitchPerson(deps.db, personId);
   return { personId };
 }
 
@@ -167,54 +170,81 @@ function challengeOf(response: AuthenticationResponseJSON): string | undefined {
   }
 }
 
-/**
- * What a take checks before it stops following, needing no copy and using up nothing: a passkey's
- * challenge is still live, or the proof cookie passes all but its person check. Each refuses with
- * the code `switchCredentials` would.
- */
-export async function precheckSwitchCredentials(
-  c: Context,
-  sw: SwitchSignIn,
-  signIn: unknown,
-): Promise<void> {
-  const fields =
-    typeof signIn === "object" && signIn !== null ? (signIn as Record<string, unknown>) : {};
-  if (fields.email !== undefined) return;
-  if (fields.passkey === undefined) {
-    await readSwitchProof(sw, readSwitchProofCookie(c));
-    return;
-  }
-  const challenge = challengeOf(fields.passkey as AuthenticationResponseJSON);
-  if (challenge === undefined || !sw.challenges.live(challenge))
-    throw new AppError("passkey.challenge_expired", {});
+/** An emergency step's sign-in, read once. With no sign-in, this box's proof cookie stands in. */
+export type SwitchSignInRequest =
+  | { kind: "password"; email: string; password: string; totp?: string }
+  | { kind: "passkey"; response: AuthenticationResponseJSON; challenge: string | undefined }
+  | { kind: "proof"; proof: string | null }
+  | { kind: "malformed" };
+
+export function parseSwitchSignIn(c: Context, signIn: unknown): SwitchSignInRequest {
+  if (signIn === undefined) return { kind: "proof", proof: readSwitchProofCookie(c) };
+  if (!isRecord(signIn)) return { kind: "malformed" };
+  const { email, password, totp, passkey } = signIn;
+  if (email !== undefined)
+    return typeof email === "string" &&
+      typeof password === "string" &&
+      (totp === undefined || typeof totp === "string")
+      ? { kind: "password", email, password, ...(totp === undefined ? {} : { totp }) }
+      : { kind: "malformed" };
+  if (!isRecord(passkey)) return { kind: "malformed" };
+  const response = passkey as unknown as AuthenticationResponseJSON;
+  return { kind: "passkey", response, challenge: challengeOf(response) };
 }
 
+type NotPassword = Exclude<SwitchSignInRequest, { kind: "password" }>;
+
 /**
- * For a sign-in without an email: a passkey over one of `sw`'s challenges, checked against `db`,
- * which sets the proof cookie; or else this box's proof cookie. Undefined for an email sign-in.
+ * Without `db`, checks only what needs no copy and uses nothing up. With it, a passkey's challenge
+ * is taken, its answer checked against `db` and the proof cookie set, or the proof's person is
+ * checked against `db`.
  */
-export async function switchCredentials(
+async function checkSwitchSignIn(
   c: Context,
   sw: SwitchSignIn,
-  db: Database,
-  signIn: unknown,
-): Promise<SwitchSignedIn | undefined> {
-  const fields =
-    typeof signIn === "object" && signIn !== null ? (signIn as Record<string, unknown>) : {};
-  if (fields.email !== undefined) return undefined;
-  const deps = { ...sw, db };
-  if (fields.passkey === undefined)
-    return switchSignedInAs((await checkSwitchProof(deps, readSwitchProofCookie(c))).personId);
-  const response = fields.passkey as AuthenticationResponseJSON;
-  const challenge = challengeOf(response);
-  if (challenge === undefined || !sw.challenges.take(challenge))
-    throw new AppError("passkey.challenge_expired", {});
+  signIn: NotPassword,
+  db?: Database,
+): Promise<string | undefined> {
+  if (signIn.kind === "malformed") refuse("malformed");
+  if (signIn.kind === "proof") {
+    const personId = await readSwitchProof(sw, signIn.proof);
+    if (db !== undefined) await requireSwitchPerson(db, personId);
+    return personId;
+  }
+  const { challenge, response } = signIn;
+  const live =
+    challenge !== undefined &&
+    (db === undefined ? sw.challenges.live(challenge) : sw.challenges.take(challenge));
+  if (!live) throw new AppError("passkey.challenge_expired", {});
+  if (db === undefined) return undefined;
   const site = await passkeyVerifySite(c, sw, venuePasskeyOrigins(db, sw.origin));
   const { personId } = await withTransaction(db, (tx) =>
     verifyPasskeyAssertion(tx, { challenge, response, ...site }),
   );
   if (!holds(await readPersonAuthority(db, personId), "node.manage"))
     throw new AppError("authorization.not_permitted", { permission: "node.manage" });
-  setSwitchProofCookie(c, await makeSwitchProof(deps, personId));
-  return switchSignedInAs(personId);
+  setSwitchProofCookie(c, await makeSwitchProof({ ...sw, db }, personId));
+  return personId;
+}
+
+/** What a take checks before it stops following, needing no copy and using up nothing. */
+export async function precheckSwitchCredentials(
+  c: Context,
+  sw: SwitchSignIn,
+  signIn: SwitchSignInRequest,
+): Promise<void> {
+  if (signIn.kind !== "password") await checkSwitchSignIn(c, sw, signIn);
+}
+
+/**
+ * A passkey over one of `sw`'s challenges, checked against `db`, which sets the proof cookie; or
+ * this box's proof cookie. A malformed sign-in is refused as a wrong password is.
+ */
+export async function switchCredentials(
+  c: Context,
+  sw: SwitchSignIn,
+  db: Database,
+  signIn: NotPassword,
+): Promise<SwitchSignedIn> {
+  return switchSignedInAs((await checkSwitchSignIn(c, sw, signIn, db))!);
 }

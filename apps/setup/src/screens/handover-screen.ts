@@ -56,11 +56,7 @@ const HELD_SIGN_IN_REFUSALS = new Set([
 ]);
 
 /** Refusals a fresh passkey answer can lift: no proof cookie, a lapsed one, or a used challenge. */
-const PROOF_REFUSALS = new Set([
-  "password.invalid",
-  "passkey.challenge_expired",
-  "handover.request_invalid",
-]);
+const PROOF_REFUSALS = new Set(["password.invalid", "passkey.challenge_expired"]);
 class PasskeyNotUsed extends Error {}
 
 @customElement("setup-handover-screen")

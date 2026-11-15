@@ -396,9 +396,7 @@ function switchSignIn(proof: SwitchProof, path: string, signIn: unknown): Respon
     return undefined;
   }
   if (signIn !== undefined || proof.cookie) return undefined;
-  return path.endsWith("/followed")
-    ? refusal("handover.request_invalid", 400)
-    : refusal("password.invalid", 401);
+  return refusal("password.invalid", 401);
 }
 const newProof = (): SwitchProof => ({ cookie: false, issued: [], used: new Set(), refusals: [] });
 /** The device's passkey answers whatever challenge it is handed; the WebAuthn library stays real. */

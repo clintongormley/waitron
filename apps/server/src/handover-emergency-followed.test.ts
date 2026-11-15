@@ -589,21 +589,31 @@ it("a refused take with nothing placed before leaves no copy folder", async () =
 });
 
 it.each([
-  ["no sign-in", undefined],
-  ["a sign-in that is not an object", "owner"],
-  ["an email that is not text", { email: 1, password: PASSWORD }],
-  ["no password", { email: ADMIN_EMAIL }],
-  ["a code that is not text", { email: ADMIN_EMAIL, password: PASSWORD, totp: 123456 }],
-])("refuses %s before the follower is touched", async (_name, credentials) => {
-  const s = service();
-  const answer = await s.post(credentials === undefined ? {} : { signIn: credentials });
-  expect(answer.status).toBe(400);
-  expect(answer.body.error?.code).toBe("handover.request_invalid");
-  expect(s.stopForSwitch).not.toHaveBeenCalled();
-  expect(s.asked).not.toHaveBeenCalled();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(s.restart).not.toHaveBeenCalled();
-});
+  ["no sign-in and no proof", undefined, 401, "password.invalid"],
+  ["a sign-in that is not an object", "owner", 400, "handover.request_invalid"],
+  ["an email that is not text", { email: 1, password: PASSWORD }, 400, "handover.request_invalid"],
+  ["no password", { email: ADMIN_EMAIL }, 400, "handover.request_invalid"],
+  [
+    "a code that is not text",
+    { email: ADMIN_EMAIL, password: PASSWORD, totp: 123456 },
+    400,
+    "handover.request_invalid",
+  ],
+  ["a passkey that is not an object", { passkey: "answer" }, 400, "handover.request_invalid"],
+  ["an empty sign-in", {}, 400, "handover.request_invalid"],
+] as const)(
+  "refuses %s before the follower is touched",
+  async (_name, credentials, status, code) => {
+    const s = service();
+    const answer = await s.post(credentials === undefined ? {} : { signIn: credentials });
+    expect(answer.status).toBe(status);
+    expect(answer.body.error?.code).toBe(code);
+    expect(s.stopForSwitch).not.toHaveBeenCalled();
+    expect(s.asked).not.toHaveBeenCalled();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(s.restart).not.toHaveBeenCalled();
+  },
+);
 
 it.each([
   ["a copy that fails its checks", "handover.copy_damaged", { failsAfterStop: false }],

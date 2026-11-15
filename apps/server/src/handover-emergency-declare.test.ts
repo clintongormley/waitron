@@ -813,6 +813,15 @@ describe("the switch's passkey and proof", () => {
     expect(answer.setCookie).toBeNull();
   });
 
+  it.each([
+    ["a passkey that is not an object", { passkey: "answer" }],
+    ["an empty sign-in, even beside a proof", {}],
+  ])("refuses %s as a wrong password", async (_name, signIn) => {
+    const s = service();
+    const answer = await s.post({ signIn }, true, "preview", await proofCookie());
+    expect(answer.body.error?.code).toBe("password.invalid");
+  });
+
   it("a passkey challenge is used once, and refused once older than two minutes", async () => {
     const passkey = await enrolledPasskey();
     const s = service();

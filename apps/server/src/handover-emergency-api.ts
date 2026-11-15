@@ -28,6 +28,7 @@ import {
   checkManagerPassword,
   endManagementSession,
   loginManagerById,
+  personIdForLoginEmail,
   persons,
   pinThrottleIdle,
   pinThrottleRetryAfterSeconds,
@@ -61,14 +62,15 @@ import {
   type SilentReason,
 } from "./boot-peer-check.js";
 import { checkEmergencyCopy, type EmergencyCopy } from "./handover-emergency-check.js";
-import { handoverSignInAttempt, signInCredentials } from "./handover-preparation.js";
+import { handoverSignInAttempt } from "./handover-preparation.js";
 import {
   createSwitchChallenges,
+  parseSwitchSignIn,
   precheckSwitchCredentials,
-  readSwitchProofCookie,
+  switchCredentials,
   type SwitchSignIn,
+  type SwitchSignInRequest,
 } from "./handover-switch-proof.js";
-import { isSwitchSignedIn } from "./operation-authentication.js";
 import { managementSite } from "./request-from-box.js";
 import { currentBinding, peerKeyOf, signAsThisBox } from "./handover-signing.js";
 import { advanceHandoverTx, beginHandoverTx, readHandoverEnvelope } from "./handover-store.js";
@@ -268,20 +270,14 @@ export function mountHandoverEmergencyApi(
       sourceServersUrl: new URL("/manage/servers", originOf(source!.contactUrl)).href,
     });
   }
-  async function authenticate(c: Context, signIn: unknown, db: Database = deps.db) {
-    const credentials = await signInCredentials(db, signIn, { c, switchSignIn });
-    if (isSwitchSignedIn(credentials))
-      return { personId: credentials.personId, method: "passkey" as const };
-    if (
-      typeof credentials.password !== "string" ||
-      (credentials.totp !== undefined && typeof credentials.totp !== "string")
-    )
-      throw new AppError("password.invalid", {});
-    const { personId, password, totp } = credentials as {
-      personId: string;
-      password: string;
-      totp: string | undefined;
-    };
+  async function authenticate(c: Context, signIn: SwitchSignInRequest, db: Database = deps.db) {
+    if (signIn.kind !== "password") {
+      const { personId } = await switchCredentials(c, switchSignIn, db, signIn);
+      return { personId, method: "passkey" as const };
+    }
+    const { password, totp } = signIn;
+    const personId = await personIdForLoginEmail(db, signIn.email);
+    const credentials = { personId };
     // End the sign-in transaction before checking the copy or the network. Only a passing check
     // reaches the separate node transaction, so neither slow operation holds a write lock.
     return handoverSignInAttempt(throttle, credentials, () =>
@@ -346,7 +342,7 @@ export function mountHandoverEmergencyApi(
   }
   async function preview(c: Context, raw: unknown) {
     if (!isRecord(raw)) refuseRequest("body");
-    await authenticate(c, raw.signIn);
+    await authenticate(c, parseSwitchSignIn(c, raw.signIn));
     const { sourceNodeId, source } = await mirrorSource();
     const operation = await readOpenHandoverOperation(deps.node, deps.nodeId);
     if (
@@ -401,7 +397,7 @@ export function mountHandoverEmergencyApi(
       if (payload.recoveryKey !== undefined && typeof payload.recoveryKey !== "string")
         refuseRequest("recoveryKey");
       return inTurn(deps.node, "handover-emergency", async () => {
-        await authenticate(c, payload.signIn);
+        await authenticate(c, parseSwitchSignIn(c, payload.signIn));
         const { sourceNodeId } = await mirrorSource();
         const open = await readOpenHandoverOperation(deps.node, deps.nodeId);
         if (open !== null)
@@ -453,7 +449,11 @@ export function mountHandoverEmergencyApi(
       log("warn", "handover.take_failure_not_counted", { errorCode: codeOf(written) }),
     );
   }
-  async function signInAgainstFollowed(c: Context, signIn: unknown, path: string): Promise<void> {
+  async function signInAgainstFollowed(
+    c: Context,
+    signIn: SwitchSignInRequest,
+    path: string,
+  ): Promise<void> {
     const followed = await openVenueDatabase(dirname(path));
     try {
       await authenticate(c, signIn, followed.venue);
@@ -461,16 +461,12 @@ export function mountHandoverEmergencyApi(
       await followed.close();
     }
   }
-  async function take(c: Context, signIn: unknown) {
-    // A malformed sign-in could never pass, so it is refused before anything is stopped.
-    const byPassword =
-      isRecord(signIn) &&
-      typeof signIn.email === "string" &&
-      typeof signIn.password === "string" &&
-      (signIn.totp === undefined || typeof signIn.totp === "string");
-    const byPasskey = isRecord(signIn) && signIn.email === undefined && isRecord(signIn.passkey);
-    const byProof = signIn === undefined && readSwitchProofCookie(c) !== null;
-    if (!byPassword && !byPasskey && !byProof) refuseRequest("signIn");
+  async function take(c: Context, raw: unknown) {
+    // A sign-in that could never pass is refused before anything is stopped.
+    const signIn = parseSwitchSignIn(c, raw);
+    if (signIn.kind === "malformed") refuseRequest("signIn");
+    if (signIn.kind === "proof" && !signIn.proof)
+      throw new AppError("password.invalid", {}, { reason: "missing" });
     const { sourceNodeId } = await mirrorSource();
     const open = await readOpenHandoverOperation(deps.node, deps.nodeId);
     if (open !== null)
@@ -546,7 +542,7 @@ export function mountHandoverEmergencyApi(
   );
   async function declare(c: Context, raw: unknown) {
     const request = parse(raw);
-    const actor = await authenticate(c, request.signIn);
+    const actor = await authenticate(c, parseSwitchSignIn(c, request.signIn));
     const stored = await readHandoverOperation(deps.node, deps.nodeId, request.operationId);
     if (stored !== null) {
       if (stored.scenario !== "emergency" || stored.role !== "destination")
