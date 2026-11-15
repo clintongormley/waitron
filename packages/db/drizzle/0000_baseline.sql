@@ -1952,18 +1952,21 @@ CREATE TABLE `option_labels` (
 	`kitchen_name` text,
 	`available` integer DEFAULT true NOT NULL,
 	`sort` integer DEFAULT 0 NOT NULL,
-	FOREIGN KEY (`list_id`) REFERENCES `option_lists`(`id`) ON UPDATE no action ON DELETE cascade
+	`is_default` integer DEFAULT false NOT NULL,
+	FOREIGN KEY (`list_id`) REFERENCES `option_lists`(`id`) ON UPDATE no action ON DELETE cascade,
+	CONSTRAINT "option_labels_name_ck" CHECK(trim("option_labels"."name") <> '')
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `option_labels_one_default_uq` ON `option_labels` (`list_id`) WHERE "option_labels"."is_default" = 1;--> statement-breakpoint
 CREATE INDEX `option_labels_list_sort_idx` ON `option_labels` (`list_id`,`sort`);--> statement-breakpoint
 CREATE TABLE `option_lists` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
 	`customer_name` text,
 	`kitchen_name` text,
-	`default_label_id` text,
 	`sort` integer DEFAULT 0 NOT NULL,
-	`active` integer DEFAULT true NOT NULL
+	`active` integer DEFAULT true NOT NULL,
+	CONSTRAINT "option_lists_name_ck" CHECK(trim("option_lists"."name") <> '')
 );
 --> statement-breakpoint
 CREATE TABLE `extra_list_items` (
@@ -1993,7 +1996,8 @@ CREATE TABLE `extra_lists` (
 	`max_picks` integer,
 	`sort` integer DEFAULT 0 NOT NULL,
 	`active` integer DEFAULT true NOT NULL,
-	CONSTRAINT "extra_lists_picks_ck" CHECK("extra_lists"."min_picks" >= 0 and ("extra_lists"."max_picks" is null or "extra_lists"."max_picks" >= "extra_lists"."min_picks"))
+	CONSTRAINT "extra_lists_name_ck" CHECK(trim("extra_lists"."name") <> ''),
+	CONSTRAINT "extra_lists_picks_ck" CHECK("extra_lists"."min_picks" >= 0 and ("extra_lists"."max_picks" is null or ("extra_lists"."max_picks" >= 1 and "extra_lists"."max_picks" >= "extra_lists"."min_picks")))
 );
 --> statement-breakpoint
 CREATE TABLE `product_modifiers` (

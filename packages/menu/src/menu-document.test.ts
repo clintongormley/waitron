@@ -4,13 +4,12 @@ import type {
   MenuChangeBody,
   IncludeFolderInput,
 } from "@waitron/shared";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   extraListItems,
   menuDetails,
   optionLabels,
-  optionLists,
   products,
   sectionMembers,
   sections,
@@ -768,9 +767,9 @@ describe("applyLiveFields", () => {
           .insert(optionLabels)
           .values({ id: CRUSHED_ICE, listId: f.iceList, name: "Crushed ice", sort: 2 });
         await tx
-          .update(optionLists)
-          .set({ defaultLabelId: publishedDefault })
-          .where(eq(optionLists.id, f.iceList));
+          .update(optionLabels)
+          .set({ isDefault: sql`id is ${publishedDefault}` })
+          .where(eq(optionLabels.listId, f.iceList));
       });
       const document = await build(f.lunch);
       const offer = document.offers[await app((tx) => offerOf(tx, f.lunch, f.lemonade))]!;

@@ -612,7 +612,7 @@ describe("seedDemoRestaurant", () => {
         join products p on p.id = pm.product_id
         join option_lists ol on ol.id = pm.option_list_id
         join option_labels lab on lab.list_id = ol.id
-        left join option_labels dflt on dflt.id = ol.default_label_id
+        left join option_labels dflt on dflt.list_id = ol.id and dflt.is_default = 1
         group by p.name, ol.name, dflt.name
         order by p.name, ol.name`);
       const optionListRows = optionListRaw.map((row) => ({

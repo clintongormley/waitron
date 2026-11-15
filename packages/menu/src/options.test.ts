@@ -222,7 +222,7 @@ describe("option list CRUD", () => {
       await run(async (tx) => {
         await tx.execute(sql`update option_labels set available = 0 where id = ${preferred}`);
         await tx.execute(
-          sql`update option_lists set default_label_id = ${storedDefault} where id = ${created.id}`,
+          sql`update option_labels set is_default = (id is ${storedDefault}) where list_id = ${created.id}`,
         );
       });
       const { id, ...body } = await run((tx) => getOptionList(tx, created.id));
@@ -250,7 +250,7 @@ describe("option list CRUD", () => {
     await run(async (tx) => {
       await tx.execute(sql`update option_labels set available = 0 where id = ${preferred}`);
       await tx.execute(
-        sql`update option_lists set default_label_id = ${preferred} where id = ${id}`,
+        sql`update option_labels set is_default = (id = ${preferred}) where list_id = ${id}`,
       );
     });
     const { id: openedId, ...opened } = await run((tx) => getOptionList(tx, id));
@@ -823,4 +823,46 @@ describe("option lists in the menu's configuration transfer", () => {
 
     expect(transferred.filter((table) => !classified.has(table))).toEqual([]);
   });
+});
+
+it("moves the preselected label within one save", async () => {
+  const a = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const b = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const created = await run((tx) =>
+    createOptionList(
+      tx,
+      {
+        name: "Cooking",
+        defaultLabelId: b,
+        labels: [
+          { id: a, name: "Rare" },
+          { id: b, name: "Well" },
+        ],
+      },
+      "en",
+    ),
+  );
+  const { id, ...body } = created;
+  const saved = await run((tx) => updateOptionList(tx, id, { ...body, defaultLabelId: a }, "en"));
+  expect(saved.defaultLabelId).toBe(a);
+  const { rows } = await fx.db.execute<{ id: string }>(
+    sql`select id from option_labels where list_id = ${id} and is_default = 1`,
+  );
+  expect(rows).toEqual([{ id: a }]);
+  const read = await run((tx) => listOptionLists(tx));
+  expect(read.find((list) => list.id === id)!.defaultLabelId).toBe(a);
+});
+
+it("clears the preselected label when its inactive list has no labels left", async () => {
+  const created = await run((tx) => createOptionList(tx, cookedList(), "en"));
+  const saved = await run((tx) =>
+    updateOptionList(
+      tx,
+      created.id,
+      { name: "Cooking", active: false, defaultLabelId: null, labels: [] },
+      "en",
+    ),
+  );
+  expect(saved.defaultLabelId).toBeNull();
+  expect(saved.labels).toEqual([]);
 });

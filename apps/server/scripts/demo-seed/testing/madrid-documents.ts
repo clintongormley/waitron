@@ -211,3 +211,24 @@ export function madridWithProductUnits(
   delete result.tables.product_units;
   return result;
 }
+
+export function madridWithOptionDefaults(
+  original: CanonicalMadridSemantics,
+): CanonicalMadridSemantics {
+  const result = structuredClone(original);
+  const lists = result.tables.option_lists!;
+  const labels = result.tables.option_labels!;
+  const defaults = new Map(Object.values(lists.rows).map((row) => [row.id, row.default_label_id]));
+  lists.columns = lists.columns.filter((column) => column.name !== "default_label_id");
+  for (const row of Object.values(lists.rows)) delete row.default_label_id;
+  labels.columns.push({
+    name: "is_default",
+    type: "INTEGER",
+    notnull: 1,
+    pk: 0,
+    dflt_value: "false",
+  });
+  for (const row of Object.values(labels.rows))
+    row.is_default = defaults.get(row.list_id) === row.id ? 1 : 0;
+  return result;
+}

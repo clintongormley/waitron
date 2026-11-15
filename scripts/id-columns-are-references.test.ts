@@ -111,13 +111,6 @@ function realSchema(table: string): TableSchema {
   };
 }
 
-/** The real declarations with one table's `references` taken away. */
-function withoutReferences(table: string): ConfigurationTransferTable[] {
-  return declarations.map((declaration) =>
-    declaration.name === table ? { ...declaration, references: [] } : declaration,
-  );
-}
-
 describe("every id-holding column of a transferred table is rewritten or left out of the export", () => {
   it("extracts JSON CHECK columns from the real stored table definition", () => {
     expect(realSchema("party_allergy_guests").jsonColumns).toEqual(["allergens"]);
@@ -168,15 +161,15 @@ describe("every id-holding column of a transferred table is rewritten or left ou
     expect(unrewrittenIdColumns(declarations, realSchema, NOT_REFERENCES)).toEqual([]);
   });
 
-  // Proof by deletion, kept as cases: each declared `references` entry is what clears its column.
-  it.each([["option_lists", "option_lists.default_label_id"]])(
-    "reports %s's reference column once its declaration is gone",
-    (table, column) => {
-      expect(unrewrittenIdColumns(withoutReferences(table), realSchema, NOT_REFERENCES)).toEqual([
-        column,
-      ]);
-    },
-  );
+  it("reports a synthetic reference until it is declared", () => {
+    const schema = () => ({ columns: ["id", "target_id"], foreignKeys: [], jsonColumns: [] });
+    expect(
+      unrewrittenIdColumns([{ name: "zz_owners", references: ["target_id"] }], schema, {}),
+    ).toEqual([]);
+    expect(unrewrittenIdColumns([{ name: "zz_owners" }], schema, {})).toEqual([
+      "zz_owners.target_id",
+    ]);
+  });
 
   // The other direction: an id-shaped column that holds no row id passes once listed, and only then.
   it("passes a listed id-shaped column that is not a reference, and reports it unlisted", () => {

@@ -66,8 +66,11 @@ default still belongs to the list and the submitted default is the effective fal
 the stored or submitted labels, the stored preference is kept. Removing it or choosing another
 available label uses the parser's result. Of what the parser
 returns, only a list with no available label, which only an inactive list may be, has no default.
-Configuration transfer copies rows without going through that parser, so a stored null default is
-still possible, and a reader of `defaultLabelId` has to accept one.
+The stored preference is `option_labels.is_default`; a partial unique index allows at most one
+flagged label per list. Reads return that label's id as `defaultLabelId`, including when it is
+unavailable. Configuration transfer can carry a list with no flagged label, so a reader still
+accepts a null default. Import refuses two flagged labels in one list, blank list or label names,
+and an extras maximum below one; the database also refuses blank names and a maximum of zero.
 
 On dashboard update, `OptionListSaveBody` omits availability flags unchanged from the
 opening draft, matched by choice id. The server fills omitted existing flags from its stored
@@ -84,9 +87,8 @@ the list was disabled after publication. Ordinary inactive-list management can s
 Older published versions may contain fewer choices; this is not a published-version guarantee.
 
 An **extras list** bounds how many picks it takes — `minPicks` 0 makes it optional, 1 or more makes
-it required, `maxPicks` null leaves it uncapped; the request check refuses a `maxPicks` of 0, but
-the database CHECK allows it and configuration transfer copies rows without the parser, so a reader
-has to accept a stored 0 — and each item bounds its own product with
+it required, and `maxPicks` null leaves it uncapped. A maximum must be at least 1. Each item bounds
+its own product with
 `maxQuantity` (at least 1, where 1 means "one or none", or null for no item limit). An item names a product and adds only the
 terms of the offer: it duplicates none of the product's names, VAT class, allergens, dietary labels
 or photo, which all come from the product. Each item stores the amount one pick adds in the

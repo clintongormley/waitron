@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { alias } from "drizzle-orm/sqlite-core";
 import { and, eq, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
 import {
   optionLabels,
@@ -25,12 +26,13 @@ import "./errors.js";
 
 // A LIST's `sort` is never written from a body (`parseOptionListInput` does not accept it), so the
 // id decides list order. A LABEL's `sort` is its position in the body (`writeLabels`).
+const defaultLabel = alias(optionLabels, "default_option_label");
 const listColumns = {
   id: optionLists.id,
   name: optionLists.name,
   customerName: optionLists.customerName,
   kitchenName: optionLists.kitchenName,
-  defaultLabelId: optionLists.defaultLabelId,
+  defaultLabelId: defaultLabel.id,
   active: optionLists.active,
 };
 const labelColumns = {
@@ -74,6 +76,10 @@ export async function listOptionLists(tx: Transaction): Promise<OptionListRow[]>
   const lists = await tx
     .select(listColumns)
     .from(optionLists)
+    .leftJoin(
+      defaultLabel,
+      and(eq(defaultLabel.listId, optionLists.id), eq(defaultLabel.isDefault, true)),
+    )
     .orderBy(optionLists.sort, optionLists.id);
   const withAll = await withLabels(tx, lists);
   const productCounts = await tx
@@ -101,6 +107,10 @@ export async function readOptionListsByIds(
   const lists = await tx
     .select(listColumns)
     .from(optionLists)
+    .leftJoin(
+      defaultLabel,
+      and(eq(defaultLabel.listId, optionLists.id), eq(defaultLabel.isDefault, true)),
+    )
     .where(inArray(optionLists.id, optionListIds))
     .orderBy(optionLists.sort, optionLists.id);
   return withLabels(tx, lists);
@@ -171,7 +181,8 @@ function normalizeNames(
 // Taken as "the rest" rather than field by field, so a column added to `ParsedOptionList` cannot be
 // left unwritten.
 function listValues(input: ParsedOptionList) {
-  const { labels, ...values } = input;
+  const { labels, defaultLabelId, ...values } = input;
+  void defaultLabelId;
   void labels; // discarded on purpose; the lint rule does not exempt a rest sibling
   return values;
 }
@@ -214,6 +225,11 @@ async function writeLabels(
         ? and(eq(optionLabels.listId, optionListId), notInArray(optionLabels.id, bodyIds))
         : eq(optionLabels.listId, optionListId),
     );
+  // Clear before assigning: a default can move to an earlier label in the same save.
+  await tx
+    .update(optionLabels)
+    .set({ isDefault: false })
+    .where(eq(optionLabels.listId, optionListId));
   const heldIds = new Set(existing.map((row) => row.id));
   for (const [sort, label] of input.labels.entries()) {
     const values = {
@@ -221,6 +237,7 @@ async function writeLabels(
       customerName: label.customerName,
       kitchenName: label.kitchenName,
       available: label.available,
+      isDefault: label.id === input.defaultLabelId,
       sort,
     };
     if (heldIds.has(label.id)) {
@@ -233,7 +250,7 @@ async function writeLabels(
     const inserted = await tx
       .insert(optionLabels)
       .values({ id: label.id, listId: optionListId, ...values })
-      .onConflictDoNothing()
+      .onConflictDoNothing({ target: optionLabels.id })
       .returning({ id: optionLabels.id });
     if (!inserted.length) throw new AppError("options.invalid", { field: `labels.${sort}.id` });
   }

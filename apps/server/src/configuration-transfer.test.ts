@@ -409,7 +409,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 33,
+  version: 34,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -1518,8 +1518,6 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
       },
       "es",
     );
-    // The default names a label of the same list, so the import has to remap BOTH and keep them
-    // pointing at each other.
     const withDefault = await updateOptionList(
       tx,
       optionList.id,
@@ -5495,7 +5493,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(33);
+  expect(exported.version).toBe(34);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)

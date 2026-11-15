@@ -2021,7 +2021,7 @@ Any other column the export
 carries that holds a row's id arrives holding the EXPORTING venue's id. Before W72a (#1230) the
 import replaced any text equal to a bundle id in every column, so a product named like an id arrived
 renamed; the narrowing is what makes this rule necessary. A reference the schema cannot give a
-foreign key goes in `references`, as `option_lists.default_label_id` does.
+foreign key goes in `references`.
 
 Cost: W72a's narrowing (#1230) made two existing columns need a `references` entry; without them
 two transfer cases failed.
@@ -6576,7 +6576,16 @@ menu defaults retain `settings.menu`.
 
 ### Product units and configuration format 33 (2026-11-15, A1308 mn4)
 
+> Historical format: superseded by the format-34 note below.
+
 Your export carries the product's unit in `products.unit_id` and uses format 33. A format-32
 export is refused as outdated. The pre-product-unit-column case in
 `apps/server/src/configuration-import.test.ts` checks that refusal; the writer and parser are in
 `packages/provisioning/src/configuration-transfer.ts`.
+
+
+### Option defaults and configuration format 34 (2026-11-15, A1308 mn9)
+
+Your export carries an options list's preference as `option_labels.is_default` and uses format 34.
+The list no longer carries `default_label_id`. A format-33 export is refused as outdated by the
+pre-option-default-flag case in `apps/server/src/configuration-import.test.ts`.

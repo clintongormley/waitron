@@ -494,6 +494,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 ### Menus and the menu
 
+- **Extras list forms still have two layout limits.** [Detail](backlog/menu.md#what-1151-left-open-2026-10-03)
+
 - **A1522. One product, the right VAT eaten here or taken away (owner, 2026-11-14).** Each product
   gets a second VAT class for takeaway, each department says whether it sells eaten in, taken away
   or chosen on the till, and each order records which. One price either way. Fiscal: the owner lands it.
