@@ -1792,7 +1792,6 @@ it("refuses course overrides with invalid references and values", () => {
   const base = {
     departments: [{ id: "dept" }],
     kitchen_courses: [{ id: "course" }],
-    department_sale_policies: [{ department_id: "dept" }],
   };
   const row = {
     department_id: "dept",
