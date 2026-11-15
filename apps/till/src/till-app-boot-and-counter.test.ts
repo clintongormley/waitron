@@ -6231,6 +6231,7 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
         receiptLanguages: string[];
         kitchenNote: string | null;
         kitchenNoteRevision: number;
+        counterZoneId: string;
       }
     >("till-table-order-screen")!;
     expect(order).not.toBeNull();
@@ -6242,6 +6243,7 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
     expect(order.receiptLanguages).toBe(receiptLanguages);
     expect(order.kitchenNote).toBe("No peanuts");
     expect(order.kitchenNoteRevision).toBe(4);
+    expect(order.counterZoneId).toBe("zone-counter");
   },
 );
 

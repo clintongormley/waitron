@@ -4335,6 +4335,71 @@ describe("till-table-order-screen", () => {
         expect(targetIds(el)).toEqual(["counter", "t6", "t7", "t8", "t9"]);
       });
 
+      describe("Move this bill's counter", () => {
+        const counter = (closed: boolean) => ({ ...zone("zone-counter", "prepay"), closed });
+
+        it("leaves out a closed counter area other than the bill's own, and offers it again once it reopens", async () => {
+          const setUp = floor("table_tab");
+          const { el } = await mount({
+            ...setUp,
+            counterZoneId: "zone-counter",
+            zones: [...setUp.zones, counter(true)],
+          });
+          await toMenu(el);
+          click(el, '[data-action="move-bill"]');
+          await el.updateComplete;
+          expect(targetIds(el)).toEqual(["t6", "t7", "t8", "t9"]);
+
+          el.zones = [...setUp.zones, counter(false)];
+          await el.updateComplete;
+          expect(targetIds(el)).toEqual(["counter", "t6", "t7", "t8", "t9"]);
+        });
+
+        it("keeps the counter when its area is the bill's own closed area", async () => {
+          const setUp = floor("table_tab");
+          const { el } = await mount({
+            ...setUp,
+            counterZoneId: "zone-dining",
+            zones: setUp.zones.map((zone) => ({ ...zone, closed: zone.id === "zone-dining" })),
+          });
+          await toMenu(el);
+          click(el, '[data-action="move-bill"]');
+          await el.updateComplete;
+          expect(targetIds(el)).toEqual(["counter", "t6", "t7", "t8", "t9"]);
+        });
+
+        it("keeps the counter for a presented bill when its area is closed", async () => {
+          const setUp = floor("table_tab");
+          const { el } = await mount({
+            ...setUp,
+            bills: setUp.bills.map((bill) => ({ ...bill, status: "placed" as const })),
+            counterZoneId: "zone-counter",
+            zones: [...setUp.zones, counter(true)],
+          });
+          await toMenu(el);
+          click(el, '[data-action="move-bill"]');
+          await el.updateComplete;
+          expect(targetIds(el)).toEqual(["counter", "t6", "t7", "t8", "t9"]);
+        });
+
+        it("says no other tables when the counter's area is closed and no table is left", async () => {
+          const setUp = floor("table_tab");
+          const { el } = await mount({
+            ...setUp,
+            counterZoneId: "zone-counter",
+            zones: [...setUp.zones, counter(true)],
+            tables: setUp.tables.filter((table) => table.id === "t4"),
+          });
+          await toMenu(el);
+          click(el, '[data-action="move-bill"]');
+          await el.updateComplete;
+          expect(targetIds(el)).toEqual([]);
+          expect(
+            el.shadowRoot!.querySelector("[data-target-picker] .empty")!.textContent!.trim(),
+          ).toBe(t("table.no_other_tables"));
+        });
+      });
+
       it.each([
         ["Move guests", "move", ["t6", "t7", "t9"]],
         ["Move this bill", "move-bill", ["counter", "t6", "t7", "t9"]],

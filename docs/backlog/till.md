@@ -2330,13 +2330,8 @@ except that it no longer waits on the retired split and transfer routes (A1196).
 
 ## Bundle: Do not offer a closed area as a destination
 
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
 
-- **Move this bill still offers a closed counter area (2026-10-15; open, A697 review).**
-  The table picker always offers The counter (`#tablePicker`,
-  `apps/till/src/screens/till-table-order-screen.ts`). Give the screen the counter area's identity
-  and apply that rule, preserving same-area moves and presented bills.
-  [Detail](till.md#move-this-bill-still-offers-a-closed-counter-area)
 - **Held-order closed-area destinations need the order's source area (2026-10-15; open,
   A697 follow-up).** Neither `HeldOrderSummary` nor `HeldOrder` includes the saved source area
   (`apps/till/src/api/client.ts`). Include that context in the read contract, then filter closed
@@ -3569,16 +3564,6 @@ place.
   not free, already grouped, zone mismatch) then show only after the seats are typed. Done when a
   floor join that needs seats asks for them before its first request and sends once.
   The request log is in #1699.
-
-## Move this bill still offers a closed counter area
-
-The table picker always offers The counter (`#tablePicker`,
-`apps/till/src/screens/till-table-order-screen.ts`), and the app sends its counter area
-(`#onMoveBill`, `apps/till/src/till-app.ts`). The real-route case "refuses a bill entering a
-closed zone at a counter" in `apps/server/src/till-api.zone-closed.test.ts` returns
-`service_zone.closed` for an open bill entering a different closed area. Give the screen the
-counter area's identity and apply that rule, preserving same-area moves and presented bills.
-A697 covers table destinations only; no screen-to-server counter probe was run.
 
 ## Held-order closed-area destinations need the order's source area
 

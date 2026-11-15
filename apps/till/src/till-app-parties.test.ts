@@ -3781,6 +3781,7 @@ describe("till-app: moving a bill", () => {
   it("moves the bill on screen to the counter, sending the counter's zone and the party revision", async () => {
     const { el } = await mountApp();
     const order = await openPartyTable(el);
+    expect(order.counterZoneId).toBe(zone.id);
     emit(order, "take-payment", { workingOrderId: "wo-check" });
     await flush(el);
 
