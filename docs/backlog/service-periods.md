@@ -266,14 +266,6 @@ its id. Left open by A789 slice 3, #2051 (plan D33).
 - **A season painter save writes each edited week whole**
   [Detail](service-periods.md#a-season-painter-save-writes-each-edited-week-whole)
 
-## A1545. Seasons and Periods: a list page and an edit page each
-
-Remaining owner question, raised by the watcher on 2026-11-15 at 14:10: does “replacing
-period-dialog.ts” also mean replacing the Calendar painters’ period pop-ups? They remain in
-place until the owner answers. The two lists, individual Add/Edit pages, row menus and inherited
-floor-plan display are built. The question belongs to the original A1545, owner request
-cb6dce040c.
-
 ## A1546. The Calendar: prep-station hours and the day box
 
 Owner, 2026-11-15, reviewing the Calendar's Opening hours tab. Mock-ups were shown to the owner and
@@ -308,6 +300,10 @@ The Opening hours guide (EN and ES) and design-system.md's Calendar section foll
 
 ## Decisions and deliberate limits
 
+- **Pop-up in painters (A1545, owner, 2026-11-15).** Keep the small period pop-up inside
+  the Calendar painters; elsewhere use the Periods pages. The owner chose “Pop-up in painters”
+  in the watcher’s window at 19:31, recorded by the watcher at 19:55.
+
 - **A holiday name has one date per year in each place** (lane C's default, 2026-11-15, with the
   2027 holiday data). `readHolidayDates` (`packages/venue-service/src/holidays.ts`) keeps only a
   name's first date in a year. Rather than change that reader, the test "never gives two holidays
@@ -323,6 +319,9 @@ tints and full phone labels, and its fields name their row._
 _2026-11-15, A1545 Periods slice: the list’s rows now open individual edit pages and its pinned
 row menus offer Edit and Delete. The Calendar painters retain their period dialogs pending the
 owner’s answer; the historical A719 dialog decisions below do not describe the list’s editor._
+
+_2026-11-15 at 19:31: the owner chose to keep the painter pop-ups; see “Pop-up in painters”
+above. The pending question in the earlier slice note is closed._
 
 _2026-11-15, A1545 Seasons slice: Seasons now has a list and individual Add/Edit pages, with
 deletion in the list menu. The older A721 table-editing receipts below describe its earlier

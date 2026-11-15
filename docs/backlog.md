@@ -649,11 +649,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   hours and closures kept in Waitron update the venue's Google Business Profile, so Google Maps never
   shows a closed venue as open. Needs a design. Not started.
 
-- **A1545. Period editors in the Calendar painters (owner answer pending).** The Seasons and
-  Periods lists and their individual Add/Edit pages are built. The watcher’s 2026-11-15 question
-  remains: keep the painters’ period pop-ups, or replace them too?
-  [Detail](backlog/service-periods.md#a1545-seasons-and-periods-a-list-page-and-an-edit-page-each)
-
 - **A1546. The Calendar: day boxes and special-day marks (owner, 2026-11-15).** The day box
   needs sections, wrapping and placement where you click; special-day bands and runs need a
   dashed shape distinct from purple seasons.
