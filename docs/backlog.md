@@ -1850,7 +1850,7 @@ Not in any track until the standalone primary is done.
   [A1188 design](superpowers/specs/2026-10-29-a1188-cloud-emergency-start-design.md).
   The emergency-card adapter is built; its facts need Cloud’s display endpoint. The card can reveal a fresh code and list permission/authenticator readiness; Cloud’s code endpoint is still required. Saved till facts (part 2), recovery-pack printing (A1187-2) and hosted runtime remain open.
   [Part 1 plan](superpowers/plans/2026-11-14-a1188-part1-emergency-card.md).
-  [Part 2 draft](superpowers/plans/2026-11-15-a1188-part2-till-facts.md) covers saved facts and the till entrance; it awaits review and watcher clearance.
+  [Part 2 plan](superpowers/plans/2026-11-15-a1188-part2-till-facts.md) covers saved facts and the till entrance; Claude reviewed it and the watcher cleared slice 2a on 15 November.
   [Detail](backlog/replication-cloud.md#a1188-someone-at-the-venue-can-start-the-venue-in-the-cloud-when-the-box-has-died-owner-2026-10-29)
 
 - **The till's theme fetch does not follow a server move (A841 slice 3).** The till fetches
