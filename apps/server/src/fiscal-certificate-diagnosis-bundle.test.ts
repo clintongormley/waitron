@@ -22,17 +22,6 @@ beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "diagnosis-bundle-"));
   entry = pathToFileURL(join(root, "fiscal-certificate-diagnosis.js"));
   await writeFile(join(root, "package.json"), '{"type":"module"}');
-  await run(
-    "pnpm",
-    [
-      "exec",
-      "node",
-      "../../scripts/bundle-node.mjs",
-      `src/fiscal-certificate-diagnosis-entry.ts=${entry.pathname}`,
-      `src/fiscal-certificate-diagnosis-runner.ts=${join(root, "host.js")}`,
-    ],
-    { cwd: resolve("."), timeout: 180_000, maxBuffer: 2_000_000 },
-  );
 }, 190_000);
 afterAll(async () => {
   if (root) await rm(root, { recursive: true, force: true });
@@ -79,15 +68,36 @@ await runCertificateDiagnosisEntry(id => {
   }};
 });`,
   );
-  await run("pnpm", ["exec", "node", "../../scripts/bundle-node.mjs", `${source}=${fixture}`], {
-    timeout: 180_000,
-    maxBuffer: 2_000_000,
-  });
+  await run(
+    "pnpm",
+    [
+      "exec",
+      "node",
+      "--input-type=module",
+      "--eval",
+      `import { bundle } from ${JSON.stringify(pathToFileURL(resolve("../../scripts/bundle-node.mjs")).href)}; bundle(${JSON.stringify([{ entry: source, outfile: fixture }])});`,
+    ],
+    { timeout: 180_000, maxBuffer: 2_000_000 },
+  );
   await rm(source);
   return { entry: pathToFileURL(fixture), pidMarker };
 }
 
 describe("shipped certificate diagnosis entry", () => {
+  beforeAll(async () => {
+    await run(
+      "pnpm",
+      [
+        "exec",
+        "node",
+        "../../scripts/bundle-node.mjs",
+        `src/fiscal-certificate-diagnosis-entry.ts=${entry.pathname}`,
+        `src/fiscal-certificate-diagnosis-runner.ts=${join(root!, "host.js")}`,
+      ],
+      { cwd: resolve("."), timeout: 180_000, maxBuffer: 2_000_000 },
+    );
+  }, 190_000);
+
   it.each(["sello", "representante"] as const)(
     "inspects selected %s bytes with the composed real module and no source loader",
     async (kind) => {
@@ -142,7 +152,9 @@ describe("shipped certificate diagnosis entry", () => {
       }
     }
   });
+});
 
+describe("local certificate diagnosis dispatcher", () => {
   it.each(["sello", "representante"] as const)(
     "runs one isolated local mTLS query for selected %s through the same dispatcher",
     async (kind) => {

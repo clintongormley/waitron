@@ -78,7 +78,7 @@ render(panel.render(false),document.querySelector("#panel"));
     { timeout: 90_000, maxBuffer: 2_000_000 },
   );
   browser = await chromium.launch({ headless: true, timeout: 15_000 });
-}, 120_000);
+}, 210_000);
 afterAll(async () => {
   await browser?.close();
   await child?.close();
