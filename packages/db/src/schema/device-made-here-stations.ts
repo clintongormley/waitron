@@ -3,7 +3,7 @@ import { id, table } from "./columns.js";
 import { devices } from "./devices.js";
 import { kitchenStations } from "./kitchen-stations.js";
 
-/** The stations whose items a device makes on the spot when it sends them (design §5.11). */
+/** Each device can stand at one station; non-till profiles ignore the saved choice. */
 export const deviceMadeHereStations = table(
   "device_made_here_stations",
   {
@@ -11,7 +11,7 @@ export const deviceMadeHereStations = table(
     stationId: id("station_id").notNull(),
   },
   (t) => [
-    primaryKey({ columns: [t.deviceId, t.stationId], name: "device_made_here_stations_pk" }),
+    primaryKey({ columns: [t.deviceId], name: "device_made_here_stations_pk" }),
     foreignKey({
       columns: [t.deviceId],
       foreignColumns: [devices.id],

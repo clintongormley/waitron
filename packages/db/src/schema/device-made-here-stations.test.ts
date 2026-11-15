@@ -46,6 +46,22 @@ describe("device made-here stations schema", () => {
     expect(isRefusal(duplicate, UNIQUE_VIOLATION)).toBe(true);
   });
 
+  it("refuses a second station for the same device", async () => {
+    const other = "aaaaaaaa-0000-4000-8000-000000000006";
+    await suite.db.insert(kitchenStations).values({ id: other, name: "Bar" });
+    await suite.db.insert(deviceMadeHereStations).values({ deviceId: DEVICE, stationId: STATION });
+    const error = await captureError(() =>
+      suite.db.insert(deviceMadeHereStations).values({ deviceId: DEVICE, stationId: other }),
+    );
+    expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
+    expect(
+      await suite.db
+        .select()
+        .from(deviceMadeHereStations)
+        .where(eq(deviceMadeHereStations.deviceId, DEVICE)),
+    ).toEqual([{ deviceId: DEVICE, stationId: STATION }]);
+  });
+
   it("refuses a device or station that does not exist", async () => {
     for (const [deviceId, stationId] of [
       [GHOST, STATION],

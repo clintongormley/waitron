@@ -2,6 +2,8 @@ import { and, eq, inArray } from "drizzle-orm";
 import type { Context, MiddlewareHandler } from "hono";
 import {
   deviceMadeHereStations,
+  devices,
+  deviceProfiles,
   serviceCommands,
   ticketItems,
   workingOrderLines,
@@ -228,7 +230,7 @@ export async function replayPrepayMadeHere(
     for (const id of row.result.value as string[]) cfg.madeHereSink.add(id);
 }
 
-/** The stations whose items `deviceId` makes on the spot. An absent device needs no query. */
+/** Only a fixed till suppresses kitchen output for its own station. */
 export async function readMadeHereStations(
   tx: Transaction,
   deviceId: string | undefined,
@@ -237,15 +239,25 @@ export async function readMadeHereStations(
   const rows = await tx
     .select({ stationId: deviceMadeHereStations.stationId })
     .from(deviceMadeHereStations)
-    .where(eq(deviceMadeHereStations.deviceId, deviceId));
+    .innerJoin(devices, eq(devices.id, deviceMadeHereStations.deviceId))
+    .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
+    .where(
+      and(eq(deviceMadeHereStations.deviceId, deviceId), eq(deviceProfiles.formFactor, "till")),
+    );
   return new Set(rows.map((row) => row.stationId));
 }
 
-/** Every device's list, with station ids in stable order. */
+/** The fixed tills' stations, in stable order. */
 export async function listMadeHereStations(tx: Transaction): Promise<Map<string, string[]>> {
   const rows = await tx
-    .select()
+    .select({
+      deviceId: deviceMadeHereStations.deviceId,
+      stationId: deviceMadeHereStations.stationId,
+    })
     .from(deviceMadeHereStations)
+    .innerJoin(devices, eq(devices.id, deviceMadeHereStations.deviceId))
+    .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
+    .where(eq(deviceProfiles.formFactor, "till"))
     .orderBy(deviceMadeHereStations.deviceId, deviceMadeHereStations.stationId);
   const byDevice = new Map<string, string[]>();
   for (const row of rows) {
@@ -256,13 +268,15 @@ export async function listMadeHereStations(tx: Transaction): Promise<Map<string,
   return byDevice;
 }
 
-/** Replace one device's list after checking every station is live. */
+/** Validate before replacing so a refusal preserves the saved station. */
 export async function setMadeHereStations(
   tx: Transaction,
   deviceId: string,
   stationIds: readonly string[],
 ): Promise<void> {
-  const ids = [...new Set(stationIds)];
+  if (stationIds.length > 1)
+    throw new AppError("management.request_invalid", { field: "madeHereStationIds" });
+  const ids = stationIds;
   for (const stationId of ids) await requireLiveStation(tx, stationId);
   await tx.delete(deviceMadeHereStations).where(eq(deviceMadeHereStations.deviceId, deviceId));
   if (ids.length > 0) {

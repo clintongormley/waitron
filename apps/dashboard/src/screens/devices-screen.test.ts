@@ -1391,12 +1391,16 @@ describe("the Edit dialog", () => {
       { value: "pr2", label: "Terrace" },
     ]);
 
-    const madeHere = q(el, "[data-test=edit-made-here]")!;
-    expect(madeHere.querySelector("legend")!.textContent!.trim()).toBe(t("devices.made_here"));
-    const boxes = [...madeHere.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
-    expect(boxes.map((b) => [b.name, b.value, b.checked])).toEqual([
-      ["madeHereStationIds", "s1", false],
-      ["madeHereStationIds", "s2", true],
+    const madeHere = field(el, "edit-made-here");
+    expect([madeHere.name, madeHere.label, madeHere.value]).toEqual([
+      "madeHereStationIds",
+      t("devices.made_here"),
+      "s2",
+    ]);
+    expect(madeHere.options).toEqual([
+      { value: "", label: t("devices.nowhere") },
+      { value: "s1", label: "Hot line" },
+      { value: "s2", label: "Drinks" },
     ]);
 
     expect(api.getDeviceReader).toHaveBeenCalledExactlyOnceWith("t1");
@@ -1626,7 +1630,7 @@ describe("the Edit dialog", () => {
     wtChange(el, "[data-test=edit-name]", "  Cash till 2 ");
     await chooseOption(q(el, "[data-test=edit-receipt-printer]")!, "pr1");
     await chooseOption(q(el, "[data-test=edit-slip-printer]")!, "");
-    q(el, '[data-test=edit-made-here] input[value="s1"]')!.click();
+    await chooseOption(q(el, "[data-test=edit-made-here]")!, "s1");
     await flush(el);
     await save(el);
 
@@ -1636,11 +1640,35 @@ describe("the Edit dialog", () => {
       profileId: "pa",
       receiptPrinterId: "pr1",
       paymentSlipPrinterId: null,
-      madeHereStationIds: ["s1", "s2"],
+      madeHereStationIds: ["s1"],
     });
     // The reader did not change, so its own route is not called.
     expect(api.setDeviceReader).not.toHaveBeenCalled();
     expect(api.listDevices).toHaveBeenCalledTimes(2);
+  });
+
+  it("chooses Nowhere to clear the device station", async () => {
+    const api = editApi();
+    const el = await openEdit(api);
+    await chooseOption(q(el, "[data-test=edit-made-here]")!, "");
+    expect(
+      q(el, "[data-test=edit-made-here]")!.shadowRoot!.querySelector(".value")!.textContent!.trim(),
+    ).toBe(t("devices.nowhere"));
+    await save(el);
+    await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.updateDevice).mock.calls[0]![1].madeHereStationIds).toEqual([]);
+  });
+
+  it("a handheld neither offers nor sends a station even when it holds one", async () => {
+    const api = editApi({
+      listDevices: vi.fn().mockResolvedValue([{ ...till, deviceProfileId: "pb" }]),
+    });
+    const el = await openEdit(api);
+    expect(q(el, "[data-test=edit-made-here]")).toBeNull();
+    await rename(el, "Handheld");
+    await save(el);
+    await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty("madeHereStationIds");
   });
 
   it("saves a kitchen screen whose stored made-here station was switched off after this screen read its stations", async () => {
@@ -1671,18 +1699,17 @@ describe("the Edit dialog", () => {
       listStations: vi.fn().mockResolvedValue([...stations, off, grill]),
     });
     const el = await openEdit(api);
-    const boxes = [
-      ...q(el, "[data-test=edit-made-here]")!.querySelectorAll<HTMLInputElement>("input"),
-    ];
-    expect(boxes.map((b) => b.value)).toEqual(["s1", "s2", "grill"]);
-    q(el, '[data-test=edit-made-here] input[value="grill"]')!.click();
-    await flush(el);
-    await save(el);
-    await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(api.updateDevice).mock.calls[0]![1].madeHereStationIds).toEqual([
+    expect(field(el, "edit-made-here").options.map((option) => option.value)).toEqual([
+      "",
+      "s1",
       "s2",
       "grill",
     ]);
+    await chooseOption(q(el, "[data-test=edit-made-here]")!, "grill");
+    await flush(el);
+    await save(el);
+    await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.updateDevice).mock.calls[0]![1].madeHereStationIds).toEqual(["grill"]);
   });
 
   it.each([
@@ -2598,15 +2625,12 @@ describe("the Edit dialog", () => {
         slip: native("edit-slip-printer"),
         reader: native("edit-reader"),
         otherStations: native("edit-other-stations"),
+        madeHere: native("edit-made-here"),
       };
       for (const toggle of el.shadowRoot!.querySelectorAll<HTMLElement & { disabled: boolean }>(
         "[data-test=edit-screen-stations] wt-switch",
       ))
         shown[toggle.dataset.test!] = toggle.disabled;
-      for (const box of q(el, "[data-test=edit-made-here]")?.querySelectorAll<HTMLInputElement>(
-        "input",
-      ) ?? [])
-        shown[`madeHere:${box.value}`] = box.disabled;
       return Object.fromEntries(
         Object.entries(shown).filter((entry): entry is [string, boolean] => entry[1] !== undefined),
       );
@@ -2618,7 +2642,7 @@ describe("the Edit dialog", () => {
     it.each([
       {
         device: "t1",
-        shown: ["name", "profile", "receipt", "slip", "reader", "madeHere:s1", "madeHere:s2"],
+        shown: ["name", "profile", "receipt", "slip", "reader", "madeHere"],
       },
       { device: "k1", shown: ["name", "profile", "reader"] },
       {
@@ -2721,7 +2745,14 @@ describe("the Edit dialog", () => {
       await vi.waitFor(async () => expect(await bottom(el)).toBe(t("form.fix_fields")));
       expect(q(el, "[data-test=edit-device-modal]")).not.toBeNull();
       const after = editControlsDisabled(el);
-      expect(Object.keys(after)).toHaveLength(7);
+      expect(Object.keys(after)).toEqual([
+        "name",
+        "profile",
+        "receipt",
+        "slip",
+        "reader",
+        "madeHere",
+      ]);
       expect(after).toEqual(all(after, false));
     });
 

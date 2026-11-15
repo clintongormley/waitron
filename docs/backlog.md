@@ -1305,12 +1305,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
     table: no "(default)" after an inherited printer or drawer.
   - **The device editor is split into headed sections, not tabs**: name and profile, then
     Printers, Card reader and Made here. Keep Approved profiles under Name and profile: the owner allowed nine fields on 15 November 05:25.
-  - **"Made here, no ticket" becomes one choice, "This device stands at"**: Nowhere (the default)
-    or one station, with the hint "Items for that station are made here: no ticket, not on
-    kitchen screens." It stays on the device, not the profile: two counter tills on one profile can
-    stand at different bars. That settles A270. A handheld does not show it. Today's
-    `device_made_here_stations` allows several stations per device; it becomes one.
-
 
 
 - **A1089: account-access recovery needs an authenticated decision when no offered sign-in works.**

@@ -131,7 +131,6 @@ export function deviceSettingIsOffered(
 ): boolean {
   const profileId = device.deviceProfileId ?? "";
   const profile = data.deviceProfiles.find((p) => p.id === profileId);
-  const shared = profile?.formFactor === SHARED_DISPLAY;
   switch (name) {
     case "approvedProfileIds":
       return (
@@ -142,8 +141,9 @@ export function deviceSettingIsOffered(
     case "paymentSlipPrinterId":
     case "cashDrawerPrinterId":
     case "invoicePrinterId":
+      return profile?.formFactor !== SHARED_DISPLAY;
     case "madeHereStationIds":
-      return !shared;
+      return profile?.formFactor === "till";
     default:
       return true;
   }
@@ -634,9 +634,10 @@ export class DevicesScreen extends LitElement {
               ? {}
               : { invoicePrinterId: form.invoicePrinterId === "" ? null : form.invoicePrinterId }),
           }),
-      ...(this.#sharedDisplay(form.profileId)
-        ? {}
-        : { madeHereStationIds: this.#madeHereToSend() }),
+      ...(this.deviceProfiles.find((profile) => profile.id === form.profileId)?.formFactor ===
+      "till"
+        ? { madeHereStationIds: this.#madeHereToSend() }
+        : {}),
       ...this.#approvalsToSend(this.editing!),
     };
   }
@@ -1378,11 +1379,6 @@ export class DevicesScreen extends LitElement {
     return this.stations
       .filter((station) => station.active && this.editForm.madeHere.includes(station.id))
       .map((station) => station.id);
-  }
-
-  #onMadeHereChange(stationId: string, checked: boolean): void {
-    const rest = this.editForm.madeHere.filter((id) => id !== stationId);
-    this.#setEdit({ madeHere: checked ? [...rest, stationId] : rest });
   }
 
   /** Another device's hold on a reader, or its payment in progress there, as a mark on its name. */
@@ -2165,7 +2161,8 @@ export class DevicesScreen extends LitElement {
               this.#setEdit({ [role.form]: e.detail.value }, role.field)}
           ></wt-combobox>`;
         })}
-        ${this.#renderApproved(errors.approved)} ${kitchen ? nothing : this.#renderMadeHere()}
+        ${this.#renderApproved(errors.approved)}
+        ${this.deviceProfiles.find((profile) => profile.id === this.editForm.profileId)?.formFactor === "till" ? this.#renderMadeHere() : nothing}
         ${this.readerState === "hidden" ? nothing : this.#renderReader(errors.reader)}
       </div>
       <wt-form-actions
@@ -2198,29 +2195,25 @@ export class DevicesScreen extends LitElement {
 
   #renderMadeHere(): TemplateResult {
     const epoch = this.#editEpoch;
-    return html`<fieldset class="made-here" data-test="edit-made-here">
-      <legend>${t("devices.made_here")}</legend>
-      <p class="hint">${t("devices.made_here_hint")}</p>
-      ${this.stations
-        .filter((station) => station.active)
-        .map(
-          (station) =>
-            html`<label class="check">
-              <input
-                type="checkbox"
-                name="madeHereStationIds"
-                value=${station.id}
-                .checked=${live(this.editForm.madeHere.includes(station.id))}
-                ?disabled=${this.editSaving}
-                @change=${(e: Event) =>
-                  this.isConnected &&
-                  epoch === this.#editEpoch &&
-                  this.#onMadeHereChange(station.id, (e.target as HTMLInputElement).checked)}
-              />
-              ${station.name}</label
-            >`,
-        )}
-    </fieldset>`;
+    return html`<wt-combobox
+      data-test="edit-made-here"
+      show-empty-option
+      name="madeHereStationIds"
+      .label=${t("devices.made_here")}
+      .hint=${t("devices.made_here_hint")}
+      .value=${this.#madeHereToSend()[0] ?? ""}
+      .options=${[
+        { value: "", label: t("devices.nowhere") },
+        ...this.stations
+          .filter((station) => station.active)
+          .map((station) => ({ value: station.id, label: station.name })),
+      ]}
+      ?disabled=${this.editSaving}
+      @wt-change=${(e: CustomEvent<{ value: string }>) =>
+        this.isConnected &&
+        epoch === this.#editEpoch &&
+        this.#setEdit({ madeHere: e.detail.value === "" ? [] : [e.detail.value] })}
+    ></wt-combobox>`;
   }
 
   #renderApproved(error: string): TemplateResult | typeof nothing {

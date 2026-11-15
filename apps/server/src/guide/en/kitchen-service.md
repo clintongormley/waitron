@@ -16,6 +16,13 @@ To split a Counter payment between guests, follow [Share a Counter bill](table-s
 
 After the final payment, follow [Choose documents after paying](table-service.md#settlement-document) to print or email a receipt, or keep serving without one.
 
+## Set a cash register’s station {#device-station}
+
+In **Devices**, edit a **Cash register** device and choose **This device stands at**: one prep station, or
+**Nowhere** to send its work to the kitchen as usual. Items this cash register sends for its chosen station
+are made here, without a ticket or kitchen-screen entry. Set each cash register separately, even
+when they share a profile.
+
 ## Retry a counter send after a lost reply {#counter-send-retry}
 
 If the till cannot confirm a counter send, retry with the basket unchanged. When the first send

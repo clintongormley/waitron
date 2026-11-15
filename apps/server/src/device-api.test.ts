@@ -2381,37 +2381,32 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
     expect(await labelOf(deviceId)).toBe("Till");
   });
 
-  it("leaves the made-here stations untouched when the field is absent, one since switched off included", async () => {
+  it("leaves a made-here station untouched when the field is absent, even since switched off", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { deviceId } = await enrolTill(app, venue, "Till");
-    const [bar, off] = await withTransaction(suite.db, async (tx) => [
-      await createStation(tx, { name: "Bar" }),
-      await createStation(tx, { name: "Off" }),
-    ]);
+    const off = await withTransaction(suite.db, (tx) => createStation(tx, { name: "Off" }));
     expect(
       (
         await edit(app, venue.managerCookie, deviceId, {
-          madeHereStationIds: [bar!.id, off!.id],
+          madeHereStationIds: [off.id],
         })
       ).status,
     ).toBe(204);
     await suite.db
       .update(kitchenStations)
       .set({ active: false })
-      .where(eq(kitchenStations.id, off!.id));
+      .where(eq(kitchenStations.id, off.id));
 
     const { madeHereStationIds: before, ...rest } = await storedBody(deviceId);
-    expect(before).toHaveLength(2);
+    expect(before).toEqual([off.id]);
     const res = await send(app, "PATCH", `/management-api/devices/${deviceId}`, {
       cookie: venue.managerCookie,
       body: { ...rest, name: "Renamed" },
     });
     expect(res.status).toBe(204);
     expect(await labelOf(deviceId)).toBe("Renamed");
-    expect([...(await storedBody(deviceId)).madeHereStationIds].sort()).toEqual(
-      [bar!.id, off!.id].sort(),
-    );
+    expect([...(await storedBody(deviceId)).madeHereStationIds].sort()).toEqual([off.id]);
   });
 
   it("refuses a malformed body field as management.request_invalid naming it", async () => {
@@ -2425,6 +2420,7 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
       [{ paymentSlipPrinterId: "bad" }, "paymentSlipPrinterId"],
       [{ madeHereStationIds: null }, "madeHereStationIds"],
       [{ madeHereStationIds: ["bad"] }, "madeHereStationIds"],
+      [{ madeHereStationIds: [venue.defaultStationId, randomUUID()] }, "madeHereStationIds"],
     ];
     for (const [changes, field] of cases) {
       const res = await edit(app, venue.managerCookie, deviceId, { name: "Renamed", ...changes });

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2f75233f-e846-49d4-8b57-c0f974aa7bf1",
+  "id": "c19d6edb-4b5a-4031-bf09-26603efe0bdc",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -4831,7 +4831,7 @@
         "device_id": {
           "name": "device_id",
           "type": "text",
-          "primaryKey": false,
+          "primaryKey": true,
           "notNull": true,
           "autoincrement": false
         },
@@ -4872,15 +4872,7 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {
-        "device_made_here_stations_pk": {
-          "columns": [
-            "device_id",
-            "station_id"
-          ],
-          "name": "device_made_here_stations_pk"
-        }
-      },
+      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
     },

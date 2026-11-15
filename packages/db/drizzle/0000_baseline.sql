@@ -731,9 +731,8 @@ CREATE TABLE `devices` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `devices_label_active_key` ON `devices` (`label`) WHERE "devices"."active" = 1;--> statement-breakpoint
 CREATE TABLE `device_made_here_stations` (
-	`device_id` text NOT NULL,
+	`device_id` text PRIMARY KEY NOT NULL,
 	`station_id` text NOT NULL,
-	PRIMARY KEY(`device_id`, `station_id`),
 	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action
 );

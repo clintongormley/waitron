@@ -266,6 +266,25 @@ describe("permanent station deletion", () => {
       expect(await snapshot(v)).toEqual(before);
     },
   );
+  it.each(["phone-portrait", "kds"] as const)(
+    "does not warn about an ignored saved station on a %s profile",
+    async (formFactor) => {
+      const { v, id } = await fixture();
+      await inTx(v, async (tx) => {
+        await tx
+          .insert(deviceMadeHereStations)
+          .values({ stationId: id, deviceId: v.cfg.origin.deviceId });
+        const [profile] = await seedDeviceProfiles(tx, { name: "Portable", formFactor });
+        await tx
+          .update(devices)
+          .set({ deviceProfileId: profile!.id })
+          .where(eq(devices.id, v.cfg.origin.deviceId));
+      });
+      const impact = await inTx(v, (tx) => readStationDeleteImpact(tx, id));
+      expect(impact.removes.find((item) => item.key === "station_made_here")).toBeUndefined();
+    },
+  );
+
   it("marks a deleted device's retained made-here choice", async () => {
     const { v, id } = await fixture();
     await inTx(v, async (tx) => {
