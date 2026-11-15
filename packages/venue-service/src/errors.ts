@@ -178,7 +178,7 @@ declare module "@waitron/shared" {
     "special_day.invalid": {
       field: string;
       date?: string;
-      reason?: "empty" | "order" | "step" | "overlap" | "clock_skips" | "outside_hours";
+      reason?: "empty" | "order" | "step" | "overlap" | "clock_skips";
       departmentId?: string;
       zoneId?: string;
     };
@@ -187,7 +187,7 @@ declare module "@waitron/shared" {
     "special_day.date_taken": { date: string; name: string; specialDayId: string };
     "zone_closed_time.invalid": {
       field: string;
-      reason?: "empty" | "order" | "step" | "overlap" | "outside_hours";
+      reason?: "empty" | "order" | "step" | "overlap";
       zoneId?: string;
       weekday?: number;
     };

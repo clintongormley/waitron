@@ -8,7 +8,7 @@ import { venueMenus } from "../../src/testing/venue-menus.js";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { deviceProfiles, withTransaction } from "@waitron/db";
+import { deviceProfiles, floorZones, menuPeriods, withTransaction } from "@waitron/db";
 import { readProfilePrinterLists } from "@waitron/layouts";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -20,7 +20,13 @@ import {
   menuStatus,
   readContentLanguages,
 } from "@waitron/menu";
-import { resolveMakers, setRoutingCell } from "@waitron/venue-service";
+import {
+  resolveMakers,
+  setRoutingCell,
+  saveSpecialDay,
+  readBusinessDayScheduleRevision,
+} from "@waitron/venue-service";
+import { VENUE_SERVICE } from "../../src/modules.js";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { getCountryPack } from "@waitron/country-packs";
 import { seedDemoRestaurant } from "./seed.js";
@@ -52,8 +58,8 @@ describe("seedDemoRestaurant", () => {
     vi.useRealTimers();
   });
 
-  it.each(["06:00", "05:00"])(
-    "closes only the Terrace from 23:00 to the Restaurant's midnight close, after its sales, with a %s changeover",
+  it.each(["06:00", "05:00", "04:00"])(
+    "stores only Terrace's 23:00–05:00 closure after its sales, retaining it for late special service with a %s changeover",
     async (cutover) => {
       const venue = await provisionVenue();
       await withTransaction(suite.db, (tx) => seedBusinessDay(tx, { dayCutover: cutover }));
@@ -63,7 +69,7 @@ describe("seedDemoRestaurant", () => {
           from zone_day_ranges r join zone_days c on c.id = r.day_id
           join seasons se on se.id = c.season_id and se.starts_on = '12-01'
           join floor_zones z on z.id = c.zone_id
-          order by z.name, c.weekday`);
+          order by z.name, c.weekday, r.starts_at`);
       const realSeedSales = salesSeed.seedSales;
       let closuresAfterSales: unknown;
       let saleCount = 0;
@@ -84,13 +90,51 @@ describe("seedDemoRestaurant", () => {
         expect(saleCount).toBeGreaterThan(0);
         expect(closuresAfterSales).toEqual([]);
         expect((await readClosures()).rows).toEqual(
-          [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-            zone: "Terrace",
-            weekday,
-            starts_at: "23:00:00",
-            ends_at: "00:00:00",
-          })),
+          [0, 1, 2, 3, 4, 5, 6].flatMap((weekday) =>
+            (cutover === "04:00"
+              ? [
+                  { starts_at: "04:00:00", ends_at: "05:00:00" },
+                  { starts_at: "23:00:00", ends_at: "04:00:00" },
+                ]
+              : [{ starts_at: "23:00:00", ends_at: "05:00:00" }]
+            ).map((range) => ({ zone: "Terrace", weekday, ...range })),
+          ),
         );
+        const zones = await suite.db.select().from(floorZones);
+        const terrace = zones.find((zone) => zone.name === "Terrace")!;
+        const other = zones.find(
+          (zone) => zone.departmentId === terrace.departmentId && zone.id !== terrace.id,
+        )!;
+        const [period] = await suite.db
+          .select()
+          .from(menuPeriods)
+          .where(eq(menuPeriods.departmentId, terrace.departmentId));
+        const at = new Date("2030-12-02T18:00:00Z");
+        await withTransaction(suite.db, async (tx) => {
+          await saveSpecialDay(
+            tx,
+            null,
+            {
+              name: "Late service",
+              repeatsYearly: false,
+              dates: [{ date: "2030-12-02", closedAllDay: false }],
+              paint: [
+                {
+                  departmentId: terrace.departmentId,
+                  date: "2030-12-02",
+                  ranges: [{ periodId: period!.id, startsAt: "23:00", endsAt: "03:00" }],
+                },
+              ],
+            },
+            at,
+            await readBusinessDayScheduleRevision(tx),
+          );
+        });
+        const late = new Date("2030-12-03T00:30:00+01:00");
+        const closed = await withTransaction(suite.db, (tx) =>
+          VENUE_SERVICE.closedZoneIdsAt(tx, late, [terrace.id, other.id]),
+        );
+        expect([...closed]).toEqual([terrace.id]);
       } finally {
         salesStep.mockRestore();
       }

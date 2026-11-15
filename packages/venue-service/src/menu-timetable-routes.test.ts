@@ -790,62 +790,32 @@ describe("the season weeks route", () => {
     );
   });
 
-  it("refuses a zone closure outside its department's hours, naming the range, and stores nothing", async () => {
+  it("stores zone closures beyond department hours, including a department with no hours", async () => {
     const r = await routed();
-    const before = await r.model();
+    const outside = [{ startsAt: "10:00", endsAt: "13:00" }];
     await answers(
       await r.send("PUT", `/seasons/${r.season}/weeks`, r.manager, {
         departments: [{ departmentId: r.restaurant, days: week(monday(r)) }],
         zones: [
-          {
-            zoneId: r.barZone,
-            days: closedWeek([
-              { startsAt: "10:00", endsAt: "11:00" },
-              { startsAt: "11:30", endsAt: "13:00" },
-            ]),
-          },
+          { zoneId: r.barZone, days: closedWeek(outside) },
+          { zoneId: r.counterZone, days: closedWeek(outside) },
         ],
       }),
-      400,
-      {
-        code: "zone_closed_time.invalid",
-        params: {
-          field: "zones.0.days.1.ranges.1",
-          reason: "outside_hours",
-          zoneId: r.barZone,
-          weekday: 1,
-        },
-      },
+      204,
     );
-    expect(await r.model()).toEqual(before);
+    const model = await r.model();
+    for (const zoneId of [r.barZone, r.counterZone]) {
+      const zone = model.departments.flatMap((d) => d.zones).find((z) => z.id === zoneId)!;
+      expect(zone.seasonWeeks.find((s) => s.seasonId === r.season)!.week).toEqual(
+        closedWeek(outside),
+      );
+    }
+    expect(restaurantOf(model, r).seasonWeeks.find((s) => s.seasonId === r.season)!.week).toEqual(
+      week(monday(r)),
+    );
   });
 
-  it("names a refused closure on a later zone by that zone's place in the request", async () => {
-    const r = await routed();
-    const before = await r.model();
-    await answers(
-      await r.send("PUT", `/seasons/${r.season}/weeks`, r.manager, {
-        ...body(r),
-        zones: [
-          { zoneId: r.barZone, days: closedWeek(closed) },
-          { zoneId: r.counterZone, days: closedWeek(closed) },
-        ],
-      }),
-      400,
-      {
-        code: "zone_closed_time.invalid",
-        params: {
-          field: "zones.1.days.1.ranges.0",
-          reason: "outside_hours",
-          zoneId: r.counterZone,
-          weekday: 1,
-        },
-      },
-    );
-    expect(await r.model()).toEqual(before);
-  });
-
-  it("checks the zone against the department week the same request sends", async () => {
+  it("saves department hours and raw zone closures in the same request", async () => {
     const r = await routed();
     expect(restaurantOf(await r.model(), r).seasonWeeks).toEqual(
       (await r.model()).seasons.map((season) => ({ seasonId: season.id, week: week([]) })),

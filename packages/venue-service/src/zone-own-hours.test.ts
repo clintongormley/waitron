@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  closureOutsideHours,
-  closuresInHours,
-  joinPlacedRanges,
-  zoneOwnHours,
-} from "./zone-own-hours.js";
+import { closuresInHours, joinPlacedRanges, zoneOwnHours } from "./zone-own-hours.js";
 
 const day = { dayCutover: "06:00", endMinute: 1440 };
 const range = (periodId: string, startsAt: string, endsAt: string) => ({
@@ -167,45 +162,25 @@ describe("zoneOwnHours", () => {
   });
 });
 
-describe("closureOutsideHours", () => {
-  it("closureOutsideHours: -1 when every closure lies in the hours, the index of the first that does not", () => {
-    const dinner = [closure("20:00", "02:00")];
-    expect(
-      closureOutsideHours(dinner, [closure("21:00", "22:00"), closure("23:30", "03:00")], day),
-    ).toBe(1);
-    expect(closureOutsideHours(dinner, [closure("21:00", "22:00")], day)).toBe(-1);
-    expect(closureOutsideHours([], [closure("21:00", "22:00")], day)).toBe(0);
-    expect(closureOutsideHours(dinner, [], day)).toBe(-1);
-  });
-
+describe("closuresInHours", () => {
   it("a closure across two touching periods is inside", () => {
     const department = [closure("13:00", "16:00"), closure("16:00", "23:00")];
     const closures = [closure("15:00", "17:00")];
-    expect(closureOutsideHours(department, closures, day)).toBe(-1);
     expect(closuresInHours(department, closures, day)).toEqual([closure("15:00", "17:00")]);
   });
 
   it("a closure across two touching periods listed out of day order is inside", () => {
     const department = [closure("16:00", "23:00"), closure("13:00", "16:00")];
     const closures = [closure("15:00", "17:00")];
-    expect(closureOutsideHours(department, closures, day)).toBe(-1);
     expect(closuresInHours(department, closures, day)).toEqual([closure("15:00", "17:00")]);
-  });
-
-  it("a period inside another does not shorten the hours", () => {
-    const department = [closure("13:00", "23:00"), closure("14:00", "15:00")];
-    expect(closureOutsideHours(department, [closure("16:00", "22:00")], day)).toBe(-1);
   });
 
   it("a closure exactly the department's hours is inside and kept whole", () => {
     const department = [closure("13:00", "16:00")];
     const closures = [closure("13:00", "16:00")];
-    expect(closureOutsideHours(department, closures, day)).toBe(-1);
     expect(closuresInHours(department, closures, day)).toEqual([closure("13:00", "16:00")]);
   });
-});
 
-describe("closuresInHours", () => {
   it("closuresInHours keeps 23:30–02:00 of 23:30–03:00", () => {
     const department = [closure("19:30", "02:00")];
     const closures = [closure("23:30", "03:00")];

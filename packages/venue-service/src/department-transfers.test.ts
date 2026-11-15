@@ -557,6 +557,22 @@ describe("departmental tab transfers", () => {
         );
         await seedBusinessDay(tx, { dayCutover: "06:00" });
       })();
+      const menu = await createMenu(tx, { name: "Late service" });
+      const period = await service.saveMenuPeriod(tx, v.b, {
+        name: "Late service",
+        menuId: menu.id,
+        staffMenuIds: [],
+      });
+      await service.replaceMenuWeek(
+        tx,
+        v.b,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots: [{ periodId: period.id, startsAt: "21:00", endsAt: "01:00" }],
+        })),
+        new Date("2026-10-05T12:00:00Z"),
+        1,
+      );
       await service.replaceZoneClosedWeek(
         tx,
         v.bz,
@@ -588,7 +604,7 @@ describe("departmental tab transfers", () => {
       departmentId: v.a,
       serviceMode: "table_tab",
     });
-    vi.setSystemTime(new Date("2026-10-06T06:00:00+02:00"));
+    vi.setSystemTime(new Date("2026-10-06T01:15:00+02:00"));
     expect(await accept(v)).toMatchObject({ status: "accepted", destinationZoneId: v.bz });
   });
 

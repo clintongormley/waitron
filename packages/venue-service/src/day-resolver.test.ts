@@ -289,7 +289,7 @@ describe("the till's service on a season boundary", () => {
   });
 
   it("an unreadable clock closes no zone", async () => {
-    const v = await venue();
+    const v = await autumnAndWinter();
     await zoneSeason(v.sala, v.seasons.Autumn!, {
       [SATURDAY]: [{ startsAt: "00:00", endsAt: "05:00" }],
     });
@@ -693,6 +693,9 @@ describe("special-day paint over the season", () => {
     expect((await zoneDays([v.sala], ["2030-12-13"])).get(v.sala)?.get("2030-12-13")).toEqual([
       { startsAt: "22:00", endsAt: "23:00" },
     ]);
+    expect([
+      ...(await scoped((tx) => closedZoneIdsAt(tx, new Date("2030-12-13T22:15:00+01:00")))),
+    ]).toEqual([]);
   });
 
   it("reads special-day dates and their paint once, however many zones and days a call covers", async () => {

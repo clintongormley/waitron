@@ -856,18 +856,18 @@ describe("a period deleted with a replacement before the stored day is read agai
   });
 });
 
-describe("a zone's Closed inside its department's hours", () => {
+describe("a zone's closures are stored independently of department hours", () => {
   const restaurantOnly: SpecialDayAnswers["season"] = () => ({
     ranges: [dinner("20:00", "23:30")],
   });
   const column = (el: SpecialDayPainter, date: string) =>
     grid(el).shadowRoot!.querySelector<HTMLElement>(`.day[data-column="${date}"]`)!;
 
-  it("a zone's Closed stroke keeps only the times its department is open on that date", async () => {
+  it("a zone's Closed stroke keeps the full painted range", async () => {
     const { painter } = await mount({ season: restaurantOnly });
     await pick(painter, "zone:z2");
     await drag(painter, DEC_15, at("19:00"), at("21:00"));
-    expect(grid(painter).days.get(DEC_15)).toEqual([closed("20:00", "21:00")]);
+    expect(grid(painter).days.get(DEC_15)).toEqual([closed("19:00", "21:00")]);
   });
 
   it("Open paint is not cut", async () => {
@@ -881,13 +881,13 @@ describe("a zone's Closed inside its department's hours", () => {
     ]);
   });
 
-  it("a stroke wholly outside says why beside Save", async () => {
+  it("a stroke outside department hours remains saveable", async () => {
     const { painter, writes } = await mount({ season: restaurantOnly });
     await pick(painter, "zone:z2");
     await drag(painter, DEC_15, at("12:00"), at("14:00"));
-    expect(grid(painter).days.get(DEC_15) ?? []).toEqual([]);
-    expect(saveButton(painter).disabled).toBe(true);
-    expect(frame(painter).refusal).toBe("A zone can only close while its department is open.");
+    expect(grid(painter).days.get(DEC_15) ?? []).toEqual([closed("12:00", "14:00")]);
+    expect(saveButton(painter).disabled).toBe(false);
+    expect(frame(painter).refusal).toBe("");
     expect(writes).toEqual([]);
   });
 
@@ -906,22 +906,19 @@ describe("a zone's Closed inside its department's hours", () => {
       "Closed all day",
     );
     await drag(painter, DEC_15, at("20:00"), at("21:00"));
-    expect(grid(painter).days.get(DEC_15) ?? []).toEqual([]);
-    expect(frame(painter).refusal).toBe("A zone can only close while its department is open.");
+    expect(grid(painter).days.get(DEC_15)).toEqual([closed("20:00", "21:00")]);
+    expect(frame(painter).refusal).toBe("");
   });
 
-  it("a painter render that changes nothing hands a zone's grid the same hours and labels", async () => {
+  it("a painter render that changes nothing hands a zone's grid the same background labels", async () => {
     const { painter } = await mount({
       season: (date) => (date === DEC_15 ? {} : { ranges: [dinner("20:00", "23:30")] }),
     });
     await pick(painter, "zone:z2");
-    const within = grid(painter).closedWithin;
     const behind = grid(painter).closedBehind;
-    expect(within?.size).toBe(2);
     expect(behind.size).toBe(1);
     painter.requestUpdate();
     await settle(painter);
-    expect(grid(painter).closedWithin).toBe(within);
     expect(grid(painter).closedBehind).toBe(behind);
     const updated = vi.spyOn(grid(painter) as unknown as { updated(): void }, "updated");
     for (let round = 0; round < 3; round++) {
@@ -941,7 +938,7 @@ describe("a zone's Closed inside its department's hours", () => {
     expect(grid(painter).periods.map(({ name }) => name)).toEqual(["Lunch", "Supper", "Open"]);
   });
 
-  it("a zone's Closed is bounded by its department's draft paint for the date, laid over the season", async () => {
+  it("department draft paint leaves a zone's Closed range whole", async () => {
     const { painter } = await mount({ season: restaurantOnly });
     await pick(painter, "zone:z2");
     await pick(painter, "d1");
@@ -949,10 +946,10 @@ describe("a zone's Closed inside its department's hours", () => {
     await drag(painter, DEC_15, at("18:00"), at("20:00"));
     await pick(painter, "zone:z2");
     await drag(painter, DEC_15, at("17:00"), at("21:00"));
-    expect(grid(painter).days.get(DEC_15)).toEqual([closed("18:00", "21:00")]);
+    expect(grid(painter).days.get(DEC_15)).toEqual([closed("17:00", "21:00")]);
   });
 
-  it("a date unticked from Closed all day while a zone is shown bounds the zone's Closed again", async () => {
+  it("a date unticked from Closed all day allows a zone's full Closed stroke", async () => {
     const { painter } = await mount({ season: restaurantOnly });
     const tick = () =>
       painter!.shadowRoot!.querySelector<HTMLInputElement>(`input[name="closed.${DEC_15}"]`)!;
@@ -964,10 +961,10 @@ describe("a zone's Closed inside its department's hours", () => {
     await settle(painter);
     expect(grid(painter).closedAllDay.has(DEC_15)).toBe(false);
     await drag(painter, DEC_15, at("19:00"), at("21:00"));
-    expect(grid(painter).days.get(DEC_15)).toEqual([closed("20:00", "21:00")]);
+    expect(grid(painter).days.get(DEC_15)).toEqual([closed("19:00", "21:00")]);
   });
 
-  it("a season re-read that changes the hours bounds a shown zone's Closed by the new hours", async () => {
+  it("a season re-read updates the underlay without trimming new zone paint", async () => {
     let hours = [dinner("20:00", "23:30")];
     const { painter, seasonReads } = await mount({ season: () => ({ ranges: hours }) });
     await pick(painter, "zone:z2");
@@ -981,10 +978,10 @@ describe("a zone's Closed inside its department's hours", () => {
     await expect.poll(() => seasonReads.length).toBe(2);
     await expect.poll(() => grid(painter).underlay.get(DEC_15)).toEqual([lunch("13:00", "16:00")]);
     await drag(painter, DEC_15, at("12:00"), at("14:00"));
-    expect(grid(painter).days.get(DEC_15)).toEqual([closed("13:00", "14:00")]);
+    expect(grid(painter).days.get(DEC_15)).toEqual([closed("12:00", "14:00")]);
   });
 
-  it("switching to another department's zone bounds its Closed by that department's hours", async () => {
+  it("switching zones keeps new paint whole against the new department underlay", async () => {
     const model = () => {
       const base = painterModel();
       const restaurant = base.departments[0]!;
@@ -1011,7 +1008,7 @@ describe("a zone's Closed inside its department's hours", () => {
     await pick(painter, "zone:z2");
     await pick(painter, "zone:z3");
     await drag(painter, DEC_15, at("13:00"), at("21:00"));
-    expect(grid(painter).days.get(DEC_15)).toEqual([closed("13:00", "16:00")]);
+    expect(grid(painter).days.get(DEC_15)).toEqual([closed("13:00", "21:00")]);
   });
 
   it("the label behind a shown zone's paint, and its Open paint's name, follow a change of language", async () => {
@@ -1033,7 +1030,7 @@ describe("a zone's Closed inside its department's hours", () => {
     }
   });
 
-  it("a zone's Copy whose Closed paint falls wholly outside the target date's hours lands its Open paint there, and says why beside Save", async () => {
+  it("a zone's Copy keeps Closed and Open paint outside the target's department hours", async () => {
     const { painter } = await mount({
       season: (date) => ({
         ranges: [date === DEC_14 ? dinner("08:00", "23:30") : dinner("20:00", "23:30")],
@@ -1068,11 +1065,11 @@ describe("a zone's Closed inside its department's hours", () => {
       )!,
     );
     await settle(painter);
-    expect(grid(painter).days.get(DEC_15)).toEqual([open]);
-    expect(frame(painter).refusal).toBe("A zone can only close while its department is open.");
+    expect(grid(painter).days.get(DEC_15)).toEqual([closed("09:00", "10:00"), open]);
+    expect(frame(painter).refusal).toBe("");
   });
 
-  it("a zone's Open block changed to Closed wholly outside its department's hours is kept, and says why beside Save", async () => {
+  it("a zone's Open block changes to Closed outside department hours", async () => {
     const { painter } = await mount({ season: restaurantOnly });
     await pick(painter, "zone:z2");
     chip(painter, "paint-open").click();
@@ -1088,8 +1085,8 @@ describe("a zone's Closed inside its department's hours", () => {
       )!,
     );
     await settle(painter);
-    expect(grid(painter).days.get(DEC_15)).toEqual([open]);
-    expect(frame(painter).refusal).toBe("A zone can only close while its department is open.");
+    expect(grid(painter).days.get(DEC_15)).toEqual([closed("12:00", "14:00")]);
+    expect(frame(painter).refusal).toBe("");
   });
 });
 

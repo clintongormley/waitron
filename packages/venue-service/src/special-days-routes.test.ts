@@ -360,7 +360,7 @@ describe("the special-day routes", () => {
     expect(await countDays()).toBe(1);
   });
 
-  it("refuses a zone closure outside its department's hours on that date, storing nothing", async () => {
+  it("stores a zone closure beyond that date's department hours on create and update", async () => {
     const r = await routed();
     const body = {
       ...christmas(r),
@@ -368,26 +368,18 @@ describe("the special-day routes", () => {
         {
           zoneId: r.room,
           date: "2030-12-24",
-          ranges: [{ kind: "closed", startsAt: "18:00", endsAt: "20:00" }],
+          ranges: [{ kind: "closed", startsAt: "18:00", endsAt: "05:00" }],
         },
       ],
       expectedClockRevision: 1,
     };
-    const error = {
-      code: "special_day.invalid",
-      params: {
-        field: "zonePaint.0.ranges.0",
-        reason: "outside_hours",
-        zoneId: r.room,
-        date: "2030-12-24",
-      },
-    };
-    await answers(await r.send("POST", "", r.manager, body), 400, error);
-    expect(await countDays()).toBe(0);
-    const day = await seeded(r);
-    await answers(await r.send("PUT", `/${day.id}`, r.manager, body), 400, error);
+    const response = await r.send("POST", "", r.manager, body);
+    expect(response.status).toBe(201);
+    const day = (await response.json()) as SpecialDayDetail;
+    expect(day.zonePaint).toEqual(body.zonePaint);
+    await answers(await r.send("PUT", `/${day.id}`, r.manager, { ...body, name: "Updated" }), 200);
+    expect((await stored(day.id)).zonePaint).toEqual(body.zonePaint);
     expect(await countDays()).toBe(1);
-    expect(await stored(day.id)).toEqual(day);
   });
 
   it("measures against the department paint the same request sends", async () => {
@@ -459,90 +451,14 @@ describe("the special-day routes", () => {
         ranges: [{ kind: "closed", startsAt, endsAt: "20:00" }],
       },
     ];
-    await answers(
-      await r.send("POST", "", r.manager, {
-        ...christmas(r),
-        zonePaint: zonePaint("18:00"),
-        expectedClockRevision: 1,
-      }),
-      400,
-      {
-        code: "special_day.invalid",
-        params: {
-          field: "zonePaint.0.ranges.0",
-          reason: "outside_hours",
-          zoneId: r.room,
-          date: "2030-12-24",
-        },
-      },
-    );
     const response = await r.send("POST", "", r.manager, {
       ...christmas(r),
-      zonePaint: zonePaint("19:00"),
+      zonePaint: zonePaint("18:00"),
       expectedClockRevision: 1,
     });
     expect(response.status).toBe(201);
     const body = (await response.json()) as SpecialDayDetail;
     expect(body.zonePaint.map((entry) => entry.zoneId)).toEqual([r.room]);
-  });
-
-  it("names a refused closure by its entry's and its range's places as sent", async () => {
-    const r = await routed();
-    await answers(
-      await r.send("POST", "", r.manager, {
-        ...christmas(r),
-        zonePaint: [
-          {
-            zoneId: r.room,
-            date: "2030-12-24",
-            ranges: [
-              { kind: "open", startsAt: "06:00", endsAt: "07:00" },
-              { kind: "closed", startsAt: "18:00", endsAt: "20:00" },
-            ],
-          },
-        ],
-        expectedClockRevision: 1,
-      }),
-      400,
-      {
-        code: "special_day.invalid",
-        params: {
-          field: "zonePaint.0.ranges.1",
-          reason: "outside_hours",
-          zoneId: r.room,
-          date: "2030-12-24",
-        },
-      },
-    );
-    await answers(
-      await r.send("POST", "", r.manager, {
-        ...christmas(r),
-        zonePaint: [
-          {
-            zoneId: r.room,
-            date: "2030-12-25",
-            ranges: [{ kind: "closed", startsAt: "18:00", endsAt: "20:00" }],
-          },
-          {
-            zoneId: r.room,
-            date: "2030-12-24",
-            ranges: [{ kind: "closed", startsAt: "18:00", endsAt: "20:00" }],
-          },
-        ],
-        expectedClockRevision: 1,
-      }),
-      400,
-      {
-        code: "special_day.invalid",
-        params: {
-          field: "zonePaint.1.ranges.0",
-          reason: "outside_hours",
-          zoneId: r.room,
-          date: "2030-12-24",
-        },
-      },
-    );
-    expect(await countDays()).toBe(0);
   });
 
   it("answers special_day.invalid with 400", async () => {

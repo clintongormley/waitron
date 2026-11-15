@@ -26,7 +26,7 @@ import type { LocalDate } from "./hours-types.js";
 import { nextOccurrence, occurrenceIn, repeatKey, standingInYear } from "./repeat-rules.js";
 import { storedTime, wireTime } from "./operations.js";
 import { readHolidayDates, type HolidayReads } from "./holidays.js";
-import { joinTouching, type ServingRead } from "./season-weeks.js";
+import { joinTouching } from "./season-weeks.js";
 import { inForceClock, scheduleCutovers, settledClock } from "./service-day-context.js";
 import { clockTimeSkippedInDay, parseRanges, type ClosedRange } from "./service-day.js";
 import "./errors.js";
@@ -849,22 +849,20 @@ export async function readSpecialDay(tx: Transaction, id: string): Promise<Speci
 
 /** Saves a special day in the caller's transaction. Dates are compared by value, so a kept date keeps
  *  its row and every paint the request does not name; a named (owner, date) is replaced whole, and
- *  given empty ranges it is cleared. Then runs `afterWrite` with the clock and the painted zones'
- *  departments this save read. */
+ *  given empty ranges it is cleared. */
 export async function saveSpecialDay(
   tx: Transaction,
   id: string | null,
   input: unknown,
   at: Date,
   expectedClockRevision: number,
-  afterWrite?: (read: ServingRead) => Promise<void>,
 ): Promise<SpecialDayDetail> {
   await assertBusinessDayScheduleWrite(tx, "time", expectedClockRevision);
   const stored = id === null ? null : await readSpecialDay(tx, id);
   const clock = await readVenueClock(tx);
   const inForce = inForceClock(clock, at);
   const parsed = parseInput(input, { settled: settledClock(clock, at), inForce });
-  const zoneDepartments = await assertPaintOwners(
+  await assertPaintOwners(
     tx,
     parsed.paint.map((entry) => entry.ownerId),
     parsed.zonePaint.map((entry) => entry.ownerId),
@@ -1000,7 +998,6 @@ export async function saveSpecialDay(
       })),
     );
   }
-  await afterWrite?.({ clock, departmentOf: zoneDepartments });
   await assertWaitingChangeFits(tx, at, clock);
   return readSpecialDay(tx, specialDayId);
 }

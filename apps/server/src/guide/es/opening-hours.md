@@ -8,6 +8,10 @@ Para consultar el detalle por periodo, elige **Abrir esta semana** en la ventana
 
 Para cambiar el horario habitual, elige **Editar la semana estándar de <temporada>** junto a la temporada, arriba de la ventana. Para una excepción, elige **Crear un día especial** abajo.
 
+## Pintar el cierre de una zona {#zone-closures}
+
+Pinta todo el tramo de **Cerrado** de la zona, aunque termine después del cierre actual de su departamento.
+
 ## Selecciona varios días {#select-days}
 
 En Año o Mes, selecciona un tramo con Mayús+clic y añade fechas sueltas con Cmd+clic (Ctrl+clic en Windows). En el móvil, mantén pulsada una fecha y arrastra para seleccionar un tramo. Mientras aparezca la barra de selección, toca fechas para añadirlas o quitarlas y elige **Crear un día especial**.

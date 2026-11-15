@@ -1456,6 +1456,23 @@ for (const locale of ["en", "es"] as const) {
         const periods = madridWithPeriodChanges(expected.seeded, PERIOD_CHANGES[locale]);
         expected.seeded = periods.semantics;
         for (const [name, count] of Object.entries(periods.added)) phases.seeded![name]! += count;
+        const terrace = `@floor_zones:${stable([locale === "en" ? "Terrace" : "Terraza"])}`;
+        const closureRows = expected.seeded.tables.zone_day_ranges!.rows;
+        for (const [oldId, row] of Object.entries(closureRows)) {
+          const day = expected.seeded.tables.zone_days!.rows[String(row.day_id)];
+          if (day?.zone_id !== terrace) continue;
+          expect({ kind: row.kind, startsAt: row.starts_at, endsAt: row.ends_at }).toEqual({
+            kind: "closed",
+            startsAt: "23:00:00",
+            endsAt: "00:00:00",
+          });
+          const id = `@zone_day_ranges:${stable([row.day_id, "closed", "23:00:00", "05:00:00"])}`;
+          delete closureRows[oldId];
+          closureRows[id] = { ...row, id, ends_at: "05:00:00" };
+        }
+        expected.seeded.tables.zone_day_ranges!.rows = Object.fromEntries(
+          Object.entries(closureRows).sort(([a], [b]) => a.localeCompare(b)),
+        );
         const { semantics, added } = madridWithAddedRows(
           expected.seeded,
           historicalSeeded,

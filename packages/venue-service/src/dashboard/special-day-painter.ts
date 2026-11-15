@@ -30,7 +30,6 @@ import {
   withoutPeriods,
 } from "../paint-model.js";
 import type { SpecialDayDetail, SpecialDayInput, SpecialDaySummary } from "../special-days.js";
-import { closuresInHours } from "../zone-own-hours.js";
 import type { AddDates, RemoveDates } from "./add-dates-calendar.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PaintChange, PaintColumn, PaintPeriod } from "./paint-grid.js";
@@ -1056,7 +1055,7 @@ export class SpecialDayPainter extends LitElement {
     if (id === undefined) return false;
     const owner = zoned ? zoneKey(id) : departmentKey(id);
     const reason =
-      params.reason === "clock_skips" || params.reason === "outside_hours"
+      params.reason === "clock_skips"
         ? refusalReason("special_day.invalid", params.reason)
         : t("opening.check_day");
     const name = ownerName(this.model, owner);
@@ -1203,29 +1202,6 @@ export class SpecialDayPainter extends LitElement {
     const { key: date, day } = event.detail;
     const paint = new Map(this.draft.paint);
     paint.set(owner, new Map(paint.get(owner)).set(date, day));
-    const department = this.model.departments.find(({ id }) => departmentKey(id) === owner);
-    const season = this.seasonDays
-      .get(date)
-      ?.departments.find(({ departmentId }) => departmentId === department?.id);
-    if (department && season && !this.closedDates().has(date)) {
-      const cutover = this.cutover();
-      const open = layerPaint(season.ranges, day, cutover);
-      for (const zone of department.zones) {
-        const zoneDay = paint.get(zoneKey(zone.id))?.get(date);
-        if (!zoneDay) continue;
-        const kept = zoneDay.filter(({ periodId }) => periodId === ZONE_OPEN);
-        const closed = zoneDay.filter(({ periodId }) => periodId === null);
-        const cut = closuresInHours(open, closed, { dayCutover: cutover, endMinute: 1440 }).map(
-          ({ startsAt, endsAt }) => ({ periodId: null, startsAt, endsAt }),
-        );
-        // The stored day comes back in clock-text order, which `samePaint` would read as a change.
-        if (samePaint(cut, closed.sort(byStart(cutover)))) continue;
-        paint.set(
-          zoneKey(zone.id),
-          new Map(paint.get(zoneKey(zone.id))).set(date, [...kept, ...cut].sort(byStart(cutover))),
-        );
-      }
-    }
     this.change({ ...this.draft, paint });
   }
 
@@ -1483,7 +1459,6 @@ export class SpecialDayPainter extends LitElement {
             .columns=${this.columns()}
             .days=${zone ? this.zoneDays(this.draft.paint.get(owner) ?? NOTHING_BY_KEY, cutover) : (this.draft.paint.get(owner) ?? NOTHING_BY_KEY)}
             .underlay=${this.underlay(department, zone?.id, cutover)}
-            .closedWithin=${within}
             .closedBehind=${within ? this.closedBehind(department, within) : NOTHING_BY_KEY}
             .periods=${periods}
             .chosen=${chosen}
@@ -1494,11 +1469,6 @@ export class SpecialDayPainter extends LitElement {
             .readOnly=${this.readOnly || stopped}
             .columnErrors=${columnErrors(owner)}
             @paint-change=${(event: CustomEvent<PaintChange>) => this.paint(owner, event)}
-            @paint-outside=${(event: Event) => {
-              event.stopPropagation();
-              this.refused = undefined;
-              this.notice = t("opening.closed_outside");
-            }}
             >${ticks}</paint-grid
           >`
     }`;

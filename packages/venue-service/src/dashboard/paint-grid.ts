@@ -26,7 +26,6 @@ import {
   samePaint,
   type Paint,
 } from "../paint-model.js";
-import { closuresInHours } from "../zone-own-hours.js";
 
 export interface PaintColumn {
   key: string;
@@ -159,14 +158,9 @@ export class PaintGrid extends LitElement {
   /** Columns drawn closed all day, hiding their underlay and paint, which stay in `days`; nothing
    *  paints there. */
   @property({ attribute: false }) closedAllDay: ReadonlySet<string> = new Set();
-  /** Per column, the blocks Closed paint must lie inside: every day the grid emits has its Closed
-   *  blocks cut to these (closuresInHours), other blocks untouched. A column the map does not name,
-   *  or no map, is not bounded. */
-  @property({ attribute: false }) closedWithin: ReadonlyMap<string, readonly Paint[]> | undefined =
-    undefined;
   /** Per column, a label for a full-day Closed block drawn BEHIND the column's paint, as the
    *  underlay is: unlike `closedAllDay`, the column's paint stays drawn on top and strokes still run
-   *  (`closedWithin` cuts them). */
+   *  without changing their stored times. */
   @property({ attribute: false }) closedBehind: ReadonlyMap<string, string> = new Map();
   /** Shows the week only: nothing paints, and no block or day offers a menu. */
   @property({ type: Boolean }) readOnly = false;
@@ -187,18 +181,9 @@ export class PaintGrid extends LitElement {
         startsAt: clockAt(stretch.start, this.cutover),
         endsAt: clockAt(stretch.end, this.cutover),
       };
-      if (this.#outside(stretch.key, [paint])) return;
-      // Only the kept pieces of a Closed stroke paint, so the parts cut away leave the day alone.
-      const pieces =
-        paint.periodId === null && this.closedWithin?.has(stretch.key)
-          ? this.#cut(stretch.key, [paint])
-          : [paint];
       this.#emit(
         stretch.key,
-        pieces.reduce<Paint[]>(
-          (day, piece) => paintStretch(day, piece, this.cutover, this.closedErases),
-          [...this.#day(stretch.key)],
-        ),
+        paintStretch(this.#day(stretch.key), paint, this.cutover, this.closedErases),
       );
     },
   });
@@ -208,14 +193,8 @@ export class PaintGrid extends LitElement {
       this.renderRoot.querySelector<HTMLElement>(`.heading[data-column="${key}"] wt-row-actions`),
     copy: (from, to) => {
       const copied = copyDay(this.days, from, to);
-      // A bounded target is cut even when it already holds the copied paint; `#emit` drops a cut
-      // day that is unchanged.
-      const changed = to.filter(
-        (key) => this.closedWithin?.has(key) || !samePaint(copied.get(key)!, this.#day(key)),
-      );
-      for (const key of changed) this.#emit(key, copied.get(key)!);
-      // After every change: a painter clears its notice on each change.
-      for (const key of changed) this.#outside(key, copied.get(key)!);
+      for (const key of to)
+        if (!samePaint(copied.get(key)!, this.#day(key))) this.#emit(key, copied.get(key)!);
     },
   });
 
@@ -237,40 +216,7 @@ export class PaintGrid extends LitElement {
     if (selected === null) return -1;
     return this.#day(selected.key).findIndex(({ startsAt }) => startsAt === selected.startsAt);
   }
-  /** The Closed blocks of `day` cut to the column's `closedWithin`; uncut when it names none. */
-  #cut(key: string, day: readonly Paint[]): Paint[] {
-    const closed = day.filter(({ periodId }) => periodId === null);
-    const within = this.closedWithin?.get(key);
-    if (within === undefined) return closed;
-    return closuresInHours(
-      within.filter(({ periodId }) => periodId !== null),
-      closed,
-      { dayCutover: this.cutover, endMinute: DAY },
-    ).map((range) => ({ periodId: null, ...range }));
-  }
-  /** Sends `paint-outside` for the column when `day` holds Closed blocks and its hours cut them
-   *  all away. */
-  #outside(key: string, day: readonly Paint[]): boolean {
-    if (!day.some(({ periodId }) => periodId === null) || this.#cut(key, day).length > 0)
-      return false;
-    this.dispatchEvent(
-      new CustomEvent<{ key: string }>("paint-outside", {
-        detail: { key },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    return true;
-  }
-  #emit(key: string, painted: Paint[]): void {
-    let day = painted;
-    if (this.closedWithin?.has(key)) {
-      day = [
-        ...painted.filter(({ periodId }) => periodId !== null),
-        ...this.#cut(key, painted),
-      ].sort((a, b) => stepSpan(a, this.cutover)[0] - stepSpan(b, this.cutover)[0]);
-      if (samePaint(day, this.#day(key))) return;
-    }
+  #emit(key: string, day: Paint[]): void {
     this.dispatchEvent(
       new CustomEvent<PaintChange>("paint-change", {
         detail: { key, day },
@@ -345,10 +291,6 @@ export class PaintGrid extends LitElement {
       const [start, end] = stepSpan(paint, this.cutover);
       return start <= from && from < end;
     });
-    if (this.#outside(selected.key, [{ ...block, periodId }])) {
-      void this.#focusAfter(selected.key, selected.startsAt);
-      return;
-    }
     this.#emit(selected.key, day);
     void this.#focusAfter(selected.key, covering?.startsAt);
   }
@@ -572,7 +514,6 @@ export class PaintGrid extends LitElement {
 declare global {
   interface HTMLElementEventMap {
     "paint-change": CustomEvent<PaintChange>;
-    "paint-outside": CustomEvent<{ key: string }>;
   }
   interface HTMLElementTagNameMap {
     "paint-grid": PaintGrid;

@@ -1,5 +1,8 @@
 # A723 — the season painter and the special-day editor say what they are, close on Save, and keep a zone's closures inside opening hours — Implementation Plan
 
+> 2026-11-15: closure containment checks and painting cuts described here are superseded by
+> [the zone-closure rule](../../backlog/service-periods.md#decisions-and-deliberate-limits).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use
 > checkbox (`- [ ]`) syntax for tracking. Every implementer is dispatched as

@@ -101,6 +101,90 @@ async function orderRows() {
 }
 
 describe("closed zones take no new service", () => {
+  it("after department hours, permits seating and asks for a late-send confirmation", async () => {
+    const v = await venue();
+    const period = await withTransaction(suite.db, async (tx) => {
+      const [zone] = await tx.select().from(floorZones).where(eq(floorZones.id, v.zoneId));
+      const [period] = await tx
+        .select()
+        .from(menuPeriods)
+        .where(
+          and(eq(menuPeriods.departmentId, zone!.departmentId), eq(menuPeriods.name, "Always")),
+        );
+      await replaceMenuWeek(
+        tx,
+        zone!.departmentId,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots: [{ periodId: period!.id, startsAt: "21:00", endsAt: "23:00" }],
+        })),
+        new Date(),
+        1,
+      );
+      await replaceZoneClosedWeek(
+        tx,
+        v.zoneId,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          ranges: [{ startsAt: "22:00", endsAt: "05:00" }],
+        })),
+        1,
+        new Date(),
+      );
+      return period!;
+    });
+    at("21:30");
+    expect(
+      (
+        await request(v, "POST", "/api/working-orders", {
+          id: randomUUID(),
+          zoneId: v.zoneId,
+          lines: [line(v)],
+        })
+      ).status,
+    ).toBe(200);
+    at("22:30");
+    const duringClosure = await orderRows();
+    expect(
+      await request(v, "POST", "/api/working-orders", {
+        id: randomUUID(),
+        zoneId: v.zoneId,
+        lines: [line(v)],
+        lateSend: { menuIds: [period.menuId] },
+      }),
+    ).toEqual(refused(v));
+    expect(await orderRows()).toEqual(duringClosure);
+    vi.setSystemTime(new Date("2026-10-06T00:30:00+02:00"));
+    await seat(v);
+    const before = await orderRows();
+    const answer = await request(v, "POST", "/api/working-orders", {
+      id: randomUUID(),
+      zoneId: v.zoneId,
+      lines: [line(v)],
+    });
+    expect(answer.status).toBe(409);
+    expect(answer.json).toMatchObject({
+      code: "menu_period.ended",
+      params: {
+        menus: [{ menuId: period.menuId, periodName: "Always" }],
+        menuItemIds: [v.offerFor("Caña")],
+        needsManager: false,
+      },
+    });
+    expect(await orderRows()).toEqual(before);
+    const id = randomUUID();
+    const confirmed = await request(v, "POST", "/api/working-orders", {
+      id,
+      zoneId: v.zoneId,
+      lines: [line(v)],
+      lateSend: { menuIds: [period.menuId] },
+    });
+    expect(confirmed.status).toBe(200);
+    const after = await orderRows();
+    expect(after).toHaveLength(before.length + 1);
+    expect(after.find((row) => row.id === id)).toMatchObject({ id, status: "open" });
+  });
+
   it("seats immediately before closure and refuses at the exact start without writing a party", async () => {
     const v = await venue();
     at("23:29");

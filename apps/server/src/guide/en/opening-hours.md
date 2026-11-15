@@ -8,6 +8,10 @@ For the period detail, choose **Open this week** in the pop-up. In Week, click a
 
 To change the usual timetable, choose **Edit <season>'s standard week** beside the season at the top of the pop-up. For an exception, choose **Make a special day** at the bottom.
 
+## Paint a zone closure {#zone-closures}
+
+Paint the zone’s whole **Closed** stretch, even past its department’s current closing time.
+
 ## Select days together {#select-days}
 
 In Year or Month, select a run with Shift-click and add separate dates with Cmd-click (Ctrl-click on Windows). On a phone, press and hold a date, then drag to pick a run. While the selection bar shows, tap dates to add or remove them, then choose **Make a special day**.

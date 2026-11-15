@@ -196,31 +196,33 @@ it("a department paints its periods with Closed erasing; a zone paints Closed ov
   expect(chip(painter, "paint-closed")!.getAttribute("aria-pressed")).toBe("true");
 });
 
-it("a zone's Closed stroke keeps only the times its department is open", async () => {
+it("a zone's Closed stroke keeps its tail beyond department hours", async () => {
   const { painter } = await mount({
     model: withDays(painterModel(), "d1", { 5: [slot("p2", "19:30", "02:00")] }),
   });
   await pick(painter, "zone:z2");
   await drag(painter, "5", 17.5 * 60, 21 * 60);
   expect(grid(painter).days.get("5")).toEqual([
-    { periodId: null, startsAt: "23:30", endsAt: "02:00" },
+    { periodId: null, startsAt: "23:30", endsAt: "03:00" },
   ]);
   expect(painter.edited()).toEqual({ departments: [], zones: ["z2"] });
 });
 
-it("a zone stroke on a day its department is closed paints nothing, leaves Save quiet and says 'A zone can only close while its department is open.' beside Save", async () => {
+it("a zone stroke on a closed department day is saved without a refusal", async () => {
   const { painter } = await mount();
   await pick(painter, "zone:z2");
   await drag(painter, "3", 0, 3 * 60);
-  expect(grid(painter).days.get("3")).toEqual([]);
-  expect(painter.edited()).toEqual({ departments: [], zones: [] });
-  expect(frame(painter).dirty).toBe(false);
+  expect(grid(painter).days.get("3")).toEqual([
+    { periodId: null, startsAt: "06:00", endsAt: "09:00" },
+  ]);
+  expect(painter.edited()).toEqual({ departments: [], zones: ["z2"] });
+  expect(frame(painter).dirty).toBe(true);
   expect(
     frame(painter).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
       "[data-test=save]",
     )!.disabled,
-  ).toBe(true);
-  expect(frame(painter).refusal).toBe("A zone can only close while its department is open.");
+  ).toBe(false);
+  expect(frame(painter).refusal).toBe("");
 });
 
 describe("a zone's Copy to…", () => {
@@ -268,19 +270,21 @@ describe("a zone's Copy to…", () => {
     await settle(el);
   }
 
-  it("onto a day where none of its Closed paint lies inside the department's hours replaces that day, its own closures going, and says why beside Save", async () => {
+  it("onto a day outside department hours replaces the target with the full closure", async () => {
     const { painter } = await mount({ model: terraceModel() });
     await pick(painter, "zone:z2");
     expect(grid(painter).days.get("3")).toEqual([
       { periodId: null, startsAt: "08:00", endsAt: "09:00" },
     ]);
     await copyMondayTo(painter, "3");
-    expect(grid(painter).days.get("3")).toEqual([]);
+    expect(grid(painter).days.get("3")).toEqual([
+      { periodId: null, startsAt: "14:00", endsAt: "15:00" },
+    ]);
     expect(grid(painter).days.get("1")).toEqual([
       { periodId: null, startsAt: "14:00", endsAt: "15:00" },
     ]);
     expect(painter.edited()).toEqual({ departments: [], zones: ["z2"] });
-    expect(frame(painter).refusal).toBe("A zone can only close while its department is open.");
+    expect(frame(painter).refusal).toBe("");
   });
 
   it("onto a day whose hours hold its Closed paint lands that paint", async () => {

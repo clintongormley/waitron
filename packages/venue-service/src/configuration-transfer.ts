@@ -1,15 +1,15 @@
 import { getCountryPack } from "@waitron/country-packs";
 import { AppError } from "@waitron/shared";
 import type { PackLookup } from "./holidays.js";
-import { isLocalDate, weekdayOf } from "./hours-rules.js";
+import { isLocalDate } from "./hours-rules.js";
 import { CALENDAR_COLOURS, type CalendarColour, type LocalDate } from "./hours-types.js";
 import { isReadableClock } from "./hours-clock.js";
 import { menuPeriodName } from "./menu-timetable-rules.js";
-import { layerPaint, type PaintRange } from "./day-paint.js";
+import type { PaintRange } from "./day-paint.js";
 import { civilDateOf } from "@waitron/reporting";
 import { SERVICE_STEP_STARTS, ZONE_PAINT_KINDS } from "@waitron/db";
 import { MAX_SERVICE_STEP_MINUTES, MAX_SERVICE_STEPS } from "./service-step-limits.js";
-import { parseSeasonStart, seasonOn } from "./season-rules.js";
+import { parseSeasonStart } from "./season-rules.js";
 import { firstSkippedEnd, NO_HOLIDAY_DATES, sharedSpecialDate } from "./special-days.js";
 import {
   parseClosedRanges,
@@ -17,7 +17,6 @@ import {
   type ClosedRange,
   type ServiceRange,
 } from "./service-day.js";
-import { closureOutsideHours } from "./zone-own-hours.js";
 import "./errors.js";
 
 type Row = Record<string, unknown>;
@@ -312,9 +311,6 @@ export function validateSeasonWeeks(tables: Tables, bundle?: ImportClock): void 
   const zonePaint = new Map<unknown, ClosedRange[]>(
     [...zoneDays.specialDays.keys()].map((id) => [id, []]),
   );
-  const zonePaintClosed = new Map<unknown, ClosedRange[]>(
-    [...zoneDays.specialDays.keys()].map((id) => [id, []]),
-  );
   for (const row of zoneRanges) {
     const paint = zonePaint.get(row.day_id);
     if (paint === undefined && !zoneDays.seasonDays.has(row.day_id))
@@ -327,7 +323,6 @@ export function validateSeasonWeeks(tables: Tables, bundle?: ImportClock): void 
       refuse("zone_day_ranges.kind");
     const stored = storedRange(row, "zone_day_ranges");
     (paint ?? zoneWeeks.get(row.day_id)!).push(stored);
-    if (paint !== undefined && row.kind === "closed") zonePaintClosed.get(row.day_id)!.push(stored);
   }
   for (const ranges of departmentWeeks.values())
     parsedAs("department_day_ranges", () => parseServiceDay(ranges, "slots", bundle.dayCutover));
@@ -349,39 +344,6 @@ export function validateSeasonWeeks(tables: Tables, bundle?: ImportClock): void 
     "department_day_ranges",
   );
   refuseSkippedPaint(zoneDays.specialDays, zonePaint, specialDates, bundle, "zone_day_ranges");
-
-  const departmentOf = new Map(
-    (tables.floor_zones ?? []).map((row) => [row.id, row.department_id]),
-  );
-  const seasonWeek = new Map<string, ServiceRange[]>();
-  for (const [id, { ownerId, seasonId, weekday }] of departmentDays.seasonDays)
-    seasonWeek.set(JSON.stringify([ownerId, seasonId, weekday]), departmentWeeks.get(id)!);
-  const datePaint = new Map<string, PaintRange[]>();
-  for (const [id, { ownerId, dateId }] of departmentDays.specialDays)
-    datePaint.set(JSON.stringify([ownerId, dateId]), departmentPaint.get(id)!);
-  const day = { dayCutover: bundle.dayCutover, endMinute: 1440 };
-  for (const [id, { ownerId, seasonId, weekday }] of zoneDays.seasonDays) {
-    const hours = seasonWeek.get(JSON.stringify([departmentOf.get(ownerId), seasonId, weekday]));
-    if (closureOutsideHours(hours ?? [], zoneWeeks.get(id)!, day) !== -1) refuse("zone_day_ranges");
-  }
-  const seasons = (tables.seasons ?? []).map((row) => ({
-    id: row.id,
-    startsOn: row.starts_on as string,
-  }));
-  for (const [id, { ownerId, dateId }] of zoneDays.specialDays) {
-    const closures = zonePaintClosed.get(id)!;
-    const date = specialDates.get(dateId)!;
-    if (closures.length === 0 || date.closedAllDay) continue;
-    const departmentId = departmentOf.get(ownerId);
-    const season = seasonOn(seasons, date.date)?.id;
-    const week = seasonWeek.get(JSON.stringify([departmentId, season, weekdayOf(date.date)]));
-    const hours = layerPaint(
-      week ?? [],
-      datePaint.get(JSON.stringify([departmentId, dateId])) ?? [],
-      bundle.dayCutover,
-    );
-    if (closureOutsideHours(hours, closures, day) !== -1) refuse("zone_day_ranges");
-  }
 }
 
 /** Refuses special-day paint at a time the clocks skip on its business day; a repeating date is

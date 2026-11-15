@@ -21,7 +21,6 @@ import {
   type Paint,
 } from "../paint-model.js";
 import { seasonLastDay } from "../season-rules.js";
-import { closuresInHours } from "../zone-own-hours.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PaintChange, PaintColumn } from "./paint-grid.js";
 import { format, formatMonthDay } from "./hours-view.js";
@@ -463,17 +462,6 @@ export class SeasonPainter extends LitElement {
     if (this.refused?.owner === key && this.refused.column === event.detail.key)
       this.refused = undefined;
     const draft = new Map(this.draft).set(key, week);
-    const department = this.model.departments.find(({ id }) => departmentKey(id) === key);
-    for (const zone of department?.zones ?? []) {
-      const zoneWeek = draft.get(zoneKey(zone.id));
-      if (!zoneWeek) continue;
-      const cut = closuresInHours(
-        event.detail.day.filter(isPeriodPaint),
-        zoneWeek.get(event.detail.key)!,
-        { dayCutover: this.model.dayCutover, endMinute: 1440 },
-      ).map(({ startsAt, endsAt }) => ({ periodId: null, startsAt, endsAt }));
-      draft.set(zoneKey(zone.id), copyWeek(zoneWeek).set(event.detail.key, cut));
-    }
     this.draft = draft;
     this.scope?.changed();
   }
@@ -735,7 +723,6 @@ export class SeasonPainter extends LitElement {
           .columns=${this.columns()}
           .days=${this.draft.get(key) ?? NOTHING_BY_KEY}
           .underlay=${underlay}
-          .closedWithin=${zone ? underlay : undefined}
           .closedBehind=${zone ? this.closedBehind(department, underlay) : NOTHING_BY_KEY}
           .periods=${department.periods}
           .chosen=${chosen}
@@ -749,11 +736,6 @@ export class SeasonPainter extends LitElement {
               : NOTHING_BY_KEY
           }
           @paint-change=${(event: CustomEvent<PaintChange>) => this.paint(key, event)}
-          @paint-outside=${(event: Event) => {
-            event.stopPropagation();
-            this.refused = undefined;
-            this.notice = t("opening.closed_outside");
-          }}
         ></paint-grid>
       </painter-frame>
       ${this.periods.render()}`;
