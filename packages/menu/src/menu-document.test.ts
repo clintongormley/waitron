@@ -129,8 +129,14 @@ it("serves current declarations for a dish, its variant and its extra, retaining
 it("hydrates guest declarations without changing published membership, names or prices", async () => {
   const f = await menusFixture(fx.db);
   const document = await build(f.dinner);
-  const original = structuredClone(document);
   const itemId = await app((tx) => offerOf(tx, f.dinner, f.lemonade));
+  Object.assign(document.offers[itemId]!, {
+    allergens: { milk: {} },
+    dietaryDeclarations: ["halal"],
+    dietOverride: { vegan: "yes" },
+    diet: { vegan: "yes", vegetarian: "yes", contains: [] },
+  });
+  const original = structuredClone(document);
   await app(async (tx) => {
     await updateProduct(tx, f.lemonade, {
       allergens: { eggs: {} },

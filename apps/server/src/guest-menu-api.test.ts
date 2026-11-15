@@ -122,6 +122,8 @@ it("serves live declarations in Cloud, preview, earlier-edition paper and public
       expectedRevision: 0,
       personId: null,
     });
+    await updateProduct(tx, f.lager, { unitPrice: "9.00" });
+    await publishMenu(tx, f.lunch, (await previewMenu(tx, f.lunch)).hash, f.cookies.managerId);
     await updateProduct(tx, f.soup, { allergens: { milk: {} }, dietaryDeclarations: ["vegan"] });
   });
   const cloud = await guestMenuApi.readGuestMenuPages(suite.db, "en");
@@ -160,7 +162,7 @@ it("serves live declarations in Cloud, preview, earlier-edition paper and public
     expect(html).toContain("Vegan");
     expect(html).toContain("Soup for guests");
   }
-  expect(preview.versionId).toBe(captured.versionId);
+  expect(preview.versionId).not.toBe(captured.versionId);
 });
 
 it("requires a signed-in manager with menu permission", async () => {

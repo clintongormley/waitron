@@ -5180,6 +5180,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
     const storedLines = await tx
       .select({
         id: workingOrderLines.id,
+        sentAt: workingOrderLines.sentAt,
         productId: workingOrderLines.productId,
         quantity: workingOrderLines.quantity,
         priceQuantity: workingOrderLines.priceQuantity,
@@ -5204,7 +5205,13 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
       .orderBy(workingOrderLines.lineNo);
     const declarations = await readProductDeclarations(
       tx,
-      storedLines.flatMap((line) => (line.productId === null ? [] : [line.productId])),
+      storedLines.flatMap((line) =>
+        line.sentAt !== null || line.productId === null ? [] : [line.productId],
+      ),
+    );
+    const captured = await VENUE_SERVICE.readSentLineNutrition(
+      tx,
+      storedLines.filter((line) => line.sentAt !== null).map((line) => line.id),
     );
     const lineRows = storedLines.map(({ productParentId, ...line }) => {
       const { productId, variantId } = soldProduct({ ...line, productParentId });
@@ -5217,6 +5224,16 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
         unitPriceGross: centsToDecimal(line.unitPriceGross),
       };
     });
+
+    const declarationOf = (line: (typeof lineRows)[number]) => {
+      if (line.sentAt === null) return declarations.get(line.variantId ?? line.productId!);
+      const saved = captured.get(line.id);
+      return productDeclarationValues({
+        allergens: saved?.allergens ?? null,
+        dietaryDeclarations: saved?.dietaryDeclarations ?? [],
+        dietOverride: null,
+      });
+    };
 
     const contextByLine = new Map(
       (await VENUE_SERVICE.listLineContexts(tx, id)).map((line) => [line.workingOrderLineId, line]),
@@ -5252,7 +5269,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
           price: child.unitPriceGross,
           quantity: perDishExtraPicks(child.quantity, line.quantity, child.priceQuantity),
           listId: child.extraListId,
-          ...extraDeclarationValues(declarations.get(child.productId!)),
+          ...extraDeclarationValues(declarationOf(child)),
         }));
         return {
           workingOrderLineId: line.id,
@@ -5284,7 +5301,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
             unitPrice: line.unitPriceGross,
             vatClass: context.vatClass as "general" | "reduced" | "super_reduced" | "zero",
             category: context.categoryName,
-            ...productDeclarationValues(declarations.get(line.variantId ?? line.productId)),
+            ...productDeclarationValues(declarationOf(line)),
             courseId: line.courseId,
             menuId: context.menuId,
             menuName: context.menuName,

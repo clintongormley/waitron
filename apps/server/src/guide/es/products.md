@@ -275,8 +275,7 @@ fecha y la hora que introdujiste.
 
 Mientras alguien en la caja usa **Filtros** para ocultar un alérgeno, también se ocultan los platos
 y tamaños sin revisar. Revisa los alérgenos de cada tamaño que vendes, o elige **No contiene
-ninguno de los 14**, y guarda. Recarga la caja para usar las declaraciones actuales.
-No necesitas publicar la carta.
+ninguno de los 14**, y guarda. No necesitas publicar la carta.
 
 Los datos de compras existentes y los datos registrados de los pedidos siguen disponibles, pero los
 alérgenos y la aptitud dietética vigentes de los productos los gestionas en **Productos**.
