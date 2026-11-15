@@ -1333,7 +1333,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 - **A1534. The device editor and the devices table made plain, and one profile per kitchen
   screen (owner, 2026-11-14).** Follows A1529, whose profile editor tabs this changes, and A1535's
   renames. Changes the venue-service and core schemas: rebuild their starting migrations, no data
-  migration (pre-live). Start with the [reviewed, watcher-cleared shared focus fix](superpowers/plans/2026-11-15-a1534-device-simplification.md); the remaining areas follow in a split amendment.
+  migration (pre-live). Split the remaining device/profile work by area in the next amendment, in pull requests of about 1,000 lines or less.
   - **One profile per kitchen screen.** A profile's kitchen screen tab chooses ONE screen (Station,
     Pass or Pass display) and its stations and zones, instead of several screens for its devices to
     pick from. A device picks only its profile: the device editor loses Screen, its Stations and
@@ -1359,12 +1359,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
     `device_made_here_stations` allows several stations per device; it becomes one.
   - **The Devices table drops its Shows column**, which only repeats the profile once the profile
     fixes the screen.
-  - **After a dialog opened with the mouse closes, the row it came from keeps focus but draws no
-    ring or highlight.** Focus going back to the opener is right; the ring appears because
-    Chrome counts typing in the dialog as keyboard use, so the returned focus matches
-    `:focus-visible`. Fix it once in `wt-data-table` and `wt-modal`, so every list screen gets
-    it. The owner's screenshot showed two rows highlighted after one edit: reproduce that first,
-    since the second may be a separate fault.
+
 
 - **A1089: account-access recovery needs an authenticated decision when no offered sign-in works.**
   The passkey refusal offers retry, password entry and an emailed password reset. These do not

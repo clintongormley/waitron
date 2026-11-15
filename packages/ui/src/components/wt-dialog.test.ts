@@ -1109,6 +1109,30 @@ test.each(lostByClosing)(
   },
 );
 
+test.each(["explicit opener", "nearby control"] as const)(
+  "returns quiet pointer focus to the %s after the opening control is removed",
+  async (fallback) => {
+    const { el, target, nearby, opener } = await scene();
+    if (fallback === "explicit opener") el.opener = opener;
+    const field = document.createElement("input");
+    el.append(field);
+    await userEvent.click(target);
+    el.open = true;
+    await el.updateComplete;
+    await userEvent.click(field);
+    await userEvent.keyboard("Counter");
+    target.remove();
+    const closed = new Promise((resolve) =>
+      el.addEventListener("wt-close", resolve, { once: true }),
+    );
+    await userEvent.keyboard("{Escape}");
+    await closed;
+    const returned = fallback === "explicit opener" ? opener : nearby;
+    expect(deepActiveElement()).toBe(returned);
+    expect(returned.matches(":focus-visible")).toBe(false);
+  },
+);
+
 test.each(lostByClosing)(
   "closed by %s, puts focus beside what had it at opening when that and the opener were both %s",
   async (how, _, change) => {
@@ -2989,3 +3013,35 @@ test("gives a form's action row in its body the raised surface it paints, and ke
   expect(getComputedStyle(body).backgroundColor).toBe("rgb(10, 11, 12)");
   expect(getComputedStyle(footer).backgroundColor).toBe("rgba(0, 0, 0, 0)");
 });
+
+test.each(["mouse", "keyboard"] as const)(
+  "returns the opener's visible focus mode after typing (%s)",
+  async (opening) => {
+    const opener = await mount(
+      '<button>Open editor</button><wt-dialog heading="Edit device"><input aria-label="Device name"></wt-dialog>',
+    );
+    const dialog = host.querySelector<WtDialog>("wt-dialog")!;
+    opener.addEventListener("click", () => {
+      dialog.open = true;
+    });
+    if (opening === "mouse") await userEvent.click(opener);
+    else {
+      await userEvent.keyboard("{Tab}");
+      opener.focus();
+      await userEvent.keyboard("{Enter}");
+    }
+    await dialog.updateComplete;
+    await userEvent.click(dialog.querySelector("input")!);
+    await userEvent.keyboard("Counter");
+    const closed = new Promise((resolve) =>
+      dialog.addEventListener("wt-close", resolve, { once: true }),
+    );
+    await userEvent.keyboard("{Escape}");
+    await closed;
+    expect(deepActiveElement()).toBe(opener);
+    expect(
+      getComputedStyle(opener).outlineStyle !== "none" &&
+        parseFloat(getComputedStyle(opener).outlineWidth) > 0,
+    ).toBe(opening === "keyboard");
+  },
+);

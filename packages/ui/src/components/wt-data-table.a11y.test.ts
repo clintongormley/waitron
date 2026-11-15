@@ -1,6 +1,6 @@
 import { html } from "lit";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { chooseOption, chooseOptions, cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import { setHelpMode } from "../help-mode.js";
@@ -1032,5 +1032,34 @@ describe.each(["light", "dark"] as const)("A462 cascade accessibility (%s)", (th
     } finally {
       await page.viewport(1280, 900);
     }
+  });
+});
+
+describe.each(["light", "dark"] as const)("row focus modes (%s)", (theme) => {
+  test("keeps keyboard focus visible after a pointer-focused row", async () => {
+    const table = (await mountThemed(
+      '<wt-data-table aria-label="Devices"></wt-data-table>',
+      theme,
+    )) as WtDataTable<{ id: string; name: string }>;
+    table.columns = [{ key: "name", label: "Name", cell: (row) => row.name }];
+    table.rows = [
+      { id: "counter", name: "Counter" },
+      { id: "bar", name: "Bar" },
+    ];
+    table.rowKey = (row) => row.id;
+    table.rowClickLabel = (row) => row.name;
+    table.rowClick = () => undefined;
+    await table.updateComplete;
+    const [first, second] = [
+      ...table.shadowRoot!.querySelectorAll<HTMLButtonElement>(".row-activate"),
+    ];
+    await userEvent.click(first!);
+    await commands.parkPointer();
+    expect(getComputedStyle(first!).outlineStyle).toBe("none");
+    await expectNoA11yViolations(host);
+    await userEvent.keyboard("{Tab}");
+    expect(table.shadowRoot!.activeElement).toBe(second);
+    expect(second!.matches(":focus-visible")).toBe(true);
+    await expectNoA11yViolations(host);
   });
 });

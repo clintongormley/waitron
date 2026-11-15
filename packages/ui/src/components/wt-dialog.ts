@@ -322,6 +322,7 @@ export class WtDialog extends LitElement {
 
   /** What had focus when the dialog opened, unless that was the page body. */
   private returnTarget: Element | null = null;
+  private returnFocusVisible?: boolean;
 
   // Shadows the native ARIAMixin accessor so a caller's aria-label reaches the inner <dialog> when
   // there is no `heading` to name it.
@@ -388,6 +389,7 @@ export class WtDialog extends LitElement {
       if (this.open && this.isConnected && !this.dialog.open) {
         const focused = deepActiveElement();
         this.returnTarget = focused === document.body ? null : focused;
+        this.returnFocusVisible = this.returnTarget?.matches(":focus-visible");
         this.openedAt = ++WtDialog.openings;
         this.showModalWithOpeningFocus();
         WtDialog.track(this);
@@ -484,6 +486,7 @@ export class WtDialog extends LitElement {
     // Before `wt-close`, so a listener that hands focus back itself acts after this and wins.
     this.refocus();
     this.returnTarget = null;
+    this.returnFocusVisible = undefined;
     this.open = false;
     this.reportedCloseGeneration = this.openingGeneration;
     this.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
@@ -494,15 +497,30 @@ export class WtDialog extends LitElement {
    * on the page body or inside this closed dialog. */
   private refocus(): void {
     const focused = deepActiveElement();
-    if (focused !== document.body && !composedContains(this, focused)) return;
-    if (this.opener?.isConnected && this.takesFocus(this.opener)) return;
+    const options =
+      this.returnFocusVisible === false ? ({ focusVisible: false } as FocusOptions) : undefined;
+    if (focused !== document.body && !composedContains(this, focused)) {
+      if (
+        options &&
+        focused instanceof HTMLElement &&
+        focused.matches(":focus-visible") &&
+        this.returnTarget &&
+        composedContains(this.returnTarget, focused)
+      ) {
+        // Chromium does not apply a visibility option to an already focused element.
+        focused.blur();
+        focused.focus(options);
+      }
+      return;
+    }
+    if (this.opener?.isConnected && this.takesFocus(this.opener, options)) return;
     // A connected element's ancestors reach the document, so searching from it also covers
     // everything near the dialog.
     const skip = new Set<Node>([this]);
     const from = this.returnTarget?.isConnected ? this.returnTarget : this;
     for (let at = composedParent(from); at; at = composedParent(at)) {
-      for (const candidate of tabbables(at, skip)) if (this.takesFocus(candidate)) return;
-      if (!skip.has(at) && isTabbable(at) && this.takesFocus(at)) return;
+      for (const candidate of tabbables(at, skip)) if (this.takesFocus(candidate, options)) return;
+      if (!skip.has(at) && isTabbable(at) && this.takesFocus(at, options)) return;
       skip.add(at);
     }
   }
@@ -590,8 +608,8 @@ export class WtDialog extends LitElement {
     }
   }
 
-  private takesFocus(element: HTMLElement): boolean {
-    element.focus();
+  private takesFocus(element: HTMLElement, options?: FocusOptions): boolean {
+    element.focus(options);
     return composedContains(element, deepActiveElement());
   }
 
