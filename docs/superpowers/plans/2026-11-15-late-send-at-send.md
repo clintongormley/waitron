@@ -76,6 +76,11 @@ API client: `placeOrder`, `sendLines`, `fireGroup`, `fireHeldLine` take an optio
 **Not covered (one line each in the PR):** a dish parked on an EARLIER business day and placed
 today — `endedMenus` lists only menus that ended today (menu-timetable.ts:286-303), so it goes
 unmarked (a counter order left parked overnight is not a real event; owner rule "real events only").
+A course released from a hold is judged only if it reaches a station (its make-at choice, or
+routing): no column records that a no-preparation course was sent on hold, so a no-preparation
+course changed into a held lunch before the period ended is not asked (nothing prints for it), and
+one sent on hold with no preparation and later given a station asks when released (review finding,
+2026-11-16).
 
 **Tasks (implementers, each well under 100 tool calls; tests first).**
 1a. Server, counter: the helper (both modes) + venue-service mark writer; `placeOrder` asks (place

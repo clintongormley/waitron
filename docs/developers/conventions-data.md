@@ -749,8 +749,11 @@ party in one refusal (`judgeHeldRelease`). Paying a saved counter bill (`fireDis
 finishing or collecting a party (`releaseHeldWorkOf`) and splitting a table or moving a bill onto
 one (`groupArrivingDishes`, both `apps/server/src/order-groups.ts`) never ask: they mark the dish
 with no confirmer (`late_confirmed_by` null, `recordLateSendMarks`), and `readLateSendMarks`
-reports it as not agreed, so its ticket and station card read "After <period>" without "agreed". A no-preparation
-course released from a hold counts as sent on hold and is not judged. A dish parked on an earlier
+reports it as not agreed, so its ticket and station card read "After <period>" without "agreed". A course
+released from a hold is judged only if it reaches a station, by its make-at choice or by routing
+(`coursesToJudge`): nothing stored tells a no-preparation course sent on hold from one stored later,
+so one reaching no station is never asked (nothing prints for it), and one sent on hold with no
+preparation whose routing or make-at choice later names a station is asked. A dish parked on an earlier
 business day and placed today is not marked: `endedMenus` lists only periods that ended today.
 The till learns which menus ended from each menu's `endedPeriodName` on the zone-offers and
 menu-state reads, and marks such a dish; when its 15-second poll has not caught up, from a

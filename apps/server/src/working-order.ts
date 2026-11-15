@@ -2647,8 +2647,10 @@ async function storedCoursesOf(
 }
 
 /**
- * The stored courses of a fire to judge as late. A no-preparation course released from a hold was
- * sent on hold, though it has no ticket and no sent time to say so, so it is not judged again.
+ * The stored courses of a fire to judge as late. Released from a hold, a course that reaches no
+ * station is skipped: nothing stored tells one sent on hold with no preparation from one stored
+ * later, and nothing prints for either. One that reaches a station, by its own make-at choice or
+ * by routing, is judged, as {@link fireLines} decides where it goes.
  */
 async function coursesToJudge(
   tx: Transaction,
@@ -2658,11 +2660,26 @@ async function coursesToJudge(
   routing: RoutingOnce,
 ): Promise<FireableLine[]> {
   if (!fromHold || courses.length === 0) return [...courses];
+  const chosen = await tx
+    .select({ id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .innerJoin(kitchenStations, eq(kitchenStations.id, workingOrderLines.makeAtStationId))
+    .where(
+      and(
+        inArray(
+          workingOrderLines.id,
+          courses.map((line) => line.id),
+        ),
+        eq(kitchenStations.active, true),
+      ),
+    );
+  const atChosenStation = new Set(chosen.map((row) => row.id));
   const zoneId = (await VENUE_SERVICE.findOrderContext(tx, orderId))?.zoneId ?? null;
   const routes = await (
     await routing()
   ).makers(zoneId, [...new Set(courses.map((line) => line.productId!))]);
   return courses.filter((line) => {
+    if (atChosenStation.has(line.id)) return true;
     const outcome = routes.get(line.productId!);
     return !(outcome?.kind === "made" && outcome.route.kind === "no_preparation");
   });

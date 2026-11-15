@@ -2190,7 +2190,14 @@ describe("a dish whose period ended earlier today", () => {
         ).id;
         await publishWorkingMenu(tx, v.menus["Midday menu"]);
         const table = await createTable(tx, v.cfg, { label: "Lunch table", zoneId: v.diningZone });
-        return { printerId: printer.id, offer, listId: list.id, dishes, tableId: table.id };
+        return {
+          stationId,
+          printerId: printer.id,
+          offer,
+          listId: list.id,
+          dishes,
+          tableId: table.id,
+        };
       });
       const seated = await sendAsTill(v, "POST", `/api/tables/${setup.tableId}/seat`, {
         guestCount: 2,
@@ -2458,6 +2465,68 @@ describe("a dish whose period ended earlier today", () => {
       expect((await fireCourse(t, groups[0]!.id)).status).toBe(200);
       expect(await courseLine(t, "bread")).toMatchObject({
         sentAt: expect.any(String),
+        latePeriodName: null,
+      });
+    });
+
+    /** Choose, through the till's make-at route, the station that makes `lineId`. */
+    const makeAt = async (t: LunchTable, lineId: string) => {
+      const read = await sendAsTill(t.v, "GET", `/api/working-orders/${t.tabId}`);
+      const chosen = await sendAsTill(t.v, "PUT", `/api/working-orders/${t.tabId}/make-at`, {
+        revision: (read.body as { revision: number }).revision,
+        lines: { [lineId]: t.stationId },
+        expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, t.tabId)),
+      });
+      expect(chosen.status).toBe(200);
+    };
+
+    it("Fire course at 14:05 asks about a no-preparation Main changed at 13:55 and then given a station, and prints it marked once confirmed", async () => {
+      const t = await lunchTable();
+      const { groups } = await orderLunch(t, ["soup", "fish"], "hold");
+      at(mondayAt("13:55"));
+      await changeLunch(t, ["soup", "bread"]);
+      const bread = await courseLine(t, "bread");
+      await makeAt(t, bread.id);
+      const before = await printed(t.printerId);
+      at(mondayAt("14:05"));
+      expect(await fireCourse(t, groups[0]!.id)).toEqual(refusal(t, [bread.id]));
+      expect(await printed(t.printerId)).toEqual(before);
+      expect((await fireCourse(t, groups[0]!.id, lateSend(t.v))).status).toBe(200);
+      expect(await courseLine(t, "bread")).toMatchObject({
+        firedAt: expect.any(String),
+        latePeriodName: "Lunch",
+        lateConfirmedBy: t.v.personId,
+      });
+      const ticket = (await printed(t.printerId)).slice(before.length).join("\n").split("\n");
+      expect(ticket[ticket.indexOf(lunchMark) + 1]).toMatch(/BREAD/i);
+    });
+
+    it("Fire course at 14:05 asks about a no-preparation course sent on hold at 13:50 once its routing sends it to a station, since nothing stored says it was sent", async () => {
+      const t = await lunchTable();
+      const { groups } = await orderLunch(t, ["bread", "fish"], "hold");
+      const bread = await courseLine(t, "bread");
+      at(mondayAt("13:55"));
+      await withTransaction(suite.db, (tx) =>
+        setRoutingCell(
+          tx,
+          { row: { kind: "product", productId: t.dishes.bread }, zoneId: t.v.diningZone },
+          { kind: "station", stationId: t.stationId },
+        ),
+      );
+      at(mondayAt("14:05"));
+      expect(await fireCourse(t, groups[0]!.id)).toEqual(refusal(t, [bread.id]));
+    });
+
+    it("Fire course at 14:05 does not ask about a no-preparation Main changed at 13:55 that no station makes, and leaves it unmarked", async () => {
+      const t = await lunchTable();
+      const { groups } = await orderLunch(t, ["soup", "fish"], "hold");
+      at(mondayAt("13:55"));
+      await changeLunch(t, ["soup", "bread"]);
+      at(mondayAt("14:05"));
+      expect((await fireCourse(t, groups[0]!.id)).status).toBe(200);
+      expect(await courseLine(t, "bread")).toMatchObject({
+        sentAt: expect.any(String),
+        firedAt: null,
         latePeriodName: null,
       });
     });
