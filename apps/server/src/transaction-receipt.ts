@@ -119,7 +119,7 @@ export async function readTransactionReceipt(
   );
   const filed = await backend.filedReceiptFor(tx, brandSaleId(saleId));
   const payments = await readBillTenderLines(tx, brandSaleId(saleId));
-  const issuer = await readReceiptIssuer(backend, tx, brandSaleId(saleId));
+  const issuer = await readReceiptIssuer(backend, tx, brandSaleId(saleId), sale);
   const taxpayer = issuer.issuer === undefined ? await readTaxpayer(tx) : null;
   const groupId =
     sale.workingOrderId ??
