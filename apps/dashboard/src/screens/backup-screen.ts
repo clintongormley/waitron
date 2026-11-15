@@ -1519,6 +1519,9 @@ export class BackupScreen extends LitElement {
           ? html`<wt-input
               data-test="destination"
               name="backup-folder"
+              autocapitalize="none"
+              autocorrect="off"
+              spellcheck="false"
               required
               label=${t("backup.destination.label")}
               hint=${t("backup.destination.hint")}

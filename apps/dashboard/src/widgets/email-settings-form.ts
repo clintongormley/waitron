@@ -265,6 +265,9 @@ export class EmailSettingsForm extends LitElement {
     const invalid = errors.has(field) || this.refusal?.field === field;
     return html`<wt-input
       name=${`smtp-${field}`}
+      autocapitalize="none"
+      autocorrect="off"
+      spellcheck="false"
       data-test=${field}
       label=${t(`email.settings.${field}`)}
       .value=${this.values[field]}

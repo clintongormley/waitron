@@ -80,6 +80,9 @@ export function renderBucketField(
   return html`<wt-input
     name=${options.namePrefix + row.name}
     data-test=${ifDefined(options.testPrefix === undefined ? undefined : options.testPrefix + row.name)}
+    autocapitalize="none"
+    autocorrect="off"
+    spellcheck="false"
     label=${t(row.labelKey)}
     .required=${options.required}
     type=${secret && !options.visible ? "password" : "text"}
