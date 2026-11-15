@@ -63,7 +63,7 @@ describe.each(["en", "es"] as const)("New order %s", (locale) => {
               id: "main",
               name: locale === "es" ? "Principales" : "Mains",
               displayOrder: 1,
-              heldUntilFired: true,
+              fireNowZoneIds: [],
             },
           ],
         },

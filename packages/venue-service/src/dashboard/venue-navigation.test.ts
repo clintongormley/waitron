@@ -13,7 +13,7 @@ const model: VenueServiceView = {
   zones: [],
   salePolicies: { departments: [], zones: [] },
   floorZones: [],
-  releaseReminderMinutesByDepartment: {},
+  courseSettingsByDepartment: {},
   needsClearingDepartmentIds: [],
   lateSendManagerDepartmentIds: [],
   serviceSteps: [],

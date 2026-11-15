@@ -605,7 +605,7 @@ describe("till-app: Split a table's rows and its revision are one read (D16)", (
       courseIds: ["c-mains"],
       summary: "",
     };
-    const mains = { id: "c-mains", name: "Mains", displayOrder: 2, heldUntilFired: true };
+    const mains = { id: "c-mains", name: "Mains", displayOrder: 2, fireNowZoneIds: [] };
     const rowsWith = (partyRevision: number, line: TabLine): SplitSources => ({
       partyRevision,
       bills: [

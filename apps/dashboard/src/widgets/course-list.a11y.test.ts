@@ -3,7 +3,6 @@ import { page } from "vitest/browser";
 import type { WtRowActions } from "@waitron/ui";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import type { Course, DashboardApi } from "../api/client.js";
-import { t } from "../i18n/t.js";
 import { CourseList } from "./course-list.js";
 
 afterEach(async () => {
@@ -18,9 +17,8 @@ const COURSES: Course[] = [
     displayOrder: 0,
     active: true,
     inUse: false,
-    heldUntilFired: false,
   },
-  { id: "c2", name: "Mains", displayOrder: 1, active: true, inUse: true, heldUntilFired: true },
+  { id: "c2", name: "Mains", displayOrder: 1, active: true, inUse: true },
 ];
 function stubApi(state: State): DashboardApi {
   return {
@@ -91,14 +89,9 @@ describe.each(["light", "dark"] as const)("course list (%s)", (theme) => {
     const q = (selector: string) => el.shadowRoot!.querySelector<HTMLElement>(selector)!;
     if (state === "load failed") expect(q("[role=alert]")).not.toBeNull();
     if (state === "populated") {
-      const switches = el.shadowRoot!.querySelectorAll("wt-segmented-control");
-      expect(switches).toHaveLength(2);
-      expect(
-        switches[0]!.shadowRoot!.querySelector('[aria-checked="true"]')!.textContent!.trim(),
-      ).toBe(t("courses.fire_now"));
-      expect(
-        switches[1]!.shadowRoot!.querySelector('[aria-checked="true"]')!.textContent!.trim(),
-      ).toBe(t("courses.hold_for_later"));
+      expect(el.shadowRoot!.querySelectorAll("wt-segmented-control")).toHaveLength(0);
+      expect(q('[data-course="c1"]').textContent).toContain("Starters");
+      expect(q('[data-course="c2"]').textContent).toContain("Mains");
     }
 
     if (state === "renaming, refused blank") {

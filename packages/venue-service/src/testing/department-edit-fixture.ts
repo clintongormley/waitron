@@ -48,8 +48,10 @@ export function departmentSettingsAnswer(
       ...answer.lateSendManagerDepartmentIds.filter((id) => id !== departmentId),
       ...(input.lateSendNeedsManager ? [departmentId] : []),
     ];
-  if (input.releaseReminderMinutes !== undefined)
-    answer.releaseReminderMinutesByDepartment[departmentId] = input.releaseReminderMinutes;
+  if (input.courseSettings !== undefined)
+    answer.courseSettingsByDepartment[departmentId] = input.courseSettings.filter(
+      (row) => !row.heldUntilFired || row.reminderMinutes !== 10,
+    );
   if (input.serviceSteps)
     answer.serviceSteps = [
       ...answer.serviceSteps.filter((step) => step.departmentId !== departmentId),

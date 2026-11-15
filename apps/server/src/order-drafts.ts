@@ -48,7 +48,7 @@ import {
 } from "./working-order.js";
 import type { OrderAttendance } from "./working-order.js";
 import { requireMakeAtStation } from "./dead-ends.js";
-import { requireCourse, requireLiveCourse } from "./kitchen.js";
+import { requireCourse, requireLiveCourse, readCourseFireNowZones } from "./kitchen.js";
 import { RETAINED_COURSE } from "./retained-course.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import {
@@ -83,7 +83,7 @@ export interface FreshDraftLine {
   note: string | null;
   quantity: string;
   courseId: string | null;
-  course?: { id: string; name: string; displayOrder: number; heldUntilFired: boolean };
+  course?: { id: string; name: string; displayOrder: number; fireNowZoneIds: string[] };
   makeAt?: string | null;
   noMerge: boolean;
   slot: number;
@@ -1217,13 +1217,13 @@ async function storedLines(
         id: kitchenCourses.id,
         name: kitchenCourses.name,
         displayOrder: kitchenCourses.displayOrder,
-        heldUntilFired: kitchenCourses.heldUntilFired,
       },
     })
     .from(orderDraftLines)
     .leftJoin(kitchenCourses, eq(kitchenCourses.id, orderDraftLines.courseId))
     .where(inArray(orderDraftLines.draftId, [...draftIds]))
     .orderBy(asc(orderDraftLines.position), asc(orderDraftLines.id));
+  const defaults = await readCourseFireNowZones(tx);
   const fresh = rows.map(
     ({ line: row, course }) =>
       ({
@@ -1241,7 +1241,9 @@ async function storedLines(
           note: row.note,
           quantity: thousandthsToDecimal(row.quantity),
           courseId: row.courseId,
-          ...(course === null ? {} : { course }),
+          ...(course === null
+            ? {}
+            : { course: { ...course, fireNowZoneIds: defaults.get(course.id) ?? [] } }),
           makeAt: row.makeAtStationId,
           noMerge: row.noMerge,
           slot: row.slot,

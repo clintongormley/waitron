@@ -21160,7 +21160,7 @@ describe("switching the device's profile from the header", () => {
         finish({
           ...till,
           formFactor: "till",
-          courses: till.courses.map((course) => ({ ...course, heldUntilFired: false })),
+          courses: till.courses.map((course) => ({ ...course, fireNowZoneIds: ["dining"] })),
           clockingAvailable: false,
           receiptLanguages: [],
           activeReaders: [],

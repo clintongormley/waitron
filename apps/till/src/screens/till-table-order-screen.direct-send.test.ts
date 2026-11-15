@@ -7,7 +7,7 @@ import { cleanupWidgets } from "../widgets/test-helpers.js";
 import type { SubmitDraftDetail, TillTableOrderScreen } from "./till-table-order-screen.js";
 import { beer, flan, mount, resized, store } from "./till-table-order-screen.test-helpers.js";
 
-const main = { id: "main", name: "Mains", displayOrder: 2, heldUntilFired: true };
+const main = { id: "main", name: "Mains", displayOrder: 2, fireNowZoneIds: [] };
 const held: OrderGroup = {
   id: "held",
   position: 3,

@@ -107,7 +107,7 @@ const model: VenueServiceView = {
       },
     ],
   },
-  releaseReminderMinutesByDepartment: {},
+  courseSettingsByDepartment: {},
   needsClearingDepartmentIds: [],
   lateSendManagerDepartmentIds: [],
   serviceSteps: [],
@@ -259,14 +259,20 @@ describe.each(["light", "dark"] as const)("department-settings reminder (%s)", (
       "<department-settings></department-settings>",
       theme,
     )) as HTMLElementTagNameMap["department-settings"];
-    el.model = { ...structuredClone(model), releaseReminderMinutesByDepartment: { d1: 10 } };
+    el.model = {
+      ...structuredClone(model),
+      courses: [{ id: "mains", name: "Mains" }],
+      courseSettingsByDepartment: {
+        d1: [{ courseId: "mains", heldUntilFired: true, reminderMinutes: 10 }],
+      },
+    };
     el.departmentId = "d1";
     el.api = new VenueServiceApi((async (path, method) => {
       if (method === "GET")
         return path.endsWith("/profiles")
           ? [{ id: "p1", name: "Restaurant counter" }]
           : { departmentId: "d1", receivingProfileId: "p1", destinationDepartmentIds: ["d2"] };
-      throw { code: "management.request_invalid", params: { field: "releaseReminderMinutes" } };
+      throw { code: "management.request_invalid", params: { field: "courseSettings" } };
     }) as DashboardRequest);
     await el.updateComplete;
     await expect
@@ -274,10 +280,10 @@ describe.each(["light", "dark"] as const)("department-settings reminder (%s)", (
       .not.toBeNull();
     const control = () =>
       el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-        "wt-combobox[name=releaseReminderMinutes]",
+        "wt-combobox[name=course-mains-reminder]",
       )!;
     if (state === "reminder") {
-      await selectDepartmentTab(el, "service");
+      await selectDepartmentTab(el, "tables");
       expect(control().value).toBe("10");
     } else {
       el.shadowRoot!.querySelector("[name=name]")!.dispatchEvent(
@@ -289,7 +295,7 @@ describe.each(["light", "dark"] as const)("department-settings reminder (%s)", (
       );
       await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
-      await expect.poll(() => el.tab).toBe("service");
+      await expect.poll(() => el.tab).toBe("tables");
       await expect.poll(() => control().error).toContain("This value was not accepted");
     }
     await expectNoA11yViolations(host);
@@ -366,8 +372,8 @@ describe.each(["light", "dark"] as const)("department-settings tabs (%s)", (them
     )) as HTMLElementTagNameMap["department-settings"];
     el.model = structuredClone(model);
     el.model.courses = [
-      { id: "first", name: "Starters", heldUntilFired: false },
-      { id: "next", name: "Mains", heldUntilFired: true },
+      { id: "first", name: "Starters" },
+      { id: "next", name: "Mains" },
     ];
     el.departmentId = "d1";
     el.api = new VenueServiceApi((async (path) =>
@@ -396,7 +402,7 @@ describe.each(["light", "dark"] as const)("department-settings service steps (%s
       theme,
     )) as HTMLElementTagNameMap["department-settings"];
     const view = structuredClone(model);
-    view.courses = [{ id: "c1", name: "Mains", heldUntilFired: true }];
+    view.courses = [{ id: "c1", name: "Mains" }];
     view.serviceSteps = [
       {
         afterStepId: null,

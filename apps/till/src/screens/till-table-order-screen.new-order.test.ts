@@ -21,8 +21,8 @@ const held = (id: string, position: number, displayNumber: number): OrderGroup =
   summary: "Sent steak",
 });
 const courses = [
-  { id: "mains", name: "Mains", displayOrder: 1, heldUntilFired: true },
-  { id: "dessert", name: "Desserts", displayOrder: 2, heldUntilFired: true },
+  { id: "mains", name: "Mains", displayOrder: 1, fireNowZoneIds: [] },
+  { id: "dessert", name: "Desserts", displayOrder: 2, fireNowZoneIds: [] },
 ];
 const dish = (name: string, courseId: string | null = null) => ({
   ...beer,

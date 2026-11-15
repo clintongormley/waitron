@@ -351,9 +351,9 @@ A service step reminds you to go back to a table at the right moment, such as **
 couple of minutes after **Set up** is done, or **Anything else?** once every dish has been served.
 Each step starts at a moment like that and falls due a set number of minutes later. Your venue sets
 them up under **Service steps** on the department's **Tables** tab in the dashboard. There you can
-read the meal from seating to leaving, with its fixed moments, steps and courses. Course rows show
-the current send or hold choice and reminder; change the course choice on **Courses** and the
-shared reminder on the department's **Service** tab.
+read the meal from seating to leaving, with its fixed moments, steps and courses. Choose **Fire now** or **Hold for later** on each course row there. A held course offers its
+own reminder delay, including **At once** and **Off**. Choose **Save** to keep these choices with
+the department’s other settings. Use **Courses** to change the shared course names and order.
 
 Choose a step's start by name, such as **After Set up**, then set its delay. The list places it
 beside that start. Renaming another step keeps the link; deleting it also removes steps that

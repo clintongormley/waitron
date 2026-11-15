@@ -3,6 +3,7 @@ import { and, count, eq } from "drizzle-orm";
 import { AppError, type DeleteImpact } from "@waitron/shared";
 import {
   kitchenCourses,
+  departmentCourses,
   orderDraftLines,
   products,
   ticketItems,
@@ -21,6 +22,7 @@ import { idsInUse, type Reference } from "./in-use.js";
 /** Retention references; `in-use-references.test.ts` checks declared foreign keys only. */
 export const COURSE_REFERENCES: readonly Reference[] = [
   { table: products, column: products.courseId },
+  { table: departmentCourses, column: departmentCourses.courseId },
   { table: orderDraftLines, column: orderDraftLines.courseId },
   { table: workingOrderLines, column: workingOrderLines.courseId },
   { table: ticketItems, column: ticketItems.courseId },
@@ -72,6 +74,7 @@ export async function deleteCourse(tx: Transaction, id: string): Promise<DeleteI
   const { impact, retained, settings } = await courseDeleteRules(tx, id);
   await tx.update(products).set({ courseId: null }).where(eq(products.courseId, id));
   await clearCourseDeleteSettings(tx, settings);
+  await tx.delete(departmentCourses).where(eq(departmentCourses.courseId, id));
   if (retained) {
     await tx.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, id));
   } else {

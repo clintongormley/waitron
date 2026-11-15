@@ -100,7 +100,7 @@ export const zonesModel: VenueServiceView = {
       },
     ],
   },
-  releaseReminderMinutesByDepartment: {},
+  courseSettingsByDepartment: {},
   needsClearingDepartmentIds: [],
   lateSendManagerDepartmentIds: [],
   serviceSteps: [],

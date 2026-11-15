@@ -120,9 +120,9 @@ function menu(version: string, prices: Record<string, string> = {}): ZoneOffers 
 }
 
 const courses = [
-  { id: "drinks", name: "Drinks", displayOrder: 0, heldUntilFired: true },
-  { id: "mains", name: "Mains", displayOrder: 1, heldUntilFired: true },
-  { id: "desserts", name: "Desserts", displayOrder: 2, heldUntilFired: true },
+  { id: "drinks", name: "Drinks", displayOrder: 0, fireNowZoneIds: [] },
+  { id: "mains", name: "Mains", displayOrder: 1, fireNowZoneIds: [] },
+  { id: "desserts", name: "Desserts", displayOrder: 2, fireNowZoneIds: [] },
 ];
 
 function party(over: Partial<TableParty> = {}): TableParty {

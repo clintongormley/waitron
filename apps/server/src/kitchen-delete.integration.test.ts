@@ -63,7 +63,6 @@ it("keeps retained draft, group, course and ready station history through manage
     const createdCourse = await createCourse(tx, {
       name: "Recorded dessert",
       displayOrder: 3,
-      heldUntilFired: true,
     });
     const station = {
       ...(await createStation(tx, { name: "Recorded pastry" })),
@@ -156,7 +155,7 @@ it("keeps retained draft, group, course and ready station history through manage
         id: course.id,
         name: course.name,
         displayOrder: course.displayOrder,
-        heldUntilFired: true,
+        fireNowZoneIds: [],
       },
     },
   ]);

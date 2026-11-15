@@ -1,3 +1,4 @@
+import { departmentCourses } from "@waitron/db";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
@@ -23,7 +24,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
-import { departments, kitchenNotices, setRoutingCell } from "@waitron/venue-service";
+import { kitchenNotices, setRoutingCell } from "@waitron/venue-service";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { createCourse, createStation } from "./kitchen.js";
@@ -1558,9 +1559,7 @@ describe("A803 waiting copy: what the copy does afterwards", () => {
   });
 
   it("A803 waiting copy: the new table's release reminder names the copy once the dishes ahead of it are served", async () => {
-    const minutesBefore = await v.db
-      .select({ id: departments.id, minutes: departments.releaseReminderMinutes })
-      .from(departments);
+    const minutesBefore = await v.db.select().from(departmentCourses);
     await inTx(v, (tx) => setReleaseReminderInEveryDepartment(tx, 10));
     try {
       const a = await seatWith([
@@ -1607,11 +1606,8 @@ describe("A803 waiting copy: what the copy does afterwards", () => {
       });
     } finally {
       await inTx(v, async (tx) => {
-        for (const { id, minutes } of minutesBefore)
-          await tx
-            .update(departments)
-            .set({ releaseReminderMinutes: minutes })
-            .where(eq(departments.id, id));
+        await tx.delete(departmentCourses);
+        await insertInChunks(tx, departmentCourses, minutesBefore);
       });
     }
   });

@@ -35,7 +35,7 @@ function view(): VenueServiceView {
     floorZones: ["z1", "z2"].map((id) => ({ id, name: id, active: true })),
     salePolicies: { departments: [], zones: [] },
     readiness: [],
-    releaseReminderMinutesByDepartment: {},
+    courseSettingsByDepartment: {},
     needsClearingDepartmentIds: [],
     lateSendManagerDepartmentIds: [],
     serviceSteps: [],
@@ -513,7 +513,7 @@ it.each(["success", "failure"] as const)(
           collectionNumber: "none",
           needsClearing: false,
           lateSendNeedsManager: false,
-          releaseReminderMinutes: null,
+          courseSettings: [],
         },
       ],
     ]);

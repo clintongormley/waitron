@@ -5,6 +5,8 @@ import { eq, sql, inArray } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   kitchenCourses,
+  departmentCourses,
+  floorZones,
   products,
   orderDraftLines,
   workingOrderLines,
@@ -43,6 +45,10 @@ describe("permanent course deletion", () => {
         .set({ courseId: id, active: false })
         .where(eq(products.id, v.productId("Tarta")));
     });
+    const [zone] = await v.db.select().from(floorZones).where(eq(floorZones.id, v.tables.zoneId));
+    await v.db
+      .insert(departmentCourses)
+      .values({ departmentId: zone!.departmentId, courseId: id, reminderMinutes: null });
     const before = await inTx(v, (tx) => tx.select().from(products).orderBy(products.id));
     const courseBefore = await inTx(v, (tx) =>
       tx.select().from(kitchenCourses).where(eq(kitchenCourses.id, id)),
@@ -62,6 +68,9 @@ describe("permanent course deletion", () => {
     expect(
       await inTx(v, (tx) => tx.select().from(kitchenCourses).where(eq(kitchenCourses.id, id))),
     ).toEqual(courseBefore.map((row) => ({ ...row, active: false })));
+    expect(
+      await v.db.select().from(departmentCourses).where(eq(departmentCourses.courseId, id)),
+    ).toEqual([]);
     await inTx(v, (tx) => requireCourse(tx, id));
     for (const action of [
       () => inTx(v, (tx) => deleteCourse(tx, id)),
@@ -230,7 +239,7 @@ describe("permanent course deletion", () => {
         inTx(v, (tx) => updateCourse(tx, id, { active, name: "Changed" } as never)),
       ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "active" } });
       expect(await inTx(v, (tx) => listCourses(tx))).toEqual([
-        { id, name: "Live", displayOrder: 0, active: true, heldUntilFired: true },
+        { id, name: "Live", displayOrder: 0, active: true, fireNowZoneIds: [] },
         ...initialCourses,
       ]);
     },

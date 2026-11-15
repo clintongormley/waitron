@@ -247,7 +247,7 @@ export interface TillCourse {
   id: string;
   name: string;
   displayOrder: number;
-  heldUntilFired: boolean;
+  fireNowZoneIds: string[];
 }
 
 /**

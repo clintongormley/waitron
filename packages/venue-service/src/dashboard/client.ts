@@ -1,3 +1,4 @@
+import type { DepartmentCourseSetting } from "../release-reminders.js";
 import type { DeleteImpact } from "@waitron/shared";
 import type { FloorPlanSetDeleteImpact, FloorPlanSetsModel } from "../floor-plan-set-types.js";
 import type { LocalDate } from "../hours-types.js";
@@ -46,7 +47,7 @@ export interface DepartmentSettingsInput extends Pick<
   tradingName: string;
   needsClearing: boolean;
   lateSendNeedsManager: boolean;
-  releaseReminderMinutes: number | null;
+  courseSettings: DepartmentCourseSetting[];
   transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
   serviceSteps?: ServiceStepInput[];
 }
@@ -92,16 +93,14 @@ export interface VenueServiceModel {
   zones: ServiceZone[];
   salePolicies: { departments: DepartmentSalePolicy[]; zones: ZoneSalePolicy[] };
   readiness: VenueReadinessIssue[];
-  /** By active department id: minutes after the work fired before it is served that staff are
-   * reminded to fire the next held group; null when that department's reminder is off. */
-  releaseReminderMinutesByDepartment: Record<string, number | null>;
+  courseSettingsByDepartment: Record<string, DepartmentCourseSetting[]>;
   /** The active departments whose tables stay "Needs clearing" after the party leaves. */
   needsClearingDepartmentIds: string[];
   /** The active departments where a dish sent after its period ended needs someone holding
    * `venue.configure`: the sender, or a manager's PIN. */
   lateSendManagerDepartmentIds: string[];
   serviceSteps: ServiceStep[];
-  courses: { id: string; name: string; heldUntilFired: boolean }[];
+  courses: { id: string; name: string }[];
 }
 export interface VenueServiceChoices {
   floorZones: FloorZone[];

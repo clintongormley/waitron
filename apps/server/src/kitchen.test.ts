@@ -714,20 +714,10 @@ async function seedVariant(parentId: string): Promise<string> {
 }
 
 describe("kitchen-course config", () => {
-  it("new courses are held until fired unless explicitly changed", async () => {
+  it("new courses have no department Fire-now exceptions", async () => {
     const cfg = await setupVenue();
     const { id } = await asApp(cfg, (tx) => createCourse(tx, { name: "Mains" }));
-    expect(await asApp(cfg, (tx) => listCourses(tx))).toMatchObject([{ id, heldUntilFired: true }]);
-    await asApp(cfg, (tx) => updateCourse(tx, id, { heldUntilFired: false }));
-    expect(await asApp(cfg, (tx) => listCourses(tx))).toMatchObject([
-      { id, heldUntilFired: false },
-    ]);
-    const starter = await asApp(cfg, (tx) =>
-      createCourse(tx, { name: "Starters", heldUntilFired: false }),
-    );
-    expect(
-      (await asApp(cfg, (tx) => listCourses(tx))).find((c) => c.id === starter.id),
-    ).toMatchObject({ heldUntilFired: false });
+    expect(await asApp(cfg, (tx) => listCourses(tx))).toMatchObject([{ id, fireNowZoneIds: [] }]);
   });
 
   it("creates/lists/updates/deletes a course and orders by display_order then name", async () => {
@@ -745,7 +735,7 @@ describe("kitchen-course config", () => {
       name: "Mains",
       displayOrder: 1,
       active: true,
-      heldUntilFired: true,
+      fireNowZoneIds: [],
     });
     await asApp(cfg, (tx) => updateCourse(tx, a, { name: "Seconds", displayOrder: 9 }));
     const productId = await seedProduct();
@@ -771,7 +761,7 @@ describe("kitchen-course config", () => {
       name: "Desserts",
       displayOrder: 0,
       active: true,
-      heldUntilFired: true,
+      fireNowZoneIds: [],
     });
   });
 
@@ -851,10 +841,10 @@ describe("moveCourse", () => {
     const [a, b, c, d] = await fourCourses(cfg);
     const moved = await asApp(cfg, (tx) => moveCourse(tx, a!, 2));
     expect(moved).toEqual([
-      { id: b, name: "B", displayOrder: 0, active: true, heldUntilFired: true },
-      { id: c, name: "C", displayOrder: 1, active: true, heldUntilFired: true },
-      { id: a, name: "A", displayOrder: 2, active: true, heldUntilFired: true },
-      { id: d, name: "D", displayOrder: 3, active: true, heldUntilFired: true },
+      { id: b, name: "B", displayOrder: 0, active: true, fireNowZoneIds: [] },
+      { id: c, name: "C", displayOrder: 1, active: true, fireNowZoneIds: [] },
+      { id: a, name: "A", displayOrder: 2, active: true, fireNowZoneIds: [] },
+      { id: d, name: "D", displayOrder: 3, active: true, fireNowZoneIds: [] },
     ]);
     expect(await storedOrders([b!, c!, a!, d!])).toEqual([0, 1, 2, 3]);
     expect(await asApp(cfg, (tx) => listCourses(tx))).toEqual(moved);

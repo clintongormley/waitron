@@ -43,7 +43,7 @@ describe.each(["en", "es"] as const)("retained routing warning %s", (locale) => 
               id: "mains",
               name: locale === "es" ? "Principales" : "Mains",
               displayOrder: 1,
-              heldUntilFired: true,
+              fireNowZoneIds: [],
             },
           ],
         },

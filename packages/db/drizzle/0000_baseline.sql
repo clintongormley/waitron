@@ -634,7 +634,6 @@ CREATE TABLE `kitchen_courses` (
 	`starter_key` text,
 	`display_order` integer DEFAULT 0 NOT NULL,
 	`active` integer DEFAULT true NOT NULL,
-	`held_until_fired` integer DEFAULT true NOT NULL,
 	`created_at` text NOT NULL
 );
 --> statement-breakpoint
@@ -2267,7 +2266,6 @@ CREATE TABLE `departments` (
 	`active` integer DEFAULT true NOT NULL,
 	`needs_clearing` integer DEFAULT false NOT NULL,
 	`late_send_needs_manager` integer DEFAULT false NOT NULL,
-	`release_reminder_minutes` integer DEFAULT 10,
 	`created_at` text NOT NULL
 );
 --> statement-breakpoint
@@ -2791,6 +2789,18 @@ CREATE TABLE `bill_number_allocations` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `bill_number_allocations_party_number_key` ON `bill_number_allocations` (`party_id`,`number`);--> statement-breakpoint
+CREATE TABLE `department_courses` (
+	`department_id` text NOT NULL,
+	`course_id` text NOT NULL,
+	`held_until_fired` integer DEFAULT true NOT NULL,
+	`reminder_minutes` integer DEFAULT 10,
+	PRIMARY KEY(`department_id`, `course_id`),
+	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`course_id`) REFERENCES `kitchen_courses`(`id`) ON UPDATE no action ON DELETE cascade,
+	CONSTRAINT "department_courses_reminder_minutes_ck" CHECK("department_courses"."reminder_minutes" between 0 and 120)
+);
+--> statement-breakpoint
+CREATE INDEX `department_courses_course_idx` ON `department_courses` (`course_id`);--> statement-breakpoint
 CREATE TABLE `document_delivery_requests` (
 	`node_id` text NOT NULL,
 	`recovery_epoch` text NOT NULL,

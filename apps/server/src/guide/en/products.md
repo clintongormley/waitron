@@ -131,9 +131,9 @@ held group or an existing held group. You can change an unsent dish's course bef
 Use groups to choose which dishes you fire together, rather than treating each course as one
 fixed section for the whole table.
 
-In **Courses**, choose **Fire now** to put new dishes straight into that group at a table.
+In the department’s **Tables** tab, choose **Fire now** to put new dishes straight into that group at a table.
 Choose **Hold for later** to group the first order by course. On later orders, check the proposed
-group before sending; you can move dishes between groups. Add a course with **Add course**, then
+group before sending; you can move dishes between groups. In **Courses**, add one with **Add course**, then
 save its name with Enter or by leaving the field. Open the row’s ⋮ menu to rename or delete a
 course.
 

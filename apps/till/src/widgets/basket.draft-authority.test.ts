@@ -41,7 +41,7 @@ async function openPicker(store: WorkingOrderStore, lineDetails = false) {
   const { el } = await mountWidget<TillBasket>("till-basket", {
     store,
     lineDetails,
-    courses: [{ id: "mains", name: "Mains", displayOrder: 1, heldUntilFired: true }],
+    courses: [{ id: "mains", name: "Mains", displayOrder: 1, fireNowZoneIds: [] }],
   });
   const edit = el.shadowRoot!.querySelector<HTMLElement>(
     lineDetails ? "[data-line-detail]" : ".edit-modifiers",

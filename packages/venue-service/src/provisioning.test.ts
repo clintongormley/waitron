@@ -107,7 +107,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
         const node = { nodeId: await seedNode(db) };
         await withTransaction(db, (tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
         const rows = await db.execute(sql`
-        select name, display_order, held_until_fired, active from kitchen_courses order by display_order`);
+        select c.name, c.display_order, coalesce(d.held_until_fired, 1) as held_until_fired, c.active from kitchen_courses c left join department_courses d on d.course_id = c.id order by c.display_order`);
         const names = english ?? [
           STARTER_COURSE_NAMES["Sharing plates"].es,
           STARTER_COURSE_NAMES.Starters.es,
@@ -136,12 +136,12 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       const rows = async () =>
         (
           await db.execute(sql`
-        select id, name, display_order, held_until_fired, active from kitchen_courses order by display_order`)
+        select id, name, display_order, active from kitchen_courses order by display_order`)
         ).rows;
       await seed();
       expect(await rows()).toHaveLength(4);
       await db.execute(
-        sql`update kitchen_courses set name = 'House mains', held_until_fired = 0 where display_order = 2`,
+        sql`update kitchen_courses set name = 'House mains' where display_order = 2`,
       );
       await db.execute(sql`delete from kitchen_courses where display_order = 0`);
       await db.execute(sql`update kitchen_courses set active = 0 where display_order = 3`);

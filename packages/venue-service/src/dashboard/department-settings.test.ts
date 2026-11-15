@@ -113,7 +113,7 @@ const model: VenueServiceView = {
       },
     ],
   },
-  releaseReminderMinutesByDepartment: {},
+  courseSettingsByDepartment: {},
   needsClearingDepartmentIds: [],
   lateSendManagerDepartmentIds: [],
   serviceSteps: [],
@@ -209,13 +209,49 @@ it("offers Tables after Service and keeps its clearing change in the shared Save
   expect(writes[0]!.body).toMatchObject({ name: "Evening restaurant", needsClearing: true });
 });
 
-it("reads fixed moments, steps and current course firing in Tables without course editors", async () => {
+it("edits each course in Tables through the shared Save and retains a hidden reminder", async () => {
   const view = structuredClone(model);
   view.courses = [
-    { id: "starter", name: "Starters", heldUntilFired: false },
-    { id: "main", name: "Mains", heldUntilFired: true },
+    { id: "mains", name: "Mains" },
+    { id: "desserts", name: "Desserts" },
   ];
-  view.releaseReminderMinutesByDepartment = { d1: 10 };
+  view.courseSettingsByDepartment = {
+    d1: [{ courseId: "mains", heldUntilFired: true, reminderMinutes: 25 }],
+  };
+  const { el, writes } = await mount(view);
+  await selectDepartmentTab(el, "tables");
+  const firing = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-segmented-control"]>(
+    '[name="course-mains-held"]',
+  );
+  expect(firing, "per-course firing control").not.toBeNull();
+  expect(firing!.value).toBe("true");
+  firing!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "false" }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector('[name="course-mains-reminder"]')).toBeNull();
+  await selectDepartmentTab(el, "service");
+  expect(save(el).disabled).toBe(false);
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]!.body).toMatchObject({
+    courseSettings: [
+      { courseId: "mains", heldUntilFired: false, reminderMinutes: 25 },
+      { courseId: "desserts", heldUntilFired: true, reminderMinutes: 10 },
+    ],
+  });
+  await expect.poll(() => save(el).disabled).toBe(true);
+});
+
+it("reads fixed moments and steps before editable course firing in Tables", async () => {
+  const view = structuredClone(model);
+  view.courses = [
+    { id: "starter", name: "Starters" },
+    { id: "main", name: "Mains" },
+  ];
+  view.courseSettingsByDepartment = {
+    d1: [{ courseId: "starter", heldUntilFired: false, reminderMinutes: 10 }],
+  };
   const { el } = await mount(view);
   await selectDepartmentTab(el, "tables");
   const panel = shownPanel(el);
@@ -223,13 +259,23 @@ it("reads fixed moments, steps and current course firing in Tables without cours
     [...panel.querySelectorAll("[data-moment]")].map((row) => row.textContent!.trim()),
   ).toEqual(["Party seated", "Bill requested", "Party leaves"]);
   const courses = [...panel.querySelectorAll("[data-course]")];
-  expect(courses.map((row) => row.textContent!.replace(/\s+/g, " ").trim())).toEqual([
-    "Starters Fire now",
-    "Mains Hold for later Shared reminder: 10 min",
+  expect(courses.map((row) => row.querySelector("strong")!.textContent)).toEqual([
+    "Starters",
+    "Mains",
   ]);
   expect(
-    courses.every((row) => row.querySelector("wt-input, wt-combobox, wt-switch, button") === null),
-  ).toBe(true);
+    courses[0]!.querySelector<HTMLElementTagNameMap["wt-segmented-control"]>(
+      "wt-segmented-control",
+    )!.value,
+  ).toBe("false");
+  expect(
+    courses[1]!.querySelector<HTMLElementTagNameMap["wt-segmented-control"]>(
+      "wt-segmented-control",
+    )!.value,
+  ).toBe("true");
+  expect(
+    courses[1]!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox")!.value,
+  ).toBe("10");
   const leaves = panel.querySelector("[data-moment=leaves]")!;
   expect(
     leaves.compareDocumentPosition(needsClearing(el)) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -250,28 +296,21 @@ it.each([
   "reads a held course's $label reminder and an unsaved reminder change",
   async ({ minutes, label }) => {
     const view = structuredClone(model);
-    view.courses = [{ id: "mains", name: "Mains", heldUntilFired: true }];
-    view.releaseReminderMinutesByDepartment = { d1: minutes };
+    view.courses = [{ id: "mains", name: "Mains" }];
+    view.courseSettingsByDepartment = {
+      d1: [{ courseId: "mains", heldUntilFired: true, reminderMinutes: minutes }],
+    };
     const { el } = await mount(view);
     await selectDepartmentTab(el, "tables");
-    const row = () =>
-      shownPanel(el)
-        .querySelector('[data-course="mains"]')!
-        .textContent!.replace(/\s+/g, " ")
-        .trim();
-    expect(row()).toBe(`Mains Hold for later Shared reminder: ${label}`);
-    expect(
-      shownPanel(el).querySelector('[data-test="course-reminder-hint"]')!.textContent!.trim(),
-    ).toBe(VENUE_SERVICE_STRINGS.en["venue.release_reminder_hint"]);
+    const control = () =>
+      shownPanel(el).querySelector<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox")!;
+    expect(control().value).toBe(minutes === null ? "" : String(minutes));
+    await control().updateComplete;
+    expect(control().options.find((option) => option.value === control().value)?.label).toBe(label);
+    await chooseOption(control(), "5");
     await selectDepartmentTab(el, "service");
-    await chooseOption(
-      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-        "[name=releaseReminderMinutes]",
-      )!,
-      "5",
-    );
     await selectDepartmentTab(el, "tables");
-    expect(row()).toBe("Mains Hold for later Shared reminder: 5 min");
+    expect(control().value).toBe("5");
   },
 );
 
@@ -327,7 +366,7 @@ it("opens quiet with Cancel before Save and sends all settings in one request", 
         collectionNumber: "numbered",
         needsClearing: false,
         lateSendNeedsManager: false,
-        releaseReminderMinutes: null,
+        courseSettings: [],
         transfers: { receivingProfileId: "p2", destinationDepartmentIds: ["d2"] },
       },
     },
@@ -336,7 +375,7 @@ it("opens quiet with Cancel before Save and sends all settings in one request", 
 });
 it("a save that does not touch the steps sends none", async () => {
   const view = structuredClone(model);
-  view.courses = [{ id: "c1", name: "Mains", heldUntilFired: true }];
+  view.courses = [{ id: "c1", name: "Mains" }];
   view.serviceSteps = [
     {
       afterStepId: null,
@@ -1600,14 +1639,14 @@ it("switching it on enables Save and saves it with the department", async () => 
 });
 it("saving a name change sends the stored minutes unchanged", async () => {
   const view = structuredClone(model);
-  view.releaseReminderMinutesByDepartment = { d1: 25 };
+  view.courseSettingsByDepartment = {};
   const { el, writes } = await mount(view);
   await change(el, "name", "Restaurant revised");
   save(el).click();
   await expect.poll(() => writes.length).toBe(1);
   expect(writes[0]!.body).toMatchObject({
     name: "Restaurant revised",
-    releaseReminderMinutes: 25,
+    courseSettings: [],
   });
 });
 it("a refusal naming the switch, sent while Details shows, brings back Tables and marks it", async () => {
@@ -1683,8 +1722,7 @@ it("shows the late-send switch under Courses and stations, after the reminder, o
   const section = control.closest("section")!;
   expect(shownPanel(el).contains(section)).toBe(true);
   expect(section.getAttribute("aria-label")).toBe("Courses and stations");
-  const reminder = section.querySelector("wt-combobox[name=releaseReminderMinutes]")!;
-  expect(reminder.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(section.querySelector("wt-combobox")).toBeNull();
   expect(control.label).toBe("Manager's PIN to send after a period ends");
   expect(control.checked).toBe(false);
   expect(control.getAttribute("aria-invalid")).toBeNull();
@@ -1756,15 +1794,16 @@ it("reads the late-send switch in Spanish", async () => {
 });
 type Reminder = HTMLElementTagNameMap["wt-combobox"];
 function reminder(el: DepartmentSettings) {
-  const control = el.shadowRoot!.querySelector<Reminder>(
-    "wt-combobox[name=releaseReminderMinutes]",
-  );
+  const control = el.shadowRoot!.querySelector<Reminder>("wt-combobox[name=course-mains-reminder]");
   expect(control, "reminder dropdown").not.toBeNull();
   return control!;
 }
 function reminderView(minutes: number | null) {
   const view = structuredClone(model);
-  view.releaseReminderMinutesByDepartment = { d1: minutes };
+  view.courses = [{ id: "mains", name: "Mains" }];
+  view.courseSettingsByDepartment = {
+    d1: [{ courseId: "mains", heldUntilFired: true, reminderMinutes: minutes }],
+  };
   return view;
 }
 function shownText(control: Reminder) {
@@ -1787,20 +1826,14 @@ async function clickChosenReminder(el: DepartmentSettings): Promise<number> {
   await el.updateComplete;
   return sent;
 }
-it("shows the reminder under Courses and stations, after Orders and payment", async () => {
+it("shows each course's reminder in Tables and leaves Service without one", async () => {
   const { el } = await mount(reminderView(10));
   await selectDepartmentTab(el, "service");
-  const panel = shownPanel(el);
-  expect([...panel.querySelectorAll("section > h3")].map((h) => h.textContent!.trim())).toEqual([
-    "Orders and payment",
-    "Courses and stations",
-  ]);
-  const control = reminder(el);
-  const section = control.closest("section")!;
-  expect(panel.contains(section)).toBe(true);
-  expect(section.getAttribute("aria-label")).toBe("Courses and stations");
-  expect(control.label).toBe("Remind to fire the next course after");
-  expect(control.value).toBe("10");
+  expect(shownPanel(el).querySelector("wt-combobox[name=course-mains-reminder]")).toBeNull();
+  await selectDepartmentTab(el, "tables");
+  expect(shownPanel(el).contains(reminder(el))).toBe(true);
+  expect(reminder(el).hint).toContain("marked served");
+  expect(reminder(el).value).toBe("10");
 });
 it("gives the reminder dropdown its search, Off and its hint", async () => {
   const { el } = await mount(reminderView(null));
@@ -1842,7 +1875,7 @@ it("offers Off, At once and 5 to 30 minutes, and keeps a stored value the list d
 });
 it("keeps offering a saved value the list does not offer after another is picked, so picking it back is clean", async () => {
   const { el, writes } = await mount(reminderView(7));
-  await selectDepartmentTab(el, "service");
+  await selectDepartmentTab(el, "tables");
   await chooseReminder(el, "10");
   await reminder(el).updateComplete;
   expect(reminder(el).options.map((option) => option.value)).toEqual([
@@ -1883,14 +1916,14 @@ it("offers both the saved value and an unsaved one the list does not offer", asy
 });
 it.each([0, 25])("opens quiet on a department with %s stored minutes", async (minutes) => {
   const { el } = await mount(reminderView(minutes));
-  await selectDepartmentTab(el, "service");
+  await selectDepartmentTab(el, "tables");
   expect(reminder(el).value).toBe(String(minutes));
   expect(save(el).disabled).toBe(true);
   expect(save(el).variant).toBe("secondary");
 });
 it.each([0, 20])("choosing %s enables Save and saves it with the department", async (minutes) => {
-  const { el, writes } = await mount();
-  await selectDepartmentTab(el, "service");
+  const { el, writes } = await mount(reminderView(null));
+  await selectDepartmentTab(el, "tables");
   expect(save(el).disabled).toBe(true);
   expect(save(el).variant).toBe("secondary");
   await chooseReminder(el, String(minutes));
@@ -1899,7 +1932,9 @@ it.each([0, 20])("choosing %s enables Save and saves it with the department", as
   save(el).click();
   await expect.poll(() => writes.length).toBe(1);
   expect(writes[0]!.path).toBe("/management-api/venue-service/departments/d1/settings");
-  expect(writes[0]!.body).toMatchObject({ releaseReminderMinutes: minutes });
+  expect(writes[0]!.body).toMatchObject({
+    courseSettings: [{ courseId: "mains", heldUntilFired: true, reminderMinutes: minutes }],
+  });
   await expect.poll(() => save(el).disabled).toBe(true);
   el.model = reminderView(minutes);
   await el.updateComplete;
@@ -1909,12 +1944,14 @@ it.each([0, 20])("choosing %s enables Save and saves it with the department", as
   expect(save(el).disabled).toBe(false);
   save(el).click();
   await expect.poll(() => writes.length).toBe(2);
-  expect(writes[1]!.body).toMatchObject({ releaseReminderMinutes: null });
+  expect(writes[1]!.body).toMatchObject({
+    courseSettings: [{ courseId: "mains", heldUntilFired: true, reminderMinutes: null }],
+  });
 });
 it("choosing the reminder already shown, or Off when Off is shown, leaves Save quiet", async () => {
   for (const minutes of [10, null]) {
     const { el, writes } = await mount(reminderView(minutes));
-    await selectDepartmentTab(el, "service");
+    await selectDepartmentTab(el, "tables");
     expect(await clickChosenReminder(el)).toBe(1);
     expect(save(el).disabled).toBe(true);
     expect(el.hasUnsavedChanges).toBe(false);
@@ -1924,8 +1961,8 @@ it("choosing the reminder already shown, or Off when Off is shown, leaves Save q
   }
 });
 it("keeps the reminder's change inside the dialog", async () => {
-  const { el } = await mount();
-  await selectDepartmentTab(el, "service");
+  const { el } = await mount(reminderView(null));
+  await selectDepartmentTab(el, "tables");
   let heard = 0;
   const listen = () => heard++;
   document.addEventListener("wt-change", listen);
@@ -1937,22 +1974,22 @@ it("keeps the reminder's change inside the dialog", async () => {
   expect(reminder(el).value).toBe("5");
   expect(heard).toBe(0);
 });
-it("a refusal naming the reminder, sent while Details shows, brings back Service and marks it", async () => {
-  const { el } = await mount(structuredClone(model), {
+it("a refusal naming the reminder, sent while Details shows, brings back Tables and marks it", async () => {
+  const { el } = await mount(reminderView(10), {
     code: "management.request_invalid",
-    params: { field: "releaseReminderMinutes" },
+    params: { field: "courseSettings" },
   });
   await change(el, "name", "Revised");
   expect(el.tab).toBe("details");
   const events = tabEvents(el);
   save(el).click();
-  await expect.poll(() => el.tab).toBe("service");
-  expect(events).toEqual([{ tab: "service", replace: true }]);
+  await expect.poll(() => el.tab).toBe("tables");
+  expect(events).toEqual([{ tab: "tables", replace: true }]);
   await strip(el).updateComplete;
   expect(strip(el).items.map((item) => item.marked)).toEqual([
     undefined,
-    "needs fixing",
     undefined,
+    "needs fixing",
     undefined,
   ]);
   const control = reminder(el);
@@ -1965,7 +2002,7 @@ it("a refusal naming the reminder, sent while Details shows, brings back Service
   expect(save(el).disabled).toBe(false);
 });
 it("follows a reminder another dashboard sets while the form is clean, and keeps a draft while it is not", async () => {
-  const { el } = await mount();
+  const { el } = await mount(reminderView(null));
   el.model = reminderView(15);
   await el.updateComplete;
   expect(reminder(el).value).toBe("15");
@@ -1982,12 +2019,12 @@ it("follows a reminder another dashboard sets while the form is clean, and keeps
 });
 it("reads the reminder in Spanish", async () => {
   setLocale("es");
-  const { el } = await mount();
+  const { el } = await mount(reminderView(null));
   const control = reminder(el);
   expect(control.closest("section")!.querySelector("h3")!.textContent!.trim()).toBe(
-    "Cursos y estaciones",
+    VENUE_SERVICE_STRINGS.es["venue.table_states"],
   );
-  expect(control.label).toBe("Avisar para marchar el siguiente curso tras");
+  expect(control.label).toBe(VENUE_SERVICE_STRINGS.es["venue.release_reminder"]);
   expect(control.options.map((option) => option.label)).toEqual([
     "Deshabilitado",
     "Al momento",
@@ -2001,8 +2038,8 @@ it("reads the reminder in Spanish", async () => {
 const stepsView = () => {
   const view = structuredClone(model);
   view.courses = [
-    { id: "c1", name: "Mains", heldUntilFired: true },
-    { id: "c2", name: "Desserts", heldUntilFired: true },
+    { id: "c1", name: "Mains" },
+    { id: "c2", name: "Desserts" },
   ];
   view.serviceSteps = [
     {
@@ -2145,8 +2182,8 @@ it("shows Service steps under Table states, before Needs clearing, with this dep
   expect(list.shadowRoot!.querySelector("h4")!.textContent!.trim()).toBe("Service steps");
   expect(list.disabled).toBe(false);
   expect(list.courses).toEqual([
-    { id: "c1", name: "Mains", heldUntilFired: true },
-    { id: "c2", name: "Desserts", heldUntilFired: true },
+    { id: "c1", name: "Mains" },
+    { id: "c2", name: "Desserts" },
   ]);
   await settled(el);
   expect(stepRows(el).map((_, index) => stepControl(el, index, "Name").value)).toEqual([
@@ -2387,7 +2424,7 @@ it("a step list another manager changed while a rename is in progress shows thei
   await settled(el);
   await change(el, "name", "Restaurant revised");
   const gone = stepsView();
-  gone.courses = [{ id: "c2", name: "Desserts", heldUntilFired: true }];
+  gone.courses = [{ id: "c2", name: "Desserts" }];
   gone.serviceSteps = gone.serviceSteps.filter((step) => step.id !== "s3");
   el.model = gone;
   await settled(el);
@@ -2479,7 +2516,7 @@ it("a rename saves when another manager put a just-saved step's start back and d
   await expect.poll(() => save(el).disabled).toBe(true);
   await change(el, "name", "Restaurant revised");
   const back = stepsView();
-  back.courses = [{ id: "c1", name: "Mains", heldUntilFired: true }];
+  back.courses = [{ id: "c1", name: "Mains" }];
   el.model = back;
   await settled(el);
   expect(save(el).disabled).toBe(false);
@@ -2763,7 +2800,7 @@ it("a step whose course another dashboard deleted is marked That course was dele
   await settled(el);
   await editStep(el, 2, "Name", "Pudding?");
   const gone = stepsView();
-  gone.courses = [{ id: "c2", name: "Desserts", heldUntilFired: true }];
+  gone.courses = [{ id: "c2", name: "Desserts" }];
   gone.serviceSteps = gone.serviceSteps.filter((step) => step.id !== "s3");
   el.model = gone;
   await settled(el);

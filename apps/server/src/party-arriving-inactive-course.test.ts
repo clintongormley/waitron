@@ -1,10 +1,16 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { orderGroups, ticketItems, workingOrderLines } from "@waitron/db";
+import {
+  departmentCourses,
+  floorZones,
+  orderGroups,
+  ticketItems,
+  workingOrderLines,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { deleteCourse } from "./course-delete.js";
-import { createCourse, updateCourse } from "./kitchen.js";
+import { createCourse } from "./kitchen.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import {
@@ -28,7 +34,7 @@ useVenueDb({
 
 describe("arriving dishes whose course no longer holds them", () => {
   it.each(["inactive", "unheld", "none"] as const)(
-    "fires a moved %s course without changing the charged food",
+    "preserves a moved %s course and its charged food",
     async (kind) => {
       const source = await seat(venue, await venue.table(`Source ${kind}`));
       const tableId = await venue.table(`Destination ${kind}`);
@@ -62,7 +68,17 @@ describe("arriving dishes whose course no longer holds them", () => {
       ).toBeNull();
       if (kind === "inactive") await inTx(venue, (tx) => deleteCourse(tx, course!.id));
       if (kind === "unheld")
-        await inTx(venue, (tx) => updateCourse(tx, course!.id, { heldUntilFired: false }));
+        await inTx(venue, async (tx) => {
+          const [zone] = await tx
+            .select({ departmentId: floorZones.departmentId })
+            .from(floorZones)
+            .where(eq(floorZones.id, venue.tables.zoneId));
+          await tx.insert(departmentCourses).values({
+            departmentId: zone!.departmentId,
+            courseId: course!.id,
+            heldUntilFired: false,
+          });
+        });
 
       await inTx(venue, (tx) =>
         moveBill(
@@ -82,8 +98,11 @@ describe("arriving dishes whose course no longer holds them", () => {
       const groups = await venue.db
         .select()
         .from(orderGroups)
-        .where(eq(orderGroups.partyId, target.partyId));
-      expect(groups).toHaveLength(1);
+        .where(eq(orderGroups.partyId, target.partyId))
+        .orderBy(orderGroups.position);
+      expect(groups.map((group) => group.state)).toEqual(
+        kind === "unheld" ? ["fired", "held"] : ["fired"],
+      );
       expect(groups[0]).toMatchObject({ state: "fired", position: 1, firedBy: OPERATOR });
       const after = await venue.db
         .select()
@@ -92,8 +111,11 @@ describe("arriving dishes whose course no longer holds them", () => {
       for (const line of before) {
         expect(after.find((row) => row.id === line.id)).toEqual({
           ...line,
-          groupId: groups[0]!.id,
-          sentAt: line.sentAt ?? expect.any(String),
+          groupId: groups[kind === "unheld" && line.id === later.id ? 1 : 0]!.id,
+          sentAt:
+            kind === "unheld" && line.id === later.id
+              ? line.sentAt
+              : (line.sentAt ?? expect.any(String)),
         });
       }
       const ticket = (
@@ -103,7 +125,7 @@ describe("arriving dishes whose course no longer holds them", () => {
           .where(eq(ticketItems.workingOrderLineId, later.id))
       )[0]!;
       expect(ticket).toMatchObject({
-        firedAt: expect.any(String),
+        firedAt: kind === "unheld" ? null : expect.any(String),
         state: "queued",
         quantity: 2000,
       });

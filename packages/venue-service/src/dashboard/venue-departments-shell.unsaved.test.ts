@@ -28,7 +28,7 @@ const model: VenueServiceView = {
   floorZones: ["z1", "z2"].map((id) => ({ id, name: id, active: true })),
   salePolicies: { departments: [], zones: [] },
   readiness: [],
-  releaseReminderMinutesByDepartment: {},
+  courseSettingsByDepartment: {},
   needsClearingDepartmentIds: [],
   lateSendManagerDepartmentIds: [],
   serviceSteps: [],

@@ -614,6 +614,29 @@ function validateServiceSteps(tables: Tables): void {
   );
 }
 
+function validateDepartmentCourses(tables: Tables): void {
+  const departments = ids(tables.departments),
+    courses = ids(tables.kitchen_courses);
+  const seen = new Set<string>();
+  for (const row of tables.department_courses ?? []) {
+    if (!departments.has(row.department_id)) refuse("department_courses.department_id");
+    if (!courses.has(row.course_id)) refuse("department_courses.course_id");
+    if (row.held_until_fired !== 0 && row.held_until_fired !== 1)
+      refuse("department_courses.held_until_fired");
+    if (!(
+      row.reminder_minutes === null ||
+      (typeof row.reminder_minutes === "number" &&
+        Number.isInteger(row.reminder_minutes) &&
+        row.reminder_minutes >= 0 &&
+        row.reminder_minutes <= 120)
+    ))
+      refuse("department_courses.reminder_minutes");
+    const key = JSON.stringify([row.department_id, row.course_id]);
+    if (seen.has(key)) refuse("department_courses");
+    seen.add(key);
+  }
+}
+
 function validateVenueServiceConfiguration(
   tables: Tables,
   bundle?: {
@@ -626,6 +649,7 @@ function validateVenueServiceConfiguration(
   validateOrderStarts(tables);
   validateServiceHierarchy(tables);
   validateServiceSteps(tables);
+  validateDepartmentCourses(tables);
   validateReceiptFields(tables);
   validateHolidayConfiguration(bundle?.holidayArea);
   validateMenuTimetables(tables);
@@ -640,6 +664,7 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
   tables: [
     { name: "departments", leaveBehindWhenFalse: "active" },
     { name: "service_steps" },
+    { name: "department_courses" },
     { name: "department_receipts" },
     { name: "department_sale_policies" },
     { name: "device_profile_service_access" },

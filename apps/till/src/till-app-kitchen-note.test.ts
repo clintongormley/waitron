@@ -1221,7 +1221,7 @@ it.each([false, true])(
       {
         getTill: vi.fn().mockResolvedValue({
           ...till,
-          courses: [{ id: "mains", name: "Mains", displayOrder: 0, heldUntilFired: true }],
+          courses: [{ id: "mains", name: "Mains", displayOrder: 0, fireNowZoneIds: [] }],
         }),
         listStations: vi.fn().mockResolvedValue([
           {

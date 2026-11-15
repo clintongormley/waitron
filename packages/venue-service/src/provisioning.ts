@@ -2,6 +2,7 @@ import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
 import { getCountryPack, starterName } from "@waitron/country-packs";
 import {
   departments,
+  departmentCourses,
   departmentSalePolicies,
   deviceProfiles,
   deviceProfileServiceAccess,
@@ -64,14 +65,22 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
           const courses =
             taxpayer === null ? [] : (getCountryPack(taxpayer.country)?.starterCourses ?? []);
           if (courses.length > 0) {
-            await tx.insert(kitchenCourses).values(
-              courses.map(({ name, heldUntilFired, starterKey }, displayOrder) => ({
-                name: starterName(STARTER_COURSE_NAMES, name, staffLanguage),
-                starterKey: starterKey ?? null,
-                displayOrder,
-                heldUntilFired,
-              })),
+            const inserted = await tx
+              .insert(kitchenCourses)
+              .values(
+                courses.map(({ name, starterKey }, displayOrder) => ({
+                  name: starterName(STARTER_COURSE_NAMES, name, staffLanguage),
+                  starterKey: starterKey ?? null,
+                  displayOrder,
+                })),
+              )
+              .returning({ id: kitchenCourses.id });
+            const exceptions = inserted.flatMap((row, index) =>
+              courses[index]!.heldUntilFired
+                ? []
+                : [{ departmentId, courseId: row.id, heldUntilFired: false }],
             );
+            if (exceptions.length > 0) await tx.insert(departmentCourses).values(exceptions);
           }
         }
         await tx

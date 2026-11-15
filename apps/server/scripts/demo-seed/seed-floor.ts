@@ -3,6 +3,7 @@ import { readBusinessDayScheduleRevision } from "@waitron/venue-service";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   categories,
+  departmentCourses,
   floorZones,
   diningTables,
   kitchenStations,
@@ -73,6 +74,18 @@ export async function seedFloor(
   await tx
     .insert(departmentSalePolicies)
     .values({ departmentId: deliDepartmentId, orderStart: "counter" });
+  const courseDefaults = await tx
+    .select({
+      courseId: departmentCourses.courseId,
+      heldUntilFired: departmentCourses.heldUntilFired,
+      reminderMinutes: departmentCourses.reminderMinutes,
+    })
+    .from(departmentCourses)
+    .where(eq(departmentCourses.departmentId, defaultPolicy.department_id));
+  if (courseDefaults.length > 0)
+    await tx
+      .insert(departmentCourses)
+      .values(courseDefaults.map((row) => ({ departmentId: deliDepartmentId, ...row })));
   await addStarterServiceSteps(tx, deliDepartmentId, locale);
 
   const zoneIds = new Map<string, string>();

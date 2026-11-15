@@ -34,7 +34,7 @@ describe.each(["en", "es"] as const)("Sent course in %s", (locale) => {
         locale === "en"
           ? "Desserts to share at the table $& $'"
           : "Postres para compartir en la mesa $& $'";
-      const course = { id: "retired", name, displayOrder: 2, heldUntilFired: true };
+      const course = { id: "retired", name, displayOrder: 2, fireNowZoneIds: [] };
       const { el, host } = await mountWidget<TillTableOrderScreen>(
         "till-table-order-screen",
         {

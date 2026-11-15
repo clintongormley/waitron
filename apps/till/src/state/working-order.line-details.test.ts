@@ -86,9 +86,9 @@ const starter: TillCourse = {
   id: "starter",
   name: "Starter",
   displayOrder: 0,
-  heldUntilFired: true,
+  fireNowZoneIds: [],
 };
-const mains: TillCourse = { id: "mains", name: "Mains", displayOrder: 1, heldUntilFired: true };
+const mains: TillCourse = { id: "mains", name: "Mains", displayOrder: 1, fireNowZoneIds: [] };
 function courseDraft() {
   const store = new DraftStore();
   store.loadFrom("draft", [

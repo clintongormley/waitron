@@ -1,3 +1,4 @@
+import { departmentCourses } from "@waitron/db";
 import type { TradingContext } from "./trading-context.js";
 import { dirname, join } from "node:path";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -3575,17 +3576,20 @@ describe("a department's late-send manager setting in a configuration transfer",
   });
 });
 
-it("carries a department's reminder minutes to the importing venue", async () => {
+it("carries a department's course firing and reminder minutes to remapped rows in the importing venue", async () => {
   const source = await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
   });
   await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, { name: "Reminded terrace" });
-    await tx
-      .update(departments)
-      .set({ releaseReminderMinutes: 25 })
-      .where(eq(departments.id, department.id));
+    const [course] = await tx.insert(kitchenCourses).values({ name: "House mains" }).returning();
+    await tx.insert(departmentCourses).values({
+      departmentId: department.id,
+      courseId: course!.id,
+      heldUntilFired: false,
+      reminderMinutes: 25,
+    });
   });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
@@ -3602,11 +3606,17 @@ it("carries a department's reminder minutes to the importing venue", async () =>
   });
   const [imported] = await withTransaction(targetSuite.db, (tx) =>
     tx
-      .select({ minutes: departments.releaseReminderMinutes })
-      .from(departments)
-      .where(eq(departments.name, "Reminded terrace")),
+      .select({
+        minutes: departmentCourses.reminderMinutes,
+        heldUntilFired: departmentCourses.heldUntilFired,
+        course: kitchenCourses.name,
+      })
+      .from(departmentCourses)
+      .innerJoin(departments, eq(departments.id, departmentCourses.departmentId))
+      .innerJoin(kitchenCourses, eq(kitchenCourses.id, departmentCourses.courseId))
+      .where(and(eq(departments.name, "Reminded terrace"), eq(kitchenCourses.name, "House mains"))),
   );
-  expect(imported).toEqual({ minutes: 25 });
+  expect(imported).toEqual({ minutes: 25, heldUntilFired: false, course: "House mains" });
 });
 
 it("leaves out a print agent's node, so the importing venue does not show it as on this box", async () => {

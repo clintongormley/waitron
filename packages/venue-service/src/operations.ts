@@ -1,3 +1,4 @@
+import { saveDepartmentCourseSettings, type DepartmentCourseSetting } from "./release-reminders.js";
 import { rangeSpanInDay } from "./service-day.js";
 import { readServiceDayPlan, serviceDayOf } from "./day-resolver.js";
 import { specialDayReadiness } from "./special-days.js";
@@ -22,6 +23,7 @@ import {
   departmentDayRanges,
   departmentDays,
   departments,
+  departmentCourses,
   departmentSalePolicies,
   floorZones,
   insertInChunks,
@@ -191,6 +193,21 @@ export async function createDepartment(
   await tx
     .insert(departmentSalePolicies)
     .values({ departmentId: row!.id, orderStart: input.orderStart ?? "counter" });
+  const defaults = await tx
+    .select({
+      courseId: departmentCourses.courseId,
+      heldUntilFired: departmentCourses.heldUntilFired,
+      reminderMinutes: departmentCourses.reminderMinutes,
+    })
+    .from(departmentCourses)
+    .innerJoin(departments, eq(departments.id, departmentCourses.departmentId))
+    .where(and(eq(departments.isDefault, true), eq(departments.active, true)));
+  if (defaults.length > 0)
+    await insertInChunks(
+      tx,
+      departmentCourses,
+      defaults.map((setting) => ({ departmentId: row!.id, ...setting })),
+    );
   const staffLanguage = await readStarterStaffLanguage(tx);
   await addStarterServiceSteps(tx, row!.id, staffLanguage);
   const menuId = await readDefaultMenuId(tx);
@@ -207,7 +224,6 @@ export async function updateDepartment(
     orderStart?: OrderStart;
     needsClearing?: boolean;
     lateSendNeedsManager?: boolean;
-    releaseReminderMinutes?: number | null;
   },
 ): Promise<void> {
   await assertDepartment(tx, departmentId);
@@ -216,8 +232,7 @@ export async function updateDepartment(
     input.name !== undefined ||
     input.tradingName !== undefined ||
     input.needsClearing !== undefined ||
-    input.lateSendNeedsManager !== undefined ||
-    input.releaseReminderMinutes !== undefined
+    input.lateSendNeedsManager !== undefined
   )
     await tx
       .update(departments)
@@ -228,9 +243,6 @@ export async function updateDepartment(
         ...(input.lateSendNeedsManager === undefined
           ? {}
           : { lateSendNeedsManager: input.lateSendNeedsManager }),
-        ...(input.releaseReminderMinutes === undefined
-          ? {}
-          : { releaseReminderMinutes: input.releaseReminderMinutes }),
       })
       .where(eq(departments.id, departmentId));
   if (input.orderStart === undefined) return;
@@ -653,7 +665,7 @@ export interface DepartmentEditInput extends Pick<
   transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
   needsClearing?: boolean;
   lateSendNeedsManager?: boolean;
-  releaseReminderMinutes?: number | null;
+  courseSettings?: readonly DepartmentCourseSetting[];
   serviceSteps?: readonly ServiceStepInput[];
 }
 
@@ -669,9 +681,6 @@ export async function saveDepartmentEditSettings(
     ...(input.lateSendNeedsManager === undefined
       ? {}
       : { lateSendNeedsManager: input.lateSendNeedsManager }),
-    ...(input.releaseReminderMinutes === undefined
-      ? {}
-      : { releaseReminderMinutes: input.releaseReminderMinutes }),
   });
   const settings = {
     orderStart: input.orderStart,
@@ -688,6 +697,8 @@ export async function saveDepartmentEditSettings(
     .onConflictDoUpdate({ target: departmentSalePolicies.departmentId, set: settings });
   if (input.transfers !== undefined)
     await setDepartmentTransferSettings(tx, departmentId, input.transfers);
+  if (input.courseSettings !== undefined)
+    await saveDepartmentCourseSettings(tx, departmentId, input.courseSettings);
   if (input.serviceSteps !== undefined)
     await saveServiceSteps(tx, departmentId, input.serviceSteps);
 }

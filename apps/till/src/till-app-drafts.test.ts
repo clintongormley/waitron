@@ -141,9 +141,9 @@ function zoneOffers(version: string, prices: Record<string, string> = {}): ZoneO
 }
 
 const courses = [
-  { id: "drinks", name: "Drinks", displayOrder: 0, heldUntilFired: true },
-  { id: "mains", name: "Mains", displayOrder: 1, heldUntilFired: true },
-  { id: "desserts", name: "Desserts", displayOrder: 2, heldUntilFired: true },
+  { id: "drinks", name: "Drinks", displayOrder: 0, fireNowZoneIds: [] },
+  { id: "mains", name: "Mains", displayOrder: 1, fireNowZoneIds: [] },
+  { id: "desserts", name: "Desserts", displayOrder: 2, fireNowZoneIds: [] },
 ];
 
 function party(over: Partial<TableParty> = {}): TableParty {
@@ -505,9 +505,9 @@ describe("W69 unassigned table draft", () => {
       getTill: vi.fn().mockResolvedValue({
         ...till(drillFormFactor),
         courses: [
-          { id: "drinks", name: "Drinks", displayOrder: 0, heldUntilFired: false },
-          { id: "mains", name: "Mains", displayOrder: 1, heldUntilFired: true },
-          { id: "desserts", name: "Desserts", displayOrder: 2, heldUntilFired: true },
+          { id: "drinks", name: "Drinks", displayOrder: 0, fireNowZoneIds: ["z1"] },
+          { id: "mains", name: "Mains", displayOrder: 1, fireNowZoneIds: [] },
+          { id: "desserts", name: "Desserts", displayOrder: 2, fireNowZoneIds: [] },
         ],
       }),
       seatTable: vi.fn(async () => {
@@ -2251,9 +2251,9 @@ describe("till-app: sending the draft", () => {
         getTill: vi.fn().mockResolvedValue({
           ...till(drillFormFactor),
           courses: [
-            { id: "drinks", name: "Drinks", displayOrder: 0, heldUntilFired: false },
-            { id: "mains", name: "Mains", displayOrder: 1, heldUntilFired: true },
-            { id: "desserts", name: "Desserts", displayOrder: 2, heldUntilFired: true },
+            { id: "drinks", name: "Drinks", displayOrder: 0, fireNowZoneIds: ["z1"] },
+            { id: "mains", name: "Mains", displayOrder: 1, fireNowZoneIds: [] },
+            { id: "desserts", name: "Desserts", displayOrder: 2, fireNowZoneIds: [] },
           ],
         }),
         ...overrides,
@@ -3922,9 +3922,9 @@ describe("till-app: how long a send may take", () => {
 
 describe("till-app: a later addition is decided from the table's own groups", () => {
   const placementCourses = [
-    { id: "drinks", name: "Drinks", displayOrder: 0, heldUntilFired: false },
-    { id: "mains", name: "Mains", displayOrder: 1, heldUntilFired: true },
-    { id: "desserts", name: "Desserts", displayOrder: 2, heldUntilFired: true },
+    { id: "drinks", name: "Drinks", displayOrder: 0, fireNowZoneIds: ["z1"] },
+    { id: "mains", name: "Mains", displayOrder: 1, fireNowZoneIds: [] },
+    { id: "desserts", name: "Desserts", displayOrder: 2, fireNowZoneIds: [] },
   ];
   const placementGroup = (id: string, position: number, courseIds: string[]): OrderGroup => ({
     id,
@@ -4087,7 +4087,7 @@ describe("till-app: a later addition is decided from the table's own groups", ()
     const { el } = await placementApp(
       true,
       [placementGroup("g-retained", 2, ["retained-starter"])],
-      [{ id: "retained-starter", name: "Old starter", displayOrder: 0, heldUntilFired: true }],
+      [{ id: "retained-starter", name: "Old starter", displayOrder: 0, fireNowZoneIds: [] }],
     );
     await tap(el, "Flan");
     expect(draft(el).lines[0]!.place).toEqual({ kind: "new", slot: 1 });

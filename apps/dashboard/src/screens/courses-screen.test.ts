@@ -11,8 +11,8 @@ import "./courses-screen.js";
 afterEach(cleanupWidgets);
 
 const COURSES: Course[] = [
-  { id: "c1", name: "Starters", displayOrder: 0, active: true, inUse: false, heldUntilFired: true },
-  { id: "c2", name: "Mains", displayOrder: 1, active: true, inUse: false, heldUntilFired: false },
+  { id: "c1", name: "Starters", displayOrder: 0, active: true, inUse: false },
+  { id: "c2", name: "Mains", displayOrder: 1, active: true, inUse: false },
 ];
 
 function stubApi(courses: Course[] = COURSES): DashboardApi {
@@ -143,7 +143,7 @@ describe("dashboard-courses-screen", () => {
     await vi.waitFor(() => expect(courseList.shadowRoot!.activeElement).toBe(field));
   });
 
-  it("read-only: names and firing settings, no Add course, and no drag instructions", async () => {
+  it("read-only: names, no Add course, and no drag instructions", async () => {
     const { el } = await mount(true);
     expect(q(el, "[data-test=add-course]")).toBeNull();
     expect(q(el, ".description")).toBeNull();
@@ -153,7 +153,7 @@ describe("dashboard-courses-screen", () => {
       [...courseList.shadowRoot!.querySelectorAll("li[data-course]")].map((row) =>
         row.textContent!.trim().replace(/\s+/g, " "),
       ),
-    ).toEqual([`Starters · ${t("courses.hold_for_later")}`, `Mains · ${t("courses.fire_now")}`]);
+    ).toEqual(["Starters", "Mains"]);
     expect(courseList.shadowRoot!.querySelectorAll("wt-segmented-control")).toHaveLength(0);
     expect(courseList.shadowRoot!.querySelector("[data-test=add-course]")).toBeNull();
     expect(courseList.shadowRoot!.querySelector("[data-test=name-c1]")).toBeNull();

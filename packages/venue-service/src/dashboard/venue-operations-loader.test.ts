@@ -20,7 +20,7 @@ function model(name = "Restaurant"): VenueServiceView {
     floorZones: [],
     salePolicies: { departments: [], zones: [] },
     readiness: [],
-    releaseReminderMinutesByDepartment: {},
+    courseSettingsByDepartment: {},
     needsClearingDepartmentIds: [],
     lateSendManagerDepartmentIds: [],
     serviceSteps: [],

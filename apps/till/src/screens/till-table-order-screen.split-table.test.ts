@@ -2988,7 +2988,7 @@ describe("A803 split: a read and a selected bill", () => {
 });
 
 describe("Split a table's mark on a dish waiting for its course", () => {
-  const mains = { id: "c-mains", name: "Mains", displayOrder: 2, heldUntilFired: true };
+  const mains = { id: "c-mains", name: "Mains", displayOrder: 2, fireNowZoneIds: [] };
   const group = (id: string, state: "held" | "fired") => ({
     id,
     position: 1,

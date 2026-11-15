@@ -291,7 +291,7 @@ describe("combined settings requests", () => {
       collectionNumber: "numbered",
       needsClearing: false,
       lateSendNeedsManager: false,
-      releaseReminderMinutes: null,
+      courseSettings: [],
       transfers: { receivingProfileId: "p1", destinationDepartmentIds: ["d2"] },
     };
     const answer = departmentSettingsAnswer(zonesModel, "d1", input);
@@ -317,7 +317,7 @@ describe("combined settings requests", () => {
           collectionNumber: "numbered",
           needsClearing: false,
           lateSendNeedsManager: false,
-          releaseReminderMinutes: null,
+          courseSettings: [],
           transfers: { receivingProfileId: "p1", destinationDepartmentIds: ["d2"] },
         },
       ],
@@ -337,7 +337,7 @@ describe("combined settings requests", () => {
       collectionNumber: "numbered",
       needsClearing: false,
       lateSendNeedsManager: false,
-      releaseReminderMinutes: null,
+      courseSettings: [],
       serviceSteps,
     };
     const answer = departmentSettingsAnswer(zonesModel, "d1", input);

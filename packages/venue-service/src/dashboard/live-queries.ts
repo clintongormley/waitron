@@ -239,6 +239,7 @@ export const QUERY_DEPENDENCIES = {
     "special_days",
     "special_day_dates",
     "service_steps",
+    "department_courses",
     "kitchen_courses",
   ],
 } as const;

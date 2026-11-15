@@ -342,7 +342,6 @@ describe("menu-screen", () => {
       displayOrder: 0,
       active: true,
       inUse: false,
-      heldUntilFired: true,
     };
     const api = stubApi({ listCourses: vi.fn().mockResolvedValue([oneCourse]) });
     const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
@@ -1002,7 +1001,6 @@ describe("menu-screen", () => {
           displayOrder: 0,
           active: true,
           inUse: false,
-          heldUntilFired: true,
         },
       ]),
     });
@@ -2088,7 +2086,6 @@ describe("menu-screen", () => {
         displayOrder: 0,
         active: true,
         inUse: false,
-        heldUntilFired: true,
       },
       {
         id: "k2",
@@ -2096,7 +2093,6 @@ describe("menu-screen", () => {
         displayOrder: 1,
         active: true,
         inUse: false,
-        heldUntilFired: true,
       },
     ];
     const slowly = <T>(value: T): Promise<T> =>
@@ -2118,10 +2114,7 @@ describe("menu-screen", () => {
         createCourse: vi.fn(
           async ({ name, displayOrder }: { name: string; displayOrder: number }) => {
             if (slowCreate) await slowly(null);
-            rows = [
-              ...rows,
-              { id: "k-new", name, displayOrder, active: true, inUse: false, heldUntilFired: true },
-            ];
+            rows = [...rows, { id: "k-new", name, displayOrder, active: true, inUse: false }];
             return { id: "k-new" };
           },
         ),
@@ -2240,8 +2233,7 @@ describe("menu-screen", () => {
       expect(dialog.querySelector("[data-test=courses-done]")!.getAttribute("slot")).toBe("cancel");
       expect(editor(el).childOpen).toBe(true);
       const timing = inList(el, "tr wt-segmented-control");
-      expect(timing).not.toBeNull();
-      expect(timing.getAttribute("hide-label")).not.toBeNull();
+      expect(timing).toBeNull();
       const actions = inList(el, "tr wt-row-actions");
       const trigger = actions.shadowRoot!.querySelector("button")!;
       expect(trigger.getAttribute("popovertarget")).not.toBeNull();
@@ -2293,7 +2285,6 @@ describe("menu-screen", () => {
         displayOrder: 2,
         active: true,
         inUse: false,
-        heldUntilFired: true,
       };
       const courses = () =>
         Promise.resolve([...venueCourses, ...(added ? [postres] : [])].map((c) => ({ ...c })));
@@ -2483,7 +2474,6 @@ describe("menu-screen", () => {
         displayOrder: 2,
         active: false,
         inUse: true,
-        heldUntilFired: true,
       };
       const api = courseApi({}, false, [...venueCourses, brunch]);
       const el = await openCourses(api, "k1");
@@ -2651,7 +2641,6 @@ describe("menu-screen", () => {
           displayOrder: 2,
           active: true,
           inUse: false,
-          heldUntilFired: true,
         },
       ]);
       await flush(el);

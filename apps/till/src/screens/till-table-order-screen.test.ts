@@ -79,8 +79,8 @@ const ham: TillProduct = {
 const products: TillProduct[] = [coffee, ham];
 
 const courses = [
-  { id: "entrantes", name: "Entrantes", displayOrder: 0, heldUntilFired: true },
-  { id: "postres", name: "Postres", displayOrder: 1, heldUntilFired: true },
+  { id: "entrantes", name: "Entrantes", displayOrder: 0, fireNowZoneIds: [] },
+  { id: "postres", name: "Postres", displayOrder: 1, fireNowZoneIds: [] },
 ];
 
 // Two café lines locked at add-time (1.50 each): line 1 still to serve, line 2 already served. Both have
@@ -824,7 +824,7 @@ describe("till-table-order-screen", () => {
         id: "retired",
         name: "Recorded dessert",
         displayOrder: 3,
-        heldUntilFired: true,
+        fireNowZoneIds: [],
       };
       const draftStore = new WorkingOrderStore();
       draftStore.loadFrom("draft", [
@@ -856,7 +856,7 @@ describe("till-table-order-screen", () => {
       id: "retired",
       name: "Recorded dessert",
       displayOrder: 3,
-      heldUntilFired: true,
+      fireNowZoneIds: [],
     };
     const { el } = await mount({
       courses: [],
@@ -943,7 +943,7 @@ describe("till-table-order-screen", () => {
         id: "long",
         name: "Platos para compartir al centro de la mesa".padEnd(60, "x"),
         displayOrder: 2,
-        heldUntilFired: true,
+        fireNowZoneIds: [],
       };
       const { el } = await mount({ courses: [...courses, long] });
       await resized(el);
@@ -1155,9 +1155,9 @@ describe("till-table-order-screen", () => {
   describe("the draft in sections, and its actions", () => {
     const serviceCourses = [
       // Listed out of display order, so a screen that keeps the list's order fails.
-      { id: "mains", name: "Mains", displayOrder: 2, heldUntilFired: true },
-      { id: "drinks", name: "Drinks", displayOrder: 0, heldUntilFired: true },
-      { id: "starters", name: "Starters", displayOrder: 1, heldUntilFired: true },
+      { id: "mains", name: "Mains", displayOrder: 2, fireNowZoneIds: [] },
+      { id: "drinks", name: "Drinks", displayOrder: 0, fireNowZoneIds: [] },
+      { id: "starters", name: "Starters", displayOrder: 1, fireNowZoneIds: [] },
     ];
     const dish = (id: string, name: string, courseId: string | null): TillProduct => ({
       ...coffee,

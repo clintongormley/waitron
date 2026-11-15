@@ -1,19 +1,12 @@
-import {
-  ReorderController,
-  baseStyles,
-  reorder,
-  type ReorderModel,
-  type WtSegmentedControl,
-} from "@waitron/ui";
+import { guideHref } from "../help-guide.js";
+import { ReorderController, baseStyles, reorder, type ReorderModel } from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
-import { guard } from "lit/directives/guard.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
-import "@waitron/ui/src/components/wt-segmented-control.js";
 import "@waitron/ui/src/components/wt-delete-dialog.js";
 import type { DeleteImpact } from "@waitron/shared";
 import { courseDeleteCopy } from "./course-delete-copy.js";
@@ -21,8 +14,7 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import type { Course, DashboardApi } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { currentLocale, t } from "../i18n/t.js";
-import { guideHref } from "../help-guide.js";
+import { t } from "../i18n/t.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import { ListWriteQueue } from "./section-writes.js";
 
@@ -107,19 +99,13 @@ export class CourseList extends LitElement {
       td.name-cell {
         width: calc(7 * var(--wt-tap-min));
       }
-      wt-segmented-control {
-        width: calc(4 * var(--wt-tap-min) - var(--wt-space-3));
-      }
-      wt-segmented-control::part(button) {
-        padding-inline: var(--wt-space-2);
-      }
       td.handle-cell {
         padding-inline-start: var(--wt-space-3);
       }
       td.actions-cell {
         padding-inline-end: var(--wt-space-3);
       }
-      .timing-label {
+      .heading-label {
         position: relative;
         display: inline-block;
       }
@@ -152,7 +138,6 @@ export class CourseList extends LitElement {
   /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
   #readErrorShown = false;
   readonly #writes = new ListWriteQueue();
-  readonly #heldPending = new Map<string, boolean>();
   /** Moves shown on screen but not yet answered: a list read meanwhile would put their rows back. */
   #movesOut = 0;
   /** A list read arrived while moves were out, so what it carried has not been shown yet. */
@@ -498,28 +483,6 @@ export class CourseList extends LitElement {
     });
   }
 
-  #setHeld(course: Course, heldUntilFired: boolean): void {
-    if (this.readOnly || this.#heldPending.has(course.id)) return;
-    this.#heldPending.set(course.id, heldUntilFired);
-    this.#showError(null);
-    this.requestUpdate();
-    this.#writes.run(SCOPE, async () => {
-      try {
-        await this.api.updateCourse(course.id, { heldUntilFired });
-      } catch (error) {
-        this.#heldPending.delete(course.id);
-        this.#showError(codeOf(error));
-        this.requestUpdate();
-        return;
-      }
-      this.courses = this.courses.map((row) =>
-        row.id === course.id ? { ...row, heldUntilFired } : row,
-      );
-      this.#heldPending.delete(course.id);
-      await this.#load();
-    });
-  }
-
   #actions(course: Course): TemplateResult {
     return html`<td class="actions-cell">
       <wt-row-actions align="end" label=${`${t("kitchen.course_actions")}: ${course.name}`}>
@@ -565,29 +528,6 @@ export class CourseList extends LitElement {
               </button>`
         }
       </td>
-      <td class="timing-cell">
-        <wt-segmented-control
-          name="heldUntilFired"
-          label=${`${t("courses.on_the_till")}: ${course.name}`}
-          hide-label
-          .options=${guard([currentLocale()], () => [
-            { value: "false", label: t("courses.fire_now") },
-            { value: "true", label: t("courses.hold_for_later") },
-          ])}
-          .value=${String(this.#heldPending.get(course.id) ?? course.heldUntilFired)}
-          @wt-change=${async (event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            const pending = this.#heldPending.has(course.id);
-            const control = event.currentTarget as WtSegmentedControl;
-            this.#setHeld(course, event.detail.value === "true");
-            control.value = String(this.#heldPending.get(course.id) ?? course.heldUntilFired);
-            if (pending) {
-              await control.updateComplete;
-              control.focus();
-            }
-          }}
-        ></wt-segmented-control>
-      </td>
       ${this.#actions(course)}
     </tr>`;
   }
@@ -628,13 +568,7 @@ export class CourseList extends LitElement {
   #table(adding: Edit | null): TemplateResult {
     if (this.readOnly)
       return html`<ul>
-        ${this.courses.map(
-          (course) =>
-            html`<li data-course=${course.id}>
-              ${course.name} ·
-              ${t(course.heldUntilFired ? "courses.hold_for_later" : "courses.fire_now")}
-            </li>`,
-        )}
+        ${this.courses.map((course) => html`<li data-course=${course.id}>${course.name}</li>`)}
       </ul>`;
     return html`<div
       class="table-wrap"
@@ -646,22 +580,17 @@ export class CourseList extends LitElement {
         <thead>
           <tr>
             <th scope="col"><span class="visually-hidden">${t("kitchen.reorder_course")}</span></th>
-            <th scope="col" class="name-heading">${t("kitchen.course_name")}</th>
-            <th scope="col" class="held-heading">
-              ${
-                this.courses.length
-                  ? html`<span class="timing-label"
-                      ><span class="timing-title">${t("courses.on_the_till")}</span
-                      ><wt-help-tooltip
-                        mode="help-mode"
-                        aria-label=${t("courses.help_label")}
-                        guide-href=${guideHref("products.course")}
-                        guide-label=${t("courses.help_guide")}
-                        >${t("courses.help")}</wt-help-tooltip
-                      ></span
-                    >`
-                  : html`<span class="visually-hidden">${t("courses.on_the_till")}</span>`
-              }
+            <th scope="col" class="name-heading">
+              <span class="heading-label"
+                ><span class="column-title">${t("kitchen.course_name")}</span
+                ><wt-help-tooltip
+                  mode="help-mode"
+                  aria-label=${t("courses.help_label")}
+                  guide-href=${guideHref("products.course")}
+                  guide-label=${t("courses.help_guide")}
+                  >${t("courses.help")}</wt-help-tooltip
+                ></span
+              >
             </th>
             <th scope="col"><span class="visually-hidden">${t("kitchen.course_actions")}</span></th>
           </tr>

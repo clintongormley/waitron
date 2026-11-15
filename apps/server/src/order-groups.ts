@@ -1,3 +1,4 @@
+import { readCourseFireNowZones } from "./kitchen.js";
 import { serviceDishPredicate, serviceDishCondition } from "./service-dishes.js";
 import { readDisplayLineNutrition, type LineNutrition } from "./line-nutrition.js";
 import {
@@ -1815,16 +1816,16 @@ export interface ReleaseReminder {
 export function releaseReminder(
   groups: readonly Pick<OrderGroup, "id" | "state" | "remindAt">[],
   lines: readonly { groupId: string | null; servedAt: string | null; fullyCancelled?: true }[],
-  minutes: number | null,
+  minutesFor: (groupId: string) => number | null,
 ): ReleaseReminder | null {
-  if (minutes === null) return null;
   const waiting = groups.findIndex((group) => {
-    if (group.state !== "held") return false;
+    if (group.state !== "held" || minutesFor(group.id) === null) return false;
     const own = lines.filter((line) => line.groupId === group.id);
     return own.length === 0 || own.some((line) => line.fullyCancelled !== true);
   });
   if (waiting === -1) return null;
   const { id: groupId, remindAt } = groups[waiting]!;
+  const minutes = minutesFor(groupId)!;
   const ahead = new Set(groups.slice(0, waiting).map((group) => group.id));
   let latest: number | null = null;
   for (const line of lines) {
@@ -1839,25 +1840,32 @@ export function releaseReminder(
   };
 }
 
-/**
- * Each party's reminder interval, from the department of its first table's zone — `firstZones`
- * when given, else {@link partyFirstZones}; null when none.
- */
-async function partyReminderMinutes(
+async function partyCourseSettings(
   tx: Transaction,
   partyIds: readonly string[],
   firstZones?: ReadonlyMap<string, string>,
-): Promise<Map<string, number | null>> {
+) {
   const zones = firstZones ?? (await partyFirstZones(tx, partyIds));
-  const byZone = await VENUE_SERVICE.readReleaseReminderMinutesByZone(tx, [
-    ...new Set(zones.values()),
-  ]);
-  return new Map(
-    partyIds.map((id) => {
-      const zoneId = zones.get(id);
-      return [id, zoneId === undefined ? null : (byZone.get(zoneId) ?? null)];
-    }),
+  const byZone = await VENUE_SERVICE.readCourseSettingsByZone(tx, [...new Set(zones.values())]);
+  return new Map(partyIds.map((id) => [id, byZone.get(zones.get(id) ?? "") ?? []]));
+}
+
+function groupReminderMinutes(
+  lines: readonly { groupId: string | null; courseId: string | null }[],
+  courses: readonly { id: string; displayOrder: number }[],
+  settings: readonly { courseId: string; reminderMinutes: number | null }[],
+): (groupId: string) => number | null {
+  const ordered = [...courses].sort(
+    (a, b) => a.displayOrder - b.displayOrder || a.id.localeCompare(b.id),
   );
+  return (groupId) => {
+    const ids = new Set(
+      lines.filter((line) => line.groupId === groupId).map((line) => line.courseId),
+    );
+    const course = ordered.find((course) => ids.has(course.id));
+    const setting = settings.find((setting) => setting.courseId === course?.id);
+    return setting === undefined ? 10 : setting.reminderMinutes;
+  };
 }
 
 /**
@@ -1873,9 +1881,10 @@ export async function readReleaseReminders(
 ): Promise<Map<string, ReleaseReminder | null>> {
   const reminders = new Map<string, ReleaseReminder | null>(partyIds.map((id) => [id, null]));
   if (partyIds.length === 0) return reminders;
-  const minutes = await partyReminderMinutes(tx, partyIds, firstZones);
-  const reminded = partyIds.filter((id) => minutes.get(id) !== null);
-  if (reminded.length === 0) return reminders;
+  const settings = await partyCourseSettings(tx, partyIds, firstZones);
+  const courses = await tx
+    .select({ id: kitchenCourses.id, displayOrder: kitchenCourses.displayOrder })
+    .from(kitchenCourses);
   const groups = await tx
     .select({
       id: orderGroups.id,
@@ -1887,7 +1896,7 @@ export async function readReleaseReminders(
     .innerJoin(parties, eq(parties.id, orderGroups.partyId))
     .where(
       and(
-        inArray(orderGroups.partyId, reminded),
+        inArray(orderGroups.partyId, [...partyIds]),
         ne(orderGroups.state, "removed"),
         eq(parties.state, "open"),
       ),
@@ -1897,6 +1906,7 @@ export async function readReleaseReminders(
   const lines = await tx
     .select({
       groupId: workingOrderLines.groupId,
+      courseId: workingOrderLines.courseId,
       quantity: workingOrderLines.quantity,
       servedQuantity: workingOrderLines.servedQuantity,
       servedAt: workingOrderLines.servedAt,
@@ -1937,7 +1947,7 @@ export async function readReleaseReminders(
             servedAt: serviceCompletedAt(line),
             ...(line.cancelledQuantity >= line.quantity ? { fullyCancelled: true as const } : {}),
           })),
-        minutes.get(partyId)!,
+        groupReminderMinutes(lines, courses, settings.get(partyId) ?? []),
       ),
     );
   }
@@ -2077,7 +2087,7 @@ export interface CurrentOrders {
   revision: number;
   hasGroups: boolean;
   nextDisplayNumber: number;
-  retainedCourses: { id: string; name: string; displayOrder: number; heldUntilFired: boolean }[];
+  retainedCourses: { id: string; name: string; displayOrder: number; fireNowZoneIds: string[] }[];
   reminder: ReleaseReminder | null;
   /** In sequence, removed ones left out. */
   groups: CurrentOrderGroup[];
@@ -2152,7 +2162,6 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
         id: kitchenCourses.id,
         name: kitchenCourses.name,
         displayOrder: kitchenCourses.displayOrder,
-        heldUntilFired: kitchenCourses.heldUntilFired,
       },
       parentLineId: workingOrderLines.parentLineId,
       name: workingOrderLines.name,
@@ -2245,10 +2254,15 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
   const byId = new Map(shown.map((group) => [group.id, group]));
   const ungrouped: CurrentOrderRow[] = [];
   const dishes: { groupId: string | null; servedAt: string | null; fullyCancelled?: true }[] = [];
+  const defaults = await readCourseFireNowZones(tx);
   const retainedCourses = new Map<string, CurrentOrders["retainedCourses"][number]>();
   for (const line of lines) {
     if (!isDish(line)) continue;
-    if (line.course !== null) retainedCourses.set(line.course.id, line.course);
+    if (line.course !== null)
+      retainedCourses.set(line.course.id, {
+        ...line.course,
+        fireNowZoneIds: defaults.get(line.course.id) ?? [],
+      });
     const group = line.groupId === null ? undefined : byId.get(line.groupId);
     if (line.groupId !== null && group === undefined) continue;
     dishes.push({
@@ -2328,10 +2342,8 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     };
     (group?.rows ?? ungrouped).push(row);
   }
-  const minutes =
-    party.state === "open"
-      ? ((await partyReminderMinutes(tx, [partyId])).get(partyId) ?? null)
-      : null;
+  const settings = (await partyCourseSettings(tx, [partyId])).get(partyId) ?? [];
+  const minutesFor = groupReminderMinutes(lines, [...retainedCourses.values()], settings);
   return {
     revision: party.revision,
     hasGroups: nextDisplayNumber > 1,
@@ -2342,7 +2354,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     reminder: releaseReminder(
       shown.filter((group) => group.rows.length > 0),
       dishes,
-      minutes,
+      party.state === "open" ? minutesFor : () => null,
     ),
     groups: shown,
     ungrouped,
@@ -2799,8 +2811,6 @@ export async function recordGroupEvent(
   });
 }
 
-// Relocation preserves fired and requested history; only a live held course keeps arriving food
-// the waiter has not asked for held.
 export async function groupArrivingDishes(
   tx: Transaction,
   cfg: OriginConfig,
@@ -2815,7 +2825,6 @@ export async function groupArrivingDishes(
       id: workingOrderLines.id,
       courseId: workingOrderLines.courseId,
       courseActive: kitchenCourses.active,
-      heldUntilFired: kitchenCourses.heldUntilFired,
       sentAt: workingOrderLines.sentAt,
       ticketItemId: ticketItems.id,
       ticketFiredAt: ticketItems.firedAt,
@@ -2842,7 +2851,7 @@ export async function groupArrivingDishes(
   const heldByCourse = new Map<string | null, typeof dishes>();
   for (const line of dishes) {
     if (serviceRequested({ ...line, groupState: null })) released.push(line);
-    else if (line.courseActive !== true || line.heldUntilFired !== true) immediate.push(line);
+    else if (line.courseActive !== true) immediate.push(line);
     else {
       const course = heldByCourse.get(line.courseId);
       if (course === undefined) heldByCourse.set(line.courseId, [line]);

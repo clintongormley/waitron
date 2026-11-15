@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "27229a1f-6377-4578-b1d3-b6f81d4a8597",
+  "id": "77596ba3-c5b1-4b11-8963-3c8241bba786",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -4326,14 +4326,6 @@
         },
         "active": {
           "name": "active",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": true
-        },
-        "held_until_fired": {
-          "name": "held_until_fired",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -15036,14 +15028,6 @@
           "autoincrement": false,
           "default": false
         },
-        "release_reminder_minutes": {
-          "name": "release_reminder_minutes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": 10
-        },
         "created_at": {
           "name": "created_at",
           "type": "text",
@@ -18628,6 +18612,94 @@
         "bill_number_allocations_number_ck": {
           "name": "bill_number_allocations_number_ck",
           "value": "typeof(\"bill_number_allocations\".\"number\") = 'integer' and \"bill_number_allocations\".\"number\" >= 1"
+        }
+      }
+    },
+    "department_courses": {
+      "name": "department_courses",
+      "columns": {
+        "department_id": {
+          "name": "department_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "course_id": {
+          "name": "course_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "held_until_fired": {
+          "name": "held_until_fired",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "reminder_minutes": {
+          "name": "reminder_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": 10
+        }
+      },
+      "indexes": {
+        "department_courses_course_idx": {
+          "name": "department_courses_course_idx",
+          "columns": [
+            "course_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "department_courses_department_fk": {
+          "name": "department_courses_department_fk",
+          "tableFrom": "department_courses",
+          "tableTo": "departments",
+          "columnsFrom": [
+            "department_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "department_courses_course_fk": {
+          "name": "department_courses_course_fk",
+          "tableFrom": "department_courses",
+          "tableTo": "kitchen_courses",
+          "columnsFrom": [
+            "course_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "department_courses_pk": {
+          "columns": [
+            "department_id",
+            "course_id"
+          ],
+          "name": "department_courses_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "department_courses_reminder_minutes_ck": {
+          "name": "department_courses_reminder_minutes_ck",
+          "value": "\"department_courses\".\"reminder_minutes\" between 0 and 120"
         }
       }
     },

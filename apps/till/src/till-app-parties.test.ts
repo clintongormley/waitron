@@ -8250,11 +8250,11 @@ describe("till-app: the order's groups", () => {
 
 describe("till-app: submitting the draft", () => {
   const serviceCourses = [
-    { id: "drinks", name: "Drinks", displayOrder: 0, heldUntilFired: true },
-    { id: "cold", name: "Cold starters", displayOrder: 1, heldUntilFired: true },
-    { id: "warm", name: "Warm starters", displayOrder: 2, heldUntilFired: true },
-    { id: "mains", name: "Mains", displayOrder: 3, heldUntilFired: true },
-    { id: "desserts", name: "Desserts", displayOrder: 4, heldUntilFired: true },
+    { id: "drinks", name: "Drinks", displayOrder: 0, fireNowZoneIds: [] },
+    { id: "cold", name: "Cold starters", displayOrder: 1, fireNowZoneIds: [] },
+    { id: "warm", name: "Warm starters", displayOrder: 2, fireNowZoneIds: [] },
+    { id: "mains", name: "Mains", displayOrder: 3, fireNowZoneIds: [] },
+    { id: "desserts", name: "Desserts", displayOrder: 4, fireNowZoneIds: [] },
   ];
   const dish = (id: string, name: string, courseId: string): TillProduct => ({
     id,

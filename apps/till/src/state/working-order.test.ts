@@ -1236,7 +1236,7 @@ describe("WorkingOrderStore.setLineCourse", () => {
   it("keeps the picked course's name on the line, and drops it with the pick", () => {
     const s = new WorkingOrderStore();
     s.addProduct(coffee, "1");
-    const mains = { id: "mains", name: "Mains", displayOrder: 1, heldUntilFired: true };
+    const mains = { id: "mains", name: "Mains", displayOrder: 1, fireNowZoneIds: [] };
     s.setLineCourse(0, "mains", mains);
     expect(s.lines[0]!.course).toEqual(mains);
     s.setLineCourse(0, "desserts");
