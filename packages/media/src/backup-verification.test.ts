@@ -262,8 +262,8 @@ describe("media backup evidence", () => {
         number: 1,
         document,
         contentHash: menuDocumentHash(document),
-        publishedBy: id,
-        publishedAt: new Date("2026-10-20T08:00:00.000Z"),
+        createdBy: id,
+        createdAt: new Date("2026-10-20T08:00:00.000Z"),
       });
       await suite.db.insert(menuVersionImages).values({ versionId: version, filename });
       await suite.db.insert(mediaImageBlobs).values({ hash, bytes });

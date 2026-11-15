@@ -1,8 +1,7 @@
 import { navigateMenuChanges } from "./menu-navigation.js";
 import { and, asc, eq, gt, gte, inArray, lt, lte, max, or, sql } from "drizzle-orm";
 import {
-  menuPublications,
-  menuScheduledPublications,
+  menuReleases,
   menuVersionImages,
   menuVersions,
   now,
@@ -45,7 +44,7 @@ export type { MenuStatus } from "@waitron/shared";
 export interface LiveVersion {
   versionId: string;
   number: number;
-  /** When it became live: the pointer's `published_at`, or a due queued edition's `activates_at`. */
+  /** When this version became live. */
   since: Date;
   contentHash: string;
   document: MenuDocument | null;
@@ -55,20 +54,20 @@ export interface LiveVersion {
 function dueEditions(tx: Transaction, at: Date, menuIds?: readonly string[]) {
   return tx
     .select({
-      menuId: menuScheduledPublications.menuId,
-      versionId: menuScheduledPublications.versionId,
-      activatesAt: menuScheduledPublications.activatesAt,
-      rank: sql<number>`row_number() over (partition by ${menuScheduledPublications.menuId} order by ${menuVersions.number} desc)`.as(
+      menuId: menuReleases.menuId,
+      versionId: menuReleases.versionId,
+      activatesAt: menuReleases.activatesAt,
+      rank: sql<number>`row_number() over (partition by ${menuReleases.menuId} order by ${menuVersions.number} desc)`.as(
         "rank",
       ),
     })
-    .from(menuScheduledPublications)
-    .innerJoin(menuVersions, eq(menuVersions.id, menuScheduledPublications.versionId))
+    .from(menuReleases)
+    .innerJoin(menuVersions, eq(menuVersions.id, menuReleases.versionId))
     .where(
       and(
-        sql`${menuScheduledPublications.state} = 'queued'`,
-        lte(menuScheduledPublications.activatesAt, at),
-        menuIds === undefined ? undefined : inArray(menuScheduledPublications.menuId, menuIds),
+        sql`${menuReleases.state} = 'queued'`,
+        lte(menuReleases.activatesAt, at),
+        menuIds === undefined ? undefined : inArray(menuReleases.menuId, menuIds),
       ),
     )
     .as("due");
@@ -99,13 +98,18 @@ export async function liveVersions(
     return unionAll(
       tx
         .select({
-          menuId: menuPublications.menuId,
-          since: menuPublications.publishedAt,
+          menuId: menuReleases.menuId,
+          since: menuReleases.activatesAt,
           ...content,
         })
-        .from(menuPublications)
-        .innerJoin(menuVersions, eq(menuVersions.id, menuPublications.versionId))
-        .where(batch === undefined ? undefined : inArray(menuPublications.menuId, batch)),
+        .from(menuReleases)
+        .innerJoin(menuVersions, eq(menuVersions.id, menuReleases.versionId))
+        .where(
+          and(
+            sql`${menuReleases.state} = 'live'`,
+            batch === undefined ? undefined : inArray(menuReleases.menuId, batch),
+          ),
+        ),
       tx
         .select({ menuId: due.menuId, since: due.activatesAt, ...content })
         .from(due)
@@ -129,11 +133,6 @@ export async function liveVersions(
   return live;
 }
 
-/**
- * Marks every queued edition due at `at` activated, and moves each menu's pointer to its
- * highest-numbered due edition, as of that edition's own time, unless the pointer already holds a
- * higher number. Answers the pointers it moved.
- */
 export async function settleDue(
   tx: Transaction,
   at: Date,
@@ -152,8 +151,11 @@ export async function settleDue(
       })
       .from(due)
       .innerJoin(menuVersions, eq(menuVersions.id, due.versionId))
-      .leftJoin(menuPublications, eq(menuPublications.menuId, due.menuId))
-      .leftJoin(current, eq(current.id, menuPublications.versionId))
+      .leftJoin(
+        menuReleases,
+        and(eq(menuReleases.menuId, due.menuId), sql`${menuReleases.state} = 'live'`),
+      )
+      .leftJoin(current, eq(current.id, menuReleases.versionId))
       .where(sql`${due.rank} = 1`);
   };
   // The instant and the state are bound beside the batch's ids.
@@ -162,29 +164,30 @@ export async function settleDue(
   const candidates = [];
   for (const batch of groups) candidates.push(...(await read(batch)));
   if (candidates.length === 0) return [];
-  for (const batch of groups)
-    await tx
-      .update(menuScheduledPublications)
-      .set({ state: "activated", activatedAt: at })
-      .where(
-        and(
-          eq(menuScheduledPublications.state, "queued"),
-          lte(menuScheduledPublications.activatesAt, at),
-          batch === undefined ? undefined : inArray(menuScheduledPublications.menuId, batch),
-        ),
-      );
   const moved = [];
-  for (const { menuId, versionId, number, activatesAt, liveNumber } of candidates) {
+  for (const { menuId, versionId, number, liveNumber } of candidates) {
     if (liveNumber !== null && liveNumber >= number) continue;
     await tx
-      .insert(menuPublications)
-      .values({ menuId, versionId, publishedAt: activatesAt })
-      .onConflictDoUpdate({
-        target: menuPublications.menuId,
-        set: { versionId, publishedAt: activatesAt },
-      });
+      .update(menuReleases)
+      .set({ state: "superseded" })
+      .where(and(eq(menuReleases.menuId, menuId), eq(menuReleases.state, "live")));
+    await tx
+      .update(menuReleases)
+      .set({ state: "live" })
+      .where(eq(menuReleases.versionId, versionId));
     moved.push({ menuId, versionId, number });
   }
+  for (const batch of groups)
+    await tx
+      .update(menuReleases)
+      .set({ state: "superseded" })
+      .where(
+        and(
+          eq(menuReleases.state, "queued"),
+          lte(menuReleases.activatesAt, at),
+          batch === undefined ? undefined : inArray(menuReleases.menuId, batch),
+        ),
+      );
   return moved;
 }
 
@@ -628,25 +631,19 @@ export async function overtakenBy(
 ): Promise<OvertakenEdition[]> {
   const rows = await tx
     .select({
-      versionId: menuScheduledPublications.versionId,
+      versionId: menuReleases.versionId,
       number: menuVersions.number,
-      activatesAt: menuScheduledPublications.activatesAt,
+      activatesAt: menuReleases.activatesAt,
     })
-    .from(menuScheduledPublications)
-    .innerJoin(menuVersions, eq(menuVersions.id, menuScheduledPublications.versionId))
+    .from(menuReleases)
+    .innerJoin(menuVersions, eq(menuVersions.id, menuReleases.versionId))
     .where(
       and(
-        eq(menuScheduledPublications.menuId, menuId),
-        eq(menuScheduledPublications.state, "queued"),
+        eq(menuReleases.menuId, menuId),
+        eq(menuReleases.state, "queued"),
         or(
-          and(
-            lt(menuVersions.number, number),
-            gte(menuScheduledPublications.activatesAt, activatesAt),
-          ),
-          and(
-            gt(menuVersions.number, number),
-            lte(menuScheduledPublications.activatesAt, activatesAt),
-          ),
+          and(lt(menuVersions.number, number), gte(menuReleases.activatesAt, activatesAt)),
+          and(gt(menuVersions.number, number), lte(menuReleases.activatesAt, activatesAt)),
         ),
       ),
     )
@@ -691,28 +688,28 @@ export async function publishMenu(
     number,
     document,
     contentHash,
-    publishedAt,
-    publishedBy: personId,
+    createdAt: publishedAt,
+    createdBy: personId,
   });
-  await pointTo(tx, menuId, versionId, publishedAt);
+  await makeLive(tx, menuId, versionId, publishedAt);
   return { versionId, number };
 }
 
-/** Makes `versionId` the menu's live version as of `publishedAt`. */
-async function pointTo(
+async function makeLive(
   tx: Transaction,
   menuId: string,
   versionId: string,
-  publishedAt: Date,
+  at: Date,
 ): Promise<void> {
   await tx
-    .insert(menuPublications)
-    .values({ menuId, versionId, publishedAt })
-    .onConflictDoUpdate({ target: menuPublications.menuId, set: { versionId, publishedAt } });
+    .update(menuReleases)
+    .set({ state: "superseded" })
+    .where(and(eq(menuReleases.menuId, menuId), eq(menuReleases.state, "live")));
+  await tx.insert(menuReleases).values({ menuId, versionId, state: "live", activatesAt: at });
 }
 
 async function requireMenu(tx: Transaction, menuId: string): Promise<void> {
-  if (!(await menuExists(tx, menuId))) throw new AppError("menu.not_found", { menuId: menuId });
+  if (!(await menuExists(tx, menuId))) throw new AppError("menu.not_found", { menuId });
 }
 
 /** The menu's version live at `at` and its document, or `null` when it has none. */
@@ -784,10 +781,10 @@ export async function patchLiveMenu(
     number,
     document,
     contentHash,
-    publishedAt: at,
-    publishedBy: personId,
+    createdAt: at,
+    createdBy: personId,
   });
-  await pointTo(tx, menuId, versionId, at);
+  await makeLive(tx, menuId, versionId, at);
   return { versionId, number, requeued: await requeueAfter(tx, menuId, at, personId) };
 }
 
@@ -800,22 +797,20 @@ async function requeueAfter(
 ): Promise<QueuedEdition[]> {
   const waiting = await tx
     .select({
-      versionId: menuScheduledPublications.versionId,
+      versionId: menuReleases.versionId,
       document: menuVersions.document,
       contentHash: menuVersions.contentHash,
-      publishedAt: menuVersions.publishedAt,
-      publishedBy: menuVersions.publishedBy,
-      activatesAt: menuScheduledPublications.activatesAt,
-      queuedAt: menuScheduledPublications.queuedAt,
-      queuedBy: menuScheduledPublications.queuedBy,
+      createdAt: menuVersions.createdAt,
+      createdBy: menuVersions.createdBy,
+      activatesAt: menuReleases.activatesAt,
     })
-    .from(menuScheduledPublications)
-    .innerJoin(menuVersions, eq(menuVersions.id, menuScheduledPublications.versionId))
+    .from(menuReleases)
+    .innerJoin(menuVersions, eq(menuVersions.id, menuReleases.versionId))
     .where(
       and(
-        eq(menuScheduledPublications.menuId, menuId),
-        eq(menuScheduledPublications.state, "queued"),
-        gt(menuScheduledPublications.activatesAt, at),
+        eq(menuReleases.menuId, menuId),
+        eq(menuReleases.state, "queued"),
+        gt(menuReleases.activatesAt, at),
       ),
     )
     .orderBy(asc(menuVersions.number));
@@ -824,9 +819,9 @@ async function requeueAfter(
   // instant, and each copy takes its original's.
   for (const batch of batches(waiting.map(({ versionId }) => versionId)))
     await tx
-      .update(menuScheduledPublications)
+      .update(menuReleases)
       .set({ state: "cancelled", cancelledAt: at, cancelledBy: personId })
-      .where(inArray(menuScheduledPublications.versionId, batch));
+      .where(inArray(menuReleases.versionId, batch));
   const requeued: QueuedEdition[] = [];
   for (const edition of waiting) {
     const number = await nextNumber(tx, menuId);
@@ -835,15 +830,14 @@ async function requeueAfter(
       number,
       document: edition.document,
       contentHash: edition.contentHash,
-      publishedAt: edition.publishedAt,
-      publishedBy: edition.publishedBy,
+      createdAt: edition.createdAt,
+      createdBy: edition.createdBy,
     });
-    await tx.insert(menuScheduledPublications).values({
+    await tx.insert(menuReleases).values({
       versionId,
       menuId,
       activatesAt: edition.activatesAt,
-      queuedAt: edition.queuedAt,
-      queuedBy: edition.queuedBy,
+      state: "queued",
     });
     requeued.push({ versionId, number, activatesAt: edition.activatesAt.toISOString() });
   }

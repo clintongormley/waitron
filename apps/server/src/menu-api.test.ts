@@ -15,7 +15,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
-import { menuPublications, menuVersions, sectionMembers } from "@waitron/menu";
+import { menuReleases, menuVersions, sectionMembers } from "@waitron/menu";
 import type { MenuPreview, MenuStatus } from "@waitron/menu";
 import type { ExtraList, ExtraListRow, OptionList, OptionListRow } from "@waitron/menu";
 import { type ContentLanguageRules } from "@waitron/shared";
@@ -4475,7 +4475,7 @@ describe("publishing a menu", () => {
 
   async function versionsOf(menuId: string) {
     return suite.db
-      .select({ number: menuVersions.number, publishedBy: menuVersions.publishedBy })
+      .select({ number: menuVersions.number, publishedBy: menuVersions.createdBy })
       .from(menuVersions)
       .where(eq(menuVersions.menuId, menuId))
       .orderBy(menuVersions.number);
@@ -4595,9 +4595,9 @@ describe("publishing a menu", () => {
     expect(two.number).toBe(2);
     expect(two.versionId).not.toBe(one.versionId);
     const [live] = await suite.db
-      .select({ versionId: menuPublications.versionId })
-      .from(menuPublications)
-      .where(eq(menuPublications.menuId, menuId));
+      .select({ versionId: menuReleases.versionId })
+      .from(menuReleases)
+      .where(sql`${menuReleases.menuId} = ${menuId} and ${menuReleases.state} = 'live'`);
     expect(live).toEqual({ versionId: two.versionId });
     expect(await status(app, menuId)).toMatchObject({ state: "current", clashes: 0, version: 2 });
   });
@@ -4678,8 +4678,8 @@ describe("publishing a menu", () => {
       const versions = await versionsOf(menuId);
       const pointer = await suite.db
         .select()
-        .from(menuPublications)
-        .where(eq(menuPublications.menuId, menuId));
+        .from(menuReleases)
+        .where(sql`${menuReleases.menuId} = ${menuId} and ${menuReleases.state} = 'live'`);
       const refused = await send(app, "POST", `/management-api/menus/${menuId}/publish`, {
         body: { expectedHash: current.hash },
       });
@@ -4689,7 +4689,7 @@ describe("publishing a menu", () => {
       });
       expect(await versionsOf(menuId)).toEqual(versions);
       expect(
-        await suite.db.select().from(menuPublications).where(eq(menuPublications.menuId, menuId)),
+        await suite.db.select().from(menuReleases).where(eq(menuReleases.menuId, menuId)),
       ).toEqual(pointer);
       expect((await preview(app, menuId)).changes.map((change) => change.id)).toEqual(
         updated.changes.map((change) => change.id),
@@ -6341,9 +6341,9 @@ it("refuses format-2 menus through management status, preview and publish routes
     })
     .returning({ id: menuVersions.id });
   await suite.db
-    .update(menuPublications)
+    .update(menuReleases)
     .set({ versionId: old!.id })
-    .where(eq(menuPublications.menuId, menuId));
+    .where(sql`${menuReleases.menuId} = ${menuId} and ${menuReleases.state} = 'live'`);
   try {
     for (const [method, route] of [
       ["GET", "/management-api/menus/status"],
@@ -6364,9 +6364,9 @@ it("refuses format-2 menus through management status, preview and publish routes
     ).toBe(2);
   } finally {
     await suite.db
-      .update(menuPublications)
+      .update(menuReleases)
       .set({ versionId: row!.id })
-      .where(eq(menuPublications.menuId, menuId));
+      .where(sql`${menuReleases.menuId} = ${menuId} and ${menuReleases.state} = 'live'`);
   }
 });
 
@@ -6460,9 +6460,9 @@ describe("shared menu reads", () => {
       })
       .returning({ id: menuVersions.id });
     await suite.db
-      .update(menuPublications)
+      .update(menuReleases)
       .set({ versionId: old!.id })
-      .where(eq(menuPublications.menuId, id));
+      .where(sql`${menuReleases.menuId} = ${id} and ${menuReleases.state} = 'live'`);
     try {
       const response = await send(
         app,
@@ -6484,9 +6484,9 @@ describe("shared menu reads", () => {
       expect(body.status).toEqual(refusal);
     } finally {
       await suite.db
-        .update(menuPublications)
+        .update(menuReleases)
         .set({ versionId: row!.id })
-        .where(eq(menuPublications.menuId, id));
+        .where(sql`${menuReleases.menuId} = ${id} and ${menuReleases.state} = 'live'`);
     }
   });
 

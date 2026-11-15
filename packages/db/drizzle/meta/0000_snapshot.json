@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d3eb9d39-6102-4b74-8300-20f023d51a6e",
+  "id": "3988da75-7e4c-4fec-a92d-7beb747c45a0",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -13591,68 +13591,8 @@
         }
       }
     },
-    "menu_publications": {
-      "name": "menu_publications",
-      "columns": {
-        "menu_id": {
-          "name": "menu_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "version_id": {
-          "name": "version_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "published_at": {
-          "name": "published_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "menu_publications_menu_fk": {
-          "name": "menu_publications_menu_fk",
-          "tableFrom": "menu_publications",
-          "tableTo": "menus",
-          "columnsFrom": [
-            "menu_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "menu_publications_version_fk": {
-          "name": "menu_publications_version_fk",
-          "tableFrom": "menu_publications",
-          "tableTo": "menu_versions",
-          "columnsFrom": [
-            "version_id",
-            "menu_id"
-          ],
-          "columnsTo": [
-            "id",
-            "menu_id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "menu_scheduled_publications": {
-      "name": "menu_scheduled_publications",
+    "menu_releases": {
+      "name": "menu_releases",
       "columns": {
         "version_id": {
           "name": "version_id",
@@ -13663,27 +13603,6 @@
         },
         "menu_id": {
           "name": "menu_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "activates_at": {
-          "name": "activates_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "queued_at": {
-          "name": "queued_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "queued_by": {
-          "name": "queued_by",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -13694,14 +13613,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false,
-          "default": "'queued'"
+          "autoincrement": false
         },
-        "activated_at": {
-          "name": "activated_at",
+        "activates_at": {
+          "name": "activates_at",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "cancelled_at": {
@@ -13720,20 +13638,28 @@
         }
       },
       "indexes": {
-        "menu_scheduled_publications_queued_time_uq": {
-          "name": "menu_scheduled_publications_queued_time_uq",
+        "menu_releases_one_live_uq": {
+          "name": "menu_releases_one_live_uq",
+          "columns": [
+            "menu_id"
+          ],
+          "isUnique": true,
+          "where": "\"menu_releases\".\"state\" = 'live'"
+        },
+        "menu_releases_queued_time_uq": {
+          "name": "menu_releases_queued_time_uq",
           "columns": [
             "menu_id",
             "activates_at"
           ],
           "isUnique": true,
-          "where": "\"menu_scheduled_publications\".\"state\" = 'queued'"
+          "where": "\"menu_releases\".\"state\" = 'queued'"
         }
       },
       "foreignKeys": {
-        "menu_scheduled_publications_menu_fk": {
-          "name": "menu_scheduled_publications_menu_fk",
-          "tableFrom": "menu_scheduled_publications",
+        "menu_releases_menu_fk": {
+          "name": "menu_releases_menu_fk",
+          "tableFrom": "menu_releases",
           "tableTo": "menus",
           "columnsFrom": [
             "menu_id"
@@ -13744,9 +13670,9 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "menu_scheduled_publications_version_fk": {
-          "name": "menu_scheduled_publications_version_fk",
-          "tableFrom": "menu_scheduled_publications",
+        "menu_releases_version_fk": {
+          "name": "menu_releases_version_fk",
+          "tableFrom": "menu_releases",
           "tableTo": "menu_versions",
           "columnsFrom": [
             "version_id",
@@ -13763,17 +13689,13 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
-        "menu_scheduled_publications_state_ck": {
-          "name": "menu_scheduled_publications_state_ck",
-          "value": "\"menu_scheduled_publications\".\"state\" in ('queued', 'activated', 'cancelled')"
+        "menu_releases_state_ck": {
+          "name": "menu_releases_state_ck",
+          "value": "\"menu_releases\".\"state\" in ('queued', 'live', 'superseded', 'cancelled')"
         },
-        "menu_scheduled_publications_settled_ck": {
-          "name": "menu_scheduled_publications_settled_ck",
-          "value": "(\"menu_scheduled_publications\".\"state\" = 'queued' and \"menu_scheduled_publications\".\"activated_at\" is null and \"menu_scheduled_publications\".\"cancelled_at\" is null and \"menu_scheduled_publications\".\"cancelled_by\" is null) or (\"menu_scheduled_publications\".\"state\" = 'activated' and \"menu_scheduled_publications\".\"activated_at\" is not null and \"menu_scheduled_publications\".\"cancelled_at\" is null and \"menu_scheduled_publications\".\"cancelled_by\" is null) or (\"menu_scheduled_publications\".\"state\" = 'cancelled' and \"menu_scheduled_publications\".\"cancelled_at\" is not null and \"menu_scheduled_publications\".\"cancelled_by\" is not null and \"menu_scheduled_publications\".\"activated_at\" is null)"
-        },
-        "menu_scheduled_publications_after_queue_ck": {
-          "name": "menu_scheduled_publications_after_queue_ck",
-          "value": "\"menu_scheduled_publications\".\"activates_at\" > \"menu_scheduled_publications\".\"queued_at\""
+        "menu_releases_settled_ck": {
+          "name": "menu_releases_settled_ck",
+          "value": "(\"menu_releases\".\"state\" = 'cancelled') = (\"menu_releases\".\"cancelled_at\" is not null) and (\"menu_releases\".\"cancelled_at\" is null) = (\"menu_releases\".\"cancelled_by\" is null)"
         }
       }
     },
@@ -13869,15 +13791,15 @@
           "notNull": true,
           "autoincrement": false
         },
-        "published_at": {
-          "name": "published_at",
+        "created_at": {
+          "name": "created_at",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "published_by": {
-          "name": "published_by",
+        "created_by": {
+          "name": "created_by",
           "type": "text",
           "primaryKey": false,
           "notNull": true,

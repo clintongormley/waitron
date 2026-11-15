@@ -20,7 +20,7 @@ import {
   createCategory,
   createExtraList,
   createProduct,
-  menuPublications,
+  menuReleases,
   setProductVariants,
   updateCategory,
   writeProductModifiers,
@@ -348,9 +348,9 @@ describe("what a filed sale line records about its product", () => {
       tender: { method: "cash", amount: "20.00" },
     });
     const [published] = await suite.db
-      .select({ versionId: menuPublications.versionId })
-      .from(menuPublications)
-      .where(eq(menuPublications.menuId, v.counter.menuId));
+      .select({ versionId: menuReleases.versionId })
+      .from(menuReleases)
+      .where(eq(menuReleases.menuId, v.counter.menuId));
 
     expect(await filedLines(id)).toEqual([
       expect.objectContaining({

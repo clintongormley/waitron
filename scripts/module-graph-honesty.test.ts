@@ -424,14 +424,14 @@ describe("the tree's module graph is honest", () => {
     expect(core?.sqls.length).toBeGreaterThan(0);
     const moved = new Map(owner);
     moved.set("products", "elsewhere");
-    moved.set("menu_publications", "elsewhere");
+    moved.set("menu_releases", "elsewhere");
     const coreEdges = new Set(
       (core?.sqls ?? []).flatMap((raw) =>
         migrationEdges(raw, "core", moved).map((edge) => `${edge.kind} on ${edge.target}`),
       ),
     );
     expect(coreEdges.has("trigger on products")).toBe(true);
-    expect(coreEdges.has("trigger body JOIN on menu_publications")).toBe(true);
+    expect(coreEdges.has("trigger body JOIN on menu_releases")).toBe(true);
   });
 
   it("every migration edge in the SQL is named in the depending descriptor's requires", () => {

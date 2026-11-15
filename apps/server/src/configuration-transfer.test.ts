@@ -43,7 +43,7 @@ import {
   listOptionLists,
   menuStatus,
   menuVersions,
-  menuPublications,
+  menuReleases,
   menuDocumentHash,
   previewMenu,
   publishMenu,
@@ -1948,9 +1948,9 @@ it.each([3, 2])(
           })
           .returning({ id: menuVersions.id });
         await tx
-          .update(menuPublications)
+          .update(menuReleases)
           .set({ versionId: old!.id })
-          .where(eq(menuPublications.menuId, menu.id));
+          .where(eq(menuReleases.menuId, menu.id));
       }
     });
     const versions = await schemaVersionsByModule(
@@ -1964,12 +1964,7 @@ it.each([3, 2])(
       new Date("2026-09-26T12:00:00Z"),
       versions,
     );
-    for (const table of [
-      "menu_versions",
-      "menu_publications",
-      "menu_version_images",
-      "menu_scheduled_publications",
-    ])
+    for (const table of ["menu_versions", "menu_releases", "menu_version_images"])
       expect(Object.keys(transferred.tables)).not.toContain(table);
     await applyVenue(planVenue(venue("B44332211"), ALL_MODULES), {
       db: targetSuite.db,

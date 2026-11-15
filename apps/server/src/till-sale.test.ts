@@ -34,7 +34,7 @@ import {
   listAvailableProducts,
   listMembers,
   menuItems,
-  menuPublications,
+  menuReleases,
   readContentLanguages,
   removeMember,
   requireMenuRoot,
@@ -2778,10 +2778,10 @@ describe("ordering extras and options — parent + child lines", () => {
         .where(eq(workingOrderLines.workingOrderId, workingOrderId));
     const liveVersion = async () => {
       const [row] = await suite.db
-        .select({ versionId: menuPublications.versionId })
-        .from(menuPublications)
-        .innerJoin(menuItems, eq(menuItems.menuId, menuPublications.menuId))
-        .where(eq(menuItems.id, v.offerFor(v.burgerId)));
+        .select({ versionId: menuReleases.versionId })
+        .from(menuReleases)
+        .innerJoin(menuItems, eq(menuItems.menuId, menuReleases.menuId))
+        .where(and(eq(menuItems.id, v.offerFor(v.burgerId)), eq(menuReleases.state, "live")));
       return row!.versionId;
     };
     const added = await liveVersion();

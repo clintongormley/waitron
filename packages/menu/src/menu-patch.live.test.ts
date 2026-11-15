@@ -1,9 +1,8 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   mediaImages,
-  menuPublications,
-  menuScheduledPublications,
+  menuReleases,
   menuVersionImages,
   menuVersions,
   withTransaction,
@@ -87,11 +86,8 @@ async function publicationTables() {
       .select()
       .from(menuVersionImages)
       .orderBy(asc(menuVersionImages.versionId), asc(menuVersionImages.filename)),
-    publications: await fx.db.select().from(menuPublications).orderBy(asc(menuPublications.menuId)),
-    schedule: await fx.db
-      .select()
-      .from(menuScheduledPublications)
-      .orderBy(asc(menuScheduledPublications.versionId)),
+    publications: await fx.db.select().from(menuReleases).orderBy(asc(menuReleases.menuId)),
+    schedule: await fx.db.select().from(menuReleases).orderBy(asc(menuReleases.versionId)),
   };
 }
 
@@ -128,9 +124,19 @@ async function versionRow(versionId: string) {
 
 async function scheduleRow(versionId: string) {
   const [row] = await fx.db
-    .select()
-    .from(menuScheduledPublications)
-    .where(eq(menuScheduledPublications.versionId, versionId));
+    .select({
+      versionId: menuReleases.versionId,
+      menuId: menuReleases.menuId,
+      state: menuReleases.state,
+      activatesAt: menuReleases.activatesAt,
+      cancelledAt: menuReleases.cancelledAt,
+      cancelledBy: menuReleases.cancelledBy,
+      queuedAt: menuVersions.createdAt,
+      queuedBy: menuVersions.createdBy,
+    })
+    .from(menuReleases)
+    .innerJoin(menuVersions, eq(menuVersions.id, menuReleases.versionId))
+    .where(eq(menuReleases.versionId, versionId));
   return row!;
 }
 
@@ -154,13 +160,13 @@ describe("patchLiveMenu", () => {
     });
     expect(live!.document.offers[item]).toMatchObject({ unitPrice: "5.50", grossPrice: "5.50" });
     const row = await versionRow(result.versionId);
-    expect(row).toMatchObject({ menuId: f.lunch, publishedAt: later, publishedBy: ANA });
+    expect(row).toMatchObject({ menuId: f.lunch, createdAt: later, createdBy: ANA });
     expect(row.document).toEqual(live!.document);
     const [pointer] = await fx.db
       .select()
-      .from(menuPublications)
-      .where(eq(menuPublications.menuId, f.lunch));
-    expect(pointer).toMatchObject({ versionId: result.versionId, publishedAt: later });
+      .from(menuReleases)
+      .where(sql`${menuReleases.menuId} = ${f.lunch} and ${menuReleases.state} = 'live'`);
+    expect(pointer).toMatchObject({ versionId: result.versionId, activatesAt: later });
   });
 
   it("readLiveMenu answers nothing for a menu never published, and the clock's live version", async () => {
@@ -260,15 +266,15 @@ describe("patchLiveMenu", () => {
         menuId: f.lunch,
         document: original.document,
         contentHash: original.contentHash,
-        publishedAt: original.publishedAt,
-        publishedBy: original.publishedBy,
+        createdAt: original.createdAt,
+        createdBy: original.createdBy,
       });
       expect(await scheduleRow(copy.id)).toMatchObject({
         menuId: f.lunch,
         state: "queued",
         activatesAt: originalSchedules[index]!.activatesAt,
-        queuedAt: originalSchedules[index]!.queuedAt,
-        queuedBy: originalSchedules[index]!.queuedBy,
+        queuedAt: originals[index]!.createdAt,
+        queuedBy: originals[index]!.createdBy,
         cancelledAt: null,
         cancelledBy: null,
       });
@@ -437,13 +443,10 @@ describe("patchLiveMenu", () => {
     const written = await statements((tx) => patchLiveMenu(tx, f.lunch, v1, changes, ANA));
     const tables = new Set(writtenTables(written));
     expect(tables.has("menu_versions")).toBe(true);
-    expect(tables.has("menu_scheduled_publications")).toBe(true);
+    expect(tables.has("menu_releases")).toBe(true);
     for (const table of tables)
-      expect([
-        "menu_versions",
-        "menu_version_images",
-        "menu_publications",
-        "menu_scheduled_publications",
-      ]).toContain(table);
+      expect(["menu_versions", "menu_version_images", "menu_releases", "menu_releases"]).toContain(
+        table,
+      );
   });
 });

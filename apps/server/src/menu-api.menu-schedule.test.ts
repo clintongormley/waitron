@@ -2,7 +2,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { activityLog, CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
@@ -240,12 +240,7 @@ async function draftSnapshot(): Promise<Record<string, string[]>> {
 /** Every row of the four publication tables, in a fixed order. */
 async function publicationTables(): Promise<Record<string, string[]>> {
   const tables: Record<string, string[]> = {};
-  for (const table of [
-    "menu_versions",
-    "menu_version_images",
-    "menu_scheduled_publications",
-    "menu_publications",
-  ]) {
+  for (const table of ["menu_versions", "menu_version_images", "menu_releases"]) {
     const { rows } = await suite.db.execute(sql.raw(`select * from ${table}`));
     tables[table] = rows.map((row) => JSON.stringify(row)).sort();
   }
@@ -568,6 +563,14 @@ describe("moving a queued menu edition through the routes", () => {
       number: 3,
       activatesAt: AFTERNOON_AT,
     });
+    expect(
+      await suite.db
+        .select({ personId: activityLog.personId, data: activityLog.data })
+        .from(activityLog)
+        .where(
+          sql`${activityLog.kind} = 'menu_edition.rescheduled' and ${activityLog.subjectId} = ${v3.versionId}`,
+        ),
+    ).toEqual([{ personId: managerId, data: { from: DAY_AFTER_AT, to: AFTERNOON_AT } }]);
     expect((await publications(app, menuId)).editions).toEqual([
       expect.objectContaining({
         versionId: v3.versionId,
@@ -732,7 +735,7 @@ describe("moving a queued menu edition through the routes", () => {
 describe("two publication requests at once", () => {
   async function scheduleRows(menuId: string): Promise<number> {
     const { rows } = await suite.db.execute(
-      sql`select version_id from menu_scheduled_publications where menu_id = ${menuId}`,
+      sql`select version_id from menu_releases where menu_id = ${menuId} and state = 'queued'`,
     );
     return rows.length;
   }

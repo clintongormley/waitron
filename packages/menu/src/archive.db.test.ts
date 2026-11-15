@@ -8,7 +8,7 @@ import {
   extraLists,
   menuItems,
   menuItemVariantOverrides,
-  menuPublications,
+  menuReleases,
   products,
   sectionMembers,
   withTransaction,
@@ -79,10 +79,12 @@ describe("publishedMenusHolding", () => {
         number: 1,
         document: shortcutOnly,
         contentHash: "shortcut-only",
-        publishedAt: T0,
-        publishedBy: "person-1",
+        createdAt: T0,
+        createdBy: "person-1",
       });
-      await tx.insert(menuPublications).values({ menuId: f.lunch, versionId, publishedAt: T0 });
+      await tx
+        .insert(menuReleases)
+        .values({ menuId: f.lunch, versionId, state: "live", activatesAt: T0 });
     });
     expect(await menuIds(f.soup)).toEqual([f.lunch]);
     expect(await menuIds(f.lemonade)).toBeUndefined();

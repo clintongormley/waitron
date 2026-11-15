@@ -1308,7 +1308,7 @@ describe("free default choice with incomplete menu and image text", () => {
       });
       const before = await snapshot();
       expect(before["menu_versions"]).toHaveLength(1);
-      expect(before["menu_publications"]).toHaveLength(1);
+      expect(before["menu_releases"]).toHaveLength(1);
       expect(before["working_order_lines"]).toHaveLength(1);
       await expect(
         writeContentLanguages(tx, { defaultLanguage: "es", languages: ["en", "es"] }),

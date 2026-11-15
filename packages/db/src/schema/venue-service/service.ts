@@ -221,7 +221,7 @@ export const workingLineContexts = table(
       name: "working_line_contexts_menu_item_fk",
     }),
     // Refuses a version that does not exist, but not a row naming another menu's version: the
-    // two-column key `menu_publications_version_fk` uses would take a table rebuild (CLAUDE.md §3).
+    // two-column key `menu_releases_version_fk` uses would take a table rebuild (CLAUDE.md §3).
     // `recordWorkingLineContexts` takes both from one served offer's menu; the copy copies both.
     foreignKey({
       columns: [t.menuVersionId],

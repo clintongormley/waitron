@@ -104,6 +104,19 @@ translation route and reprints the recorded customer text. It compares the compl
 sale, line, fiscal-record, invoice-series and publication rows before and after the save and
 reprint. These checks cover those fixtures; they do not exercise an external filing service.
 
+## Publishing and scheduling
+
+You publish the working menu immediately or queue an edition for a later time. Each version's
+frozen document stays in `menu_versions`; `created_at` and `created_by` record when and by whom it
+was made; a requeued copy keeps its original creation time and person. One `menu_releases` row holds that version's current state: `queued`, `live`,
+`superseded` or `cancelled`, and its activation time. Replacing a live version keeps its release as
+`superseded`.
+
+A due queued edition reads as live before the activation job settles it. The scheduled-editions
+list still calls settled editions Activated; immediate publications stay out of that list.
+Rescheduling records the old and new activation times and the acting person in
+`activity_log`, under `menu_edition.rescheduled`.
+
 ## What a sold line freezes
 
 A line freezes its names, its gross price and its VAT class when it is added and never reads them

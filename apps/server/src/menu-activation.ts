@@ -5,7 +5,7 @@ import type { JobDefinition } from "./job-runner.js";
 import type { Logger } from "./logger.js";
 import { sleepMsFor } from "./loop.js";
 
-const SCHEDULE = "menu_scheduled_publications";
+const SCHEDULE = "menu_releases";
 
 export function menuActivationJob(deps: {
   db: Database;

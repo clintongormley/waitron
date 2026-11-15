@@ -10,8 +10,7 @@ const MENU_PUBLICATION_READS = [
   "extra_lists",
   "menu_item_variant_overrides",
   "menu_items",
-  "menu_publications",
-  "menu_scheduled_publications",
+  "menu_releases",
   "menu_versions",
   "option_labels",
   "option_lists",
@@ -327,11 +326,10 @@ export const QUERY_DEPENDENCIES = {
   getMenuStatuses: MENU_PUBLICATION_READS,
   getMenuStatus: MENU_PUBLICATION_READS,
   getMenuPreview: MENU_PUBLICATION_READS,
-  getLiveMenu: ["menu_publications", "menu_scheduled_publications", "menu_versions"],
+  getLiveMenu: ["menu_releases", "menu_versions"],
   // The route converts each time with the venue's zone.
   getMenuPublications: [
-    "menu_scheduled_publications",
-    "menu_publications",
+    "menu_releases",
     "menu_versions",
     "settings.business_day",
     "settings.venue",

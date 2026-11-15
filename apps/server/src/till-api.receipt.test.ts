@@ -1206,7 +1206,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
       headers: suite.db.all(sql`select * from sale_receipt_headers order by sale_id`),
       series: suite.db.all(sql`select * from invoice_series order by id`),
       versions: suite.db.all(sql`select * from menu_versions order by id`),
-      publications: suite.db.all(sql`select * from menu_publications order by menu_id`),
+      publications: suite.db.all(sql`select * from menu_releases order by menu_id`),
     });
     const before = retained();
     expect(before.fiscal).toHaveLength(1);

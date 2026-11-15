@@ -1193,9 +1193,9 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
       const versionId = requireUuidParam(c.req.param("versionId"), "MenuVersionId");
       const body = await readJsonBody<{ activatesAt?: unknown }>(c);
-      const moved = await gated(c, sessionId, async (tx) => {
+      const moved = await gated(c, sessionId, async (tx, authorizedBy) => {
         const activatesAt = activationInstant(body.activatesAt, await venueTimeZone(tx));
-        return rescheduleMenuPublication(tx, menuId, versionId, activatesAt);
+        return rescheduleMenuPublication(tx, menuId, versionId, activatesAt, authorizedBy);
       });
       return c.json(moved);
     }),

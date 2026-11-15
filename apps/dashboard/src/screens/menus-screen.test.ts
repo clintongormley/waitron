@@ -9997,13 +9997,13 @@ describe("publishing", () => {
     );
     expect(client.getMenuStatus).toHaveBeenCalledWith("menu-lunch");
     const one = client.getMenuStatus.mock.calls.length;
-    live.invalidate([{ type: "menu_publications" }]);
+    live.invalidate([{ type: "menu_releases" }]);
     await vi.waitFor(() => expect(client.getMenuStatus.mock.calls.length).toBe(one + 1));
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(client.getMenuStatuses).toHaveBeenCalledTimes(1);
     await click(el, "back");
     await vi.waitFor(() => expect(client.getMenuStatuses).toHaveBeenCalledTimes(2));
-    live.invalidate([{ type: "menu_publications" }]);
+    live.invalidate([{ type: "menu_releases" }]);
     await vi.waitFor(() => expect(client.getMenuStatuses).toHaveBeenCalledTimes(3));
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(client.getMenuStatus.mock.calls.length).toBe(one + 1);
@@ -10065,7 +10065,7 @@ describe("publishing", () => {
         hash: LUNCH_LIVE_HASH,
       },
     });
-    live.invalidate([{ type: "menu_publications" }]);
+    live.invalidate([{ type: "menu_releases" }]);
     await vi.waitFor(() => expect(client.getMenuPreview.mock.calls.length).toBe(previews + 1));
     await vi.waitFor(() =>
       expect(text(q(el, '[data-test="menu-status"]'))).toBe(
@@ -10089,7 +10089,7 @@ describe("publishing", () => {
         `(Live: version 2 · ${formatIsoMinute(PUBLISHED_AT)})`,
       ),
     );
-    live.invalidate([{ type: "menu_publications" }]);
+    live.invalidate([{ type: "menu_releases" }]);
     await vi.waitFor(() => expect(client.getMenuStatus.mock.calls.length).toBe(statusReads + 2));
     expect(client.getMenuPreview.mock.calls.length).toBe(previews + 1);
     cleanupWidgets();

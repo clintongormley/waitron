@@ -121,10 +121,10 @@ const IMAGE = `${"a".repeat(64)}.png`;
 const ROWS: Record<(typeof FOLDED_APPEND_ONLY)[number], { insert: SQL[]; update: SQL }> = {
   menu_versions: {
     insert: [
-      sql`insert into menu_versions (id, menu_id, number, document, content_hash, published_at, published_by)
+      sql`insert into menu_versions (id, menu_id, number, document, content_hash, created_at, created_by)
           values ('version-1', 'menu-1', 1, '{}', 'hash', ${AT}, 'person-1')`,
     ],
-    update: sql`update menu_versions set published_by = 'person-2'`,
+    update: sql`update menu_versions set created_by = 'person-2'`,
   },
   menu_version_images: {
     insert: [

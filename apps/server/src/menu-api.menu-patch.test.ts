@@ -160,7 +160,7 @@ async function publicationTables() {
   return {
     versions: await suite.db.all(sql`select * from menu_versions order by id`),
     images: await suite.db.all(sql`select * from menu_version_images order by version_id`),
-    publications: await suite.db.all(sql`select * from menu_publications order by menu_id`),
+    publications: await suite.db.all(sql`select * from menu_releases order by menu_id`),
   };
 }
 

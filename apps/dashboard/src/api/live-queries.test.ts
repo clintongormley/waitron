@@ -749,7 +749,7 @@ it("refreshes the shared menu snapshot for product and publication changes", asy
       }),
     );
     columns = 6;
-    api.liveData.invalidate([{ type: "menu_publications" }]);
+    api.liveData.invalidate([{ type: "menu_releases" }]);
     await vi.waitFor(() =>
       expect(observed.snapshot.value).toEqual({
         home: { status: 200, body: { handheld: { columns: 6 } } },
@@ -1243,11 +1243,7 @@ it("refreshes the box's health every fifteen seconds, from no table, passively a
 });
 
 it("refreshes the live menu read only when a publication or version changes", async () => {
-  expect([...QUERY_DEPENDENCIES.getLiveMenu].sort()).toEqual([
-    "menu_publications",
-    "menu_scheduled_publications",
-    "menu_versions",
-  ]);
+  expect([...QUERY_DEPENDENCIES.getLiveMenu].sort()).toEqual(["menu_releases", "menu_versions"]);
   const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
     async () => new Response("null"),
   );

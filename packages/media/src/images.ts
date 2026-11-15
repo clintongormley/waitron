@@ -1,6 +1,5 @@
 import {
-  menuPublications,
-  menuScheduledPublications,
+  menuReleases,
   menuVersionImages,
   menuVersions,
   parentJoin,
@@ -232,24 +231,17 @@ async function listImageUsagesForFilename(
       menuId: menuVersions.menuId,
       menuName: menus.name,
       number: menuVersions.number,
-      livePointer: menuPublications.versionId,
-      activatesAt: menuScheduledPublications.activatesAt,
+      state: menuReleases.state,
+      activatesAt: menuReleases.activatesAt,
     })
     .from(menuVersionImages)
     .innerJoin(menuVersions, eq(menuVersions.id, menuVersionImages.versionId))
     .innerJoin(menus, eq(menus.id, menuVersions.menuId))
-    .leftJoin(menuPublications, eq(menuPublications.versionId, menuVersionImages.versionId))
-    .leftJoin(
-      menuScheduledPublications,
-      and(
-        eq(menuScheduledPublications.versionId, menuVersionImages.versionId),
-        eq(menuScheduledPublications.state, "queued"),
-      ),
-    )
+    .innerJoin(menuReleases, eq(menuReleases.versionId, menuVersionImages.versionId))
     .where(
       and(
         eq(menuVersionImages.filename, filename),
-        or(isNotNull(menuPublications.versionId), isNotNull(menuScheduledPublications.versionId)),
+        inArray(menuReleases.state, ["live", "queued"]),
       ),
     )
     .orderBy(menus.name, menuVersions.menuId, menuVersions.number);
@@ -285,18 +277,11 @@ async function listImageUsagesForFilename(
     ...productRows.map(usage),
     ...sectionRows.map((row): ImageUsage => ({ kind: "section", ...row })),
     ...includeRows.map((row): ImageUsage => ({ kind: "menu_include", ...row })),
-    ...versionRows.flatMap(({ livePointer, activatesAt, ...row }): ImageUsage[] => [
-      ...(livePointer === null ? [] : [{ kind: "menu_version" as const, ...row }]),
-      ...(activatesAt === null
-        ? []
-        : [
-            {
-              kind: "scheduled_menu_version" as const,
-              ...row,
-              activatesAt: activatesAt.toISOString(),
-            },
-          ]),
-    ]),
+    ...versionRows.map(({ state, activatesAt, ...row }): ImageUsage =>
+      state === "live"
+        ? { kind: "menu_version", ...row }
+        : { kind: "scheduled_menu_version", ...row, activatesAt: activatesAt.toISOString() },
+    ),
     ...departmentRows.map((row): ImageUsage => ({ kind: "department_receipt", ...row })),
     ...themeRows.map((row): ImageUsage => ({ kind: "theme_logo", ...row })),
   ];
@@ -590,21 +575,11 @@ async function countUsages(
   for (const row of await tx
     .select({ image: menuVersionImages.filename })
     .from(menuVersionImages)
-    .innerJoin(menuPublications, eq(menuPublications.versionId, menuVersionImages.versionId))
-    .where(inArray(menuVersionImages.filename, wanted))) {
-    tally(row.image);
-  }
-  for (const row of await tx
-    .select({ image: menuVersionImages.filename })
-    .from(menuVersionImages)
-    .innerJoin(
-      menuScheduledPublications,
-      eq(menuScheduledPublications.versionId, menuVersionImages.versionId),
-    )
+    .innerJoin(menuReleases, eq(menuReleases.versionId, menuVersionImages.versionId))
     .where(
       and(
         inArray(menuVersionImages.filename, wanted),
-        eq(menuScheduledPublications.state, "queued"),
+        inArray(menuReleases.state, ["live", "queued"]),
       ),
     )) {
     tally(row.image);

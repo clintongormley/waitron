@@ -5,7 +5,7 @@ import {
   menus,
   menuItems,
   menuItemVariantOverrides,
-  menuPublications,
+  menuReleases,
   menuVersions,
   sectionMembers,
   sections,
@@ -195,8 +195,8 @@ async function rowsOf(menuId: string) {
     const versions = await tx.select().from(menuVersions).where(eq(menuVersions.menuId, menuId));
     const publications = await tx
       .select()
-      .from(menuPublications)
-      .where(eq(menuPublications.menuId, menuId));
+      .from(menuReleases)
+      .where(eq(menuReleases.menuId, menuId));
     return { owned, members, details: details!, items, overrides, versions, publications };
   });
 }

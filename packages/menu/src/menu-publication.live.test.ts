@@ -24,7 +24,7 @@ it("announces a publish to live subscribers, so another tab's menu status refres
   const { hash } = await withTransaction(fx.db, (tx) => previewMenu(tx, f.lunch));
   expect(types).toEqual(new Set());
   await withTransaction(fx.db, (tx) => publishMenu(tx, f.lunch, hash, "person-1"));
-  expect(types).toContain("menu_publications");
+  expect(types).toContain("menu_releases");
   expect(types).toContain("menu_versions");
 });
 
@@ -47,5 +47,5 @@ it("announces an activation to live subscribers, so a menu that went live by sch
     for (const resource of change.resources) types.add(resource.type);
   });
   await withTransaction(fx.db, (tx) => activateDueMenuPublications(tx, activatesAt));
-  expect(types).toEqual(new Set(["menu_publications", "menu_scheduled_publications"]));
+  expect(types).toEqual(new Set(["menu_releases"]));
 });

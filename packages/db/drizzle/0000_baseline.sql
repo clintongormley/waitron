@@ -2047,32 +2047,21 @@ CREATE TABLE `sections` (
 CREATE UNIQUE INDEX `sections_one_root_per_menu_uq` ON `sections` (`owner_menu_id`,`role`) WHERE "sections"."role" in ('menu_root','home_layout');--> statement-breakpoint
 CREATE INDEX `sections_owner_menu_idx` ON `sections` (`owner_menu_id`);--> statement-breakpoint
 CREATE INDEX `sections_image_idx` ON `sections` (`image`) WHERE "sections"."image" is not null;--> statement-breakpoint
-CREATE TABLE `menu_publications` (
-	`menu_id` text PRIMARY KEY NOT NULL,
-	`version_id` text NOT NULL,
-	`published_at` text NOT NULL,
-	FOREIGN KEY (`menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`version_id`,`menu_id`) REFERENCES `menu_versions`(`id`,`menu_id`) ON UPDATE no action ON DELETE no action
-);
---> statement-breakpoint
-CREATE TABLE `menu_scheduled_publications` (
+CREATE TABLE `menu_releases` (
 	`version_id` text PRIMARY KEY NOT NULL,
 	`menu_id` text NOT NULL,
+	`state` text NOT NULL,
 	`activates_at` text NOT NULL,
-	`queued_at` text NOT NULL,
-	`queued_by` text NOT NULL,
-	`state` text DEFAULT 'queued' NOT NULL,
-	`activated_at` text,
 	`cancelled_at` text,
 	`cancelled_by` text,
 	FOREIGN KEY (`menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`version_id`,`menu_id`) REFERENCES `menu_versions`(`id`,`menu_id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "menu_scheduled_publications_state_ck" CHECK("menu_scheduled_publications"."state" in ('queued', 'activated', 'cancelled')),
-	CONSTRAINT "menu_scheduled_publications_settled_ck" CHECK(("menu_scheduled_publications"."state" = 'queued' and "menu_scheduled_publications"."activated_at" is null and "menu_scheduled_publications"."cancelled_at" is null and "menu_scheduled_publications"."cancelled_by" is null) or ("menu_scheduled_publications"."state" = 'activated' and "menu_scheduled_publications"."activated_at" is not null and "menu_scheduled_publications"."cancelled_at" is null and "menu_scheduled_publications"."cancelled_by" is null) or ("menu_scheduled_publications"."state" = 'cancelled' and "menu_scheduled_publications"."cancelled_at" is not null and "menu_scheduled_publications"."cancelled_by" is not null and "menu_scheduled_publications"."activated_at" is null)),
-	CONSTRAINT "menu_scheduled_publications_after_queue_ck" CHECK("menu_scheduled_publications"."activates_at" > "menu_scheduled_publications"."queued_at")
+	CONSTRAINT "menu_releases_state_ck" CHECK("menu_releases"."state" in ('queued', 'live', 'superseded', 'cancelled')),
+	CONSTRAINT "menu_releases_settled_ck" CHECK(("menu_releases"."state" = 'cancelled') = ("menu_releases"."cancelled_at" is not null) and ("menu_releases"."cancelled_at" is null) = ("menu_releases"."cancelled_by" is null))
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `menu_scheduled_publications_queued_time_uq` ON `menu_scheduled_publications` (`menu_id`,`activates_at`) WHERE "menu_scheduled_publications"."state" = 'queued';--> statement-breakpoint
+CREATE UNIQUE INDEX `menu_releases_one_live_uq` ON `menu_releases` (`menu_id`) WHERE "menu_releases"."state" = 'live';--> statement-breakpoint
+CREATE UNIQUE INDEX `menu_releases_queued_time_uq` ON `menu_releases` (`menu_id`,`activates_at`) WHERE "menu_releases"."state" = 'queued';--> statement-breakpoint
 CREATE TABLE `menu_version_images` (
 	`version_id` text NOT NULL,
 	`filename` text NOT NULL,
@@ -2087,8 +2076,8 @@ CREATE TABLE `menu_versions` (
 	`number` integer NOT NULL,
 	`document` text NOT NULL,
 	`content_hash` text NOT NULL,
-	`published_at` text NOT NULL,
-	`published_by` text NOT NULL,
+	`created_at` text NOT NULL,
+	`created_by` text NOT NULL,
 	FOREIGN KEY (`menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "menu_versions_number_ck" CHECK("menu_versions"."number" >= 1)
 );
@@ -3646,13 +3635,8 @@ BEGIN
   SELECT raise(abort, 'menu_version_images_media_image_fk')
   WHERE exists (
     SELECT 1 FROM menu_version_images
-    JOIN menu_publications ON menu_publications.version_id = menu_version_images.version_id
-    WHERE menu_version_images.filename = old.filename
-  )
-  OR exists (
-    SELECT 1 FROM menu_version_images
-    JOIN menu_scheduled_publications ON menu_scheduled_publications.version_id = menu_version_images.version_id
-    WHERE menu_version_images.filename = old.filename AND menu_scheduled_publications.state = 'queued'
+    JOIN menu_releases ON menu_releases.version_id = menu_version_images.version_id
+    WHERE menu_version_images.filename = old.filename AND menu_releases.state in ('live', 'queued')
   );
 END;
 --> statement-breakpoint
@@ -3661,19 +3645,11 @@ BEFORE UPDATE OF filename ON media_images
 FOR EACH ROW
 BEGIN
   SELECT raise(abort, 'menu_version_images_media_image_fk')
-  WHERE new.filename IS NOT old.filename
-    AND (
-      exists (
-        SELECT 1 FROM menu_version_images
-        JOIN menu_publications ON menu_publications.version_id = menu_version_images.version_id
-        WHERE menu_version_images.filename = old.filename
-      )
-      OR exists (
-        SELECT 1 FROM menu_version_images
-        JOIN menu_scheduled_publications ON menu_scheduled_publications.version_id = menu_version_images.version_id
-        WHERE menu_version_images.filename = old.filename AND menu_scheduled_publications.state = 'queued'
-      )
-    );
+  WHERE new.filename IS NOT old.filename AND exists (
+    SELECT 1 FROM menu_version_images
+    JOIN menu_releases ON menu_releases.version_id = menu_version_images.version_id
+    WHERE menu_version_images.filename = old.filename AND menu_releases.state in ('live', 'queued')
+  );
 END;
 --> statement-breakpoint
 CREATE TRIGGER section_members_media_image_fk_insert

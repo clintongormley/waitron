@@ -207,19 +207,17 @@ it("refreshes image ordering passively after content-language settings change", 
 
 // `countUsages` (packages/media/src/images.ts) counts a live or queued version's photos, and an
 // include folder's, from these.
-it.each([
-  "menu_publications",
-  "menu_version_images",
-  "menu_scheduled_publications",
-  "section_members",
-])("refreshes the library passively when %s changes", async (type) => {
-  const liveData = new LiveData();
-  const background = api();
-  const client = Object.assign(api(), { background, liveData });
-  await mount(client);
-  liveData.invalidate([{ type }]);
-  await vi.waitFor(() => expect(background.listImages).toHaveBeenCalledOnce());
-});
+it.each(["menu_releases", "menu_version_images", "section_members"])(
+  "refreshes the library passively when %s changes",
+  async (type) => {
+    const liveData = new LiveData();
+    const background = api();
+    const client = Object.assign(api(), { background, liveData });
+    await mount(client);
+    liveData.invalidate([{ type }]);
+    await vi.waitFor(() => expect(background.listImages).toHaveBeenCalledOnce());
+  },
+);
 
 // The library's live read (listImages) names neither; only the delete dialog's one-off
 // getImage does, and it is not refreshed live.

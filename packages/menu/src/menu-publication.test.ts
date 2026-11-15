@@ -2,7 +2,7 @@ import { storedMenuParts } from "../test/menu-parts.js";
 import { triggerRaised } from "@waitron/db";
 import {
   extraListItems,
-  menuPublications,
+  menuReleases,
   menuVersionImages,
   menuVersions,
   products,
@@ -205,7 +205,7 @@ describe("preview live snapshot", () => {
     await publish(f.lunch);
     await publish(f.dinner);
     const beforeVersions = await versionRows();
-    const beforePublications = await fx.db.select().from(menuPublications);
+    const beforePublications = await fx.db.select().from(menuReleases);
     const includeId = await sectionMemberOf(f.lunchRoot, f.drinks);
     const refs = [
       { kind: "product" as const, id: f.lemonade },
@@ -324,7 +324,7 @@ describe("preview live snapshot", () => {
       names: { en: "Something to drink", es: "Bebidas para invitados" },
     });
     expect(await versionRows()).toEqual(beforeVersions);
-    expect(await fx.db.select().from(menuPublications)).toEqual(beforePublications);
+    expect(await fx.db.select().from(menuReleases)).toEqual(beforePublications);
     expect(preview.live!.document).toEqual(frozen);
     const recorded = frozen.offers[offerId]!;
     expect(recorded.customerName).toEqual({ en: "Lemonade for guests" });
@@ -407,11 +407,18 @@ describe("publishMenu", () => {
       menuId: f.lunch,
       number: 1,
       contentHash: hash,
-      publishedBy: "person-1",
+      createdBy: "person-1",
     });
     expect(menuDocumentHash(row!.document)).toBe(hash);
-    expect(await fx.db.select().from(menuPublications)).toEqual([
-      { menuId: f.lunch, versionId: published.versionId, publishedAt: row!.publishedAt },
+    expect(await fx.db.select().from(menuReleases)).toEqual([
+      {
+        menuId: f.lunch,
+        versionId: published.versionId,
+        activatesAt: row!.createdAt,
+        state: "live",
+        cancelledAt: null,
+        cancelledBy: null,
+      },
     ]);
     expect(
       (await fx.db.select().from(menuVersionImages)).map((image) => image.filename).sort(),
@@ -424,7 +431,7 @@ describe("publishMenu", () => {
       state: "current",
       clashes: 0,
       version: 1,
-      publishedAt: row!.publishedAt.toISOString(),
+      publishedAt: row!.createdAt.toISOString(),
       hash,
     });
     expect(status.get(f.dinner)).toEqual({ state: "unpublished", clashes: 0 });
@@ -440,7 +447,10 @@ describe("publishMenu", () => {
     const rows = await versionRows();
     expect(rows).toHaveLength(2);
     expect(rows[0]).toEqual(before);
-    const [publication] = await fx.db.select().from(menuPublications);
+    const [publication] = await fx.db
+      .select()
+      .from(menuReleases)
+      .where(eq(menuReleases.state, "live"));
     expect(publication!.versionId).toBe(second.versionId);
 
     const update = await captureError(() =>
@@ -765,14 +775,14 @@ describe("a live version published before its document froze VAT", () => {
         number: row!.number + 1,
         document,
         contentHash: menuDocumentHash(document),
-        publishedAt: row!.publishedAt,
-        publishedBy: "person-1",
+        createdAt: row!.createdAt,
+        createdBy: "person-1",
       })
       .returning({ id: menuVersions.id });
     await fx.db
-      .update(menuPublications)
+      .update(menuReleases)
       .set({ versionId: earlier!.id })
-      .where(eq(menuPublications.menuId, menuId));
+      .where(sql`${menuReleases.menuId} = ${menuId} and ${menuReleases.state} = 'live'`);
     return earlier!.id;
   }
 
@@ -810,14 +820,14 @@ describe("a live version published before the Device Home Page", () => {
         number: row!.number + 1,
         document,
         contentHash: menuDocumentHash(document),
-        publishedAt: row!.publishedAt,
-        publishedBy: "person-1",
+        createdAt: row!.createdAt,
+        createdBy: "person-1",
       })
       .returning({ id: menuVersions.id });
     await fx.db
-      .update(menuPublications)
+      .update(menuReleases)
       .set({ versionId: earlier!.id })
-      .where(eq(menuPublications.menuId, menuId));
+      .where(sql`${menuReleases.menuId} = ${menuId} and ${menuReleases.state} = 'live'`);
     return earlier!.id;
   }
 
@@ -848,9 +858,8 @@ describe("a live version published before the Device Home Page", () => {
       });
       expect(await versionRows()).toEqual(before);
       expect(
-        (
-          await fx.db.select().from(menuPublications).where(eq(menuPublications.menuId, f.lunch))
-        )[0]!.versionId,
+        (await fx.db.select().from(menuReleases).where(eq(menuReleases.menuId, f.lunch)))[0]!
+          .versionId,
       ).toBe(versionId);
     },
   );
@@ -911,14 +920,14 @@ describe("a live version published before its document froze the takeaway VAT cl
         number: row!.number + 1,
         document,
         contentHash: menuDocumentHash(document),
-        publishedAt: row!.publishedAt,
-        publishedBy: "person-1",
+        createdAt: row!.createdAt,
+        createdBy: "person-1",
       })
       .returning({ id: menuVersions.id });
     await fx.db
-      .update(menuPublications)
+      .update(menuReleases)
       .set({ versionId: earlier!.id })
-      .where(eq(menuPublications.menuId, f.lunch));
+      .where(sql`${menuReleases.menuId} = ${f.lunch} and ${menuReleases.state} = 'live'`);
     await expect(app((tx) => readRecordedDocuments(tx, [earlier!.id]))).rejects.toMatchObject({
       code: "menu.reset_required",
       params: { menuId: f.lunch },
@@ -951,14 +960,14 @@ describe("a live version published while its document froze a VAT rate", () => {
         number: row!.number + 1,
         document,
         contentHash: menuDocumentHash(document),
-        publishedAt: row!.publishedAt,
-        publishedBy: "person-1",
+        createdAt: row!.createdAt,
+        createdBy: "person-1",
       })
       .returning({ id: menuVersions.id });
     await fx.db
-      .update(menuPublications)
+      .update(menuReleases)
       .set({ versionId: earlier!.id })
-      .where(eq(menuPublications.menuId, menuId));
+      .where(sql`${menuReleases.menuId} = ${menuId} and ${menuReleases.state} = 'live'`);
     return earlier!.id;
   }
 
@@ -1096,14 +1105,14 @@ describe("a live version whose offers carry no colour", () => {
         number: row!.number + 1,
         document,
         contentHash: menuDocumentHash(document),
-        publishedAt: row!.publishedAt,
-        publishedBy: "person-1",
+        createdAt: row!.createdAt,
+        createdBy: "person-1",
       })
       .returning({ id: menuVersions.id });
     await fx.db
-      .update(menuPublications)
+      .update(menuReleases)
       .set({ versionId: earlier!.id })
-      .where(eq(menuPublications.menuId, menuId));
+      .where(sql`${menuReleases.menuId} = ${menuId} and ${menuReleases.state} = 'live'`);
     return earlier!.id;
   }
 
@@ -2287,7 +2296,7 @@ describe("previewMenu", () => {
       state: "current",
       clashes: 0,
       version: 1,
-      publishedAt: row!.publishedAt.toISOString(),
+      publishedAt: row!.createdAt.toISOString(),
       hash,
     });
     expect(current.status).toEqual((await app((tx) => menuStatus(tx, [f.lunch]))).get(f.lunch));
@@ -2429,14 +2438,17 @@ describe("combined menu publication", () => {
       preview.clashes.map(({ productId, variantId, field }) => ({ productId, variantId, field })),
     ).toEqual([{ productId: f.lemonade, variantId: f.large, field: "price" }]);
     const before = await versionRows();
-    const publications = await fx.db.select().from(menuPublications);
+    const publications = await fx.db
+      .select()
+      .from(menuReleases)
+      .where(eq(menuReleases.state, "live"));
     const images = await fx.db.select().from(menuVersionImages);
     await expect(publish(f.dinner)).rejects.toMatchObject({
       code: "menu.clashes_unresolved",
       params: { menuId: f.dinner, count: 1 },
     });
     expect(await versionRows()).toEqual(before);
-    expect(await fx.db.select().from(menuPublications)).toEqual(publications);
+    expect(await fx.db.select().from(menuReleases)).toEqual(publications);
     expect(await fx.db.select().from(menuVersionImages)).toEqual(images);
   });
   it("inherits included prices, refuses clashes without writing, and attributes the included edit", async () => {

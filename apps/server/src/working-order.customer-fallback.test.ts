@@ -128,7 +128,7 @@ describe("future order customer fallback", () => {
           "invoice_series",
           "registros_facturacion",
           "menu_versions",
-          "menu_publications",
+          "menu_releases",
         ].map((name) => [
           name,
           venue.db.all<Record<string, unknown>>(

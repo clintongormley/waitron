@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -12,8 +12,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   MENU_CHANGE_SOURCES,
   listMenuPublications,
-  menuPublications,
-  menuScheduledPublications,
+  menuReleases,
   previewMenu,
   publishMenu,
   queueMenuPublication,
@@ -64,17 +63,17 @@ async function lunchWithQueue(...days: number[]): Promise<string[]> {
 
 async function stateOf(versionId: string): Promise<string | undefined> {
   const [row] = await fx.db
-    .select({ state: menuScheduledPublications.state })
-    .from(menuScheduledPublications)
-    .where(eq(menuScheduledPublications.versionId, versionId));
+    .select({ state: menuReleases.state })
+    .from(menuReleases)
+    .where(eq(menuReleases.versionId, versionId));
   return row?.state;
 }
 
 async function pointerOf(menuId: string): Promise<string | undefined> {
   const [row] = await fx.db
-    .select({ versionId: menuPublications.versionId })
-    .from(menuPublications)
-    .where(eq(menuPublications.menuId, menuId));
+    .select({ versionId: menuReleases.versionId })
+    .from(menuReleases)
+    .where(sql`${menuReleases.menuId} = ${menuId} and ${menuReleases.state} = 'live'`);
   return row?.versionId;
 }
 
@@ -183,7 +182,7 @@ function startDuty(
 /** Lets every queued microtask and the I/O they wait on run. */
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 50));
 
-const SCHEDULE_CHANGE = { resources: [{ type: "menu_scheduled_publications" }] };
+const SCHEDULE_CHANGE = { resources: [{ type: "menu_releases" }] };
 
 describe("menuActivationJob", () => {
   it("on start, activates every overdue edition and arms the timer for the next one", async () => {
@@ -192,8 +191,8 @@ describe("menuActivationJob", () => {
     try {
       await armedCount(1);
       expect(await pointerOf(f.lunch)).toBe(v3);
-      expect(await stateOf(v2!)).toBe("activated");
-      expect(await stateOf(v3!)).toBe("activated");
+      expect(await stateOf(v2!)).toBe("superseded");
+      expect(await stateOf(v3!)).toBe("live");
       expect(await stateOf(v4!)).toBe("queued");
       expect(armed[0]!.ms).toBe(day(6).getTime() - day(4).getTime());
       expect(lines.filter((line) => line.event === "menu_publication.activated")).toEqual([
@@ -223,7 +222,7 @@ describe("menuActivationJob", () => {
       armed[0]!.fn();
       await armedCount(2);
       expect(await pointerOf(f.lunch)).toBe(v2);
-      expect(await stateOf(v2!)).toBe("activated");
+      expect(await stateOf(v2!)).toBe("live");
       expect(armed[1]!.ms).toBe(MAX_WAIT_MS);
     } finally {
       await duty.stop();
@@ -287,7 +286,7 @@ describe("menuActivationJob", () => {
       primary = true;
       armed[0]!.fn();
       await armedCount(2);
-      expect(await stateOf(v2!)).toBe("activated");
+      expect(await stateOf(v2!)).toBe("live");
       expect(await pointerOf(f.lunch)).toBe(v2);
     } finally {
       await duty.stop();
@@ -318,7 +317,7 @@ describe("menuActivationJob", () => {
 
       armed[0]!.fn();
       await armedCount(2);
-      expect(await stateOf(v2!)).toBe("activated");
+      expect(await stateOf(v2!)).toBe("live");
     } finally {
       await duty.stop();
     }
@@ -402,7 +401,7 @@ describe("menuActivationJob", () => {
     const duty = { stop: () => runner.stopJobs() };
     try {
       expect(await stateOf(versionId)).toBe("queued");
-      await vi.waitFor(async () => expect(await stateOf(versionId)).toBe("activated"), {
+      await vi.waitFor(async () => expect(await stateOf(versionId)).toBe("live"), {
         timeout: 10_000,
         interval: 100,
       });
@@ -429,9 +428,9 @@ describe("menuActivationJob", () => {
       await armedCount(2);
       await flush();
 
-      expect(await stateOf(v2!)).toBe("activated");
+      expect(await stateOf(v2!)).toBe("live");
       // Every change is the activation's, delivered before the extra run had begun.
-      expect(changes.flatMap((change) => change.types)).toContain("menu_scheduled_publications");
+      expect(changes.flatMap((change) => change.types)).toContain("menu_releases");
       expect(new Set(changes.map((change) => change.begins))).toEqual(new Set([2]));
       expect(door.begins).toBe(3);
       expect(armed).toHaveLength(2);

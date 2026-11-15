@@ -513,12 +513,12 @@ async function publish(tx: Transaction, menuId: string): Promise<string> {
 async function liveInEarlierFormat(tx: Transaction, menuId: string, versionId: string) {
   const earlier = randomUUID();
   await tx.execute(sql`
-    insert into menu_versions (id, menu_id, number, document, content_hash, published_at, published_by)
+    insert into menu_versions (id, menu_id, number, document, content_hash, created_at, created_by)
     select ${earlier}, menu_id, number + 1, json_set(document, '$.format', 1), 'earlier',
-      published_at, published_by
+      created_at, created_by
     from menu_versions where id = ${versionId}`);
   await tx.execute(
-    sql`update menu_publications set version_id = ${earlier} where menu_id = ${menuId}`,
+    sql`update menu_releases set version_id = ${earlier} where menu_id = ${menuId} and state = 'live'`,
   );
 }
 
@@ -2947,7 +2947,7 @@ describe("zone offers from the published menus", () => {
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
       await expect(listVenueReadiness(tx)).resolves.toEqual([]);
       const sqlOf = prepared.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
-      expect(sqlOf.filter((text) => /from "menu_publications"/.test(text))).toHaveLength(1);
+      expect(sqlOf.filter((text) => /from "menu_releases"/.test(text))).toHaveLength(1);
       expect(sqlOf.filter((text) => /from "menu_period_staff_menus"/.test(text))).toHaveLength(1);
       expect(sqlOf.filter((text) => /from "menu_periods"/.test(text))).toHaveLength(1);
     });

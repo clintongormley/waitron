@@ -511,7 +511,7 @@ for (const p of SCHEDULE_PATHS) {
             expect(tableCell(panel, p.acceptedCell)?.textContent ?? "").not.toContain(
               p.acceptedTime,
             );
-            app.api.liveData.invalidate([{ type: "menu_scheduled_publications" }]);
+            app.api.liveData.invalidate([{ type: "menu_releases" }]);
             await vi.waitFor(() =>
               expect(app.api.getMenuPublications).toHaveBeenCalledTimes(reads + 2),
             );
