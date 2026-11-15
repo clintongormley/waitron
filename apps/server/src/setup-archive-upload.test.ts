@@ -188,7 +188,7 @@ it.each(["duplicate", "oversized"])(
     ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field: "body" } });
   },
 );
-it("counts multipart artifact bytes separately from the overhead budget", async () => {
+it("refuses a multipart artifact larger than its file limit", async () => {
   const dir = await root();
   const form = new FormData();
   form.set("artifact", new Blob(["123456789"]));

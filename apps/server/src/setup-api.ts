@@ -711,7 +711,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       if (c.req.method !== "POST" || c.req.path.startsWith("/setup-api/first-setup/"))
         return next();
       if (
-        (provisioning || fiscalTesting || configurationStaging || emailTesting()) &&
+        setupBusy() &&
         ["/setup-api/restore", "/setup-api/restore/preview", "/setup-api/recovery/stage"].includes(
           c.req.path,
         )
@@ -802,10 +802,12 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     () => provisioning || fiscalTesting || configurationStaging,
   );
 
+  const setupBusy = () => provisioning || fiscalTesting || configurationStaging || emailTesting();
+
   mountRecoveryPreparationApi(app, deps, log, {
     uploadLimit: MAX_RESTORE_UPLOAD_BYTES,
     hold: (request) => holds.get(request),
-    busy: () => provisioning || fiscalTesting || configurationStaging || emailTesting(),
+    busy: setupBusy,
     setBusy: (value) => {
       provisioning = value;
     },
