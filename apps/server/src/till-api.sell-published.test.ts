@@ -138,9 +138,8 @@ interface Lunch {
   burger: { productId: string; offerId: string };
   /** "Extra lemon", offered at 0.50 by Lemonade's "Lemon" extras list. */
   extraLemon: { productId: string; listId: string };
-  /** Burger's "Punto" options list; `poco` is one of its labels. */
-  punto: { listId: string; poco: string };
-  postresId: string;
+  preparation: { listId: string; firstLabelId: string };
+  dessertsId: string;
   flanId: string;
 }
 
@@ -221,7 +220,7 @@ async function setupLunch(): Promise<Lunch> {
       LOCALE,
     );
     await writeProductModifiers(tx, lemonade.id, [{ kind: "extras", id: lemon.id }]);
-    const punto = await createOptionList(
+    const preparation = await createOptionList(
       tx,
       {
         name: "Punto",
@@ -236,14 +235,14 @@ async function setupLunch(): Promise<Lunch> {
       },
       LOCALE,
     );
-    await writeProductModifiers(tx, burger.id, [{ kind: "options", id: punto.id }]);
+    await writeProductModifiers(tx, burger.id, [{ kind: "options", id: preparation.id }]);
     await assignMenuToVenue(tx, lunch.id);
     const lemonadeOffer = await addProductToMenu(tx, { menuId: lunch.id, productId: lemonade.id });
     const burgerOffer = await addProductToMenu(tx, { menuId: lunch.id, productId: burger.id });
 
     const rootId = await requireMenuRoot(tx, lunch.id);
-    const postres = await createSectionIn(tx, rootId, { internalName: "Desserts" });
-    await addProducts(tx, postres.id, [flan.id]);
+    const desserts = await createSectionIn(tx, rootId, { internalName: "Desserts" });
+    await addProducts(tx, desserts.id, [flan.id]);
     const zone = await tx.execute<{ id: string }>(sql`
       select id from floor_zones
       where is_counter_default`);
@@ -265,8 +264,8 @@ async function setupLunch(): Promise<Lunch> {
       lemonade: { productId: lemonade.id, offerId: lemonadeOffer.id },
       burger: { productId: burger.id, offerId: burgerOffer.id },
       extraLemon: { productId: extraLemon.id, listId: lemon.id },
-      punto: { listId: punto.id, poco: punto.labels[0]!.id },
-      postresId: postres.id,
+      preparation: { listId: preparation.id, firstLabelId: preparation.labels[0]!.id },
+      dessertsId: desserts.id,
       flanId: flan.id,
     };
   });
@@ -382,7 +381,7 @@ describe("a basket that spans a publish (Review Focus 2)", () => {
 
     // v3 renames only the section holding Flan, which the basket holds nothing from.
     await withTransaction(suite.db, (tx) =>
-      updateSection(tx, v.postresId, { internalName: "House desserts" }),
+      updateSection(tx, v.dessertsId, { internalName: "House desserts" }),
     );
     const v3 = await publish(v.menuId);
     expect(v3).not.toBe(v2);
@@ -747,7 +746,7 @@ describe("an unavailable product keeps its place and cannot be ordered (Review F
         menuItemId: v.burger.offerId,
         quantity: "1",
         menuVersionId: v1,
-        options: [{ listId: v.punto.listId, labelId: v.punto.poco }],
+        options: [{ listId: v.preparation.listId, labelId: v.preparation.firstLabelId }],
       },
     ]);
     expect(refused.status).toBe(409);
@@ -794,7 +793,7 @@ describe("who may order a product on its own (spec §9, D12)", () => {
         LOCALE,
       );
       await writeProductModifiers(tx, v.burger.productId, [
-        { kind: "options", id: v.punto.listId },
+        { kind: "options", id: v.preparation.listId },
         { kind: "extras", id: toppings.id },
       ]);
 
@@ -809,7 +808,7 @@ describe("who may order a product on its own (spec §9, D12)", () => {
   const burgerWithBacon = (v: Lunch, bacon: { productId: string; toppingsId: string }) => ({
     menuItemId: v.burger.offerId,
     quantity: "1",
-    options: [{ listId: v.punto.listId, labelId: v.punto.poco }],
+    options: [{ listId: v.preparation.listId, labelId: v.preparation.firstLabelId }],
     extras: [{ listId: bacon.toppingsId, picks: [{ productId: bacon.productId, quantity: 1 }] }],
   });
 
@@ -1101,17 +1100,20 @@ describe("GET /api/menu-state", () => {
   it("lists an unavailable option label and extras product, and clears them", async () => {
     const v = await setupLunch();
     await publish(v.menuId);
-    const setPoco = (available: boolean) =>
-      suite.db.update(optionLabels).set({ available }).where(eq(optionLabels.id, v.punto.poco));
+    const setFirstLabelAvailable = (available: boolean) =>
+      suite.db
+        .update(optionLabels)
+        .set({ available })
+        .where(eq(optionLabels.id, v.preparation.firstLabelId));
     const setLemon = (available: boolean) =>
       withTransaction(suite.db, (tx) => updateProduct(tx, v.extraLemon.productId, { available }));
-    await setPoco(false);
+    await setFirstLabelAvailable(false);
     await setLemon(false);
     expect((await state(v)).unavailable).toEqual({
       products: [v.extraLemon.productId],
-      optionLabels: [v.punto.poco],
+      optionLabels: [v.preparation.firstLabelId],
     });
-    await setPoco(true);
+    await setFirstLabelAvailable(true);
     await setLemon(true);
     expect((await state(v)).unavailable).toEqual(nothing);
   });
@@ -1157,8 +1159,8 @@ describe("the Device Home Page each menu serves", () => {
 
   it("serves each menu's structure and Device Home Page on both offers routes, and its version alone in the menu state", async () => {
     const v = await setupLunch();
-    await app((tx) => updateSection(tx, v.postresId, { names: { es: "Para terminar" } }));
-    await app((tx) => addShortcut(tx, v.menuId, { kind: "section", sectionId: v.postresId }));
+    await app((tx) => updateSection(tx, v.dessertsId, { names: { es: "Para terminar" } }));
+    await app((tx) => addShortcut(tx, v.menuId, { kind: "section", sectionId: v.dessertsId }));
     await app((tx) => setHomeDisplay(tx, v.menuId, "till", { columns: 8, order: "menu_first" }));
     const versionId = await publish(v.menuId);
     const zonePath = zonePathOf(v);
@@ -1179,7 +1181,7 @@ describe("the Device Home Page each menu serves", () => {
           { kind: "product", menuItemId: v.burger.offerId, productId: v.burger.productId },
           {
             kind: "section",
-            sectionId: v.postresId,
+            sectionId: v.dessertsId,
             internalName: "Desserts",
             names: { es: "Para terminar" },
             image: null,
@@ -1189,7 +1191,7 @@ describe("the Device Home Page each menu serves", () => {
         ],
       },
       home: {
-        shortcuts: [{ kind: "section", sectionId: v.postresId }],
+        shortcuts: [{ kind: "section", sectionId: v.dessertsId }],
         handheld,
         till: { columns: 8, tiles: "colours", order: "menu_first" },
       },
@@ -1208,7 +1210,7 @@ describe("the Device Home Page each menu serves", () => {
     const v = await setupLunch();
     const published = await publish(v.menuId);
     const before = { shortcuts: [], handheld, till };
-    await app((tx) => addShortcut(tx, v.menuId, { kind: "section", sectionId: v.postresId }));
+    await app((tx) => addShortcut(tx, v.menuId, { kind: "section", sectionId: v.dessertsId }));
     await app((tx) => setHomeDisplay(tx, v.menuId, "handheld", { columns: 2 }));
     for (const path of [zonePathOf(v), "/api/default-service-zone/offers"]) {
       const [menu] = (await served(v, path)).menus;
@@ -1220,7 +1222,7 @@ describe("the Device Home Page each menu serves", () => {
     const republished = await publish(v.menuId);
     expect(republished).not.toBe(published);
     const after = {
-      shortcuts: [{ kind: "section", sectionId: v.postresId }],
+      shortcuts: [{ kind: "section", sectionId: v.dessertsId }],
       handheld: { ...handheld, columns: 2 },
       till,
     };
