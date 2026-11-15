@@ -158,6 +158,12 @@ export class WtDisclosure extends LitElement {
         transition: transform 150ms ease;
       }
 
+      @media (prefers-reduced-motion: reduce) {
+        .chevron {
+          transition: none;
+        }
+      }
+
       :host([open]) .chevron {
         transform: rotate(180deg);
       }

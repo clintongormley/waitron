@@ -83,6 +83,12 @@ export class WtSwitch extends LitElement {
         transition: transform 120ms ease;
       }
 
+      @media (prefers-reduced-motion: reduce) {
+        .thumb {
+          transition: none;
+        }
+      }
+
       :host([checked]) .track {
         background: var(--wt-color-primary);
       }
