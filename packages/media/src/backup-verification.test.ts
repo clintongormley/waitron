@@ -191,12 +191,11 @@ describe("media backup evidence", () => {
     expect((await run()).status).toBe("invalid");
   });
   it.each([
-    [{}, "passed"],
-    [{ image: null }, "passed"],
-    [{ image: filename }, "passed"],
-    [{ image: "missing.webp" }, "invalid"],
-    [{ image: 42 }, "invalid"],
-    [[], "invalid"],
+    [null, "passed"],
+    [filename, "passed"],
+    ["missing.webp", "invalid"],
+    [42, "invalid"],
+    ["[]", "invalid"],
   ] as const)("checks retained folder picture configuration %j", async (value, want) => {
     for (const suite of [original, restored]) {
       await suite.db.insert(menus).values({ id: menu, name: "Menu" });
@@ -208,7 +207,7 @@ describe("media backup evidence", () => {
         .values({ id: version, sectionId: menu, position: 0, missingName: "Removed" });
       await corrupt(
         suite,
-        `update section_members set folder_overrides='${JSON.stringify(value)}'`,
+        `update section_members set folder_image=${value === null ? "NULL" : `'${value}'`}`,
       );
     }
     expect((await run()).status).toBe(want);

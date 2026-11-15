@@ -116,7 +116,7 @@ export function themeLogoName(side: "light" | "dark") {
     then json_extract(${customThemes.theme}, ${path}) end end`;
 }
 // The expression `section_members_folder_image_idx` indexes.
-const folderImage = sql<string | null>`${sectionMembers.folderOverrides} ->> '$.image'`;
+const folderImage = sectionMembers.folderImage;
 const includedRoots = alias(sections, "included_roots");
 const includedMenus = alias(menus, "included_menus");
 

@@ -2011,11 +2011,18 @@ CREATE TABLE `section_members` (
 	`child_section_id` text,
 	`missing_name` text,
 	`show_as_folder` integer DEFAULT true NOT NULL,
-	`folder_overrides` text DEFAULT '{}' NOT NULL,
+	`folder_names` text,
+	`folder_image` text,
+	`folder_image_fixed` integer DEFAULT false NOT NULL,
+	`folder_color` text,
+	`folder_color_fixed` integer DEFAULT false NOT NULL,
 	FOREIGN KEY (`section_id`) REFERENCES `sections`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`product_id`) REFERENCES `products`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`child_section_id`) REFERENCES `sections`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "section_members_one_ref_ck" CHECK(("section_members"."product_id" is null or "section_members"."child_section_id" is null) and (("section_members"."product_id" is null and "section_members"."child_section_id" is null) = ("section_members"."missing_name" is not null)))
+	CONSTRAINT "section_members_one_ref_ck" CHECK(("section_members"."product_id" is null or "section_members"."child_section_id" is null) and (("section_members"."product_id" is null and "section_members"."child_section_id" is null) = ("section_members"."missing_name" is not null))),
+	CONSTRAINT "section_members_folder_names_ck" CHECK(json_valid("section_members"."folder_names") and json_type("section_members"."folder_names") = 'object'),
+	CONSTRAINT "section_members_folder_image_ck" CHECK("section_members"."folder_image" is null or "section_members"."folder_image_fixed" = 1),
+	CONSTRAINT "section_members_folder_color_ck" CHECK("section_members"."folder_color" is null or "section_members"."folder_color_fixed" = 1)
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `section_members_product_uq` ON `section_members` (`section_id`,`product_id`);--> statement-breakpoint
@@ -2023,7 +2030,7 @@ CREATE UNIQUE INDEX `section_members_child_uq` ON `section_members` (`section_id
 CREATE INDEX `section_members_order_idx` ON `section_members` (`section_id`,`position`);--> statement-breakpoint
 CREATE INDEX `section_members_child_idx` ON `section_members` (`child_section_id`);--> statement-breakpoint
 CREATE INDEX `section_members_product_idx` ON `section_members` (`product_id`);--> statement-breakpoint
-CREATE INDEX `section_members_folder_image_idx` ON `section_members` ("folder_overrides" ->> '$.image') WHERE "section_members"."folder_overrides" ->> '$.image' is not null;--> statement-breakpoint
+CREATE INDEX `section_members_folder_image_idx` ON `section_members` (`folder_image`) WHERE "section_members"."folder_image" is not null;--> statement-breakpoint
 CREATE TABLE `sections` (
 	`id` text PRIMARY KEY NOT NULL,
 	`internal_name` text,
@@ -2039,6 +2046,7 @@ CREATE TABLE `sections` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `sections_one_root_per_menu_uq` ON `sections` (`owner_menu_id`,`role`) WHERE "sections"."role" in ('menu_root','home_layout');--> statement-breakpoint
 CREATE INDEX `sections_owner_menu_idx` ON `sections` (`owner_menu_id`);--> statement-breakpoint
+CREATE INDEX `sections_image_idx` ON `sections` (`image`) WHERE "sections"."image" is not null;--> statement-breakpoint
 CREATE TABLE `menu_publications` (
 	`menu_id` text PRIMARY KEY NOT NULL,
 	`version_id` text NOT NULL,
@@ -3673,20 +3681,20 @@ BEFORE INSERT ON section_members
 FOR EACH ROW
 BEGIN
   SELECT raise(abort, 'section_members_media_image_fk')
-  WHERE json_extract(new.folder_overrides, '$.image') IS NOT NULL
+  WHERE new.folder_image IS NOT NULL
     AND NOT exists (
-      SELECT 1 FROM media_images WHERE filename = json_extract(new.folder_overrides, '$.image')
+      SELECT 1 FROM media_images WHERE filename = new.folder_image
     );
 END;
 --> statement-breakpoint
 CREATE TRIGGER section_members_media_image_fk_update
-BEFORE UPDATE OF folder_overrides ON section_members
+BEFORE UPDATE OF folder_image ON section_members
 FOR EACH ROW
 BEGIN
   SELECT raise(abort, 'section_members_media_image_fk')
-  WHERE json_extract(new.folder_overrides, '$.image') IS NOT NULL
+  WHERE new.folder_image IS NOT NULL
     AND NOT exists (
-      SELECT 1 FROM media_images WHERE filename = json_extract(new.folder_overrides, '$.image')
+      SELECT 1 FROM media_images WHERE filename = new.folder_image
     );
 END;
 --> statement-breakpoint
@@ -3696,7 +3704,7 @@ FOR EACH ROW
 BEGIN
   SELECT raise(abort, 'section_members_media_image_fk')
   WHERE exists (
-    SELECT 1 FROM section_members WHERE folder_overrides ->> '$.image' = old.filename
+    SELECT 1 FROM section_members WHERE folder_image = old.filename
   );
 END;
 --> statement-breakpoint
@@ -3707,7 +3715,7 @@ BEGIN
   SELECT raise(abort, 'section_members_media_image_fk')
   WHERE new.filename IS NOT old.filename
     AND exists (
-      SELECT 1 FROM section_members WHERE folder_overrides ->> '$.image' = old.filename
+      SELECT 1 FROM section_members WHERE folder_image = old.filename
     );
 END;
 

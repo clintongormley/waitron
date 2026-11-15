@@ -244,7 +244,10 @@ export async function canonicalMadridSemantics(
         key = row.parent_id === null ? parts("image") : parts("parent_id", "variant_order");
         break;
       case "sections":
-        key = parts("owner_menu_id", "role", "internal_name");
+        key = [
+          ...parts("owner_menu_id", "role"),
+          row.internal_name ?? ids.get(String(row.owner_menu_id))!.row.name,
+        ];
         break;
       case "section_members":
         key = parts("section_id", "position");

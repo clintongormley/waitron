@@ -1,4 +1,5 @@
-import { sql } from "drizzle-orm";
+import { columnsFromOverrides, overridesFromRow } from "@waitron/menu";
+import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -32,7 +33,7 @@ import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 
 /**
- * `products.image`, `sections.image`, `section_members.folder_overrides`'s `image` key and
+ * `products.image`, `sections.image`, `section_members.folder_image` and
  * `menu_version_images.filename` may only name a photo that exists, and a photo one of the first
  * three still names cannot be deleted or renamed. Nor can a photo a LIVE menu version or a queued
  * edition names. The rules are triggers in core's set (`packages/db/triggers/core.sql`),
@@ -285,17 +286,21 @@ describe("an image an include's folder names", () => {
     memberId = member!.id;
   });
 
-  const setFolder = async (overrides: object, showAsFolder = true): Promise<void> => {
-    await suite.db.execute(
-      sql`update section_members set folder_overrides = ${JSON.stringify(overrides)},
-        show_as_folder = ${showAsFolder ? 1 : 0} where id = ${memberId}`,
-    );
+  const setFolder = async (
+    overrides: Parameters<typeof columnsFromOverrides>[0],
+    showAsFolder = true,
+  ): Promise<void> => {
+    await suite.db
+      .update(sectionMembers)
+      .set({ ...columnsFromOverrides(overrides), showAsFolder })
+      .where(eq(sectionMembers.id, memberId));
   };
   const storedOverrides = async (): Promise<unknown> => {
-    const rows = await suite.db.execute<{ overrides: string }>(
-      sql`select folder_overrides as overrides from section_members where id = ${memberId}`,
-    );
-    return JSON.parse(rows.rows[0]!.overrides);
+    const [row] = await suite.db
+      .select()
+      .from(sectionMembers)
+      .where(eq(sectionMembers.id, memberId));
+    return overridesFromRow(row!);
   };
 
   it("refuses a folder image that is not in the library", async () => {
@@ -320,15 +325,17 @@ describe("an image an include's folder names", () => {
         sectionId: ids.sectionId,
         position: 0,
         childSectionId: extra!.id,
-        folderOverrides: { image },
+        ...columnsFromOverrides({ image }),
       });
       return extra!.id;
     };
     const stored = async (childId: string): Promise<unknown> =>
-      suite.db
-        .select({ overrides: sectionMembers.folderOverrides })
-        .from(sectionMembers)
-        .where(sql`${sectionMembers.childSectionId} = ${childId}`);
+      (
+        await suite.db
+          .select()
+          .from(sectionMembers)
+          .where(sql`${sectionMembers.childSectionId} = ${childId}`)
+      ).map((row) => ({ overrides: overridesFromRow(row) }));
     await expect(insert(ABSENT)).rejects.toMatchObject({
       message: "section_members_media_image_fk",
     });
@@ -370,7 +377,7 @@ describe("an image an include's folder names", () => {
   });
 
   it("finds a folder's photo through section_members_folder_image_idx, not a scan of every member", async () => {
-    const lookup = "section_members WHERE folder_overrides ->> '$.image' = old.filename";
+    const lookup = "section_members WHERE folder_image = old.filename";
     const triggers = await suite.db.execute<{ name: string; sql: string }>(
       sql`select name, sql from sqlite_master where type = 'trigger'
         and name glob 'section_members_media_image_fk_parent_*' order by name`,
@@ -380,10 +387,10 @@ describe("an image an include's folder names", () => {
       ["section_members_media_image_fk_parent_rename", true],
     ]);
     const plan = await suite.db.execute<{ detail: string }>(
-      sql`explain query plan select 1 from section_members where folder_overrides ->> '$.image' = ${PRESENT}`,
+      sql`explain query plan select 1 from section_members where folder_image = ${PRESENT}`,
     );
     expect(plan.rows.map((row) => row.detail)).toEqual([
-      "SEARCH section_members USING COVERING INDEX section_members_folder_image_idx (<expr>=?)",
+      "SEARCH section_members USING COVERING INDEX section_members_folder_image_idx (folder_image=?)",
     ]);
   });
 });

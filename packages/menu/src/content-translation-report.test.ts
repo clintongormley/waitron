@@ -1,3 +1,4 @@
+import { columnsFromOverrides } from "./include-folder.js";
 import { storedMenuParts } from "../test/menu-parts.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
@@ -275,7 +276,7 @@ describe("the missing-translations report", () => {
       });
       await tx
         .update(sectionMembers)
-        .set({ folderOverrides: { names: { es: "FOLDER-ES Barra", ca: "" } } })
+        .set({ ...columnsFromOverrides({ names: { es: "FOLDER-ES Barra", ca: "" } }) })
         .where(eq(sectionMembers.id, member));
       // A section and a unit missing Catalan too, so the order of the kinds shows.
       const [desserts] = await tx
@@ -341,7 +342,7 @@ describe("the missing-translations report", () => {
       });
       await tx
         .update(sectionMembers)
-        .set({ folderOverrides: { names: { es: "FOLDER-ES Barra", ca: "" } } })
+        .set({ ...columnsFromOverrides({ names: { es: "FOLDER-ES Barra", ca: "" } }) })
         .where(eq(sectionMembers.id, nested.id));
 
       expect((await report(tx))("ca")).toEqual([
@@ -556,7 +557,7 @@ describe("the missing-translations report", () => {
         });
         await tx
           .update(sectionMembers)
-          .set({ folderOverrides: { names: { es: "FOLDER-ES Barra", ca: "" } } })
+          .set({ ...columnsFromOverrides({ names: { es: "FOLDER-ES Barra", ca: "" } }) })
           .where(eq(sectionMembers.id, member));
         expect((await report(tx))("ca")).toHaveLength(1);
         await deactivateMenu(tx, lunch.id);

@@ -1,3 +1,5 @@
+import { columnsFromOverrides } from "@waitron/menu";
+import type { IncludeFolderOverrides } from "@waitron/shared";
 import { madridWithDroppedColumns } from "./madrid-dropped-columns.js";
 import { FIRST_DAY_START } from "@waitron/db";
 import { stable, type CanonicalMadridSemantics, type MadridColumn } from "./madrid-semantics.js";
@@ -230,5 +232,46 @@ export function madridWithOptionDefaults(
   });
   for (const row of Object.values(labels.rows))
     row.is_default = defaults.get(row.list_id) === row.id ? 1 : 0;
+  return result;
+}
+
+export function madridWithSectionColumns(
+  original: CanonicalMadridSemantics,
+): CanonicalMadridSemantics {
+  const result = structuredClone(original);
+  const sections = result.tables.sections!;
+  sections.columns.find((column) => column.name === "internal_name")!.notnull = 0;
+  for (const row of Object.values(sections.rows))
+    if (row.role === "menu_root") row.internal_name = null;
+  const members = result.tables.section_members!;
+  const position = members.columns.findIndex((column) => column.name === "folder_overrides");
+  members.columns.splice(
+    position,
+    1,
+    ...[
+      "folder_names",
+      "folder_image",
+      "folder_image_fixed",
+      "folder_color",
+      "folder_color_fixed",
+    ].map((name) => ({
+      name,
+      type: name.endsWith("_fixed") ? "INTEGER" : "TEXT",
+      notnull: name.endsWith("_fixed") ? 1 : 0,
+      pk: 0,
+      dflt_value: name.endsWith("_fixed") ? "false" : null,
+    })),
+  );
+  for (const row of Object.values(members.rows)) {
+    const columns = columnsFromOverrides(row.folder_overrides as IncludeFolderOverrides);
+    delete row.folder_overrides;
+    Object.assign(row, {
+      folder_names: columns.folderNames,
+      folder_image: columns.folderImage,
+      folder_image_fixed: Number(columns.folderImageFixed),
+      folder_color: columns.folderColor,
+      folder_color_fixed: Number(columns.folderColorFixed),
+    });
+  }
   return result;
 }

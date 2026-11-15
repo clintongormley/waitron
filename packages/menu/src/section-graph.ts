@@ -1,14 +1,9 @@
+import { overridesFromRow } from "./include-folder.js";
 import { eq, getTableColumns } from "drizzle-orm";
 import { SECTION_NAME } from "./sections.js";
 import { menus, sectionMembers, sections, type Transaction } from "@waitron/db";
 import { FOLLOWING_FOLDER } from "./include-folder-presentation.js";
-import type {
-  IncludeFolder,
-  IncludeFolderOverrides,
-  SectionMember,
-  SectionRole,
-  TileRef,
-} from "@waitron/shared";
+import type { IncludeFolder, SectionMember, SectionRole, TileRef } from "@waitron/shared";
 
 export interface SectionRow {
   id: string;
@@ -28,7 +23,11 @@ export interface MemberRow {
   childSectionId: string | null;
   missingName?: string | null;
   showAsFolder?: boolean;
-  folderOverrides?: IncludeFolderOverrides;
+  folderNames?: Record<string, string> | null;
+  folderImage?: string | null;
+  folderImageFixed?: boolean;
+  folderColor?: string | null;
+  folderColorFixed?: boolean;
 }
 
 /** Every section and every membership, held in memory for one operation. */
@@ -77,7 +76,7 @@ export function buildSectionGraph(
     const list = children.get(row.sectionId) ?? [];
     list.push(toSectionMember(row));
     children.set(row.sectionId, list);
-    const overrides = row.folderOverrides ?? {};
+    const overrides = overridesFromRow(row);
     if (row.showAsFolder === false || Object.keys(overrides).length > 0)
       folders.set(row.id, { showAsFolder: row.showAsFolder ?? true, overrides });
     if (row.childSectionId !== null) {
@@ -121,7 +120,11 @@ export async function loadSectionGraph(tx: Transaction): Promise<SectionGraph> {
       childSectionId: sectionMembers.childSectionId,
       missingName: sectionMembers.missingName,
       showAsFolder: sectionMembers.showAsFolder,
-      folderOverrides: sectionMembers.folderOverrides,
+      folderNames: sectionMembers.folderNames,
+      folderImage: sectionMembers.folderImage,
+      folderImageFixed: sectionMembers.folderImageFixed,
+      folderColor: sectionMembers.folderColor,
+      folderColorFixed: sectionMembers.folderColorFixed,
     })
     .from(sectionMembers);
   const menuRows = await tx

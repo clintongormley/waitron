@@ -1,3 +1,4 @@
+import { columnsFromOverrides } from "./include-folder.js";
 import { storedMenuParts } from "../test/menu-parts.js";
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
@@ -280,7 +281,7 @@ describe("language correction evidence", () => {
       const included = await addMember(tx, root, { kind: "section", sectionId: childRoot });
       await tx
         .update(sectionMembers)
-        .set({ showAsFolder: true, folderOverrides: { names: { es: "Own Spanish" } } })
+        .set({ showAsFolder: true, ...columnsFromOverrides({ names: { es: "Own Spanish" } }) })
         .where(eq(sectionMembers.id, included.id));
       return { id: included.id, childRoot };
     });
@@ -326,7 +327,7 @@ describe("language correction evidence", () => {
     expect(await listed(cell.id)).toMatchObject({ stale: true });
     expect(
       (await suite.db.select().from(sectionMembers).where(eq(sectionMembers.id, member.id)))[0]!
-        .folderOverrides.names,
+        .folderNames,
     ).toEqual({ es: "Own Spanish" });
   });
 });

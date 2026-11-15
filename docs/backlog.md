@@ -490,6 +490,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 ### Menus and the menu
 
+- **Loose ends left by A322 (#1372, an included menu can show its sections directly).** Folder photos,
+  shortcut placement and fixed values remain open.
+  [Detail](backlog/menu.md#an-included-menu-can-show-its-sections-directly-a322-1372-left-open)
+
 - **Extras list forms still have two layout limits.** [Detail](backlog/menu.md#what-1151-left-open-2026-10-03)
 
 - **A1522. One product, the right VAT eaten here or taken away (owner, 2026-11-14).** Each product

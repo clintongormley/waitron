@@ -64,7 +64,7 @@ import {
  * The other triggers a fully migrated venue carries: they stand in for the two foreign keys
  * `products.image` and `sections.image`, for `menu_version_images.filename`, keeping a photo a live
  * menu version or a queued edition names, and for the photo an include's folder names in
- * `section_members.folder_overrides`.
+ * `section_members.folder_image`.
  * Named here only because the assertion below is an EQUALITY over every non-append-only trigger.
  */
 const IMAGE_REFERENCE_TRIGGERS = [

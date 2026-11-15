@@ -1,3 +1,4 @@
+import { columnsFromOverrides } from "./include-folder.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import {
@@ -128,7 +129,7 @@ async function makeTarget(tx: Transaction, kind: string, names: Names): Promise<
           .select()
           .from(sectionMembers)
           .where(eq(sectionMembers.id, member.id));
-        return saved!.folderOverrides.names ?? null;
+        return saved!.folderNames ?? null;
       },
       async save(tx, names) {
         return setIncludeFolder(
@@ -147,7 +148,7 @@ async function makeTarget(tx: Transaction, kind: string, names: Names): Promise<
       async plant(tx, names) {
         return tx
           .update(sectionMembers)
-          .set({ folderOverrides: { names, image: null, color: "#112233" } })
+          .set({ ...columnsFromOverrides({ names, image: null, color: "#112233" }) })
           .where(eq(sectionMembers.id, member.id));
       },
     };

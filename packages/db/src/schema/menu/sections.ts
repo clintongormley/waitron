@@ -1,8 +1,19 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { menus, products } from "../menus.js";
-import { count, enumCheck, enumType, flag, id, json, label, newId, table } from "../columns.js";
-import type { IncludeFolderOverrides, SectionRole } from "@waitron/shared";
+import {
+  count,
+  jsonShapeCheck,
+  enumCheck,
+  enumType,
+  flag,
+  id,
+  json,
+  label,
+  newId,
+  table,
+} from "../columns.js";
+import type { SectionRole } from "@waitron/shared";
 
 // Not in `@waitron/shared`'s menu-document/section-types.ts: the dashboard imports that file, and
 // scripts/dashboard-browser-purity.test.ts refuses a runtime value in it.
@@ -40,6 +51,9 @@ export const sections = table(
       .on(t.ownerMenuId, t.role)
       .where(sql`${t.role} in ('menu_root','home_layout')`),
     index("sections_owner_menu_idx").on(t.ownerMenuId),
+    index("sections_image_idx")
+      .on(t.image)
+      .where(sql`${t.image} is not null`),
   ],
 );
 
@@ -54,7 +68,11 @@ export const sectionMembers = table(
     childSectionId: id("child_section_id"),
     missingName: label("missing_name"),
     showAsFolder: flag("show_as_folder").notNull().default(true),
-    folderOverrides: json<IncludeFolderOverrides>("folder_overrides").notNull().default({}),
+    folderNames: json<Record<string, string>>("folder_names"),
+    folderImage: label("folder_image"),
+    folderImageFixed: flag("folder_image_fixed").notNull().default(false),
+    folderColor: label("folder_color"),
+    folderColorFixed: flag("folder_color_fixed").notNull().default(false),
   },
   (t) => [
     foreignKey({
@@ -81,12 +99,17 @@ export const sectionMembers = table(
     index("section_members_order_idx").on(t.sectionId, t.position),
     index("section_members_child_idx").on(t.childSectionId),
     index("section_members_product_idx").on(t.productId),
-    // `->>`, not `json_extract(…, …)`: drizzle-kit splits an index expression at its commas. SQLite
-    // uses the index only for this exact expression, which media's photo delete and rename triggers,
-    // and its reads, repeat. A drizzle-kit table rebuild writes an expression index back wrongly: take this out for
-    // any generation that rebuilds the table and add it back in one of its own (CLAUDE.md §3).
+    check("section_members_folder_names_ck", jsonShapeCheck(t.folderNames, "object")),
+    check(
+      "section_members_folder_image_ck",
+      sql`${t.folderImage} is null or ${t.folderImageFixed} = 1`,
+    ),
+    check(
+      "section_members_folder_color_ck",
+      sql`${t.folderColor} is null or ${t.folderColorFixed} = 1`,
+    ),
     index("section_members_folder_image_idx")
-      .on(sql`${t.folderOverrides} ->> '$.image'`)
-      .where(sql`${t.folderOverrides} ->> '$.image' is not null`),
+      .on(t.folderImage)
+      .where(sql`${t.folderImage} is not null`),
   ],
 );

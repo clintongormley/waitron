@@ -1,3 +1,4 @@
+import { columnsFromOverrides } from "./include-folder.js";
 import { storedMenuParts } from "../test/menu-parts.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { describe, expect, it, vi } from "vitest";
@@ -96,11 +97,11 @@ async function fixture() {
       .update(sectionMembers)
       .set({
         showAsFolder: false,
-        folderOverrides: {
+        ...columnsFromOverrides({
           names: { en: "CLIENT override" },
           color: "preserved-colour",
           image: null,
-        },
+        }),
       })
       .where(eq(sectionMembers.id, member.id));
     const [unit] = await tx
@@ -283,7 +284,13 @@ describe("atomic multilingual cell saves", () => {
         .select()
         .from(sectionMembers)
         .where(eq(sectionMembers.id, ids.included_menu));
-      expect(row!.folderOverrides).toEqual({ names: {}, color: "preserved-colour", image: null });
+      expect(row).toMatchObject({
+        folderNames: null,
+        folderColor: "preserved-colour",
+        folderColorFixed: true,
+        folderImage: null,
+        folderImageFixed: true,
+      });
       expect(row!.showAsFolder).toBe(false);
     },
   );
@@ -767,11 +774,11 @@ describe("translation cell batch boundaries", () => {
     for (const row of after.members) {
       const original = before.members.find((old) => old.id === row.id)!;
       if (row.id === ids.included_menu) {
-        expect(row.folderOverrides.names).toEqual({
-          ...original.folderOverrides.names,
+        expect(row.folderNames).toEqual({
+          ...original.folderNames,
           en: "New text",
         });
-        row.folderOverrides.names = original.folderOverrides.names;
+        row.folderNames = original.folderNames;
       }
     }
     for (const row of after.units) {

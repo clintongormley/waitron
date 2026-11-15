@@ -1,3 +1,4 @@
+import { columnsFromOverrides } from "./include-folder.js";
 import { storedMenuParts } from "../test/menu-parts.js";
 import { countingSettingsReads } from "../test/fixtures.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -101,7 +102,7 @@ async function fixture(tx: Transaction) {
   );
   await tx
     .update(sectionMembers)
-    .set({ folderOverrides: { names: { en: "" }, color: "#123456" } })
+    .set({ ...columnsFromOverrides({ names: { en: "" }, color: "#123456" }) })
     .where(eq(sectionMembers.id, member.id));
   const [unit] = await tx
     .insert(units)

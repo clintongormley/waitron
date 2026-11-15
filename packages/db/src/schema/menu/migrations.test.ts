@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   captureError,
   menus,
+  mediaImages,
   CHECK_VIOLATION,
   CORE_MIGRATIONS,
   contentSuggestionJobs,
@@ -100,6 +101,66 @@ it("refuses a root section with a name and a plain section without one", async (
       { role: "section", internalName: "Starters" },
       { role: "home_layout", internalName: "Home" },
     ]),
+  );
+});
+
+it("refuses inconsistent fixed folder values and non-object names, and accepts the three folder states", async () => {
+  const [menu] = await db.insert(menus).values({ name: "Folder columns" }).returning();
+  const [section] = await db
+    .insert(sections)
+    .values({ internalName: "List", ownerMenuId: menu!.id })
+    .returning();
+  const image = `${"a".repeat(64)}.webp`;
+  await db.insert(mediaImages).values({ filename: image, names: {} });
+  const member = crypto.randomUUID();
+  await db.execute(sql`insert into section_members (id, section_id, position, missing_name)
+    values (${member}, ${section!.id}, 0, 'Missing')`);
+  for (const [column, value, check] of [
+    ["folder_image", image, "section_members_folder_image_ck"],
+    ["folder_color", "#112233", "section_members_folder_color_ck"],
+    ...["[]", "3", "nope"].map((value) => [
+      "folder_names",
+      value,
+      "section_members_folder_names_ck",
+    ]),
+  ]) {
+    const error = await captureError(() =>
+      db.execute(sql`update section_members
+      set ${sql.raw(column!)} = ${value} where id = ${member}`),
+    );
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toContain(check);
+  }
+  for (const [imageFixed, imageValue, colorFixed, colorValue, names] of [
+    [0, null, 0, null, null],
+    [1, null, 1, null, null],
+    [1, image, 1, "#112233", '{"es":"Desserts"}'],
+  ]) {
+    await db.execute(sql`update section_members set folder_image_fixed = ${imageFixed}, folder_image = ${imageValue},
+      folder_color_fixed = ${colorFixed}, folder_color = ${colorValue}, folder_names = ${names} where id = ${member}`);
+    expect(
+      (
+        await db.execute(sql`select folder_image_fixed, folder_image, folder_color_fixed, folder_color, folder_names
+      from section_members where id = ${member}`)
+      ).rows,
+    ).toEqual([
+      {
+        folder_image_fixed: imageFixed,
+        folder_image: imageValue,
+        folder_color_fixed: colorFixed,
+        folder_color: colorValue,
+        folder_names: names,
+      },
+    ]);
+  }
+});
+
+it("a lookup of sections by photo uses sections_image_idx", async () => {
+  const plan = await db.execute<{ detail: string }>(
+    sql`explain query plan select 1 from sections where image = ${"photo"}`,
+  );
+  expect(plan.rows.map((row) => row.detail).join(" ")).toContain(
+    "USING COVERING INDEX sections_image_idx",
   );
 });
 
@@ -271,6 +332,9 @@ describe("the menu tables carry no taxpayer column", () => {
       product_modifiers_one_reference_ck: `("product_modifiers"."extra_list_id" is null) <> ("product_modifiers"."option_list_id" is null)`,
       sections_root_name_ck: `("sections"."role" = 'menu_root') = ("sections"."internal_name" is null)`,
       sections_role_ck: `"sections"."role" in ('section', 'menu_root', 'home_layout')`,
+      section_members_folder_names_ck: `json_valid("section_members"."folder_names") and json_type("section_members"."folder_names") = 'object'`,
+      section_members_folder_image_ck: `"section_members"."folder_image" is null or "section_members"."folder_image_fixed" = 1`,
+      section_members_folder_color_ck: `"section_members"."folder_color" is null or "section_members"."folder_color_fixed" = 1`,
       section_members_one_ref_ck: `("section_members"."product_id" is null or "section_members"."child_section_id" is null) and (("section_members"."product_id" is null and "section_members"."child_section_id" is null) = ("section_members"."missing_name" is not null))`,
       menu_versions_number_ck: `"menu_versions"."number" >= 1`,
       menu_scheduled_publications_state_ck: `"menu_scheduled_publications"."state" in ('queued', 'activated', 'cancelled')`,
@@ -321,6 +385,7 @@ describe("the menu tables carry no taxpayer column", () => {
       product_modifiers_product_option_uq: { unique: true, columns: "product_id, option_list_id" },
       product_modifiers_product_sort_idx: { unique: false, columns: "product_id, sort" },
       units_seed_key_key: { unique: true, columns: "seed_key" },
+      sections_image_idx: { unique: false, columns: "image" },
       sections_owner_menu_idx: { unique: false, columns: "owner_menu_id" },
       section_members_product_uq: { unique: true, columns: "section_id, product_id" },
       section_members_child_uq: { unique: true, columns: "section_id, child_section_id" },
@@ -328,7 +393,7 @@ describe("the menu tables carry no taxpayer column", () => {
       section_members_child_idx: { unique: false, columns: "child_section_id" },
       section_members_product_idx: { unique: false, columns: "product_id" },
       // One expression column, which `pragma index_info` reports with no name.
-      section_members_folder_image_idx: { unique: false, columns: "" },
+      section_members_folder_image_idx: { unique: false, columns: "folder_image" },
       menu_versions_menu_number_uq: { unique: true, columns: "menu_id, number" },
       menu_versions_id_menu_key: { unique: true, columns: "id, menu_id" },
       menu_version_images_filename_idx: { unique: false, columns: "filename" },

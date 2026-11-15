@@ -296,7 +296,11 @@ describe("duplicateMenu", () => {
       expect.objectContaining({
         child: f.dessertsRoot,
         showAsFolder: false,
-        folderOverrides: { names: { en: "Sweets" }, color: "#445566" },
+        folderNames: { en: "Sweets" },
+        folderColor: "#445566",
+        folderColorFixed: true,
+        folderImage: null,
+        folderImageFixed: false,
       }),
     );
     for (const member of copied.members)

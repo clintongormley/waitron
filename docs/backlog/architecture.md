@@ -984,7 +984,7 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
   Menu code uses `@waitron/menu` and menu/product file paths. Product defaults and starter-unit
   history share `settings.menu`; translation runs store their total on the first batch only.
   The menu table, identifiers, routes and wording now use menu names; the Products screen uses
-  products names. The remaining menu table folds await the following slices.
+  products names. Menu root names now come from menus.name; include-folder names, photo and colour have their own columns. The remaining menu table folds await the following slices.
   Membership reads its term from the signed document, and an alert's handler references a person.
 
 ## Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables
@@ -997,9 +997,6 @@ Where each lands: the A1308 slice named in the design's "Lands in" column
   hex characters, `.png`, a NUL and `evil` (73 bytes) on `node:sqlite`, because `substr` stops at
   the NUL; closing it needs a migration. Found by #609 (`packages/media`), not fixable in a
   comments-only change.
-- **Loose ends left by A322 (#1372, an included menu can show its sections directly).** A folder's
-  fixed photo shows on the till only in Thumbnails mode, as a section's photo does.
-  [Detail](menu.md#an-included-menu-can-show-its-sections-directly-a322-1372-left-open)
 - **A1368. A dish waiting for the pass whose HOLD ticket printed, moved to the counter, still gets no MOVED line and no FIRE mark (left open by A1327, #2502).** At the counter the dish
   leaves its group, and the record of HOLD paper is kept per group. The fix proposed is a per-dish
   record: a schema change, held by A1308 until A760 lands. The owner chose to fix it there
