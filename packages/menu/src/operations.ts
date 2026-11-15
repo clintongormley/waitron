@@ -333,7 +333,7 @@ export async function createMenu(
     color: input.color,
   });
   const row = await insertMenu(tx, presentation.internalName!);
-  await createMenuShell(tx, row.id, row.name, presentation);
+  await createMenuShell(tx, row.id, presentation);
   return row;
 }
 

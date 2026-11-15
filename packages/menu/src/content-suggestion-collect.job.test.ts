@@ -316,7 +316,7 @@ describe("the house style", () => {
         .returning({ id: menus.id });
       await tx
         .update(sections)
-        .set({ ownerMenuId: bare!.id, role: "home_layout" })
+        .set({ ownerMenuId: bare!.id, role: "home_layout", internalName: "Other Home" })
         .where(eq(sections.id, lunch.rootId));
       expect(
         (await readHouseStyle(tx, THREE.languages)).map((example) => example.staffName),

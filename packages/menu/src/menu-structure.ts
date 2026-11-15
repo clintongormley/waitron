@@ -29,7 +29,6 @@ const HOME_SECTION_NAME = "Home";
 export async function createMenuShell(
   tx: Transaction,
   menuId: string,
-  _menuName: string,
   presentation: Partial<SectionInput> = {},
 ): Promise<{ rootSectionId: string; homeSectionId: string }> {
   const [root] = await tx

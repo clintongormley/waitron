@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { menus, sections, withTransaction, type Transaction } from "@waitron/db";
+import { menus, withTransaction, type Transaction } from "@waitron/db";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { useMenuDb } from "../test/fixtures.js";
 import { createMenu, listMenus, updateMenuDetails } from "./operations.js";
@@ -51,10 +51,8 @@ describe("menu names on creation and rename", () => {
     await seedTaxpayer(fx.db);
     const first = await app((tx) => createMenu(tx, { name: "Lunch" }));
     const second = await app((tx) => createMenu(tx, { name: "Dinner" }));
-    const root = (await app((tx) => readMenuStructure(tx, second.id))).rootSectionId;
     await app(async (tx) => {
       await tx.update(menus).set({ name: "Lunch" }).where(eq(menus.id, second.id));
-      await tx.update(sections).set({ internalName: "Lunch" }).where(eq(sections.id, root));
     });
     await app((tx) => updateMenuDetails(tx, second.id, { name: "Lunch", names: { en: "Midday" } }));
     await app((tx) => updateMenuDetails(tx, second.id, { color: "#112233" }));

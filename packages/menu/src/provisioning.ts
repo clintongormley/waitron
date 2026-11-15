@@ -111,9 +111,9 @@ export const MENU_PROVISIONING: ModuleProvisioning = {
         const [created] = await tx
           .insert(menus)
           .values({ name: starterName(STARTER_MENU_NAMES, FIRST_MENU_NAME, starter.staffLanguage) })
-          .returning({ id: menus.id, name: menus.name });
+          .returning({ id: menus.id });
         menuId = created!.id;
-        await createMenuShell(tx, menuId, created!.name);
+        await createMenuShell(tx, menuId);
         await assignMenuToVenue(tx, menuId);
       }
       return "initial menu ready";
