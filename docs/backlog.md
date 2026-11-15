@@ -798,7 +798,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A1526. A table's whole meal in one list: service steps and course firing together (owner,
   2026-11-14).** The owner approved the [design](superpowers/specs/2026-11-14-a1526-meal-flow.md)
   at 21:09 on 14 November: “Approve, all three as written (Recommended)” (watcher window picker,
-  recorded in Lane D's questions.md). Implementation and its separately reviewed plan are still open.
+  recorded in Lane D's questions.md). Claude reviewed the [four-cut build plan](superpowers/plans/2026-11-14-a1526-meal-flow-build.md), and the watcher cleared it on 15 November at 00:33; implementation remains open.
   - The department's **Tables** tab combines fixed meal moments, waiter steps and courses in one
     list. **Service** keeps orders, payment and the collection ticket. Courses keep their names
     and order; each department owns Fire now / Hold for later and each held course's reminder.

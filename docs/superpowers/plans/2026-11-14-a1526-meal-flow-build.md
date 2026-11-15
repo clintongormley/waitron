@@ -1,6 +1,6 @@
 # A1526: Tables first, then named starts and department courses
 
-**Authority:** [design](../specs/2026-11-14-a1526-meal-flow.md). Watcher, 14 November 21:09, Lane D `questions.md`: “OWNER APPROVED the design (spec head 0e94810f33)”; owner's picker choice: “Approve, all three as written (Recommended)”. This build plan is not owner-approved; Claude reviewed the first draft (249 s); watcher clearance is pending.
+**Authority:** [design](../specs/2026-11-14-a1526-meal-flow.md). Watcher, 14 November 21:09, Lane D `questions.md`: “OWNER APPROVED the design (spec head 0e94810f33)”; owner's picker choice: “Approve, all three as written (Recommended)”. The owner approved the design, not this build plan. Claude reviewed the first draft (249 s) and the simpler four-cut revision (161 s); all findings are incorporated. The watcher cleared the corrected plan at 00:33 on 15 November in Lane D’s `questions.md`, including copying the default department’s overrides for a new department.
 
 Reuse the department draft/Save, step editor/completions, order groups and reminder reckoning. Read-only source trace. Paths: `V=packages/venue-service/src`, `B=packages/db/src`, `S=apps/server/src`, `T=apps/till/src`, `D=apps/dashboard/src`. Estimates are **production; tests; docs**, added/removed, including generated changes; no new test support. Each PR targets opening within three hours.
 
