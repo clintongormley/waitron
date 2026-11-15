@@ -991,6 +991,10 @@ retain the earlier scope and the six follow-ups.
 
 - **Prep stations at phone width (watcher, 2026-11-13 23:51).** Use the existing whole-table wrapping; no per-column heading API. Remaining Spanish horizontal scrolling is accepted. The 390 px read-outs cases in `station-table.test.ts` check that headings wrap, names and read-outs stay within their cells, and Actions stays reachable; they do not pin a width or promise no scrolling for arbitrary names.
 
+- **Live declarations (A1150, owner 2026-10-27).** Allergens and diet labels take their source
+  from the live product without publishing the menu. Sent till/history declarations follow A1517
+  decision 6 below. [Design](../superpowers/specs/2026-11-15-a1150-live-product-declarations-design.md).
+
 - **Sent declarations (A1517 decision 6, owner 2026-11-11, “As recommended”).** Sent till dishes and
   Orders history detail use declarations captured at the first send, including each extra's own
   declaration. Held dishes stay live until released. Kitchen screens, paper and guest-clash checks
