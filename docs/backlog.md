@@ -680,8 +680,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   carries the old name, and a later cancellation of an earlier invoice carries the new one. Waits
   on the asesor's answer to Q37(d), S18 in `docs/compliance/asesor-questions.md`.
 
-- **Holidays yearly** (bundle of 3, size S). [Detail](backlog/service-periods.md#bundle-holidays-yearly)
-
 - **A1084. A confirmed late dish routes by the period running when it is sent, not the period the
   kitchen agreed for**
   [Detail](backlog/service-periods.md#a1084-a-confirmed-late-dish-routes-by-the-period-running-when-it-is-sent-not-the-period-the-kitchen-agreed-for)

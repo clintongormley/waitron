@@ -34,12 +34,6 @@ login behaviour; decide the future schema/contract and test it separately.
 Nothing pins which of two repeated midnights a clock change picks. The separate Hours client's
 read-window and lifecycle notes and station-cell checks are retired with that page (slice 4 Part B).
 
-## Smaller notes from the public holidays reviews
-
-There is no control to clear a chosen area back to "not
-chosen" (the route accepts it); the area names "Arán" and "Lleida, fuera del territorio de
-Arán" are Spanish data labels shown untranslated in English.
-
 ## The Business day start dialog repeats the server's conflict-counting rule
 
 The Business day start dialog works out its conflict count by repeating the server's rule for
@@ -104,15 +98,6 @@ run. What tells them apart today: the painter's heading says "standard week" or 
 the month's special-day run is joined across the gaps between its dates where a season's line
 keeps them. Options: keep purple out of the season chooser, or give the special-day marks a shape
 of their own.
-
-## Two holidays with one name in one year's list
-
-The holiday dates a
-save reads keep only each name's first date in the year (`readHolidayDates`,
-`packages/venue-service/src/holidays.ts`), so a repeating date saved on the second is stored with
-no holiday name, unless another holiday shares that day, and repeats on its month and day; in
-a later year a name with two dates is followed to the first of them, a rule nobody chose.
-Re-check when a new year's list is added.
 
 ## Loose ends left by A788
 
@@ -296,20 +281,6 @@ its id. Left open by A789 slice 3, #2051 (plan D33).
 - **A per-field department policy repair changes the trading-name default.**
   [Detail](service-periods.md#a-per-field-department-policy-repair-changes-the-trading-name-default)
 
-## Bundle: Holidays yearly
-
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Two holidays with one name in one year's list**
-  [Detail](service-periods.md#two-holidays-with-one-name-in-one-years-list)
-- **2027 data** — left open by A261 step 6 (Public holidays, #1305). Not shipped; the BOE daily
-  summaries to 2026-10-06 held no 2027 national list. Follow the yearly update once it is published
-  ([public-holidays.md](../developers/public-holidays.md)). Andalucía's own 2027 calendar (BOJA,
-  Decreto 84/2026) is not national coverage and is not shipped.
-- **Smaller notes from the public holidays reviews**
-  Left open by A261 step 6 (Public holidays, #1305).
-  [Detail](service-periods.md#smaller-notes-from-the-public-holidays-reviews)
-
 ## Bundle: Calendar marks
 
 2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -321,6 +292,12 @@ its id. Left open by A789 slice 3, #2051 (plan D33).
   Month does not. The owner's "even on the month view the special day is not shown" may mean it too.
 
 ## Decisions and deliberate limits
+
+- **A holiday name has one date per year in each place** (lane C's default, 2026-11-15, with the
+  2027 holiday data). `readHolidayDates` (`packages/venue-service/src/holidays.ts`) keeps only a
+  name's first date in a year. Rather than change that reader, the test "never gives two holidays
+  one name in a year, in any place a venue can choose" in `packages/country-es/src/holidays.test.ts`
+  fails on shipped data that gives a name two dates in one place.
 
 _2026-11-14, A1536: Seasons and Periods now have module-contributed pages beside Calendar.
 The A719/A721 window decisions below describe their earlier presentation; see
@@ -641,7 +618,7 @@ the season painter continues saving through the season-week route._
   caught: the route takes no expected address, and an area save already on its way has the same
   gap. The address-change warning names only the new city, though a province change also
   triggers it. The owner decided on 2026-10-06 not to queue these, or the clear-area control
-  (listed among the smaller notes from the public holidays reviews, above).
+  (a way to clear a chosen holiday area back to "not chosen"; the route accepts it).
 
 ### A723's plan defaults sent to the owner as an FYI
 

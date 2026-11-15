@@ -38,7 +38,8 @@ its import compares such a date with the others in its first year only (`validat
 
 - `CountryHolidayCalendar` in `packages/country/src/holidays.ts` describes shipped facts and their
   coverage. A pack without it supplies no official holidays; you can still add special days.
-- Spain's data lives in `packages/country-es/src/data/`: `es-2026.ts` holds the rows, `regions.ts`
+- Spain's data lives in `packages/country-es/src/data/`: `es-2026.ts` and `es-2027.ts` hold the
+  rows, `rows.ts` their shared builders, `regions.ts`
   maps provinces and territorial areas, and `sources.ts` holds source addresses and hashes.
   The archived pages and their provenance remain in `packages/country-es/src/data/sources/`.
 - Special days live in `special_days` and `special_day_dates`, declared in
@@ -59,7 +60,7 @@ its import compares such a date with the others in its first year only (`validat
 from the taxpayer, the province from the pack's province list, and the city from the venue.
 A missing or unknown province supplies no official facts. If the official calendar offers a
 territorial choice, choose it in the Year; until then, only facts certain for the whole province
-are shown. The 2026 territorial source notes remain in the archived sources README.
+are shown. The 2026 and 2027 territorial source notes remain in the archived sources README.
 
 An area's identity uses country, province and normalized city. Changing the address stops using
 that area's choice; choosing another area replaces it. `holidayCityKey` normalizes
@@ -130,15 +131,15 @@ The 2026 data was checked against the archived annex by a test, not by reading:
 
 What is not verified:
 
-- **Legal or payroll effect.** The data says which days the 2026 resolution lists. Whether a venue
+- **Legal or payroll effect.** The data says which days the 2026 and 2027 resolutions list. Whether a venue
   owes a holiday premium, or must close, is a question for the labour advisor and for the wage
   rules of "Wages / labour cost (SP16)" in [the backlog](../backlog.md), not something this data
   answers.
 - **Local holidays.** They are whatever the venue entered.
-- **2027.** It is not shipped. On 2026-10-06 the BOE daily summaries from 2026-08-01 to 2026-10-06
-  held no "fiestas laborales" resolution for 2027, so a 2027 read reports `missing_year`. Andalucía
-  has published its own 2027 calendar (BOJA, Decreto 84/2026), but one region's calendar is not the
-  national list, and none of it is shipped.
+- **2027.** It is shipped as `ES-2027.1` from the national list, BOE-A-2026-21254 (published
+  2026-10-13, fetched 2026-11-15), and checked against its annex by the same comparison as 2026.
+  Andalucía's own 2027 calendar (BOJA, Decreto 84/2026) is not the national list, and none of it is
+  shipped; only what the BOE annex marks for Andalucía is.
 - **Canary islands.** The island choice is built and tested from the data, but setup refuses the
   Canary provinces, so no venue reaches it yet.
 
@@ -162,15 +163,18 @@ These steps assume Spain; another country follows the same shape with its own of
    run `shasum -a 256` on it, and record the hash in `sources.ts` and in the sources `README.md`
    table with the fetch date and the resolution's publication date. For each territorial note or
    unusual cell the data depends on, write down where it sits in the annex (the row and column, or
-   the note's number), as the README does for 2026's notes 1 and 2. A moved address is not a new
+   the note's number), as the README's "2027" section does for its notes 1 and 2. A moved address is not a new
    fact. A changed hash for a page already
    shipped means the page changed: compare its rows again before shipping anything.
 4. **Transcribe and compare.** Write `es-YYYY.ts` by hand from the annex and notes, with data
    version `ES-YYYY.1`; a correction to a shipped year raises the revision (`ES-YYYY.2`). Keep every
    earlier year and every fact key unchanged, because a fact's id is `shipped:` plus its key. Keep
    each row's regions as the annex marks them. Never fill an empty cell from last year, and never
-   work out a moved Monday yourself. Point the annex comparison test at the new year and read every
-   difference it reports against the page.
+   work out a moved Monday yourself. Add the year to `SPAIN_HOLIDAY_YEARS` in
+   `packages/country-es/src/holidays.ts`; in `holidays.test.ts`, add its resolution to the source
+   artifacts' `files` map and the title-and-address `it.each`, add the year to the annex
+   comparison's `describe.each` list and the one-name check's pinned year list, and move the "not
+   yet published" case to the next year. Read every difference the comparison reports against the page.
 5. **Verify.** Run the three country suites, then the venue-service holiday suites:
 
    ```sh
@@ -195,6 +199,10 @@ These steps assume Spain; another country follows the same shape with its own of
    local-table receipt below is historical.
 
 ### Earlier data-revision receipt
+
+**2026-11-15:** 2027 shipped from BOE-A-2026-21254; the 2026 page was fetched again and its
+SHA-256 was unchanged. The annex comparison and the one-name-per-place check run over both years
+(`packages/country-es/src/holidays.test.ts`).
 
 **2026-11-10, A1308 5c:** the holiday_geographies table is dropped; the area choice below is settings.venue.holidayArea.
 

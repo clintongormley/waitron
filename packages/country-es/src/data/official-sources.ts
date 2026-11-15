@@ -2,7 +2,7 @@
  * Reads the archived BOE and INE pages in `sources/` for the holiday data's tests and its annual
  * update. Nothing the pack ships imports this file: the pack reads only the typed constants.
  */
-import type { SpanishHolidayYear } from "./es-2026.js";
+import type { SpanishHolidayYear } from "./rows.js";
 
 export interface AnnexRow {
   readonly id: string;
@@ -88,22 +88,34 @@ export function parseAnnex(xml: string): Annex {
     /^Año (\d{4})$/.exec(text(/<p class="anexo_tit">([\s\S]*?)<\/p>/.exec(body)![1]!))![1],
   );
   const table = body.slice(0, body.indexOf("</table>"));
-  const columns = [...table.matchAll(/<th axis="comunidad"[^>]*>([\s\S]*?)<\/th>/g)].map(
-    ([, header]) => text(header!).replace(/\s*\(\d+\)$/, ""),
+  // The 2026 page marks its region headers, month cells and row ids with attributes; the 2027 page
+  // has none, so its regions are the last header row and a row's id is its day and month.
+  const marked = /<th axis="comunidad"/.test(table);
+  const headerRows = [...table.matchAll(/<tr>([\s\S]*?)<\/tr>/g)].filter(([, row]) =>
+    row!.includes("<th"),
   );
+  const columns = [
+    ...(marked ? table : headerRows.at(-1)![1]!).matchAll(
+      marked ? /<th axis="comunidad"[^>]*>([\s\S]*?)<\/th>/g : /<th[^>]*>([\s\S]*?)<\/th>/g,
+    ),
+  ].map(([, header]) => text(header!).replace(/\s*\(\d+\)$/, ""));
   const rows: AnnexRow[] = [];
   let month = 0;
   for (const [, row] of table.matchAll(/<tr>([\s\S]*?)<\/tr>/g)) {
     const cells = [...row!.matchAll(/<td([^>]*)>([\s\S]*?)<\/td>/g)];
     if (cells.length === 0) continue;
     const [first, ...rest] = cells;
-    if (first![1]!.includes('axis="mes"')) {
+    if (
+      first![1]!.includes('axis="mes"') ||
+      (!marked && MONTHS.includes(text(first![2]!).toLowerCase()))
+    ) {
       month = monthNumber(text(first![2]!));
       continue;
     }
     const label = /^(\d+) (.*)\.$/.exec(text(first![2]!))!;
+    const dayMonth = `${pad(Number(label[1]))}${pad(month)}`;
     rows.push({
-      id: /id="header([^"]+)"/.exec(first![1]!)![1]!,
+      id: marked ? /id="header([^"]+)"/.exec(first![1]!)![1]! : dayMonth,
       date: `${year}-${pad(month)}-${pad(Number(label[1]))}`,
       name: label[2]!,
       marks: rest.map(([, , cell]) => text(cell!)),
@@ -119,7 +131,19 @@ export function parseAnnex(xml: string): Annex {
   const notes = [...after.matchAll(/<p class="[^"]*">(\d+\.\s[\s\S]*?)<\/p>/g)].map(([, p]) =>
     text(p!),
   );
-  return { title, year, columns, rows, codes, notes, paragraphs };
+  return { title, year, columns, rows: marked ? rows : lettered(rows), codes, notes, paragraphs };
+}
+
+/** Two rows on one date are told apart as 2026's page does, `A` and `B`, here in page order. */
+function lettered(rows: readonly AnnexRow[]): AnnexRow[] {
+  const count = (id: string) => rows.filter((row) => row.id === id).length;
+  const seen = new Map<string, number>();
+  return rows.map((row) => {
+    if (count(row.id) === 1) return row;
+    const index = seen.get(row.id) ?? 0;
+    seen.set(row.id, index + 1);
+    return { ...row, id: `${row.id}${String.fromCharCode(65 + index)}` };
+  });
 }
 
 /** Every row of every table in an HTML page, as the text of its cells. */
@@ -150,10 +174,11 @@ function line(
 export function expectedRowsFromAnnex(
   annex: Annex,
   sourceId: string,
-  columns: readonly { boe: string; region: string }[],
+  columns: readonly { boe: string; also?: readonly string[]; region: string }[],
   areaByName: (name: string) => string | undefined,
 ): string[] {
-  const regionOf = (column: string) => columns.find(({ boe }) => boe === column)!.region;
+  const regionOf = (column: string) =>
+    columns.find(({ boe, also }) => boe === column || also?.includes(column))!.region;
   const areaOf = (name: string) => {
     const key = areaByName(name);
     if (key === undefined) throw new Error(`no area is named ${name}`);
