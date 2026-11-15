@@ -60,11 +60,11 @@ for module in disk-start disk-key disk-recovery-key preboot disk-state name-tag 
 done
 install -D -m 0644 "$repo/scripts/box/upgrades/contracts.mjs" "$root/opt/waitron-host/box/upgrades/contracts.mjs"
 install -D -m 0755 "$repo/deploy/box/waitron-box.sh" "$root/usr/local/lib/waitron/waitron-box.sh"
-for unit in waitron-box.socket waitron-box@.service waitron-network-change.service; do
+for unit in waitron-box.socket waitron-box@.service waitron-network-change.service waitron-network-monitor.service; do
   install -m 0644 "$repo/deploy/box/$unit" "$root/etc/systemd/system/"
 done
 chroot "$root" groupadd --system --gid 10001 waitron-box
-systemctl --root="$root" enable waitron-box.socket waitron-network-change.service
+systemctl --root="$root" enable waitron-box.socket waitron-network-change.service waitron-network-monitor.service
 for unit in waitron-disk-start waitron-disk-ready; do
   install -m 0644 "$repo/deploy/box/$unit.service" "$root/etc/systemd/system/"
 done

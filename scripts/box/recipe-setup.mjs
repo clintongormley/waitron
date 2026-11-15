@@ -81,6 +81,8 @@ export function installedFailures(expected, installedUuid, first, again) {
       )
     )
       failures.push("host-network-reconcile");
+    if (["created", "changed", "deleted"].some((key) => boot.networkMonitor?.[key] !== true))
+      failures.push("host-network-monitor");
     if (!installedUuid || installedUuid === expected.uuid || boot.uuid !== installedUuid)
       failures.push("root-uuid");
     if (!boot.luksUuid || boot.luksUuid === boot.uuid || boot.luksUuid !== first.luksUuid)

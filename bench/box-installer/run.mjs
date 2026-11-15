@@ -578,13 +578,42 @@ const profile="/etc/NetworkManager/system-connections/b3-rehearsal.nmconnection"
 const measured=()=>cp.execFileSync("sh",["-ec",'sha256sum /boot/vmlinuz-* /boot/initrd.img-* /boot/efi/EFI/BOOT/BOOTX64.EFI'],{encoding:"utf8"});
 const before=measured(),startupCopy=${name === "again" ? 'JSON.parse(fs.readFileSync(copy)).psk==="startup-password"' : "true"};
 const load=password=>{fs.writeFileSync(profile,"[connection]\\nid=B3 rehearsal\\nuuid=22222222-2222-4222-8222-222222222222\\ntype=wifi\\nautoconnect=true\\ninterface-name=wlan-missing\\n[wifi]\\nmode=infrastructure\\nssid=65;\\n[wifi-security]\\nkey-mgmt=wpa-psk\\npsk="+password+"\\n[ipv4]\\nmethod=auto\\n",{mode:384});cp.execFileSync("nmcli",["connection","load",profile]);};
+const readStatus=()=>new Promise((resolve,reject)=>{
+  const c=net.connect("/run/waitron-box/box.sock");let text="";
+  c.setTimeout(5000,()=>{c.destroy();reject(Error("live status deadline"))});
+  c.on("connect",()=>c.write('network.read {"actor":{"source":"server"}}\\n'));
+  c.on("data",b=>text+=b);c.on("end",()=>resolve(JSON.parse(text)));c.on("error",reject);
+});
+const observe=async(label,check)=>{
+  const began=Date.now();
+  do {
+    const value=fs.existsSync(copy)?JSON.parse(fs.readFileSync(copy)):null;
+    const status=await readStatus();
+    if(status.ok===true&&check(value,status))return Date.now()-began;
+    await new Promise(resolve=>setTimeout(resolve,100));
+  } while(Date.now()-began<10000);
+  throw Error("live network copy deadline: "+label);
+};
 (async()=>{
+if(${name === "first"})cp.execFileSync("systemctl",["is-enabled","--quiet","waitron-network-monitor.service"]);
+cp.execFileSync("systemctl",["enable","--now","waitron-network-monitor.service"]);
+if(fs.existsSync(profile))cp.execFileSync("nmcli",["connection","delete","uuid","22222222-2222-4222-8222-222222222222"]);
+await observe("initial absence",(value,status)=>value===null&&status.bootCopy.state==="absent");
+load("live-first-password");
+const createdMs=await observe("create",(value,status)=>value?.psk==="live-first-password"&&status.wifi.savedSsidHex==="41"&&status.bootCopy.state==="current");
+cp.execFileSync("nmcli",["connection","modify","uuid","22222222-2222-4222-8222-222222222222","wifi-sec.psk","live-second-password"]);
+const changedMs=await observe("change",(value,status)=>value?.psk==="live-second-password"&&status.wifi.savedSsidHex==="41"&&status.bootCopy.state==="current");
+cp.execFileSync("nmcli",["connection","delete","uuid","22222222-2222-4222-8222-222222222222"]);
+const deletedMs=await observe("delete",(value,status)=>value===null&&status.wifi.savedSsidHex===null&&status.bootCopy.state==="absent");
+console.log("B3_NETWORK_MONITOR:"+JSON.stringify({created:true,changed:true,deleted:true,createdMs,changedMs,deletedMs}));
 load("rehearsal-password");cp.execFileSync("systemctl",["restart","waitron-network-change.service"]);
 const saved=JSON.parse(fs.readFileSync(copy)),savedCopy=saved.ssidHex==="41"&&saved.psk==="rehearsal-password";
 const reply=await new Promise((resolve,reject)=>{const c=net.connect("/run/waitron-box/box.sock");let text="";c.setTimeout(5000,()=>{c.destroy();reject(Error("forget deadline"))});c.on("connect",()=>c.write('network.forget {"ssidHex":"41","actor":{"source":"person","person":"rehearsal-owner"}}\\n'));c.on("data",b=>text+=b);c.on("end",()=>resolve(JSON.parse(text)));c.on("error",reject)});
 if(reply.ok!==true)throw Error("saved forget refused");cp.execFileSync("systemctl",["start","waitron-network-change.service"]);
 const state=JSON.parse(fs.readFileSync("/var/lib/waitron-host/network.json"));
 const forgotten=!fs.existsSync(copy)&&!fs.existsSync(profile)&&state.change.kind==="forget"&&state.change.state==="applied"&&state.bootCopy.state==="absent";
+cp.execFileSync("systemctl",["disable","--now","waitron-network-monitor.service"]);
+cp.execFileSync("systemctl",["start","waitron-network-change.service"]);
 load("startup-password");
 console.log("B3_NETWORK_RECONCILE:"+JSON.stringify({savedCopy,forgotten,startupCopy,measuredUnchanged:before===measured()}));
 })().catch(e=>{console.error(e);process.exitCode=1});`;
@@ -863,7 +892,8 @@ console.log("B3_NETWORK_RECONCILE:"+JSON.stringify({savedCopy,forgotten,startupC
         while (
           !rigLine(guest.serial, "B3_NETWORK:") ||
           !rigLine(guest.serial, "B3_NETWORK_OPS:") ||
-          !rigLine(guest.serial, "B3_NETWORK_RECONCILE:")
+          !rigLine(guest.serial, "B3_NETWORK_RECONCILE:") ||
+          !rigLine(guest.serial, "B3_NETWORK_MONITOR:")
         ) {
           if (Date.now() >= networkUntil) throw new Error("network probe did not finish");
           await new Promise((done) => setTimeout(done, 100));
@@ -873,6 +903,7 @@ console.log("B3_NETWORK_RECONCILE:"+JSON.stringify({savedCopy,forgotten,startupC
         observed.networkInterfaces = network.interfaces;
         observed.networkOperations = JSON.parse(rigLine(guest.serial, "B3_NETWORK_OPS:"));
         observed.networkReconcile = JSON.parse(rigLine(guest.serial, "B3_NETWORK_RECONCILE:"));
+        observed.networkMonitor = JSON.parse(rigLine(guest.serial, "B3_NETWORK_MONITOR:"));
         if (caseName === "existing-stick") {
           const until = Date.now() + 20_000;
           while (

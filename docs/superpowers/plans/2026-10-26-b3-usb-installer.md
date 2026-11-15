@@ -328,3 +328,5 @@ Self-review coverage: §§0–4 → 1.1/2.1/5.1; §5 → 2.1/2.2/6.1; §6 → 1.
 After fresh review, hand the completed artifacts to the parent for path validation, existing checks and visual work. Do not ask for a new plan approval and do not execute from this author turn. At an eventual authorised implementation branch completion, run the repository's `finish-branch` process with its required review/normal hook/current-head CI and announce readiness; do not merge without separate landing authority.
 
 **14 November 2026, Wi-Fi host slice 2a:** [The cleared cut](2026-11-14-b3-wifi-host-reconcile.md) adds host forget and startup/after-operation boot-copy reconciliation. Live outside-change monitoring, dashboard controls and physical qualification remain open; parent B3 remains 0/6.
+
+**15 November 2026, Wi-Fi host slice 2b:** [The monitor cut](2026-11-15-b3-wifi-host-monitor.md) observes outside NetworkManager changes and reuses the existing systemd worker. Dashboard controls and physical qualification remain open; parent B3 remains 0/6.

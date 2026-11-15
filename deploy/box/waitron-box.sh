@@ -151,8 +151,55 @@ clock_set() {
   answer "{\"ok\":true,\"beforeMs\":$before,\"afterMs\":$after}"
 }
 
+network_monitor() {
+  # SECONDS can tick just after a read; the extra tick keeps the full wait.
+  local monitor_pid waiter_pid="" dirty=1 due=$((SECONDS + 2)) retry=1 state rc line was_running=0
+  exec 3< <(exec stdbuf -oL nmcli monitor)
+  monitor_pid=$!
+  trap '[ -z "$waiter_pid" ] || { kill "$waiter_pid" 2>/dev/null || true; wait "$waiter_pid" 2>/dev/null || true; }; kill "$monitor_pid" 2>/dev/null || true; wait "$monitor_pid" 2>/dev/null || true; exec 3<&-' EXIT
+  trap 'exit 143' TERM INT HUP
+  while :; do
+    if [ -n "$waiter_pid" ] && ! kill -0 "$waiter_pid" 2>/dev/null; then
+      wait "$waiter_pid"; rc=$?
+      waiter_pid=""
+      if [ "$rc" = 0 ]; then
+        retry=1
+        [ "$was_running" = 0 ] || dirty=1
+      else
+        dirty=1
+        due=$((SECONDS + retry + 1))
+        retry=$((retry * 2))
+        [ "$retry" -le 60 ] || retry=60
+      fi
+    fi
+    if [ -z "$waiter_pid" ] && [ "$dirty" = 1 ] && [ "$SECONDS" -ge "$due" ]; then
+      if state="$(systemctl show --property=ActiveState --value waitron-network-change.service)"; then
+        was_running=0
+        case "$state" in active|activating|deactivating) was_running=1 ;; esac
+        dirty=0
+        systemctl start waitron-network-change.service &
+        waiter_pid=$!
+      else
+        due=$((SECONDS + retry + 1))
+        retry=$((retry * 2))
+        [ "$retry" -le 60 ] || retry=60
+      fi
+    fi
+    if IFS= read -r -t 1 line <&3; then
+      dirty=1
+    else
+      # Bash 3 gives timeout and EOF the same status; check the owned producer.
+      if ! kill -0 "$monitor_pid" 2>/dev/null; then
+        printf '%s\n' 'Wi-Fi change observer stopped.' >&2
+        exit 1
+      fi
+    fi
+  done
+}
+
 main() {
   local instance line rc arrived rest target requester reply read_limit=701
+  if [ "${1:-}" = --network-monitor ]; then network_monitor; fi
   if [ "${1:-}" = --network-change ]; then
     umask 077
     mkdir -p -m 0700 "$STATE_DIR"
