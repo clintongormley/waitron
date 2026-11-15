@@ -51,6 +51,8 @@ const HELD_SIGN_IN_REFUSALS = new Set([
   "password.invalid",
   "totp.required",
   "authorization.not_permitted",
+  "passkey.not_registered",
+  "passkey.verification_failed",
 ]);
 
 /** Refusals a fresh passkey answer can lift: no proof cookie, a lapsed one, or a used challenge. */
@@ -481,7 +483,13 @@ export class SetupHandoverScreen extends LitElement {
       "handover.copy_check_failed",
       "handover.copy_mismatch",
     ].includes(code ?? "");
-    if (cause instanceof PasskeyNotUsed || (this.usePasskey && PROOF_REFUSALS.has(code ?? "")))
+    if (
+      cause instanceof PasskeyNotUsed ||
+      (this.usePasskey &&
+        [...PROOF_REFUSALS, "passkey.not_registered", "passkey.verification_failed"].includes(
+          code ?? "",
+        ))
+    )
       return t("handover.emergency.passkey_failed");
     if (code === "password.invalid" && this.code && this.#signInChecked)
       return t("handover.emergency.code_expired");

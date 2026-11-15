@@ -370,8 +370,12 @@ interface SwitchProof {
   cookie: boolean;
   issued: string[];
   used: Set<string>;
-  /** Passkey answers refused after their challenge is taken, as a wrong key would be. */
-  refuse: number;
+  /**
+   * Codes the next passkey answers are refused with, in turn, after their challenge is taken:
+   * `passkey.verification_failed` as for a wrong key, or `passkey.not_registered` as for a passkey
+   * the copy checked does not hold.
+   */
+  refusals: string[];
 }
 const refusal = (code: string, status: number) =>
   new Response(JSON.stringify({ error: { code } }), { status });
@@ -386,10 +390,8 @@ function switchSignIn(proof: SwitchProof, path: string, signIn: unknown): Respon
     if (!proof.issued.includes(challenge) || proof.used.has(challenge))
       return refusal("passkey.challenge_expired", 400);
     proof.used.add(challenge);
-    if (proof.refuse > 0) {
-      proof.refuse -= 1;
-      return refusal("password.invalid", 401);
-    }
+    const refused = proof.refusals.shift();
+    if (refused !== undefined) return refusal(refused, 401);
     proof.cookie = true;
     return undefined;
   }
@@ -398,7 +400,7 @@ function switchSignIn(proof: SwitchProof, path: string, signIn: unknown): Respon
     ? refusal("handover.request_invalid", 400)
     : refusal("password.invalid", 401);
 }
-const newProof = (): SwitchProof => ({ cookie: false, issued: [], used: new Set(), refuse: 0 });
+const newProof = (): SwitchProof => ({ cookie: false, issued: [], used: new Set(), refusals: [] });
 /** The device's passkey answers whatever challenge it is handed; the WebAuthn library stays real. */
 function stubPasskey() {
   return vi.spyOn(navigator.credentials, "get").mockImplementation(async (request) => {
@@ -1756,7 +1758,7 @@ it("a refused passkey, or a lapsed proof, offers the passkey again rather than e
   await vi.waitFor(() => expect(q(el, "[data-test=emergency-copy]")).not.toBeNull());
   await declarationFields(el);
   proof.cookie = false;
-  proof.refuse = 1;
+  proof.refusals = ["passkey.verification_failed"];
   q(el, "[data-test=emergency-declare]").click();
   await vi.waitFor(() =>
     expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
@@ -1771,3 +1773,49 @@ it("a refused passkey, or a lapsed proof, offers the passkey again rather than e
   await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
   expect(get).toHaveBeenCalledTimes(3);
 });
+
+it.each(["passkey.not_registered", "passkey.verification_failed"])(
+  "a passkey the held copy refuses with %s goes on to the take with a fresh answer",
+  async (code) => {
+    const get = stubPasskey();
+    const proof = newProof();
+    proof.refusals = [code];
+    const { el, posts } = await mount({ proof });
+    await choosePasskey(el);
+    q(el, "[data-test=emergency-preview]").click();
+    await vi.waitFor(() => expect(q(el, "[data-test=emergency-copy]")).not.toBeNull());
+    const sent = posts
+      .filter(({ body }) => body.signIn !== undefined)
+      .map(({ path, body }) => {
+        const { clientDataJSON } = (
+          body.signIn as { passkey: { response: { clientDataJSON: string } } }
+        ).passkey.response;
+        const client = clientDataJSON.replace(/-/g, "+").replace(/_/g, "/");
+        return [
+          path.split("/").at(-1),
+          (JSON.parse(atob(client)) as { challenge: string }).challenge,
+        ];
+      });
+    expect(sent.map(([step]) => step)).toEqual(["preview", "followed"]);
+    expect(sent[0]![1]).not.toBe(sent[1]![1]);
+    expect(get).toHaveBeenCalledTimes(2);
+  },
+);
+
+it.each(["passkey.not_registered", "passkey.verification_failed"])(
+  "a passkey the take also refuses with %s says the passkey did not sign in",
+  async (code) => {
+    stubPasskey();
+    const proof = newProof();
+    proof.refusals = [code, code];
+    const { el, posts } = await mount({ proof });
+    await choosePasskey(el);
+    q(el, "[data-test=emergency-preview]").click();
+    await vi.waitFor(() =>
+      expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
+        t("handover.emergency.passkey_failed"),
+      ),
+    );
+    expect(posts.filter(({ path }) => path.endsWith("/followed"))).toHaveLength(2);
+  },
+);
