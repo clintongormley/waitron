@@ -976,6 +976,20 @@ describe("Management API staff + session routes", () => {
         error: { code: "management.request_invalid", params: { field: "locale" } },
       });
     }
+    for (const [locale, expected] of [
+      [undefined, "es-ES"],
+      [null, null],
+    ] as const) {
+      const saved = await app.request(`/management-api/staff/${staffId}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ ...details, locale }),
+      });
+      expect(saved.status).toBe(204);
+      const reread = await app.request("/management-api/staff", { headers: { cookie } });
+      const rows = (await reread.json()) as { personId: string; locale: string | null }[];
+      expect(rows.find((p) => p.personId === staffId)?.locale).toBe(expected);
+    }
   });
 
   it("create with a duplicate email → 409 person.email_taken, no row lands", async () => {
