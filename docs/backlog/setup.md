@@ -326,31 +326,6 @@ other code is not one of the start's refusals, so that start carries on past it 
 (`refusedAtStart`, `apps/server/src/first-setup-entry.ts`; read, not run). Option B, offering Keep alone
 for these boxes, is still open to the owner.
 
-## A1285: should the staged reset of a stopped join delete `secrets.env`?
-
-Left open by A947 slice 3a. A staged reset of a stopped join keeps `secrets.env` (its list in
-`runStagedReset`, `apps/server/src/reset-request.ts`, leaves it out). That was kept so a Move folder
-sealed under the box's own ring stays readable after an early-stopped join; a join that stopped
-after it replaced `secrets.env` leaves the main box's ring there. Now that the Move keeps its own
-copy (A1143), decide whether the staged reset should delete `secrets.env`.
-
-## A1284: where the environment sets the vault key, a Move or a join leaves a ring that is not the one in use
-
-Left open by A947 slice 3a. Setup mode always writes `secrets.env` with its own key
-(`ensureBoxSecrets`, called from `apps/server/src/boot.ts` in setup mode), and in trading mode a
-non-empty `WAITRON_CREDENTIALS_KEY` in the environment wins over the file
-(`apps/server/src/box-env.ts`). So on such a box a Move copies `secrets.env`, which opens rows
-sealed in setup mode but not rows sealed in trading mode. Measured with the real `ensureBoxSecrets`
-and `loadBoxEnv` in the slice's Task R review. The slice's finish-branch review (2026-11-01) then
-ran both cases in a scratch test with the key set in the environment: after a Move and a join, the
-copied ring opened neither the moved signing key nor the payment credential
-(`credentials.decrypt_failed`); and a join through the real route wrote the main box's ring to
-`secrets.env` (`apps/server/src/adopt.ts`), which the next start ignores, so the spare's new
-signing key failed `credentials.decrypt_failed`. No production box sets the key in the environment
-today (`deploy/` names none); a cloud profile can (`box-env.ts`). Decide whether the Move should
-record the key in use or refuse to copy, and whether a join should refuse before any write when
-the environment's key would hide the ring it receives.
-
 ## A1186. The setup tour offers Waitron Cloud's level-2 trial (owner, 2026-10-29).
 
 - **A1186. The setup tour offers Waitron Cloud's level-2 trial (owner, 2026-10-29).** Setup
@@ -490,18 +465,6 @@ the server-wide timeout. No new timeout policy is built by the streamed-upload c
 - **No Recover from backup when the setup's own record cannot be read.** The only way out is a
   reinstall. Left open by A1131bc slice 3.
   [Detail](setup.md#no-recover-from-backup-when-the-setups-own-record-cannot-be-read)
-
-## Bundle: The key ring after a join
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A1285: should the staged reset of a stopped join delete `secrets.env`?** Left open by A947
-  slice 3a.
-  [Detail](setup.md#a1285-should-the-staged-reset-of-a-stopped-join-delete-secretsenv)
-- **A1284: where the environment sets the vault key, a Move or a join leaves a ring that is not the
-  one in use.** A joined spare then cannot open its own signing key after a restart. Left open by
-  A947 slice 3a.
-  [Detail](setup.md#a1284-where-the-environment-sets-the-vault-key-a-move-or-a-join-leaves-a-ring-that-is-not-the-one-in-use)
 
 ## Starter courses for Italy
 

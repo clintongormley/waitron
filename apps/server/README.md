@@ -381,6 +381,11 @@ it:
   still decrypt while `rotate` re-seals them under the current one. Setting one without the other is
   a boot-time `credentials.key_ring_incomplete` failure, not a runtime surprise later.
 
+Any of the four set non-empty in the environment wins over `secrets.env` at every start, in setup
+mode as in trading (`loadBoxEnv`, `src/box-env.ts`). So joining another box as its spare refuses
+`mirror.environment_key_differs`, before writing anything, while one of them differs from the main
+box's ring, and a Start again Move's copy of the ring holds the environment's values.
+
 Use `packages/credentials`'s CLI to provision and rotate credentials (`fiscal.aeat`,
 `payments.stripe`, `payments.sumup`), for example
 `waitron-credentials set --purpose fiscal.aeat` with the JSON payload on stdin. That CLI refuses a
