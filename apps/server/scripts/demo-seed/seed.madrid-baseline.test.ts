@@ -804,6 +804,12 @@ for (const locale of ["en", "es"] as const) {
         { name: "set_lunch", type: "INTEGER", notnull: 1, dflt_value: "false", pk: 0 },
       );
       for (const row of Object.values(products.rows)) row.set_lunch = 0;
+      products.columns.splice(
+        products.columns.findIndex((column) => column.name === "vat_class") + 1,
+        0,
+        { name: "takeaway_vat_class", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
+      );
+      for (const row of Object.values(products.rows)) row.takeaway_vat_class = null;
       products.columns = products.columns.filter(
         (column) => !["recipe_derivation", "diet_derivation"].includes(column.name),
       );
@@ -826,16 +832,29 @@ for (const locale of ["en", "es"] as const) {
         },
       );
       for (const row of Object.values(contexts.rows)) row.sent_nutrition = null;
+      type Classed = { vatClass: string; takeawayVatClass?: string };
       for (const row of Object.values(expected[phase].tables.menu_versions!.rows)) {
         const document = row.document as {
+          format: number;
           offers: Record<
             string,
-            { dietDerivation?: unknown; variants: { dietDerivation?: unknown }[] }
+            Classed & {
+              dietDerivation?: unknown;
+              variants: (Classed & { dietDerivation?: unknown })[];
+              offeredModifiers: ({ kind: "extras"; items: Classed[] } | { kind: "options" })[];
+            }
           >;
         };
+        document.format = 4;
         for (const offer of Object.values(document.offers)) {
           delete offer.dietDerivation;
           for (const variant of offer.variants) delete variant.dietDerivation;
+          for (const copy of [
+            offer,
+            ...offer.variants,
+            ...offer.offeredModifiers.flatMap((list) => (list.kind === "extras" ? list.items : [])),
+          ])
+            copy.takeawayVatClass = copy.vatClass;
         }
       }
       expected[phase] = madridWithNameChanges(expected[phase], []);

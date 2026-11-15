@@ -805,13 +805,15 @@ describe("the takeaway VAT class", () => {
       ]),
       languages,
     );
-    expect(patched.offers[lemonade]!.variants.find((v) => v.id === f.large)).toMatchObject({
-      takeawayVatClass: "zero",
-    });
-    for (const list of extrasLists(patched, f.extrasList))
-      expect(list.items.find((item) => item.productId === f.extraLemon)).toMatchObject({
-        takeawayVatClass: "super_reduced",
-      });
+    const expected = structuredClone(document);
+    expected.offers[lemonade]!.variants.find((v) => v.id === f.large)!.takeawayVatClass = "zero";
+    const items = extrasLists(expected, f.extrasList).map((list) =>
+      list.items.find((item) => item.productId === f.extraLemon)!,
+    );
+    expect(items).toHaveLength(2);
+    for (const item of items) item.takeawayVatClass = "super_reduced";
+    // Everything else, every other copy and both served classes included, is as it was.
+    expect(patched).toEqual(expected);
   });
 
   it("refuses a takeaway class that is not a VAT class", () => {
@@ -828,8 +830,13 @@ describe("the takeaway VAT class", () => {
   });
 
   it("patching only the served class leaves the takeaway class as the live menu holds it", async () => {
-    const { f, document } = await liveLunch(takeawayZero);
+    // Lemonade has no takeaway class of its own, so the menu holds its served class for both.
+    const { f, document } = await liveLunch();
     const lemonade = await menuItem(f, f.lemonade);
+    expect(document.offers[lemonade]).toMatchObject({
+      vatClass: "reduced",
+      takeawayVatClass: "reduced",
+    });
     const patched = applyMenuPatch(
       document,
       parseMenuPatch([
@@ -839,7 +846,7 @@ describe("the takeaway VAT class", () => {
     );
     expect(patched.offers[lemonade]).toMatchObject({
       vatClass: "general",
-      takeawayVatClass: "zero",
+      takeawayVatClass: "reduced",
     });
   });
 });
