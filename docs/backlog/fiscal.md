@@ -1113,8 +1113,8 @@ real day as `FechaOperacion` when it differs from its own date; it is built but 
 (`FULL_INVOICE_REPLACEMENT_ON`). The owner, 2026-11-15 01:58, relayed by the watcher: "the operation
 date is when the table closes, which normally coincides with the invoice date", and "where an
 invoice is issued days after the meal finished … the operation date and the invoice date should be
-distinct". So a replacement corrective, R4 and R5 alike, is to print a "Date of the sale" row with
-that real day when it differs from its own issue date (Task 3a of the
+distinct". So a replacement corrective, R4 and R5 alike, prints a "Date of the sale" row with that
+real day when it differs from its own issue date (Task 3a of the
 [A1407 plan](../superpowers/plans/2026-11-15-a1407-full-invoice-replacement.md)). The owner's
 reading has two parts: the creation-date rule above covers an invoice issued at the end of the meal,
 when the table closes, which normally coincides with the invoice date; an invoice issued days after
