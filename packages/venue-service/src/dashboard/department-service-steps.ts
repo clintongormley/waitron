@@ -48,7 +48,7 @@ export class DepartmentServiceSteps extends LitElement {
         border-inline-start: var(--wt-space-1) solid var(--wt-color-primary);
       }
       h4 wt-icon {
-        color: var(--wt-color-primary);
+        color: var(--wt-color-primary-text);
         margin-inline-end: var(--wt-space-2);
       }
       tbody td {

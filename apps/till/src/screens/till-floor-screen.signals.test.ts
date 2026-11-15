@@ -152,7 +152,9 @@ describe("till-floor-screen: the signals at a table", () => {
   });
 
   it("draws a due Take order step as a chip with its stored name", async () => {
-    const el = await mountFloor([table({ signals: [dueStepSignal("Take order")] })]);
+    const el = await mountFloor([
+      table({ signals: [dueStepSignal("Take order", new Date(now).toISOString())] }),
+    ]);
     expect(chips(card(el, "t2"))).toEqual(["Take order"]);
   });
 
@@ -207,7 +209,7 @@ describe("till-floor-screen: the signals at a table", () => {
     const el = await mountFloor([
       table({
         signals: [
-          dueStepSignal("Take order"),
+          dueStepSignal("Take order", new Date(now).toISOString()),
           ready(["bar", "Bar", 3], ["kitchen", "Kitchen", 1]),
           { kind: "long_wait", band: "overdue" },
           { kind: "held_unavailable", groupId: "g2", lineNames: ["Steak"] },
@@ -318,7 +320,9 @@ describe("till-floor-screen: what each station has ready", () => {
   });
 
   it("is not shown while nothing is ready", async () => {
-    const el = await mountFloor([table({ signals: [dueStepSignal("Take order")] })]);
+    const el = await mountFloor([
+      table({ signals: [dueStepSignal("Take order", new Date(now).toISOString())] }),
+    ]);
     expect(el.shadowRoot!.querySelector("[data-station-summary]")).toBeNull();
   });
 

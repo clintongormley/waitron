@@ -143,13 +143,16 @@ async function typeInto(input: Updatable, text: string): Promise<void> {
   if (text !== "") await userEvent.type(field, text);
 }
 
-it("marks waiter steps with the shared primary colour and a bell", async () => {
+it("marks waiter steps with the shared primary colour and the step icon", async () => {
   const el = await mount();
   el.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
+  el.style.setProperty("--wt-color-primary-text", "rgb(4, 5, 6)");
   const cell = rows(el)[0]!.firstElementChild!;
   expect(getComputedStyle(cell).borderInlineStartColor).toBe("rgb(1, 2, 3)");
   expect(parseFloat(getComputedStyle(cell).borderInlineStartWidth)).toBeGreaterThan(0);
-  expect(q(el, 'h4 wt-icon[name="floor-step"]')).not.toBeNull();
+  const icon = q(el, 'h4 wt-icon[name="floor-step"]');
+  expect(icon).not.toBeNull();
+  expect(getComputedStyle(icon!).color).toBe("rgb(4, 5, 6)");
 });
 
 it("draws each step's name, start and minutes under Step and Starts", async () => {
