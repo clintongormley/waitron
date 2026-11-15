@@ -52,6 +52,10 @@ export function createClockWatch(deps: {
       latest: (tx: Transaction, abovePosition: number) => Promise<FutureDateRefusal | null>;
     };
   };
+  /** Read at every look, whatever the start's state, outside the correction's turn: boot hands
+   * the shared one-minute reading of a host wrapped by `keepTimeServiceOn`, so reading it is
+   * what switches a switched-off time service back on without waiting for a request. */
+  readTimeService?: () => Promise<unknown>;
   log: Logger;
   wall?: () => number;
   /** The steady clock; the boot reader's elapsed time when absent, which counts a suspend, so
@@ -180,6 +184,13 @@ export function createClockWatch(deps: {
     if (stopped) return;
     try {
       await deps.correction?.writePending();
+    } catch (error) {
+      deps.log("warn", "clock_watch.check_failed", { errorCode: codeOf(error) });
+    }
+    if (stopped) return;
+    // Last, since it may wait for the host to switch the service on.
+    try {
+      await deps.readTimeService?.();
     } catch (error) {
       deps.log("warn", "clock_watch.check_failed", { errorCode: codeOf(error) });
     }

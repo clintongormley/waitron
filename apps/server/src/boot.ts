@@ -3787,6 +3787,7 @@ async function bootServer(
           (await nodeBackend.latestFutureDateRefusal?.(tx, chainNodeId, abovePosition)) ?? null,
       },
     },
+    readTimeService: readClockService,
     log,
     monotonic: boxBoot.elapsed,
   });

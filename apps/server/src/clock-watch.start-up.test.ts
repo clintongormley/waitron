@@ -20,6 +20,8 @@ function harness(
     host?: () => Promise<ClockServiceStatus>;
     startState?: StartClockState;
     heads?: () => Promise<Record<string, number>>;
+    /** Hands the watch the same shared reading to read at every look, as boot does. */
+    readTimeService?: boolean;
   } = {},
 ) {
   let wallMs = options.startMs ?? START_MS;
@@ -46,10 +48,25 @@ function harness(
       : sharedClockServiceReading({ clockStatus: host }, () => new Date(wallMs));
   const clockStatus = reading === undefined ? undefined : vi.fn(reading.read);
   const clearClockStatus = reading?.clear;
+  const readTimeService =
+    options.readTimeService === true && reading !== undefined ? vi.fn(reading.read) : undefined;
   let steps = 0;
+  let inTurnNow = false;
+  const hostReadsInTurn: boolean[] = [];
+  host?.mockImplementation(async () => {
+    hostReadsInTurn.push(inTurnNow);
+    return options.host!();
+  });
   const correction = {
     steps: () => steps,
-    inTurn: <T>(fn: () => Promise<T>) => fn(),
+    inTurn: async <T>(fn: () => Promise<T>) => {
+      inTurnNow = true;
+      try {
+        return await fn();
+      } finally {
+        inTurnNow = false;
+      }
+    },
     writePending: vi.fn(async () => {}),
   };
   const startState = options.startState ?? startClockState();
@@ -68,6 +85,7 @@ function harness(
     ...(clockStatus === undefined
       ? {}
       : { start: { state: startState, clockStatus, clearClockStatus, heads } }),
+    ...(readTimeService === undefined ? {} : { readTimeService }),
   });
 
   async function tick() {
@@ -98,7 +116,9 @@ function harness(
     logs,
     tick,
     host,
+    hostReadsInTurn,
     clockStatus,
+    readTimeService,
     startState,
     heads,
     transaction,
@@ -201,6 +221,41 @@ describe("the clock watch and the start check", () => {
     expect(h.clockStatus).not.toHaveBeenCalled();
     expect(h.heads).not.toHaveBeenCalled();
     expect(startLogs(h)).toEqual([]);
+  });
+});
+
+describe("the clock watch's regular reading of the time service", () => {
+  it("reads it at every look once the start is confirmed by the internet, one host read a minute, outside the correction's turn", async () => {
+    const startState = startClockState();
+    startState.confirm("by_internet", {});
+    const h = harness({ host: async () => SYNCHRONISED, startState, readTimeService: true });
+    for (let look = 0; look < 4; look++) await h.tick();
+    expect(h.readTimeService).toHaveBeenCalledTimes(4);
+    expect(h.host).toHaveBeenCalledTimes(1);
+    await h.tick();
+    expect(h.host).toHaveBeenCalledTimes(2);
+    expect(h.hostReadsInTurn).toEqual([false, false]);
+    // The start check itself still asks nothing.
+    expect(h.clockStatus).not.toHaveBeenCalled();
+    expect(h.heads).not.toHaveBeenCalled();
+  });
+
+  it("logs a reading that fails rather than failing the look", async () => {
+    const startState = startClockState();
+    startState.confirm("by_internet", {});
+    const h = harness({
+      host: async () => {
+        throw new Error("host gone");
+      },
+      startState,
+      readTimeService: true,
+    });
+    await h.tick();
+    expect(h.readTimeService).toHaveBeenCalledTimes(1);
+    expect(h.logs).toContainEqual({
+      event: "clock_watch.check_failed",
+      fields: { errorCode: "unknown" },
+    });
   });
 });
 

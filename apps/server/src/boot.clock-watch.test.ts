@@ -27,6 +27,8 @@ const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 
 const seen = vi.hoisted(() => ({
   stops: [] as { calls: number }[],
+  watches: [] as { check(): Promise<void> }[],
+  readings: [] as { clear(): void }[],
 }));
 
 vi.mock("./clock-watch.js", async (importOriginal) => {
@@ -37,6 +39,7 @@ vi.mock("./clock-watch.js", async (importOriginal) => {
       const watch = actual.createClockWatch(...args);
       const seenStop = { calls: 0 };
       seen.stops.push(seenStop);
+      seen.watches.push(watch);
       return {
         ...watch,
         halt: () => {
@@ -44,6 +47,17 @@ vi.mock("./clock-watch.js", async (importOriginal) => {
           return watch.halt();
         },
       };
+    },
+  };
+});
+vi.mock("./clock-service-reading.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./clock-service-reading.js")>();
+  return {
+    ...actual,
+    sharedClockServiceReading: (...args: Parameters<typeof actual.sharedClockServiceReading>) => {
+      const reading = actual.sharedClockServiceReading(...args);
+      seen.readings.push(reading);
+      return reading;
     },
   };
 });
@@ -58,6 +72,8 @@ let scratch: string;
 
 beforeEach(async () => {
   seen.stops.length = 0;
+  seen.watches.length = 0;
+  seen.readings.length = 0;
   vi.mocked(menuActivationJob).mockClear();
   scratch = await mkdtemp(join(tmpdir(), "waitron-boot-clock-watch-"));
 });
@@ -115,6 +131,36 @@ describe("boot's clock watch", () => {
     await expect(startServer(env, env)).rejects.toThrow("menu activation failed");
     expect(seen.stops).toHaveLength(1);
     expect(seen.stops[0]!.calls).toBe(1);
+  });
+
+  it("switches a time service found off back on at a look, after a start confirmed by the internet", async () => {
+    let service: "on" | "off" = "on";
+    const timeServiceOn = vi.fn(async () => ({ available: true as const }));
+    const host: BoxHostClient = {
+      clockStatus: async () => ({
+        available: true,
+        service,
+        unit: service === "on" ? "chrony.service" : null,
+        synchronised: service === "on",
+        lastSyncAt: null,
+      }),
+      setClock: async () => ({ available: false, reason: "missing" }),
+      timeServiceOn,
+    };
+    const env = await tradingEnv();
+    const server = await startServer(env, env, { boxHost: host });
+    try {
+      expect(timeServiceOn).not.toHaveBeenCalled();
+      service = "off";
+      // A minute passing, without waiting for one: the shared reading forgets its answer.
+      expect(seen.readings).toHaveLength(1);
+      seen.readings[0]!.clear();
+      expect(seen.watches).toHaveLength(1);
+      await seen.watches[0]!.check();
+      expect(timeServiceOn).toHaveBeenCalledTimes(1);
+    } finally {
+      await server.close();
+    }
   });
 
   it("serves a till's check of the time, handing the set to the host as a staff member's", async () => {
