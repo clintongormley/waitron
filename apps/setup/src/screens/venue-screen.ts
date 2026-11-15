@@ -275,8 +275,8 @@ export class SetupVenueScreen extends LitElement {
    * Next until the operator presses it again. */
   @property() errorMessage?: string;
 
-  /** A field path the server refused (`setup.request_invalid`'s `params.field`), routed back by the
-   * shell. */
+  /** A field path the server refused (the `params.field` of `setup.request_invalid` or
+   * `venue.detail_invalid`), routed back by the shell. */
   @property() invalidField?: string;
 
   @state() private values: Record<TextField, string> = {

@@ -1688,8 +1688,9 @@ export class SetupApp extends LitElement {
   }
 
   /**
-   * A venue-data refusal (`provisioning.*`, `fiscal.*`) would fail again on a re-POST of the same
-   * data, so it routes back to the venue form rather than offering a retry.
+   * A venue-data refusal (`provisioning.*`, `fiscal.*`, or a `setup.request_invalid` /
+   * `venue.detail_invalid` naming a field the venue form shows) would fail again on a re-POST of the
+   * same data, so it routes back to the venue form rather than offering a retry.
    */
   #mapProvisionError(error: ApiError): void {
     // A network drop rejects with a bare `TypeError`, which carries no `code`.
@@ -1703,7 +1704,8 @@ export class SetupApp extends LitElement {
       return;
     }
     switch (code) {
-      case "setup.request_invalid": {
+      case "setup.request_invalid":
+      case "venue.detail_invalid": {
         const field = typeof error.params?.field === "string" ? error.params.field : undefined;
         // The same list the venue form marks and explains from, so a path can never route back to a
         // form that has nothing to say about it.

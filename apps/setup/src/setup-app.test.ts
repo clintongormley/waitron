@@ -1508,6 +1508,31 @@ describe("setup-app", () => {
     expect(next.disabled).toBe(false);
   });
 
+  it("sends a refused start-of-day time back to the venue form with the field explained", async () => {
+    const provision = vi.fn().mockRejectedValue({
+      code: "venue.detail_invalid",
+      params: { field: "dayCutover", reason: "cutover" },
+      status: 400,
+    });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-provisioning]")).toBeNull();
+    const venue = await screenHost(el, "venue");
+    const input = venue.shadowRoot!.querySelector<
+      HTMLElement & { error: string; updateComplete: Promise<unknown> }
+    >("wt-input[name=dayCutover]")!;
+    await input.updateComplete;
+    expect(input.hasAttribute("invalid")).toBe(true);
+    expect(input.error).toBe(
+      "That is not a time of day. Enter one from 00:00 to 23:59, such as 04:00.",
+    );
+    const next = venue.shadowRoot!.querySelector("[data-test=next]") as HTMLElement & {
+      disabled: boolean;
+    };
+    expect(next.disabled).toBe(false);
+  });
+
   it("still routes a field the fiscal seat does not refuse to the review banner", async () => {
     const provision = vi
       .fn()

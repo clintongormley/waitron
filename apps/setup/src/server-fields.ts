@@ -11,7 +11,8 @@ export type ServerFieldKey =
   | "seriesCode"
   | "fullSeriesCode"
   | "rectificativeSeriesCode"
-  | "staffLanguage";
+  | "staffLanguage"
+  | "dayCutover";
 
 export interface ServerField {
   readonly key: ServerFieldKey;
@@ -65,6 +66,12 @@ export const VENUE_SERVER_FIELDS: Readonly<Record<string, ServerField | undefine
     key: "taxpayerDomicile",
     get message() {
       return t("server_fields.taxpayer_domicile");
+    },
+  },
+  dayCutover: {
+    key: "dayCutover",
+    get message() {
+      return t("server_fields.day_cutover");
     },
   },
 };
