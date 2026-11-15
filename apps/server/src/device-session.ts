@@ -66,6 +66,9 @@ export function setDeviceCookie(
   venueDomain?: string,
 ): void {
   const domain = cookieDomainFor(c.req.header("host"), venueDomain);
+  // A host-only cookie from before would be sent ahead of the domain one. It is expired FIRST: a
+  // browser that keys both as one entry would otherwise delete the cookie just set.
+  if (domain !== undefined) deleteCookie(c, DEVICE_COOKIE, { path: "/" });
   setCookie(c, DEVICE_COOKIE, value, {
     httpOnly: true,
     secure,
@@ -80,7 +83,8 @@ export function setDeviceCookie(
  * original cookie. */
 export function clearDeviceCookie(c: Context, venueDomain?: string): void {
   const domain = cookieDomainFor(c.req.header("host"), venueDomain);
-  deleteCookie(c, DEVICE_COOKIE, { path: "/", ...(domain === undefined ? {} : { domain }) });
+  deleteCookie(c, DEVICE_COOKIE, { path: "/" });
+  if (domain !== undefined) deleteCookie(c, DEVICE_COOKIE, { path: "/", domain });
 }
 
 export function readDeviceCookie(c: Context): string | null {
