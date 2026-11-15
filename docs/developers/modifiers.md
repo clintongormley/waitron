@@ -87,7 +87,8 @@ the list was disabled after publication. Ordinary inactive-list management can s
 Older published versions may contain fewer choices; this is not a published-version guarantee.
 
 An **extras list** bounds how many picks it takes — `minPicks` 0 makes it optional, 1 or more makes
-it required, and `maxPicks` null leaves it uncapped. A maximum must be at least 1. Each item bounds its own product with
+it required, and `maxPicks` null leaves it uncapped. A maximum must be at least 1. Each item bounds
+its own product with
 `maxQuantity` (at least 1, where 1 means "one or none", or null for no item limit). An item names a product and adds only the
 terms of the offer: it duplicates none of the product's names, VAT class, allergens, dietary labels
 or photo, which all come from the product. Each item stores the amount one pick adds in the
