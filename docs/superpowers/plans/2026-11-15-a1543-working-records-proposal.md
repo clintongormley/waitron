@@ -1,7 +1,8 @@
 # A1543: audit approach for the working-records proposal
 
-**Authority and gate.** Lane J `queue.md:70–74` records the ask and the owner's
-2026-11-15 12:38 “start now”. This authorises the proposal, not retention periods.
+**Authority and gate.** Lane J `queue.md`, A1543, records the proposal ask;
+the watcher at 2026-11-15 12:53 records “The owner said ‘start now’ on A1543 (12:38)”.
+This authorises the proposal, not retention periods.
 Before the audit starts, the driver supplies Claude a brief quoting that ask,
 obtains a completed plan read, addresses findings and obtains watcher clearance.
 This is an audit plan, not a trimming design or an approved policy.
@@ -20,14 +21,17 @@ paths there are incomplete orientation, not a completed audit.
    `kitchen_print_jobs`, `working_line_contexts`, `kitchen_print_job_lines`.
    Catch “smaller ones” by reconciling the full sample table/index inventory with
    core/module classifications; enumerate remaining growing working tables and
-   linked parents, including `working_orders`. Record exclusions and reasons.
+   linked parents, including `working_orders`, `attendance_day_work`,
+   `attendance_response_commands` and `kitchen_notices`. Record exclusions and reasons.
    Classifications describe storage roles, not permission to trim.
 2. **Trace before choosing.** The driver follows every reader through its callers
    to screens, exports, reports, jobs and replays. Search SQL names, camelCase
    symbols, schema barrels, raw SQL, triggers, JSON and plain-id references;
    reconcile incoming links with actual SQLite foreign keys. Record exact
    `file:line` paths, cascade effects and append-only anchors. An append-only
-   foreign key keeps its target. Evidence of who did what/when, working time,
+   foreign key keeps its target. Kept rows also keep their restrict/no-action targets;
+   cascade/set-null links into kept rows block trimming their parents.
+   Evidence of who did what/when, working time,
    served dishes or allergies stays. Split mixed row classes; names alone justify
    no cutoff. Verify `attendance-facts.ts:44–48`, workforce `personal-data.ts:156–167`,
    discovery's missing-cursor restart (`attendance-discovery.ts:423–426`), and
@@ -39,10 +43,17 @@ paths there are incomplete orientation, not a completed audit.
    30-day fixture or regenerate through existing `apps/server/scripts/bench/cli.ts`:
    from `apps/server`, `pnpm bench build --out <absolute-owned-scratch> --days 30 --bills-per-day 250 --seed 1`.
    Follow testing-guide's bench instructions and current README boundaries.
-   Verify box-matching `node:sqlite` SQLite/STAT4, revision, profile and final clock.
-   Reuse A1532's measurement method/print baseline. On independent disposable
-   copies only, probe justified periods; record eligible/kept counts, table/index
+   Record the sample's Node/SQLite/STAT4, revision, profile and final clock;
+   make no box-planner or cross-runtime claims. Reuse A1532's byte-measurement method.
+   The bench does not run print housekeeping: report absolute table bytes and state
+   that shares with untrimmed print payloads are not comparable with A1531's.
+   Interpret “no deletion” as no real-data deletion or trim implementation; ask the
+   watcher to confirm synthetic-copy probes, falling back to eligibility counts if refused.
+   On independent freshly built disposable copies under owned scratch only, probe
+   justified periods; record eligible/kept counts at the final clock, table/index
    `dbstat`, freelist, file and compact-copy bytes, plus an unchanged control.
+   A period at least as long as the sample may save nothing: report that result;
+   label average daily growth and projected kept-window bytes derived, not measured savings.
    Distinguish reusable pages from smaller files; explain synthetic-sample limits.
    No new byte claims without runs.
 
