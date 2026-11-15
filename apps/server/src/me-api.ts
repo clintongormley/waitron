@@ -353,7 +353,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   // No session is required: this exposes only public identity and languages.
   app.get("/management-api/locales", (c) =>
     run(c, log, async () => {
-      const venueName = await asStaff(readVenueName);
+      const venueName = await deps.db.withWriteLock(() => readVenueName(deps.db));
       c.header("Vary", "Accept-Language");
       return c.json({
         locales: SUPPORTED_LOCALES,
@@ -368,15 +368,15 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   app.get("/management-api/session/me", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const { personId, authority, email, locale, venueName, expiresAt } = await asStaff(
-        async (tx) => {
+      const { personId, authority, email, locale, venueName, expiresAt } =
+        await deps.db.withWriteLock(async () => {
+          const tx = deps.db;
           const session = await resolveManagementSession(tx, sessionId, { touch: false });
           return {
             ...session,
             venueName: await readVenueName(tx),
           };
-        },
-      );
+        });
       // This body describes ONE person in ONE browser: it turns on the session cookie AND on
       // Accept-Language, so no cache may keep a copy, and any cache that ignores `no-store` must at
       // least key on the language it varies by.

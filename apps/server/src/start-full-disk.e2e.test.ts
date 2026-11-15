@@ -100,6 +100,12 @@ import { mountPrintApi } from "./print-api.js";
 import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
 import { timeRecordPersonalData } from "./personal-data-time-record.js";
 import { mountInvoiceCustomerDataApi } from "./invoice-customer-data-api.js";
+import { mountThemesApi } from "./themes-api.js";
+import { mountMeApi } from "./me-api.js";
+import { mountMenuApi } from "./menu-api.js";
+import { mountScheduleApi } from "./schedule-api.js";
+import { mountTillApi } from "./till-api.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { START_AGAIN_PAGE_WORDS } from "./i18n/start-again-page.js";
 import { escapeHtml } from "./html-page.js";
 import {
@@ -107,7 +113,8 @@ import {
   readStaffNoticesInTurns,
   type OwnedStaffNoticeSource,
 } from "./staff-notices.js";
-import { provisionBillVenue } from "./testing/bill-venue.js";
+import { provisionBillVenue, seatedWith } from "./testing/bill-venue.js";
+import { parkOrder } from "./working-order.js";
 import { freePorts } from "./testing/free-ports.js";
 import { REQUIRE_FULL_DISK, openSmallDisk, type SmallDisk } from "./testing/full-disk.js";
 import { systemClock } from "./till-backend.js";
@@ -294,6 +301,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
   let root: string | undefined;
   let store: Awaited<ReturnType<typeof openVenueDatabase>> | undefined;
   let app: Hono;
+  let bootstrapApp: Hono;
   let db: Database;
   let diskState: DiskFullState;
   let logDir: string;
@@ -468,6 +476,41 @@ describe("the Box status read and free-space deletion on a real full disk", () =
       },
       () => {},
     );
+    bootstrapApp = new Hono();
+    bootstrapApp.use("*", async (c, next) => {
+      if (c.req.header("x-waitron-live") === "1") await withPassiveManagementRead(next);
+      else await next();
+    });
+    mountThemesApi(bootstrapApp, { db }, () => {});
+    mountMenuApi(bootstrapApp, { db, venueLocale: "en-GB" }, () => {});
+    mountMeApi(
+      bootstrapApp,
+      {
+        db,
+        venueLocale: "en-GB",
+        modules: ["core"],
+        credentialKeyRing: { current: { version: 1, key: Buffer.alloc(32, 4) } },
+      },
+      () => {},
+    );
+    mountTillApi(
+      bootstrapApp,
+      {
+        admission: testTradingAdmission(),
+        db,
+        backend: new FakeFiscalBackend(db),
+        clock: systemClock(),
+        cfg: {
+          nodeId: brandNodeId(nodeId),
+          locale: "en-GB",
+          tipsEnabled: false,
+          simplifiedInvoiceLimit: null,
+        },
+        secureCookies: false,
+        venueLocale: "en-GB",
+      },
+      () => {},
+    );
     mountDiskStopApi(
       app,
       {
@@ -533,6 +576,79 @@ describe("the Box status read and free-space deletion on a real full disk", () =
     );
     return at;
   };
+
+  it.each([
+    ["/api/theme", { css: "", logo: null }],
+    ["/api/content-languages", { defaultLanguage: "en", languages: ["en"] }],
+    ["/management-api/locales", { venueName: "Test SL", venueDefault: "en-GB" }],
+    ["/management-api/session/me", { venueName: "Test SL", modules: ["core"] }],
+    ["/management-api/themes", { themes: [], inUse: null }],
+    ["/api/till", { venueName: "Test SL", nif: "40000001K" }],
+  ])("%s answers with a change waiting, passive and active", async (path, expected, ctx) => {
+    const small = needDisk(ctx);
+    await withTransaction(db, () => {});
+    let stamp = seenAMinuteAgo();
+    const read = (passive: boolean) =>
+      bootstrapApp.request(path, {
+        headers: { cookie: manager.cookie, ...(passive ? { "x-waitron-live": "1" } : {}) },
+      });
+    const healthy = await read(false);
+    expect(healthy.status).toBe(200);
+    expect(await healthy.json()).toMatchObject(expected);
+    if (path === "/management-api/themes") expect(lastSeen()).not.toBe(stamp);
+    stamp = seenAMinuteAgo();
+    db.run(
+      sql`insert into change_log (id, payload) values ('read-pending', '{"resources":[{"type":"persons","id":"pending"}]}')`,
+    );
+    db.all(sql`pragma wal_checkpoint(truncate)`);
+    small.fill(0);
+    for (const passive of [true, false]) {
+      const response = await read(passive);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject(expected);
+    }
+    expect(lastSeen()).toBe(stamp);
+    expect(db.all(sql`select id from change_log`)).toEqual([{ id: "read-pending" }]);
+    small.unfill();
+    if (path === "/management-api/themes") {
+      expect((await read(false)).status).toBe(200);
+      expect(lastSeen()).not.toBe(stamp);
+    }
+  });
+
+  it.each([
+    ["ended", 401, "management_session.required"],
+    ["expired", 401, "management_session.expired"],
+    ["suspended", 403, "person.suspended"],
+    ["staff", 403, "authorization.not_permitted"],
+  ] as const)(
+    "the full-disk theme read still refuses %s authority",
+    async (state, status, code, ctx) => {
+      const small = needDisk(ctx);
+      const person = await seedPerson(state === "staff" ? "staff" : "manager", `Theme ${state}`);
+      if (state === "ended")
+        db.run(
+          sql`update management_sessions set ended_at = ${new Date().toISOString()} where token_hash = ${hashSessionToken(person.token)}`,
+        );
+      if (state === "expired")
+        db.run(
+          sql`update management_sessions set last_seen_at = '2020-01-01T00:00:00.000Z' where token_hash = ${hashSessionToken(person.token)}`,
+        );
+      if (state === "suspended")
+        db.run(sql`update persons set status = 'suspended' where id = ${person.personId}`);
+      db.run(
+        sql`insert into change_log (id, payload) values ('theme-authority', '{"resources":[{"type":"persons","id":"pending"}]}')`,
+      );
+      db.all(sql`pragma wal_checkpoint(truncate)`);
+      small.fill(0);
+      const response = await bootstrapApp.request("/management-api/themes", {
+        headers: { cookie: person.cookie },
+      });
+      expect(response.status).toBe(status);
+      expect(await response.json()).toMatchObject({ error: { code } });
+      expect(db.all(sql`select id from change_log`)).toEqual([{ id: "theme-authority" }]);
+    },
+  );
 
   it("the box health read answers on a full disk with a change waiting, passive and not", async (ctx) => {
     const small = needDisk(ctx);
@@ -1404,6 +1520,107 @@ describe("a start on a real full disk", () => {
       await store.close();
     }
   });
+  it("pure till reads answer with a change waiting while reconciliation keeps its transaction", async (ctx) => {
+    const small = needDisk(ctx);
+    const dir = realpathSync(small.folder("till-read-audit"));
+    await applyMigrations(dir, migrationOptionsFor(manifestSets(), null));
+    const store = await openVenueDatabase(dir);
+    const db = store.venue;
+    try {
+      const venue = await provisionBillVenue(db);
+      mountDeviceApi(
+        venue.app,
+        { db, cfg: venue.cfg, secureCookies: false, pairingMode: createPairingMode() },
+        () => {},
+      );
+      mountScheduleApi(venue.app, { db }, () => {});
+      const parkedId = randomUUID();
+      await parkOrder({ db }, venue.cfg, {
+        id: parkedId,
+        zoneId: venue.zoneId,
+        lines: [{ menuItemId: venue.offerFor("Steak"), quantity: "1" }],
+        operatorId: venue.operatorId,
+      });
+      const party = await seatedWith(venue, "Steak");
+      const paths = [
+        "/api/staff",
+        "/api/till",
+        "/api/locales",
+        "/api/menu-state",
+        "/api/working-orders",
+        "/api/default-service-zone/offers",
+        "/api/tables",
+        "/api/tables/state",
+        "/api/zones",
+        "/api/stations",
+        "/api/expo/board",
+        "/api/orders/counter-waiting",
+        "/api/drawer/authorizers",
+        "/api/cancel-credit-authorizers",
+        "/api/device/me",
+        "/api/device/zones",
+        "/api/device/stations",
+        "/api/schedule/shifts?from=2026-11-01&to=2026-12-01",
+        "/api/schedule/swaps",
+        "/api/schedule/absences",
+        `/api/service-zones/${venue.zoneId}/offers`,
+        `/api/working-orders/${parkedId}`,
+        `/api/working-orders/${party.tabId}/lines`,
+        `/api/parties/${party.partyId}/bills`,
+        `/api/parties/${party.partyId}/groups`,
+        `/api/parties/${party.partyId}/current-orders`,
+        `/api/parties/${party.partyId}/drafts`,
+        `/api/parties/${party.partyId}/split-sources`,
+      ];
+      const read = async (path: string) => {
+        const res = await venue.app.request(path, {
+          headers: { cookie: venue.cookie, [PERSON_HEADER]: venue.operatorId },
+        });
+        return { path, status: res.status, body: await res.json() };
+      };
+      const before = [];
+      for (const path of paths) before.push(await read(path));
+      db.run(
+        sql`update devices set last_seen_at = '2020-01-01T00:00:00.000Z' where id = ${venue.deviceId}`,
+      );
+      db.run(
+        sql`insert into change_log (id, payload) values ('audit-pending', '{"resources":[{"type":"persons","id":"pending"}]}')`,
+      );
+      db.all(sql`pragma wal_checkpoint(truncate)`);
+      small.fill(0);
+      const full = [];
+      for (const path of paths) full.push(await read(path));
+      expect(before.map(({ path, status }) => ({ path, status }))).toEqual(
+        paths.map((path) => ({ path, status: path === "/api/device/stations" ? 401 : 200 })),
+      );
+      expect(full.map(({ path, status }) => ({ path, status }))).toEqual(
+        paths.map((path) => ({
+          path,
+          status: path === "/api/tables/state" ? 507 : path === "/api/device/stations" ? 401 : 200,
+        })),
+      );
+      expect(full.find(({ path }) => path === "/api/working-orders")!.body).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: parkedId, total: "25.00" })]),
+      );
+      expect(
+        full.find(({ path }) => path === `/api/working-orders/${parkedId}`)!.body,
+      ).toMatchObject({ id: parkedId });
+      expect(db.all(sql`select id from change_log`)).toEqual([{ id: "audit-pending" }]);
+      expect(
+        db.all(sql`select last_seen_at as at from devices where id = ${venue.deviceId}`),
+      ).toEqual([{ at: "2020-01-01T00:00:00.000Z" }]);
+      small.unfill();
+      expect((await read("/api/working-orders")).status).toBe(200);
+      expect(
+        db.all(sql`select last_seen_at as at from devices where id = ${venue.deviceId}`)[0],
+      ).not.toEqual({ at: "2020-01-01T00:00:00.000Z" });
+    } finally {
+      small.unfill();
+      await store.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("the notice reader answers on a full disk with a change waiting, and a source that writes fails alone", async (ctx) => {
     const small = needDisk(ctx);
     const dir = realpathSync(small.folder("notices"));

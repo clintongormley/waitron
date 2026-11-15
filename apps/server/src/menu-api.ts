@@ -950,7 +950,8 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
   // Language choices are public content metadata; this read neither requires nor touches a session.
   app.get("/api/content-languages", (c) =>
     run(c, log, async () => {
-      const config = await withTransaction(deps.db, async (tx) => {
+      const config = await deps.db.withWriteLock(async () => {
+        const tx = deps.db;
         return readContentLanguages(tx, deps.venueLocale ?? FALLBACK_LOCALE);
       });
       return c.json(config);
