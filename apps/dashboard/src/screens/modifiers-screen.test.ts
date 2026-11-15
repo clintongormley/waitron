@@ -72,6 +72,7 @@ function product(overrides: Partial<Product> = {}): Product {
     pricingUnit: "each",
     unitPrice: "1.50",
     vatClass: "reduced",
+    takeawayVatClass: "reduced",
     active: true,
     available: true,
     ordering: "not_sold_separately",

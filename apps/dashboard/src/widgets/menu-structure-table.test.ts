@@ -41,6 +41,7 @@ function product(id: string, name: string, image: string | null = null): Product
     pricingUnit: "each",
     unitPrice: "2.00",
     vatClass: "general",
+    takeawayVatClass: "general",
     active: true,
     available: true,
     ordering: "public",

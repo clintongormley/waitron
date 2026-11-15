@@ -1,6 +1,7 @@
 import { and, eq, isNull, sql, type AnyColumn, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { products, units } from "@waitron/db";
+import type { VatClass } from "@waitron/shared";
 
 /** A `products` row with no parent: a product in its own right, never a variant. */
 export const isTopLevelProduct = isNull(products.parentId);
@@ -64,6 +65,9 @@ function parentsAlways<C extends AnyColumn>(
 export const effectiveProductColumns = {
   description: inherited(products.description, parentProducts.description),
   vatClass: owned(products.vatClass, parentProducts.vatClass),
+  // A variant that sets only its main class is charged that class taken away too, ahead of the
+  // parent's takeaway class. Non-null for the reason `owned` gives: the parent's `vat_class` is set.
+  takeawayVatClass: sql<VatClass>`coalesce(${products.takeawayVatClass}, ${products.vatClass}, ${parentProducts.takeawayVatClass}, ${parentProducts.vatClass})`,
   unitPrice: owned(products.unitPrice, parentProducts.unitPrice),
   categoryId: parentsAlways(products.categoryId, parentProducts.categoryId),
   color: parentsAlways(products.color, parentProducts.color),

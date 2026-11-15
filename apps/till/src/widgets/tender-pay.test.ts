@@ -1727,6 +1727,7 @@ describe("a dish not sold by the unit offers its options but no extras", () => {
     kitchenName: "Queso KDS",
     price: "1.00",
     vatClass: "general" as const,
+    takeawayVatClass: "general" as const,
     maxQuantity: 3,
     preselected: true,
     addAllergens: null,

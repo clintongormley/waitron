@@ -80,6 +80,7 @@ function offer(menu: Menu, product: string): TillMenuOffer {
     kitchenName: product,
     unit,
     vatClass: "general",
+    takeawayVatClass: "general",
     category: null,
     allergens: null,
     diet: null,

@@ -202,6 +202,7 @@ function zoneOffers(
       kitchenName: null,
       unit: productUnit(product),
       vatClass: product.vatClass,
+      takeawayVatClass: product.vatClass,
       category: product.category ?? "Other",
       allergens: product.allergens,
       diet: null,

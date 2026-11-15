@@ -1202,6 +1202,7 @@ describe("till-app: comping a stored counter order", () => {
               unit,
               price: "1.00",
               vatClass: "general",
+              takeawayVatClass: "general",
               maxQuantity: null,
               preselected: false,
               addAllergens: null,

@@ -73,6 +73,7 @@ it("A738 extra and note removal stage the same window without changing the line"
               },
               price: "0.50",
               vatClass: "general",
+              takeawayVatClass: "general",
               maxQuantity: 2,
               preselected: false,
               addAllergens: { milk: {} },

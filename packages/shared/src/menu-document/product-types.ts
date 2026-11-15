@@ -83,6 +83,7 @@ export interface ListedVariant extends ProductVariant {
     allergens: ProductAllergens | null;
     unitPrice: string;
     vatClass: VatClass;
+    takeawayVatClass: VatClass;
     primaryCategoryId: string | null;
     courseId: string | null;
   };
@@ -120,6 +121,8 @@ export interface Product {
   /** GROSS (VAT-inclusive): per selected unit. */
   unitPrice: string;
   vatClass: VatClass;
+  /** The class charged taken away, as stored; null charges `vatClass` either way. */
+  takeawayVatClass: VatClass | null;
   /** Whether the product exists for the venue; deleting it makes it Inactive. */
   active: boolean;
   /** Whether it can be sold right now: false is "sold out for now", and hides nothing in the

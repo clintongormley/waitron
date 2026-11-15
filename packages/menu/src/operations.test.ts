@@ -1382,6 +1382,7 @@ describe("menu operations", () => {
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
+      takeawayVatClass: "general",
       category: null,
       allergens: null,
       diet: null,

@@ -55,6 +55,7 @@ function product(id: string, name: string, overrides: Partial<Product> = {}): Pr
     pricingUnit: "each",
     unitPrice: "2.00",
     vatClass: "general",
+    takeawayVatClass: "general",
     active: true,
     available: true,
     ordering: "public",

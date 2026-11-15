@@ -293,6 +293,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
           kitchenName: "Queso KDS",
           price: "1.00",
           vatClass: "general",
+          takeawayVatClass: "general",
           maxQuantity: 3,
           preselected: false,
           addAllergens: null,

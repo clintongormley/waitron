@@ -76,6 +76,22 @@ describe("menu — menu, taxonomy and priced items", () => {
     await db.execute(insertProduct("general"));
   });
 
+  it("rejects a bad takeaway_vat_class on its own CHECK, and accepts a valid or blank one", async () => {
+    const [menu] = await db.insert(menus).values({ name: "Deli" }).returning({ id: menus.id });
+    const insertProduct = (takeawayVatClass: string | null): ReturnType<typeof sql> =>
+      sql`insert into products (id, menu_id, name, pricing_unit, unit_price, vat_class, takeaway_vat_class, created_at, updated_at) values (${randomUUID()}, ${menu.id}, 'Fixture', 'each', 100, 'reduced', ${takeawayVatClass}, ${AT}, ${AT})`;
+
+    const error = await captureError(() => db.execute(insertProduct("nope")));
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toBe(
+      "CHECK constraint failed: products_takeaway_vat_class_ck",
+    );
+
+    await db.execute(insertProduct("general"));
+    // Not part of `products_top_level_owns_ck`: a product with no parent may leave it blank.
+    await db.execute(insertProduct(null));
+  });
+
   it("has a snapshot category column on both line tables", async () => {
     const present = async (table: string, column: string) =>
       (await columnsOf(db, table)).some((c) => c.name === column);

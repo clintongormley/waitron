@@ -991,6 +991,7 @@ describe("WorkingOrderStore: the VAT preview takes each class's rate today", () 
   const sellingValues = {
     unit,
     vatClass: "general" as const,
+    takeawayVatClass: "general" as const,
     category: null,
     allergens: null,
     diet: null,

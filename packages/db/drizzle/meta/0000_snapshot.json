@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "b1e1629c-4885-4c6e-be58-b1133b793dc8",
+  "id": "01177cf4-dc99-4919-920e-1d3910e5eb52",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -6699,6 +6699,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "takeaway_vat_class": {
+          "name": "takeaway_vat_class",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "active": {
           "name": "active",
           "type": "integer",
@@ -6905,6 +6912,10 @@
         "products_vat_class_ck": {
           "name": "products_vat_class_ck",
           "value": "\"products\".\"vat_class\" in ('general','reduced','super_reduced','zero')"
+        },
+        "products_takeaway_vat_class_ck": {
+          "name": "products_takeaway_vat_class_ck",
+          "value": "\"products\".\"takeaway_vat_class\" in ('general','reduced','super_reduced','zero')"
         }
       }
     },

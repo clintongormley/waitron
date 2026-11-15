@@ -25,6 +25,7 @@ import { readOfferedModifiers } from "./offered-modifiers.js";
 import { readProductEditor } from "./product-editor.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { createUnit, EACH_UNIT } from "./units.js";
+import { selectMenuVariant } from "./variants.js";
 import {
   effectiveProductColumns,
   INHERITED_KEYS,
@@ -124,6 +125,7 @@ beforeEach(async () => {
       .set({
         courseId: course!.id,
         color: "#256bb1",
+        takeawayVatClass: "general",
       })
       .where(eq(products.id, parent.id));
     // Every inherited field null — dietary declarations as an EXPLICIT null, which is what makes
@@ -154,6 +156,7 @@ beforeEach(async () => {
 
         unitPrice: 550,
         vatClass: "general",
+        takeawayVatClass: "zero",
         dietaryDeclarations: ["vegetarian"],
         image: libraryImageName("large.jpg"),
         courseId: ownCourse!.id,
@@ -721,6 +724,81 @@ describe("dietary declarations on a variant", () => {
     );
     return row!.dietaryDeclarations;
   }
+});
+
+describe("a variant's takeaway VAT class", () => {
+  // Its own takeaway class, else its own main class, else the parent's takeaway class, else the
+  // parent's main class: a variant that changes only its main class is taxed that way taken away
+  // too.
+  it("reads its own, then its own main class, then the parent's takeaway class", async () => {
+    const ids = await run(async (tx) => {
+      const cola = await createProduct(tx, {
+        menuId: f.menuId,
+        categoryId: f.bottles,
+        name: "Cola",
+        unitId: null,
+        unitPrice: "1.80",
+        vatClass: "reduced",
+      });
+      await tx
+        .update(products)
+        .set({ takeawayVatClass: "general" })
+        .where(eq(products.id, cola.id));
+      const variant = (name: string, order: number, own: Partial<typeof products.$inferInsert>) =>
+        tx
+          .insert(products)
+          .values({
+            menuId: f.menuId,
+            parentId: cola.id,
+            name,
+            pricingUnit: null,
+            unitPrice: null,
+            vatClass: null,
+            dietaryDeclarations: null,
+            variantOrder: order,
+            ...own,
+          })
+          .returning({ id: products.id })
+          .then(([row]) => row!.id);
+      const water = await createProduct(tx, {
+        menuId: f.menuId,
+        categoryId: f.bottles,
+        name: "Water",
+        unitId: null,
+        unitPrice: "1.20",
+        vatClass: "super_reduced",
+      });
+      for (const productId of [cola.id, water.id]) {
+        await addProductToMenu(tx, { menuId: f.menuId, productId, grossPrice: null });
+      }
+      return {
+        cola: cola.id,
+        water: water.id,
+        plain: await variant("Can", 0, {}),
+        ownMain: await variant("Bottle", 1, { vatClass: "super_reduced" }),
+        ownTakeaway: await variant("Jug", 2, { takeawayVatClass: "zero" }),
+      };
+    });
+    const offers = await run((tx) => listMenuOffers(tx, [f.menuId]));
+    const cola = offers.find((o) => o.productId === ids.cola)!;
+    expect(cola.takeawayVatClass).toBe("general");
+    const takeaway = (id: string) => cola.variants.find((v) => v.id === id)!.takeawayVatClass;
+    expect(takeaway(ids.plain)).toBe("general");
+    expect(takeaway(ids.ownMain)).toBe("super_reduced");
+    expect(takeaway(ids.ownTakeaway)).toBe("zero");
+    expect(selectMenuVariant(cola, ids.ownMain)).toMatchObject({
+      vatClass: "super_reduced",
+      takeawayVatClass: "super_reduced",
+    });
+    expect(selectMenuVariant(cola, ids.ownTakeaway)).toMatchObject({
+      vatClass: "reduced",
+      takeawayVatClass: "zero",
+    });
+
+    const water = offers.find((o) => o.productId === ids.water)!;
+    expect(water.takeawayVatClass).toBe("super_reduced");
+    expect(selectMenuVariant(water, null).takeawayVatClass).toBe("super_reduced");
+  });
 });
 
 describe("INHERITED_KEYS", () => {

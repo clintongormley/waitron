@@ -33,6 +33,7 @@ function extraList(id: string, price: string): OfferedModifier {
         kitchenName: null,
         price,
         vatClass: "general",
+        takeawayVatClass: "general",
         portion: "1",
         unit: {
           id: "each",

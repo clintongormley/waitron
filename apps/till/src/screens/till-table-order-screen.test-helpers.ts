@@ -84,6 +84,7 @@ const extrasList: OfferedModifier = {
       kitchenName: "Bacon KDS",
       price: "1.00",
       vatClass: "general",
+      takeawayVatClass: "general",
       maxQuantity: 3,
       preselected: true,
       addAllergens: null,

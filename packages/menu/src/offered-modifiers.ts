@@ -120,6 +120,7 @@ async function readExtraProducts(
       parentCustomerName: parentProducts.customerName,
       parentKitchenName: parentProducts.kitchenName,
       vatClass: effectiveProductColumns.vatClass,
+      takeawayVatClass: effectiveProductColumns.takeawayVatClass,
       allergens: effectiveProductColumns.allergens,
       dietaryDeclarations: effectiveProductColumns.dietaryDeclarations,
     })
@@ -151,6 +152,7 @@ async function readExtraProducts(
           kitchenName:
             row.parentName === null ? row.kitchenName : kitchenPresentationName(presentation),
           vatClass: row.vatClass as VatClass,
+          takeawayVatClass: row.takeawayVatClass,
           addAllergens: row.allergens,
           suitableFor: expandDietaryDeclarations(
             validateDietaryDeclarations(row.dietaryDeclarations),

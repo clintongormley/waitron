@@ -1244,6 +1244,7 @@ const lunchOffer: TillMenuOffer = {
   description: null,
   placements: [[]],
   vatClass: "reduced",
+  takeawayVatClass: "reduced",
   category: null,
   allergens: null,
   dietaryDeclarations: [],

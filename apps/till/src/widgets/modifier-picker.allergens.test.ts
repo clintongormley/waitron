@@ -36,6 +36,7 @@ const extra = (
   },
   price: "1.00",
   vatClass: "general",
+  takeawayVatClass: "general",
   maxQuantity: 1,
   preselected,
   addAllergens: allergens,

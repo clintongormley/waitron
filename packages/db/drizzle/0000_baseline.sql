@@ -1009,6 +1009,7 @@ CREATE TABLE `products` (
 	`unit_id` text,
 	`unit_price` integer,
 	`vat_class` text,
+	`takeaway_vat_class` text,
 	`active` integer DEFAULT true NOT NULL,
 	`available` integer DEFAULT true NOT NULL,
 	`ordering` text DEFAULT 'public' NOT NULL,
@@ -1026,7 +1027,8 @@ CREATE TABLE `products` (
 	FOREIGN KEY (`unit_id`) REFERENCES `units`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`parent_id`,`menu_id`) REFERENCES `products`(`id`,`menu_id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "products_top_level_owns_ck" CHECK("products"."parent_id" is not null or ("products"."vat_class" is not null and "products"."unit_price" is not null and "products"."dietary_declarations" is not null)),
-	CONSTRAINT "products_vat_class_ck" CHECK("products"."vat_class" in ('general','reduced','super_reduced','zero'))
+	CONSTRAINT "products_vat_class_ck" CHECK("products"."vat_class" in ('general','reduced','super_reduced','zero')),
+	CONSTRAINT "products_takeaway_vat_class_ck" CHECK("products"."takeaway_vat_class" in ('general','reduced','super_reduced','zero'))
 );
 --> statement-breakpoint
 CREATE INDEX `products_menu_id_idx` ON `products` (`menu_id`);--> statement-breakpoint

@@ -194,6 +194,7 @@ const PRODUCT_BASE_COLUMNS = {
   setLunch: products.setLunch,
   unitPrice: effective.unitPrice,
   vatClass: effective.vatClass,
+  takeawayVatClass: products.takeawayVatClass,
   active: products.active,
   available: products.available,
   allergens: effective.allergens,
@@ -239,6 +240,7 @@ interface RawProduct {
   /** Cents, as the column stores it; `toProduct` is where it becomes the amount callers see. */
   unitPrice: number;
   vatClass: string;
+  takeawayVatClass: string | null;
   active: boolean;
   available: boolean;
   allergens: ProductAllergens | null;
@@ -288,6 +290,7 @@ function toProduct(row: RawProduct, variants: ListedVariant[] = []): Product {
     unitId: unit.id,
     pricingUnit: (row.hardwareUnit === null ? "each" : "weight") as PricingUnit,
     vatClass: row.vatClass as VatClass,
+    takeawayVatClass: row.takeawayVatClass as VatClass | null,
     dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
     dietOverride: row.dietOverride as DietOverride | null,
     variants,
@@ -432,6 +435,7 @@ const offerLineColumns = {
   unitPrecision: units.precision,
   hardwareUnit: units.hardwareUnit,
   vatClass: effective.vatClass,
+  takeawayVatClass: effective.takeawayVatClass,
   category: categories.name,
   allergens: effective.allergens,
   diet: effective.diet,
@@ -454,6 +458,7 @@ interface OfferLineRow {
   unitPrecision: UnitRow["precision"] | null;
   hardwareUnit: UnitRow["hardwareUnit"] | null;
   vatClass: NonNullable<ProductRow["vatClass"]>;
+  takeawayVatClass: VatClass;
   category: (typeof categories.$inferSelect)["name"] | null;
   allergens: ProductRow["allergens"];
   diet: ProductRow["diet"];
@@ -477,6 +482,7 @@ function offerLineValues(row: OfferLineRow) {
     ),
     pricingUnit: (row.hardwareUnit === null ? "each" : "weight") as PricingUnit,
     vatClass: row.vatClass as VatClass,
+    takeawayVatClass: row.takeawayVatClass,
     category: row.category,
     allergens: row.allergens,
     diet: row.diet as DietProfile | null,
@@ -1026,6 +1032,7 @@ async function listedVariantsOfProducts(
       active: products.active,
       unitPrice: effective.unitPrice,
       vatClass: effective.vatClass,
+      takeawayVatClass: effective.takeawayVatClass,
       primaryCategoryId: effective.categoryId,
       courseId: products.courseId,
       effectiveCourseId: effective.courseId,
@@ -1042,6 +1049,7 @@ async function listedVariantsOfProducts(
     allergens,
     unitPrice,
     vatClass,
+    takeawayVatClass,
     primaryCategoryId,
     effectiveCourseId,
     ...row
@@ -1055,6 +1063,7 @@ async function listedVariantsOfProducts(
         allergens,
         unitPrice: centsToDecimal(unitPrice),
         vatClass: vatClass as VatClass,
+        takeawayVatClass,
         primaryCategoryId,
         courseId: effectiveCourseId,
       },
@@ -1232,6 +1241,7 @@ export async function listAvailableProducts(
       hardwareUnit: units.hardwareUnit,
       unitPrice: effective.unitPrice,
       vatClass: effective.vatClass,
+      takeawayVatClass: effective.takeawayVatClass,
       category: categories.name,
       allergens: effective.allergens,
       diet: effective.diet,
@@ -1283,6 +1293,7 @@ export async function listAvailableProducts(
     pricingUnit: (row.hardwareUnit === null ? "each" : "weight") as PricingUnit,
     unitPrice: centsToDecimal(row.unitPrice),
     vatClass: row.vatClass as VatClass,
+    takeawayVatClass: row.takeawayVatClass,
     category: row.category,
     allergens: row.allergens,
     diet: row.diet as DietProfile | null,
