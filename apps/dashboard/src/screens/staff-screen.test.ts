@@ -8,7 +8,7 @@ import { chooseOption, chooseOptions, formMessageOf } from "@waitron/ui/src/test
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { roleName, rolesByName, statusName } from "../i18n/domain.js";
-import type { DashboardApi, PersonPage, PersonSummary } from "../api/client.js";
+import { DashboardApi, type PersonPage, type PersonSummary } from "../api/client.js";
 import type { StaffList } from "../widgets/staff-list.js";
 import type { PersonForm } from "../widgets/person-form.js";
 import type { PersonEdit } from "../widgets/person-edit.js";
@@ -35,6 +35,7 @@ const people: PersonSummary[] = [
     telephone: "+44 20",
     roleIds: ["manager"],
     status: "active",
+    locale: null,
     hasPassword: true,
     hasTotp: false,
     email: "ada@x.com",
@@ -47,6 +48,7 @@ const people: PersonSummary[] = [
     telephone: null,
     roleIds: ["staff"],
     status: "suspended",
+    locale: null,
     hasPassword: false,
     hasTotp: false,
     email: null,
@@ -960,6 +962,7 @@ describe("staff-screen — row edit", () => {
       telephone: "+44 21",
       email: "ada@example.com",
       status: "active" as const,
+      locale: "es-ES",
     };
     editForm(el).dispatchEvent(
       new CustomEvent("save-person", { detail: details, bubbles: true, composed: true }),
@@ -969,6 +972,62 @@ describe("staff-screen — row edit", () => {
     expect(api.savePerson).toHaveBeenCalledWith("p1", details);
     expect(api.listStaff).toHaveBeenCalledTimes(2);
   });
+
+  it.each([null, "en-GB"])(
+    "omits unchanged language (%s) across onboarding contact saves",
+    async (initialLocale) => {
+      let savedLocale: string | null = initialLocale;
+      const writes: Record<string, unknown>[] = [];
+      const api = new DashboardApi("", async (path, init) => {
+        if (init?.method === "PUT") {
+          writes.push(JSON.parse(String(init.body)));
+          return new Response(null, { status: 204 });
+        }
+        const value = String(path).includes("/staff/page")
+          ? {
+              rows: [{ ...people[0]!, telephone: null, locale: savedLocale }],
+              page: 0,
+              pageSize: 50,
+              total: 1,
+              anyPeople: true,
+            }
+          : String(path).endsWith("/locales")
+            ? {
+                locales: [
+                  { code: "en-GB", label: "English" },
+                  { code: "es-ES", label: "Español" },
+                ],
+                venueDefault: "en-GB",
+                loginDefault: "en-GB",
+                venueName: "Venue",
+              }
+            : accessRoleChoices;
+        return new Response(JSON.stringify(value), {
+          headers: { "content-type": "application/json" },
+        });
+      });
+      const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+        api,
+        canAdminister: true,
+      });
+      await vi.waitFor(() => expect(list(el).people).toHaveLength(1));
+      await openEdit(el, "p1");
+      const roles = editForm(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        'wt-combobox[name="accessRoles"]',
+      )!;
+      await vi.waitFor(() => expect(roles.disabled).toBe(false));
+      await chooseOptions(roles, ["staff"]);
+      savedLocale = "es-ES";
+      await saveThroughEdit(el);
+      await vi.waitFor(() => expect(editForm(el).person?.locale).toBe("es-ES"));
+      expect(editForm(el).open).toBe(true);
+      expect(writes).toHaveLength(1);
+      expect(writes[0]).not.toHaveProperty("locale");
+      await saveThroughEdit(el, "edit-telephone", "+44 20 7946 0001");
+      await vi.waitFor(() => expect(writes).toHaveLength(2));
+      expect(writes[1]).not.toHaveProperty("locale");
+    },
+  );
 
   it("resends an invitation and reports delivery after closing the edit dialog", async () => {
     const api = stubApi();
@@ -1012,6 +1071,7 @@ describe("staff-screen — row edit", () => {
           email: "ada@x.com",
           roleIds: ["manager"],
           status: "active",
+          locale: null,
         },
         bubbles: true,
         composed: true,
@@ -1048,6 +1108,7 @@ describe("staff-screen — row edit", () => {
           email: "ada@x.com",
           roleIds: ["manager"],
           status: "active",
+          locale: null,
         },
         bubbles: true,
         composed: true,
@@ -1068,6 +1129,7 @@ describe("staff-screen — row edit", () => {
     telephone: null,
     email: "ada@x.com",
     status: "active" as const,
+    locale: null,
   };
   function dispatchSave(el: StaffScreen): void {
     editForm(el).dispatchEvent(
@@ -1540,6 +1602,7 @@ describe("staff-screen — row actions, filters and edit races", () => {
           email: "bea@x.com",
           roleIds: ["manager"],
           status: "active",
+          locale: null,
         },
         bubbles: true,
         composed: true,

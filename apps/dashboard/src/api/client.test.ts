@@ -466,6 +466,7 @@ describe("DashboardApi", () => {
       telephone: "+44 20",
       email: "ada@example.com",
       status: "active" as const,
+      locale: "es-ES",
     };
     await api.savePerson("p1", details);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/staff/p1", {

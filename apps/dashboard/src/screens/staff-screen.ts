@@ -127,6 +127,8 @@ export class StaffScreen extends LitElement {
   @state() private formOpen = false;
   @state() private editingPerson: PersonSummary | null = null;
   @state() private editOpen = false;
+  // List refreshes do not advance the form’s committed locale.
+  #localeBaseline: string | null = null;
   @state() private errorKey: string | null = null;
   /** The refusal's `params.field`, read by the add and edit forms beside `errorKey`. */
   @state() private errorField: string | null = null;
@@ -359,6 +361,7 @@ export class StaffScreen extends LitElement {
   #closeEdit(): void {
     this.editOpen = false;
     this.editingPerson = null;
+    this.#localeBaseline = null;
   }
 
   #onEditPerson(event: CustomEvent<{ personId: string }>): void {
@@ -370,6 +373,7 @@ export class StaffScreen extends LitElement {
     this.invitationStatus = null;
     this.formOpen = false;
     this.editingPerson = person;
+    this.#localeBaseline = person.locale ?? null;
     this.editOpen = true;
   }
 
@@ -396,8 +400,10 @@ export class StaffScreen extends LitElement {
   #onSavePerson(event: CustomEvent<PersonEditDetails>): void {
     event.stopPropagation();
     this.#editWith(async (id) => {
-      await this.api.savePerson(id, event.detail);
+      const locale = event.detail.locale === this.#localeBaseline ? undefined : event.detail.locale;
+      await this.api.savePerson(id, { ...event.detail, locale });
       if (this.editingPerson?.personId === id) {
+        this.#localeBaseline = event.detail.locale;
         this.editingPerson = { ...this.editingPerson, ...event.detail };
         this.shadowRoot!.querySelector("dashboard-person-edit")!.closeSaved(event.detail);
       }
@@ -480,6 +486,7 @@ export class StaffScreen extends LitElement {
       if (inactive) {
         this.formOpen = false;
         this.editingPerson = inactive;
+        this.#localeBaseline = inactive.locale ?? null;
         this.editOpen = true;
       } else {
         this.#fail(error);

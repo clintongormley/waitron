@@ -221,6 +221,7 @@ export async function updatePersonDetails(
     telephone: string | null;
     email: string;
     status: "pending" | "active" | "suspended";
+    locale?: string | null;
   },
 ): Promise<void> {
   const { authorizedBy, authority } = await authorizeManager(tx, {
@@ -245,6 +246,12 @@ export async function updatePersonDetails(
   if (telephone !== null && !isValidTelephone(telephone))
     throw new AppError("person.telephone_invalid", {});
   const email = normalizeAndValidateEmail(input.email);
+  const locale =
+    input.locale === undefined
+      ? person.locale
+      : input.locale === null
+        ? null
+        : assertSupportedLocale(input.locale);
   if ((email !== person.email && authorizedBy !== person.id) || input.status !== person.status) {
     requireAdminAuthority(authority);
     if (authorizedBy !== person.id) {
@@ -271,6 +278,7 @@ export async function updatePersonDetails(
         emailFolded: foldForUniqueness(email),
         emailVerifiedAt: email === person.email ? person.emailVerifiedAt : null,
         status: input.status,
+        locale,
         ...(becomesSuspended ? NO_SIGN_IN_SECRETS : {}),
       })
       .where(eq(persons.id, person.id));
@@ -536,6 +544,7 @@ export interface PersonSummary {
   firstNames: string | null;
   lastNames: string | null;
   telephone: string | null;
+  locale: string | null;
   /** The person's login email. Null is reserved for internal principals and low-level fixtures. */
   email: string | null;
   roleIds: string[];
@@ -566,6 +575,7 @@ async function readPersonSummaries(tx: Transaction, ids?: string[]): Promise<Per
       telephone: persons.telephone,
       email: persons.email,
       status: persons.status,
+      locale: persons.locale,
       passwordHash: persons.passwordHash,
       totpSecret: persons.totpSecret,
     })
@@ -593,6 +603,7 @@ async function readPersonSummaries(tx: Transaction, ids?: string[]): Promise<Per
       telephone: r.telephone,
       email: r.email,
       roleIds: roleIds.get(r.personId) ?? [],
+      locale: r.locale,
       status: r.status as "pending" | "active" | "suspended",
       hasPassword: r.passwordHash !== null,
       hasTotp: r.totpSecret !== null,

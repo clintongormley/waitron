@@ -1332,9 +1332,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   connected or disconnected. No link, one line on what to do if it was not them. Open: notify the OLD
   address on an email change; wording when an admin made the change; grouping a burst.
 
-- **The admin's Edit user form has no Language** chooser; a person's `locale` can only be set on Your
-  profile.
-
 - **Typed values are only partly checked — a generic phone-format check landed, a country-specific
   one has not.**
   [Detail](backlog/dashboard.md#typed-values-are-only-partly-checked--a-generic-phone-format-check-landed-a-country-specific-one-has-not)

@@ -486,6 +486,49 @@ function details(
 const MISSING_ID = "00000000-0000-4000-8000-000000000000";
 
 describe("updatePersonDetails refusals and side effects", () => {
+  it("saves or clears a person's locale atomically while absent locale keeps the saved choice", async () => {
+    await openManagementSession(suite.db, "admin");
+    const { token } = await openUnprovedManagementSession(suite.db, "manager");
+    const target = await seedPerson(suite.db, "staff");
+    await suite.db.execute(sql`update persons set email = 'kept@example.com' where id = ${target}`);
+    const listed = async () =>
+      (await run((tx) => listPersons(tx, { managementSessionId: token }))).find(
+        (p) => p.personId === target,
+      )!;
+    expect((await listed()).locale).toBeNull();
+    await run((tx) =>
+      updatePersonDetails(
+        tx,
+        details(token, target, { email: "kept@example.com", locale: "es-ES" }),
+      ),
+    );
+    expect((await listed()).locale).toBe("es-ES");
+    await run((tx) =>
+      updatePersonDetails(
+        tx,
+        details(token, target, { email: "kept@example.com", displayName: "Renamed" }),
+      ),
+    );
+    expect((await listed()).locale).toBe("es-ES");
+    await expect(
+      run((tx) =>
+        updatePersonDetails(
+          tx,
+          details(token, target, {
+            email: "kept@example.com",
+            displayName: "Rejected name",
+            locale: "xx-XX",
+          }),
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "locale.unsupported" });
+    expect(await listed()).toMatchObject({ displayName: "Renamed", locale: "es-ES" });
+    await run((tx) =>
+      updatePersonDetails(tx, details(token, target, { email: "kept@example.com", locale: null })),
+    );
+    expect((await listed()).locale).toBeNull();
+  });
+
   it.each(["email", "role", "status"] as const)(
     "requires proof for a changed %s but permits contact edits",
     async (field) => {

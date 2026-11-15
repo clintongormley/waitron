@@ -4,7 +4,7 @@ import { userEvent } from "vitest/browser";
 import { afterEach, expect, it } from "vitest";
 import { LitElement, html } from "lit";
 import { LeaveController, registerIcons } from "@waitron/ui";
-import type { DashboardApi, PersonEditDetails, PersonSummary } from "../api/client.js";
+import type { DashboardApi, PersonSummary } from "../api/client.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -24,6 +24,7 @@ const person: PersonSummary = {
   email: "ada@example.com",
   roleIds: ["manager"],
   status: "pending",
+  locale: null,
   hasPassword: false,
   hasTotp: false,
 };
@@ -82,7 +83,7 @@ function save(form: HTMLElement) {
 it("staff edit commits the submitted details before a failed list refresh", async () => {
   let reads = 0;
   let dirtyAtRefresh: boolean | undefined;
-  let received: { id: string; details: PersonEditDetails } | undefined;
+  let received: { id: string; details: Parameters<DashboardApi["savePerson"]>[1] } | undefined;
   const mounted = await mount({
     listAccessRoles: async () => accessRoleChoices,
     listStaff: async () => {
@@ -107,6 +108,7 @@ it("staff edit commits the submitted details before a failed list refresh", asyn
       telephone: null,
       email: "new@example.com",
       status: "pending",
+      locale: undefined,
     },
   });
   await expect.poll(() => mounted.form.open).toBe(false);

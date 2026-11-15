@@ -1,5 +1,6 @@
+import { SUPPORTED_LOCALES } from "@waitron/shared";
 import { useLocale } from "../testing/locale-setup.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DashboardApi, type PersonSummary } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { chooseOption, chooseOptions, formMessageOf } from "@waitron/ui/src/test-helpers.js";
@@ -10,8 +11,20 @@ import { PersonEdit } from "./person-edit.js";
 
 useLocale("es-ES");
 
+beforeEach(() => {
+  vi.spyOn(DashboardApi.prototype, "getLocales").mockResolvedValue({
+    locales: [
+      { code: "en-GB", label: "English" },
+      { code: "es-ES", label: SUPPORTED_LOCALES[0].label },
+    ],
+    venueDefault: "en-GB",
+    loginDefault: "en-GB",
+    venueName: "Venue",
+  });
+});
 afterEach(() => {
   cleanupWidgets();
+  vi.restoreAllMocks();
 });
 
 const person: PersonSummary = {
@@ -22,6 +35,7 @@ const person: PersonSummary = {
   telephone: "+44 20",
   roleIds: ["manager"],
   status: "active",
+  locale: null,
   hasPassword: true,
   hasTotp: false,
   email: "ada@example.com",
@@ -169,6 +183,7 @@ describe("person-edit", () => {
       telephone: "+44 20 7946 0958",
       email: "ada@example.com",
       status: "suspended",
+      locale: null,
     });
   });
 
@@ -728,6 +743,7 @@ describe("person-edit validation and keyboard submit", () => {
         telephone: "+34 600 000 000",
         email: "ada@example.com",
         status: "active",
+        locale: null,
       },
     ]);
   });
