@@ -257,8 +257,10 @@ describe("a check whose thread has not exited", () => {
       expect(thread.unref).toHaveBeenCalledOnce();
       await expect(isCopyIntact(path, { startWorker })).rejects.toMatchObject({
         code: "handover.copy_check_failed",
+        params: { module: "core" },
       });
       expect(startWorker).toHaveBeenCalledOnce();
+      expect(await waitForCopyCheck(path, undefined, false)).toBe(false);
       let finished = false;
       const waiting = waitForCopyCheck(path).then(() => {
         finished = true;
@@ -268,6 +270,7 @@ describe("a check whose thread has not exited", () => {
       thread.emit("exit", 1);
       await waiting;
       expect(finished).toBe(true);
+      expect(await waitForCopyCheck(path, undefined, false)).toBe(true);
       expect(await isCopyIntact(path)).toBe(true);
     } finally {
       thread.emit("exit", 1);

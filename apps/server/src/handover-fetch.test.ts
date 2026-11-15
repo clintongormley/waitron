@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import type { Worker } from "node:worker_threads";
-import { isCopyIntact, waitForCopyCheck } from "./handover-integrity.js";
+import { isCopyIntact } from "./handover-integrity.js";
 import {
   createServer as createHttpServer,
   type RequestListener,
@@ -74,7 +74,6 @@ vi.mock("@waitron/db", async (importOriginal) => {
   };
 });
 vi.mock("./handover-store.js", { spy: true });
-vi.mock("./handover-integrity.js", { spy: true });
 vi.mock("node:fs/promises", { spy: true });
 
 const RING: KeyRing = loadKeyRing({
@@ -1719,11 +1718,59 @@ it("waits for a stopped integrity thread before deleting a rejected copy", async
   const r = await rig();
   await r.stepDownM1();
   await r.listen(r.m1App({ restricted: true }));
+  await mkdir(join(r.stateDir, "handover", OP), { recursive: true });
+  await writeFile(r.received(), "copy from the previous duty");
   const thread = Object.assign(new EventEmitter(), {
     terminate: () => new Promise<number>(() => {}),
     unref() {},
   });
+  const stopping = new AbortController();
+  const pending = isCopyIntact(r.received(), {
+    signal: stopping.signal,
+    startWorker: () => thread as unknown as Worker,
+    stopWaitMs: 1,
+  }).catch(() => {});
+  stopping.abort();
+  await pending;
+  let threadExited = false;
+  let removedBeforeDownload = false;
+  const compare = vi.fn(async () => ({ ok: true as const }));
+  const duty = (await r.start({
+    compare,
+    download: async (...args) => {
+      expect(threadExited).toBe(true);
+      expect(existsSync(r.received())).toBe(false);
+      removedBeforeDownload = true;
+      return boxDownload(...args);
+    },
+  }))!;
+  try {
+    await vi.waitFor(() => expect(r.statusReads()).toBeGreaterThan(2));
+    expect(await readFile(r.received(), "utf8")).toBe("copy from the previous duty");
+    expect(r.copyReads()).toBe(0);
+    threadExited = true;
+    thread.emit("exit", 1);
+    duty.wake();
+    await vi.waitFor(() => expect(compare).toHaveBeenCalledOnce(), { timeout: 10_000 });
+    expect(removedBeforeDownload).toBe(true);
+  } finally {
+    thread.emit("exit", 1);
+    await duty.stop();
+  }
+});
+
+it("keeps reading status while a retained copy's old integrity thread is busy", async () => {
+  const r = await rig();
+  await r.stepDownM1();
+  await r.listen(r.m1App({ restricted: true }));
+  let clock = 0;
+  const thread = Object.assign(new EventEmitter(), {
+    terminate: () => new Promise<number>(() => {}),
+    unref() {},
+  });
+  let calls = 0;
   const compare = vi.fn(async (_operation: unknown, _indicator: unknown, path: string) => {
+    if (calls++ > 0) return { ok: true as const };
     const stopping = new AbortController();
     const pending = isCopyIntact(path, {
       signal: stopping.signal,
@@ -1732,21 +1779,24 @@ it("waits for a stopped integrity thread before deleting a rejected copy", async
     }).catch(() => {});
     stopping.abort();
     await pending;
-    return { ok: false as const, reason: "handover.copy_damaged" as const, detail: {} };
+    return { ok: false as const, reason: "handover.copy_check_failed" as const, detail: {} };
   });
-  vi.mocked(waitForCopyCheck).mockClear();
-  const duty = (await r.start({ compare }))!;
+  const duty = (await r.start({ compare, monotonicNow: () => clock }))!;
   try {
-    await vi.waitFor(
-      () =>
-        expect(
-          vi.mocked(waitForCopyCheck).mock.calls.filter(([path]) => path === r.received()).length,
-        ).toBeGreaterThanOrEqual(3),
-      { timeout: 10_000 },
+    await vi.waitFor(async () =>
+      expect((await r.m2Row()).waitingReason).toBe("handover.copy_check_failed"),
     );
+    clock = 60_000;
+    const reads = r.statusReads();
+    duty.wake();
+    await vi.waitFor(() => expect(r.statusReads()).toBeGreaterThan(reads + 2));
+    expect(compare).toHaveBeenCalledOnce();
     expect(existsSync(r.received())).toBe(true);
+    expect((await r.m2Row()).waitingReason).toBe("handover.copy_check_failed");
     thread.emit("exit", 1);
-    await vi.waitFor(() => expect(existsSync(r.received())).toBe(false));
+    duty.wake();
+    await vi.waitFor(() => expect(compare).toHaveBeenCalledTimes(2));
+    expect(r.copyReads()).toBe(1);
   } finally {
     thread.emit("exit", 1);
     await duty.stop();

@@ -162,7 +162,6 @@ progreso del traspaso**. En la página de traspaso del servidor de reserva puede
 consultar el progreso. No inicies otro traspaso. Un mensaje de espera describe el último intento;
 mantén los dos servidores conectados mientras vuelven a intentarlo.
 Si sigue fallando la comprobación de la copia, consulta [cómo cambiar al servidor de reserva](servers.md#emergency).
-Apaga el servidor principal anterior antes de seguir ese procedimiento.
 
 ## Después del traspaso {#after-hand-over}
 

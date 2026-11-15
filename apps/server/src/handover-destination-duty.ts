@@ -179,10 +179,11 @@ interface DutyWork {
   operation: HandoverOperation;
 }
 
-async function discardCopy(path: string, signal: AbortSignal): Promise<void> {
-  await waitForCopyCheck(path, signal);
+async function discardCopy(path: string, signal: AbortSignal): Promise<boolean> {
+  if (!(await waitForCopyCheck(path, signal, false))) return false;
   await rm(path, { force: true });
   await rm(`${path}.partial`, { force: true });
+  return true;
 }
 
 function refusalReason(
@@ -341,7 +342,8 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
 
   async function removeFolder(operationId: string): Promise<void> {
     const folder = dirname(receivedCopyPath(deps.stateDir, operationId));
-    await waitForCopyCheck(receivedCopyPath(deps.stateDir, operationId), signal);
+    if (!(await waitForCopyCheck(receivedCopyPath(deps.stateDir, operationId), signal, false)))
+      return;
     await rm(folder, { recursive: true, force: true }).catch((error: unknown) => {
       deps.log("error", "handover-destination.remove_failed", {
         operationId,
@@ -401,7 +403,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     let indicator: unknown;
     try {
       await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-      await discard();
+      if (!(await discard())) return;
       // Before the record nothing is promised, and beside a leftover a second whole copy might not fit.
       await rm(acceptedCopyPath(deps.stateDir, operationId), { force: true });
       const answer = await boxExchange(
@@ -448,19 +450,25 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     }
     // The download can outlast the operation, the box's being a mirror, or this duty.
     const current = await stillWorkingOn(operation);
-    if (current === null) return discard();
+    if (current === null) {
+      await discard();
+      return;
+    }
     held = { operationId, indicator, path, compareDueAt: 0, found: {} };
     await recordWait(current, null);
     // Another writer may have closed the operation while the reason was being cleared.
     const cleared = await stillWorkingOn(operation);
-    if (cleared === null) return discard();
+    if (cleared === null) {
+      await discard();
+      return;
+    }
     await compareHeld(held, cleared);
   }
 
   async function compareHeld(copy: HeldCopy, operation: HandoverOperation): Promise<void> {
-    if (monotonicNow() < copy.compareDueAt) return;
+    if (monotonicNow() < copy.compareDueAt || !(await waitForCopyCheck(copy.path, signal, false)))
+      return;
     copy.compareDueAt = monotonicNow() + compareRetryMs;
-    await waitForCopyCheck(copy.path, signal);
     await recordWait(operation, null);
     let outcome: CompareOutcome;
     try {

@@ -332,7 +332,7 @@ it.each(["en", "es"])(
         expect(el.shadowRoot!.textContent).toContain(
           locale === "en"
             ? "The copy check failed. This box has not taken over. It will retry automatically."
-            : "La comprobación de la copia ha fallado. Este servidor no ha tomado el relevo. Volverá a intentarlo automáticamente.",
+            : handoverEs["handover.check_failed"],
         ),
       );
       const link = el.shadowRoot!.querySelector<HTMLAnchorElement>(

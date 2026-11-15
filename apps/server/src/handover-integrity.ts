@@ -36,9 +36,14 @@ type WorkerStarter = (source: string, options: WorkerOptions) => Worker;
 const runningChecks = new Map<string, Promise<void>>();
 
 /** A stopped caller can return before SQLite closes its file; replacement waits for actual exit. */
-export async function waitForCopyCheck(path: string, signal?: AbortSignal): Promise<void> {
+export async function waitForCopyCheck(
+  path: string,
+  signal?: AbortSignal,
+  wait = true,
+): Promise<boolean> {
   const running = runningChecks.get(resolvePath(path));
-  if (running === undefined) return;
+  if (running === undefined) return true;
+  if (!wait) return false;
   signal?.throwIfAborted();
   let stop!: () => void;
   const stopped = new Promise<never>((_resolve, reject) => {
@@ -47,6 +52,7 @@ export async function waitForCopyCheck(path: string, signal?: AbortSignal): Prom
   });
   try {
     await Promise.race([running, stopped]);
+    return true;
   } finally {
     signal?.removeEventListener("abort", stop);
   }
@@ -76,7 +82,8 @@ export function isCopyIntact(
   return new Promise((resolve, reject) => {
     signal?.throwIfAborted();
     const key = resolvePath(path);
-    if (runningChecks.has(key)) throw new AppError("handover.copy_check_failed", {});
+    if (runningChecks.has(key))
+      throw new AppError("handover.copy_check_failed", { module: "core" });
     const worker = startWorker(INTEGRITY_SOURCE, { eval: true, workerData: { path } });
     let finished!: () => void;
     runningChecks.set(
