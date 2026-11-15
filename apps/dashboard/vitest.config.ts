@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
 import { durationSequencer } from "../../scripts/vitest-duration-sequencer.mjs";
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
@@ -62,7 +63,20 @@ const browserProject = {
       // On the provider: Vitest 4 silently ignores a `context` key on the instance.
       provider: playwright({ contextOptions: { timezoneId: "UTC" } }),
       headless: true,
-      instances: [{ browser: "chromium" }],
+      instances: [
+        { browser: "chromium" },
+        {
+          browser: "chromium",
+          name: "chromium-fallback",
+          include: ["src/widgets/product-appearance.test.ts"],
+          testNamePattern: "fallback layout",
+          setupFiles: [
+            fileURLToPath(
+              new URL("../../packages/ui/test/popover-fallback-ready.ts", import.meta.url),
+            ),
+          ],
+        },
+      ],
       commands: {
         emulateColorScheme,
         emulateReducedMotion,
@@ -108,7 +122,7 @@ const nodeTimezoneProject = {
 export default defineConfig({
   optimizeDeps: {
     // Pre-bundled so Vite cannot discover it mid-run and reload an in-flight browser test.
-    include: ["axe-core"],
+    include: ["@waitron/ui > @oddbird/popover-polyfill", "axe-core"],
     entries: ["src/main.ts"],
   },
   // Under an AI agent, Vite would print every browser console.error, console.warn, uncaught error

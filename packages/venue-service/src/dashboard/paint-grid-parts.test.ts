@@ -4,6 +4,7 @@ import { LitElement, html } from "lit";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, mount } from "@waitron/ui/src/test-helpers.js";
 import {
+  paintGridStyles,
   ColumnStroke,
   CopyChooser,
   columnMenu,
@@ -26,6 +27,7 @@ const columns = [
 ];
 
 class PartsHost extends LitElement {
+  static override styles = paintGridStyles;
   copied: { from: string; to: string[] }[] = [];
   readonly follow = vi.fn<(key: string) => void>();
   readonly clear = vi.fn<(key: string) => void>();
@@ -345,4 +347,22 @@ test("placePopover keeps a popup beside a trigger partly off the window's right 
   const box = popup.getBoundingClientRect();
   expect(box.right).toBeLessThanOrEqual(button.getBoundingClientRect().left);
   expect(box.left).toBeGreaterThanOrEqual(8);
+});
+
+test("paint chooser fallback layout is positioned, hittable and cancels", async () => {
+  const el = (await mount("<paint-grid-parts-host></paint-grid-parts-host>")) as PartsHost;
+  await userEvent.click(menu(el, "tue"));
+  await userEvent.click(action(el, "tue", "Copy to…"));
+  await el.updateComplete;
+  const chooser = el.shadowRoot!.querySelector<HTMLElement>(".chooser")!;
+  expect(getComputedStyle(chooser).display).toBe("flex");
+  expect(chooser.getBoundingClientRect().width).toBeGreaterThan(0);
+  expect(chooser.getBoundingClientRect().right).toBeLessThanOrEqual(innerWidth);
+  const cancel = [...chooser.querySelectorAll<HTMLElement>("wt-button")].find(
+    (button) => button.textContent!.trim() === "Cancel",
+  )!;
+  await userEvent.click(cancel);
+  expect(chooser.matches(":popover-open")).toBe(false);
+  expect(el.copied).toEqual([]);
+  expect(chooser.getBoundingClientRect().height).toBe(0);
 });

@@ -23,7 +23,13 @@ const emulateColorScheme: BrowserCommand<[colorScheme: ColorScheme]> = async (
 export default defineConfig({
   // Vite discovering a dependency mid-run re-optimises and reloads the in-flight test file ("Vite
   // unexpectedly reloaded a test"), which can flake CI; pre-bundling these up front prevents it.
-  optimizeDeps: { include: ["axe-core", "lit/directives/unsafe-html.js"] },
+  optimizeDeps: {
+    include: [
+      "@waitron/ui > @oddbird/popover-polyfill",
+      "axe-core",
+      "lit/directives/unsafe-html.js",
+    ],
+  },
   test: {
     globals: true,
     clearMocks: false,

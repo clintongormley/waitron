@@ -3,6 +3,7 @@ import { styleMap } from "lit/directives/style-map.js";
 import { capturePointer, releasePointer } from "@waitron/dashboard-kit";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
+import { popoverVisibilityStyles } from "@waitron/ui";
 import { t } from "./strings.js";
 import { clockAt } from "../day-paint.js";
 import { stepMinuteAt } from "../paint-model.js";
@@ -475,6 +476,8 @@ export class CopyChooser {
  *  headings, the time ruler, the day columns and their hour lines, and the popover menu and
  *  copy chooser. A host may stretch the days to a taller `--paint-grid-fill`. */
 export const paintGridStyles = css`
+  ${popoverVisibilityStyles}
+
   :host {
     display: block;
     color: var(--wt-color-text);
@@ -607,8 +610,8 @@ export const paintGridStyles = css`
     color: var(--wt-color-text);
     box-shadow: var(--wt-shadow-2);
   }
-  .menu:popover-open,
-  .chooser:popover-open {
+  .menu:is(:popover-open, .\\:popover-open),
+  .chooser:is(:popover-open, .\\:popover-open) {
     display: flex;
     flex-direction: column;
     gap: var(--wt-space-1);

@@ -451,3 +451,23 @@ describe("rota-popup", () => {
     expect(style.borderTopWidth).not.toBe("0px");
   });
 });
+
+it("rota popup fallback layout is positioned, hittable and light dismisses", async () => {
+  await useViewport(390, 844);
+  const anchor = anchorAt(20, 100);
+  const action = document.createElement("button");
+  action.textContent = "Edit duty";
+  content.append(action);
+  el.show(anchor);
+  insideWindow();
+  expect(box().width).toBeGreaterThan(0);
+  await userEvent.click(action);
+  expect(el.shown).toBe(true);
+  const outside = document.createElement("button");
+  outside.textContent = "Outside";
+  outside.style.cssText = "position:fixed;bottom:4px;left:4px";
+  host.append(outside);
+  await userEvent.click(outside);
+  await expect.poll(() => closes).toBe(1);
+  expect(popup().getBoundingClientRect().height).toBe(0);
+});

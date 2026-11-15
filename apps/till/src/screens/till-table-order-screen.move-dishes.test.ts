@@ -923,3 +923,19 @@ describe("on a phone with the order's foot held at the bottom", () => {
     expect(getComputedStyle(row).backgroundColor).toBe(getComputedStyle(aside).backgroundColor);
   });
 });
+
+it("fallback layout Escape closes the popup without closing its action panel", async () => {
+  const el = await mountScreen();
+  await openMoveDishes(el);
+  const popup = document.createElement("div");
+  popup.setAttribute("popover", "auto");
+  popup.style.cssText = "position:fixed;top:100px;left:100px";
+  popup.innerHTML = "<button>Popup action</button>";
+  panel(el)!.append(popup);
+  popup.showPopover();
+  popup.querySelector("button")!.focus();
+  await userEvent.keyboard("{Escape}");
+  await el.updateComplete;
+  expect(panel(el)).not.toBeNull();
+  expect(popup.matches(":popover-open")).toBe(false);
+});

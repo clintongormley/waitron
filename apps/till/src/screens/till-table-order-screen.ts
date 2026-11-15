@@ -6742,7 +6742,7 @@ export class TillTableOrderScreen extends LitElement {
   /** A popover is open anywhere in the screen, shadow trees included. Escape belongs to it, and
    * the browser closes it only while the keydown is not cancelled. */
   #layerOpen(root: ShadowRoot = this.shadowRoot!): boolean {
-    if (root.querySelector(":popover-open") !== null) return true;
+    if (root.querySelectorAll(":popover-open").length > 0) return true;
     return [...root.querySelectorAll("*")].some(
       (element) => element.shadowRoot !== null && this.#layerOpen(element.shadowRoot),
     );

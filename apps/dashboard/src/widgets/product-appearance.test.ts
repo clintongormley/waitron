@@ -139,3 +139,29 @@ it("reads the refusal before an inherited-photo hint and restores the hint when 
     .element(page.elementLocator(button), { timeout: 1000 })
     .toHaveAccessibleDescription(caption.textContent!);
 });
+
+it("product appearance fallback layout is positioned, hittable and dismisses", async () => {
+  await page.viewport(390, 844);
+  try {
+    const { el } = await mountWidget<HTMLElementTagNameMap["dashboard-product-appearance"]>(
+      "dashboard-product-appearance",
+      {},
+    );
+    const control = document.createElement("button");
+    control.slot = "controls";
+    control.textContent = "Choose image";
+    el.append(control);
+    const trigger = el.shadowRoot!.querySelector<HTMLButtonElement>(".thumb")!;
+    await userEvent.click(trigger);
+    const panel = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    expect(getComputedStyle(panel).display).toBe("grid");
+    expect(panel.getBoundingClientRect().width).toBeGreaterThan(0);
+    expect(panel.getBoundingClientRect().right).toBeLessThanOrEqual(innerWidth);
+    await userEvent.click(control);
+    await userEvent.keyboard("{Escape}");
+    expect(panel.matches(":popover-open")).toBe(false);
+    expect(panel.getBoundingClientRect().height).toBe(0);
+  } finally {
+    await page.viewport(1280, 720);
+  }
+});

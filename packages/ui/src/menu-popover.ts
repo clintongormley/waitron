@@ -43,9 +43,7 @@ export const menuOptionStyles = css`
 `;
 
 /**
- * The rules for a `role="menu"` popover of `.option` buttons. In the top layer, so no positioned
- * content later in the page can paint over it. A manual popover, because the host's own
- * outside-press and Escape handling decide when it closes.
+ * A manual popover because the host's outside-press and Escape handling decide when it closes.
  */
 export const menuPopoverStyles = css`
   .menu {
@@ -63,7 +61,7 @@ export const menuPopoverStyles = css`
     box-shadow: var(--wt-shadow-2);
   }
 
-  .menu:popover-open {
+  .menu:is(:popover-open, .\\:popover-open) {
     display: flex;
   }
 

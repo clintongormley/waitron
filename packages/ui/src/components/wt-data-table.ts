@@ -297,6 +297,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
         text-align: end;
       }
 
+      tbody tr td[data-pinned="end"]:has(wt-row-actions[data-fallback-popover-open]) {
+        z-index: 100;
+      }
+
       tbody tr:last-child td {
         border-bottom: 0;
       }

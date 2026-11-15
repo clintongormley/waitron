@@ -97,6 +97,21 @@ const clickForNewPage: BrowserCommand<
 // A crashed Stryker run leaves mutated copies of the source in .stryker-tmp, which Vitest would
 // otherwise run as real test files.
 const exclude = [...configDefaults.exclude, "**/.stryker-tmp/**"];
+const refusePopoverChunk: BrowserCommand<[refuse: boolean]> = async (context, refuse) => {
+  const { page } = context as unknown as {
+    page: {
+      route: (
+        pattern: string,
+        handle: (route: { abort(): Promise<void> }) => Promise<void>,
+      ) => Promise<void>;
+      unroute: (pattern: string) => Promise<void>;
+    };
+  };
+  const pattern = "**/*popover-polyfill*";
+  if (refuse) await page.route(pattern, (route) => route.abort());
+  else await page.unroute(pattern);
+};
+const fallbackTests = "src/popover-fallback.test.ts";
 const touchTests = "src/icon-button.touch.test.ts";
 
 export default defineConfig({
@@ -106,6 +121,7 @@ export default defineConfig({
       "lit/directives/class-map.js",
       "lit/async-directive.js",
       "lit/directive.js",
+      "@oddbird/popover-polyfill",
     ],
   },
   test: {
@@ -118,7 +134,13 @@ export default defineConfig({
       headless: true,
       instances: [
         // An instance's own `exclude` replaces the root one rather than adding to it.
-        { browser: "chromium", exclude: [...exclude, touchTests] },
+        { browser: "chromium", exclude: [...exclude, touchTests, fallbackTests] },
+        {
+          browser: "chromium",
+          name: "chromium-fallback",
+          include: [fallbackTests],
+          setupFiles: ["test/popover-fallback-setup.ts"],
+        },
         // A touch context makes `(hover: hover)` false for the whole page, so touch tests get their
         // own instance; it is split by file because Stryker replaces every instance's test-name filter.
         {
@@ -129,6 +151,7 @@ export default defineConfig({
         },
       ],
       commands: {
+        refusePopoverChunk,
         emulateColorScheme,
         emulateReducedMotion,
         emulateForcedColors,

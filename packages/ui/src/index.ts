@@ -2,6 +2,7 @@ export { applyTokens } from "./tokens/index.js";
 export { TickingClock } from "./ticking-clock.js";
 export {
   baseStyles,
+  popoverVisibilityStyles,
   pageTitleStyles,
   disabledStyles,
   floorTrayStyles,
@@ -250,3 +251,5 @@ export {
 export { ChangeObserver } from "./change-observer.js";
 
 export { TableRequestController } from "./components/table-request-controller.js";
+
+export { startWithPopover } from "./popover-startup.js";
