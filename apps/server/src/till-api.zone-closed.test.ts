@@ -143,6 +143,17 @@ describe("closed zones take no new service", () => {
         })
       ).status,
     ).toBe(200);
+    at("22:30");
+    const duringClosure = await orderRows();
+    expect(
+      await request(v, "POST", "/api/working-orders", {
+        id: randomUUID(),
+        zoneId: v.zoneId,
+        lines: [line(v)],
+        lateSend: { menuIds: [period.menuId] },
+      }),
+    ).toEqual(refused(v));
+    expect(await orderRows()).toEqual(duringClosure);
     vi.setSystemTime(new Date("2026-10-06T00:30:00+02:00"));
     await seat(v);
     const before = await orderRows();
@@ -161,6 +172,17 @@ describe("closed zones take no new service", () => {
       },
     });
     expect(await orderRows()).toEqual(before);
+    const id = randomUUID();
+    const confirmed = await request(v, "POST", "/api/working-orders", {
+      id,
+      zoneId: v.zoneId,
+      lines: [line(v)],
+      lateSend: { menuIds: [period.menuId] },
+    });
+    expect(confirmed.status).toBe(200);
+    const after = await orderRows();
+    expect(after).toHaveLength(before.length + 1);
+    expect(after.find((row) => row.id === id)).toMatchObject({ id, status: "open" });
   });
 
   it("seats immediately before closure and refuses at the exact start without writing a party", async () => {
