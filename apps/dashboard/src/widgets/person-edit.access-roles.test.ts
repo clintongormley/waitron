@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { SUPPORTED_LOCALES } from "@waitron/shared";
 import { chooseOptions } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { DashboardApi, type AccessRole, type PersonSummary } from "../api/client.js";
@@ -27,6 +28,7 @@ const person: PersonSummary = {
   telephone: null,
   roleIds: ["manager"],
   status: "active",
+  locale: null,
   hasPassword: true,
   hasTotp: false,
 };
@@ -45,6 +47,12 @@ async function mount(held = ["manager"], viewerAdmin = true, stale = false) {
       }
       return { roleIds: args[1] as string[] };
     },
+  });
+  vi.spyOn(api.background, "getLocales").mockResolvedValue({
+    locales: [...SUPPORTED_LOCALES],
+    venueDefault: "en-GB",
+    loginDefault: "en-GB",
+    venueName: "Venue",
   });
   const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
     person: { ...person, roleIds: held },
@@ -151,6 +159,7 @@ it("a name-only save does not write access-role memberships", async () => {
     email: "ada@example.com",
     telephone: null,
     status: "active",
+    locale: null,
   });
   expect(calls).toEqual([]);
 });

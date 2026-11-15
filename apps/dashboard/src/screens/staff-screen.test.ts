@@ -973,49 +973,61 @@ describe("staff-screen — row edit", () => {
     expect(api.listStaff).toHaveBeenCalledTimes(2);
   });
 
-  it("omits an unchanged language that the person chose during onboarding", async () => {
-    let savedLocale: string | null = null;
-    const writes: Record<string, unknown>[] = [];
-    const api = new DashboardApi("", async (path, init) => {
-      if (init?.method === "PUT") {
-        writes.push(JSON.parse(String(init.body)));
-        return new Response(null, { status: 204 });
-      }
-      const value = String(path).includes("/staff/page")
-        ? {
-            rows: [{ ...people[0]!, telephone: null, locale: savedLocale }],
-            page: 0,
-            pageSize: 50,
-            total: 1,
-            anyPeople: true,
-          }
-        : String(path).endsWith("/locales")
+  it.each([null, "en-GB"])(
+    "omits unchanged language (%s) across onboarding contact saves",
+    async (initialLocale) => {
+      let savedLocale: string | null = initialLocale;
+      const writes: Record<string, unknown>[] = [];
+      const api = new DashboardApi("", async (path, init) => {
+        if (init?.method === "PUT") {
+          writes.push(JSON.parse(String(init.body)));
+          return new Response(null, { status: 204 });
+        }
+        const value = String(path).includes("/staff/page")
           ? {
-              locales: [
-                { code: "en-GB", label: "English" },
-                { code: "es-ES", label: "Español" },
-              ],
-              venueDefault: "en-GB",
-              loginDefault: "en-GB",
-              venueName: "Venue",
+              rows: [{ ...people[0]!, telephone: null, locale: savedLocale }],
+              page: 0,
+              pageSize: 50,
+              total: 1,
+              anyPeople: true,
             }
-          : accessRoleChoices;
-      return new Response(JSON.stringify(value), {
-        headers: { "content-type": "application/json" },
+          : String(path).endsWith("/locales")
+            ? {
+                locales: [
+                  { code: "en-GB", label: "English" },
+                  { code: "es-ES", label: "Español" },
+                ],
+                venueDefault: "en-GB",
+                loginDefault: "en-GB",
+                venueName: "Venue",
+              }
+            : accessRoleChoices;
+        return new Response(JSON.stringify(value), {
+          headers: { "content-type": "application/json" },
+        });
       });
-    });
-    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
-      api,
-      canAdminister: true,
-    });
-    await vi.waitFor(() => expect(list(el).people).toHaveLength(1));
-    await openEdit(el, "p1");
-    savedLocale = "es-ES";
-    await saveThroughEdit(el);
-    await vi.waitFor(() => expect(editForm(el).open).toBe(false));
-    expect(writes).toHaveLength(1);
-    expect(writes[0]).not.toHaveProperty("locale");
-  });
+      const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+        api,
+        canAdminister: true,
+      });
+      await vi.waitFor(() => expect(list(el).people).toHaveLength(1));
+      await openEdit(el, "p1");
+      const roles = editForm(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        'wt-combobox[name="accessRoles"]',
+      )!;
+      await vi.waitFor(() => expect(roles.disabled).toBe(false));
+      await chooseOptions(roles, ["staff"]);
+      savedLocale = "es-ES";
+      await saveThroughEdit(el);
+      await vi.waitFor(() => expect(editForm(el).person?.locale).toBe("es-ES"));
+      expect(editForm(el).open).toBe(true);
+      expect(writes).toHaveLength(1);
+      expect(writes[0]).not.toHaveProperty("locale");
+      await saveThroughEdit(el, "edit-telephone", "+44 20 7946 0001");
+      await vi.waitFor(() => expect(writes).toHaveLength(2));
+      expect(writes[1]).not.toHaveProperty("locale");
+    },
+  );
 
   it("resends an invitation and reports delivery after closing the edit dialog", async () => {
     const api = stubApi();
