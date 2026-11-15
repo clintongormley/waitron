@@ -619,11 +619,11 @@ describe("Stripe reader HTTP deadlines", () => {
         const result = await (
           method === "status" ? seat.readers.status(deps, "tmr_abc") : seat.readers.list(deps)
         ).catch((error: unknown) => error);
+        if (method === "status") expect(result).toEqual({ online: false, unreachable: true });
+        else expect(result).toBeInstanceOf(Stripe.errors.StripeConnectionError);
         expect(received?.timeout).toBe(20_000);
         expect(received?.maxNetworkRetries).toBe(0);
         expect(received?.httpClient?.getClientName()).toBe("fetch");
-        if (method === "status") expect(result).toEqual({ online: false, unreachable: true });
-        else expect(result).toBeInstanceOf(Stripe.errors.StripeConnectionError);
         expect(paths).toEqual([
           method === "status" ? "GET /v1/terminal/readers/tmr_abc" : "GET /v1/terminal/readers",
         ]);
