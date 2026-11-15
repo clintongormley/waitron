@@ -1154,14 +1154,14 @@ async function releaseGroup(
   const fire = { heldPaper: (await heldPaperStations(tx, [groupId])).get(groupId) ?? new Set() };
   // Every bill in this group must use the same station snapshot at the release instant.
   await routing();
-  await judgeHeldRelease(
+  const judged = await judgeHeldRelease(
     tx,
     [...byOrder].map(([orderId, lineIds]) => ({ orderId, lineIds })),
     late,
     routing,
   );
   for (const [orderId, lineIds] of byOrder) {
-    await fireOrderLines(tx, cfg, orderId, lineIds, late, fire, routing);
+    await fireOrderLines(tx, cfg, orderId, lineIds, judged.get(orderId)!, fire, routing);
   }
   const firstFood = (await nextFireKind(tx, partyId)) === "new_order";
   await tx

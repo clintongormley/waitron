@@ -2670,61 +2670,63 @@ async function coursesToJudge(
 
 /**
  * Judge, before a held group is released across its bills, the stored courses each bill's
- * {@link fireOrderLines} would send, so one refusal names them all.
+ * {@link fireOrderLines} would send, so one refusal names them all. Answers each bill's stored
+ * courses, for its fire to take as already judged.
  */
 export async function judgeHeldRelease(
   tx: Transaction,
   bills: readonly { orderId: string; lineIds: readonly string[] }[],
   late: LateUnsentMode,
   routing: RoutingOnce,
-): Promise<void> {
+): Promise<Map<string, { judged: FireableLine[] }>> {
+  const stored = new Map<string, { judged: FireableLine[] }>();
   const judged = [];
-  for (const { orderId, lineIds } of bills)
-    judged.push({
-      orderId,
-      lines: await coursesToJudge(
-        tx,
-        orderId,
-        await storedCoursesOf(tx, orderId, lineIds),
-        true,
-        routing,
-      ),
-    });
+  for (const { orderId, lineIds } of bills) {
+    const courses = await storedCoursesOf(tx, orderId, lineIds);
+    stored.set(orderId, { judged: courses });
+    judged.push({ orderId, lines: await coursesToJudge(tx, orderId, courses, true, routing) });
+  }
   await lateUnsentDishesOf(tx, judged, late);
+  return stored;
 }
 
 /**
  * Send `lineIds`' stored courses and release their held kitchen work. `fire` names a release from a
- * held group; `late` says how a stored course whose period has ended is treated.
+ * held group; `late` says how a stored course whose period has ended is treated, or gives the
+ * stored courses {@link judgeHeldRelease} already judged.
  */
 export async function fireOrderLines(
   tx: Transaction,
   cfg: OriginConfig,
   orderId: string,
   lineIds: readonly string[],
-  late: LateUnsentMode,
+  late: LateUnsentMode | { judged: readonly FireableLine[] },
   fire?: { heldPaper: ReadonlySet<string> },
   routing?: RoutingOnce,
 ): Promise<void> {
-  const fresh = await storedCoursesOf(tx, orderId, lineIds);
+  const fresh =
+    typeof late === "object" && "judged" in late
+      ? [...late.judged]
+      : await storedCoursesOf(tx, orderId, lineIds);
   if (fresh.length > 0) {
     if (await isOpenOrder(tx, orderId))
       await assertSendable(
         tx,
         fresh.map((line) => line.id),
       );
-    await lateUnsentDishes(
-      tx,
-      orderId,
-      await coursesToJudge(
+    if (!(typeof late === "object" && "judged" in late))
+      await lateUnsentDishes(
         tx,
         orderId,
-        fresh,
-        fire !== undefined,
-        routing ?? routingOnce(tx, new Date()),
-      ),
-      late,
-    );
+        await coursesToJudge(
+          tx,
+          orderId,
+          fresh,
+          fire !== undefined,
+          routing ?? routingOnce(tx, new Date()),
+        ),
+        late,
+      );
     await fireLines(
       tx,
       cfg,
