@@ -2472,7 +2472,7 @@ async function bootServer(
           log,
         });
   undoOnFailure.push(async () => mainSilence?.stop());
-  if (isMirror) app.use("*", spareReadGate({ silent: () => mainSilence?.state().silent === true }));
+  if (isMirror) app.use("*", spareReadGate({ main: () => mainSilence?.state() }));
   if (isMirror) mountMainServerApi(app, { readMembership: () => readNodeMembership(db) }, log);
 
   // The node whose DATA the node-scoped read paths display. On a mirror it is the ORIGIN primary,

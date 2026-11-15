@@ -2,11 +2,16 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { Hono } from "hono";
 import { expect, it } from "vitest";
 import { spareReadGate } from "./spare-read-gate.js";
+import { formatDuration } from "@waitron/shared";
 import { SPARE_WORDS } from "./i18n/spare.js";
+import type { MainSilenceState } from "./main-silence-watch.js";
 import { readOnlyGate } from "./read-only-gate.js";
 import { isReadOnlyExempt } from "./read-only-exemptions.js";
 
-function fixture(watch = { silent: false }) {
+const ANSWERING: MainSilenceState = { silentSinceMs: null, reached: true, silent: false };
+const NOW = 1_800_000_000_000;
+
+function fixture(watch: { silent: boolean } = { silent: false }, main?: MainSilenceState | null) {
   const mode = { mirror: true };
   const app = new Hono();
   app.use(
@@ -16,7 +21,20 @@ function fixture(watch = { silent: false }) {
       (c) => isReadOnlyExempt(c.req, { mirror: mode.mirror, fenced: false }),
     ),
   );
-  app.use("*", spareReadGate({ silent: () => watch.silent }));
+  app.use(
+    "*",
+    spareReadGate({
+      main: () =>
+        main === null
+          ? undefined
+          : (main ?? {
+              ...ANSWERING,
+              silent: watch.silent,
+              silentSinceMs: watch.silent ? NOW : null,
+            }),
+      now: () => NOW,
+    }),
+  );
   app.post("/management-api/promote", (c) => {
     mode.mirror = false;
     return c.json({ restarting: true });
@@ -203,3 +221,70 @@ it.each([true, false])(
     }
   },
 );
+
+it.each(["en-GB", "es-ES"] as const)(
+  "the closed page says for how long a silent main server has not answered and links to the switch: %s",
+  async (locale) => {
+    const app = fixture(undefined, {
+      silentSinceMs: NOW - 65_000,
+      reached: true,
+      silent: true,
+    });
+    const body = await (
+      await app.request(`${OWN}/`, { headers: { "accept-language": locale } })
+    ).text();
+    expect(body).toContain(
+      SPARE_WORDS[locale].mainSilent.replace("{duration}", formatDuration(65_000, locale)),
+    );
+    expect(body).toContain(`<a href="/handover/emergency">${SPARE_WORDS[locale].openSwitch}</a>`);
+    expect(body).not.toContain(SPARE_WORDS[locale].mainUnreached);
+    expect(body).toContain(SPARE_WORDS[locale].title);
+  },
+);
+
+it.each(["en-GB", "es-ES"] as const)(
+  "the closed page says a main server this spare has not reached is out of its reach: %s",
+  async (locale) => {
+    const app = fixture(undefined, { silentSinceMs: null, reached: false, silent: false });
+    const body = await (
+      await app.request(`${OWN}/manage`, { headers: { "accept-language": locale } })
+    ).text();
+    expect(body).toContain(SPARE_WORDS[locale].mainUnreached);
+    expect(body).not.toContain("/handover/emergency");
+  },
+);
+
+it.each([
+  ["answering", ANSWERING],
+  ["not yet silent long enough", { silentSinceMs: NOW - 5_000, reached: true, silent: false }],
+  ["watching nothing", null],
+] as const)("the closed page says nothing of the main server while %s", async (_, main) => {
+  const body = await (await fixture(undefined, main).request(`${OWN}/`)).text();
+  expect(body).toContain(SPARE_WORDS["en-GB"].title);
+  expect(body).not.toContain(SPARE_WORDS["en-GB"].mainUnreached);
+  expect(body).not.toContain(SPARE_WORDS["en-GB"].openSwitch);
+  expect(body).not.toContain("/handover/emergency");
+});
+
+it("the closed page's words pass through the page's escaping", async () => {
+  const words = SPARE_WORDS["en-GB"];
+  const original = { ...words };
+  Object.assign(words, {
+    title: "<b>title</b>",
+    mainSilent: "<i>silent</i> {duration}",
+    openSwitch: "<u>open</u>",
+  });
+  try {
+    const body = await (
+      await fixture(undefined, { silentSinceMs: NOW - 2_000, reached: true, silent: true }).request(
+        `${OWN}/`,
+      )
+    ).text();
+    expect(body).toContain("&lt;b&gt;title&lt;/b&gt;");
+    expect(body).toContain("&lt;i&gt;silent&lt;/i&gt; ");
+    expect(body).toContain("&lt;u&gt;open&lt;/u&gt;");
+    expect(body).not.toMatch(/<[biu]>/);
+  } finally {
+    Object.assign(words, original);
+  }
+});
