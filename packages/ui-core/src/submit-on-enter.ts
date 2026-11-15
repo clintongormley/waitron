@@ -13,7 +13,7 @@ const singleLineTypes = new Set([
   "week",
 ]);
 
-/** Safari's Enter that confirms an input method's text can arrive after the composition ends, with isComposing unset and key code 229. */
+/** Whether an input method owns this key: flagged isComposing, or key code 229, which catches Safari's out-of-order confirming Enter. */
 export function belongsToComposition(event: KeyboardEvent): boolean {
   return event.isComposing || event.keyCode === 229;
 }

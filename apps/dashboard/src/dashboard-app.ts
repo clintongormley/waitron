@@ -3009,8 +3009,7 @@ export class DashboardApp extends LitElement {
     this.#selectScreen(screen);
   }
 
-  /** Escape is stopped only when it cleared a term, so on an empty box it still closes the drawer.
-   * A key that belongs to an input method's composition is left to it, not the box. */
+  /** Escape is stopped only when it cleared a term, so on an empty box it still closes the drawer. */
   #onNavSearchKeydown(e: KeyboardEvent): void {
     if (belongsToComposition(e)) return;
     if (e.key === "Enter" && this.navSearch.trim() !== "") {

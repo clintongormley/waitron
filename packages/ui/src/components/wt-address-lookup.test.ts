@@ -770,3 +770,35 @@ test.each(["isComposing", "keyCode 229"] as const)(
     expect(provider.calls.resolve).toHaveLength(1);
   },
 );
+
+test.each(["isComposing", "keyCode 229"] as const)(
+  "an Escape or arrow key an input method owns (%s) leaves the list alone",
+  async (how) => {
+    const el = await mountLookup();
+    const outside = vi.fn();
+    host.addEventListener("keydown", outside);
+    input(el).focus();
+    type(el, "Calle Mayor");
+    await settle(el);
+    for (const key of ["ArrowDown", "ArrowUp", "Escape"]) {
+      const event = new KeyboardEvent("keydown", {
+        key,
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+        isComposing: how === "isComposing",
+      });
+      if (how === "keyCode 229") Object.defineProperty(event, "keyCode", { value: 229 });
+      input(el).dispatchEvent(event);
+      await settle(el);
+      expect(event.defaultPrevented).toBe(false);
+    }
+    expect(options(el).length).toBeGreaterThan(0);
+    expect(outside).toHaveBeenCalledTimes(3);
+    host.removeEventListener("keydown", outside);
+
+    await userEvent.keyboard("{Escape}");
+    await el.updateComplete;
+    expect(options(el)).toHaveLength(0);
+  },
+);

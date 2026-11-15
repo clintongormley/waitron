@@ -675,7 +675,7 @@ export class WtCombobox extends LitElement {
   }
 
   private async onSearchKeydown(event: KeyboardEvent): Promise<void> {
-    if (event.key === "Enter" && belongsToComposition(event)) return;
+    if (belongsToComposition(event)) return;
     if (event.key === "Enter") {
       // Whether or not a row is active, so a form's submit-on-Enter never sees it.
       event.preventDefault();
@@ -949,7 +949,7 @@ export class WtCombobox extends LitElement {
       this.closeAndReturnFocus();
       return;
     }
-    if (event.key !== "Escape") return;
+    if (event.key !== "Escape" || belongsToComposition(event)) return;
     event.preventDefault();
     event.stopPropagation();
     this.closeAndReturnFocus();

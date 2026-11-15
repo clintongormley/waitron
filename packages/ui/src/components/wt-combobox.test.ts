@@ -4187,11 +4187,10 @@ test("grouped options add one indent and keep the same row spacing, including se
   expect(parseFloat(getComputedStyle(optionRows(el)[0]!).paddingInlineStart)).toBe(30);
 });
 
-/** An Enter keydown that confirms an input-method character: flagged as composing, or, as Safari
- * sends it, with key code 229. */
-function composingEnter(how: "isComposing" | "keyCode 229"): KeyboardEvent {
+/** A keydown an input method owns: flagged as composing, or, as Safari sends it, with key code 229. */
+function composingKey(how: "isComposing" | "keyCode 229", key = "Enter"): KeyboardEvent {
   const event = new KeyboardEvent("keydown", {
-    key: "Enter",
+    key,
     bubbles: true,
     composed: true,
     cancelable: true,
@@ -4207,7 +4206,7 @@ test.each(["isComposing", "keyCode 229"] as const)(
     const { el, trigger } = await mountWithOptions();
     await userEvent.click(trigger);
     await userEvent.keyboard("{ArrowDown}");
-    const event = composingEnter(how);
+    const event = composingKey(how);
     searchBox(el).dispatchEvent(event);
     await el.updateComplete;
     expect(el.value).toBe("");
@@ -4215,5 +4214,24 @@ test.each(["isComposing", "keyCode 229"] as const)(
 
     await userEvent.keyboard("{Enter}");
     expect(el.value).toBe("gluten-free");
+  },
+);
+
+test.each(["isComposing", "keyCode 229"] as const)(
+  "an Escape or arrow key an input method owns (%s) in the search box leaves the list alone",
+  async (how) => {
+    const { el, trigger, popup } = await mountWithOptions();
+    await userEvent.click(trigger);
+    for (const key of ["ArrowDown", "ArrowUp", "Escape"]) {
+      const event = composingKey(how, key);
+      searchBox(el).dispatchEvent(event);
+      await el.updateComplete;
+      expect(event.defaultPrevented).toBe(false);
+    }
+    expect(popup.matches(":popover-open")).toBe(true);
+    expect(el.shadowRoot!.activeElement).toBe(searchBox(el));
+
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(false));
   },
 );
