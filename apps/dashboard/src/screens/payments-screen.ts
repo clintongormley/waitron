@@ -3,6 +3,7 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { keyed } from "lit/directives/keyed.js";
 import { customElement, property, state } from "lit/decorators.js";
 import {
+  UrlStateController,
   baseStyles,
   pageTitleStyles,
   focusFirstInvalid,
@@ -51,6 +52,7 @@ import type {
   HeldOutcome,
   HeldPaymentRow,
 } from "../api/client.js";
+import { dashboardPath } from "../navigation.js";
 import { CARD_PROVIDERS_PATH } from "./modules-screen.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -60,6 +62,11 @@ import "../widgets/equipment-label.js";
 import "../widgets/backup-audit.js";
 import { holderText } from "../i18n/equipment.js";
 import { readerDeleteCopy } from "../widgets/reader-delete-copy.js";
+
+export const readerSettingFields = [
+  { name: "reader-name", labelKey: "payments.reader_col_name" },
+  { name: "prints-own-slip-automatically", labelKey: "payments.prints_own_slip_automatically" },
+] as const;
 
 /** The section's own wording for a refused check; any other code reads its shared message. */
 function stuckRefusalText(error: unknown): string {
@@ -420,6 +427,48 @@ export class PaymentsScreen extends LitElement {
   @state() private dialogError: string | null = null;
   @state() private busy = false;
   @state() private refreshing = false;
+  #linkedReader: string | null = null;
+  #addressReader: string | null = null;
+  readonly #url = new UrlStateController(
+    this,
+    () => {
+      if (this.#url.read("dashboard") !== "payments") return;
+      const id = this.#url.read("reader");
+      if (id === this.#addressReader) return;
+      const previous = this.#addressReader;
+      this.#linkedReader = this.#addressReader = id;
+      if (id === null) {
+        if (previous !== null) void this.#closeEditor(false);
+      } else this.#openLinkedReader();
+    },
+    dashboardPath,
+  );
+
+  #clearReaderAddress(): void {
+    this.#linkedReader = this.#addressReader = null;
+    if (this.#url.read("dashboard") === "payments") void this.#url.write({ reader: null }, true);
+  }
+
+  #openLinkedReader(): void {
+    const id = this.#linkedReader;
+    if (
+      id === null ||
+      this.readers === undefined ||
+      this.busy ||
+      this.#listQueries.failing("listReaders")
+    )
+      return;
+    this.#linkedReader = null;
+    const reader = this.readers.find((row) => row.id === id);
+    if (!reader) this.#clearReaderAddress();
+    else if (this.editor?.reader.id !== id || this.editor.mode !== "edit")
+      this.#openEditor(reader, "edit");
+  }
+
+  override updated(): void {
+    this.#openLinkedReader();
+  }
+
   #opener?: HTMLElement;
   #discoveryVersion = 0;
   #statusVersion = 0;
@@ -676,6 +725,7 @@ export class PaymentsScreen extends LitElement {
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    this.#linkedReader = this.#addressReader = null;
     this.#tenderRefundRead++;
     this.#heldRead++;
     this.#closeDelete();
@@ -735,6 +785,7 @@ export class PaymentsScreen extends LitElement {
           const gone = (this.readers ?? []).filter(({ id }) => !listed.has(id));
           this.readers = readers;
           for (const { id } of gone) this.#readerGone(id, true);
+          this.#openLinkedReader();
           // A status may ask the provider itself, so a background refresh asks again only when the
           // set of active readers changed.
           const ids = JSON.stringify(
@@ -943,9 +994,12 @@ export class PaymentsScreen extends LitElement {
     }
   }
 
-  #openEditor(reader: ReaderRow, mode: "edit" | "details" | "unpair", event: Event): void {
-    const menu = (event.currentTarget as HTMLElement).closest("wt-row-actions")!;
-    this.#opener = menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+  #openEditor(reader: ReaderRow, mode: "edit" | "details" | "unpair", event?: Event): void {
+    const menu = (event?.currentTarget as HTMLElement | undefined)?.closest("wt-row-actions");
+    this.#opener =
+      menu?.shadowRoot?.querySelector<HTMLButtonElement>("button") ??
+      this.renderRoot.querySelector<HTMLElement>("h1") ??
+      undefined;
     this.#editScope?.dispose();
     this.#editScope = undefined;
     this.#readerOperation = undefined;
@@ -983,10 +1037,11 @@ export class PaymentsScreen extends LitElement {
     }
   }
 
-  async #closeEditor(): Promise<void> {
+  async #closeEditor(clearAddress = true): Promise<void> {
     this.#editScope?.dispose();
     this.#editScope = undefined;
     this.editor = null;
+    if (clearAddress && this.#addressReader !== null) this.#clearReaderAddress();
     await this.updateComplete;
     if (this.#opener?.isConnected) this.#opener.focus();
   }
@@ -1147,6 +1202,7 @@ export class PaymentsScreen extends LitElement {
       open = true;
       this.labelReader = null;
     }
+    if (this.#addressReader === id) this.#clearReaderAddress();
     this.readers = this.readers?.filter((reader) => reader.id !== id);
     if (refuse && open && !ours) this.#showError("reader.not_found");
   }

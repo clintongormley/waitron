@@ -1335,8 +1335,8 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 ### Users, sign-in and the dashboard shell
 
 - **A1527. Find settings inside the remaining windows through Search pages (owner,
-  2026-11-14).** Shared search/chooser, department Details, Service, Transfers and Receipts, zone settings, printer Edit/calibration settings and device settings are implemented.
-  Remaining required families: card readers and device profiles. The last family also adds the EN/ES guide sentence on finding settings, as cleared by
+  2026-11-14).** Shared search/chooser, department Details, Service, Transfers and Receipts, zone settings, printer Edit/calibration settings, device settings and card-reader settings are implemented.
+  Remaining required family: device profiles. The last family also adds the EN/ES guide sentence on finding settings, as cleared by
   the watcher on 14 November at 19:07. Each window needs its mounted two-way label/control check.
   [All-window design](superpowers/specs/2026-11-14-a1527-setting-search-design.md), Claude-read and
   watcher-cleared; [department plan](superpowers/plans/2026-11-14-a1527-search-settings-core.md).
