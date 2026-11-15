@@ -182,8 +182,7 @@ it.each([
           loadBoxEnv,
           readRecoveryState,
           writeRecoveryState,
-          startServer: async (merged, base) =>
-            (server = await startServer(merged, base, seams)),
+          startServer: async (merged, base) => (server = await startServer(merged, base, seams)),
           serveRecovery: async () => {
             throw new Error("unexpected recovery mode");
           },
