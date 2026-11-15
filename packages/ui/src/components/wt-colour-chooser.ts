@@ -230,7 +230,6 @@ export class WtColourChooser extends LitElement {
     const placement = popupPlacement(anchor, box.height, innerHeight, "above");
     popup.style.maxHeight = `${placement.maxHeight}px`;
     popup.scrollTop = scrollTop;
-    // Measured again after the cap: a panel it makes scroll can gain a scrollbar's width.
     const maxLeft = Math.max(0, innerWidth - popup.getBoundingClientRect().width - 8);
     popup.style.left = `${Math.max(0, Math.min(anchor.left, maxLeft))}px`;
     popup.style.top = `${placement.top}px`;
