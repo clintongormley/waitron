@@ -5259,6 +5259,7 @@ describe("menuOfferToTillProduct", () => {
         unit: litre,
         pricingUnit: "weight",
         vatClass: "reduced",
+        takeawayVatClass: "reduced",
         category: "Jarras",
         allergens: { sulphites: {} },
         diet: { vegan: "yes", vegetarian: "yes", contains: [] },
@@ -5275,6 +5276,66 @@ describe("menuOfferToTillProduct", () => {
       courseId: null,
     });
   });
+  it("carries the takeaway class the menu holds for the dish and each variant", () => {
+    const unit = {
+      staffName: "Staff unit",
+      staffAbbreviation: "su",
+      id: "unit-each",
+      name: { es: "unidad" },
+      abbreviation: { es: "ud" },
+      precision: 0,
+      hardwareUnit: null,
+    };
+    const selling = {
+      unit,
+      vatClass: "general" as const,
+      category: null,
+      allergens: null,
+      diet: null,
+      dietOverride: null,
+      dietaryDeclarations: [],
+      courseId: null,
+    };
+    const product = menuOfferToTillProduct({
+      ...selling,
+      id: "offer-coffee",
+      menuId: "menu-1",
+      productId: "coffee",
+      grossPrice: null,
+      unitPrice: "2.00",
+      available: true,
+      image: null,
+      description: null,
+      menuName: "Carta",
+      placements: [[]],
+      name: "Coffee",
+      customerName: null,
+      kitchenName: null,
+      takeawayVatClass: "reduced",
+      offeredModifiers: [],
+      variants: [
+        {
+          ...selling,
+          id: "coffee-large",
+          name: "Large",
+          customerName: null,
+          kitchenName: null,
+          image: null,
+          unitPrice: "2.50",
+          menuPrice: null,
+          available: true,
+          pricingUnit: "each",
+          takeawayVatClass: "super_reduced",
+        },
+      ],
+    });
+    expect(product).toMatchObject({ vatClass: "general", takeawayVatClass: "reduced" });
+    expect(product.variants![0]).toMatchObject({
+      vatClass: "general",
+      takeawayVatClass: "super_reduced",
+    });
+  });
+
   it("carries whether the offer can be sold now, and the menu version it came from", () => {
     const offer: TillMenuOffer = {
       id: "offer-burger",

@@ -92,7 +92,7 @@ export interface DeviceHome {
 }
 
 export interface MenuDocument {
-  format: 3;
+  format: 4;
   /** Direct active inclusions' working hashes. */
   includedMenuHashes?: Record<string, string>;
   menuId: string;

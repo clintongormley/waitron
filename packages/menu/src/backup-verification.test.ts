@@ -43,7 +43,7 @@ const version = "10000000-0000-4000-8000-000000000002";
 const person = "10000000-0000-4000-8000-000000000003";
 const image = "a".repeat(64) + ".webp";
 const documentText = JSON.stringify({
-  format: 3,
+  format: 4,
   home: {
     handheld: { columns: 2, order: "home_first", tiles: "colours" },
     shortcuts: [],
@@ -189,7 +189,7 @@ describe("menu backup evidence", () => {
     "update menu_version_images set filename='missing.webp'",
     "delete from menu_version_images",
     "update menu_versions set document='{}'",
-    "update menu_versions set document='{\"format\":3}'",
+    "update menu_versions set document='{\"format\":4}'",
     "update menu_versions set document='[]'",
     "update menu_versions set document=x'7b7d'",
     "update menu_version_images set filename=x'61'",
@@ -202,7 +202,7 @@ describe("menu backup evidence", () => {
     expect((await run()).status).toBe("invalid");
   });
   it("does not certify an unknown document format as corruption", async () => {
-    const changed = documentText.replace('"format":3', '"format":99');
+    const changed = documentText.replace('"format":4', '"format":99');
     for (const suite of [original, restored])
       await suite.db.insert(menuVersions).values({
         id: "10000000-0000-4000-8000-000000000009",
@@ -216,7 +216,7 @@ describe("menu backup evidence", () => {
     expect((await run()).status).toBe("unsupported");
   });
   it("keeps an unsupported format inconclusive even beside broken references", async () => {
-    const changed = documentText.replace('"format":3', '"format":99');
+    const changed = documentText.replace('"format":4', '"format":99');
     for (const suite of [original, restored]) {
       await corrupt(suite, "update menu_version_images set version_id='missing'");
       await corrupt(suite, `update menu_versions set document='${changed}'`);

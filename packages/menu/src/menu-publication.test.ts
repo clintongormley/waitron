@@ -881,7 +881,7 @@ describe("a live version published before the Device Home Page", () => {
       params: { menuId: f.dinner },
     });
   });
-  it("keeps an unrelated format-3 menu usable when another menu has an unsupported live format", async () => {
+  it("keeps an unrelated current-format menu usable when another menu has an unsupported live format", async () => {
     const f = await menusFixture(fx.db);
     const first = await publish(f.lunch);
     await liveInFormat2(f.dinner);
@@ -891,6 +891,42 @@ describe("a live version published before the Device Home Page", () => {
     expect(await app((tx) => publishMenu(tx, f.lunch, preview.hash, "person-1"))).toEqual(first);
     expect([...(await app((tx) => readLiveDocuments(tx, [f.lunch]))).keys()]).toEqual([f.lunch]);
     expect((await app((tx) => menuStatus(tx, [f.lunch]))).get(f.lunch)!.state).toBe("current");
+  });
+});
+
+describe("a live version published before its document froze the takeaway VAT class", () => {
+  it("refuses a format-3 document with the venue-reset code", async () => {
+    const f = await menusFixture(fx.db);
+    const { versionId } = await publish(f.lunch);
+    const [row] = await fx.db.select().from(menuVersions).where(eq(menuVersions.id, versionId));
+    const document = JSON.parse(
+      JSON.stringify({ ...row!.document, format: 3 }, (key, value: unknown) =>
+        key === "takeawayVatClass" ? undefined : value,
+      ),
+    ) as typeof row.document;
+    const [earlier] = await fx.db
+      .insert(menuVersions)
+      .values({
+        menuId: f.lunch,
+        number: row!.number + 1,
+        document,
+        contentHash: menuDocumentHash(document),
+        publishedAt: row!.publishedAt,
+        publishedBy: "person-1",
+      })
+      .returning({ id: menuVersions.id });
+    await fx.db
+      .update(menuPublications)
+      .set({ versionId: earlier!.id })
+      .where(eq(menuPublications.menuId, f.lunch));
+    await expect(app((tx) => readRecordedDocuments(tx, [earlier!.id]))).rejects.toMatchObject({
+      code: "menu.reset_required",
+      params: { menuId: f.lunch },
+    });
+    await expect(app((tx) => readLiveDocuments(tx, [f.lunch]))).rejects.toMatchObject({
+      code: "menu.reset_required",
+      params: { menuId: f.lunch },
+    });
   });
 });
 

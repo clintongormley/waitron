@@ -165,7 +165,7 @@ describe("buildMenuDocument", () => {
     const lager = await app((tx) => offerOf(tx, f.lunch, f.lager));
     const soup = await app((tx) => offerOf(tx, f.lunch, f.soup));
     expect(document).toMatchObject({
-      format: 3,
+      format: 4,
       menuId: f.lunch,
       menuName: "Lunch Menu",
       home: {
@@ -254,6 +254,25 @@ describe("buildMenuDocument", () => {
       vatClass: "super_reduced",
     });
     expect(JSON.stringify(document)).not.toMatch(/vatRate/);
+  });
+
+  it("freezes the effective takeaway class of the dish, each variant and each extras item", async () => {
+    const f = await menusFixture(fx.db);
+    await app(async (tx) => {
+      await updateProduct(tx, f.lemonade, { takeawayVatClass: "zero" });
+      await updateProduct(tx, f.large, { vatClass: "general" });
+      await updateProduct(tx, f.extraLemon, { takeawayVatClass: "super_reduced" });
+    });
+    const document = await build(f.lunch);
+    const offer = document.offers[await app((tx) => offerOf(tx, f.lunch, f.lemonade))]!;
+    expect(offer).toMatchObject({ vatClass: "reduced", takeawayVatClass: "zero" });
+    // The variant has its own served class and no takeaway class: its own served class wins.
+    expect(offer.variants[0]).toMatchObject({ vatClass: "general", takeawayVatClass: "general" });
+    const extras = offer.offeredModifiers[0]!;
+    expect(extras.kind === "extras" && extras.items[0]).toMatchObject({
+      vatClass: "reduced",
+      takeawayVatClass: "super_reduced",
+    });
   });
 
   it("holds an extras item and an option label whatever their availability", async () => {
@@ -569,6 +588,10 @@ describe("menuDocumentHash", () => {
     ["the dish's VAT class", (tx, f) => updateProduct(tx, f.lemonade, { vatClass: "general" })],
     ["the variant's VAT class", (tx, f) => updateProduct(tx, f.large, { vatClass: "general" })],
     ["the extra's VAT class", (tx, f) => updateProduct(tx, f.extraLemon, { vatClass: "general" })],
+    [
+      "the dish's takeaway VAT class",
+      (tx, f) => updateProduct(tx, f.lemonade, { takeawayVatClass: "zero" }),
+    ],
     ["the dish's name", (tx, f) => updateProduct(tx, f.lemonade, { name: "Still lemonade" })],
     ["the dish's price", (tx, f) => updateProduct(tx, f.lemonade, { unitPrice: "3.20" })],
     [
@@ -1776,6 +1799,42 @@ describe("diffMenuDocuments", () => {
     await app(async (tx) => {
       await updateProduct(tx, f.large, { vatClass: "zero" });
       await updateProduct(tx, f.extraLemon, { vatClass: "general" });
+    });
+    expect(changeBodies(diffMenuDocuments(dish, await build(f.dinner)))).toEqual([
+      {
+        kind: "product_changed",
+        productId: f.lemonade,
+        name: "Lemonade",
+        fields: ["vat", "variants"],
+        source: "shared_product",
+      },
+      {
+        kind: "product_changed",
+        productId: f.extraLemon,
+        name: "Extra lemon",
+        fields: ["vat"],
+        source: "shared_product",
+      },
+    ]);
+  });
+
+  it("names a change to only the takeaway class as a VAT change, wherever it is made", async () => {
+    const f = await menusFixture(fx.db);
+    const live = await build(f.dinner);
+    await app((tx) => updateProduct(tx, f.lemonade, { takeawayVatClass: "zero" }));
+    const dish = await build(f.dinner);
+    expect(changeBodies(diffMenuDocuments(live, dish))).toEqual([
+      {
+        kind: "product_changed",
+        productId: f.lemonade,
+        name: "Lemonade",
+        fields: ["vat"],
+        source: "shared_product",
+      },
+    ]);
+    await app(async (tx) => {
+      await updateProduct(tx, f.large, { takeawayVatClass: "general" });
+      await updateProduct(tx, f.extraLemon, { takeawayVatClass: "general" });
     });
     expect(changeBodies(diffMenuDocuments(dish, await build(f.dinner)))).toEqual([
       {

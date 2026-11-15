@@ -36,7 +36,7 @@ const offer: FrozenOffer = {
 };
 function document(dish: FrozenOffer = offer): MenuDocument {
   return {
-    format: 3,
+    format: 4,
     menuId: "private-menu",
     menuName: "Lunch",
     includedMenuHashes: { secret: "hash" },
