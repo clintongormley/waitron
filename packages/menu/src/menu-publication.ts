@@ -533,14 +533,7 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
   }
 
   const hash = menuDocumentHash(mine.document);
-  const unreviewed = new Map<string, { id: string; name: string; parentName: string | null }>();
-  for (const offer of Object.values(mine.document.offers)) {
-    if (offer.allergens === null)
-      unreviewed.set(offer.productId, { id: offer.productId, name: offer.name, parentName: null });
-    for (const variant of offer.variants)
-      if (variant.allergens === null)
-        unreviewed.set(variant.id, { id: variant.id, name: variant.name, parentName: offer.name });
-  }
+  const unreviewed = new Map(mine.unreviewed.map((product) => [product.id, product]));
   const precisionWarnings: MenuPreview["warnings"] = [];
   const warned = new Set<string>();
   for (const offer of Object.values(mine.document.offers))

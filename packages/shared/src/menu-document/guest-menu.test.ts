@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import type { MenuDocument, FrozenOffer } from "./menu-document-types.js";
+import type { DeclarationDocument, DeclarationOffer } from "./menu-document-types.js";
 import { publicGuestMenu } from "./guest-menu.js";
 
 const unit = {
@@ -11,7 +11,7 @@ const unit = {
   precision: 0,
   hardwareUnit: null,
 };
-const offer: FrozenOffer = {
+const offer: DeclarationOffer = {
   id: "item",
   menuId: "private-menu",
   productId: "private-product",
@@ -34,7 +34,7 @@ const offer: FrozenOffer = {
   variants: [],
   offeredModifiers: [],
 };
-function document(dish: FrozenOffer = offer): MenuDocument {
+function document(dish: DeclarationOffer = offer): DeclarationDocument {
   return {
     format: 4,
     menuId: "private-menu",
@@ -74,7 +74,7 @@ it("allows only resolved guest content, with the effective price and reviewed st
   });
 });
 it("resolves parent and variant names independently and prices each variant", () => {
-  const dish: FrozenOffer = {
+  const dish: DeclarationOffer = {
     ...offer,
     variants: [
       {
@@ -150,7 +150,7 @@ it("keeps section order and places directly included members in place", () => {
   ]);
 });
 it("keeps separately priced extras and option names with their own declarations", () => {
-  const dish: FrozenOffer = {
+  const dish: DeclarationOffer = {
     ...offer,
     offeredModifiers: [
       {

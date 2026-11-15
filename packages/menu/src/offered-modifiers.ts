@@ -1,10 +1,9 @@
+import { extraDeclarationValues } from "./product-declarations.js";
 import {
   customerPresentationText,
   joinCustomerPresentationText,
   kitchenPresentationName,
   staffPresentationName,
-  expandDietaryDeclarations,
-  validateDietaryDeclarations,
 } from "@waitron/shared";
 import { readContentLanguages } from "./content-languages.js";
 import { and, eq, inArray, notExists, sql } from "drizzle-orm";
@@ -153,10 +152,7 @@ async function readExtraProducts(
             row.parentName === null ? row.kitchenName : kitchenPresentationName(presentation),
           vatClass: row.vatClass as VatClass,
           takeawayVatClass: row.takeawayVatClass,
-          addAllergens: row.allergens,
-          suitableFor: expandDietaryDeclarations(
-            validateDietaryDeclarations(row.dietaryDeclarations),
-          ),
+          ...extraDeclarationValues(row),
         },
       ];
     }),

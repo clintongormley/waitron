@@ -161,6 +161,7 @@ export { duplicateMenu } from "./menu-copy.js";
 export {
   MENU_DOCUMENT_FORMAT,
   applyLiveFields,
+  hydrateDeclarationDocument,
   buildMenuDocument,
   diffMenuDocuments,
   documentOffers,
@@ -311,3 +312,5 @@ export type * from "./content-suggestion-types.js";
 export { assertProductWritable } from "./archive.js";
 
 export { MENU_BACKUP_VERIFICATION } from "./backup-verification.js";
+
+export { productDeclarationValues, extraDeclarationValues } from "./product-declarations.js";

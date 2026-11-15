@@ -107,7 +107,7 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 
 **4. Released by the hold, once A760 lands.** Build order: the pay window, A446 pre-bill,
 close the day, then A947 and its handover bundles. A1150 (allergens from the live product) is needed before go-live; its
-[design](superpowers/specs/2026-11-15-a1150-live-product-declarations-design.md) is ready, and its implementation plan is next.
+[design](superpowers/specs/2026-11-15-a1150-live-product-declarations-design.md) and [two-PR plan](superpowers/plans/2026-11-15-a1150-live-product-declarations.md) are cleared; refreshing already-open till views remains.
 
 - [The pay window, after A739](backlog/till.md#bundle-the-pay-window-after-a739)
 - [Close the day: count the cash, record cash in and out, waiter floats](backlog/till.md#bundle-close-the-day-count-the-cash-record-cash-in-and-out-waiter-floats)
@@ -631,17 +631,14 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **The menu patch window: split the file first** (bundle of 9, size M). [Detail](backlog/menu.md#bundle-the-menu-patch-window-split-the-file-first)
 
-- **A1150. Allergens and diet labels come from the live product on every screen** (owner,
-  2026-10-27). [Design](superpowers/specs/2026-11-15-a1150-live-product-declarations-design.md) reviewed by Claude and cleared by the watcher on 15 November; the [two-PR plan](superpowers/plans/2026-11-15-a1150-live-product-declarations.md) was also reviewed by Claude and cleared by the watcher that day. Both implementation slices remain. Today the till's menu and product info
-  read them from the published menu version, while the kitchen screen, the table's allergy check
-  and unsent table lines read the live product (`apps/server/src/line-nutrition.ts`). Sent till
-  lines and Orders history detail use the live product captured at first sending under the owner’s
-  11-November A1517 decision 6, even while the counter still displays an earlier published declaration. So the live readers disagree
-  until the menu is published again, and nothing says which is which. The owner chose one source,
-  the live product, the way availability already works. The design covers every reader of a
-  version's `allergens`, `dietaryDeclarations` and `diet`, the publish warnings and change list
-  that compare them, and the guide's wording. The menu patch window (A1151)
-  leaves allergens out because of this decision.
+- **A1150. Refresh already-open till views after live declaration edits** (owner,
+  2026-10-27). [Design](superpowers/specs/2026-11-15-a1150-live-product-declarations-design.md) and
+  [two-PR plan](superpowers/plans/2026-11-15-a1150-live-product-declarations.md) reviewed by Claude
+  and cleared by the watcher on 15 November. New/reloaded menu reads, held retrieval and guest
+  outputs use current product declarations without publishing. PR 2 remains: refresh existing
+  unsent counter/table/held lines, last-added dishes and open information/choice views on the
+  existing menu-state read, without saves, price confirmation or changing first-send captures.
+  Needed before go-live.
 
 ### Service periods, opening hours and departments
 

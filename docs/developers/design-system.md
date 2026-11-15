@@ -7067,7 +7067,8 @@ for the hierarchy's separate immediate cleanup and retained-history limits.
 A product button uses the shared `allergies` symbol in its top trailing corner when it has declared
 allergens or dietary labels. The name leaves room for the mark. The mark is decorative; a short
 press on any part of the button selects the dish. A held pointer press opens the product information
-window without selecting it. The window shows the published description, allergens and dietary labels, offers Close and Add to
+window without selecting it. The window shows the published description and current product allergens
+and dietary labels, offers Close and Add to
 order, and remains available on products with no mark.
 
 Counter and table-order lines place the dish’s allergen and positive diet icons after its name.

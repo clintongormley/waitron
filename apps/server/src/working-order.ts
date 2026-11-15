@@ -56,6 +56,7 @@ import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import {
   captureSentLineNutrition,
   readDisplayLineNutrition,
+  readProductDeclarations,
   type LineNutrition,
 } from "./line-nutrition.js";
 import {
@@ -217,6 +218,8 @@ import {
   selectMenuVariant,
   customerPresentationText,
   effectiveProductColumns,
+  productDeclarationValues,
+  extraDeclarationValues,
   kitchenPresentationName,
   NO_LIVE_FIELDS,
   parentJoin,
@@ -5035,6 +5038,8 @@ export interface HeldOrder {
       price: string;
       quantity: number;
       listId: string | null;
+      addAllergens: ProductAllergens | null;
+      suitableFor: DietaryLabel[];
     }[];
     note?: string;
     product?: {
@@ -5063,6 +5068,7 @@ export interface HeldOrder {
       courseId: string | null;
       menuId: string;
       menuName: string;
+      dietaryDeclarations: DietaryLabel[];
       diet: unknown;
       dietOverride: unknown;
     };
@@ -5196,6 +5202,10 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
       .leftJoin(products, eq(products.id, workingOrderLines.productId))
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
+    const declarations = await readProductDeclarations(
+      tx,
+      storedLines.flatMap((line) => (line.productId === null ? [] : [line.productId])),
+    );
     const lineRows = storedLines.map(({ productParentId, ...line }) => {
       const { productId, variantId } = soldProduct({ ...line, productParentId });
       return {
@@ -5242,6 +5252,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
           price: child.unitPriceGross,
           quantity: perDishExtraPicks(child.quantity, line.quantity, child.priceQuantity),
           listId: child.extraListId,
+          ...extraDeclarationValues(declarations.get(child.productId!)),
         }));
         return {
           workingOrderLineId: line.id,
@@ -5273,12 +5284,10 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
             unitPrice: line.unitPriceGross,
             vatClass: context.vatClass as "general" | "reduced" | "super_reduced" | "zero",
             category: context.categoryName,
-            allergens: context.allergens,
+            ...productDeclarationValues(declarations.get(line.variantId ?? line.productId)),
             courseId: line.courseId,
             menuId: context.menuId,
             menuName: context.menuName,
-            diet: context.diet,
-            dietOverride: context.dietOverride,
           },
         };
       });

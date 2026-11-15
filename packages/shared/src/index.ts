@@ -351,6 +351,8 @@ export type {
   LiveOptionsList,
   LiveOfferedModifier,
   LiveOffer,
+  DeclarationDocument,
+  DeclarationOffer,
   MenuField,
   MenuTarget,
   MenuOccurrence,

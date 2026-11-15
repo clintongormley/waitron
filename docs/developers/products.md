@@ -795,7 +795,7 @@ The editor allows any number of variants, one included (`apps/dashboard/src/widg
 
 A variant also has its own product page: the product editor's routes read and save a variant's id.
 The value it reads is the variant's own row, a field it leaves blank read blank, and its parent's
-value for each of those fields in `inherited` — for allergens, the parent's published declaration
+value for each of those fields in `inherited` — for allergens, the parent's current declaration
 (the declaration staff set on it, sorted and de-duplicated, or no declaration at all
 while the parent has not been reviewed), since
 that is what a blank reads as, while the variant's own allergens field holds only what staff set on

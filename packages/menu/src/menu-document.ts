@@ -1,3 +1,4 @@
+import { productDeclarationValues, extraDeclarationValues } from "./product-declarations.js";
 import { alias } from "drizzle-orm/sqlite-core";
 import { navigateMenuChanges, pathKey } from "./menu-navigation.js";
 import { createHash } from "node:crypto";
@@ -18,6 +19,7 @@ import type {
   DocumentMember,
   DocumentTile,
   FrozenOffer,
+  DeclarationDocument,
   FrozenOfferedModifier,
   LiveOffer,
   LiveOfferedModifier,
@@ -97,6 +99,7 @@ interface BuiltMenu {
   document: MenuDocument;
   omittedShortcuts: OmittedShortcut[];
   rootSectionId: string;
+  unreviewed: { id: string; name: string; parentName: string | null }[];
 }
 
 /** Several menus' documents built together, and what they were built from. */
@@ -293,6 +296,14 @@ export async function buildMenuDocuments(
       }
     }
     const built = {
+      unreviewed: (offersByMenu.get(row.menuId) ?? []).flatMap((offer) => [
+        ...(offer.allergens === null
+          ? [{ id: offer.productId, name: offer.name, parentName: null }]
+          : []),
+        ...offer.variants
+          .filter((variant) => variant.allergens === null)
+          .map((variant) => ({ id: variant.id, name: variant.name, parentName: offer.name })),
+      ]),
       rootSectionId: row.rootSectionId,
       clashes: (offersByMenu.get(row.menuId) ?? []).flatMap((offer) => clashesOf(offer.combined)),
       combined: new Map(
@@ -394,12 +405,30 @@ function freezeOffer(
   extraImages: ReadonlyMap<string, string | null>,
 ): FrozenOffer {
   return {
-    ...without(offer, ["courseId", "category", "offeredModifiers", "variants", "combined"]),
+    ...without(offer, [
+      "courseId",
+      "category",
+      "offeredModifiers",
+      "variants",
+      "combined",
+      "allergens",
+      "diet",
+      "dietOverride",
+      "dietaryDeclarations",
+    ]),
     image: facts.image,
     description: facts.description,
     color: facts.color,
     variants: offer.variants.map((variant) =>
-      without(variant, ["available", "courseId", "category"]),
+      without(variant, [
+        "available",
+        "courseId",
+        "category",
+        "allergens",
+        "diet",
+        "dietOverride",
+        "dietaryDeclarations",
+      ]),
     ),
     offeredModifiers: offer.offeredModifiers.map((entry): FrozenOfferedModifier =>
       entry.kind === "options"
@@ -407,7 +436,7 @@ function freezeOffer(
         : {
             ...entry,
             items: entry.items.map((item) => ({
-              ...item,
+              ...without(item, ["addAllergens", "suitableFor"]),
               image: extraImages.get(item.productId)!,
             })),
           },
@@ -475,6 +504,9 @@ interface LiveProductRow {
   available: boolean;
   courseId: string | null;
   category: string | null;
+  allergens: import("@waitron/shared").ProductAllergens | null;
+  dietOverride: unknown;
+  dietaryDeclarations: unknown;
 }
 
 /** The current rows behind some published offers. */
@@ -515,6 +547,9 @@ async function readLiveRows(tx: Transaction, offers: readonly FrozenOffer[]): Pr
         available: products.available,
         courseId: effectiveProductColumns.courseId,
         category: categories.name,
+        allergens: effectiveProductColumns.allergens,
+        dietOverride: effectiveProductColumns.dietOverride,
+        dietaryDeclarations: effectiveProductColumns.dietaryDeclarations,
       })
       .from(products)
       .leftJoin(parentProducts, parentJoin)
@@ -531,11 +566,11 @@ async function readLiveRows(tx: Transaction, offers: readonly FrozenOffer[]): Pr
   return { products: productRows, labels };
 }
 
-/** Digest of each dish, variant and extra's course and reporting category, in id order; not availability. */
+/** Digest of current declarations, course and category, excluding availability. */
 function liveFieldsDigest(products: ReadonlyMap<string, LiveProductRow>): string {
   const rows = [...products]
     .sort(([a], [b]) => (a < b ? -1 : 1))
-    .map(([id, row]) => [id, row.courseId, row.category]);
+    .map(([id, row]) => [id, row.courseId, row.category, productDeclarationValues(row)]);
   return createHash("sha256").update(canonicalJson(rows)).digest("hex");
 }
 
@@ -578,7 +613,7 @@ export async function readLiveState(
 
 /**
  * The documents' offers, per menu and in menu order, with the live fields put back from the current
- * rows: availability, and the course and reporting category that are not menu content.
+ * rows: availability, declarations, course and reporting category.
  * With `menuItemIds`, only the offers it names are read and returned, and `liveFields` digests
  * only their rows, so it is not comparable with {@link readLiveState}'s.
  *
@@ -610,6 +645,7 @@ export async function applyLiveFields(
         return [
           {
             ...offer,
+            ...productDeclarationValues(dish),
             available: sellable(dish),
             courseId: dish.courseId,
             category: dish.category,
@@ -620,6 +656,7 @@ export async function applyLiveFields(
                 : [
                     {
                       ...variant,
+                      ...productDeclarationValues(row),
                       available: sellable(row),
                       courseId: row.courseId,
                       category: row.category,
@@ -648,6 +685,7 @@ export async function applyLiveFields(
                     : [
                         {
                           ...item,
+                          ...extraDeclarationValues(row),
                           available: sellable(row),
                         },
                       ];
@@ -659,6 +697,40 @@ export async function applyLiveFields(
       }),
     );
   return { offers: live, liveFields: liveFieldsDigest(rows.products) };
+}
+
+export async function hydrateDeclarationDocument(
+  tx: Transaction,
+  document: MenuDocument,
+): Promise<DeclarationDocument> {
+  const rows = await readLiveRows(tx, documentOffers(document));
+  return {
+    ...document,
+    offers: Object.fromEntries(
+      Object.entries(document.offers).map(([id, offer]) => [
+        id,
+        {
+          ...offer,
+          ...productDeclarationValues(rows.products.get(offer.productId)),
+          variants: offer.variants.map((variant) => ({
+            ...variant,
+            ...productDeclarationValues(rows.products.get(variant.id)),
+          })),
+          offeredModifiers: offer.offeredModifiers.map((entry) =>
+            entry.kind === "options"
+              ? entry
+              : {
+                  ...entry,
+                  items: entry.items.map((item) => ({
+                    ...item,
+                    ...extraDeclarationValues(rows.products.get(item.productId)),
+                  })),
+                },
+          ),
+        },
+      ]),
+    ),
+  };
 }
 
 export interface DiffEntry {
@@ -795,8 +867,6 @@ const PRODUCT_FIELD_ORDER: readonly ProductChangeField[] = [
   "image",
   "color",
   "unit",
-  "allergens",
-  "diet",
   "vat",
   "ordering",
   "set_lunch",
@@ -811,16 +881,12 @@ const PRODUCT_FACTS: readonly [ProductChangeField, readonly string[]][] = [
   ["set_lunch", ["setLunch"]],
   ["image", ["image"]],
   ["unit", ["unit", "pricingUnit"]],
-  ["allergens", ["allergens"]],
-  ["diet", ["diet", "dietOverride", "dietaryDeclarations"]],
   ["vat", ["vatClass", "takeawayVatClass"]],
 ];
 
 const EXTRA_FACTS: readonly [ProductChangeField, readonly string[]][] = [
   ["names", ["name", "customerName", "kitchenName", "presentation"]],
   ["image", ["image"]],
-  ["allergens", ["addAllergens"]],
-  ["diet", ["suitableFor"]],
   ["vat", ["vatClass", "takeawayVatClass"]],
 ];
 
