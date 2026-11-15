@@ -806,7 +806,8 @@ describe("a variant's takeaway VAT class", () => {
 });
 
 describe("INHERITED_KEYS", () => {
-  // Every key below is read from the parent when a variant leaves it blank; the three names never are.
+  // Every key below is read from the parent when a variant leaves it blank (a blank takeaway class
+  // reads the variant's own VAT class first); the three names never are.
   // Pinned whole, so a key added or dropped is a decision somebody makes here rather than by accident.
   it("inherits exactly this set, and none of the names, flags or identity", () => {
     expect([...INHERITED_KEYS].sort()).toEqual(
