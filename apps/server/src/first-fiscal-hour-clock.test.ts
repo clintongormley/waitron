@@ -18,13 +18,14 @@ import {
 
 const NOW = Date.parse("2026-10-16T11:40:00Z");
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
-vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: external.internet,
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
+  observeTimeServiceHourClock: external.internet,
 }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));
 const venue = useVenueDb({ migrations: TEST_MIGRATIONS });
+const timeServiceSynchronised = vi.fn(async () => true);
 const roots: string[] = [];
 let clock: HourTestClock;
 beforeEach(() => {
@@ -75,6 +76,7 @@ async function fixture(environment: "production" | "preproduction" = "preproduct
     environment: {},
     modules,
     database: () => venue.db,
+    timeServiceSynchronised,
   });
   const claim = await host.owner.claimFirstSetup({ environment, request });
   const state = (await host.store.read())!;
@@ -137,7 +139,11 @@ it.each(["production", "preproduction"] as const)(
     );
     expect(journal.prepared[0].value.entries[0].kind).toBe("wait");
     expect(journal.prepared.at(-1).value.entries.at(-1).identity).toBe("0CNNY");
-    expect(external.internet).toHaveBeenCalledWith(environment);
+    expect(external.internet).toHaveBeenCalledWith(expect.any(Function), expect.any(Object));
+    const handedOn = external.internet.mock.calls[0]![0] as () => Promise<boolean>;
+    const asked = timeServiceSynchronised.mock.calls.length;
+    await expect(handedOn()).resolves.toBe(true);
+    expect(timeServiceSynchronised).toHaveBeenCalledTimes(asked + 1);
   },
 );
 it("an unavailable browser and TLS comparison refuse the name for want of a second clock", async () => {

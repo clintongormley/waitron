@@ -159,3 +159,10 @@ it("hands the module the clock setter it is given, and none when it is given non
   expect(createModuleOperationHost({}, { setBoxClock }).setBoxClock).toBe(setBoxClock);
   expect(createModuleOperationHost({}, {})).not.toHaveProperty("setBoxClock");
 });
+
+it("hands the time service reader it was given to the modules, and none when given none", async () => {
+  const synchronised = async () => true;
+  const host = createModuleOperationHost({}, { timeServiceSynchronised: synchronised });
+  expect(host.timeServiceSynchronised).toBe(synchronised);
+  expect(createModuleOperationHost({}, {}).timeServiceSynchronised).toBeUndefined();
+});

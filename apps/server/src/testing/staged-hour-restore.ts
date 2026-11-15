@@ -41,8 +41,9 @@ import {
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));
-vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: async () => ({
+// A `vi.fn`, so a suite can hand one case the real observer, which asks the time-service reader.
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
+  observeTimeServiceHourClock: vi.fn(async () => ({
     source: "internet",
     result: "usable",
     instantMs: Date.now(),
@@ -51,7 +52,7 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
     wallFinishedMs: Date.now(),
     monotonicStartedMs: performance.now(),
     monotonicFinishedMs: performance.now(),
-  }),
+  })),
 }));
 const bases = [
   { code: "A", purpose: "standard" },
@@ -303,8 +304,10 @@ export async function stagedHourRestore(
           ? restoreFromArtifact(prepared)
           : writeStreamRestore({ ...prepared, databasePath, entries });
       },
-      run: (log: Parameters<typeof runStagedRestore>[0]["log"] = () => {}) =>
-        runStagedRestore({ ...restore, log }),
+      run: (
+        log: Parameters<typeof runStagedRestore>[0]["log"] = () => {},
+        extra: Partial<Parameters<typeof runStagedRestore>[0]> = {},
+      ) => runStagedRestore({ ...restore, log, ...extra }),
     };
   } catch (error) {
     await cleanup();

@@ -40,7 +40,7 @@ import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js"
 // - `requestFromBox` and `requestProvenFromBox` say no request comes from the box itself: every
 //   client here is on loopback.
 //
-// - `@waitron/fiscal-verifactu/src/hour-release.js` and `hour-clock-internet.js`: the switch-on's
+// - `@waitron/fiscal-verifactu/src/hour-release.js` and `hour-clock-time-service.js`: the switch-on's
 //   release date and internet clock. The browser's clock sample comes from the test.
 //
 // No dormant filing setup is created for M2: it writes its own at the real switch-on step, inside the
@@ -109,8 +109,8 @@ import { nodeId as brandNodeId, saleId as brandSaleId } from "@waitron/shared";
 import { systemClock } from "./till-backend.js";
 import { deploymentEnvironment } from "./config.js";
 
-vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: () =>
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
+  observeTimeServiceHourClock: () =>
     Promise.resolve({
       source: "internet",
       result: "usable",

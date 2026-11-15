@@ -183,12 +183,12 @@ const actionsOf = (calls: { action: string; value?: unknown }[]) =>
 const WHY_WAIT = "Waiting to confirm the time, so no invoice series is ever repeated.";
 const NOTHING_TO_DO = "Nothing to do; keep this page open.";
 const WHY_SECOND =
-  "So no invoice series is ever repeated, the box's time is compared with another device's or the internet's.";
+  "So no invoice series is ever repeated, the server checks its time over the internet, or you confirm it against this device's time.";
 const ON_BOX = "This screen is on the box itself, so it does not count.";
 const SETUP_DO =
-  "Connect the box to the internet, or open this page on a phone or till on the venue's network and enter the setup password.";
+  "Let the box keep its time over the internet, or open this page on a phone or till on the venue's network and enter the setup password.";
 const SETUP_ENDS =
-  "It carries on by itself once the box reaches the internet, or on the phone if you carry on there.";
+  "It carries on by itself once the box keeps its time over the internet, or on the phone if you carry on there.";
 const WHY_REFUSED = "No invoice series is created without a confirmed time";
 const DIFFER = "It is very important that the server time is set correctly. Which time is correct:";
 const fakeClock = () =>
@@ -1918,7 +1918,7 @@ it("names the box's own clock reading «Servidor» in Spanish, apart from a till
   const labels = [...el.shadowRoot!.querySelectorAll("[data-test=clock-times] dt")].map((dt) =>
     dt.textContent!.trim(),
   );
-  expect(labels).toEqual(["Hora del servidor", "Este dispositivo", "Internet"]);
+  expect(labels).toEqual(["Hora del servidor", "Este dispositivo"]);
   expect(series).toBe(
     "Cuando pulses Continuar, Waitron creará las series de facturas de este servidor. La serie de facturas es el código al principio de cada número de factura: por ejemplo, en A-0CSQW/1 la serie es A-0CSQW.",
   );
@@ -2647,19 +2647,3 @@ it.each([
     );
   },
 );
-it("offers no This device when the internet's time agrees with the server's", async () => {
-  const { el } = await mount({
-    decision: {
-      ...deviceAhead,
-      usable: [...deviceAhead.usable, { source: "internet", lowerMs: instant, upperMs: instant }],
-    },
-  });
-  await ready(el);
-  await proceed(el);
-  await vi.waitFor(() => expect(text(el)).toContain(DIFFER));
-  expect(
-    [...el.shadowRoot!.querySelectorAll("[data-test=clock-refused] wt-button")].map((b) =>
-      b.getAttribute("data-test"),
-    ),
-  ).toEqual(["server-correct", "both-wrong"]);
-});

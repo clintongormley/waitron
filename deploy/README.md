@@ -129,9 +129,10 @@ service runs on the machine nothing keeps its clock right, and to check the cloc
 time service such as `systemd-timesyncd`; `install` carries on. It matters because at every start a box
 that files invoices takes no payment until the system reports its clock in step with internet time
 (`timedatectl`'s `NTPSynchronized`, read through the box's clock service), two tills or handhelds
-that are switched on and connected agree with its clock, or someone confirms it. `install` switches
-synchronisation back on even where someone switched it off, so a test box whose clock is set wrong
-on purpose needs it switched off again after each `install`. `reset` does not touch it.
+that are switched on and connected agree with its clock, or someone confirms it. It is also what
+lets setup, restore and promotion name an invoice series without another device on the venue's
+network. `install` switches synchronisation back on even where someone switched it off, so a test
+box whose clock is set wrong on purpose needs it switched off again after each `install`. `reset` does not touch it.
 
 On a host with systemd, every `install` also installs the box's clock service, which lets Waitron
 set this machine's clock when a confirmed time shows it is wrong; the app's container cannot set it
@@ -542,8 +543,8 @@ volumes is wiped, and that includes the venue's databases, because they live in 
 
 A reset during an unfinished first setup forgets the series name that setup chose, as Start again
 does; the clock check and setup's 90–150 second wait still guard it (outside the preproduction
-throwaway, a new name is the current UTC minute, taken only after a clock on another machine agrees
-with the box's within 30 seconds), unless the box and the machine that confirms its clock are wrong
+throwaway, a new name is the current UTC minute, taken only after the box's internet time service says it
+is synchronised or a clock on another machine agrees with the box's within 30 seconds), unless the box and the machine that confirms its clock are wrong
 by the same amount.
 
 At a terminal, `reset` asks you to type the word `reset` to confirm before it wipes anything; run
@@ -682,6 +683,10 @@ command against it treat that entrypoint differently:
   backup's server key, a fresh allocation and current outside evidence. The source examples below
   show archive and bucket access only; add that procedure's recovery override and credentials
   when restoring Veri*Factu. The recovery key alone does not authorise activation.
+  When the series check cannot confirm the box's time (`sif.allocation_invalid` with reason
+  `second_clock_missing` or `clock_unconfirmed`), the command prints one line naming the code and
+  that reason, says no invoice series was made, and asks you to check that `timedatectl` shows
+  "System clock synchronized: yes" before running the command again.
 
   ```bash
   docker compose run --rm -v "$PWD/recovery-pack.pdf:/recovery-pack.pdf:ro" --entrypoint node app \

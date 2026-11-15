@@ -73,6 +73,7 @@ async function mount(
       throw new Error("unexpected proposal");
     },
   ),
+  extra: { boxAddress?: string } = {},
 ) {
   const factory = FISCAL_SETUP.createRecovery;
   expect(factory, "the fiscal contribution offers an hour recovery form").toBeTypeOf("function");
@@ -85,6 +86,7 @@ async function mount(
     selection: { ...selection },
     binding: { ...binding },
     prepare,
+    ...extra,
   }) as Entry;
   host.append(el);
   await el.updateComplete;
@@ -152,13 +154,15 @@ const fakeClock = () =>
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance"] });
 const WHY_WAIT = "Waiting to confirm the time, so no invoice series is ever repeated.";
 const NOTHING_TO_DO = "Nothing to do; keep this page open.";
-const WHY_SECOND =
-  "So no invoice series is ever repeated, the box's time is compared with another device's or the internet's.";
+const RESTORE_LEAD =
+  "It is very important that the server's time is correct, and it can't check its time over the Internet right now. Either:";
 const ON_BOX = "This screen is on the box itself, so it does not count.";
-const RESTORE_DO =
-  "Connect the box to the internet, or open this page on a phone or laptop on the venue's network that has the backup.";
-const RESTORE_ENDS =
-  "It carries on by itself once the box reaches the internet, or on the other device if you carry on there.";
+const RESTORE_FIX = "fix the Internet connection, and this page carries on by itself, or";
+const RESTORE_OPEN = "open this page on a phone or till on the venue's network, and carry on there";
+const choicesOf = (el: Entry) =>
+  [...el.shadowRoot!.querySelectorAll("[data-test=clock-wait] li")].map((li) =>
+    li.textContent!.replace(/\s+/g, " ").trim(),
+  );
 const WHY_REFUSED = "No invoice series is created without a confirmed time";
 const DIFFER = "It is very important that the server time is set correctly. Which time is correct:";
 const noSecondClock = {
@@ -890,10 +894,10 @@ it("with no second clock it explains itself and carries on when the internet arr
   fakeClock();
   try {
     await ready(el);
-    await vi.waitFor(() => expect(text(el)).toContain(RESTORE_DO));
-    expect(text(el)).toContain(WHY_SECOND);
+    await vi.waitFor(() => expect(text(el)).toContain(RESTORE_FIX));
+    expect(text(el)).toContain(RESTORE_LEAD);
     expect(text(el)).toContain(ON_BOX);
-    expect(text(el)).toContain(RESTORE_ENDS);
+    expect(choicesOf(el)).toEqual([RESTORE_FIX, RESTORE_OPEN]);
     expect(
       (el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
     ).toBe("");
@@ -918,10 +922,53 @@ it("a phone with no second clock does not say it is the box", async () => {
   };
   const { el } = await mount(prepare);
   await ready(el);
-  await vi.waitFor(() => expect(text(el)).toContain(RESTORE_DO));
-  expect(text(el)).toContain(WHY_SECOND);
+  await vi.waitFor(() => expect(text(el)).toContain(RESTORE_FIX));
+  expect(text(el)).toContain(RESTORE_LEAD);
   expect(text(el)).not.toContain(ON_BOX);
 });
+it.each([
+  [
+    "en",
+    RESTORE_LEAD,
+    [
+      RESTORE_FIX,
+      "open this page on https://192.168.10.10 on a phone or till on the venue's network, and carry on there",
+    ],
+    ON_BOX,
+  ],
+  [
+    "es",
+    "Es muy importante que la hora del servidor sea correcta, y ahora mismo no puede comprobar su hora por internet. Puedes:",
+    [
+      "arreglar la conexión a internet, y esta página seguirá sola, o",
+      "abrir esta página en https://192.168.10.10 desde un móvil o una caja de la red del local, y seguir allí",
+    ],
+    "Esta pantalla está en el propio servidor y no cuenta.",
+  ],
+] as const)(
+  "with no second clock it lists the two ways on, naming the box's address, then says the box's screen does not count (%s)",
+  async (locale, lead, choices, onBox) => {
+    const { state, prepare } = scripted();
+    state.decision = noSecondClock;
+    const { el } = await mount(prepare, { boxAddress: "https://192.168.10.10" });
+    el.locale = locale;
+    await el.updateComplete;
+    await ready(el);
+    await vi.waitFor(() => expect(choicesOf(el)).toEqual(choices));
+    const section = el.shadowRoot!.querySelector("[data-test=clock-wait]")!;
+    expect(
+      [...section.children].map((child) => [
+        child.tagName,
+        child.textContent!.replace(/\s+/g, " ").trim(),
+      ]),
+    ).toEqual([
+      ["P", lead],
+      ["UL", expect.stringContaining(choices[0])],
+      ["P", onBox],
+    ]);
+    expect(section.querySelector("p")!.getAttribute("role")).toBe("status");
+  },
+);
 it("a clock refusal shows each clock's reading and no countdown, and waits for Compare the clocks again", async () => {
   const { state, prepare } = scripted();
   state.decision = {
@@ -980,7 +1027,7 @@ it("a missing second clock reported by the server starts the 15-second check", a
   fakeClock();
   try {
     await ready(el);
-    await vi.waitFor(() => expect(text(el)).toContain(RESTORE_DO));
+    await vi.waitFor(() => expect(text(el)).toContain(RESTORE_FIX));
     vi.advanceTimersByTime(15_000);
     await vi.waitFor(() => expect(selects(prepare)).toHaveLength(2));
     await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
@@ -1159,7 +1206,7 @@ it("keeps checking for a second clock after one automatic re-check is lost", asy
   fakeClock();
   try {
     await ready(el);
-    await vi.waitFor(() => expect(text(el)).toContain(RESTORE_DO));
+    await vi.waitFor(() => expect(text(el)).toContain(RESTORE_FIX));
     let release!: () => void;
     state.hold = new Promise((resolve) => {
       release = resolve;
@@ -1168,14 +1215,14 @@ it("keeps checking for a second clock after one automatic re-check is lost", asy
     vi.advanceTimersByTime(15_000);
     await vi.waitFor(() => expect(prepare.mock.calls.length).toBeGreaterThan(before));
     await el.updateComplete;
-    expect(text(el)).toContain(RESTORE_DO);
+    expect(text(el)).toContain(RESTORE_FIX);
     state.fail = true;
     release();
     await vi.waitFor(() => expect(state.fail).toBe(false));
     state.hold = undefined;
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
-    expect(text(el)).toContain(RESTORE_DO);
+    expect(text(el)).toContain(RESTORE_FIX);
     state.decision = clock;
     vi.advanceTimersByTime(15_000);
     await vi.waitFor(() => expect(selects(prepare)).toHaveLength(1));
@@ -1190,7 +1237,7 @@ it("stops checking for a second clock when a re-check is refused, and shows the 
   fakeClock();
   try {
     await ready(el);
-    await vi.waitFor(() => expect(text(el)).toContain(RESTORE_DO));
+    await vi.waitFor(() => expect(text(el)).toContain(RESTORE_FIX));
     state.refusal = { code: "setup.attempt_conflict" };
     vi.advanceTimersByTime(15_000);
     await vi.waitFor(() =>
@@ -1199,7 +1246,7 @@ it("stops checking for a second clock when a re-check is refused, and shows the 
       ).not.toBe(""),
     );
     await el.updateComplete;
-    expect(text(el)).not.toContain(RESTORE_ENDS);
+    expect(text(el)).not.toContain(RESTORE_OPEN);
     expect(quiet(el)).toEqual({ disabled: false, variant: "primary" });
     const after = prepare.mock.calls.length;
     vi.advanceTimersByTime(45_000);
@@ -1216,7 +1263,7 @@ it("an answer it cannot read while waiting for a second clock shows the failure"
   fakeClock();
   try {
     await ready(el);
-    await vi.waitFor(() => expect(text(el)).toContain(RESTORE_DO));
+    await vi.waitFor(() => expect(text(el)).toContain(RESTORE_FIX));
     // A comparison with no readings lists, which `readClocks` refuses as "invalid comparison".
     state.decision = {} as typeof clock;
     vi.advanceTimersByTime(15_000);
@@ -1226,7 +1273,7 @@ it("an answer it cannot read while waiting for a second clock shows the failure"
       ).not.toBe(""),
     );
     await el.updateComplete;
-    expect(text(el)).not.toContain(RESTORE_ENDS);
+    expect(text(el)).not.toContain(RESTORE_OPEN);
     expect(quiet(el)).toEqual({ disabled: false, variant: "primary" });
     const after = prepare.mock.calls.length;
     vi.advanceTimersByTime(45_000);
@@ -1300,17 +1347,16 @@ it("explains each wait in Spanish with the restore page's words", async () => {
   try {
     await ready(el);
     await vi.waitFor(() =>
-      expect(text(el)).toContain(
-        "Conecta el servidor a internet, o abre esta página desde un móvil o un portátil del local que tenga la copia.",
-      ),
+      expect(text(el)).toContain("arreglar la conexión a internet, y esta página seguirá sola, o"),
     );
     expect(text(el)).toContain(
-      "Para que ninguna serie de facturas se repita, la hora del servidor se compara con la de otro aparato o con internet.",
+      "Es muy importante que la hora del servidor sea correcta, y ahora mismo no puede comprobar su hora por internet. Puedes:",
     );
     expect(text(el)).toContain("Esta pantalla está en el propio servidor y no cuenta.");
-    expect(text(el)).toContain(
-      "Sigue sola cuando el servidor tenga internet, o en el otro aparato si sigues allí.",
-    );
+    expect(choicesOf(el)).toEqual([
+      "arreglar la conexión a internet, y esta página seguirá sola, o",
+      "abrir esta página desde un móvil o una caja de la red del local, y seguir allí",
+    ]);
     state.decision = {
       ...clock,
       usable: [
@@ -1457,7 +1503,7 @@ it("keeps the 15-second rhythm when a re-check again finds no second clock", asy
   fakeClock();
   try {
     await ready(el);
-    await vi.waitFor(() => expect(text(el)).toContain(RESTORE_DO));
+    await vi.waitFor(() => expect(text(el)).toContain(RESTORE_FIX));
     let release!: () => void;
     state.hold = new Promise((resolve) => {
       release = resolve;
@@ -1470,7 +1516,7 @@ it("keeps the 15-second rhythm when a re-check again finds no second clock", asy
     release();
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
-    expect(text(el)).toContain(RESTORE_DO);
+    expect(text(el)).toContain(RESTORE_FIX);
     vi.advanceTimersByTime(5_000);
     await vi.waitFor(() => expect(compares()).toBe(3));
   } finally {
@@ -1527,7 +1573,7 @@ it("a fiscal refusal that is not about the clock fails without explaining a wait
   await vi.waitFor(() => expect(formError(el)).not.toBe(""));
   expect(text(el)).not.toContain(WHY_WAIT);
   expect(text(el)).not.toContain(WHY_REFUSED);
-  expect(text(el)).not.toContain(RESTORE_DO);
+  expect(text(el)).not.toContain(RESTORE_FIX);
   expect(el.readCredentials()).toBeNull();
 });
 it("names the box's own clock reading «Servidor» in Spanish, apart from a till", async () => {
@@ -1540,7 +1586,7 @@ it("names the box's own clock reading «Servidor» in Spanish, apart from a till
   const labels = [...el.shadowRoot!.querySelectorAll("[data-test=clock-times] dt")].map((dt) =>
     dt.textContent!.trim(),
   );
-  expect(labels).toEqual(["Hora del servidor", "Este dispositivo", "Internet"]);
+  expect(labels).toEqual(["Hora del servidor", "Este dispositivo"]);
 });
 
 const observationKey = 'waitron.invoiceEvidence.v1:["B12345674","production","A-0CNNY"]';
@@ -1656,9 +1702,9 @@ async function mountPromotion(prepare: Mock<(proposal: unknown) => Promise<unkno
 const promotionActions = (prepare: Mock<(proposal: unknown) => Promise<unknown>>) =>
   prepare.mock.calls.map(([proposal]) => (proposal as { action: string }).action);
 const SWITCH_PAGE_DO =
-  "Switch from a till or phone on the venue's network, or connect the box to the internet.";
+  "Switch from a till or phone on the venue's network, or let the box keep its time over the internet.";
 const SWITCH_PAGE_ENDS =
-  "It carries on by itself once the box reaches the internet, while this page stays open.";
+  "It carries on by itself once the box keeps its time over the internet, while this page stays open.";
 
 it("a handover start shows the details tick and Proceed, sends nothing before Proceed, then carries on by itself to the series", async () => {
   let decision = noSecondClock;
@@ -1884,11 +1930,11 @@ it("a Spanish switch page calls the box «servidor», never «equipo»", async (
   await proceed(el);
   await vi.waitFor(() =>
     expect(text(el)).toContain(
-      "Cambia desde una caja o un móvil del local, o conecta el servidor a internet.",
+      "Cambia desde una caja o un móvil del local, o deja que el servidor se ponga en hora por internet.",
     ),
   );
   expect(text(el)).toContain(
-    "Sigue sola cuando el servidor tenga internet, mientras esta página siga abierta.",
+    "Sigue sola cuando el servidor se ponga en hora por internet, mientras esta página siga abierta.",
   );
   expect(text(el)).not.toMatch(/equipo/i);
   expect(el.refusalMessage({ code: "authorization.not_permitted", params: {} })).toContain(
@@ -1899,12 +1945,12 @@ it("a Spanish switch page calls the box «servidor», never «equipo»", async (
 it.each([
   [
     "en",
-    "Connect the box to the internet, or open this handover page on another phone or laptop.",
+    "Let the box keep its time over the internet, or open this handover page on another phone or laptop.",
     "Keep this page open, or continue on the other device.",
   ],
   [
     "es",
-    "Conecta el servidor a internet o abre esta página de traspaso en otro móvil o portátil.",
+    "Deja que el servidor se ponga en hora por internet o abre esta página de traspaso en otro móvil o portátil.",
     "Mantén esta página abierta o continúa en el otro dispositivo.",
   ],
 ] as const)(
@@ -2098,7 +2144,7 @@ it.each<[string, string | undefined, boolean, () => Promise<Entry>]>([
     false,
     async () => {
       const { el } = await pressed(undefined, noSecondClock);
-      await vi.waitFor(() => expect(text(el)).toContain(RESTORE_ENDS));
+      await vi.waitFor(() => expect(text(el)).toContain(RESTORE_OPEN));
       return el;
     },
   ],
@@ -2302,7 +2348,6 @@ it("clocks that differ show one time per clock and ask which is correct; The ser
     expect(detailRows(el, "clock-times")).toEqual([
       ["Server time", "18 October 2026 at 14:30"],
       ["This device", "Unavailable"],
-      ["Internet", "18 October 2026 at 14:33"],
     ]);
     expect(text(el)).not.toMatch(/ask for help/);
     const sent = prepare.mock.calls.length;
@@ -2477,10 +2522,6 @@ it("a restore on clocks that differ sets the server's clock from This device and
   expect(Number.isSafeInteger(sent.proposal.browser.instantMs)).toBe(true);
 });
 it.each([
-  [
-    "witnessed",
-    "The server has the tax agency's time and sets its clock from it by itself. If the times still differ in a minute, press This device again.",
-  ],
   [
     "later",
     "The server's time was not changed: this device's time is earlier than a time already used for this venue's invoice series, so it is probably wrong. Correct the time on this device, reconnect to the server and choose which time is correct again.",

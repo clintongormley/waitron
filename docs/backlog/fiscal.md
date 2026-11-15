@@ -321,13 +321,6 @@ and bounded implementation checkpoints.
 2026-11-10: the table's digest column is now `fingerprint`, the request id `submissionId`, and
 `actor_id` references `persons` ([Task 3 plan](../superpowers/plans/2026-11-10-a275-transfer-close-route.md)).
 
-## A679's internet time reading came back unavailable against pre-production in each of four runs on 2026-10-23
-
-`observeInternetHourClock` asks the submission host, which answered a certificate-less request with
-a redirect to another site and no `Date` header, and the reading follows only same-origin
-redirects (A798-B slice 9 plan, P1 and P2; production not tried). Found while planning A798-B
-slice 9.
-
 ## Protected write-path test policy quotation
 
 W41s-7's two run-it reviews found the header of
@@ -970,7 +963,7 @@ here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is create
 
 ## Bundle: One owner session with a real certificate against AEAT
 
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **A1270. Verify the fake AEAT's invoice-date comparison at midnight.**
   The readiness fixture uses a controlled clock. The library's `1112` check compares invoice dates
@@ -986,9 +979,6 @@ here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is create
   owner approved landing A795 on 2026-10-19 before these ran.
   If any answers differently from the design, that part is redesigned in a follow-up.
   [Detail](fiscal.md#a888-after-a795-lands-the-owners-checks-with-real-certificates)
-- **A679's internet time reading came back unavailable against pre-production in each of four runs
-  on 2026-10-23.** Found while planning A798-B slice 9.
-  [Detail](fiscal.md#a679s-internet-time-reading-came-back-unavailable-against-pre-production-in-each-of-four-runs-on-2026-10-23)
 
 ## Bundle: Settle the hold and the brake once
 
@@ -1469,8 +1459,8 @@ allocation no person asks for); a guard, proven by deletion, refuses to add a re
 opened under another identity. Corrections of invoices issued before the change join the new
 chain; the design asks for asesor Q53(d)(2) to be widened to cover that. The name is A947's
 five-symbol UTC minute (A947 §6.5), so A947's slice 4a lands first; no new recovery sheet is
-asked for. Because A947 needs a second clock for every name and a start has nobody present, the
-design has the upgrade check the clock while the old release still serves, and make
+asked for. Because A947 needs a second clock for every name and, without a synchronised internet time
+service, a start has nobody present to give one, the design has the upgrade check the clock while the old release still serves, and make
 the change only once that check passes — otherwise the old release never stops. A sale can still
 wait on the internet after a crash between the migration and the change, or when the new release
 is started by hand; and a power cut during the upgrade's stop leaves no app running until the

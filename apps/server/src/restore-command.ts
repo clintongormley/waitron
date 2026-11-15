@@ -410,6 +410,8 @@ function sourceLiveRefusal(err: AppError, subject: string): string | null {
   return null;
 }
 
+const CLOCK_REFUSALS = new Set<unknown>(["second_clock_missing", "clock_unconfirmed"]);
+
 /**
  * The words both paths share. Anything outside the known codes is the fixed `restore failed`, never
  * `err.message`: a filesystem error names the path it failed on, and any bug in the restore's chain
@@ -419,6 +421,10 @@ function sharedRefusal(err: unknown): string {
   if (!(err instanceof AppError)) return "restore failed";
   if (err.code === "restore.request_waiting")
     return "restore failed: restore.request_waiting — a restore saved from the setup page is still waiting and this command changed nothing; start the server to run that restore. If it cannot finish, use Retry a normal boot or choose Throw this restore away on the HTTPS recovery page, using an administrator password from the selected backup; after discarding it, run this command again";
+  // The series check could not confirm the box's time (`clockRefusal` in fiscal-verifactu's `hour-clock.ts`, and `hour-selection.ts`'s own refusals).
+  const reason = (err.params as { reason?: unknown }).reason;
+  if (err.code === "sif.allocation_invalid" && CLOCK_REFUSALS.has(reason))
+    return `restore failed: sif.allocation_invalid (${String(reason)}) — the box's time is not confirmed, so no invoice series was made; check that timedatectl shows "System clock synchronized: yes", then run this command again`;
   if (err.code === "promotion.break_glass_invalid")
     return "restore failed: promotion.break_glass_invalid — use the selected backup's server key";
   if (err.code === "provisioning.database_in_use") {

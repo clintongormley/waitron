@@ -15,7 +15,7 @@ import { recordSale } from "@waitron/core";
 import { fiscalAllocations, registroSif, VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
-import * as internetClock from "@waitron/fiscal-verifactu/src/hour-clock-internet.js";
+import * as internetClock from "@waitron/fiscal-verifactu/src/hour-clock-time-service.js";
 import { stagedHourRestore } from "./testing/staged-hour-restore.js";
 import { mountDeviceApi } from "./device-api.js";
 import { mountJoinApi } from "./join-api.js";
@@ -42,7 +42,7 @@ it.each([
   "pairs a new device after offline %s recovery over %s without changing the recovered allocation",
   async (kind, transport) => {
     const network = vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("offline"));
-    const outsideClock = vi.spyOn(internetClock, "observeInternetHourClock").mockResolvedValue({
+    const outsideClock = vi.spyOn(internetClock, "observeTimeServiceHourClock").mockResolvedValue({
       source: "internet",
       result: "unavailable",
       reason: "tls",

@@ -46,6 +46,7 @@ export class SetupRestoreScreen extends LitElement {
 
   @property() errorMessage?: string;
   @property({ attribute: false }) api: SetupApi = new SetupApi();
+  @property({ attribute: false }) boxAddress?: string;
   /** The field `errorMessage` is about; the message then shows under it, not above Restore. */
   @property() invalidField?: RestoreField;
   /** Set by the shell from `restore.stream_source_live`: when the old server last wrote to its bucket. */
@@ -338,6 +339,7 @@ export class SetupRestoreScreen extends LitElement {
           this.recoveryInvalid = event.detail.invalid;
         }}
         .api=${this.api}
+        .boxAddress=${this.boxAddress}
         .artifact=${this.artifact}
         .recoveryKey=${this.recoveryKey}
         .environment=${this.environment}

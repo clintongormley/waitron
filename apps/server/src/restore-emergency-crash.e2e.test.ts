@@ -25,8 +25,8 @@ import { stagedHourCrash } from "./testing/staged-hour-crash.js";
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));
-vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: async () => ({
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
+  observeTimeServiceHourClock: async () => ({
     source: "internet",
     result: "usable",
     instantMs: Date.now(),
@@ -162,23 +162,13 @@ async function killRestore(f: Awaited<ReturnType<typeof stage>>, phase: string) 
   const preload = join(f.root, "synthetic-clock.mjs");
   await writeFile(
     preload,
-    `import https from "node:https";
-import { EventEmitter } from "node:events";
-import { syncBuiltinESMExports } from "node:module";
-const OriginalDate = Date;
+    `const OriginalDate = Date;
 const started = OriginalDate.now();
 const fixed = OriginalDate.parse("2026-10-16T12:40:00Z");
 globalThis.Date = class extends OriginalDate {
   constructor(...args) { super(...(args.length ? args : [fixed + OriginalDate.now() - started])); }
   static now() { return fixed + OriginalDate.now() - started; }
 };
-https.request = (url, options, receive) => {
-  if (url.protocol !== "https:" || options.method !== "HEAD" || options.rejectUnauthorized !== true) throw new Error("unexpected clock request");
-  const request = new EventEmitter();
-  request.end = () => receive({ headers: { date: new Date().toUTCString() }, statusCode: 200, destroy() {} });
-  return request;
-};
-syncBuiltinESMExports();
 `,
   );
   await writeFile(
@@ -230,7 +220,7 @@ if (phase === "after-publish" || phase === "staging-artifact") {
   const hold = await lockRestoreTarget(venueDir);
   try { if (phase === "staging-artifact") await endRestoreFlow(stateDir); await stageRestoreRequest(stateDir, { ...record.request, artifact, recoveryKey, nodeRecoverySecret }); } finally { hold.release(); }
 }
-await runStagedRestore({ stateDir, venueDir, migrationsRoot, log: (_level, event, fields) => {
+await runStagedRestore({ stateDir, venueDir, migrationsRoot, timeServiceSynchronised: async () => true, log: (_level, event, fields) => {
   if (phase === "before-commit" && event === "restore.hook.done" && fields?.module === "fiscal-verifactu") { writeSync(1,"RECOVERY_CRASH_GATE\\n"); process.kill(process.pid,"SIGSTOP"); }
 } });
 if (phase === "before-first-sale") await wait();

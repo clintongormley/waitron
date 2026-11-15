@@ -1,13 +1,14 @@
 import { readSetupFlowRecord, updateSetupFlowSection } from "./setup-flow-record.js";
 import { dirname, join } from "node:path";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { InitialSetupContribution, WaitronModule, ModuleOperationHost } from "@waitron/module";
 import { ALL_MODULES } from "@waitron/composition";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { createFirstSetupRuntime } from "./first-setup-runtime.js";
+import { timedatectlSynchronised } from "./timedatectl-reader.js";
 import { prepareFirstSetupCommand, recheckFirstSetupCommand } from "./first-setup-command.js";
 import { MODULE, PASSWORD, request } from "../test/first-setup-request.js";
 import {
@@ -19,8 +20,8 @@ import {
 
 const NOW = Date.parse("2026-10-16T11:40:00Z");
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
-vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: external.internet,
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
+  observeTimeServiceHourClock: external.internet,
 }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
@@ -52,6 +53,7 @@ async function fixture(
   password = PASSWORD,
   modules: readonly WaitronModule[] = ALL_MODULES,
   testClock?: ModuleOperationHost["testClock"],
+  timeServiceSynchronised?: ModuleOperationHost["timeServiceSynchronised"],
 ) {
   const root = await mkdtemp(join(tmpdir(), "setup-command-"));
   roots.push(root);
@@ -62,6 +64,7 @@ async function fixture(
     modules,
     database: () => venue.db,
     testClock,
+    timeServiceSynchronised,
   });
   const claim = await runtime.owner.claimFirstSetup({ environment: "preproduction", request });
   const owner = { ...claim.state, capability: claim.capability };
@@ -197,12 +200,61 @@ it("with only the box's clock the terminal explains and cancels without a questi
     "No series is made without a confirmed time, so none is ever repeated.",
   );
   expect(f.output).toContain(
-    "Connect the box to the internet, or set up from a phone or laptop on the venue's network.",
+    "Let the box keep its time over the internet, or set up from a phone or laptop on the venue's network.",
   );
   expect(f.prompts).toEqual([]);
   await expect(
     readFile(join(f.root, "state/module-records/fiscal-verifactu.json")),
   ).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+describe("the box's own time service, through timedatectl", () => {
+  let stubs: string;
+  beforeAll(async () => {
+    stubs = await mkdtemp(join(tmpdir(), "setup-command-timedatectl-"));
+    for (const answer of ["yes", "no"]) {
+      await writeFile(join(stubs, answer), `#!/bin/sh\necho ${answer}\n`);
+      await chmod(join(stubs, answer), 0o755);
+    }
+  });
+  afterAll(() => rm(stubs, { recursive: true, force: true }));
+  beforeEach(async () => {
+    const actual = await vi.importActual<
+      typeof import("@waitron/fiscal-verifactu/src/hour-clock-time-service.js")
+    >("@waitron/fiscal-verifactu/src/hour-clock-time-service.js");
+    external.internet.mockImplementation(actual.observeTimeServiceHourClock);
+  });
+  const run = async (answer: "yes" | "no") => {
+    let wall = Date.parse("2026-10-16T11:38:00Z");
+    let monotonic = 1_000_000;
+    vi.setSystemTime(wall);
+    const f = await fixture(
+      "no",
+      PASSWORD,
+      ALL_MODULES,
+      { wall: () => wall, monotonic: () => monotonic },
+      timedatectlSynchronised({ command: join(stubs, answer) }),
+    );
+    const result = await prepareFirstSetupCommand(f.runtime, f.owner, f.io, async (ms) => {
+      wall += ms;
+      monotonic += ms;
+      vi.setSystemTime(wall);
+    });
+    return { f, result };
+  };
+  it("names the series with no browser when the box's time service is synchronised", async () => {
+    const { f, result } = await run("yes");
+    expect(result.status).toBe("ready");
+    expect((await f.runtime.store.read())!.inputs[MODULE]).toMatchObject({
+      allocation: { installationIdentity: "0CNNW" },
+    });
+  });
+  it("names none when the box's time service is not synchronised", async () => {
+    const { f, result } = await run("no");
+    expect(result.status).toBe("cancelled");
+    expect(f.output.join("\n")).toContain("internet: unavailable");
+    expect((await f.runtime.store.read())!.inputs).toEqual({});
+  });
 });
 
 it("when the internet's clock disagrees the terminal explains and cancels without a question", async () => {
@@ -223,7 +275,7 @@ it("when the internet's clock disagrees the terminal explains and cancels withou
     "No series is made without a confirmed time, so none is ever repeated.",
   );
   expect(f.output).not.toContain(
-    "Connect the box to the internet, or set up from a phone or laptop on the venue's network.",
+    "Let the box keep its time over the internet, or set up from a phone or laptop on the venue's network.",
   );
   expect(f.prompts).toEqual([]);
   await expect(

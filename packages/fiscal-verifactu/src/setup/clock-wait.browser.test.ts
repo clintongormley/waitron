@@ -426,7 +426,7 @@ describe("the two times the clock step shows", () => {
   };
   const minuteStart = Date.parse("2026-10-18T12:30:00Z");
 
-  it("names the server's time and this device's, each one time to the minute, and no internet row without an internet reading", () => {
+  it("names the server's time and this device's, each one time to the minute", () => {
     const target = draw([reading("box", at), reading("browser", at + 5 * 60_000)]);
     expect(rows(target)).toEqual([
       ["Server time", "18 October 2026 at 14:30"],
@@ -434,7 +434,6 @@ describe("the two times the clock step shows", () => {
     ]);
     expect(text(target)).not.toContain(" – ");
     expect(text(target)).not.toContain("Z");
-    expect(text(target)).not.toContain("Internet");
   });
 
   it("clocks that differ within one minute show their seconds, so the difference is visible", () => {
@@ -448,7 +447,7 @@ describe("the two times the clock step shows", () => {
     ]);
   });
 
-  it("shows the seconds in Spanish too, with the internet's row when it has a reading", () => {
+  it("shows the seconds in Spanish too, and draws no row for an internet reading", () => {
     const target = draw(
       [reading("box", minuteStart + 400), reading("internet", minuteStart + 45_000)],
       "es",
@@ -456,7 +455,6 @@ describe("the two times the clock step shows", () => {
     expect(rows(target)).toEqual([
       ["Hora del servidor", "18 de octubre de 2026 a las 14:30:00"],
       ["Este dispositivo", "No disponible"],
-      ["Internet", "18 de octubre de 2026 a las 14:30:45"],
     ]);
   });
 
@@ -469,7 +467,6 @@ describe("the two times the clock step shows", () => {
     expect(rows(target)).toEqual([
       ["Server time", "18 October 2026 at 14:30"],
       ["This device", "18 October 2026 at 14:32"],
-      ["Internet", "18 October 2026 at 14:32"],
     ]);
   });
 
@@ -671,24 +668,6 @@ describe("This device sets the server's clock", () => {
     ]);
   });
 
-  it("is not offered when the internet's time agrees with the server's and only this device differs", () => {
-    const internetAgrees = decision([
-      reading("box", at),
-      reading("browser", at + 5 * 60_000),
-      reading("internet", at + 10_000),
-    ]);
-    expect(buttons(draw(disagreeing(), () => undefined, internetAgrees))).toEqual([
-      ["server-correct", "The server"],
-      ["both-wrong", "Both times are wrong"],
-    ]);
-    const internetDiffers = decision([
-      reading("box", at),
-      reading("browser", at + 5 * 60_000),
-      reading("internet", at + 5 * 60_000),
-    ]);
-    expect(buttons(draw(disagreeing(), () => undefined, internetDiffers))).toHaveLength(3);
-  });
-
   it("takes a fresh challenge, sends this device's time, and on a set says so and asks for a new comparison", async () => {
     const wait = disagreeing();
     const { sent, send } = box({ status: "set" });
@@ -750,11 +729,6 @@ describe("This device sets the server's clock", () => {
   it.each([
     ["synchronised", ...INTERNET],
     ["not_stopped", ...INTERNET],
-    [
-      "witnessed",
-      "The server has the tax agency's time and sets its clock from it by itself. If the times still differ in a minute, press This device again.",
-      "El servidor tiene la hora de Hacienda y se pone en hora con ella por sí solo. Si dentro de un minuto las horas siguen sin coincidir, vuelve a pulsar Este dispositivo.",
-    ],
     [
       "same_machine",
       "This screen is on the server itself, so it cannot set the server's time. Open this page on a phone or computer.",

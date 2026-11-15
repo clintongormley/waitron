@@ -332,7 +332,7 @@ it("compares base values independently of their original order", () => {
 });
 
 const source = vi.hoisted(() => ({ internet: vi.fn() }));
-vi.mock("./hour-clock-internet.js", () => ({ observeInternetHourClock: source.internet }));
+vi.mock("./hour-clock-time-service.js", () => ({ observeTimeServiceHourClock: source.internet }));
 vi.mock("./hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));
@@ -566,7 +566,7 @@ it("the terminal with only the box's clock explains and cancels without a questi
     "No series is made without a confirmed time, so none is ever repeated.",
   );
   expect(t.output).toContain(
-    "Connect the box to the internet, or set up from a phone or laptop on the venue's network.",
+    "Let the box keep its time over the internet, or set up from a phone or laptop on the venue's network.",
   );
   expect(t.prompts).toEqual([]);
   expect(f.history).toEqual([]);
@@ -593,7 +593,7 @@ it("the terminal explains and cancels when the internet's clock disagrees", asyn
     "No series is made without a confirmed time, so none is ever repeated.",
   );
   expect(t.output).not.toContain(
-    "Connect the box to the internet, or set up from a phone or laptop on the venue's network.",
+    "Let the box keep its time over the internet, or set up from a phone or laptop on the venue's network.",
   );
   expect(t.prompts).toEqual([]);
   expect(f.history).toEqual([]);
@@ -802,7 +802,7 @@ it("a terminal whose first selection is stale and whose fresh reading finds no i
   expect(t.output.slice(-3)).toEqual([
     "internet: unavailable",
     "No series is made without a confirmed time, so none is ever repeated.",
-    "Connect the box to the internet, or set up from a phone or laptop on the venue's network.",
+    "Let the box keep its time over the internet, or set up from a phone or laptop on the venue's network.",
   ]);
   expect(t.output.join("\n")).not.toContain("out of date");
   expect(t.prompts).toEqual([]);

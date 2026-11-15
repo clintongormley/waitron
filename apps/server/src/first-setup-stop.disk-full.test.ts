@@ -3,8 +3,8 @@ import { AppError } from "@waitron/shared";
 import { expectRefusedUnchanged, ordinaryServer } from "../test/stop-route-server.js";
 import { FULL_DISK_BYTES } from "./boot-failure.js";
 
-vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: async () => ({
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
+  observeTimeServiceHourClock: async () => ({
     source: "internet",
     result: "usable",
     instantMs: Date.now(),

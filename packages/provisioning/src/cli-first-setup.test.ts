@@ -28,8 +28,8 @@ import { moveFakeClock, STOPPED_DURING_WAIT, stopDuringWait } from "../test/sett
 
 const NOW = Date.parse("2026-10-16T11:40:00Z");
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
-vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: external.internet,
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
+  observeTimeServiceHourClock: external.internet,
 }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
@@ -747,7 +747,7 @@ it("a command whose internet time is gone by activation stops before activating"
   expect(f.output.slice(-3)).toEqual([
     "internet: unavailable",
     "No series is made without a confirmed time, so none is ever repeated.",
-    "Connect the box to the internet, or set up from a phone or laptop on the venue's network.",
+    "Let the box keep its time over the internet, or set up from a phone or laptop on the venue's network.",
   ]);
   expect(f.calls).toEqual([]);
   expect((await f.runtime.store.read())!.status).toBe("consumption-intent");

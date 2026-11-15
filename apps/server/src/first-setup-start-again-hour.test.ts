@@ -38,8 +38,8 @@ import {
 } from "./testing/hour-test-clock.js";
 
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
-vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: external.internet,
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
+  observeTimeServiceHourClock: external.internet,
 }));
 vi.mock("@waitron/verifactu", async (actual) => {
   const real = await actual<typeof import("@waitron/verifactu")>();

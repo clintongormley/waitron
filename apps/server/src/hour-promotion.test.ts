@@ -48,8 +48,8 @@ import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
 import { nodeId as brandNodeId } from "@waitron/shared";
 
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
-vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: external.internet,
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
+  observeTimeServiceHourClock: external.internet,
 }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),

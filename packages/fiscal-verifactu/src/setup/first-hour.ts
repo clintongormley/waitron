@@ -63,9 +63,9 @@ const strings = {
     seriesLine:
       "When you press Proceed, Waitron creates this box's invoice series. The invoice series is the code at the start of every invoice number: for example, in A-0CSQW/1 the series is A-0CSQW.",
     secondClockDo:
-      "Connect the box to the internet, or open this page on a phone or till on the venue's network and enter the setup password.",
+      "Let the box keep its time over the internet, or open this page on a phone or till on the venue's network and enter the setup password.",
     secondClockEnds:
-      "It carries on by itself once the box reaches the internet, or on the phone if you carry on there.",
+      "It carries on by itself once the box keeps its time over the internet, or on the phone if you carry on there.",
     next: "Keep your recovery pack.",
     packWhy:
       "The recovery pack is a PDF holding this box's server key. If this box ever fails, restoring this venue's backups onto a new box asks for that key, so keep the pack somewhere safe, away from the box.",
@@ -83,8 +83,9 @@ const strings = {
     seriesLine:
       "Cuando pulses Continuar, Waitron creará las series de facturas de este servidor. La serie de facturas es el código al principio de cada número de factura: por ejemplo, en A-0CSQW/1 la serie es A-0CSQW.",
     secondClockDo:
-      "Conecta el servidor a internet, o abre esta página desde un móvil o una caja del local y escribe la contraseña de la configuración.",
-    secondClockEnds: "Sigue sola cuando el servidor tenga internet, o en el móvil si sigues allí.",
+      "Deja que el servidor se ponga en hora por internet, o abre esta página desde un móvil o una caja del local y escribe la contraseña de la configuración.",
+    secondClockEnds:
+      "Sigue sola cuando el servidor se ponga en hora por internet, o en el móvil si sigues allí.",
     next: "Guarda el paquete de recuperación.",
     packWhy:
       "El paquete de recuperación es un PDF con la clave de este servidor. Si este servidor falla, restaurar las copias de este local en un servidor nuevo pide esa clave, así que guarda el paquete en un lugar seguro, lejos del servidor.",

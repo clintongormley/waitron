@@ -53,6 +53,7 @@ export class SetupRecoveryCopy extends LitElement {
   @property() errorMessage?: string;
   @property() refusedField?: string;
   @property({ attribute: false }) api: SetupApi = new SetupApi();
+  @property({ attribute: false }) boxAddress?: string;
   @property({ attribute: false }) artifact?: File;
   @property({ attribute: false }) recoveryKey = "";
   @property() environment: "production" | "preproduction" = "production";
@@ -358,6 +359,7 @@ export class SetupRecoveryCopy extends LitElement {
                 }}
                 .preview=${preview}
                 .prepare=${this.#prepare}
+                .boxAddress=${this.boxAddress}
                 .errorMessage=${this.errorMessage}
                 .refusedField=${this.refusedField}
               ></setup-recovery-allocation>

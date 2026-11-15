@@ -63,8 +63,8 @@ import {
 } from "./testing/veri-factu-join.js";
 
 // The new installation's name is chosen against these two clocks; the browser's is `Date.now()`.
-vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: async () => ({
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
+  observeTimeServiceHourClock: async () => ({
     source: "internet",
     result: "usable",
     instantMs: Date.now(),

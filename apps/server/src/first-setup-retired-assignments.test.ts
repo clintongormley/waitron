@@ -28,8 +28,8 @@ import {
 import { ALL_MODULES } from "@waitron/composition";
 
 const outside = vi.hoisted(() => ({ internet: vi.fn(), release: vi.fn() }));
-vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: outside.internet,
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
+  observeTimeServiceHourClock: outside.internet,
 }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: outside.release,

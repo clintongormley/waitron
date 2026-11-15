@@ -97,7 +97,7 @@ If the backup has no usable time zone, the clock times and a reissued recovery p
 show UTC. Recovery keeps the saved zone unchanged.
 
 The page lists the backup's environment, country, taxpayer NIF and time zone one to a row, and after
-**Proceed**, when the clocks differ, the clock step the first-setup runbook describes
+**Proceed**, when the box's time service is not synchronised and the clocks differ, the clock step the first-setup runbook describes
 (`recovery-hour.browser.test.ts`, "Check this venue lists the backup's details one to a row, and no
 clock rows" and
 "clocks that differ show one time per clock and ask which is correct; The server and Both times
@@ -117,9 +117,10 @@ creates new ones so the box never repeats the old box's. Until **Proceed** the p
 to the box; while the button reads **Proceed** it says "When you press Proceed, Waitron creates new invoice series for this box, so
 its invoice numbers never repeat the old box's." with an example of an invoice series (the same
 file's "the key, both statements and the details tick send nothing until Proceed, and the page says what Proceed
-does"). After **Proceed** the box compares its own clock with the clock of the device showing the
-page and with the internet's, and when they agree the page asks the box for the invoice series, all
-by itself; nobody types a time (`recovery-hour.browser.test.ts`, "decodes the printed key and sends
+does"). After **Proceed** the box asks its internet time service whether it is synchronised and
+compares its own clock with the clock of the device showing the page (AEAT's time is not read for
+it), and when the time service is synchronised or the two clocks agree the page asks the box for
+the invoice series, all by itself; nobody types a time (`recovery-hour.browser.test.ts`, "decodes the printed key and sends
 independent recovery declarations before selecting"). Changing or clearing the key, either
 statement or the details tick stops it, and putting it back sends nothing until **Proceed** is
 pressed again (the same file's "an edit to a declaration stops the wait, and putting it back sends
@@ -172,12 +173,18 @@ button reads %s", its "a countdown after a press" row). Once the invoice series 
 them and no longer shows that button (the same file's "once the series are made, the page's one
 button is gone"). What the page shows when it cannot go ahead, and what it asks for:
 
-- **No second clock** (no internet, and the page is on the box itself): connect the box to the
-  internet, or open the page on a phone or laptop on the venue's network that has the backup. It
-  checks again about every 15 seconds and carries on by itself (`recovery-hour.browser.test.ts`,
-  "with no second clock it explains itself and carries on when the internet arrives").
-- **The clocks differ by more than 30 seconds**: the page shows the server's time, this device's
-  and, when it was read, the internet's, and asks which is correct; either answer says to correct this device's time and reconnect to the box. It does not
+- **No second clock** (the box's time service is not synchronised, and the page is on the box
+  itself): the page says the server's time must be correct and it cannot check it over the
+  internet, then lists two choices: fix the internet connection, or open the page at the address it
+  names (the box's first network address, or `waitron.local` when it has none) on a phone or till on the venue's network and carry
+  on there. It checks again about every 15 seconds and carries on by itself (`recovery-hour.browser.test.ts`,
+  "with no second clock it explains itself and carries on when the internet arrives", and "with no
+  second clock it lists the two ways on, naming the box's address, then says the box's screen does
+  not count (%s)").
+- **The clocks differ by more than 30 seconds** (the box's time service is not synchronised): the
+  page shows the server's time and this device's, and asks which is correct; **The server** and
+  **Both times are wrong** say to correct this device's time and reconnect to the box, and **This
+  device** sets the box's clock. It does not
   retry by itself; press **Compare the clocks again**, which
   carries on to the invoice series once the clocks agree (`recovery-hour.browser.test.ts`, "a clock
   refusal shows each clock's reading and no countdown, and waits for Compare the clocks again" and
@@ -221,8 +228,8 @@ a started marker by itself grants no activation. Do not delete a staged request,
 spent-name record to retry. An uncertain outcome needs inspection rather than a new submission.
 
 The box makes the new series when it places the backup, after the restart the restore asks for, and
-it checks its time against the internet's again at that moment. If it cannot read the internet's
-clock then, placement is refused (`sif.allocation_invalid`, `second_clock_missing`), the staged
+it asks its internet time service again at that moment whether it is synchronised. If it is not,
+placement is refused (`sif.allocation_invalid`, `second_clock_missing`), the staged
 restore is kept, and the next start tries again (`apps/server/src/hour-recovery-placement-3.test.ts`,
 "a fresh-box Cloud restore refused at placement for no internet clock keeps its request and places
 on the next start"). How long a Cloud download took makes no difference to this (0 and 31 seconds were tried while
@@ -230,7 +237,7 @@ building A1385; no test keeps that comparison). The box restarts by
 itself after a failed start (`restart: unless-stopped`, `deploy/compose.yml`); after three failed
 starts in a row (`RECOVERY_AT`, `apps/server/src/recovery-state.ts`) it shows the start-failure
 page, which says "The box could not make its new invoice series." and asks you to connect the box
-to the internet and press **Retry a normal boot**; once the box reads the internet's clock the restore finishes
+to the internet and press **Retry a normal boot**; once the box's time service says it is synchronised the restore finishes
 (`apps/server/src/recovery-surface.test.ts`, "names a refused series in both languages"; the
 restart and the three-start count are read, not run here).
 

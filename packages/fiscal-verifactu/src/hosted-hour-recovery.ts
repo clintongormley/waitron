@@ -42,6 +42,7 @@ function createHostedHourRecovery(
   const clocks = createSetupHourClock({
     ...(clock.wall === undefined ? {} : { wall: clock.wall }),
     monotonic: monotonicNow,
+    timeService: async () => (await host.timeServiceSynchronised?.()) ?? false,
   });
   const facts = async (binding: Parameters<NonNullable<typeof host.readRecoveryFacts>>[0]) => {
     const current = await host.readRecoveryFacts!(binding);
@@ -137,7 +138,6 @@ function createHostedHourRecovery(
           );
         const result = await clocks.compare(
           current.contextKey,
-          current.environment,
           proposal.browser as SetupBrowserClockSample | null,
           client,
         );
@@ -162,7 +162,7 @@ function createHostedHourRecovery(
         const current = await facts(held.binding);
         operatorFor(held);
         if (current.priorActivation === "committed") return;
-        await clocks.compare(current.contextKey, current.environment, null, { onBox: true });
+        await clocks.compare(current.contextKey, null, { onBox: true });
         operatorFor(held);
       });
     },

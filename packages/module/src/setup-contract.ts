@@ -34,6 +34,7 @@ export interface SetupContribution {
     };
     binding: RecoveryOperationBinding;
     prepare(request: ModuleRecoveryPreparationRequest): Promise<unknown>;
+    boxAddress?: string;
   }): ModuleRecoveryEntry;
   createPromotion?(context: ModulePromotionContext): ModulePromotionEntry;
   createRecoveryKey?(context: {

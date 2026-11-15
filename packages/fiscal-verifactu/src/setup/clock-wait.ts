@@ -1,5 +1,5 @@
 import { html, nothing, type ReactiveControllerHost } from "lit";
-import { AGREEMENT_MS, type HourClockDecision } from "../hour-clock.js";
+import type { HourClockDecision } from "../hour-clock.js";
 import "@waitron/ui/src/components/wt-button.js";
 import { createWaitCountdown, formatRemaining, type WaitCountdown } from "./wait-countdown.js";
 import { detailRow } from "./check-venue.js";
@@ -11,21 +11,28 @@ export type ClockProblem =
   | { kind: "later" | "in-use" }
   | { kind: "next-minute"; remainingMs: number; recheckInMs: number };
 
-export interface ClockWords {
+export type ClockWords = SharedClockWords &
+  (
+    | { secondClockDo: string; secondClockEnds: string; secondClockChoices?: never }
+    | {
+        secondClockChoices: readonly [string, string];
+        secondClockDo?: never;
+        secondClockEnds?: never;
+      }
+  );
+
+interface SharedClockWords {
   whyWait: string;
   nothingToDo: string;
   continuesIn: string;
   whySecondClock: string;
   onBox: string;
-  secondClockDo: string;
-  secondClockEnds: string;
   whichCorrect: string;
   theServer: string;
   bothWrong: string;
   correctDevice: string;
   serverTime: string;
   thisDevice: string;
-  internetTime: string;
   unavailable: string;
   later: string;
   inUse: string;
@@ -33,14 +40,13 @@ export interface ClockWords {
   newCodeIn: string;
   deviceSet: string;
   deviceSynchronised: string;
-  deviceWitnessed: string;
   deviceSameMachine: string;
   deviceLater: string;
   deviceFailed: string;
   laterAfterSet: string;
 }
 
-type ClockRowWords = Pick<ClockWords, "serverTime" | "thisDevice" | "internetTime" | "unavailable">;
+type ClockRowWords = Pick<ClockWords, "serverTime" | "thisDevice" | "unavailable">;
 
 export interface ClockComparison {
   id: string;
@@ -60,7 +66,7 @@ export const clockWaitStrings = {
     nothingToDo: "Nothing to do; keep this page open.",
     continuesIn: "Continues in",
     whySecondClock:
-      "So no invoice series is ever repeated, the box's time is compared with another device's or the internet's.",
+      "So no invoice series is ever repeated, the server checks its time over the internet, or you confirm it against this device's time.",
     onBox: "This screen is on the box itself, so it does not count.",
     whichCorrect:
       "It is very important that the server time is set correctly. Which time is correct:",
@@ -69,7 +75,6 @@ export const clockWaitStrings = {
     correctDevice: "Please correct the time on this device and then reconnect to the server.",
     serverTime: "Server time",
     thisDevice: "This device",
-    internetTime: "Internet",
     unavailable: "Unavailable",
     later:
       "The invoice series cannot be created yet: this box's clock is earlier than a time it has already used for invoice series.",
@@ -80,8 +85,6 @@ export const clockWaitStrings = {
     deviceSet: "The server's time is now set from this device.",
     deviceSynchronised:
       "The server keeps its time over the internet, so its time is right. Correct the time on this device, then reconnect to the server.",
-    deviceWitnessed:
-      "The server has the tax agency's time and sets its clock from it by itself. If the times still differ in a minute, press This device again.",
     deviceSameMachine:
       "This screen is on the server itself, so it cannot set the server's time. Open this page on a phone or computer.",
     deviceLater:
@@ -96,7 +99,7 @@ export const clockWaitStrings = {
     nothingToDo: "No hace falta hacer nada; deja esta página abierta.",
     continuesIn: "Sigue en",
     whySecondClock:
-      "Para que ninguna serie de facturas se repita, la hora del servidor se compara con la de otro aparato o con internet.",
+      "Para que ninguna serie de facturas se repita, el servidor comprueba su hora por internet, o tú la confirmas con la hora de este dispositivo.",
     onBox: "Esta pantalla está en el propio servidor y no cuenta.",
     whichCorrect: "Es muy importante que la hora del servidor sea correcta. ¿Cuál es la correcta?",
     theServer: "El servidor",
@@ -104,7 +107,6 @@ export const clockWaitStrings = {
     correctDevice: "Corrige la hora de este dispositivo y vuelve a conectarte al servidor.",
     serverTime: "Hora del servidor",
     thisDevice: "Este dispositivo",
-    internetTime: "Internet",
     unavailable: "No disponible",
     later:
       "Todavía no se pueden crear las series de facturas: la hora de este servidor es anterior a una hora que ya usó para series de facturas.",
@@ -115,8 +117,6 @@ export const clockWaitStrings = {
     deviceSet: "La hora del servidor ya está puesta desde este dispositivo.",
     deviceSynchronised:
       "El servidor se pone en hora por internet, así que su hora es correcta. Corrige la hora de este dispositivo y vuelve a conectarte al servidor.",
-    deviceWitnessed:
-      "El servidor tiene la hora de Hacienda y se pone en hora con ella por sí solo. Si dentro de un minuto las horas siguen sin coincidir, vuelve a pulsar Este dispositivo.",
     deviceSameMachine:
       "Esta pantalla está en el propio servidor, así que no puede poner su hora. Abre esta página en un móvil o un ordenador.",
     deviceLater:
@@ -126,7 +126,7 @@ export const clockWaitStrings = {
     laterAfterSet:
       "No se pueden crear las series de facturas: la hora del servidor es ahora anterior a una hora que ya se usó para las series de facturas de este local, así que probablemente la hora de este dispositivo está mal. Corrige la hora de este dispositivo, vuelve a conectarte al servidor y elige de nuevo qué hora es la correcta.",
   },
-} satisfies Record<"en" | "es", Omit<ClockWords, "secondClockDo" | "secondClockEnds">>;
+} satisfies Record<"en" | "es", SharedClockWords>;
 
 const formats = new Map<string, Intl.DateTimeFormat>();
 
@@ -229,13 +229,11 @@ async function sendDeviceClock(
 const deviceRefusal = (words: ClockWords, reason: string): string =>
   reason === "synchronised" || reason === "not_stopped"
     ? words.deviceSynchronised
-    : reason === "witnessed"
-      ? words.deviceWitnessed
-      : reason === "same_machine"
-        ? words.deviceSameMachine
-        : reason === "later"
-          ? words.deviceLater
-          : words.deviceFailed;
+    : reason === "same_machine"
+      ? words.deviceSameMachine
+      : reason === "later"
+        ? words.deviceLater
+        : words.deviceFailed;
 
 /** Checks again every 15 seconds; starting it again while it runs keeps its rhythm. */
 function createRecheckPoll(host: ReactiveControllerHost, run: () => void) {
@@ -434,23 +432,31 @@ export function renderClockProblem(
   },
   place?: { locale: "en" | "es"; timeZone: string },
 ) {
-  if (problem?.kind === "second-clock")
-    return html`<section data-test="clock-wait">
-      <p role="status">${words.whySecondClock}</p>
-      ${
-        clock?.unavailable.some((r) => r.source === "browser" && r.reason === "same_machine")
-          ? html`<p>${words.onBox}</p>`
-          : nothing
-      }
-      ${sentence(words.secondClockDo)} ${sentence(words.secondClockEnds)}
-    </section>`;
+  if (problem?.kind === "second-clock") {
+    const onBox = clock?.unavailable.some(
+      (r) => r.source === "browser" && r.reason === "same_machine",
+    )
+      ? html`<p>${words.onBox}</p>`
+      : nothing;
+    const choices = words.secondClockChoices;
+    return choices
+      ? html`<section data-test="clock-wait">
+          <p role="status">${words.whySecondClock}</p>
+          <ul>
+            ${choices.map((line) => html`<li>${line}</li>`)}
+          </ul>
+          ${onBox}
+        </section>`
+      : html`<section data-test="clock-wait">
+          <p role="status">${words.whySecondClock}</p>
+          ${onBox} ${sentence(words.secondClockDo)} ${sentence(words.secondClockEnds)}
+        </section>`;
+  }
   if (problem?.kind === "disagreement") {
     const device = choice.device;
     const choices = [
       ["server-correct", words.theServer, () => choice.answer()],
-      ...(device?.set && !onlyThisDeviceDiffers(clock)
-        ? ([["device-correct", words.thisDevice, device.set]] as const)
-        : []),
+      ...(device?.set ? ([["device-correct", words.thisDevice, device.set]] as const) : []),
       ["both-wrong", words.bothWrong, () => choice.answer()],
     ] as const;
     return html`<section data-test="clock-refused">
@@ -499,25 +505,9 @@ export function renderClockProblem(
 const middle = (reading: { lowerMs: number; upperMs: number }) =>
   (reading.lowerMs + reading.upperMs) / 2;
 
-/** The internet's time agrees with the server's and only this device's differs (A1482 Q3). */
-function onlyThisDeviceDiffers(clock: HourClockDecision | undefined): boolean {
-  const at = (source: string) => clock?.usable.find((r) => r.source === source);
-  const box = at("box"),
-    internet = at("internet"),
-    browser = at("browser");
-  return (
-    box !== undefined &&
-    internet !== undefined &&
-    browser !== undefined &&
-    Math.abs(middle(internet) - middle(box)) <= AGREEMENT_MS &&
-    Math.abs(middle(browser) - middle(box)) > AGREEMENT_MS
-  );
-}
-
 /**
- * The clock step's rows: the server's time, this device's, and the internet's when it was read. The
- * box refuses clocks more than 30 seconds apart, so when another clock reads the server's minute the
- * rows show seconds too.
+ * The clock step's rows: the server's time and this device's. When another clock reads the
+ * server's minute the rows show seconds too.
  */
 export function renderClockRows(
   clock: HourClockDecision,
@@ -535,11 +525,7 @@ export function renderClockRows(
     const reading = clock.usable.find((r) => r.source === source);
     return reading ? format.format(middle(reading)) : words.unavailable;
   };
-  return html`${detailRow(words.serverTime, at("box"))}${detailRow(words.thisDevice, at("browser"))}${
-    clock.usable.some((r) => r.source === "internet")
-      ? detailRow(words.internetTime, at("internet"))
-      : nothing
-  }`;
+  return html`${detailRow(words.serverTime, at("box"))}${detailRow(words.thisDevice, at("browser"))}`;
 }
 
 function renderWait(words: ClockWords, countdown: WaitCountdown, minuteTaken: boolean) {

@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import type { DeploymentEnvironment } from "@waitron/db";
 import type {
   ModuleClockSetAnswer,
   ModuleClockSetRequest,
@@ -14,7 +13,7 @@ import {
   type HourClockDecision,
   type HourClockObservation,
 } from "./hour-clock.js";
-import { observeInternetHourClock } from "./hour-clock-internet.js";
+import { observeTimeServiceHourClock } from "./hour-clock-time-service.js";
 import { readHourRelease } from "./hour-release.js";
 import { chosenHourIssuedAtMs } from "./hour-selection.js";
 import "./errors.js";
@@ -22,7 +21,7 @@ import "./errors.js";
 interface ClockDependencies {
   wall?: () => number;
   monotonic?: () => number;
-  internet?: (environment: DeploymentEnvironment) => Promise<HourClockObservation>;
+  timeService?: () => Promise<boolean>;
   release?: () => number | null;
 }
 export type { SetupBrowserClockSample } from "./hour-clock.js";
@@ -74,7 +73,7 @@ export async function setBoxClockFrom(
 export function createSetupHourClock(deps: ClockDependencies = {}) {
   const wall = deps.wall ?? Date.now;
   const monotonic = deps.monotonic ?? (() => performance.now());
-  const internet = deps.internet ?? observeInternetHourClock;
+  const timeService = deps.timeService ?? (async () => false);
   const release = deps.release ?? (() => readHourRelease()?.instantMs ?? null);
   const sessions = new Map<string, Session>();
   const session = (key: string) => {
@@ -162,12 +161,7 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
         },
       };
     },
-    async compare(
-      key: string,
-      environment: DeploymentEnvironment,
-      browser: SetupBrowserClockSample | null,
-      client: SetupClockClient,
-    ) {
+    async compare(key: string, browser: SetupBrowserClockSample | null, client: SetupClockClient) {
       const state = session(key);
       const { challenge, received, elapsed, timed } =
         browser === null
@@ -188,7 +182,7 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
           monotonicFinishedMs: received.monotonicFinishedMs,
         });
       } else observations.push({ source: "browser", result: "unavailable", reason: "challenge" });
-      observations.push(structuredClone(await internet(environment)));
+      observations.push(await observeTimeServiceHourClock(timeService, { wall, monotonic }));
       if (sessions.get(key) !== state) return refuse("clock_stale");
       const sample = box();
       const clock = compareHourClocks([...observations, sample], release());

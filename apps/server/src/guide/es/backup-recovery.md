@@ -215,13 +215,13 @@ posteriores a esta instantánea.» para una copia de Waitron Cloud— y elige **
 **Restaurar desde mi bucket** o **Restaurar esta instantánea**.
 
 Una clave que abre la copia no evita las comprobaciones del historial y del reloj. Si la comprobación
-del reloj lo impide, resuelve la causa y elige **Volver a comparar los relojes**. Si los relojes no
-coinciden, después de **Continuar** la página muestra la hora del servidor y la de este dispositivo y
+del reloj lo impide, resuelve la causa y elige **Volver a comparar los relojes**. Si el servidor no puede comprobar su
+hora por internet y los relojes no coinciden, después de **Continuar** la página muestra la hora del servidor y la de este dispositivo y
 pregunta cuál es la correcta: **El servidor**, **Este dispositivo** o **Las dos horas están mal**.
 **Este dispositivo** pone la hora del servidor con la del dispositivo que estás usando, y la página
 sigue sola. Después de cualquiera de las otras dos, corrige la hora de este dispositivo, vuelve a
 conectarte al servidor y elige **Volver a comparar los relojes**. Si después el servidor muestra una
-página que dice que no pudo crear sus nuevas series de facturas, conéctalo a internet y pulsa
+página que dice que no pudo crear sus nuevas series de facturas, deja que se ponga en hora por internet y pulsa
 **Reintentar un arranque normal**.
 
 Si la copia no tiene ningún administrador activo con contraseña, elige otra copia de seguridad.

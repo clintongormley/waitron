@@ -380,6 +380,49 @@ describe("waitron-restore restore", () => {
     ]);
   });
 
+  it.each(["second_clock_missing", "clock_unconfirmed"])(
+    "says the box could not confirm its time when the series check refuses for %s",
+    async (reason) => {
+      const dir = mkdtempSync(join(tmpdir(), "restore-command-clock-"));
+      const artifactPath = await makeArtifact(dir);
+      const out: string[] = [];
+      const code = await runRestore({
+        argv: ["restore", artifactPath],
+        env: { WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY },
+        lockVenue: unlockedVenue,
+        out: (line) => out.push(line),
+        restore: async () => {
+          throw new AppError("sif.allocation_invalid", { reason });
+        },
+      });
+      expect(code).toBe(1);
+      expect(out).toEqual([
+        COLD_RESTORE_NOTICE,
+        `restore failed: sif.allocation_invalid (${reason}) — the box's time is not confirmed, so no invoice series was made; check that timedatectl shows "System clock synchronized: yes", then run this command again`,
+      ]);
+    },
+  );
+
+  it.each(["clock_stale", "clock_disagreement"])(
+    "keeps the fixed line for a series refusal for %s",
+    async (reason) => {
+      const dir = mkdtempSync(join(tmpdir(), "restore-command-allocation-"));
+      const artifactPath = await makeArtifact(dir);
+      const out: string[] = [];
+      const code = await runRestore({
+        argv: ["restore", artifactPath],
+        env: { WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY },
+        lockVenue: unlockedVenue,
+        out: (line) => out.push(line),
+        restore: async () => {
+          throw new AppError("sif.allocation_invalid", { reason });
+        },
+      });
+      expect(code).toBe(1);
+      expect(out).toEqual([COLD_RESTORE_NOTICE, "restore failed"]);
+    },
+  );
+
   it("reports an AppError outside restore/recovery/backup namespaces generically, never rethrown", async () => {
     const dir = mkdtempSync(join(tmpdir(), "restore-command-other-apperror-"));
     const artifactPath = await makeArtifact(dir);

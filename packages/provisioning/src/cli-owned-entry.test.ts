@@ -50,25 +50,21 @@ afterAll(async () => {
 
 const SETTLE = "2026-10-18T11:40:00Z";
 /**
- * A preload that starts the child's clock at `instant`, has the internet's clock agree, and lets a
- * wait pass by moving that clock forward instead of sleeping.
+ * A preload that starts the child's clock at `instant`, has a stand-in `timedatectl` report the box's
+ * time service synchronised, and lets a wait pass by moving that clock forward instead of sleeping.
  */
 function clockPreload(instant: string, extra = "") {
-  return `import https from "node:https";
+  return `import childProcess from "node:child_process";
 import timers from "node:timers/promises";
-import { EventEmitter } from "node:events";
 import { syncBuiltinESMExports } from "node:module";
 let passed = 0;
 timers.setTimeout = async (ms, value) => {
   passed += ms;
   return value;
 };
-https.request = (_url, _options, respond) => {
-  const request = new EventEmitter();
-  const date = new Date().toUTCString();
-  request.end = () => queueMicrotask(() => respond({ statusCode: 200, headers: { date }, destroy() {} }));
-  return request;
-};
+const execFile = childProcess.execFile;
+childProcess.execFile = (file, args, options, callback) =>
+  file === "timedatectl" ? queueMicrotask(() => callback(null, "yes\\n", "")) : execFile(file, args, options, callback);
 ${extra}syncBuiltinESMExports();
 const RealDate = Date;
 globalThis.Date = class extends RealDate {
@@ -81,7 +77,7 @@ Object.defineProperty(performance, "now", { value: () => passed });
 const WAIT_WORDS =
   "Waiting to confirm the time, so no invoice series is ever repeated.\nWaiting until 2026-10-18T11:42:00.000Z; it carries on by itself, so keep the command running.\n";
 
-it("with no network the built venue command explains, asks nothing and spends no name", async () => {
+it("with the box's time service not synchronised the built venue command explains, asks nothing and spends no name", async () => {
   const target = join(directory!, "venue");
   const stateDir = join(directory!, "state");
   await mkdir(target);
@@ -92,9 +88,11 @@ it("with no network the built venue command explains, asks nothing and spends no
   const offline = join(directory!, "offline.mjs");
   await writeFile(
     offline,
-    `import https from "node:https";
+    `import childProcess from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
-https.request = () => { throw new Error("synthetic offline clock"); };
+const execFile = childProcess.execFile;
+childProcess.execFile = (file, args, options, callback) =>
+  file === "timedatectl" ? queueMicrotask(() => callback(null, "no\\n", "")) : execFile(file, args, options, callback);
 syncBuiltinESMExports();\n`,
   );
   const values = {
@@ -169,7 +167,7 @@ syncBuiltinESMExports();\n`,
   expect({ code, errors }).toEqual({ code: 1, errors: "" });
   expect(output).toContain("No series is made without a confirmed time, so none is ever repeated.");
   expect(output).toContain(
-    "Connect the box to the internet, or set up from a phone or laptop on the venue's network.",
+    "Let the box keep its time over the internet, or set up from a phone or laptop on the venue's network.",
   );
   expect(output).not.toContain("[no/yes/unknown]");
   expect(answered.size).toBe(0);

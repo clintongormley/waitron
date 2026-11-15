@@ -50,8 +50,8 @@ const time = vi.hoisted(() => ({
     monotonic: () => performance.now() + time.aheadMs,
   },
 }));
-vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: async () => {
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
+  observeTimeServiceHourClock: async () => {
     const now = time.clock.wall(),
       mono = time.clock.monotonic();
     return {

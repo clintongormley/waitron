@@ -16,7 +16,7 @@ import { withHourAdmission } from "./allocation-envelope.js";
 import { withCollectedModuleAllocation } from "./allocation-operation.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import { FISCAL_OPERATIONS } from "./index.js";
-import * as internet from "./hour-clock-internet.js";
+import * as internet from "./hour-clock-time-service.js";
 import * as release from "./hour-release.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 
@@ -46,7 +46,7 @@ beforeEach(async () => {
     generator: "scripts/generate-hour-release.mjs:v1",
     generatorSha256: "b".repeat(64),
   });
-  vi.spyOn(internet, "observeInternetHourClock").mockImplementation(async () => ({
+  vi.spyOn(internet, "observeTimeServiceHourClock").mockImplementation(async () => ({
     source: "internet",
     result: "usable",
     instantMs: wall,

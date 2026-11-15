@@ -766,6 +766,7 @@ export class SetupApp extends LitElement {
   #connectionGeneration = 0;
 
   @state() private installationOrigin?: "usb";
+  @state() private boxAddress?: string;
   @state() private environment?: "production" | "preproduction";
   @state() private developmentMode = false;
 
@@ -918,6 +919,7 @@ export class SetupApp extends LitElement {
       this.installationOrigin = status.installationOrigin;
       this.environment = status.environment;
       this.developmentMode = status.developmentMode === true;
+      this.boxAddress = discovery.ipUrls?.[0] ?? discovery.hostnameUrl;
       const first = await this.api.firstSetupStatus();
       if (!this.isConnected || generation !== this.#connectionGeneration) return;
       if (first.claimed || first.conflict) {
@@ -2642,6 +2644,7 @@ export class SetupApp extends LitElement {
         return html`<setup-restore-screen
           data-test="screen-restore"
           .api=${this.api}
+          .boxAddress=${this.boxAddress}
           .errorMessage=${this.restoreError?.()}
           .invalidField=${this.restoreInvalidField}
           .liveSince=${this.restoreLiveSince}
@@ -2652,6 +2655,7 @@ export class SetupApp extends LitElement {
         return html`<setup-restore-bucket-screen
           data-test="screen-restore-bucket"
           .api=${this.api}
+          .boxAddress=${this.boxAddress}
           .errorMessage=${this.bucketRestoreError?.()}
           .invalidField=${this.bucketInvalidField}
           .liveSince=${this.bucketLiveSince}
@@ -2663,6 +2667,7 @@ export class SetupApp extends LitElement {
         return html`<setup-cloud-restore-screen
           data-test="screen-cloud-restore"
           .api=${this.api}
+          .boxAddress=${this.boxAddress}
           .view=${this.cloudRecoveryView}
           .retryConfirmation=${this.cloudRetryConfirmation}
           .errorMessage=${this.cloudRecoveryError?.()}

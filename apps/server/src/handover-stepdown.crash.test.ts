@@ -169,13 +169,6 @@ const STEPDOWN = wrapper(
 }`,
 );
 
-const INTERNET = wrapper(
-  here("../../../packages/fiscal-verifactu/src/hour-clock-internet.ts"),
-  `export function authenticatedHourHead() {
-  return Promise.reject(new Error("the crashing child asks AEAT nothing for the time"));
-}`,
-);
-
 // The child stands for a box that prepared the handover while it was running, so its own start
 // neither abandons the operation the suite seeded at `prepared` (`repairAtStart`) nor waits on it
 // (the `peerCheck` seam below). The restart after the crash runs the real start check.
@@ -191,7 +184,7 @@ globalThis.__stepdownCrash = {
   at: process.env.WAITRON_TEST_CRASH_AT,
   die(line) { mark(line); process.kill(process.pid, "SIGKILL"); },
 };
-const swaps = { "/handover-gate.js": ${JSON.stringify(GATE)}, "/background-duties.js": ${JSON.stringify(DUTIES)}, "/handover-stepdown.js": ${JSON.stringify(STEPDOWN)}, "/hour-clock-internet.js": ${JSON.stringify(INTERNET)}, "/start-peer-check.js": ${JSON.stringify(START_CHECK)} };
+const swaps = { "/handover-gate.js": ${JSON.stringify(GATE)}, "/background-duties.js": ${JSON.stringify(DUTIES)}, "/handover-stepdown.js": ${JSON.stringify(STEPDOWN)}, "/start-peer-check.js": ${JSON.stringify(START_CHECK)} };
 registerHooks({ resolve(specifier, context, next) {
   const swap = Object.entries(swaps).find(([end]) => specifier.endsWith(end));
   return swap === undefined ? next(specifier, context) : { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(swap[1]) };

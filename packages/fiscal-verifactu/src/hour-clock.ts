@@ -115,13 +115,18 @@ export function compareHourClocks(
   const middle = (sample: { lowerMs: number; upperMs: number }) =>
     (sample.lowerMs + sample.upperMs) / 2;
   const others = usable.filter((sample) => sample.source !== "box");
+  // The owner trusts the internet time service over every device (2026-11-11), so while it is
+  // usable a device's disagreement does not refuse.
+  const judged = others.some((sample) => sample.source === "internet")
+    ? others.filter((sample) => sample.source === "internet")
+    : others;
   const decision: HourClockDecision = Object.freeze({
     usable: Object.freeze(usable),
     unavailable: Object.freeze(unavailable),
     secondClock: others.length > 0,
     disagreement:
       boxRange !== undefined &&
-      others.some((sample) => Math.abs(middle(sample) - middle(boxRange)) > AGREEMENT_MS),
+      judged.some((sample) => Math.abs(middle(sample) - middle(boxRange)) > AGREEMENT_MS),
     releaseBlocked:
       boxRange === undefined ||
       releaseInstantMs === null ||

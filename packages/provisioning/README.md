@@ -91,9 +91,12 @@ refuses with `setup.not_ready` before opening the venue directory. For example:
 WAITRON_STATE_DIR=/var/lib/waitron/state node packages/provisioning/dist/bin.js venue
 ```
 
-The interactive Live flow owns its setup attempt and compares the box's clock with the internet's;
-with only the box's own clock it explains why and stops
-(`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the terminal with only the box's
+The interactive Live flow owns its setup attempt and asks the box's internet time service whether
+it is synchronised (`timedatectl show -p NTPSynchronized --value`); when it is not, it explains why
+and stops. `timedatectl` reports on the machine the command runs on, so run it on the box
+itself: where `timedatectl` is missing or fails, the answer is "not synchronised" and the command
+stops (`src/timedatectl-reader.ts`;
+`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the terminal with only the box's
 clock explains and cancels without a question"). It asks nothing about the clock or recent setups.
 When the name must wait, it prints why and the time it carries on at, and waits in the same run;
 keep it running (`packages/provisioning/src/cli-first-setup.test.ts`, "the venue command claims

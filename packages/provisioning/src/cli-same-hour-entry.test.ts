@@ -52,15 +52,15 @@ async function builtCommand(name: string) {
   const source = databases.rows.find((row) => row.name === "main")!.file;
   for (const name of ["venue.db", "venue.db-wal", "node.db", "node.db-wal"])
     await copyFile(join(dirname(source), name), join(target, name));
-  /** A preload that starts the child's clock at `instant`, with the internet's clock agreeing, and
-   * lets a wait pass by moving that clock forward instead of sleeping. */
+  /** A preload that starts the child's clock at `instant`, with a stand-in `timedatectl` reporting the
+   * box's time service synchronised, and lets a wait pass by moving that clock forward instead of
+   * sleeping. */
   async function clockAt(instant: string) {
     const preload = join(directory!, name, `clock-${instant.replaceAll(":", "")}.mjs`);
     await writeFile(
       preload,
-      `import https from "node:https";
+      `import childProcess from "node:child_process";
 import timers from "node:timers/promises";
-import { EventEmitter } from "node:events";
 import { syncBuiltinESMExports } from "node:module";
 let passed = 0;
 timers.setTimeout = async (ms, value) => {
@@ -68,12 +68,9 @@ timers.setTimeout = async (ms, value) => {
   return value;
 };
 const RealDate = Date;
-https.request = (_url, _options, respond) => {
-  const request = new EventEmitter();
-  const date = new Date().toUTCString();
-  request.end = () => queueMicrotask(() => respond({ statusCode: 200, headers: { date }, destroy() {} }));
-  return request;
-};
+const execFile = childProcess.execFile;
+childProcess.execFile = (file, args, options, callback) =>
+  file === "timedatectl" ? queueMicrotask(() => callback(null, "yes\\n", "")) : execFile(file, args, options, callback);
 syncBuiltinESMExports();
 globalThis.Date = class extends RealDate {
   constructor(...args) { super(...(args.length ? args : [RealDate.parse(${JSON.stringify(instant)}) + passed])); }

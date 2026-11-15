@@ -3,6 +3,7 @@ import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { ensureStreamId } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { publishRestoreFlow } from "./restore-flow.js";
+import type { BoxHostClient } from "./box-host-client.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { spawn, spawnSync } from "node:child_process";
@@ -449,9 +450,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       generatorSha256: "b".repeat(64),
     });
     const testClock = createHourTestClock(Date.parse("2026-10-16T11:40:00Z"));
-    const internet = await import("@waitron/fiscal-verifactu/src/hour-clock-internet.js");
+    const internet = await import("@waitron/fiscal-verifactu/src/hour-clock-time-service.js");
     const internetSpy = vi
-      .spyOn(internet, "observeInternetHourClock")
+      .spyOn(internet, "observeTimeServiceHourClock")
       .mockImplementation(async () => ({
         source: "internet",
         result: "usable",
@@ -1191,6 +1192,34 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             installationOrigin: "usb",
           });
         },
+      );
+    } finally {
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  it("the restore page's host asks the setup start's own box host, afresh at each reading", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    let synchronised = true;
+    const boxHost: BoxHostClient = {
+      clockStatus: vi.fn(async () => clockServiceAnswer(synchronised)),
+      setClock: async () => ({ available: false, reason: "missing" }),
+    };
+    try {
+      await withSetupBoot(
+        venue.directory,
+        {},
+        async () => {
+          const read = recovery.options!.timeServiceSynchronised!;
+          const asked = vi.mocked(boxHost.clockStatus).mock.calls.length;
+          expect(await read()).toBe(true);
+          synchronised = false;
+          expect(await read()).toBe(false);
+          expect(vi.mocked(boxHost.clockStatus).mock.calls.length).toBe(asked + 2);
+        },
+        { seams: { boxHost } },
       );
     } finally {
       await venue.store.close();

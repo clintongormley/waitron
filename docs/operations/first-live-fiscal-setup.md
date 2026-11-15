@@ -16,17 +16,19 @@ If you imported a prepared configuration, review whether it belongs to this same
 continuing. Complete the applicable certificate, email and separate preproduction readiness steps.
 The readiness sample uses its own database and grants no production identity.
 
-Review the country, location and time zone together. The box compares its clock with the clock
-of the device showing the page, and with the internet's when it reaches it, by itself; nobody types
+Review the country, location and time zone together. The box checks its clock by itself: it asks
+its internet time service whether it is synchronised, and compares its clock with the clock of the
+device showing the page; AEAT's time is not read for it, and nobody types
 a time (`packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts`, "automatically compares
 clocks and shows combined country, place and zone, with no clock time, before selection"). A page shown on the
 box's own screen runs on the box's clock, so it does not count as the second clock
 (`apps/server/src/request-from-box.test.ts` sorts a request from the box's own address as the box;
 `packages/fiscal-verifactu/src/hour-setup-clock.test.ts`, "a browser on the box itself is never
-the second clock"). The box's clock must be within 30 seconds of every
-other clock it reads, ahead or behind, and there is no confirmation to get past it
-(`packages/fiscal-verifactu/src/hour-clock.test.ts`, "a name needs a second clock within 30
-seconds of the box"). There is no "last hour" question: the page has no such field
+the second clock"). While the time service is synchronised it carries on, whatever the device's clock reads
+(`packages/fiscal-verifactu/src/hour-clock.test.ts`, "a synchronised time service carries on past a
+browser five minutes out"). Otherwise the box's clock must be within 30 seconds of the device's,
+ahead or behind, and there is no confirmation to get past it (the same file's "a name needs a
+second clock within 30 seconds of the box"). There is no "last hour" question: the page has no such field
 (`packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts`, "asks no last-hour question and offers no clock confirmation").
 
 Tick "These details are correct.", then press **Proceed**; once
@@ -47,9 +49,8 @@ state is the same file's "while %s the page's one button reads %s".
 Each detail sits on its own row, its value beside its label (`first-hour.browser.test.ts`, "Check
 this venue puts each detail on a row of its own, label then value"), and the list shows no clock time
 (the same file's "when only the %s agrees, Check this venue shows no clock rows").
-When the clocks differ, after **Proceed** the page says "It is very important that the server time
-is set correctly. Which time is correct:", then shows a "Server time" row and a "This device" row (and
-an "Internet" row when the internet was read), each one time to the minute (with seconds on every
+When the box's time service is not synchronised and the clocks differ, after **Proceed** the page says "It is very important that the server time
+is set correctly. Which time is correct:", then shows a "Server time" row and a "This device" row, each one time to the minute (with seconds on every
 row when another clock reads the server's minute), then **The server**, **This device** and
 **Both times are wrong**. **The server** and **Both times are wrong** send nothing and say to correct
 this device's time and reconnect (the same file's "%s: clocks that differ show one time per clock,
@@ -58,8 +59,7 @@ from the device showing the page, under the owner's pass, and the page then make
 nobody pressing (the same file's "after Proceed on clocks that differ, This device sets the server's
 clock and the series are made with nobody pressing"); a refusal says what happened and what to do
 (the same file's "in %s a refusal for %s says what happened and what to do, compares nothing and
-keeps the choices"). It is not offered when the internet's time agrees with the box's (the same
-file's "offers no This device when the internet's time agrees with the server's"). Each step
+keeps the choices"). Each step
 becomes an alert, handed to the managers' email duty, at the venue's first full start that is
 neither a mirror nor fenced (`apps/server/src/boot.box-emails.test.ts`, "boot raises and emails
 each clock step the setup page noted, then deletes the note"); a step whose note could not be saved
@@ -96,16 +96,18 @@ carry on by itself"). With no wait recorded, a reloaded page shows no countdown 
 tick and **Proceed** (the same file's "shows no countdown before the tick when no wait is
 recorded"). What the page shows when it cannot go ahead, and what it asks for:
 
-- **No second clock** (no internet, and the page is on the box itself): connect the box to the
-  internet, or open the page on a phone or till on the venue's network and enter the setup
+- **No second clock** (the box's time service is not synchronised, and the page is on the box
+  itself): let the box keep its time over the internet, or open the page on a phone or till on the venue's network and enter the setup
   password. It checks again about every 15 seconds from when the page opens, and carries on by
   itself once a second clock answers and **Proceed** has been pressed; **Proceed** can be pressed
   while it waits. After a reload during the box's wait, no tick or press is needed (see above)
   (`first-hour.browser.test.ts`, "with no second clock it explains itself and carries on when the
   internet arrives" and "with no second clock on load it explains itself before the tick, and makes
   the series once Proceed is pressed and a clock answers").
-- **The clocks differ by more than 30 seconds**: after **Proceed** the page shows the server's time,
-  this device's and, when it was read, the internet's, and asks which is correct; either answer says to correct this device's time and reconnect to the box.
+- **The clocks differ by more than 30 seconds** (the box's time service is not synchronised): after
+  **Proceed** the page shows the server's time and this device's, and asks which is correct; **The
+  server** and **Both times are wrong** say to correct this device's time and reconnect to the box,
+  and **This device** sets the box's clock.
   It does not retry by itself; press **Compare the clocks again**, which after **Proceed** carries on
   to the series once the clocks agree (`first-hour.browser.test.ts`, "a clock refusal shows each
   clock's reading and no countdown, and waits for Compare the clocks again" and "Compare the clocks again
@@ -251,9 +253,15 @@ WAITRON_STATE_DIR=/var/lib/waitron/state \
 ```
 
 Follow the venue, password and kept-document prompts; the command asks nothing about the clock or
-recent setups. It needs the internet's clock: with only the box's own, it explains why and stops
-(`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the terminal with only the box's
-clock explains and cancels without a question"). When the name must wait, it prints why and the
+recent setups. It needs the box's internet time service to say it is synchronised (it asks
+`timedatectl show -p NTPSynchronized --value`); otherwise it explains why and stops. `timedatectl`
+reports on the machine the command runs on, so run the command on the box itself: where
+`timedatectl` is missing or fails, the answer is "not synchronised" and the command stops
+(`packages/provisioning/src/timedatectl-reader.ts`;
+`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the terminal with only the box's
+clock explains and cancels without a question"; `packages/provisioning/src/first-setup-command.test.ts`,
+"names the series with no browser when the box's time service is synchronised" and "names none when
+the box's time service is not synchronised"). When the name must wait, it prints why and the
 time it carries on at, and waits in the same run; keep it running
 (`packages/provisioning/src/cli-first-setup.test.ts`, "the venue command claims ownership, waits
 out its settle wait saying why and until when, before any venue write, and carries on in the same

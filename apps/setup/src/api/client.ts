@@ -458,7 +458,11 @@ export class SetupApi {
     });
   }
 
-  getDiscovery(): Promise<{ caDownloadAvailable: boolean }> {
+  getDiscovery(): Promise<{
+    caDownloadAvailable: boolean;
+    hostnameUrl?: string;
+    ipUrls?: string[];
+  }> {
     return this.#request("/setup-api/discovery", "GET");
   }
 

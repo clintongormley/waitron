@@ -39,26 +39,26 @@ const promotionWords = {
   emergency: {
     en: {
       secondClockDo:
-        "Switch from a till or phone on the venue's network, or connect the box to the internet.",
+        "Switch from a till or phone on the venue's network, or let the box keep its time over the internet.",
       secondClockEnds:
-        "It carries on by itself once the box reaches the internet, while this page stays open.",
+        "It carries on by itself once the box keeps its time over the internet, while this page stays open.",
     },
     es: {
       secondClockDo:
-        "Cambia desde una caja o un móvil del local, o conecta el servidor a internet.",
+        "Cambia desde una caja o un móvil del local, o deja que el servidor se ponga en hora por internet.",
       secondClockEnds:
-        "Sigue sola cuando el servidor tenga internet, mientras esta página siga abierta.",
+        "Sigue sola cuando el servidor se ponga en hora por internet, mientras esta página siga abierta.",
     },
   },
   controlled: {
     en: {
       secondClockDo:
-        "Connect the box to the internet, or open this handover page on another phone or laptop.",
+        "Let the box keep its time over the internet, or open this handover page on another phone or laptop.",
       secondClockEnds: "Keep this page open, or continue on the other device.",
     },
     es: {
       secondClockDo:
-        "Conecta el servidor a internet o abre esta página de traspaso en otro móvil o portátil.",
+        "Deja que el servidor se ponga en hora por internet o abre esta página de traspaso en otro móvil o portátil.",
       secondClockEnds: "Mantén esta página abierta o continúa en el otro dispositivo.",
     },
   },
@@ -96,10 +96,11 @@ const strings = {
       "When you press Proceed, Waitron creates new invoice series for this box, so its invoice numbers never repeat the old box's. The invoice series is the code at the start of every invoice number: for example, in A-0CSQW/1 the series is A-0CSQW.",
     missing: "Complete recovery before continuing.",
     key: "Check the key for this backup.",
-    secondClockDo:
-      "Connect the box to the internet, or open this page on a phone or laptop on the venue's network that has the backup.",
-    secondClockEnds:
-      "It carries on by itself once the box reaches the internet, or on the other device if you carry on there.",
+    secondClockLead:
+      "It is very important that the server's time is correct, and it can't check its time over the Internet right now. Either:",
+    secondClockFix: "fix the Internet connection, and this page carries on by itself, or",
+    secondClockOpen: (address?: string) =>
+      `open this page${address ? ` on ${address}` : ""} on a phone or till on the venue's network, and carry on there`,
     clear: "Clear",
   },
   es: {
@@ -124,10 +125,11 @@ const strings = {
       "Cuando pulses Continuar, Waitron creará series de facturas nuevas para este servidor, para que sus números de factura nunca repitan los del servidor anterior. La serie de facturas es el código al principio de cada número de factura: por ejemplo, en A-0CSQW/1 la serie es A-0CSQW.",
     missing: "Completa la recuperación antes de continuar.",
     key: "Revisa la clave de esta copia.",
-    secondClockDo:
-      "Conecta el servidor a internet, o abre esta página desde un móvil o un portátil del local que tenga la copia.",
-    secondClockEnds:
-      "Sigue sola cuando el servidor tenga internet, o en el otro aparato si sigues allí.",
+    secondClockLead:
+      "Es muy importante que la hora del servidor sea correcta, y ahora mismo no puede comprobar su hora por internet. Puedes:",
+    secondClockFix: "arreglar la conexión a internet, y esta página seguirá sola, o",
+    secondClockOpen: (address?: string) =>
+      `abrir esta página${address ? ` en ${address}` : ""} desde un móvil o una caja de la red del local, y seguir allí`,
     clear: "Borrar",
   },
 };
@@ -458,7 +460,14 @@ export class RecoveryHourEntry extends LitElement {
           ...promotionWords[context.scenario][this.locale],
           inUse: en ? clockWaitStrings.en.inUse : clockWaitStrings.es.inUse,
         }
-      : baseWords;
+      : {
+          ...baseWords,
+          whySecondClock: baseWords.secondClockLead,
+          secondClockChoices: [
+            baseWords.secondClockFix,
+            baseWords.secondClockOpen(context.boxAddress),
+          ] as const,
+        };
     const observations = promote
       ? []
       : readInvoiceEvidenceReport({
