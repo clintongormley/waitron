@@ -394,6 +394,8 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   const transportPort = httpPortFrom(transportEnv);
   const transport: RecoveryServeOptions = {
     stateDir: admission.roots.stateDir,
+    freeSpace: () =>
+      lowestFreeBytes([admission.roots.stateDir, admission.roots.venueDir], deps.statfs),
     port: transportPort,
     log: deps.log,
     httpHost: isUnset(transportEnv.WAITRON_HTTP_HOST)

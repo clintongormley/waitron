@@ -99,11 +99,20 @@ describe.each(["light", "dark"] as const)("till-lock-screen a11y (%s theme)", (t
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations on the clock-waiting line", async () => {
+  it("has no violations on the storage and clock-waiting lines", async () => {
     const { el, host } = await mountWidget<TillLockScreen>(
       "till-lock-screen",
       {
         api: stubApi(),
+        storageNotices: [
+          {
+            owner: "box",
+            key: "storage.disk_full",
+            code: "storage.disk_full",
+            severity: "error",
+            params: {},
+          },
+        ],
         clockNotice: {
           owner: "box-clock",
           key: "clock.unconfirmed",

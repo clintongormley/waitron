@@ -4,6 +4,7 @@ import { CONNECTION_TEXT, CONNECTION_DEVICE_ES } from "./connection-bootstrap-st
 import { DEVICE_HELP, DEVICE_ORDER } from "./trust-page-devices.js";
 import { DECLARATION_LINK_WORDS } from "./i18n/declaration-page.js";
 import { TRUST_PAGE_LOGO_SVG } from "./trust-page-logo.js";
+import { RECOVERY_PAGE_WORDS } from "./i18n/recovery-page.js";
 import type { TrustPageInput } from "./trust-page.js";
 
 function escape(value: string): string {
@@ -65,6 +66,11 @@ export function renderConnectionPage(
   const locale = input.locale ?? "en";
   const words = CONNECTION_TEXT[locale];
   const status = input.connection;
+  const recoveryLocale = locale === "es" ? "es-ES" : "en-GB";
+  const freeSpace =
+    status.storageFreeBytes === undefined
+      ? ""
+      : `<section data-storage-warning role="status"><h2>${words.spaceLow}</h2><p>${escape(RECOVERY_PAGE_WORDS[recoveryLocale].freeSpace(`${new Intl.NumberFormat(recoveryLocale, { maximumFractionDigits: 1 }).format(status.storageFreeBytes / 1_000_000)} MB`))}</p><p>${words.spaceAction}</p></section>`;
   const operator = status.repairAllowed === false;
   const retry = status.continuationRequired === true;
   const ready = status.state === "healthy" && !operator;
@@ -166,7 +172,7 @@ button?.addEventListener("click", async () => {
 </head><body data-connection-state="${status.state}"><main>
 <div class="logo">${TRUST_PAGE_LOGO_SVG}</div>
 <nav aria-label="${words.language}"><a href="?lang=en" lang="en"${locale === "en" ? ' aria-current="page"' : ""}>${CONNECTION_TEXT.en.languageName}</a><a href="?lang=es" lang="es"${locale === "es" ? ' aria-current="page"' : ""}>${CONNECTION_TEXT.es.languageName}</a></nav>
-<h1>${words.title}</h1><p>${words.intro}</p><p class="note">${words.publicOnly}</p>
+<h1>${words.title}</h1>${freeSpace}<p>${words.intro}</p><p class="note">${words.publicOnly}</p>
 <p id="connection-status" role="status" tabindex="-1">${operator ? words.operator : elsewhere ? words.serverOnly : ready ? (retry ? words.certificateReady : words.ready) : status.state === "refused" ? words.failed : words.needed}</p>
 <p id="connection-error" role="alert"></p>
 <noscript><p>${words.javascript}</p></noscript>

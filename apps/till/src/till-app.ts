@@ -3357,12 +3357,19 @@ export class TillApp extends LitElement {
     read: (signal) => this.api.getDeviceEquipment({ signal }),
     onEquipment: (read) => {
       this.pinClockNotice = waitingStartNotice(this.pinClockNotice, read);
+      this.pinStorageNotices = nextNotices(this.pinStorageNotices, read).filter(
+        (notice) =>
+          notice.owner === "box" &&
+          (notice.code === "storage.disk_full" || notice.code === "storage.space_low"),
+      );
     },
     onRefused: () => {
       this.pinClockNotice = undefined;
+      this.pinStorageNotices = [];
     },
   });
   @state() private pinClockNotice?: StaffNotice;
+  @state() private pinStorageNotices: StaffNotice[] = [];
 
   #startPinScreenPoll(): void {
     if (this.deviceId !== undefined && !this.deviceMode && !this.#equipmentPoll.running)
@@ -3372,6 +3379,7 @@ export class TillApp extends LitElement {
   #stopPinScreenPoll(): void {
     this.#pinScreenPoll.stop();
     this.pinClockNotice = undefined;
+    this.pinStorageNotices = [];
   }
   @state() private tableSelectedMenuId = "";
   /** Identifies the latest table-selection offer request so a slower prior selection cannot win. */
@@ -22992,6 +23000,7 @@ export class TillApp extends LitElement {
                           .mainServerRefused=${this.mainServerRefused}
                           @switch-to-spare=${() => void this.#onSwitchToSpare()}
                           .clockNotice=${this.pinClockNotice}
+                          .storageNotices=${this.pinStorageNotices}
                           @check-again=${() => void this.router?.probeNow()}
                         ></till-lock-screen>`,
                       )

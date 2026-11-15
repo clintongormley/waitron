@@ -19,7 +19,7 @@ import { get as httpsGet, request as httpsRequest } from "node:https";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { unzipSync } from "fflate";
 import { Hono } from "hono";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -121,6 +121,9 @@ import { prepareImage, uploadImage } from "@waitron/media";
 import { freePorts } from "./testing/free-ports.js";
 import { REQUIRE_FULL_DISK, openSmallDisk, type SmallDisk } from "./testing/full-disk.js";
 import { systemClock } from "./till-backend.js";
+import { setupVenue } from "./testing/venue-fixtures.js";
+import { waitingDish } from "./testing/waiting-dish.js";
+import { stationScreensDark, passScreensDark } from "./station-outputs-down.js";
 import { SESSION_COOKIE } from "./till-session.js";
 
 const MiB = 1024 * 1024;
@@ -1374,6 +1377,114 @@ describe("a start on a real full disk", () => {
     } finally {
       small.unfill();
       await store.close();
+    }
+  });
+
+  it("warns on the public connection page when the real disk remains full, then rereads freed space", async (ctx) => {
+    const small = needDisk(ctx);
+    const stateDir = await startedBefore(small, "connection-space", { spareBytes: 0 });
+    mkdirSync(join(stateDir, "tls"), { recursive: true });
+    writeFileSync(join(stateDir, "tls", "ca.crt"), "unusable retained certificate");
+    small.fill(0);
+    const d = entryDeps(stateDir, { spareBytes: 0 });
+    await runEntry(d);
+    expect(d.startServer).not.toHaveBeenCalled();
+    expect(d.serveRecovery).toHaveBeenCalledOnce();
+    const [app, opts] = d.serveRecovery.mock.calls[0]!;
+    const listener = await serveRecovery(app, {
+      ...opts,
+      port: 0,
+      httpHost: "127.0.0.1",
+      landing: undefined,
+    });
+    try {
+      const address = listener.address();
+      if (address === null || typeof address === "string")
+        throw new Error("No connection listener");
+      const page = async (lang: string) =>
+        (await fetch(`http://127.0.0.1:${address.port}/?lang=${lang}`)).text();
+      for (const lang of ["en", "es"]) {
+        const html = await page(lang);
+        expect(html).toContain("data-storage-warning");
+        expect(html).toContain(
+          lang === "en"
+            ? "Free space on the box's disk: 0 MB."
+            : "Espacio libre en el disco del equipo: 0 MB.",
+        );
+        expect(html).toContain('id="connection-stop"');
+      }
+      small.unfill();
+      expect(await page("en")).not.toContain("data-storage-warning");
+    } finally {
+      small.unfill();
+      await new Promise<void>((resolve) => listener.close(() => resolve()));
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps working kitchen screens lit on the full filesystem and still detects a real outage", async (ctx) => {
+    const small = needDisk(ctx);
+    const dir = realpathSync(small.folder("kitchen-sightings"));
+    await applyMigrations(dir, migrationOptionsFor(manifestSets(), null));
+    const store = await openVenueDatabase(dir);
+    const db = store.venue;
+    const now = new Date("2026-10-02T18:06:00.000Z");
+    const old = "2026-10-02T18:00:00.000Z";
+    try {
+      const venue = await setupVenue(db);
+      await waitingDish(db, venue, venue.defaultStationId, "2026-10-02T18:00:00.000Z", now);
+      const ids: string[] = [];
+      for (const kind of ["station", "pass", "pass_monitor"] as const) {
+        ids.push(
+          await kitchenScreenDevice(
+            db,
+            {
+              deviceProfileId: await kitchenProfile(db, "kds"),
+              label: kind,
+              tokenHash: hashDeviceToken("screen-token"),
+              lastSeenAt: old,
+            },
+            { kind, stationIds: [venue.defaultStationId], zoneIds: null },
+          ),
+        );
+      }
+      const app = new Hono();
+      mountDeviceApi(app, { db, pairingMode: createPairingMode() }, () => {});
+      const dark = (at: Date) =>
+        db.withWriteLock(async () => [
+          ...(await stationScreensDark(db, at)),
+          ...(await passScreensDark(db, at)),
+        ]);
+      const equipment = (id: string, token = "screen-token") =>
+        app.request("/api/device/equipment", {
+          headers: { cookie: `waitron_device=${id}.${token}` },
+        });
+      db.all(sql`pragma wal_checkpoint(truncate)`);
+      small.fill(0);
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(now);
+      expect((await equipment(ids[0]!, "wrong-token")).status).toBe(401);
+      expect(await dark(now)).toHaveLength(3);
+      for (const id of ids) expect((await equipment(id)).status).toBe(200);
+      expect(
+        (
+          await db.select({ at: devices.lastSeenAt }).from(devices).where(inArray(devices.id, ids))
+        ).every((row) => row.at === old),
+      ).toBe(true);
+      expect(await dark(now)).toEqual([]);
+      expect(await dark(new Date(now.getTime() + 180_001))).toHaveLength(3);
+      small.unfill();
+      expect((await equipment(ids[0]!)).status).toBe(200);
+      expect(
+        (
+          await db.select({ at: devices.lastSeenAt }).from(devices).where(eq(devices.id, ids[0]!))
+        )[0]!.at,
+      ).toBe(now.toISOString());
+    } finally {
+      vi.useRealTimers();
+      small.unfill();
+      await store.close();
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 

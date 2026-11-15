@@ -18,6 +18,7 @@ import { compareStationNames } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { firedPassDishes, passScopeOf, passSees } from "./pass-board.js";
 import { kitchenWork } from "./kitchen-print.js";
+import { lastDeviceSighting } from "./device-session.js";
 
 export interface DownPrinter {
   stationId: string;
@@ -153,7 +154,7 @@ export async function stationScreensDark(tx: Transaction, now: Date): Promise<Da
   // keeps the station lit.
   const lastSeen = new Map<string, string | null>();
   for (const screen of screens) {
-    const at = seen.get(screen.deviceId) ?? null;
+    const at = lastDeviceSighting(tx, screen.deviceId, seen.get(screen.deviceId) ?? null);
     for (const stationId of screen.stationIds) {
       const before = lastSeen.get(stationId);
       lastSeen.set(
@@ -208,10 +209,12 @@ export async function passScreensDark(tx: Transaction, now: Date): Promise<DarkP
     silent.map((device) => device.id),
   );
   const passes = silent.flatMap((device) => {
+    const lastSeenAt = lastDeviceSighting(tx, device.id, device.lastSeenAt);
+    if (lastSeenAt !== null && lastSeenAt >= darkBefore) return [];
     const running = screens.get(device.id)!.find((screen) => screen.available);
     return running === undefined || running.kind === "station"
       ? []
-      : [{ ...device, kind: running.kind, scope: passScopeOf(running) }];
+      : [{ ...device, lastSeenAt, kind: running.kind, scope: passScopeOf(running) }];
   });
   if (passes.length === 0) return [];
   const since = new Date(now.getTime() - WAITING_WINDOW_MS).toISOString();

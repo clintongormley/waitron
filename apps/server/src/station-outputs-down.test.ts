@@ -1,7 +1,11 @@
 import { seedDeviceProfiles, attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql, inArray } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { Hono } from "hono";
+import { AppError } from "@waitron/shared";
+import { hashDeviceToken } from "@waitron/identity";
+import { requireDevice } from "./device-session.js";
 import {
   devices,
   kitchenStations,
@@ -806,3 +810,50 @@ it("A725 down printers and dark station screens use station and printer names", 
     "Cocina",
   ]);
 });
+
+it.each(["station", "pass", "pass_monitor"] as const)(
+  "keeps an authenticated %s screen lit when its sighting cannot be saved, then detects silence",
+  async (kind) => {
+    const f = await setup();
+    await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
+    const token = "live-screen-token";
+    const id = await kitchenScreenDevice(
+      suite.db,
+      {
+        deviceProfileId: await profile(suite.db, "kds"),
+        label: "Kitchen display",
+        tokenHash: hashDeviceToken(token),
+        lastSeenAt: "2026-10-02T18:00:00.000Z",
+      },
+      { kind, stationIds: [f.grill], zoneIds: null },
+    );
+    const dark = (now: Date) =>
+      suite.db.withWriteLock(() =>
+        kind === "station" ? stationScreensDark(suite.db, now) : passScreensDark(suite.db, now),
+      );
+    expect(await dark(at)).toHaveLength(1);
+    const app = new Hono();
+    app.get("/seen", async (c) => {
+      await requireDevice({ db: suite.db }, c);
+      return c.text("ok");
+    });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(at);
+    const refusing = vi
+      .spyOn(suite.db, "withWriteLock")
+      .mockRejectedValueOnce(new AppError("storage.disk_full", {}));
+    try {
+      expect(
+        (await app.request("/seen", { headers: { cookie: `waitron_device=${id}.${token}` } }))
+          .status,
+      ).toBe(200);
+    } finally {
+      refusing.mockRestore();
+      vi.useRealTimers();
+    }
+    expect(await dark(at)).toEqual([]);
+    expect(await dark(new Date(at.getTime() + 180_001))).toMatchObject([
+      { lastSeenAt: at.toISOString() },
+    ]);
+  },
+);

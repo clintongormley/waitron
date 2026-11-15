@@ -624,12 +624,78 @@ describe("a till or handheld at the PIN screen", () => {
     expect(clockLine(el)).toBeNull();
   });
 
-  it("shows no other notice at the PIN screen", async () => {
-    const getDeviceEquipment = vi.fn().mockResolvedValue(withNotices([CLOCK, DISK]));
+  it.each(["en-GB", "es-ES"])(
+    "shows the storage stop before sign-in in %s and clears it on recovery",
+    async (locale) => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const getDeviceEquipment = vi.fn().mockResolvedValue(withNotices([DISK, UNCONFIRMED]));
+        const { el } = await mountAtPin(getDeviceEquipment);
+        setLocale(locale);
+        await poll(el);
+        const storageLine = () =>
+          el
+            .shadowRoot!.querySelector("till-lock-screen")!
+            .shadowRoot!.querySelector("[data-storage-notice]")
+            ?.textContent?.replace(/\s+/g, " ")
+            .trim();
+        const words = locale === "es-ES" ? es : en;
+        expect(storageLine()).toBe(
+          `${words["staff_notice.storage.disk_full"]} · ${words["staff_notice.tell_manager"]}`,
+        );
+        expect(clockLine(el)).not.toBeNull();
+        getDeviceEquipment.mockResolvedValue({
+          ...withNotices([UNCONFIRMED]),
+          noticesUnavailable: ["box"],
+        });
+        await poll(el);
+        expect(storageLine()).toContain(words["staff_notice.storage.disk_full"]);
+        getDeviceEquipment.mockResolvedValue(withNotices([UNCONFIRMED]));
+        await poll(el);
+        expect(storageLine()).toBeUndefined();
+        expect(clockLine(el)).not.toBeNull();
+        expect(getDeviceEquipment).toHaveBeenCalledTimes(3);
+      } finally {
+        setLocale(previous);
+      }
+    },
+  );
+
+  it("shows the low-space warning from the existing PIN poll", async () => {
+    const getDeviceEquipment = vi.fn().mockResolvedValue(
+      withNotices([
+        {
+          ...DISK,
+          key: "storage.space_low",
+          code: "storage.space_low",
+          severity: "warning",
+        },
+      ]),
+    );
+    const { el } = await mountAtPin(getDeviceEquipment);
+    await poll(el);
+    expect(
+      el
+        .shadowRoot!.querySelector("till-lock-screen")!
+        .shadowRoot!.querySelector("[data-storage-notice]")!.textContent,
+    ).toContain(en["staff_notice.storage.space_low"]);
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows no non-storage or non-start notice at the PIN screen", async () => {
+    const getDeviceEquipment = vi
+      .fn()
+      .mockResolvedValue(withNotices([CLOCK, { ...DISK, owner: "fiscal" }]));
     const { el } = await mountAtPin(getDeviceEquipment);
     await poll(el);
     expect(getDeviceEquipment).toHaveBeenCalledTimes(1);
     expect(clockLine(el)).toBeNull();
     expect(seen(el).staffNotices).toEqual([]);
+    expect(
+      el
+        .shadowRoot!.querySelector("till-lock-screen")!
+        .shadowRoot!.querySelector("[data-storage-notice]"),
+    ).toBeNull();
   });
 });

@@ -26,6 +26,7 @@ afterEach(async () => {
 async function fixture(
   healthy = false,
   repairAllowed?: Parameters<typeof mountConnectionBootstrap>[1]["repairAllowed"],
+  freeSpace?: () => Promise<number | null>,
 ) {
   const stateDir = await mkdtemp(join(tmpdir(), "public-connection-"));
   dirs.push(stateDir);
@@ -49,6 +50,7 @@ async function fixture(
     onRepaired,
     log: () => {},
     repairAllowed,
+    freeSpace,
   });
   return { stateDir, app, onRepaired };
 }
@@ -388,5 +390,37 @@ it.each(["repair reply", "public page"])(
       ]);
     }
     expect(await readFile(join(f.stateDir, "tls/ca.crt"), "utf8")).toBe(combined);
+  },
+);
+
+it.each(["en", "es"] as const)(
+  "rereads low disk space on the public connection page in %s",
+  async (lang) => {
+    let bytes: number | null = 500_000;
+    let fail = false;
+    const f = await fixture(false, undefined, async () => {
+      if (fail) throw new Error("Space cannot be read");
+      return bytes;
+    });
+    const page = async () =>
+      (await f.app.request(`http://waitron.local:8080/?lang=${lang}`)).text();
+    const html = await page();
+    expect(html).toContain("data-storage-warning");
+    expect(html).toContain(CONNECTION_TEXT[lang].spaceAction);
+    expect(html).not.toContain(
+      lang === "en" ? "Retry a normal boot" : "Reintentar un arranque normal",
+    );
+    expect(html).toContain(
+      lang === "en"
+        ? "Free space on the box's disk: 0.5 MB."
+        : "Espacio libre en el disco del equipo: 0,5 MB.",
+    );
+    expect(html).toContain('id="connection-check"');
+    bytes = 32 * 1024 * 1024;
+    expect(await page()).not.toContain("data-storage-warning");
+    bytes = null;
+    expect(await page()).not.toContain("data-storage-warning");
+    fail = true;
+    expect(await page()).not.toContain("data-storage-warning");
   },
 );

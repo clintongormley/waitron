@@ -47,6 +47,7 @@ export interface RecoveryServeOptions {
   onRepaired?: () => Promise<void>;
   bootstrapOnly?: boolean;
   operatorTls?: boolean;
+  freeSpace?: () => Promise<number | null>;
 }
 
 export function connectionDepsFor(
@@ -70,6 +71,7 @@ export function connectionDepsFor(
       : hosts
     ).map((host) => origin("https", host, opts.port)),
     continuationRequired: opts.bootstrapOnly,
+    freeSpace: opts.freeSpace,
     onRepaired: opts.onRepaired ?? (async () => {}),
     log: opts.log,
     repairAllowed: opts.operatorTls !== true,
