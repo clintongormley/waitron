@@ -23,6 +23,7 @@ import {
   listCredentials,
   loadKeyRing,
   sealNodeSigningKeyTx,
+  singleLineKeyRingVariables,
   writePairLinkTx,
   type KeyRing,
 } from "@waitron/credentials";
@@ -230,8 +231,10 @@ export async function adoptFromPrimary(
   assertAuthorityKeyMatches(bundle.boxCaPem, bundle.boxCaKeyPem);
   const bundleEnv = keyRingEnv(bundle.credentialsRing);
   // The ring persisted below would be hidden at the next start, and the keys sealed under it lost.
-  for (const [name, set] of Object.entries(deps.environmentKeys)) {
-    if (set !== bundleEnv[name]) throw new AppError("mirror.vault_key_differs", {});
+  // Compared as `loadKeyRing` reads each side, so another spelling of the same ring joins.
+  const bundleRead = singleLineKeyRingVariables(bundleEnv);
+  for (const [name, set] of Object.entries(singleLineKeyRingVariables(deps.environmentKeys))) {
+    if (set !== bundleRead[name]) throw new AppError("mirror.vault_key_differs", {});
   }
   const ring = loadKeyRing(bundleEnv);
   const recovery = await makeBreakGlassSecret();

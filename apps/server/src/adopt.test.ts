@@ -1001,6 +1001,16 @@ describe("adoptFromPrimary (mirror adopt)", () => {
       "a previous version the main box's ring does not hold",
       { WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "2" },
     ],
+    [
+      "the main box's key with one byte more",
+      {
+        WAITRON_CREDENTIALS_KEY: Buffer.concat([
+          Buffer.from(BUNDLE_RING.key, "base64"),
+          Buffer.of(0x6b),
+        ]).toString("base64"),
+      },
+    ],
+    ["a version that is not a whole number", { WAITRON_CREDENTIALS_KEY_VERSION: "1.5" }],
   ] as const)(
     "refuses mirror.vault_key_differs when the environment sets %s, writing nothing",
     async (_case, baseEnv) => {
@@ -1040,6 +1050,44 @@ describe("adoptFromPrimary (mirror adopt)", () => {
       expect(nodeSigningPublicKey(sealed!)).toBe(STANDBY.publicKey);
     },
   );
+
+  // 0xfb bytes encode with both `+` and `/`, so the URL-safe alphabet spells this key differently.
+  const SLASHED_RING = { key: Buffer.alloc(32, 0xfb).toString("base64"), version: 4 };
+  const urlSafe = (key: string) => key.replaceAll("+", "-").replaceAll("/", "_");
+  it.each([
+    ["the version with a leading zero", { WAITRON_CREDENTIALS_KEY_VERSION: "04" }],
+    ["the key in the URL-safe alphabet", { WAITRON_CREDENTIALS_KEY: urlSafe(SLASHED_RING.key) }],
+    [
+      "the key broken across two lines",
+      {
+        WAITRON_CREDENTIALS_KEY: `${SLASHED_RING.key.slice(0, 20)}\n${SLASHED_RING.key.slice(20)}`,
+      },
+    ],
+  ] as const)(
+    "joins when the environment spells the main box's ring otherwise: %s",
+    async (_case, baseEnv) => {
+      await adoptFromPrimary(
+        deps({ baseEnv, fetchBundle: async () => makeBundle({ credentialsRing: SLASHED_RING }) }),
+        REQ,
+        NO_HOOKS,
+      );
+      const nextStart = loadKeyRing(await loadBoxEnv(baseEnv, stateDir));
+      const sealed = await readNodeSigningKey(suite.node, nextStart, STANDBY.nodeId);
+      expect(sealed).not.toBeNull();
+      expect(nodeSigningPublicKey(sealed!)).toBe(STANDBY.publicKey);
+    },
+  );
+
+  it("refuses mirror.vault_key_differs for another key in the URL-safe alphabet, writing nothing", async () => {
+    const baseEnv = { WAITRON_CREDENTIALS_KEY: urlSafe(Buffer.alloc(32, 0xfe).toString("base64")) };
+    const error = await adoptFromPrimary(
+      deps({ baseEnv, fetchBundle: async () => makeBundle({ credentialsRing: SLASHED_RING }) }),
+      REQ,
+      NO_HOOKS,
+    ).catch((e: unknown) => e);
+    expect(isAppError(error) && error.code).toBe("mirror.vault_key_differs");
+    await writtenNothing();
+  });
 
   it.each([
     [
