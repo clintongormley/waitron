@@ -21,7 +21,7 @@ import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { goToLabel, wholeTimes, wholeTimesStyles } from "../widgets/alert-format.js";
 import { guideHref } from "../help-guide.js";
-import { boxStatusRows, type PartRow } from "./box-status-rows.js";
+import { boxStatusRows, ssidName, type PartRow } from "./box-status-rows.js";
 
 /** The least `formatBytes` writes as "1 MB" rather than "0 MB". */
 const LEAST_TO_FREE = 500_000;
@@ -1112,10 +1112,4 @@ declare global {
   interface HTMLElementTagNameMap {
     "dashboard-box-status-screen": BoxStatusScreen;
   }
-}
-
-function ssidName(hex: string): string {
-  return new TextDecoder().decode(
-    Uint8Array.from(hex.match(/../g) ?? [], (byte) => Number.parseInt(byte, 16)),
-  );
 }

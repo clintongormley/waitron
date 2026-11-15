@@ -5,6 +5,12 @@ import { alertMessage } from "../i18n/alerts.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 
+export function ssidName(hex: string): string {
+  return new TextDecoder().decode(
+    Uint8Array.from(hex.match(/../g) ?? [], (byte) => Number.parseInt(byte, 16)),
+  );
+}
+
 export type PartId =
   "sales" | "tax" | "spare" | "bucket" | "printers" | "readers" | "clock" | "disk";
 export type PartState = "ok" | "attention" | "stopped";
