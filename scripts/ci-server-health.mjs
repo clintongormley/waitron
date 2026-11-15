@@ -79,13 +79,18 @@ async function runJobs(options, run, attempt = run.run_attempt) {
 }
 async function serverJobs(options, run, attempt = run.run_attempt) {
   const { repositoryId, prefix = "dt" } = options;
-  return (await runJobs(options, run, attempt)).filter(
-    (job) =>
-      job.labels.includes("self-hosted") &&
-      job.labels.some((label) =>
-        label.startsWith(`${prefix}-${repositoryId}-${run.id}-${attempt}-`),
-      ),
+  return (await runJobs(options, run, attempt)).filter((job) =>
+    serverLabel(job, repositoryId, prefix, run.id, attempt),
   );
+}
+const serverLabel = (job, repositoryId, prefix, runId, attempt) =>
+  job.labels.includes("self-hosted") &&
+  job.labels.some((label) => label.startsWith(`${prefix}-${repositoryId}-${runId}-${attempt}-`));
+function plannerSkip(options, run, jobs, reason) {
+  for (const job of jobs)
+    options.report?.(
+      `Planner rescue skipped: run=${run.id} attempt=${run.run_attempt} job=${job.id}; ${reason}.`,
+    );
 }
 const assigned = (job) =>
   job.status !== "completed" && (job.status === "in_progress" || job.runner_id > 0);
@@ -118,19 +123,64 @@ export async function serverHealth(options, unavailable) {
       if (owned(run, repositoryId)) runs.set(run.id, run);
     }
   }
-  const stuck = [];
+  const stuck = [],
+    deferredPlanners = [];
   let running = 0,
     progressing = false,
     recent = false;
   for (const run of runs.values()) {
-    if (
+    if (options.plannersOnly && run.event !== "pull_request") continue;
+    const excluded =
       options.plannersOnly &&
-      (run.event !== "pull_request" ||
-        run.run_attempt !== 1 ||
-        Object.hasOwn(options.hostedAttempts ?? {}, run.id))
-    )
+      (run.run_attempt !== 1 || Object.hasOwn(options.hostedAttempts ?? {}, run.id));
+    if (excluded && !options.plannerSkipReason) {
+      deferredPlanners.push(run);
       continue;
-    const jobs = await readInventory(() => serverJobs(options, run), unavailable);
+    }
+    let jobs;
+    try {
+      jobs = await readInventory(
+        () => (options.plannersOnly ? runJobs(options, run) : serverJobs(options, run)),
+        unavailable,
+      );
+    } catch (error) {
+      if (!options.plannerSkipReason) throw error;
+      options.report?.(
+        `Planner diagnostics unavailable: run=${run.id} attempt=${run.run_attempt}; ${error.message}`,
+      );
+      continue;
+    }
+    if (options.plannersOnly) {
+      for (const job of jobs.filter(
+        (job) =>
+          job.name === "changes" &&
+          job.status === "queued" &&
+          !job.runner_id &&
+          job.labels.includes("self-hosted"),
+      )) {
+        let reason;
+        if (options.plannerSkipReason) {
+          if (old(job, now)) reason = options.plannerSkipReason;
+        } else if (
+          !job.labels.includes(
+            `${options.prefix || "dt"}-${repositoryId}-${run.id}-${run.run_attempt}-changes-1`,
+          )
+        ) {
+          reason = "planning label mismatch";
+        } else if (!old(job, now)) {
+          const field = job.started_at ? "started_at" : "created_at";
+          const age = now - Date.parse(job[field]);
+          reason = Number.isFinite(age)
+            ? `waiting ${age} ms from ${field}; five minutes required`
+            : "job age unknown";
+        }
+        if (reason) plannerSkip(options, run, [job], reason);
+      }
+      if (options.plannerSkipReason) continue;
+      jobs = jobs.filter((job) =>
+        serverLabel(job, repositoryId, options.prefix || "dt", run.id, run.run_attempt),
+      );
+    }
     running += jobs.filter(assigned).length;
     progressing ||= jobs.some(
       (job) =>
@@ -143,22 +193,25 @@ export async function serverHealth(options, unavailable) {
         assigned(job) ||
         (job.runner_id > 0 && now - Date.parse(job.completed_at) < 300_000),
     );
-    if (
-      jobs.some(
-        (job) =>
-          job.status === "queued" &&
-          !job.runner_id &&
-          old(job, now) &&
-          (!options.plannersOnly ||
-            (job.name === "changes" &&
-              job.labels.includes(
-                `${options.prefix || "dt"}-${repositoryId}-${run.id}-${run.run_attempt}-changes-1`,
-              ))),
-      )
-    )
-      stuck.push(run);
+    const waiting = jobs.filter(
+      (job) =>
+        job.status === "queued" &&
+        !job.runner_id &&
+        old(job, now) &&
+        (!options.plannersOnly ||
+          (job.name === "changes" &&
+            job.labels.includes(
+              `${options.prefix || "dt"}-${repositoryId}-${run.id}-${run.run_attempt}-changes-1`,
+            ))),
+    );
+    if (waiting.length) stuck.push(options.plannersOnly ? { ...run, plannerJobs: waiting } : run);
   }
-  return { stuck: !options.plannersOnly && (running || progressing) ? [] : stuck, running, recent };
+  return {
+    stuck: !options.plannersOnly && (running || progressing) ? [] : stuck,
+    running,
+    recent,
+    ...(options.plannersOnly ? { deferredPlanners } : {}),
+  };
 }
 
 function validCapacity(capacity) {
@@ -277,6 +330,11 @@ export async function recoverServer(options) {
   const { request, repository, wait = delay, plannersOnly = false } = options;
   if (plannersOnly && serverFull(options)) {
     options.report?.("Planner rescue skipped: server is full in a fresh capacity snapshot.");
+    try {
+      await serverHealth({ ...options, plannerSkipReason: "server full" });
+    } catch (error) {
+      options.report?.(`Planner diagnostics unavailable: ${error.message}`);
+    }
     return { retried: [] };
   }
   const retried = [],
@@ -296,13 +354,18 @@ export async function recoverServer(options) {
     const path = `/repos/${repository}/actions/runs/${run.id}`;
     const eligible = async (cancelled = false) => {
       const current = await request(path);
+      const skip = (reason) => {
+        if (plannersOnly && !cancelled) plannerSkip(options, run, run.plannerJobs, reason);
+      };
       if (
         current.id !== run.id ||
         current.run_attempt !== run.run_attempt ||
         current.head_sha !== run.head_sha ||
         (!cancelled && current.status === "completed")
-      )
+      ) {
+        skip("run identity changed or completed");
         return;
+      }
       if (plannersOnly) {
         if (
           !owned(current, options.repositoryId) ||
@@ -310,8 +373,10 @@ export async function recoverServer(options) {
           current.event !== "pull_request" ||
           current.pull_requests?.length !== 1 ||
           current.pull_requests[0].number !== run.pull_requests?.[0]?.number
-        )
+        ) {
+          skip("PR link missing or changed");
           return;
+        }
         const pull = await request(`/repos/${repository}/pulls/${current.pull_requests[0].number}`);
         if (
           pull.number !== current.pull_requests[0].number ||
@@ -319,8 +384,10 @@ export async function recoverServer(options) {
           pull.head?.sha !== run.head_sha ||
           pull.head.repo?.id !== options.repositoryId ||
           pull.base?.repo?.id !== options.repositoryId
-        )
+        ) {
+          skip("PR head changed or identity is not an open owned PR");
           return;
+        }
       }
       const jobs = await runJobs(options, current);
       if (
@@ -337,8 +404,10 @@ export async function recoverServer(options) {
               : job.status === "queued" && !job.runner_id) &&
             old(job, options.now ?? Date.now()),
         )
-      )
+      ) {
+        skip("planning job no longer queued unassigned and old");
         return;
+      }
       if (
         jobs.some(
           (job) =>
@@ -353,6 +422,7 @@ export async function recoverServer(options) {
               (job.status === "completed" && !["skipped", "cancelled"].includes(job.conclusion))),
         )
       ) {
+        skip("other work has started or completed");
         preserved.push(run.id);
         return;
       }
@@ -422,6 +492,24 @@ export async function recoverServer(options) {
       }
     }
     if (!plannersOnly) break;
+  }
+  for (const run of state.deferredPlanners ?? []) {
+    try {
+      const jobs = (await runJobs(options, run)).filter(
+        (job) =>
+          job.name === "changes" &&
+          job.status === "queued" &&
+          !job.runner_id &&
+          job.labels.includes("self-hosted") &&
+          old(job, options.now ?? Date.now()),
+      );
+      const reason = run.run_attempt !== 1 ? "retry run" : "run marked for hosted recovery";
+      plannerSkip(options, run, jobs, reason);
+    } catch (error) {
+      options.report?.(
+        `Planner diagnostics unavailable: run=${run.id} attempt=${run.run_attempt}; ${error.message}`,
+      );
+    }
   }
   return { retried, ...(preserved.length ? { preserved } : {}) };
 }

@@ -1505,14 +1505,25 @@ describe("scheduled PR planner recovery", () => {
   });
   it("does not retry an obsolete cancelled head and still recovers the next PR", async () => {
     const { f, g, request } = pair(),
-      writes = [];
+      writes = [],
+      reports = [];
     const changed = async (path, options) => {
       if (options?.method) writes.push(path);
       const reply = await request(path, options);
       if (path.endsWith("/runs/12/force-cancel")) f.pull.head.sha = "b".repeat(40);
       return reply;
     };
-    expect((await health.recoverServer({ ...f.options, request: changed })).retried).toEqual([13]);
+    expect(
+      (
+        await health.recoverServer({
+          ...f.options,
+          request: changed,
+          report: (line) => reports.push(line),
+        })
+      ).retried,
+    ).toEqual([13]);
+    expect(reports).toContain("Cancelled PR run 12 is obsolete; not retried.");
+    expect(reports.some((line) => line.startsWith("Planner rescue skipped:"))).toBe(false);
     expect(writes).not.toContain("/repos/fixture/waitron/actions/runs/12/rerun");
     expect(g.run.run_attempt).toBe(2);
   });
@@ -1552,6 +1563,208 @@ describe("scheduled PR planner recovery", () => {
     expect((await health.recoverServer(f.options)).retried).toEqual([]);
     expect(f.run.run_attempt).toBe(1);
   });
+  it.each([
+    ["missing-link", "PR link missing or changed"],
+    ["obsolete", "PR head changed or identity is not an open owned PR"],
+    ["young", "waiting 60000 ms from started_at; five minutes required"],
+    ["unknown-age", "job age unknown"],
+    ["missing-age", "job age unknown"],
+    ["created-age", "waiting 60000 ms from created_at; five minutes required"],
+    ["label", "planning label mismatch"],
+    ["marked", "run marked for hosted recovery"],
+    ["retry", "retry run"],
+    ["changed-run", "run identity changed or completed"],
+    ["assigned-later", "planning job no longer queued unassigned and old"],
+    ["sibling", "other work has started or completed"],
+  ])("names the job and reason for %s without recovery", async (kind, reason) => {
+    const f = planner(),
+      reports = [],
+      request = f.options.request;
+    if (kind === "missing-link") f.run.pull_requests = [];
+    if (kind === "obsolete") f.pull.head.sha = "b".repeat(40);
+    if (kind === "young") f.job.started_at = date(1);
+    if (kind === "unknown-age") f.job.started_at = "invalid";
+    if (kind === "missing-age") delete f.job.started_at;
+    if (kind === "created-age") {
+      delete f.job.started_at;
+      f.job.created_at = date(1);
+    }
+    if (kind === "label") f.job.labels = ["self-hosted", "dt-42-12-1-changes-2"];
+    if (kind === "marked") f.options.hostedAttempts = { 12: 2 };
+    if (kind === "retry") {
+      f.run.run_attempt = f.job.run_attempt = 2;
+      f.job.labels = ["self-hosted", "dt-42-12-2-changes-1"];
+      f.options.request = (path, options) =>
+        request(path.replace("/attempts/2/", "/attempts/1/"), options);
+    }
+    if (kind === "changed-run")
+      f.options.request = (path, options) =>
+        path.endsWith("/runs/12") ? { ...f.run, head_sha: "b".repeat(40) } : request(path, options);
+    if (kind === "assigned-later")
+      replyJobs(f, () => ({ total_count: 1, jobs: [{ ...f.job, runner_id: 8 }] }), 1);
+    if (kind === "sibling") sibling(f, { name: "lint", status: "in_progress", runner_id: 8 });
+    await health.healthCommand("recover-planners", f.options, {
+      report: (line) => reports.push(line),
+    });
+    expect(reports).toContain(
+      `Planner rescue skipped: run=12 attempt=${kind === "retry" ? 2 : 1} job=123; ${reason}.`,
+    );
+    expect(reports.some((line) => /Recovering/.test(line))).toBe(false);
+    if (kind === "sibling")
+      expect(reports.at(-1)).toBe(
+        "Preserved runs 12 because work has started or completed, or this is already a retry.",
+      );
+    else expect(reports.some((line) => /Preserved/.test(line))).toBe(false);
+    expect(f.calls.filter(([, options]) => options.method)).toEqual([]);
+  });
+  it.each(["normal", "marked", "retry"])(
+    "names only server full for an old %s planner",
+    async (kind) => {
+      const f = planner(),
+        reports = [],
+        request = f.options.request;
+      f.options.capacity = { observedAt: now, slots: 6, serverRunning: 6 };
+      if (kind === "marked") f.options.hostedAttempts = { 12: 2 };
+      if (kind === "retry") {
+        f.run.run_attempt = f.job.run_attempt = 2;
+        f.job.labels = ["self-hosted", "dt-42-12-2-changes-1"];
+      }
+      f.options.request = (path, options) => {
+        expect(reports[0]).toContain("full in a fresh capacity snapshot");
+        expect(path).not.toContain("/pulls/");
+        return request(path.replace("/attempts/2/", "/attempts/1/"), options);
+      };
+      await health.healthCommand("recover-planners", f.options, {
+        report: (line) => reports.push(line),
+      });
+      expect(reports).toEqual([
+        "Planner rescue skipped: server is full in a fresh capacity snapshot.",
+        `Planner rescue skipped: run=12 attempt=${kind === "retry" ? 2 : 1} job=123; server full.`,
+        "No stalled server run needed recovery.",
+      ]);
+      expect(f.calls.filter(([, options]) => options.method)).toEqual([]);
+    },
+  );
+  it("keeps the full-server skip when a diagnostic job read throws", async () => {
+    const f = planner(),
+      reports = [],
+      request = f.options.request;
+    f.options.capacity = { observedAt: now, slots: 6, serverRunning: 6 };
+    f.options.request = (path, options) => {
+      if (path.includes("/jobs?")) throw new Error("diagnostic refused");
+      return request(path, options);
+    };
+    await health.healthCommand("recover-planners", f.options, {
+      report: (line) => reports.push(line),
+    });
+    expect(reports).toEqual([
+      "Planner rescue skipped: server is full in a fresh capacity snapshot.",
+      "Planner diagnostics unavailable: run=12 attempt=1; diagnostic refused",
+      "No stalled server run needed recovery.",
+    ]);
+    expect(f.calls.filter(([, options]) => options.method)).toEqual([]);
+  });
+  it.each(["marked", "retry"])(
+    "continues recovery after a %s diagnostic read fails",
+    async (kind) => {
+      const { f, request } = pair(),
+        reports = [],
+        writes = [];
+      if (kind === "retry") f.run.run_attempt = 2;
+      const read = (path, options) => {
+        if (path.includes("/runs/12/") && path.includes("/jobs?"))
+          throw new Error("diagnostic refused");
+        if (options?.method) writes.push(path);
+        return request(path, options);
+      };
+      await health.healthCommand(
+        "recover-planners",
+        { ...f.options, hostedAttempts: kind === "marked" ? { 12: 2 } : {}, request: read },
+        { report: (line) => reports.push(line) },
+      );
+      expect(reports).toEqual([
+        "Recovering PR run 13; cancellation/retry pending. If this pass stops, intervention is needed.",
+        "Retried PR run 13 on GitHub.",
+        `Planner diagnostics unavailable: run=12 attempt=${kind === "retry" ? 2 : 1}; diagnostic refused`,
+        "SERVER STUCK: cancelled and retried runs 13 after five minutes without assigned work.",
+      ]);
+      expect(reports.some((line) => /Preserved|Recovering PR run 12/.test(line))).toBe(false);
+      expect(writes).toEqual([
+        "/repos/fixture/waitron/actions/runs/13/force-cancel",
+        "/repos/fixture/waitron/actions/runs/13/rerun",
+      ]);
+    },
+  );
+  it("keeps the full-server skip after a run-list error", async () => {
+    const f = planner(),
+      reports = [];
+    await health.healthCommand(
+      "recover-planners",
+      {
+        ...f.options,
+        capacity: { observedAt: now, slots: 6, serverRunning: 6 },
+        request: () => {
+          throw new Error("list refused");
+        },
+      },
+      { report: (line) => reports.push(line) },
+    );
+    expect(reports).toEqual([
+      "Planner rescue skipped: server is full in a fresh capacity snapshot.",
+      "Planner diagnostics unavailable: list refused",
+      "No stalled server run needed recovery.",
+    ]);
+  });
+  it.each(["marked", "retry"])("rescues before reading %s diagnostics", async (kind) => {
+    const { f, request } = pair(),
+      reports = [],
+      events = [];
+    if (kind === "retry") {
+      f.run.run_attempt = f.job.run_attempt = 2;
+      f.job.labels = ["self-hosted", "dt-42-12-2-changes-1"];
+    }
+    const read = (path, options) => {
+      if (path.includes("/runs/12/") && path.includes("/jobs?")) events.push("diagnostic job read");
+      if (options?.method) events.push(path);
+      return request(path, options);
+    };
+    await health.healthCommand(
+      "recover-planners",
+      { ...f.options, hostedAttempts: kind === "marked" ? { 12: 2 } : {}, request: read },
+      { report: (line) => reports.push(line) },
+    );
+    expect(events).toEqual([
+      "/repos/fixture/waitron/actions/runs/13/force-cancel",
+      "/repos/fixture/waitron/actions/runs/13/rerun",
+      "diagnostic job read",
+    ]);
+    expect(reports).toContain(
+      kind === "retry"
+        ? "Planner rescue skipped: run=12 attempt=2 job=123; retry run."
+        : "Planner rescue skipped: run=12 attempt=1 job=123; run marked for hosted recovery.",
+    );
+  });
+  it.each(["incomplete", "refused"])(
+    "retains the ordinary planner failure for a %s job read",
+    async (kind) => {
+      const f = planner(),
+        reports = [];
+      replyJobs(f, () => {
+        if (kind === "refused") throw new Error("read refused");
+        return { total_count: 2, jobs: [] };
+      });
+      const command = health.healthCommand("recover-planners", f.options, {
+        report: (line) => reports.push(line),
+      });
+      if (kind === "refused") await expect(command).rejects.toThrow("read refused");
+      else {
+        await command;
+        expect(reports).toHaveLength(1);
+        expect(reports[0]).toMatch(/^Server inventory unavailable; planner recovery stopped:/);
+      }
+      expect(f.calls.filter(([, options]) => options.method)).toEqual([]);
+    },
+  );
   it("explains the fresh full-capacity skip", async () => {
     const f = planner(),
       reports = [];
