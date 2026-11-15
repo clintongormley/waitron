@@ -9,9 +9,9 @@ export const SWITCH_ON_LONGEST_WAIT_MS = 60 * 60_000;
 
 /**
  * A box host whose `clockStatus()` switches the host's automatic time back on when it reads it as
- * switched off, waiting longer after each failure in a row, then answers the reading as it was. The reading waits for the switch-on, so a
- * clock set that reads the status next is not refused `busy` by it. A failure is warned once, and
- * again only after a success or a different failure.
+ * switched off, waiting longer after each failure in a row, then answers the reading as it was.
+ * The reading waits for the switch-on, so a clock set that reads the status next is not refused
+ * `busy` by it. A failure is warned once, and again only after a success or a different failure.
  */
 export function keepTimeServiceOn(
   host: BoxHostClient,
