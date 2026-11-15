@@ -6,8 +6,9 @@ import { mountSpa } from "./spa-api.js";
 
 export function mountHandoverPage(
   app: Hono,
-  /** `sells`: mounted on the app of a start that takes sales, never a waiting start's. */
-  deps: { root: string; node: NodeDatabase; nodeId: string; sells?: boolean },
+  /** `servesDashboard`: set on the full start's app, which mounts the dashboard, never on a
+   * waiting start's. */
+  deps: { root: string; node: NodeDatabase; nodeId: string; servesDashboard?: boolean },
   log: Logger,
 ): void {
   app.get("/handover", (c) => c.notFound());
@@ -25,7 +26,10 @@ export function mountHandoverPage(
     if (match[1] === "emergency") {
       if ((await readNodeMode(deps.node, deps.nodeId)).mode !== "mirror") {
         // The selling box's own switch label is scanned too; Servers is where its manager hands over.
-        if (deps.sells === true && (await readHandoverRestriction(deps.node, deps.nodeId)) === null)
+        if (
+          deps.servesDashboard === true &&
+          (await readHandoverRestriction(deps.node, deps.nodeId)) === null
+        )
           return c.redirect("/manage/servers", 302);
         return c.notFound();
       }

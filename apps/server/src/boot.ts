@@ -2431,12 +2431,12 @@ async function bootServer(
     );
   }
   await endMirrorViewer(db);
-  // Built as the switch's own check builds it (`sourceSilent` in handover-emergency-api.ts).
+  let mainAskAuthority: Promise<string | undefined> | undefined;
   const askMainBox = async (mainId: string): Promise<MainAskResult> => {
     const held = await readNodeMembership(db);
     const main = held?.body.nodes.find((n) => n.nodeId === mainId);
     const own = held?.body.nodes.find((n) => n.nodeId === node.nodeId);
-    const authority = await readVenueAuthority(config.stateDir);
+    const authority = await (mainAskAuthority ??= readVenueAuthority(config.stateDir));
     const self = { db, node: store.node, ring, nodeId: node.nodeId };
     let reason: SilentReason = "not_established";
     const answer = await askPeerStatus({
@@ -4309,7 +4309,7 @@ async function bootServer(
         root: config.setupAppDir,
         node: store.node,
         nodeId: tradingContext.nodeId,
-        sells: true,
+        servesDashboard: true,
       },
       log,
     );

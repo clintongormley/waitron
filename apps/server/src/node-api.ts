@@ -1,6 +1,11 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { standingOf, type NodeStanding, type SignedMembershipDocument } from "@waitron/membership";
+import {
+  servingPrimaryNodeId,
+  standingOf,
+  type NodeStanding,
+  type SignedMembershipDocument,
+} from "@waitron/membership";
 import type { DeploymentEnvironment } from "./config.js";
 import { createErrorBoundary } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
@@ -75,7 +80,8 @@ export function mountMainServerApi(
     run(c, log, async () => {
       c.header("cache-control", "no-store");
       const held = await deps.readMembership();
-      const main = held?.body.nodes.find((n) => n.standing === "serving-primary");
+      const mainId = held === null ? undefined : servingPrimaryNodeId(held);
+      const main = held?.body.nodes.find((n) => n.nodeId === mainId);
       return c.json({ mainUrl: main?.contactUrl || null });
     }),
   );

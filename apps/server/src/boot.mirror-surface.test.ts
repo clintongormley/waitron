@@ -9,20 +9,9 @@ import { dirname, join } from "node:path";
 import { sql } from "drizzle-orm";
 import type { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import {
-  invoiceSeries,
-  nodes,
-  stampDeployment,
-  taxpayer,
-  withNodeTransaction,
-  writeNodeMembership,
-} from "@waitron/db";
+import { invoiceSeries, nodes, stampDeployment, taxpayer, withNodeTransaction } from "@waitron/db";
 import { loadKeyRing, sealNodeSigningKeyTx } from "@waitron/credentials";
-import {
-  generateNodeKeyPair,
-  signDocumentBody,
-  type MembershipDocumentBody,
-} from "@waitron/membership";
+import { generateNodeKeyPair } from "@waitron/membership";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { setNodeMode, writeMirrorLink } from "@waitron/node-db";
@@ -30,6 +19,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer, StartServerSeams } from "./boot.js";
 import { serverFixture } from "./testing/server-fixture.js";
 import { fakeMdnsSocket } from "./testing/fake-mdns-socket.js";
+import { holdChartNamingMainBox } from "./testing/membership-doc-fixture.js";
 import { writeTlsSet } from "./testing/box-tls.js";
 import { writePendingAdoption, type PendingAdoption } from "./finish-adoption.js";
 import { mintSelfSignedServerCert, reissueServerLeaf } from "./self-signed-cert.js";
@@ -130,7 +120,12 @@ async function boot(
   options: { landing?: boolean; fromBox?: { current: boolean }; silentMain?: boolean },
 ): Promise<{ server: StartedServer; app: Hono; stateDir: string }> {
   await seedVenue();
-  if (options.silentMain === true) await holdChartNamingMainBox();
+  if (options.silentMain === true)
+    await holdChartNamingMainBox(
+      suite.db,
+      { nodeId: ORIGIN, contactUrl: "https://box-b800.waitron.local" },
+      { nodeId: NODE, contactUrl: "https://box-b801.waitron.local" },
+    );
   const stateDir = await mkdtemp(join(tmpdir(), "waitron-surface-state-"));
   const own = mintSelfSignedServerCert({
     hostnames: ["waitron.local"],
@@ -225,23 +220,6 @@ async function startOn(
     seams,
   );
   return { server, app: app! };
-}
-
-/** A held chart naming another box as serving primary, which the spare's watch asks. */
-async function holdChartNamingMainBox(): Promise<void> {
-  const body: MembershipDocumentBody = {
-    term: 1,
-    nodes: [
-      { nodeId: ORIGIN, contactUrl: "https://box-b800.waitron.local", standing: "serving-primary" },
-      { nodeId: NODE, contactUrl: "https://box-b801.waitron.local", standing: "serving-secondary" },
-    ],
-  };
-  await writeNodeMembership(suite.db, {
-    body,
-    signerNodeId: ORIGIN,
-    signature: signDocumentBody(body, generateNodeKeyPair().privateKey),
-    endorsements: [],
-  });
 }
 
 const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);

@@ -29,7 +29,7 @@ beforeAll(async () => {
 afterAll(async () => {
   if (root !== undefined) await rm(root, { recursive: true, force: true });
 });
-async function build(mirror = false, sells = false) {
+async function build(mirror = false, servesDashboard = false) {
   if (mirror) await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, NODE, "mirror"));
   await beginHandover(
     { node: suite.node, nodeId: NODE },
@@ -45,7 +45,11 @@ async function build(mirror = false, sells = false) {
   );
   const app = new Hono();
   if (mirror) app.use("*", spareReadGate({ main: () => undefined }));
-  mountHandoverPage(app, { root: root!, node: suite.node, nodeId: NODE, sells }, () => {});
+  mountHandoverPage(
+    app,
+    { root: root!, node: suite.node, nodeId: NODE, servesDashboard },
+    () => {},
+  );
   mountSpa(app, { root: root!, basePath: "", navigationPath: "/tabs" }, () => {});
   return app;
 }
@@ -104,7 +108,7 @@ it("serves an operation page whose address carries a query, as without one", asy
   expect(await answer.text()).toContain("./assets/app-123.js");
 });
 
-it("on a box that sells, /handover/emergency goes to Servers", async () => {
+it("on a full start's primary, /handover/emergency goes to Servers", async () => {
   const app = await build(false, true);
   for (const path of ["/handover/emergency", "/handover/emergency/"]) {
     const answer = await app.request(path, { headers: { Accept: "text/html" } });
@@ -116,12 +120,7 @@ it("on a box that sells, /handover/emergency goes to Servers", async () => {
   );
 });
 
-it("on a waiting or fenced box it stays 404", async () => {
-  // A waiting start mounts the page with `sells: false` on a primary; a fenced box does not mount it.
-  const waiting = await build(false, false);
-  expect(
-    (await waiting.request("/handover/emergency", { headers: { Accept: "text/html" } })).status,
-  ).toBe(404);
+it("on a full start's primary under a handover restriction it stays 404", async () => {
   const restricted = await build(false, true);
   await withNodeTransaction(suite.node, (tx) =>
     recordHandoverRestrictionTx(tx, {

@@ -8,10 +8,12 @@ import type { MainSilenceState } from "./main-silence-watch.js";
 import { readOnlyGate } from "./read-only-gate.js";
 import { isReadOnlyExempt } from "./read-only-exemptions.js";
 
-const ANSWERING: MainSilenceState = { silentSinceMs: null, reached: true, silent: false };
 const NOW = 1_800_000_000_000;
+const ANSWERING: MainSilenceState = { silentSinceMs: null, reached: true, silent: false };
+const SILENT: MainSilenceState = { silentSinceMs: NOW, reached: true, silent: true };
 
-function fixture(watch: { silent: boolean } = { silent: false }, main?: MainSilenceState | null) {
+/** `null`: no watch runs. */
+function fixture(main: MainSilenceState | null = ANSWERING) {
   const mode = { mirror: true };
   const app = new Hono();
   app.use(
@@ -24,14 +26,7 @@ function fixture(watch: { silent: boolean } = { silent: false }, main?: MainSile
   app.use(
     "*",
     spareReadGate({
-      main: () =>
-        main === null
-          ? undefined
-          : (main ?? {
-              ...ANSWERING,
-              silent: watch.silent,
-              silentSinceMs: watch.silent ? NOW : null,
-            }),
+      main: () => main ?? undefined,
       now: () => NOW,
     }),
   );
@@ -129,6 +124,7 @@ it.each(["en-GB", "es-ES"] as const)(
       expect(body).toContain(`<html lang="${locale}">`);
       expect(body).toContain(SPARE_WORDS[locale].title);
       expect(body).toContain(SPARE_WORDS[locale].status);
+      expect(body).not.toContain(SPARE_WORDS[locale].mainBack);
       expect(body).not.toContain("<script");
     }
     const response = await app.request("/management-api/menus", {
@@ -159,7 +155,7 @@ const VENUE = "https://waitron.local";
 const OWN = "https://box-bbbb.waitron.local";
 
 it("at the venue's name a silent main server's spare sends pages to the switch page", async () => {
-  const app = fixture({ silent: true });
+  const app = fixture(SILENT);
   for (const path of ["/", "/manage", "/manage/servers"]) {
     const response = await app.request(`${VENUE}${path}`, { headers: { accept: "text/html" } });
     expect([response.status, response.headers.get("location")]).toEqual([
@@ -173,7 +169,7 @@ it("at the venue's name a silent main server's spare sends pages to the switch p
 it.each(["en-GB", "es-ES"] as const)(
   "at the venue's name, with the main server answering, pages say it is back and reload: %s",
   async (locale) => {
-    const app = fixture({ silent: false });
+    const app = fixture(ANSWERING);
     for (const path of ["/", "/manage", "/manage/servers"]) {
       const response = await app.request(`${VENUE}${path}`, {
         headers: { "accept-language": locale },
@@ -192,60 +188,45 @@ it.each(["en-GB", "es-ES"] as const)(
   },
 );
 
-it.each([true, false])(
-  "at the box's own name the closed page is served as before, silent: %s",
-  async (silent) => {
-    const app = fixture({ silent });
-    for (const path of ["/", "/manage", "/manage/servers"]) {
-      const response = await app.request(`${OWN}${path}`);
-      expect(response.status).toBe(200);
-      const body = await response.text();
-      expect(body).toContain(SPARE_WORDS["en-GB"].title);
-      expect(body).not.toContain(SPARE_WORDS["en-GB"].mainBack);
-    }
-  },
-);
-
-it.each([true, false])(
-  "other reads keep node.spare at the venue's name, silent: %s",
-  async (silent) => {
-    const app = fixture({ silent });
-    for (const path of ["/management-api/menus", "/api/box/status", "/media/images/image"]) {
-      const response = await app.request(`${VENUE}${path}`);
-      expect(response.status).toBe(403);
-      expect((await response.json()).error.code).toBe("node.spare");
-    }
-    for (const path of ["/api/node", "/api/node/main", "/handover/emergency"]) {
-      const response = await app.request(`${VENUE}${path}`);
-      expect([response.status, await response.json()]).toEqual([200, { reached: path }]);
-    }
-  },
-);
+it.each([
+  ["answering", ANSWERING],
+  ["silent", SILENT],
+] as const)("other reads keep node.spare at the venue's name, main server %s", async (_, main) => {
+  const app = fixture(main);
+  for (const path of ["/management-api/menus", "/api/box/status", "/media/images/image"]) {
+    const response = await app.request(`${VENUE}${path}`);
+    expect(response.status).toBe(403);
+    expect((await response.json()).error.code).toBe("node.spare");
+  }
+  for (const path of ["/api/node", "/api/node/main", "/handover/emergency"]) {
+    const response = await app.request(`${VENUE}${path}`);
+    expect([response.status, await response.json()]).toEqual([200, { reached: path }]);
+  }
+});
 
 it.each(["en-GB", "es-ES"] as const)(
   "the closed page says for how long a silent main server has not answered and links to the switch: %s",
   async (locale) => {
-    const app = fixture(undefined, {
-      silentSinceMs: NOW - 65_000,
-      reached: true,
-      silent: true,
-    });
-    const body = await (
-      await app.request(`${OWN}/`, { headers: { "accept-language": locale } })
-    ).text();
-    expect(body).toContain(
-      SPARE_WORDS[locale].mainSilent.replace("{duration}", formatDuration(65_000, locale)),
-    );
-    expect(body).toContain(`<a href="/handover/emergency">${SPARE_WORDS[locale].openSwitch}</a>`);
-    expect(body).not.toContain(SPARE_WORDS[locale].mainUnreached);
-    expect(body).toContain(SPARE_WORDS[locale].title);
+    const app = fixture({ silentSinceMs: NOW - 65_000, reached: true, silent: true });
+    for (const path of ["/", "/manage", "/manage/servers"]) {
+      const body = await (
+        await app.request(`${OWN}${path}`, { headers: { "accept-language": locale } })
+      ).text();
+      expect(body).toContain(
+        SPARE_WORDS[locale].mainSilent.replace("{duration}", () => formatDuration(65_000, locale)),
+      );
+      expect(body).toContain(`<a href="/handover/emergency">${SPARE_WORDS[locale].openSwitch}</a>`);
+      expect(body).not.toContain(SPARE_WORDS[locale].mainUnreached);
+      expect(body).not.toContain(SPARE_WORDS[locale].mainBack);
+      expect(body).toContain(SPARE_WORDS[locale].title);
+    }
   },
 );
 
 it.each(["en-GB", "es-ES"] as const)(
   "the closed page says a main server this spare has not reached is out of its reach: %s",
   async (locale) => {
-    const app = fixture(undefined, { silentSinceMs: null, reached: false, silent: false });
+    const app = fixture({ silentSinceMs: null, reached: false, silent: false });
     const body = await (
       await app.request(`${OWN}/manage`, { headers: { "accept-language": locale } })
     ).text();
@@ -259,8 +240,9 @@ it.each([
   ["not yet silent long enough", { silentSinceMs: NOW - 5_000, reached: true, silent: false }],
   ["watching nothing", null],
 ] as const)("the closed page says nothing of the main server while %s", async (_, main) => {
-  const body = await (await fixture(undefined, main).request(`${OWN}/`)).text();
+  const body = await (await fixture(main).request(`${OWN}/manage/servers`)).text();
   expect(body).toContain(SPARE_WORDS["en-GB"].title);
+  expect(body).not.toContain(SPARE_WORDS["en-GB"].mainBack);
   expect(body).not.toContain(SPARE_WORDS["en-GB"].mainUnreached);
   expect(body).not.toContain(SPARE_WORDS["en-GB"].openSwitch);
   expect(body).not.toContain("/handover/emergency");
@@ -276,9 +258,7 @@ it("the closed page's words pass through the page's escaping", async () => {
   });
   try {
     const body = await (
-      await fixture(undefined, { silentSinceMs: NOW - 2_000, reached: true, silent: true }).request(
-        `${OWN}/`,
-      )
+      await fixture({ silentSinceMs: NOW - 2_000, reached: true, silent: true }).request(`${OWN}/`)
     ).text();
     expect(body).toContain("&lt;b&gt;title&lt;/b&gt;");
     expect(body).toContain("&lt;i&gt;silent&lt;/i&gt; ");

@@ -18,15 +18,9 @@ import {
   taxpayer,
   withNodeTransaction,
   withTransaction,
-  writeNodeMembership,
   type Database,
   type VenueDatabase,
 } from "@waitron/db";
-import {
-  generateNodeKeyPair,
-  signDocumentBody,
-  type MembershipDocumentBody,
-} from "@waitron/membership";
 import { MDNS_TTL_SECONDS } from "./box-lookup.js";
 import type { MainAskResult } from "./main-silence-watch.js";
 import { readNodeMode, setNodeMode, writeMirrorLink } from "@waitron/node-db";
@@ -42,6 +36,7 @@ import { drain } from "@waitron/fiscal-verifactu";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { fakeMdnsSocket } from "./testing/fake-mdns-socket.js";
+import { holdChartNamingMainBox } from "./testing/membership-doc-fixture.js";
 import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
 import { TEST_RELEASE, writeDeclarationFolder } from "./testing/declaration-folder.js";
 import { runPass, DRAIN_DUTY } from "./pass.js";
@@ -345,44 +340,26 @@ afterAll(async () => {
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
 
-const MAIN_BOX_KEY = generateNodeKeyPair();
-
-/** A held chart naming the main box as serving primary and this box as its spare; returns its removal. */
-async function holdChartNamingMainBox(venue: VenueName): Promise<() => Promise<void>> {
-  const body: MembershipDocumentBody = {
-    term: 1,
-    nodes: [
-      {
-        nodeId: MIRROR_ORIGIN_NODE,
-        contactUrl: "https://box-7777.waitron.local",
-        standing: "serving-primary",
-      },
-      {
-        nodeId: TILL_ENV.WAITRON_NODE_ID,
-        contactUrl: "https://box-3333.waitron.local",
-        standing: "serving-secondary",
-      },
-    ],
-  };
-  await writeNodeMembership(db[venue], {
-    body,
-    signerNodeId: MIRROR_ORIGIN_NODE,
-    signature: signDocumentBody(body, MAIN_BOX_KEY.privateKey),
-    endorsements: [],
-  });
+/** Holds a chart naming the main box as serving primary and this box as its spare; returns its removal. */
+async function holdMainBoxChart(venue: VenueName): Promise<() => Promise<void>> {
+  await holdChartNamingMainBox(
+    db[venue],
+    { nodeId: MIRROR_ORIGIN_NODE, contactUrl: "https://box-7777.waitron.local" },
+    { nodeId: TILL_ENV.WAITRON_NODE_ID, contactUrl: "https://box-3333.waitron.local" },
+  );
   return async () => {
     await db[venue].execute(sql`delete from node_membership`);
   };
 }
 
-/** The main box as the watch's ask sees it: answering until `main.result` says otherwise. */
+/** The main box as the watch's ask sees it, silent from the first ask `main.result` makes unreachable. */
 function scriptedMainBox() {
   const main = { result: "answered" as MainAskResult, asks: 0 };
   const ask = () => {
     main.asks += 1;
     return Promise.resolve(main.result);
   };
-  return { main, seam: { mainSilence: { intervalMs: 20, silentAfterMs: 100, ask } } };
+  return { main, seam: { mainSilence: { intervalMs: 20, silentAfterMs: 0, ask } } };
 }
 
 /** Poll `predicate` up to ~10s for its first defined value. */
@@ -902,47 +879,19 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     }
   }, 60_000);
 
-  it("a mirror answers and announces the venue's name once its main box is silent", async () => {
-    const removeChart = await holdChartNamingMainBox("mirror");
+  it("a mirror announces the venue's name while its main box is silent and withdraws it when it answers", async () => {
+    const removeChart = await holdMainBoxChart("mirror");
     const { main, seam } = scriptedMainBox();
-    const mdns = fakeMdnsSocket();
-    try {
-      const server = await startServer(
-        {
-          ...KEY_ENV,
-          WAITRON_VENUE_DIR: venueDir.mirror,
-          WAITRON_HTTP_HOST: "0.0.0.0",
-          WAITRON_HTTP_PORT: String(await freePort()),
-          WAITRON_MIGRATIONS_DIR: migrationsRoot,
-        },
-        {},
-        { mdnsSocket: () => mdns.socket, ...seam },
-      );
-      try {
-        await vi.waitFor(() => expect(main.asks).toBeGreaterThan(1));
-        mdns.query("waitron.local");
-        expect(mdns.answered()).toEqual([]);
-        main.result = "unreachable";
-        await vi.waitFor(() =>
-          expect(mdns.answers().filter((a) => a.name === "waitron.local")).not.toEqual([]),
-        );
-        expect(new Set(mdns.answers().map((a) => a.ttl))).toEqual(new Set([MDNS_TTL_SECONDS]));
-        mdns.clear();
-        for (const name of ["box-3333.waitron.local", "waitron.local"]) mdns.query(name);
-        expect(mdns.answered()).toEqual(["box-3333.waitron.local", "waitron.local"]);
-      } finally {
-        await server.close();
-      }
-    } finally {
-      await removeChart();
-    }
-  }, 60_000);
-
-  it("and withdraws it when the main box answers", async () => {
-    const removeChart = await holdChartNamingMainBox("mirror");
-    const { main, seam } = scriptedMainBox();
+    // Unreachable from the first ask, so silence is found before the responder starts and the
+    // start itself must announce.
     main.result = "unreachable";
     const mdns = fakeMdnsSocket();
+    const venueAnswers = () => mdns.answers().filter((a) => a.name === "waitron.local");
+    const queried = () => {
+      mdns.clear();
+      for (const name of ["box-3333.waitron.local", "waitron.local"]) mdns.query(name);
+      return mdns.answered();
+    };
     try {
       const server = await startServer(
         {
@@ -956,21 +905,24 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
         { mdnsSocket: () => mdns.socket, ...seam },
       );
       try {
-        await vi.waitFor(() =>
-          expect(mdns.answers().some((a) => a.name === "waitron.local")).toBe(true),
-        );
-        mdns.clear();
-        main.result = "answered";
-        await vi.waitFor(() =>
-          expect(mdns.answers().filter((a) => a.name === "waitron.local")).not.toEqual([]),
-        );
-        expect(new Set(mdns.answers().map((a) => a.ttl))).toEqual(new Set([0]));
-        mdns.clear();
-        for (const name of ["box-3333.waitron.local", "waitron.local"]) mdns.query(name);
-        expect(mdns.answered()).toEqual(["box-3333.waitron.local"]);
+        for (const [result, ttl, answered] of [
+          ["unreachable", MDNS_TTL_SECONDS, ["box-3333.waitron.local", "waitron.local"]],
+          ["answered", 0, ["box-3333.waitron.local"]],
+          ["unreachable", MDNS_TTL_SECONDS, ["box-3333.waitron.local", "waitron.local"]],
+        ] as const) {
+          main.result = result;
+          await vi.waitFor(() => expect(venueAnswers()).not.toEqual([]));
+          expect({ result, ttls: new Set(venueAnswers().map((a) => a.ttl)) }).toEqual({
+            result,
+            ttls: new Set([ttl]),
+          });
+          expect({ result, answered: queried() }).toEqual({ result, answered });
+          mdns.clear();
+        }
       } finally {
         await server.close();
       }
+      expect(new Set(venueAnswers().map((a) => a.ttl))).toEqual(new Set([0]));
     } finally {
       await removeChart();
     }
@@ -1125,7 +1077,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
       }),
       { mode: 0o600 },
     );
-    const removeChart = await holdChartNamingMainBox("adopting");
+    const removeChart = await holdMainBoxChart("adopting");
     const { main, seam } = scriptedMainBox();
     main.result = "unreachable";
     const mdns = fakeMdnsSocket();

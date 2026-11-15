@@ -1,3 +1,4 @@
+import { writeNodeMembership } from "@waitron/db";
 import {
   generateNodeKeyPair,
   signDocumentBody,
@@ -35,4 +36,22 @@ export function signedMembershipDoc(
     signature: signDocumentBody(body, keyPair.privateKey),
     endorsements: [],
   };
+}
+
+/** Holds a chart naming `main` the serving primary and `spare` its serving secondary. */
+export async function holdChartNamingMainBox(
+  db: Parameters<typeof writeNodeMembership>[0],
+  main: { nodeId: string; contactUrl: string },
+  spare: { nodeId: string; contactUrl: string },
+): Promise<void> {
+  await writeNodeMembership(
+    db,
+    signedMembershipDoc(1, {
+      signerNodeId: main.nodeId,
+      nodes: [
+        { ...main, standing: "serving-primary" },
+        { ...spare, standing: "serving-secondary" },
+      ],
+    }),
+  );
 }

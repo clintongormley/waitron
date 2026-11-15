@@ -7,14 +7,17 @@ export const MAIN_SILENT_MS = 20_000;
 
 export type MainAskResult = "answered" | SilentReason;
 
-export interface MainSilenceState {
-  silentSinceMs: number | null;
-  /** Whether any ask has answered or found the main box's last checked address unreachable. */
-  reached: boolean;
-  silent: boolean;
-}
+export type MainSilenceState =
+  | {
+      silent: false;
+      silentSinceMs: number | null;
+      /** Whether any ask has answered or found the main box's last checked address unreachable. */
+      reached: boolean;
+    }
+  | { silent: true; silentSinceMs: number; reached: true };
 
 export interface MainSilenceWatch {
+  /** Builds nothing: the responder reads it for every query heard on the network. */
   state(): MainSilenceState;
   stop(): Promise<void>;
 }
@@ -37,7 +40,7 @@ export interface MainSilenceWatchDeps {
 export function startMainSilenceWatch(deps: MainSilenceWatchDeps): MainSilenceWatch {
   let silentSinceMs: number | null = null;
   let reached = false;
-  let silent = false;
+  let state: MainSilenceState = { silent: false, silentSinceMs, reached };
   let fromFirst = deps.silentFromFirst;
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -52,12 +55,14 @@ export function startMainSilenceWatch(deps: MainSilenceWatchDeps): MainSilenceWa
       silentSinceMs = null;
       fromFirst = false;
     }
-    const now =
-      silentSinceMs !== null && (fromFirst || deps.now() - silentSinceMs >= deps.silentAfterMs);
-    if (now === silent) return;
-    silent = now;
-    deps.log("info", silent ? "main_silence.silent" : "main_silence.answering", {});
-    deps.onChange(silent);
+    const was = state.silent;
+    state =
+      silentSinceMs !== null && (fromFirst || deps.now() - silentSinceMs >= deps.silentAfterMs)
+        ? { silent: true, silentSinceMs, reached: true }
+        : { silent: false, silentSinceMs, reached };
+    if (state.silent === was) return;
+    deps.log("info", state.silent ? "main_silence.silent" : "main_silence.answering", {});
+    deps.onChange(state.silent);
   };
 
   const ask = async (): Promise<void> => {
@@ -71,6 +76,7 @@ export function startMainSilenceWatch(deps: MainSilenceWatchDeps): MainSilenceWa
     if (stopped) return;
     judge(result, startedAtMs);
     const waitMs = startedAtMs + deps.intervalMs - deps.now();
+    // A timer waits at least 1 ms, so a main box slow to answer every ask would drift the cadence.
     if (waitMs <= 0) {
       inFlight = ask();
       return;
@@ -84,7 +90,7 @@ export function startMainSilenceWatch(deps: MainSilenceWatchDeps): MainSilenceWa
   inFlight = ask();
 
   return {
-    state: () => ({ silentSinceMs, reached, silent }),
+    state: () => state,
     async stop() {
       stopped = true;
       clearTimeout(timer);

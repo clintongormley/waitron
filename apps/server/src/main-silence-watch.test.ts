@@ -53,17 +53,25 @@ describe("the spare's watch on its main server", () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(asks).toEqual([0, 5_000, 10_000, 15_000, 20_000]);
     expect(w.state()).toEqual({ silentSinceMs: T0, reached: true, silent: true });
+    // The responder reads it for every query heard on the network.
+    expect(w.state()).toBe(w.state());
     await stopNow(w);
   });
 
-  it.each(["refused", "not_established", "certificate", "answered"] as const)(
-    "any other result ends the silence at once: %s",
+  it.each(["refused", "not_established", "certificate", "answered", new Error("boom")] as const)(
+    "any other result, or a throwing ask, ends the silence at once: %s",
     async (result) => {
-      const { w } = watch([...repeat<MainAskResult>("unreachable", 6), result]);
+      const { w, log } = watch([...repeat<MainAskResult>("unreachable", 6), result]);
       await vi.advanceTimersByTimeAsync(29_999);
       expect(w.state()).toEqual({ silentSinceMs: T0, reached: true, silent: true });
       await vi.advanceTimersByTimeAsync(1);
       expect(w.state()).toEqual({ silentSinceMs: null, reached: true, silent: false });
+      const failed = log.mock.calls.filter(([, event]) => event === "main_silence.ask_failed");
+      expect(failed).toEqual(
+        result instanceof Error
+          ? [["warn", "main_silence.ask_failed", { errorCode: "unknown" }]]
+          : [],
+      );
       await w.stop();
     },
   );
@@ -93,19 +101,6 @@ describe("the spare's watch on its main server", () => {
     const { w } = watch(["answered", "unreachable"], { silentFromFirst: true });
     await vi.advanceTimersByTimeAsync(5_000);
     expect(w.state()).toEqual({ silentSinceMs: T0 + 5_000, reached: true, silent: false });
-    await w.stop();
-  });
-
-  it("a throwing ask counts as not silent and is logged", async () => {
-    const failure = Object.assign(new Error("boom"), { code: "node.key_missing" });
-    const { w, log } = watch([...repeat<MainAskResult | Error>("unreachable", 5), failure]);
-    await vi.advanceTimersByTimeAsync(20_000);
-    expect(w.state().silent).toBe(true);
-    await vi.advanceTimersByTimeAsync(5_000);
-    expect(w.state()).toEqual({ silentSinceMs: null, reached: true, silent: false });
-    expect(log).toHaveBeenCalledWith("warn", "main_silence.ask_failed", {
-      errorCode: expect.any(String),
-    });
     await w.stop();
   });
 

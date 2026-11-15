@@ -16,9 +16,11 @@ export function renderSparePage(
   const words = SPARE_WORDS[locale];
   const title = escapeHtml(words.title);
   let mainLine = "";
-  if (main?.silent === true && main.silentSinceMs !== null)
+  if (main?.silent === true)
     mainLine = `<p>${escapeHtml(
-      words.mainSilent.replace("{duration}", formatDuration(nowMs - main.silentSinceMs, locale)),
+      words.mainSilent.replace("{duration}", () =>
+        formatDuration(nowMs - main.silentSinceMs, locale),
+      ),
     )} <a href="/handover/emergency">${escapeHtml(words.openSwitch)}</a></p>`;
   else if (main !== undefined && !main.reached)
     mainLine = `<p>${escapeHtml(words.mainUnreached)}</p>`;
