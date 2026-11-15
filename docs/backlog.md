@@ -632,7 +632,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **The menu patch window: split the file first** (bundle of 9, size M). [Detail](backlog/menu.md#bundle-the-menu-patch-window-split-the-file-first)
 
 - **A1150. Allergens and diet labels come from the live product on every screen** (owner,
-  2026-10-27). [Design](superpowers/specs/2026-11-15-a1150-live-product-declarations-design.md) reviewed by Claude and cleared by the watcher on 15 November; implementation plan and build remain. Today the till's menu and product info
+  2026-10-27). [Design](superpowers/specs/2026-11-15-a1150-live-product-declarations-design.md) reviewed by Claude and cleared by the watcher on 15 November; the [two-PR plan](superpowers/plans/2026-11-15-a1150-live-product-declarations.md) was also reviewed by Claude and cleared by the watcher that day. Both implementation slices remain. Today the till's menu and product info
   read them from the published menu version, while the kitchen screen, the table's allergy check
   and unsent table lines read the live product (`apps/server/src/line-nutrition.ts`). Sent till
   lines and Orders history detail use the live product captured at first sending under the owner’s

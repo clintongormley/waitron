@@ -6,7 +6,8 @@
 design. The watcher’s 15-November 18:46 clearance in Lane J’s `questions.md` says: “Take the
 stripping design and keep the current document format, recorded versions and the single hash:
 no migration, no second hash, no reset.” It also forbids transition guide text. No owner approval
-of this design or plan is recorded. This plan still needs Claude review and watcher clearance.
+of this design or plan is recorded. Claude reviewed this plan in two reads; the watcher cleared
+it on 15 November at 19:44 with the corrections incorporated below.
 
 **Finish line:** saving declarations updates all design-mapped live readers without publishing.
 Sent till/history dishes and extras retain first-send capture; held stays live until release.
@@ -47,13 +48,15 @@ opinion; do not weaken a boundary or increase the budget yourself.
    **Preserve guest/paper membership and published names/prices:** if a live product is missing,
    retain its published entry, always overwriting old declarations. Missing-row defaults are
    `null` allergens, no override and `[]` declarations through the shared helper, giving
-   `overlayDietProfile(UNDECLARED_DIET, null)`. No old-label fallback or unrelated omission.
+   `overlayDietProfile(UNDECLARED_DIET, null)`, with one assertion in `menu-document.test.ts`.
+   No production path deletes a product row; do not repeat that case in guest API tests.
+   No old-label fallback or unrelated omission.
    In `apps/server/src/{guest-menu-api,line-nutrition,working-order}.ts`, hydrate all four producers
    and batch held products/variants/extras even outside offers; never use filtered
    `readLineNutrition` as the full profile. Existing `recordWorkingLineContexts` and set-lunch
    writers keep consuming hydrated offers; held retrieval stops reading copied context nutrition.
    `menu-allergen-workflow.test.ts` owns held outside-offer/null/variant reads;
-   `guest-menu-api.test.ts` owns Cloud/preview/old-paper/public output and missing-row behavior;
+   `guest-menu-api.test.ts` owns live declarations in Cloud/preview/old-paper/public output;
    `cloud-guest-menu.test.ts` owns body reconciliation without publication. Keep sent capture,
    replay, split, later-extra and missing-capture assertions in `sent-line-nutrition.test.ts`, and
    existing `kitchen-allergy.reads.test.ts`/`kitchen-print.allergy.test.ts` live checks.
