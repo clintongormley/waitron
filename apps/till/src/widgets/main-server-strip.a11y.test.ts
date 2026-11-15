@@ -20,6 +20,7 @@ const STATES: [string, Partial<TillMainServerStrip>][] = [
   ["the spare answers", { spareAnswering: true, showSwitch: true }],
   ["the switch was refused", { spareAnswering: true, showSwitch: true, refused: true }],
   ["no server answers", { spareAnswering: false, showSwitch: true }],
+  ["the spare answers but the switch is not offered", { spareAnswering: true, showSwitch: false }],
 ];
 
 describe.each(["light", "dark"] as const)("till-main-server-strip a11y (%s theme)", (theme) => {
