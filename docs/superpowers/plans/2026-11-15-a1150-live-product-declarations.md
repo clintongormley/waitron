@@ -18,6 +18,7 @@ The same-version open-line snapshot gap remains until PR 2, as today; both finis
 Guides ship with each behavior. Each slice has three active hours **including finish-branch
 reviews, fixes and the hook through PR creation**, excluding outside waits. Estimates of changed
 production/tests/support lines: PR 1 **300/400/40**, PR 2 **150/250/20**, plus about 70/30 docs.
+The larger total corrects omitted fixture/type edits and open-view wiring, not added behavior.
 Beyond 1.5× a slice estimate, or an unattainable three-hour milestone, stop for watcher outside
 opinion; do not weaken a boundary or increase the budget yourself.
 
@@ -40,10 +41,13 @@ opinion; do not weaken a boundary or increase the budget yourself.
    hydration; `extraDeclarationValues` shares the existing expanded extra labels with
    `offered-modifiers.ts`. No new diet policy. Collect `BuiltMenu.unreviewed` from pre-freeze
    offers for preview warnings, avoiding another live read.
-3. Require a hydrated document at `publicGuestMenu`, through one adapter over `applyLiveFields`.
+3. Require a hydrated document at `publicGuestMenu`. Add sibling `hydrateDeclarationDocument`
+   in `menu-document.ts`, using the same batched `readLiveRows`; keep till `applyLiveFields` unchanged
+   in how it drops absent rows.
    **Preserve guest/paper membership and published names/prices:** if a live product is missing,
-   retain its published entry with unknown declarations (`null` allergens, empty declared labels,
-   unknown diet), never old declarations. This removes the initial draft’s unrelated omission.
+   retain its published entry, always overwriting old declarations. Missing-row defaults are
+   `null` allergens, no override and `[]` declarations through the shared helper, giving
+   `overlayDietProfile(UNDECLARED_DIET, null)`. No old-label fallback or unrelated omission.
    In `apps/server/src/{guest-menu-api,line-nutrition,working-order}.ts`, hydrate all four producers
    and batch held products/variants/extras even outside offers; never use filtered
    `readLineNutrition` as the full profile. Existing `recordWorkingLineContexts` and set-lunch
@@ -85,5 +89,5 @@ the normal hook later covers dependents. Review EN/ES, light/dark, phone/desktop
 Use current A1308 `menuReleases` fixtures after rebase. Keep format 4, one full-document hash,
 all recorded documents and A1517 behavior; no migration, compatibility layer, reset, schema,
 protocol or second polling service. Each PR takes initial rebase, two Claude run-it reviews
-(cross-package contract), one fresh fixes read, the normal hook and current-head CI before land.
+(cross-package or concurrency trigger), one fresh fixes read, the normal hook and current-head CI before land.
 This plan is source inspection, with no runtime verification claimed.
