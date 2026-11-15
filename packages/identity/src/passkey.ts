@@ -192,7 +192,7 @@ export async function finishPasskeyRegistration(
     challengeHandle: string;
     response: RegistrationResponseJSON;
     rpId: string;
-    origin: string;
+    origin: string | string[];
   },
 ): Promise<{ credentialId: string }> {
   const { personId } = await resolveManagementSession(tx, input.managementSessionId);
@@ -273,7 +273,7 @@ export async function finishPasskeyAuthentication(
     challengeHandle: string;
     response: AuthenticationResponseJSON;
     rpId: string;
-    origin: string;
+    origin: string | string[];
   },
 ): Promise<ManagementSession> {
   const expectedChallenge = await consumeChallenge(tx, input.challengeHandle, { purpose: "login" });
@@ -375,7 +375,7 @@ export async function verifyOwnPasskey(
     challengeHandle: string;
     response: AuthenticationResponseJSON;
     rpId: string;
-    origin: string;
+    origin: string | string[];
     totp?: string;
     recoveryCode?: string;
     keyRing: TotpKeyRing;

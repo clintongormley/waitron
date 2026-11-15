@@ -22,8 +22,8 @@ export interface FreshSignInDeps {
   db: Database;
   throttle: PasswordThrottle & PasswordThrottleProbe;
   keyRing: TotpKeyRing;
-  rpId: string;
-  origin: string;
+  /** Where a passkey must have been used; asked only when the check is by passkey. */
+  passkeySite: () => Promise<{ rpId: string; origin: string | string[] }>;
 }
 
 type Codes = { totp?: string; recoveryCode?: string };
@@ -89,6 +89,7 @@ export async function confirmFreshSignIn(
     const challengeHandle = fields.challengeHandle;
     const response = fields.response as Parameters<typeof verifyOwnPasskey>[1]["response"];
     const codes = codesOf(fields);
+    const site = await deps.passkeySite();
     // A failed code check rolls the transaction back, which restores the challenge, so one signed
     // response can be resent with each new code guess until it expires: this throttle is the bound.
     return withTransaction(deps.db, async (tx) => {
@@ -99,8 +100,7 @@ export async function confirmFreshSignIn(
           managementSessionId,
           challengeHandle,
           response,
-          rpId: deps.rpId,
-          origin: deps.origin,
+          ...site,
           ...codes,
           keyRing: deps.keyRing,
         });

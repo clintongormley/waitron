@@ -18,8 +18,8 @@ import { generateSync } from "otplib";
 import { encryptTotpSecret, replaceRecoveryCodes } from "./mfa.js";
 import { codeOf, openManagementSession, seedPerson, TOTP_KEY_RING } from "../test/fixtures.js";
 
-// Only the two VERIFY calls are mocked, because a genuine authenticator response cannot be
-// synthesised in a unit test — so this suite asserts OUR wiring around them, not the crypto.
+// Only the two VERIFY calls are mocked, so this suite asserts OUR wiring around them;
+// passkey.ceremony.test.ts runs the real verifier.
 vi.mock("@simplewebauthn/server", async (orig) => ({
   ...(await orig<typeof import("@simplewebauthn/server")>()),
   verifyRegistrationResponse: vi.fn(),

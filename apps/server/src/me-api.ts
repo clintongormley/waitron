@@ -36,6 +36,7 @@ import { resolveLoginLocale } from "./login-locale.js";
 import { createPasswordThrottle } from "./password-throttle.js";
 import { confirmFreshSignIn } from "./fresh-sign-in.js";
 import { managementSite } from "./request-from-box.js";
+import { passkeyVerifySite, venuePasskeyOrigins } from "./passkey-origins.js";
 import { ownPasswordChanges } from "./own-password-ahead.js";
 import "./errors.js";
 import { createErrorBoundary } from "@waitron/server-kit";
@@ -145,6 +146,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
 
   const proofThrottle = createPasswordThrottle();
   const proofSite = { rpId: deps.rpId ?? "localhost", origin: deps.origin ?? "http://localhost" };
+  const passkeyOrigins = venuePasskeyOrigins(deps.db, proofSite.origin);
   app.post("/management-api/session/me/fresh-sign-in", (c) =>
     run(c, log, async () => {
       const token = requireManagementSession(c);
@@ -153,7 +155,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
           db: deps.db,
           throttle: proofThrottle,
           keyRing: credentialKeyRing,
-          ...managementSite(c, proofSite),
+          passkeySite: () => passkeyVerifySite(c, proofSite, passkeyOrigins),
         },
         token,
         await readJsonBody<unknown>(c),

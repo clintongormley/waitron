@@ -90,8 +90,8 @@ export interface ServerConfig {
   /** The WebAuthn Relying Party ID: a bare domain, no scheme or port. A passkey is only offered
    * back on the RP ID it was registered under. Defaults to `localhost`; REQUIRED in production. */
   managementRpId: string;
-  /** The exact origin the dashboard is served from, which each passkey ceremony must match
-   * byte-for-byte. Defaults to `http://localhost:5191`; REQUIRED in production, and in every
+  /** The exact origin the dashboard is served from; a local passkey ceremony is checked against
+   * what `venuePasskeyOrigins` answers for it. Defaults to `http://localhost:5191`; REQUIRED in production, and in every
    * environment refused unless a bare http(s) origin (`bareOrigin`). */
   managementOrigin: string;
   /** Optional Google login client. The callback is derived from the validated management origin so
