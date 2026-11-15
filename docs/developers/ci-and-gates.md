@@ -4535,6 +4535,9 @@ still meets all the installed triggers; the guard does not exercise interruption
 feed installation. Product boot and migration code are unchanged. The budget, still 30 seconds plus 500 ms per step,
 is now spent in processor time (below).
 
+16 November 2026: CHANGE-FEED-ONE-TX moved `removeChangeFeed`'s drops and boot's `installChangeFeed`
+each into one `withWriteLock` transaction.
+
 Measured 2026-10-16 on macOS, Node v26.11.1 and Vitest 4.1.11, from main
 `3e713d3a780b8f65447ab203bc9a2f08f336f884`:
 
