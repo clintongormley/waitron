@@ -942,6 +942,21 @@ for (const locale of ["en", "es"]) {
   });
 }
 
+for (const [locale, create, edit] of [
+  ["en", "Add invoice", "Edit invoice"],
+  ["es", "Añadir factura", "Editar factura"],
+]) {
+  it(`names the edit dialog in the create dialog's words in ${locale}`, async () => {
+    setLocale(locale!);
+    const headingOf = async (props: Partial<PurchaseForm>): Promise<string | null> => {
+      const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps(props));
+      return el.shadowRoot!.querySelector("wt-dialog")!.getAttribute("heading");
+    };
+    expect(await headingOf({})).toBe(create);
+    expect(await headingOf({ invoice: EDIT_INVOICE })).toBe(edit);
+  });
+}
+
 describe("purchase-form — a VAT line's layout", () => {
   const fieldBoxOf = (el: PurchaseForm, testId: string): DOMRect =>
     el

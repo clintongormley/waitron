@@ -89,14 +89,11 @@ among them «PIN de gerente») say «gerente». Pick one word and use it everywh
 
 ## Bundle: Ui wording sweep
 
-6 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+5 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **Not covered: empty sentences outside a `wt-data-table` (floor, kitchen, devices and others)
   still use "Aún no hay" and other shapes.** Left open by A177 (one fixed "nothing matches"
   sentence; a specific "nothing yet" sentence per screen, #1037).
-- **Two texts still use the old words.** A hint says "Create" (the Products screen's empty prompt,
-  "Create a menu on the Menus screen…"), and the purchase dialog's edit heading reads "Edit
-  purchase invoice" while its create heading is now "Add invoice". Left open by A450 (#1484).
 - **Spanish calls the manager role «gerente» in the guide and README, and «Encargado» on screen.**
   [Detail](languages.md#spanish-calls-the-manager-role-gerente-in-the-guide-and-readme-and-encargado-on-screen)
 - **The image library calls an archived variant an "Archived product".**
