@@ -3414,18 +3414,19 @@ describe("reserved venue names", () => {
 });
 
 describe("combined settings operations", () => {
-  it("saves a department's settings when its policy row is missing", async () => {
+  it("saves a bare department's settings from its column defaults", async () => {
     await seedFixtureVenue("Repair department settings");
     await scoped(async (tx) => {
-      const department = await createDepartment(tx, { name: "Dining", orderStart: "counter" });
+      const [row] = await tx
+        .insert(departments)
+        .values({ name: "Dining", tradingName: "Dining" })
+        .returning();
+      const department = row!;
       const zone = await createServiceZone(tx, {
         name: "Terrace",
-        departmentId: department.id,
+        departmentId: department!.id,
       });
-      await tx.execute(
-        sql`delete from department_sale_policies where department_id = ${department.id}`,
-      );
-      await settingsOperations.saveDepartmentEditSettings(tx, department.id, {
+      await settingsOperations.saveDepartmentEditSettings(tx, department!.id, {
         name: "Restaurant",
         tradingName: "Receipt",
         orderStart: "table",
@@ -3434,7 +3435,7 @@ describe("combined settings operations", () => {
       });
       await settingsOperations.setDepartmentSalePolicyField(
         tx,
-        department.id,
+        department!.id,
         "printTradingName",
         false,
       );

@@ -1879,8 +1879,8 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       select id, trading_name from departments
       where id = (select department_id from floor_zones where id = ${venue.offers.zoneId})`);
     const [policy] = suite.db.all<{ print_trading_name: number }>(sql`
-      select print_trading_name from department_sale_policies
-      where department_id = ${department!.id}`);
+      select print_trading_name from departments
+      where id = ${department!.id}`);
     await suite.db.execute(sql`
       update departments set trading_name = 'Blue terrace' where id = ${department!.id}`);
     try {
@@ -1907,8 +1907,8 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       await suite.db.execute(sql`
         update departments set trading_name = 'New name' where id = ${department!.id}`);
       await suite.db.execute(sql`
-        update department_sale_policies set print_trading_name = 0
-        where department_id = ${department!.id}`);
+        update departments set print_trading_name = 0
+        where id = ${department!.id}`);
       await suite.db.execute(sql`
         update device_profiles set capabilities = ${JSON.stringify([
           ...JSON.parse(profile!.capabilities),
@@ -1941,8 +1941,8 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       await suite.db.execute(sql`
         update departments set trading_name = ${department!.trading_name} where id = ${department!.id}`);
       await suite.db.execute(sql`
-        update department_sale_policies set print_trading_name = ${policy!.print_trading_name}
-        where department_id = ${department!.id}`);
+        update departments set print_trading_name = ${policy!.print_trading_name}
+        where id = ${department!.id}`);
       await suite.db.execute(sql`
         update device_profiles set capabilities = ${profile!.capabilities} where id = ${profile!.id}`);
     }

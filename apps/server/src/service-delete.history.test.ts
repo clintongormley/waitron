@@ -19,7 +19,6 @@ import {
   deleteDepartment,
   departmentReceipts,
   departments,
-  departmentSalePolicies,
   deviceProfileServiceAccess,
   departmentTransferRequests,
   orderServiceContexts,
@@ -60,9 +59,9 @@ it("deleted department reprints its original receipt configuration and frozen he
       .set({ tradingName: "Frozen trading brand" })
       .where(eq(departments.id, departmentId));
     await tx
-      .update(departmentSalePolicies)
+      .update(departments)
       .set({ printTradingName: true })
-      .where(eq(departmentSalePolicies.departmentId, departmentId));
+      .where(eq(departments.id, departmentId));
     await tx
       .update(departmentReceipts)
       .set({

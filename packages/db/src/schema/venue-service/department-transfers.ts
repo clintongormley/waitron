@@ -11,30 +11,9 @@ import {
   table,
   tsString,
 } from "../columns.js";
-import { deviceProfiles } from "../device-profiles.js";
 import { floorZones } from "../floor-zones.js";
 import { workingOrders } from "../orders.js";
 import { departments } from "./service.js";
-
-export const departmentTransferDesks = table(
-  "department_transfer_desks",
-  {
-    departmentId: id("department_id").primaryKey(),
-    receivingProfileId: id("receiving_profile_id").notNull(),
-  },
-  (t) => [
-    foreignKey({
-      columns: [t.departmentId],
-      foreignColumns: [departments.id],
-      name: "department_transfer_desks_department_fk",
-    }),
-    foreignKey({
-      columns: [t.receivingProfileId],
-      foreignColumns: [deviceProfiles.id],
-      name: "department_transfer_desks_profile_fk",
-    }).onDelete("cascade"),
-  ],
-);
 
 export const departmentTransferDestinations = table(
   "department_transfer_destinations",

@@ -148,8 +148,6 @@ describe("the menu timetable rows of a bundle", () => {
   const DELI_PERIOD = "33333333-3333-4333-8333-333333333333";
   function menuTables(): Tables {
     return {
-      department_sale_policies: [{ department_id: RESTAURANT }, { department_id: DELI }],
-
       departments: [
         { id: RESTAURANT, is_default: 1 },
         { id: DELI, is_default: 0 },
@@ -202,7 +200,7 @@ describe("the menu timetable rows of a bundle", () => {
     const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
     const at = names.indexOf("menu_periods");
     expect(names.slice(at, at + 2)).toEqual(["menu_periods", "menu_period_staff_menus"]);
-    expect(at).toBeGreaterThan(names.indexOf("department_sale_policies"));
+    expect(at).toBeGreaterThan(names.indexOf("departments"));
   });
 
   it("transfers floor sets once through core and periods through venue-service", () => {
@@ -327,12 +325,8 @@ describe("the menu timetable rows of a bundle", () => {
 
 describe("department transfer settings in a configuration bundle", () => {
   const valid = (): Tables => ({
-    department_sale_policies: [{ department_id: RESTAURANT }, { department_id: DELI }],
-    departments: [{ id: RESTAURANT }, { id: DELI }],
+    departments: [{ id: RESTAURANT, transfer_desk_profile_id: "receiving-profile" }, { id: DELI }],
     device_profiles: [{ id: "receiving-profile" }],
-    department_transfer_desks: [
-      { department_id: RESTAURANT, receiving_profile_id: "receiving-profile" },
-    ],
     department_transfer_destinations: [
       { source_department_id: DELI, destination_department_id: RESTAURANT },
     ],
@@ -342,8 +336,7 @@ describe("department transfer settings in a configuration bundle", () => {
     expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({})).not.toThrow();
   });
   it.each([
-    ["department_transfer_desks", "department_id", "missing"],
-    ["department_transfer_desks", "receiving_profile_id", "missing"],
+    ["departments", "transfer_desk_profile_id", "missing"],
     ["department_transfer_destinations", "source_department_id", "missing"],
     ["department_transfer_destinations", "destination_department_id", "missing"],
     ["department_transfer_destinations", "destination_department_id", DELI],
@@ -354,16 +347,13 @@ describe("department transfer settings in a configuration bundle", () => {
       refusal(`${table}.${column}`),
     );
   });
-  it.each(["department_transfer_desks", "department_transfer_destinations"])(
-    "refuses duplicate %s rows",
-    (table) => {
-      const tables = valid();
-      tables[table]!.push({ ...tables[table]![0]! });
-      expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables)).toThrowError(
-        refusal(table),
-      );
-    },
-  );
+  it.each(["department_transfer_destinations"])("refuses duplicate %s rows", (table) => {
+    const tables = valid();
+    tables[table]!.push({ ...tables[table]![0]! });
+    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables)).toThrowError(
+      refusal(table),
+    );
+  });
 });
 
 describe("validateRoutingConfiguration", () => {
@@ -729,7 +719,6 @@ describe("validateRoutingConfiguration", () => {
     const tables = routingTables();
     tables.departments!.find((row) => row.id === DELI)!.active = 1;
     tables.floor_zones!.find((row) => row.id === CLOSED_ZONE)!.active = 1;
-    tables.department_sale_policies = [{ department_id: RESTAURANT }, { department_id: DELI }];
     expect(() => validate(tables)).not.toThrow();
     tables.routing_cells!.push(cell({ product: LARGE, station: BAR }));
     expect(() => validate(tables)).toThrowError(refusal("routing_cells.product_id"));
@@ -741,8 +730,6 @@ describe("deleted hierarchy rows in a configuration bundle", () => {
   const { validate } = VENUE_SERVICE_CONFIGURATION_TRANSFER;
   function zoneTables(): Tables {
     return {
-      department_sale_policies: [{ department_id: RESTAURANT }, { department_id: DELI }],
-
       departments: [
         { id: RESTAURANT, name: "Restaurant", active: 1 },
         { id: DELI, name: "Deli", active: 0 },
@@ -861,7 +848,6 @@ describe("service-period configuration", () => {
   };
   function tables(): Tables {
     return {
-      department_sale_policies: [{ department_id: RESTAURANT }],
       departments: [{ id: RESTAURANT }],
       menus: [{ id: "customer" }, { id: "staff" }],
       menu_periods: [
@@ -962,32 +948,33 @@ describe("service-period configuration", () => {
 });
 
 describe("configuration order starts", () => {
-  it.each(["department_sale_policies", "floor_zones"])(
-    "refuses malformed %s order starts",
-    (table) => {
-      for (const value of [
-        "tab",
-        "",
-        ["table"],
-        1,
-        false,
-        {},
-        ...(table === "department_sale_policies" ? [null] : []),
-      ]) {
-        expect(() =>
-          VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
-            departments: [{ id: RESTAURANT }],
-            floor_zones: [{ id: "zone", department_id: RESTAURANT }],
+  it.each(["departments", "floor_zones"])("refuses malformed %s order starts", (table) => {
+    for (const value of [
+      "tab",
+      "",
+      ["table"],
+      1,
+      false,
+      {},
+      ...(table === "departments" ? [null] : []),
+    ]) {
+      expect(() =>
+        VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
+          departments: [{ id: RESTAURANT }],
+          floor_zones: [{ id: "zone", department_id: RESTAURANT }],
 
-            department_sale_policies: [{ department_id: RESTAURANT }],
-
-            [table]: [{ id: "zone", department_id: RESTAURANT, order_start: value }],
-          }),
-        ).toThrowError(refusal(`${table}.order_start`));
-      }
-    },
-  );
-  it.each(["department_sale_policies", "floor_zones"])(
+          [table]: [
+            {
+              id: table === "departments" ? RESTAURANT : "zone",
+              department_id: RESTAURANT,
+              order_start: value,
+            },
+          ],
+        }),
+      ).toThrowError(refusal(`${table}.order_start`));
+    }
+  });
+  it.each(["departments", "floor_zones"])(
     "accepts explicit and absent %s order starts",
     (table) => {
       for (const value of [
@@ -1001,12 +988,10 @@ describe("configuration order starts", () => {
             departments: [{ id: RESTAURANT }],
             floor_zones: [{ id: "zone", department_id: RESTAURANT }],
 
-            department_sale_policies: [{ department_id: RESTAURANT }],
-
             [table]: [
               {
                 department_id: RESTAURANT,
-                id: "zone",
+                id: table === "departments" ? RESTAURANT : "zone",
                 ...(value === undefined ? {} : { order_start: value }),
               },
             ],
@@ -1026,7 +1011,6 @@ it.each([0, false])(
     expect(() =>
       VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
         departments: [{ id: "live", active: 1 }],
-        department_sale_policies: [{ department_id: "live" }],
       }),
     ).not.toThrow();
   },
@@ -1035,7 +1019,6 @@ it.each([0, false])(
 it.each([
   ["floor_zones", "department_id", { id: "z-live", department_id: "missing" }],
   ["department_receipts", "department_id", { department_id: "missing", receipt: {} }],
-  ["department_sale_policies", "department_id", { department_id: "missing" }],
 ])("refuses a deleted hierarchy child %s.%s with an absent parent", (table, field, row) => {
   const tables = {
     departments: [{ id: RESTAURANT, active: 1 }],
@@ -1076,8 +1059,6 @@ describe("season weeks in a configuration bundle", () => {
    *  only. Terrace closes 23:00–02:00 on a Winter Friday. */
   function seasonTables(): Tables {
     return {
-      department_sale_policies: [{ department_id: RESTAURANT }],
-
       departments: [{ id: RESTAURANT }],
       floor_zones: [{ id: "terrace", active: 1, department_id: RESTAURANT }],
 
@@ -1149,7 +1130,7 @@ describe("season weeks in a configuration bundle", () => {
       "zone_day_ranges",
     ]);
     expect(at).toBeGreaterThan(names.indexOf("menu_periods"));
-    expect(at).toBeGreaterThan(names.indexOf("department_sale_policies"));
+    expect(at).toBeGreaterThan(names.indexOf("departments"));
     expect(VENUE_SERVICE_CONFIGURATION_TRANSFER.tables[at]).toEqual({
       name: "seasons",
     });
@@ -1291,7 +1272,6 @@ describe("season weeks in a configuration bundle", () => {
 describe("department receipt configuration fields", () => {
   function tables(receipt: unknown): Tables {
     return {
-      department_sale_policies: [{ department_id: RESTAURANT }],
       departments: [{ id: RESTAURANT, active: 1 }],
       department_receipts: [{ department_id: RESTAURANT, receipt }],
     };
@@ -1352,8 +1332,6 @@ describe("special days in a configuration bundle", () => {
    *  restaurant, the terrace open 12:00–14:00; 16 August is Closed all day. */
   function specialTables(): Tables {
     return {
-      department_sale_policies: [{ department_id: RESTAURANT }],
-
       departments: [{ id: RESTAURANT }],
       floor_zones: [{ id: "terrace", active: 1, department_id: RESTAURANT }],
 
@@ -1628,7 +1606,6 @@ describe("validateServiceSteps", () => {
 
   function bundle(steps: Row[]): Tables {
     return {
-      department_sale_policies: [{ department_id: RESTAURANT }, { department_id: DELI }],
       departments: [{ id: RESTAURANT }, { id: DELI }],
       kitchen_courses: [{ id: COURSE }],
       service_steps: steps,

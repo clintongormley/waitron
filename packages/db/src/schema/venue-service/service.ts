@@ -56,27 +56,6 @@ export const departments = table(
   ],
 );
 
-export const departmentSalePolicies = table(
-  "department_sale_policies",
-  {
-    departmentId: id("department_id").primaryKey(),
-    orderStart: orderStart("order_start").notNull().default("counter"),
-    paidWhen: paidWhen("paid_when").notNull().default("prepay"),
-    collectionNumber: collectionNumber("collection_number").notNull().default("none"),
-    printTradingName: flag("print_trading_name").notNull().default(true),
-  },
-  (t) => [
-    foreignKey({
-      columns: [t.departmentId],
-      foreignColumns: [departments.id],
-      name: "department_sale_policies_department_fk",
-    }),
-    check("department_sale_policies_order_start_ck", enumCheck(t.orderStart)),
-    check("department_sale_policies_paid_when_ck", enumCheck(t.paidWhen)),
-    check("department_sale_policies_collection_number_ck", enumCheck(t.collectionNumber)),
-  ],
-);
-
 export const saleReceiptHeaders = table(
   "sale_receipt_headers",
   {

@@ -1287,7 +1287,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
       sql`update departments set name = 'Staff department name', trading_name = 'Guest trading name' `,
     );
     await suite.db.execute(
-      sql`update department_sale_policies set print_trading_name = 1 where department_id in (select id from departments )`,
+      sql`update departments set print_trading_name = 1 where id in (select id from departments )`,
     );
     const printerId = await makePrinter();
     await configureReceipt({ printerId });

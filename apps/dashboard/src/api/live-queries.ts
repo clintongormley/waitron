@@ -52,7 +52,6 @@ const HIERARCHY_DELETE_READS = [
   "device_profile_kitchen_screen_zones",
   "routing_cells",
   "routing_cell_periods",
-  "department_sale_policies",
   "service_steps",
   "menu_periods",
   "menu_period_staff_menus",
@@ -60,7 +59,6 @@ const HIERARCHY_DELETE_READS = [
   "department_day_ranges",
   "zone_days",
   "zone_day_ranges",
-  "department_transfer_desks",
   "department_transfer_destinations",
   "department_transfer_requests",
   "floor_plan_sets",
@@ -496,7 +494,6 @@ export const QUERY_DEPENDENCIES = {
   listPurchaseInvoices: ["purchase_invoices", "purchase_invoice_vat"],
   getDepartmentReceipt: [
     "department_receipts",
-    "department_sale_policies",
     "departments",
     "settings.business_day",
     "settings.venue",

@@ -71,7 +71,7 @@ it("a live policy and receipt read preserves the host-supplied editor's authored
     receipt: { operationDescription: "New elsewhere" },
     policy: { printTradingName: false },
   });
-  liveData.invalidate([{ type: "department_sale_policies" }]);
+  liveData.invalidate([{ type: "departments" }]);
   await expect
     .poll(() => fetchImpl.mock.calls.filter(([path]) => path.endsWith("/bar/receipt")).length)
     .toBe(2);

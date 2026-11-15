@@ -7,6 +7,12 @@
 > declared in `packages/db/src/schema/sale-rule-types.ts`. The rest of this plan applies.
 > This is the watcher's clearance, not an owner review of this implementation.
 
+> **2026-11-15 consumer ports, cleared by the watcher in Lane H `questions.md` at 08:22,
+> 09:07 and 09:11:** missing side-row fixtures follow the department column defaults;
+> impossible side-row completeness, duplicate and orphan cases retire. Other behavioural
+> assertions stay. The till live interests follow `departments` too. At 09:16 the watcher
+> cleared about 1,500 handwritten code/test lines for the traced consumer ports.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax. Every rule in
 > [the slice rules](2026-11-08-a1308-slice-rules.md) applies ("rules §n"). Implementers are

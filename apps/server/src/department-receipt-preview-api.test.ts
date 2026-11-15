@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { printJobs, sales } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
+import { departments, departmentReceipts } from "@waitron/venue-service";
 import { ALL_MODULES } from "./modules.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { mountReceiptPreviewApi, type ReceiptPreviewResponse } from "./receipt-preview-api.js";
@@ -24,10 +24,7 @@ beforeEach(async () => {
     .update(departments)
     .set({ tradingName: "Deli counter" })
     .where(eq(departments.id, departmentId));
-  await suite.db
-    .update(departmentSalePolicies)
-    .set(policy)
-    .where(eq(departmentSalePolicies.departmentId, departmentId));
+  await suite.db.update(departments).set(policy).where(eq(departments.id, departmentId));
   await seedVenueSettings(suite.db, { invoiceLocales: ["gl-ES"] });
   await seedVenueSettings(suite.db, {
     defaultContentLanguage: "es",
@@ -74,7 +71,7 @@ function lines(answer: ReceiptPreviewResponse) {
 async function snapshot() {
   return {
     receipts: await suite.db.select().from(departmentReceipts),
-    policies: await suite.db.select().from(departmentSalePolicies),
+    policies: await suite.db.select().from(departments),
 
     sales: await suite.db.select().from(sales),
     jobs: await suite.db.select().from(printJobs),

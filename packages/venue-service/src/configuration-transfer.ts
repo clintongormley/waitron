@@ -381,13 +381,9 @@ function refuseSkippedPaint(
 function validateDepartmentTransfers(tables: Tables): void {
   const departments = ids(tables.departments);
   const profiles = ids(tables.device_profiles);
-  const desks = new Set<unknown>();
-  for (const row of tables.department_transfer_desks ?? []) {
-    if (!departments.has(row.department_id)) refuse("department_transfer_desks.department_id");
-    if (!profiles.has(row.receiving_profile_id))
-      refuse("department_transfer_desks.receiving_profile_id");
-    if (desks.has(row.department_id)) refuse("department_transfer_desks");
-    desks.add(row.department_id);
+  for (const row of tables.departments ?? []) {
+    if (row.transfer_desk_profile_id != null && !profiles.has(row.transfer_desk_profile_id))
+      refuse("departments.transfer_desk_profile_id");
   }
   const directions = new Map<unknown, Set<unknown>>();
   for (const row of tables.department_transfer_destinations ?? []) {
@@ -512,18 +508,8 @@ function validateServiceHierarchy(tables: Tables): void {
   const departments = ids(tables.departments);
   for (const row of tables.floor_zones ?? [])
     if (!departments.has(row.department_id)) refuse("floor_zones.department_id");
-  for (const table of ["department_receipts", "department_sale_policies"])
-    for (const row of tables[table] ?? [])
-      if (!departments.has(row.department_id)) refuse(`${table}.department_id`);
-}
-
-function validateServicePolicyCompleteness(tables: Tables): void {
-  for (const [parents, policies, key] of [
-    ["departments", "department_sale_policies", "department_id"],
-  ] as const) {
-    const configured = new Set((tables[policies] ?? []).map((row) => row[key]));
-    if ((tables[parents] ?? []).some((row) => !configured.has(row.id))) refuse(policies);
-  }
+  for (const row of tables.department_receipts ?? [])
+    if (!departments.has(row.department_id)) refuse("department_receipts.department_id");
 }
 
 function validateReceiptFields(tables: Tables): void {
@@ -554,7 +540,7 @@ function validateReceiptFields(tables: Tables): void {
 }
 
 function validateOrderStarts(tables: Tables): void {
-  for (const table of ["department_sale_policies", "floor_zones"] as const) {
+  for (const table of ["departments", "floor_zones"] as const) {
     for (const row of tables[table] ?? []) {
       const value = row.order_start;
       if (value === undefined || (table === "floor_zones" && value === null)) continue;
@@ -661,7 +647,6 @@ function validateVenueServiceConfiguration(
   validateSeasonWeeks(tables, bundle);
   validateDepartmentTransfers(tables);
   validateRoutingConfiguration(tables);
-  validateServicePolicyCompleteness(tables);
 }
 
 export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
@@ -671,13 +656,11 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "service_steps" },
     { name: "department_courses" },
     { name: "department_receipts" },
-    { name: "department_sale_policies" },
     { name: "device_profile_service_access" },
     { name: "device_profile_zones" },
     { name: "device_profile_kitchen_screens" },
     { name: "device_profile_kitchen_screen_stations" },
     { name: "device_profile_kitchen_screen_zones" },
-    { name: "department_transfer_desks" },
     { name: "department_transfer_destinations" },
     { name: "routing_cells" },
     { name: "menu_periods" },

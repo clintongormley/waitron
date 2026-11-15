@@ -5149,10 +5149,15 @@ they did not test every migration caller.
 ## Department and zone service settings
 
 You choose how orders start separately from when a counter order is paid.
-`department_sale_policies.order_start` holds `table` or `counter`;
+`departments.order_start` holds `table` or `counter`;
 `floor_zones.order_start` is nullable, with null following the department.
 The same zone-first resolution applies to paid-when and collection tickets.
 The receipt-print field and its controls are retired.
+
+A department keeps its sale rules and receipt trading-name choice on its own row. Its
+`transfer_desk_profile_id` names the receiving device profile; deleting that profile clears the
+choice and keeps the department. Configuration format 36 carries these columns with the
+department. Earlier exports are refused as outdated because their two side tables are gone.
 
 `resolveZoneContext` and the order-context writers in
 `packages/venue-service/src/operations.ts` work out an order's flow as `table_tab` for table

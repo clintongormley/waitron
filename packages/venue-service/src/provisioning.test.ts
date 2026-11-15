@@ -380,10 +380,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       print_trading_name: number;
     }>(sql`
       select order_start, paid_when, collection_number, print_trading_name
-      from department_sale_policies
-      where department_id = (
-        select id from departments where is_default = 1
-      )`);
+      from departments where is_default = 1`);
     expect(department.rows).toEqual([
       {
         order_start: "counter",

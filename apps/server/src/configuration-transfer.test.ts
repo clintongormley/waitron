@@ -152,7 +152,6 @@ import {
   setDepartmentTransferSettings,
   setProfileServiceScope,
   createServiceZone,
-  departmentSalePolicies,
   departments,
   readHolidays,
   readHolidayAreaModel,
@@ -5391,7 +5390,7 @@ describe("venue detail edits and configuration boundaries", () => {
   );
 });
 
-it.each(["department_sale_policies", "floor_zones"])(
+it.each(["departments", "floor_zones"])(
   "refuses obsolete %s receipt data before changing the target venue",
   async (table) => {
     const source = await applyVenue(planVenue(venue("B13572476"), ALL_MODULES), {
@@ -5423,7 +5422,6 @@ it.each(["department_sale_policies", "floor_zones"])(
     expect(bad.tables[table]).not.toHaveLength(0);
     const before = {
       departments: targetSuite.db.all(sql`select * from departments`),
-      departmentPolicies: targetSuite.db.all(sql`select * from department_sale_policies`),
       zonePolicies: targetSuite.db.all(sql`select * from floor_zones`),
     };
     await expect(
@@ -5435,9 +5433,6 @@ it.each(["department_sale_policies", "floor_zones"])(
       params: { field: `table:${table}` },
     });
     expect(targetSuite.db.all(sql`select * from departments`)).toEqual(before.departments);
-    expect(targetSuite.db.all(sql`select * from department_sale_policies`)).toEqual(
-      before.departmentPolicies,
-    );
     expect(targetSuite.db.all(sql`select * from floor_zones`)).toEqual(before.zonePolicies);
   },
 );
@@ -5461,9 +5456,9 @@ it("A725 transfers station and department choices", async () => {
       departmentId: department.id,
     });
     await tx
-      .update(departmentSalePolicies)
+      .update(departments)
       .set({ printTradingName: false })
-      .where(eq(departmentSalePolicies.departmentId, department.id));
+      .where(eq(departments.id, department.id));
     await tx
       .update(floorZones)
       .set({ collectionNumber: "numbered" })
@@ -5494,10 +5489,9 @@ it("A725 transfers station and department choices", async () => {
     beforeCommit: async (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
   });
   const modes = await targetSuite.db.execute(sql`
-    select z.name, p.print_trading_name as trading_name, z.collection_number as zone_collection
+    select z.name, d.print_trading_name as trading_name, z.collection_number as zone_collection
     from floor_zones z
     join departments d on d.id=z.department_id
-    join department_sale_policies p on p.department_id=d.id
     where d.name='Receipt department' order by z.name`);
   expect(modes.rows).toEqual([
     { name: "Explicit receipts", trading_name: 0, zone_collection: "numbered" },
@@ -5914,11 +5908,7 @@ describe("special days in a configuration transfer", () => {
       modules: ALL_MODULES,
     });
     await withTransaction(suite.db, async (tx) => {
-      const [department] = await tx
-        .insert(departments)
-        .values({ name: "Deli", tradingName: "Deli" })
-        .returning({ id: departments.id });
-      await tx.insert(departmentSalePolicies).values({ departmentId: department!.id });
+      await tx.insert(departments).values({ name: "Deli", tradingName: "Deli" });
       await tx
         .insert(kitchenStations)
         .values([{ name: "Bar" }, { name: "Pass" }, { name: "Grill" }]);
@@ -6402,8 +6392,8 @@ it("round-trips departmental transfer directions and desks with remapped ids, le
     department_id: string;
     profile_id: string;
   }>(sql`
-    select d.name as department, p.name as profile, t.department_id, t.receiving_profile_id as profile_id
-    from department_transfer_desks t join departments d on d.id=t.department_id join device_profiles p on p.id=t.receiving_profile_id
+    select d.name as department, p.name as profile, d.id as department_id, d.transfer_desk_profile_id as profile_id
+    from departments d join device_profiles p on p.id=d.transfer_desk_profile_id
     where d.name='Transfer restaurant'`);
   expect(desk.rows).toEqual([
     {
@@ -6569,8 +6559,8 @@ it("transfers order start policies under new department and zone ids", async () 
       name: "Department follower",
       departmentId: department.id,
     });
-    await tx.execute(sql`update department_sale_policies set order_start = 'table'
-      where department_id = ${department.id}`);
+    await tx.execute(sql`update departments set order_start = 'table'
+      where id = ${department.id}`);
     await tx.execute(sql`update floor_zones set order_start = 'counter'
       where id = ${explicit.id}`);
     return { departmentId: department.id, explicitId: explicit.id, inheritedId: inherited.id };
@@ -6584,9 +6574,7 @@ it("transfers order start policies under new department and zone ids", async () 
     versions,
   );
   expect(
-    exported.tables.department_sale_policies!.find(
-      (row) => row.department_id === sourceIds.departmentId,
-    )!.order_start,
+    exported.tables.departments!.find((row) => row.id === sourceIds.departmentId)!.order_start,
   ).toBe("table");
   expect(
     exported.tables.floor_zones!.find((row) => row.id === sourceIds.explicitId)!.order_start,
@@ -6610,10 +6598,9 @@ it("transfers order start policies under new department and zone ids", async () 
     department_start: string;
     zone_start: string | null;
   }>(sql`select d.id as department_id, z.id as zone_id, z.name,
-    p.order_start as department_start, z.order_start as zone_start
+    d.order_start as department_start, z.order_start as zone_start
     from floor_zones z
     join departments d on d.id = z.department_id
-    join department_sale_policies p on p.department_id = d.id
     where d.name = 'Order start department' order by z.name`);
   expect(
     imported.rows.map(({ name, department_start, zone_start }) => ({
@@ -7227,7 +7214,7 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
       updated_at: expect.any(String),
     },
   ]);
-  for (const table of ["department_sale_policies", "floor_zones"])
+  for (const table of ["departments", "floor_zones"])
     expect(JSON.stringify(transferred.tables[table])).not.toContain(ids.old);
   expect(JSON.stringify(transferred.tables.floor_zones)).not.toContain(ids.oldZone);
   expect(transferred.tables.dining_tables!.map((row) => row.id)).toEqual([ids.table]);

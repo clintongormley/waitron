@@ -1537,7 +1537,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             profileId: device.deviceProfileId,
           });
         }
-        // Refuse an incomplete policy before offering its dishes.
         await VENUE_SERVICE.resolveSalePolicy(tx, context.zoneId);
         return {
           context,
@@ -1562,7 +1561,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         const tx = deps.db;
         await checkZones(tx, session, [{ zoneId }]);
         const context = await VENUE_SERVICE.resolveZoneContext(tx, zoneId);
-        // Refuse an incomplete policy before offering its dishes.
         await VENUE_SERVICE.resolveSalePolicy(tx, zoneId);
         return {
           context,

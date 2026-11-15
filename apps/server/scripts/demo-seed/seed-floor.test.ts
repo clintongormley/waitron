@@ -490,8 +490,7 @@ describe("seedFloor", () => {
         });
         const { rows } = await tx.execute<{ name: string; trading_name: string }>(
           sql`select d.name, d.trading_name from departments d
-              join department_sale_policies p on p.department_id = d.id
-               order by p.order_start desc`,
+               order by d.order_start desc`,
         );
         return rows;
       });

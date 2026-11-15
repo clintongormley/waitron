@@ -33,8 +33,8 @@ import {
   deactivateMenu,
 } from "@waitron/menu";
 import {
-  departmentSalePolicies,
   createServiceZone,
+  departments,
   menuPeriods,
   orderServiceContexts,
   replaceMenuWeek,
@@ -523,9 +523,9 @@ describe("service periods gate only added dishes and added stored quantities", (
 
   const savedTableDraft = async (v: Venue) => {
     await suite.db
-      .update(departmentSalePolicies)
+      .update(departments)
       .set({ orderStart: "table" })
-      .where(eq(departmentSalePolicies.departmentId, v.restaurant));
+      .where(eq(departments.id, v.restaurant));
     const { id: tableId } = await withTransaction(suite.db, (tx) =>
       createTable(tx, v.cfg, { label: "Late table", zoneId: v.diningZone }),
     );
@@ -1020,9 +1020,9 @@ describe("service periods gate only added dishes and added stored quantities", (
       let path: string;
       if (kind === "fired") {
         await suite.db
-          .update(departmentSalePolicies)
+          .update(departments)
           .set({ orderStart: "table" })
-          .where(eq(departmentSalePolicies.departmentId, v.restaurant));
+          .where(eq(departments.id, v.restaurant));
         const { id: tableId } = await withTransaction(suite.db, (tx) =>
           createTable(tx, v.cfg, { label: "Fired meal table", zoneId: v.diningZone }),
         );
@@ -1104,9 +1104,9 @@ describe("service periods gate only added dishes and added stored quantities", (
       at(mondayAt("13:50"));
       const v = await mealVenue();
       await suite.db
-        .update(departmentSalePolicies)
+        .update(departments)
         .set({ orderStart: "table" })
-        .where(eq(departmentSalePolicies.departmentId, v.restaurant));
+        .where(eq(departments.id, v.restaurant));
       const { id: tableId } = await withTransaction(suite.db, (tx) =>
         createTable(tx, v.cfg, { label: "Meal table", zoneId: v.diningZone }),
       );
@@ -1975,9 +1975,9 @@ describe("kitchen routing follows the period running when a dish goes on the ord
   async function cocktailVenue() {
     const v = await mealVenue();
     await suite.db
-      .update(departmentSalePolicies)
+      .update(departments)
       .set({ orderStart: "table" })
-      .where(eq(departmentSalePolicies.departmentId, v.restaurant));
+      .where(eq(departments.id, v.restaurant));
     const setup = await withTransaction(suite.db, async (tx) => {
       const periods = await tx
         .select()

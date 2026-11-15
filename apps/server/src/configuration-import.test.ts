@@ -273,8 +273,8 @@ describe("staged configuration import", () => {
   });
 
   it.each([
-    ["department_sale_policies", "tab"],
-    ["department_sale_policies", null],
+    ["departments", "tab"],
+    ["departments", null],
     ["floor_zones", ["counter"]],
     ["floor_zones", 1],
   ])("refuses malformed %s order start %j before replacing staged files", async (table, value) => {
@@ -719,7 +719,6 @@ describe("routing cells in a staged import", () => {
     ["departments", "active", 0],
     ["floor_zones", "active", 0],
     ["floor_zones", "department_id", "absent-deleted-parent"],
-    ["department_sale_policies", "department_id", "absent-deleted-parent"],
   ])(
     "refuses a deleted hierarchy bundle at staging and import: %s.%s",
     async (table, field, value) => {

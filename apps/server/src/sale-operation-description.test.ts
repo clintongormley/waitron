@@ -9,7 +9,6 @@ import {
   orderServiceContexts,
   saleReceiptHeaders,
   departmentReceipts,
-  departmentSalePolicies,
 } from "@waitron/venue-service";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 
@@ -43,9 +42,6 @@ async function fixture(nullHeader = false) {
     orderNumber: 1,
   });
   const zone = await seedZone(suite.db, { name: "Dining zone" });
-  await suite.db
-    .insert(departmentSalePolicies)
-    .values([{ departmentId: primary!.id }, { departmentId: fallback!.id }]);
   await suite.db
     .update(floorZones)
     .set({ departmentId: primary!.id })

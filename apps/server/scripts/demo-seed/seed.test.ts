@@ -542,9 +542,8 @@ describe("seedDemoRestaurant", () => {
         trading_name: string;
         order_start: string;
       }>(sql`
-        select d.name, d.trading_name, p.order_start
+        select d.name, d.trading_name, d.order_start
         from departments d
-        join department_sale_policies p on p.department_id = d.id
         order by d.name`);
       const { rows: serviceZoneRaw } = await tx.execute<{
         zone_name: string;
@@ -554,19 +553,18 @@ describe("seedDemoRestaurant", () => {
         menus: string;
       }>(sql`
         select z.name as zone_name, d.name as department_name,
-               coalesce(z.order_start, dp.order_start) as order_start,
+               coalesce(z.order_start, d.order_start) as order_start,
                z.is_counter_default,
                json_group_array(c.name order by dm.display_order, c.name) as menus
         from floor_zones z
         join departments d on d.id = z.department_id
-        join department_sale_policies dp on dp.department_id = d.id
         join (
           select department_id, menu_id, 0 as display_order from menu_periods
           union
           select department_id, menu_id, display_order + 1 from menu_period_staff_menus
         ) dm on dm.department_id = z.department_id
         join menus c on c.id = dm.menu_id
-        group by z.name, d.name, z.order_start, dp.order_start, z.is_counter_default
+        group by z.name, d.name, z.order_start, d.order_start, z.is_counter_default
         order by z.name`);
       const serviceZoneRows = serviceZoneRaw.map((row) => ({
         ...row,

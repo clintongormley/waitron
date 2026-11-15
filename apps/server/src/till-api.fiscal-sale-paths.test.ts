@@ -2327,8 +2327,8 @@ describe("handheld sales and device capability gates", () => {
   it("handheld and till placement files nothing; collection files each invoice under the collecting device with only payment permission", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     await suite.db.execute(sql`
-      update department_sale_policies set paid_when = 'ticket_then_pay'
-      where department_id in (select id from departments )`);
+      update departments set paid_when = 'ticket_then_pay'
+      where id in (select id from departments )`);
     const modeCfg: TradingContext = { ...cfg };
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();

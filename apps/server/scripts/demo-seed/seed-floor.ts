@@ -12,7 +12,6 @@ import {
 import {
   addStarterServiceSteps,
   createServiceZone,
-  departmentSalePolicies,
   departments,
   createFloorPlanSet,
   menuPeriods,
@@ -57,9 +56,9 @@ export async function seedFloor(
     set name = ${restaurantName}, trading_name = ${departmentTradingNames.restaurant}
     where id = ${defaultPolicy.department_id}`);
   await tx
-    .update(departmentSalePolicies)
+    .update(departments)
     .set({ orderStart: "table" })
-    .where(eq(departmentSalePolicies.departmentId, defaultPolicy.department_id));
+    .where(eq(departments.id, defaultPolicy.department_id));
   const [deliRow] = await tx
     .insert(departments)
     .values({
@@ -71,9 +70,6 @@ export async function seedFloor(
   const deliDepartmentId = deliRow?.id;
   if (deliDepartmentId === undefined)
     throw new Error("seedFloor: failed to create deli department");
-  await tx
-    .insert(departmentSalePolicies)
-    .values({ departmentId: deliDepartmentId, orderStart: "counter" });
   const courseDefaults = await tx
     .select({
       courseId: departmentCourses.courseId,

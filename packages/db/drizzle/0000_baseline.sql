@@ -2246,18 +2246,6 @@ CREATE TABLE `adjustment_lines` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `adjustment_lines_adjustment_line_key` ON `adjustment_lines` (`adjustment_id`,`line_id`);--> statement-breakpoint
 CREATE INDEX `adjustment_lines_line_idx` ON `adjustment_lines` (`line_id`);--> statement-breakpoint
-CREATE TABLE `department_sale_policies` (
-	`department_id` text PRIMARY KEY NOT NULL,
-	`order_start` text DEFAULT 'counter' NOT NULL,
-	`paid_when` text DEFAULT 'prepay' NOT NULL,
-	`collection_number` text DEFAULT 'none' NOT NULL,
-	`print_trading_name` integer DEFAULT true NOT NULL,
-	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "department_sale_policies_order_start_ck" CHECK("department_sale_policies"."order_start" in ('table', 'counter')),
-	CONSTRAINT "department_sale_policies_paid_when_ck" CHECK("department_sale_policies"."paid_when" in ('prepay', 'ticket_then_pay')),
-	CONSTRAINT "department_sale_policies_collection_number_ck" CHECK("department_sale_policies"."collection_number" in ('none', 'numbered'))
-);
---> statement-breakpoint
 CREATE TABLE `departments` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
@@ -2467,13 +2455,6 @@ CREATE TABLE `menu_periods` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `menu_periods_department_name_key` ON `menu_periods` (`department_id`,`name`);--> statement-breakpoint
 CREATE UNIQUE INDEX `menu_periods_department_key` ON `menu_periods` (`id`,`department_id`);--> statement-breakpoint
-CREATE TABLE `department_transfer_desks` (
-	`department_id` text PRIMARY KEY NOT NULL,
-	`receiving_profile_id` text NOT NULL,
-	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`receiving_profile_id`) REFERENCES `device_profiles`(`id`) ON UPDATE no action ON DELETE cascade
-);
---> statement-breakpoint
 CREATE TABLE `department_transfer_destinations` (
 	`source_department_id` text NOT NULL,
 	`destination_department_id` text NOT NULL,

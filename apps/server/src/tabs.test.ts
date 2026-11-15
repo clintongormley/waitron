@@ -1148,7 +1148,7 @@ describe("listTablesWithState (occupancy)", () => {
         })
         .returning({ id: departments.id });
       await tx.execute(
-        sql`insert into department_sale_policies (department_id, order_start) values (${department!.id}, 'table')`,
+        sql`update departments set order_start = 'table' where id = ${department!.id}`,
       );
       await tx.execute(sql`update floor_zones
         set department_id = ${department!.id}

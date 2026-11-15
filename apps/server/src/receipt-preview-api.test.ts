@@ -18,7 +18,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { isAppError } from "@waitron/shared";
-import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
+import { departments, departmentReceipts } from "@waitron/venue-service";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { mountReceiptPreviewApi, type ReceiptPreviewResponse } from "./receipt-preview-api.js";
 import type { TradingContext } from "./trading-context.js";
@@ -40,9 +40,9 @@ beforeAll(async () => {
   const [department] = await suite.db.select().from(departments);
   departmentId = department!.id;
   await suite.db
-    .update(departmentSalePolicies)
+    .update(departments)
     .set({ printTradingName: false })
-    .where(eq(departmentSalePolicies.departmentId, departmentId));
+    .where(eq(departments.id, departmentId));
   await seedVenueSettings(suite.db, {
     defaultContentLanguage: "es",
     contentLanguages: ["es", "ca", "gl", "eu"],

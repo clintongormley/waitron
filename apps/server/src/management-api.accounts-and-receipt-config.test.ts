@@ -8,7 +8,6 @@ import { createStaffApp } from "./cloud-remote.js";
 import {
   departments,
   departmentReceipts,
-  departmentSalePolicies,
   readPrintedDepartmentReceipt,
 } from "@waitron/venue-service";
 /**
@@ -2309,12 +2308,9 @@ async function departmentFixture(active = true): Promise<string> {
       name: `Receipt ${randomUUID()}`,
       tradingName: "Receipt",
       active,
+      ...RECEIPT_POLICY,
     })
     .returning();
-  await suite.db.insert(departmentSalePolicies).values({
-    departmentId: row!.id,
-    ...RECEIPT_POLICY,
-  });
   return row!.id;
 }
 async function putTrim(app: Hono, cookie: string, path: string, body: unknown): Promise<Response> {
