@@ -23,7 +23,7 @@ afterEach(async () => {
 describe.each(["en", "es"] as const)("table menu with no pending dishes in %s", (locale) => {
   describe.each(["light", "dark"] as const)("%s", (theme) => {
     it.each([390, 1280])(
-      "keeps the total and Sent details without an empty To serve card at %i",
+      "keeps the total and Sent details without a pending-dishes card at %i",
       async (width) => {
         setLocale(locale);
         await page.viewport(width, 1000);

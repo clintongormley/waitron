@@ -2053,7 +2053,8 @@ Printer identity is separate from the till route inventory.
 ## Bundle: Small till and floor wording fixes
 
 5 entries, size M. Four keep their text from the index they came from (backlog review, 2026-11-06);
-the remaining till unit and tab edges joined on 2026-11-12.
+the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A1107 (the floor) and A1108
+(the order screen's Sent panel) wait for the owner's redesign of the table screens (watcher, 2026-11-15).
 
 - **Remaining till unit and tab edges (A379/A385 run-it review).** The Kitchen
   title stays English in a synthetic Spanish probe; legacy unit maps cover English and Spanish only.
