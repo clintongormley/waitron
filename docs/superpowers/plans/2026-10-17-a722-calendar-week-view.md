@@ -1,5 +1,9 @@
 # A722 — a Week view in the Calendar — Implementation Plan
 
+_2026-11-15, A1546 slice 1 supersedes the Calendar default-station marker, combined station rows,
+No orders wording and Month Show-all restriction described below. See
+[the current Calendar contract](../../developers/design-system.md#calendar)._
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use
 > checkbox (`- [ ]`) syntax for tracking. Every implementer is dispatched as

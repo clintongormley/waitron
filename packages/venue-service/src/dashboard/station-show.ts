@@ -16,7 +16,6 @@ export interface ShowStation {
 }
 export type StationShow =
   | { id: string; state: "loading" }
-  | { id: string; state: "always" }
   | {
       id: string;
       state: "ready";
@@ -43,8 +42,7 @@ export function monthWeeks(month: string): [LocalDate, LocalDate] {
   return [addDays(first, -((weekdayOf(first) + 6) % 7)), addDays(last, (7 - weekdayOf(last)) % 7)];
 }
 
-/** Department rows follow the month read's order; a station row combines every sender.
- *  Both reads must cover the same dates. */
+/** Both reads must cover the same dates; sending departments keep the month read's order. */
 export function stationShowModel(
   meta: OpeningHoursMonth,
   times: StationServiceTimes,
@@ -62,7 +60,9 @@ export function stationShowModel(
   const fed = [
     ...new Set(times.days.flatMap((day) => day.departments.map((row) => row.departmentId))),
   ].sort((a, b) => rank(a) - rank(b));
-  const perDepartment = rowsBy === "department";
+  const grouped = rowsBy === "station" && fed.length > 1;
+  const perDepartment = rowsBy === "department" || grouped;
+  const key = (id: string) => (grouped ? `${station.id}:${id}` : id);
   const rows = perDepartment ? fed : [station.id];
   const model: OpeningHoursMonth = {
     ...meta,
@@ -73,7 +73,7 @@ export function stationShowModel(
       return {
         ...day,
         departments: rows.map((id) => ({
-          departmentId: id,
+          departmentId: key(id),
           zones: [],
           ranges: sent
             .filter((row) => !perDepartment || row.departmentId === id)
@@ -86,7 +86,10 @@ export function stationShowModel(
   const plain = ({ id, name, colour }: TimesPeriod) => ({ id, name, colour });
   const departments: MonthDepartment[] = perDepartment
     ? fed.map((id) => ({
-        id,
+        id: key(id),
+        ...(grouped
+          ? { stationChild: true, ...(id === fed[0] ? { stationHeading: station.name } : {}) }
+          : {}),
         name: periods.find((period) => period.departmentId === id)?.departmentName ?? "",
         zones: [],
         periods: periods.filter((period) => period.departmentId === id).map(plain),

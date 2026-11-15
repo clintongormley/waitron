@@ -116,7 +116,6 @@ async function fixture(db: Transaction) {
   };
 }
 const planned = (f: Awaited<ReturnType<typeof fixture>>, ranges = [f.lunchRange]) => ({
-  always: null,
   days: [{ date: day, departments: [{ departmentId: f.department, ranges }] }],
 });
 const specialDay = (db: Transaction, input: SpecialDayInput) =>
@@ -280,12 +279,24 @@ it("keeps separate surviving segments around a zone closure", async () =>
       ]),
     );
   }));
-it("answers default without a grid", async () =>
+it("shows dated default demand and respects a whole-venue closure", async () =>
   tx(async (db) => {
     const f = await fixture(db);
+    await clearRoutingCell(db, {
+      row: { kind: "category", categoryId: f.category },
+      zoneId: f.terrace,
+    });
+    expect(await stationServiceTimes(db, f.defaultStation, day, day)).toEqual(
+      planned(f, [f.lunchRange, { periodId: f.afternoon, startsAt: "16:00", endsAt: "18:00" }]),
+    );
+    await specialDay(db, {
+      name: "Closed",
+      repeatsYearly: false,
+      dates: [{ date: day, closedAllDay: true }],
+      paint: [],
+    });
     expect(await stationServiceTimes(db, f.defaultStation, day, day)).toEqual({
-      always: "default",
-      days: [],
+      days: [{ date: day, departments: [] }],
     });
   }));
 it("refuses a deleted station instead of showing a switched-off grid", async () => {
@@ -332,7 +343,7 @@ it.each([
       );
     expect(
       await stationServiceTimes(db, kind === "unrouted" ? f.unused : f.station, day, day),
-    ).toEqual({ always: null, days: [{ date: day, departments: [] }] });
+    ).toEqual({ days: [{ date: day, departments: [] }] });
   }),
 );
 it("planning ignores a station's daily closure", async () =>
@@ -363,7 +374,7 @@ it("allows exactly 42 days, keeping closed dates in order", async () =>
   tx(async (db) => {
     const f = await fixture(db);
     const result = await stationServiceTimes(db, f.unused, day, "2026-11-22");
-    expect(result.always).toBeNull();
+    expect(result).not.toHaveProperty("always");
     expect(result.days).toHaveLength(42);
     expect(result.days[0]).toEqual({ date: day, departments: [] });
     expect(result.days[41]).toEqual({ date: "2026-11-22", departments: [] });
@@ -415,7 +426,6 @@ it("a repeating special day uses its occurrence, with an unpainted department st
       ],
     });
     expect(await stationServiceTimes(db, f.station, "2037-10-12", "2037-10-12")).toEqual({
-      always: null,
       days: [
         {
           date: "2037-10-12",
@@ -474,7 +484,6 @@ it("keeps each active department's ranges, cut by its own zone", async () =>
       1,
     );
     expect(await stationServiceTimes(db, f.station, day, day)).toEqual({
-      always: null,
       days: [
         {
           date: day,
@@ -494,7 +503,6 @@ it("reads the last valid calendar date without stepping beyond its requested ran
   tx(async (db) => {
     const f = await fixture(db);
     expect(await stationServiceTimes(db, f.unused, "9999-12-31", "9999-12-31")).toEqual({
-      always: null,
       days: [{ date: "9999-12-31", departments: [] }],
     });
   }));
@@ -508,7 +516,6 @@ it("applies a special day's closure to the date it stands on", async () =>
       dates: [{ date: day, closedAllDay: true }],
     });
     expect(await stationServiceTimes(db, f.station, day, day)).toEqual({
-      always: null,
       days: [{ date: day, departments: [] }],
     });
   }));
@@ -528,7 +535,6 @@ it("clamps a station forecast to the following dated start", async () =>
       dayCutover: "03:00:00",
     });
     expect(await stationServiceTimes(db, f.station, day, "2026-10-13")).toEqual({
-      always: null,
       days: [
         {
           date: day,
@@ -599,7 +605,6 @@ it("shows Winter's Monday Lunch on 2 December only, reading each date's own seas
     const f = await fixture(db);
     await winterLunchOnly(db, f);
     expect(await stationServiceTimes(db, f.station, "2030-11-25", "2030-12-02")).toEqual({
-      always: null,
       days: seasonDates.map(lunchOn(f, ["2030-12-02"])),
     });
   }));
@@ -617,7 +622,6 @@ it("cuts Lunch by the zone's closure in each date's own season", async () =>
       { seasonId: seasonId("Winter") },
     );
     expect(await stationServiceTimes(db, f.station, "2030-11-25", "2030-12-02")).toEqual({
-      always: null,
       days: seasonDates.map(lunchOn(f, ["2030-11-25"])),
     });
   }));
@@ -809,9 +813,9 @@ it("reads every active station through one dated planning batch", async () =>
     const spy = vi.spyOn(session, "prepareQuery");
     try {
       expect(await stationsServiceTimes(db, day, day)).toEqual({
-        [f.defaultStation]: { always: "default", days: [] },
+        [f.defaultStation]: { days: [{ date: day, departments: [] }] },
         [f.station]: planned(f),
-        [f.unused]: { always: null, days: [{ date: day, departments: [] }] },
+        [f.unused]: { days: [{ date: day, departments: [] }] },
       });
       const texts = spy.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
       for (const table of ["menu_periods", "routing_cells"])

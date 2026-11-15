@@ -86,9 +86,8 @@ const STATIONS = [
   { id: "s1", name: "Grill", active: true, isDefault: false, displayOrder: 1 },
 ];
 /** The Grill's days from `from` to `to`: the Restaurant sends it lunch, the Bar all day. The
- *  default station is always open. */
-function stationTimes(stationId: string, from: string, to: string) {
-  if (stationId === "s2") return { always: "default", days: [] };
+ *  default station uses the same dated demand fixture. */
+function stationTimes(_stationId: string, from: string, to: string) {
   const days = [];
   for (let date = from; date <= to; date = addDays(date, 1))
     days.push({
@@ -107,7 +106,7 @@ function stationTimes(stationId: string, from: string, to: string) {
               },
             ],
     });
-  return { always: null, days };
+  return { days };
 }
 interface Answers {
   stations?: typeof STATIONS;
@@ -828,6 +827,7 @@ describe("a prep station in the Calendar", () => {
         label: "Alpha",
         depth: 1,
         icon: "prep-station",
+        iconPosition: "end",
         iconLabel: "Prep station",
       },
       {
@@ -835,6 +835,7 @@ describe("a prep station in the Calendar", () => {
         label: "Bar",
         depth: 1,
         icon: "prep-station",
+        iconPosition: "end",
         iconLabel: "Prep station",
       },
       {
@@ -842,6 +843,7 @@ describe("a prep station in the Calendar", () => {
         label: "Zulu",
         depth: 1,
         icon: "prep-station",
+        iconPosition: "end",
         iconLabel: "Prep station",
       },
     ];
@@ -939,11 +941,12 @@ describe("a prep station in the Calendar", () => {
     expect(timesReads(paths)).toEqual([]);
   });
 
-  it("the default station reads Always open", async () => {
+  it("the default station draws its dated department demand", async () => {
     const { el } = await mount("/manage/opening-hours/view/week/station/s2/week/2026-12-09");
-    await expect.poll(() => week(el)!.station?.state).toBe("always");
+    await expect.poll(() => week(el)!.station?.state).toBe("ready");
     await week(el)!.updateComplete;
-    expect(week(el)!.shadowRoot!.querySelector("[data-test=always-open]")).not.toBeNull();
+    expect(week(el)!.shadowRoot!.querySelector('[data-row="rest"] .block')).not.toBeNull();
+    expect(week(el)!.shadowRoot!.querySelector("[data-test=always-open]")).toBeNull();
   });
 
   it.each([
@@ -1124,21 +1127,32 @@ describe("a prep station in the Calendar", () => {
 
 it("Show all draws departments before stations, preserves department actions and remembers its address through Month", async () => {
   const { el, paths } = await mount("/manage/opening-hours/view/week/show/all/week/2026-12-09");
-  await expect.poll(() => week(el)!.shadowRoot!.querySelector('[data-row="s1"]')).not.toBeNull();
+  await expect
+    .poll(() => week(el)!.shadowRoot!.querySelector('[data-row="s1:rest"]'))
+    .not.toBeNull();
   const rows = () => [
     ...week(el)!
       .shadowRoot!.querySelector('[data-date="2026-12-09"]')!
       .querySelectorAll<HTMLElement>(".row"),
   ];
-  expect(rows().map((row) => row.dataset.row)).toEqual(["rest", "bar", "s2", "s1"]);
+  expect(rows().map((row) => row.dataset.row)).toEqual([
+    "rest",
+    "bar",
+    "s2:rest",
+    "s2:bar",
+    "s1:rest",
+    "s1:bar",
+  ]);
   expect(paths.filter((path) => path.includes("service-times?"))).toEqual([
     "/management-api/venue-service/stations/service-times?from=2026-11-30&to=2027-01-03",
   ]);
-  expect(rows().at(-1)!.querySelector('wt-icon[name="prep-station"]')).not.toBeNull();
+  expect(
+    week(el)!.shadowRoot!.querySelector('.station-heading wt-icon[name="prep-station"]'),
+  ).not.toBeNull();
   dayName(el, "2026-12-09").click();
   await expect.poll(() => boxOpen(el)).toBe(true);
   expect(boxButtons(el)).toContain("Make a special day");
-  expect(dayBox(el)!.querySelector('a[href="/manage/periods"]')).not.toBeNull();
+  expect(dayBox(el)!.querySelector('a[href="/manage/periods"]')).toBeNull();
   expect(
     dayBox(el)!
       .rows.filter((row) => row.station)
@@ -1149,14 +1163,14 @@ it("Show all draws departments before stations, preserves department actions and
   monthLink(el, "2026-12").click();
   await expect.poll(() => monthView(el)?.model).toBeDefined();
   expect(location.pathname).toContain("/show/all");
-  expect(monthView(el)!.station).toBeUndefined();
+  expect(monthView(el)!.station).toMatchObject({ state: "ready", mixed: true });
   const optionValues = monthView(el)!
     .shadowRoot!.querySelector("wt-combobox")!
     .options.map((row) => row.value);
-  expect(optionValues).not.toContain("show:all");
+  expect(optionValues).toContain("show:all");
   history.back();
   await expect
-    .poll(() => week(el)?.shadowRoot!.querySelector('[data-row="s1"]') ?? null)
+    .poll(() => week(el)?.shadowRoot!.querySelector('[data-row="s1:rest"]') ?? null)
     .not.toBeNull();
   expect(week(el)!.shadowRoot!.querySelector("wt-combobox")!.value).toBe("show:all");
 });
@@ -1192,7 +1206,7 @@ it("choosing a group, station or department keeps only that choice in the addres
         .shadowRoot!.querySelector('section[data-date="2026-12-09"]')!
         .querySelectorAll<HTMLElement>(".row"),
     ].map((row) => row.dataset.row),
-  ).toEqual(["s2", "s1"]);
+  ).toEqual(["s2:rest", "s2:bar", "s1:rest", "s1:bar"]);
   chooseShown(el, "station:s1");
   await expect
     .poll(() => location.pathname)
@@ -1228,7 +1242,7 @@ it("keeps loaded departments visible when Show all's station times fail, then ad
   await expect.poll(() => boxOpen(el)).toBe(false);
   answers.timesFail = undefined;
   el.api.rereadWatches();
-  await expect.poll(rows).toEqual(["rest", "bar", "s2", "s1"]);
+  await expect.poll(rows).toEqual(["rest", "bar", "s2:rest", "s2:bar", "s1:rest", "s1:bar"]);
   expect(el.shadowRoot!.querySelector('[data-test="station-read-error"]')).toBeNull();
 });
 
@@ -1246,7 +1260,7 @@ it("keeps departments distinct from station orders on a closed phone day, and ke
   chooseShown(el, "show:stations");
   await expect
     .poll(() => [...card().querySelectorAll<HTMLElement>(".row")].map((item) => item.dataset.row))
-    .toEqual(["s2", "s1"]);
-  expect(words("s2").textContent).toBe("Always open: this is the default station");
-  expect(words("s1").textContent).toBe("No orders");
+    .toEqual(["s2:rest", "s2:bar", "s1:rest", "s1:bar"]);
+  for (const id of ["s2:rest", "s2:bar", "s1:rest", "s1:bar"])
+    expect(words(id).textContent).toBe("Closed");
 });

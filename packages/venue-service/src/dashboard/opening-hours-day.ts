@@ -21,7 +21,8 @@ export interface OpeningHoursDay {
 export interface MonthNames {
   name(id: string): string;
   station(id: string): boolean;
-  always(id: string): boolean;
+  stationHeading(id: string): string;
+  stationChild(id: string): boolean;
   period(id: string): { name: string; colour?: string };
 }
 
@@ -36,7 +37,8 @@ export function monthNames(departments: readonly MonthDepartment[]): MonthNames 
   return {
     name: (id) => named.get(id) ?? "",
     station: (id) => departments.some((d) => d.id === id && d.station),
-    always: (id) => departments.some((d) => d.id === id && d.always),
+    stationHeading: (id) => departments.find((d) => d.id === id)?.stationHeading ?? "",
+    stationChild: (id) => Boolean(departments.find((d) => d.id === id)?.stationChild),
     period: (id) => periods.get(id) ?? { name: "" },
   };
 }

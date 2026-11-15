@@ -22,9 +22,9 @@ Paint the zone’s whole **Closed** stretch, even past its department’s curren
 
 ## Compare prep-station hours {#station-hours}
 
-In Month or Week, choose **All prep stations** in **Show** to compare stations, or choose one station to see which departments send it orders. In Week, choose **Show all** to see departments followed by stations. The station icon distinguishes them from zones with similar names.
+In Month or Week, choose **All prep stations** in **Show** to compare stations by sending department, or choose one station to see which departments send it orders. Choose **Show all** to see departments followed by stations. The station icon distinguishes them from zones with similar names.
 
-Station hours follow your painted periods, their menus, routing and the closures of sending zones. To change when a station gets orders, edit its periods and menus in **Periods**, its routes in **Prep stations**, or the closing times of the zones that send to it. The default station is always open.
+Station hours follow your painted periods, their menus, routing and the closures of sending zones. To change when a station gets orders, edit its periods and menus in **Periods**, its routes in **Prep stations**, or the closing times of the zones that send to it. The default station shows the periods that send it orders too.
 
 ## Select days together {#select-days}
 

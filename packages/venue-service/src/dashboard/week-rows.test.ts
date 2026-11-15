@@ -223,7 +223,7 @@ describe("weekStationRows", () => {
       name: "Bar",
       blocks: [],
       empty: "",
-      words: "No orders",
+      words: "Closed",
     });
   });
 
@@ -237,13 +237,13 @@ describe("weekStationRows", () => {
     expect(weekStationRows(withZone, names).map((r) => r.key)).toEqual(["rest", "bar"]);
   });
 
-  it("reads No orders on a date closed all day too, and in Spanish", () => {
+  it("reads Closed on a date closed all day too, and in Spanish", () => {
     const christmas = monthModel().days.find((d) => d.date === "2026-12-25")!;
     const closed = { ...christmas, departments: [{ departmentId: "rest", zones: [], ranges: [] }] };
-    expect(weekStationRows(closed, names)[0]).toMatchObject({ empty: "", words: "No orders" });
+    expect(weekStationRows(closed, names)[0]).toMatchObject({ empty: "", words: "Closed" });
     setLocale("es");
     try {
-      expect(weekStationRows(grillDay(), names)[1]!.words).toBe("Sin pedidos");
+      expect(weekStationRows(grillDay(), names)[1]!.words).toBe("Cerrada");
     } finally {
       setLocale("en");
     }

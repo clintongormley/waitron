@@ -45,6 +45,42 @@ test.each(["field", "link"])(
   },
 );
 
+test.each(["field", "link"])(
+  "can put an icon after its label in the %s trigger and option",
+  async (appearance) => {
+    registerIcons({ "test-station": "M1 1H15V15H1Z" });
+    const { el, trigger } = await mountCombobox(
+      `<wt-combobox label="Show" appearance="${appearance}"></wt-combobox>`,
+    );
+    el.options = [
+      {
+        value: "station",
+        label: "Bar",
+        icon: "test-station",
+        iconLabel: "Prep station",
+        iconPosition: "end",
+      },
+    ];
+    el.value = "station";
+    await el.updateComplete;
+    const label = trigger.querySelector<HTMLElement>(".value")!;
+    const icon = trigger.querySelector<HTMLElement>(".icon")!;
+    expect(icon.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+      label.getBoundingClientRect().right,
+    );
+    await expect.element(trigger).toHaveAccessibleName(/Bar.*Prep station/);
+    trigger.click();
+    await el.updateComplete;
+    const option = el.shadowRoot!.querySelector<HTMLElement>('[role="option"]')!;
+    expect(
+      option
+        .querySelector(".option-label")!
+        .compareDocumentPosition(option.querySelector(".icon")!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    await expect.element(option).toHaveAccessibleName(/Bar.*Prep station/);
+  },
+);
+
 test("the closed field gives its chevron a larger slot", async () => {
   const { el } = await mountCombobox();
   const chevron = el.shadowRoot!.querySelector<HTMLElement>(".chevron")!;

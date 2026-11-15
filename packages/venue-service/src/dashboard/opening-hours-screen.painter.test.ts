@@ -46,7 +46,6 @@ function request(model: () => OpeningHoursModel, writes: unknown[] = []): Dashbo
       return [{ periodId: "p1", seasons: [{ id: "spring", name: "Spring" }], specialDays: [] }];
     if (path.includes("/service-times?"))
       return {
-        always: null,
         days: Array.from({ length: 7 }, (_, index) => ({
           date: `2026-12-${14 + index}`,
           departments: [],

@@ -1,5 +1,10 @@
 # A725 Prep Stations Implementation Plan
 
+_2026-11-15, A1546 slice 1 changes the Calendar presentation described below: default-station
+reads now carry dated demand, station comparisons retain separate sending departments, and
+Calendar uses Closed. The Staffing guide-band wording is unchanged. See
+[the current Calendar contract](../../developers/design-system.md#calendar)._
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan inline, task by task. Native execution is authorised; no brainstorm or plan-approval gate. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Deliver all seven A725 requirements: sidebar placement, two tabs, name ordering, unused default colours, row swatches, clearer editing, and the shared popup chooser.

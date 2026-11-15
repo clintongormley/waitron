@@ -12,7 +12,6 @@ export interface StationServiceDay {
   readonly departments: readonly { departmentId: string; ranges: readonly ServiceRange[] }[];
 }
 export interface StationServiceTimes {
-  readonly always: "default" | null;
   readonly days: readonly StationServiceDay[];
 }
 
@@ -36,11 +35,10 @@ export async function stationServiceTimes(
 ): Promise<StationServiceTimes> {
   const dates = serviceDates(from, to);
   const [station] = await tx
-    .select({ active: kitchenStations.active, isDefault: kitchenStations.isDefault })
+    .select({ id: kitchenStations.id })
     .from(kitchenStations)
     .where(and(eq(kitchenStations.id, stationId), eq(kitchenStations.active, true)));
   if (!station) throw new AppError("station.not_found", { stationId });
-  if (station.isDefault) return { always: "default", days: [] };
 
   const clock = await readVenueClock(tx);
   const guides = await readPlannedServiceGuides(tx, [stationId], {
@@ -49,7 +47,6 @@ export async function stationServiceTimes(
     clock,
   });
   return {
-    always: null,
     days: dates.map((date) => ({
       date,
       departments: guides.stationRanges.get(stationId)!.get(date)!,
@@ -64,27 +61,24 @@ export async function stationsServiceTimes(
 ): Promise<StationsServiceTimes> {
   const dates = serviceDates(from, to);
   const stations = await tx
-    .select({ id: kitchenStations.id, isDefault: kitchenStations.isDefault })
+    .select({ id: kitchenStations.id })
     .from(kitchenStations)
     .where(eq(kitchenStations.active, true));
   const clock = await readVenueClock(tx);
   const guides = await readPlannedServiceGuides(
     tx,
-    stations.filter((station) => !station.isDefault).map((station) => station.id),
+    stations.map((station) => station.id),
     { kind: "dates", dates, clock },
   );
   return Object.fromEntries(
     stations.map((station) => [
       station.id,
-      station.isDefault
-        ? { always: "default", days: [] }
-        : {
-            always: null,
-            days: dates.map((date) => ({
-              date,
-              departments: guides.stationRanges.get(station.id)!.get(date)!,
-            })),
-          },
+      {
+        days: dates.map((date) => ({
+          date,
+          departments: guides.stationRanges.get(station.id)!.get(date)!,
+        })),
+      },
     ]),
   );
 }

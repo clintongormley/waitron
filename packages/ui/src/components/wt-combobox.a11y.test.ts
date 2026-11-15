@@ -85,12 +85,18 @@ const WITH_DISABLED: ComboboxOption[] = [
 ];
 
 describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme) => {
-  test.each(["field", "link"])("picked named icon, %s", async (appearance) => {
+  test.each(
+    ["field", "link"].flatMap((appearance) =>
+      [undefined, "end" as const].map((iconPosition) => ({ appearance, iconPosition })),
+    ),
+  )("picked named icon, $appearance/$iconPosition", async ({ appearance, iconPosition }) => {
     const el = (await mountThemed(
       `<wt-combobox label="Show" appearance="${appearance}"></wt-combobox>`,
       theme,
     )) as WtCombobox;
-    el.options = [{ value: "station", label: "Bar", icon: "leaf", iconLabel: "Prep station" }];
+    el.options = [
+      { value: "station", label: "Bar", icon: "leaf", iconLabel: "Prep station", iconPosition },
+    ];
     el.value = "station";
     await el.updateComplete;
     await expectNoA11yViolations(host);

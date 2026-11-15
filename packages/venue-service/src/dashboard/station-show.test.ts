@@ -35,7 +35,6 @@ function times(
   departments: StationServiceTimes["days"][number]["departments"],
 ): StationServiceTimes {
   return {
-    always: null,
     days: monthModel().days.map((day) => ({ date: day.date, departments })),
   };
 }
@@ -72,26 +71,26 @@ describe("stationShowModel", () => {
     ]);
   });
 
-  it("combines two senders into one named station row for station comparisons", () => {
+  it("keeps simultaneous senders separate under one station heading for comparisons", () => {
     const read = times([
-      { departmentId: "bar", ranges: [LATE, ALL_DAY] },
+      { departmentId: "bar", ranges: [ALL_DAY] },
       { departmentId: "rest", ranges: [DINNER] },
     ]);
     const shown = stationShowModel(monthModel(), read, STATION, PERIODS, "station")!;
-    expect(shown.departments).toEqual([
-      {
-        id: "pass",
-        name: "Pass",
-        zones: [],
-        periods: [
-          { id: "lunch", name: "Lunch", colour: "green" },
-          { id: "dinner", name: "Dinner", colour: "red" },
-          { id: "allday", name: "All day", colour: "purple" },
-        ],
-      },
+    expect(
+      shown.departments.map(({ id, name, stationHeading, stationChild }) => ({
+        id,
+        name,
+        stationHeading,
+        stationChild,
+      })),
+    ).toEqual([
+      { id: "pass:rest", name: "Restaurant", stationHeading: "Pass", stationChild: true },
+      { id: "pass:bar", name: "Bar", stationHeading: undefined, stationChild: true },
     ]);
     expect(shown.model.days[3]!.departments).toEqual([
-      { departmentId: "pass", zones: [], ranges: [ALL_DAY, DINNER, LATE] },
+      { departmentId: "pass:rest", zones: [], ranges: [DINNER] },
+      { departmentId: "pass:bar", zones: [], ranges: [ALL_DAY] },
     ]);
   });
 

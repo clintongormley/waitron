@@ -21,7 +21,7 @@ const base = "/management-api/venue-service";
 
 it("watches all stations in one passive read, including station-list and routing changes", async () => {
   const live = new LiveData();
-  const request = vi.fn(async () => ({ grill: { always: null, days: [] } }));
+  const request = vi.fn(async () => ({ grill: { days: [] } }));
   const api = new OpeningHoursApi(request as DashboardRequest, live);
   const received: unknown[] = [];
   const stop = api.watchStationsTimes(
@@ -495,7 +495,6 @@ it.each(["sections", "section_members", "menus"])(
   async (type) => {
     const live = new LiveData();
     const before = {
-      always: null,
       days: [
         "2026-10-12",
         "2026-10-13",
@@ -507,7 +506,6 @@ it.each(["sections", "section_members", "menus"])(
       ].map((date) => ({ date, departments: [] })),
     };
     const after = {
-      always: null,
       days: [
         {
           date: "2026-10-12",
@@ -547,9 +545,8 @@ it.each(["settings.venue", "taxpayer"])(
   "re-reads station times when %s changes, as the public holidays a date follows come from it",
   async (type) => {
     const live = new LiveData();
-    const before = { always: null, days: [{ date: "2026-10-12", departments: [] }] };
+    const before = { days: [{ date: "2026-10-12", departments: [] }] };
     const after = {
-      always: null,
       days: [
         {
           date: "2026-10-12",

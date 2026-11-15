@@ -4,16 +4,13 @@ import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import type { MonthNames } from "./opening-hours-day.js";
 import type { ShowStation } from "./station-show.js";
 import { t } from "./strings.js";
-import { periodsPath } from "./opening-hours-paths.js";
 
 const ALL = "all";
 const STATION = "station:";
 export type CalendarShow = "" | "stations" | "all";
 
 export const stationExplanation = () =>
-  html`<p data-test="station-explanation">
-    ${t("opening.station_hours")} <a href=${periodsPath}>${t("period.title")}</a>
-  </p>`;
+  html`<p data-test="station-explanation">${t("opening.station_hours")}</p>`;
 
 export function showPicker(options: {
   model: OpeningHoursMonth;
@@ -24,7 +21,6 @@ export function showPicker(options: {
   stationId: string;
   onStation: (stationId: string) => void;
   show?: CalendarShow;
-  week?: boolean;
   onShow?: (show: CalendarShow) => void;
 }): TemplateResult {
   const { model, chosen, names, onDepartment, stations, stationId, onStation } = options;
@@ -33,11 +29,13 @@ export function showPicker(options: {
     : options.show
       ? `show:${options.show}`
       : chosen || ALL;
-  const stationMark = { icon: "prep-station", iconLabel: t("opening.prep_station") };
+  const stationMark = {
+    icon: "prep-station",
+    iconPosition: "end" as const,
+    iconLabel: t("opening.prep_station"),
+  };
   const choices = [
-    ...(options.week && stations.length
-      ? [{ value: "show:all", fixed: true, label: t("opening.show_all") }]
-      : []),
+    ...(stations.length ? [{ value: "show:all", fixed: true, label: t("opening.show_all") }] : []),
     { value: ALL, fixed: true, label: t("opening.all_departments") },
     ...model.days[0]!.departments.map((d) => ({
       value: d.departmentId,

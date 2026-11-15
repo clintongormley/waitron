@@ -29,7 +29,13 @@ export function dateAroundDay(
   date: string,
   formatter: Intl.DateTimeFormat,
 ): { before: string; after: string } {
-  const parts = formatter.formatToParts(utc(date));
+  const parts = formatter
+    .formatToParts(utc(date))
+    .map((part) =>
+      part.type === "month" && formatter.resolvedOptions().month === "short"
+        ? { ...part, value: part.value.slice(0, 3) }
+        : part,
+    );
   const at = parts.findIndex((part) => part.type === "day");
   const text = (some: Intl.DateTimeFormatPart[]) => some.map((part) => part.value).join("");
   return { before: text(parts.slice(0, at)), after: text(parts.slice(at + 1)) };
@@ -41,16 +47,23 @@ export const mondayFirst = (index: number) => new Date(A_MONDAY + index * DAY_MS
 /** A day of a week by its JavaScript weekday, Sunday 0. */
 export const weekdayDate = (weekday: number) => mondayFirst((weekday + 6) % 7);
 
-/** A leap year, so a season ending 29 February reads as itself. */
+export const calendarDate = (date: string, options: Intl.DateTimeFormatOptions) =>
+  dateFormat(options)
+    .formatToParts(utc(date))
+    .map((part) =>
+      part.type === "month" && options.month === "short" ? part.value.slice(0, 3) : part.value,
+    )
+    .join("");
+/** A leap year lets a season end on 29 February. */
 export const monthDay = (md: string) =>
-  dateFormat({ day: "numeric", month: "short" }).format(utc(`2000-${md}`));
+  calendarDate(`2000-${md}`, { day: "numeric", month: "short" });
 
 /** A date's short weekday, day and month, without the separators a locale puts between them. */
 export const dateLabel = (date: string) =>
   dateFormat({ weekday: "short", day: "numeric", month: "short" })
     .formatToParts(utc(date))
     .filter(({ type }) => type !== "literal")
-    .map(({ value }) => value)
+    .map(({ type, value }) => (type === "month" ? value.slice(0, 3) : value))
     .join(" ");
 
 /** A week's title in parts, "30 Nov – 6 Dec 2026", from its Monday, in `language`, else the
@@ -65,7 +78,7 @@ export function weekTitleParts(
     .formatRangeToParts(utc(monday), utc(sunday))
     .map(({ type, value, source }) =>
       type === "month"
-        ? { text: value, month: (source === "endRange" ? sunday : monday).slice(0, 7) }
+        ? { text: value.slice(0, 3), month: (source === "endRange" ? sunday : monday).slice(0, 7) }
         : { text: value },
     );
 }

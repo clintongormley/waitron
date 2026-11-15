@@ -7,7 +7,7 @@ import { DEPARTMENTS, monthModel } from "../testing/opening-hours-month-fixture.
 import { flatParent } from "./flat-tree.js";
 import type { OpeningHoursWeekView } from "./opening-hours-week.js";
 import "./opening-hours-week.js";
-import type { StationShow } from "./station-show.js";
+import { stationShowModel, type StationShow } from "./station-show.js";
 
 afterEach(() => {
   cleanup();
@@ -102,10 +102,6 @@ const states: Record<
     },
     shown: ['wt-icon[name="prep-station"]', ".block", "wt-combobox"],
   },
-  "a station always open": {
-    props: { date: "2026-12-02", stations: STATIONS, station: { id: "grill", state: "always" } },
-    shown: ['[data-test="always-open"]', "wt-combobox"],
-  },
 };
 
 describe.each(["light", "dark"] as const)("Opening hours week accessibility (%s)", (theme) => {
@@ -128,6 +124,40 @@ describe.each(["light", "dark"] as const)("Opening hours week accessibility (%s)
     expect(
       contrastRatio(getComputedStyle(track).backgroundColor, behind(track)),
     ).toBeGreaterThanOrEqual(1.4);
+  });
+
+  test.each([390, 1280])("grouped station senders at %s pixels", async (width) => {
+    await page.viewport(width, 800);
+    const model = monthModel();
+    const grouped = stationShowModel(
+      model,
+      { days: model.days.map((day) => ({ date: day.date, departments: day.departments })) },
+      STATIONS[0]!,
+      DEPARTMENTS.flatMap((department) =>
+        department.periods.map((period) => ({
+          ...period,
+          departmentId: department.id,
+          departmentName: department.name,
+        })),
+      ),
+      "station",
+    )!;
+    const el = await mountWeek(theme, {
+      date: "2026-12-02",
+      stations: STATIONS,
+      show: "stations",
+      station: {
+        id: "",
+        state: "ready",
+        ...grouped,
+        departments: grouped.departments.map((row) => ({ ...row, station: true })),
+      },
+    });
+    expect(el.shadowRoot!.querySelector(".station-heading")?.textContent).toContain("Grill");
+    expect(el.shadowRoot!.querySelectorAll("[data-station-child]")).toHaveLength(
+      width === 390 ? 2 : 14,
+    );
+    await expectNoA11yViolations(host);
   });
 
   test.each(Object.keys(states))("%s", async (state) => {

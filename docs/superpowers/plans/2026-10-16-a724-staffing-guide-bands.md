@@ -1,5 +1,10 @@
 # A724 Part 1: staffing guide bands implementation plan
 
+_2026-11-15, A1546 slice 1 changes the Calendar presentation described below: default-station
+reads now carry dated demand, station comparisons retain separate sending departments, and
+Calendar uses Closed. The Staffing guide-band wording is unchanged. See
+[the current Calendar contract](../../developers/design-system.md#calendar)._
+
 > 2026-10-16: A710 aligns the staffing painter hint, creation action,
 > tooltips and headcount controls. The owner kept the whole-day scale, with tooltip and block menu
 > for short blocks; a later readability design remains open. The current contract is in

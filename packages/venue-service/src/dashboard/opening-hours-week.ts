@@ -150,7 +150,6 @@ export class OpeningHoursWeekView extends LitElement {
       .head wt-combobox {
         min-width: 0;
       }
-      .always-open,
       .no-orders {
         margin: 0;
         color: var(--wt-color-text-muted);
@@ -175,6 +174,17 @@ export class OpeningHoursWeekView extends LitElement {
       }
       .hint {
         ${visuallyHiddenStyles}
+      }
+      .station-heading {
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-1);
+        margin-block: var(--wt-space-2) var(--wt-space-1);
+      }
+      .row[data-station-child] .row-name {
+        font-weight: var(--wt-font-weight-normal);
       }
       .ruler,
       .row {
@@ -557,18 +567,12 @@ export class OpeningHoursWeekView extends LitElement {
     });
   }
 
-  /** The department view of `drawn`, or the station's in its place: nothing while it loads, Always
-   *  open for the default station, else `drawn`'s days of its read. */
   #body(drawn: Drawn, draw: (body: Body) => unknown) {
     const station = this.station;
     if (!station || (station.state === "loading" && this.show === "all")) {
       const { days, chosen, names } = drawn;
       return draw({ days, names, rows: (day) => weekRows(day, chosen, names), orders: false });
     }
-    if (station.state === "always")
-      return html`<p class="always-open" data-test="always-open">
-        ${t("prep.always_open_default")}
-      </p>`;
     if (station.state === "loading") return nothing;
     const days = daysAt(
       station.model,
@@ -604,7 +608,6 @@ export class OpeningHoursWeekView extends LitElement {
     });
   }
 
-  /** A station's day whose departments send nothing reads No orders once, in place of its rows. */
   #noOrders(rows: readonly WeekRow[], orders: boolean) {
     return orders && !this.show && rows.every((row) => !row.blocks.length)
       ? html`<p class="no-orders" data-test="no-orders">${t("month.no_orders")}</p>`
@@ -681,29 +684,28 @@ export class OpeningHoursWeekView extends LitElement {
 
   #phoneRow(row: WeekRow, day: Day, names: MonthNames, orders: boolean) {
     const span = day.endMinute;
-    return html`<div class="row" data-row=${row.key}>
-      <span class="row-name ${row.strong ? "strong" : ""}"
-        >${row.station ? stationIcon() : nothing}${row.name}</span
-      >
-      <span class="words" ?data-no-orders=${orders && !row.blocks.length && !row.always}
-        >${row.words}</span
-      >
-      <div class="track" aria-hidden="true">
-        ${row.blocks.map(
-          (block) =>
-            html`<span
-              class="block"
-              @click=${() => this.#openBarDay(day.date)}
-              data-colour=${names.period(block.periodId).colour || nothing}
-              ?data-faded=${block.faded}
-              style=${styleMap({
-                left: `${(block.start / span) * 100}%`,
-                width: `${((block.end - block.start) / span) * 100}%`,
-              })}
-            ></span>`,
-        )}
-      </div>
-    </div>`;
+    return html`${row.stationHeading ? html`<h3 class="station-heading">${stationIcon()}${row.stationHeading}</h3>` : nothing}
+      <div class="row" data-row=${row.key} ?data-station-child=${row.stationChild}>
+        <span class="row-name ${row.strong ? "strong" : ""}"
+          >${row.station && !row.stationChild ? stationIcon() : nothing}${row.name}</span
+        >
+        <span class="words" ?data-no-orders=${orders && !row.blocks.length}>${row.words}</span>
+        <div class="track" aria-hidden="true">
+          ${row.blocks.map(
+            (block) =>
+              html`<span
+                class="block"
+                @click=${() => this.#openBarDay(day.date)}
+                data-colour=${names.period(block.periodId).colour || nothing}
+                ?data-faded=${block.faded}
+                style=${styleMap({
+                  left: `${(block.start / span) * 100}%`,
+                  width: `${((block.end - block.start) / span) * 100}%`,
+                })}
+              ></span>`,
+          )}
+        </div>
+      </div>`;
   }
 
   #show({ model, chosen, names }: Drawn) {
@@ -715,7 +717,6 @@ export class OpeningHoursWeekView extends LitElement {
       stations: this.stations,
       stationId: this.station?.id ?? "",
       show: this.show,
-      week: true,
       onShow: (show) => this.#emit("week-show-change", { show }),
       onStation: (stationId) => this.#emit("week-station-change", { stationId }),
     });
@@ -771,40 +772,41 @@ export class OpeningHoursWeekView extends LitElement {
 
   #row(row: WeekRow, day: Day, names: MonthNames, longest: number) {
     const span = day.endMinute;
-    return html`<div class="row" data-row=${row.key}>
-      <span class="row-name ${row.zone ? "" : "strong"}" aria-hidden="true"
-        >${row.station ? stationIcon() : nothing}${row.name}</span
-      >
-      <span class="spoken"
-        >${`${row.station ? t("opening.prep_station") + " " : ""}${row.name}: ${row.words}`}</span
-      >
-      <div class="lane">
-        <div
-          class="track"
-          aria-hidden="true"
-          style=${styleMap({ width: `${(span / longest) * 100}%` })}
+    return html`${row.stationHeading ? html`<h4 class="station-heading">${stationIcon()}${row.stationHeading}</h4>` : nothing}
+      <div class="row" data-row=${row.key} ?data-station-child=${row.stationChild}>
+        <span class="row-name ${row.zone ? "" : "strong"}" aria-hidden="true"
+          >${row.station && !row.stationChild ? stationIcon() : nothing}${row.name}</span
         >
-          ${
-            row.blocks.length
-              ? row.blocks.map(
-                  (block) =>
-                    html`<span
-                      class="block"
-                      data-colour=${names.period(block.periodId).colour || nothing}
-                      ?data-faded=${block.faded}
-                      @click=${() => this.#openBarDay(day.date)}
-                      style=${styleMap({
-                        left: `${(block.start / span) * 100}%`,
-                        width: `${((block.end - block.start) / span) * 100}%`,
-                      })}
-                      ><span class="text">${block.text}</span></span
-                    >`,
-                )
-              : row.empty
-          }
+        <span class="spoken"
+          >${`${row.station && !row.stationChild ? t("opening.prep_station") + " " : ""}${row.name}: ${row.words}`}</span
+        >
+        <div class="lane">
+          <div
+            class="track"
+            aria-hidden="true"
+            style=${styleMap({ width: `${(span / longest) * 100}%` })}
+          >
+            ${
+              row.blocks.length
+                ? row.blocks.map(
+                    (block) =>
+                      html`<span
+                        class="block"
+                        data-colour=${names.period(block.periodId).colour || nothing}
+                        ?data-faded=${block.faded}
+                        @click=${() => this.#openBarDay(day.date)}
+                        style=${styleMap({
+                          left: `${(block.start / span) * 100}%`,
+                          width: `${((block.end - block.start) / span) * 100}%`,
+                        })}
+                        ><span class="text">${block.text}</span></span
+                      >`,
+                  )
+                : row.empty
+            }
+          </div>
         </div>
-      </div>
-    </div>`;
+      </div>`;
   }
 }
 

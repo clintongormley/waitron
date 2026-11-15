@@ -397,6 +397,9 @@ the change (plan PR 8 Decision 1).
   time hid each other) and one bar with a label naming both where times overlap.
   **2026-10-17:** A725 retires that standalone tab. Calendar's Show picker carries the station
   view, using department names even for a single sending department (A722 Part 3, Decision 10).
+  _2026-11-15, A1546 slice 1: Calendar uses Closed in place of No orders; station comparisons
+  group sender rows under station headings. See the current Calendar contract in
+  [design-system.md](../developers/design-system.md#calendar)._
 
 - After approval the owner ruled that a dish made at the till is never held and the till lists
   what to make ("Make now").
