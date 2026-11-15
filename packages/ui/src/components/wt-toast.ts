@@ -9,8 +9,9 @@ export type WtToastTone = "info" | "error";
 /**
  * A brief notice. Both live regions are always in the document, so a screen reader announces the
  * message when it appears. Positioning belongs to the consumer. The consuming app registers the
- * `close` icon. While a modal window it is not inside is open, an open toast waits unseen, and its
- * countdown with it: that window makes everything outside it impossible to press.
+ * `close` icon. While the most recently opened modal window is one it is not inside, an open toast
+ * waits unseen, and its countdown with it: that window makes everything outside it impossible to
+ * press.
  */
 @customElement("wt-toast")
 export class WtToast extends LitElement {
