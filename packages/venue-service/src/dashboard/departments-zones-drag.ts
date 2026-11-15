@@ -29,7 +29,7 @@ export class DepartmentsZonesDrag {
     private readonly move: (zoneId: string, departmentId: string, keyboard: boolean) => void,
   ) {}
   start(event: PointerEvent, zoneId: string) {
-    if (event.button !== 0 || this.drag) return;
+    if (event.button !== 0 || (event.pointerType === "mouse" && event.ctrlKey) || this.drag) return;
     const model = this.model(),
       grip = event.currentTarget as HTMLElement;
     const zone = model?.zones.find((zone) => zone.id === zoneId && zone.active !== false);

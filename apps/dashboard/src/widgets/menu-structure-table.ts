@@ -515,7 +515,14 @@ export class MenuStructureTable extends LitElement {
   }
 
   #gripDown(event: PointerEvent, row: Row): void {
-    if (this.#drag || this.busy || !this.#reorderable || event.button !== 0) return;
+    if (
+      this.#drag ||
+      this.busy ||
+      !this.#reorderable ||
+      event.button !== 0 ||
+      (event.pointerType === "mouse" && event.ctrlKey)
+    )
+      return;
     // Keep the press from selecting text or starting the browser's own drag.
     event.preventDefault();
     this.#drag = {

@@ -611,6 +611,32 @@ it("takes the pointer's press so the page does not act on it", async () => {
   expect(down.defaultPrevented).toBe(true);
 });
 
+it("a Control-click on a table, a Mac's context-menu click, starts no drag and moves nothing", async () => {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 3 })]);
+  const seen = moves(el);
+  const rest = offset(el, "t1");
+  const box = button(el, "t1").getBoundingClientRect();
+  const down = new PointerEvent("pointerdown", {
+    bubbles: true,
+    composed: true,
+    cancelable: true,
+    pointerId: 1,
+    pointerType: "mouse",
+    button: 0,
+    buttons: 1,
+    ctrlKey: true,
+    clientX: box.left + 5,
+    clientY: box.top + 5,
+  });
+  button(el, "t1").dispatchEvent(down);
+  pointer(window, "pointermove", 1, box.left + 35, box.top + 5);
+  await el.updateComplete;
+  expect(offset(el, "t1")).toEqual(rest);
+  await release(el, { x: box.left + 35, y: box.top + 5 });
+  expect(down.defaultPrevented).toBe(false);
+  expect(seen).toEqual([]);
+});
+
 it("a drag ends at release", async () => {
   const el = await canvas([table("t1", "T1", { x: 2, y: 3 })]);
   const seen = moves(el);

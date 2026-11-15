@@ -89,10 +89,17 @@ function centre(box: DOMRect): { x: number; y: number } {
 }
 
 /** Presses `key`'s handle at its centre with the main button, without focusing it. */
-function grab(el: WtDataTable<Row>, key: string, pointerId: number, button = 0) {
+function grab(
+  el: WtDataTable<Row>,
+  key: string,
+  pointerId: number,
+  button = 0,
+  init: PointerEventInit = {},
+) {
   const point = centre(handle(el, key).getBoundingClientRect());
   handle(el, key).dispatchEvent(
     new PointerEvent("pointerdown", {
+      ...init,
       pointerId,
       button,
       bubbles: true,
@@ -270,6 +277,20 @@ test("a drag with the secondary button moves no column", async () => {
   send("pointermove", 23, start.x, y);
   expect(columnRow(el, "m1").hasAttribute("data-dragging")).toBe(false);
   send("pointerup", 23, start.x, y);
+  await el.updateComplete;
+  expect(headers(el)).toEqual(["Name", "M1", "M2", "M3", "M4", "Actions"]);
+});
+
+test("a Control-click on a handle, a Mac's context-menu click, moves no column", async () => {
+  keepCursor();
+  const el = await table();
+  await openChooser(el);
+  const rest = rests(el);
+  const start = grab(el, "m1", 36, 0, { pointerType: "mouse", ctrlKey: true });
+  const y = centre(rest.m3!).y;
+  send("pointermove", 36, start.x, y);
+  expect(columnRow(el, "m1").hasAttribute("data-dragging")).toBe(false);
+  send("pointerup", 36, start.x, y);
   await el.updateComplete;
   expect(headers(el)).toEqual(["Name", "M1", "M2", "M3", "M4", "Actions"]);
 });

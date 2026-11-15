@@ -255,6 +255,32 @@ it("uses the current frame size mid-drag, ignores a second pointer and releases 
   expect(release).toHaveBeenCalledWith(7);
 });
 
+it("a Control-click on the frame, a Mac's context-menu click, starts no drag and moves nothing", async () => {
+  const root = await mount();
+  const frame = root.querySelector<HTMLElement>("[data-test=frame]")!;
+  const capture = vi.spyOn(frame, "setPointerCapture").mockImplementation(() => {});
+  vi.spyOn(frame, "getBoundingClientRect").mockReturnValue({ width: 200, height: 200 } as DOMRect);
+  const down = new PointerEvent("pointerdown", {
+    cancelable: true,
+    pointerId: 9,
+    pointerType: "mouse",
+    button: 0,
+    buttons: 1,
+    ctrlKey: true,
+  });
+  frame.dispatchEvent(down);
+  frame.dispatchEvent(new PointerEvent("pointermove", { pointerId: 9, clientX: 50, clientY: 0 }));
+  frame.dispatchEvent(new PointerEvent("pointerup", { pointerId: 9, clientX: 50, clientY: 0 }));
+  await el.updateComplete;
+  expect(down.defaultPrevented).toBe(false);
+  expect(capture).not.toHaveBeenCalled();
+  expect(frame.hasAttribute("data-dragging")).toBe(false);
+  const done = vi.fn();
+  el.addEventListener("done", done);
+  root.querySelector<HTMLElement>("[data-test=done]")!.click();
+  expect(done.mock.calls[0]![0].detail).toEqual({ framing: { x: 5000, y: 5000, zoom: 100 } });
+});
+
 it("a native mouse press captures its pointer before moving or releasing it", async () => {
   const root = await mount();
   const frame = root.querySelector<HTMLElement>("[data-test=frame]")!;
