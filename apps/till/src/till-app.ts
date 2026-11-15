@@ -20482,7 +20482,7 @@ export class TillApp extends LitElement {
         unconfirmed: true,
         pendingRefusal: {
           ...refusal,
-          recoveryUrl: refusal.recoveryUrl ?? "/manage/payments",
+          recoveryUrl: refusal.recoveryUrl ?? "/manage/check-card-payments",
         },
       };
       this.#unansweredPayments.set(billId, held);
@@ -20664,7 +20664,7 @@ export class TillApp extends LitElement {
         const manual = asked.pay.method === "card" && asked.card?.entry === "manual";
         if (manual) refusal.manualCard = true;
         if (refusal.code === "sale.charged_not_recorded")
-          refusal.recoveryUrl ??= "/manage/payments";
+          refusal.recoveryUrl ??= "/manage/check-card-payments";
         unanswered = {
           ...unanswered,
           pendingRefusal: refusal,

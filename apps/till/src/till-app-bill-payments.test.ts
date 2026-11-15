@@ -5611,7 +5611,9 @@ describe("till-app: a bill payment on the card reader", () => {
     );
     expect(dialog(el)!.confirmationLocked).toBe(true);
     expect(sent()).toHaveLength(1);
-    expect(inDialog(el, "a[data-recovery]")?.getAttribute("href")).toBe("/manage/payments");
+    expect(inDialog(el, "a[data-recovery]")?.getAttribute("href")).toBe(
+      "/manage/check-card-payments",
+    );
 
     await press(el, "[data-pay-confirm]");
     expect(sent()).toHaveLength(2);
@@ -5712,7 +5714,9 @@ describe("till-app: a bill payment on the card reader", () => {
     const el = await takeOnReader(takeBillPayment, { getBillBalance });
     expect(dialog(el)!.confirmationLocked).toBe(true);
     expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.unconfirmed"));
-    expect(inDialog(el, "a[data-recovery]")?.getAttribute("href")).toBe("/manage/payments");
+    expect(inDialog(el, "a[data-recovery]")?.getAttribute("href")).toBe(
+      "/manage/check-card-payments",
+    );
     await press(el, "[data-pay-confirm]");
     expect(sent()[1]).toEqual(sent()[0]);
     expect(dialog(el)!.confirmationLocked).toBe(true);
@@ -5801,7 +5805,9 @@ describe("till-app: a bill payment on the card reader", () => {
       expect(sent()[1]).toEqual(sent()[0]);
       expect(dialog(el)!.confirmationLocked).toBe(true);
       expect(inDialog(el, "wt-form-actions")!.error).toBe(expected);
-      expect(inDialog(el, "a[data-recovery]")?.getAttribute("href")).toBe("/manage/payments");
+      expect(inDialog(el, "a[data-recovery]")?.getAttribute("href")).toBe(
+        "/manage/check-card-payments",
+      );
     },
   );
 

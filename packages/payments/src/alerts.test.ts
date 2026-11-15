@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { PAYMENTS_ALERTS } from "./index.js";
 
-it("claims payment. incidents for the payments area under hardware.manage, linking held payments to Payments", () => {
+it("claims payment. incidents for the payments area under hardware.manage, linking held payments to Check card payments", () => {
   expect(PAYMENTS_ALERTS).toEqual({
     events: [
       { prefix: "payment.", area: "payments", permission: "hardware.manage" },
@@ -9,7 +9,7 @@ it("claims payment. incidents for the payments area under hardware.manage, linki
         prefix: "payment.reconcile_held",
         area: "payments",
         permission: "hardware.manage",
-        screen: "payments",
+        screen: "check-card-payments",
       },
     ],
   });

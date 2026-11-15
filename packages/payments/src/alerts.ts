@@ -6,7 +6,7 @@ export const PAYMENTS_ALERTS = {
       prefix: "payment.reconcile_held",
       area: "payments",
       permission: "hardware.manage",
-      screen: "payments",
+      screen: "check-card-payments",
     },
   ],
 } as const;

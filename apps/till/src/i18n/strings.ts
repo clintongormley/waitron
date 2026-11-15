@@ -901,7 +901,7 @@ export const en = {
   "card.declined": "Card declined",
   "card.no_answer": "The card reader did not answer",
   "card.pending_check":
-    "Waitron is checking the payment. Until the result is known, what this order charges cannot be changed. If it stays unresolved, ask a manager to check Card payments.",
+    "Waitron is checking the payment. Until the result is known, what this order charges cannot be changed. If it stays unresolved, ask a manager to open Check card payments in Reporting.",
   "card.insufficient_funds": "Card declined: not enough funds",
   "card.expired": "Card declined: card expired",
   "card.wrong_pin": "Card declined: wrong PIN",
@@ -1811,8 +1811,8 @@ export const en = {
   "bill_pay.ticket_unread":
     "Payment recorded. The receipt could not be loaded. You can continue serving.",
   "bill_pay.card_recovery":
-    "Open Card payments and sign in to finish recording this payment. Do not take it again.",
-  "bill_pay.card_recovery_open": "Card payments / sign in",
+    "Open Check card payments in Reporting and sign in to finish recording this payment. Do not take it again.",
+  "bill_pay.card_recovery_open": "Check card payments / sign in",
   "bill_pay.payment_failed": "This payment is recorded as not taken. You can take it again.",
   "bill_pay.choose_later":
     "These items cost more than is left to pay on the bill. Choose how to pay for them.",
@@ -1827,7 +1827,7 @@ export const en = {
   "bill_pay.card_unreachable":
     "The card reader could not reach the card network, so nothing was taken. Try again, or go back and take cash.",
   "bill_pay.card_pending":
-    "The card payment is still in progress, so {amount} is held on this bill until it finishes. If it does not finish, a manager can clear it on the dashboard's Card payments screen.",
+    "The card payment is still in progress, so {amount} is held on this bill until it finishes. If it does not finish, a manager can clear it on the dashboard's Check card payments page in Reporting.",
   "bill_pay.uncertain_title": "We don't know yet whether it was charged",
   "bill_pay.uncertain":
     "The reader has not answered. Do not take this guest's money another way yet: {amount} stays held on the bill and this screen updates itself.",
@@ -1843,7 +1843,7 @@ export const en = {
   "bill_pay.state_failed": "Failed",
   "bill_pay.state_declined": "Declined",
   "bill_pay.pending_where":
-    "If it does not finish, a manager can clear it on the dashboard's Card payments screen.",
+    "If it does not finish, a manager can clear it on the dashboard's Check card payments page in Reporting.",
   "bill_pay.refunded": "Refunded: {amount}",
   "bill_pay.refund_waiting": "Refund of {amount} waiting for the card provider",
   "bill_pay.refund_failed_row": "Refund of {amount} did not go through",
@@ -1919,7 +1919,7 @@ export const en = {
   "bill_refund.done_card": "Refunded: {amount} to the card.",
   "bill_refund.done_terminal": "The refund of {amount} on the card terminal is recorded.",
   "bill_refund.pending":
-    "The card refund of {amount} is waiting for the card provider. Until it finishes, this bill cannot take payments or refunds, and what it charges cannot be changed; sending and firing dishes still works. If it does not finish, a manager can follow it on the dashboard's Card payments screen.",
+    "The card refund of {amount} is waiting for the card provider. Until it finishes, this bill cannot take payments or refunds, and what it charges cannot be changed; sending and firing dishes still works. If it does not finish, a manager can follow it on the dashboard's Check card payments page in Reporting.",
   "bill_refund.failed": "The card refund of {amount} did not go through, so nothing was refunded.",
   // Said after a table action was refused because another device changed the party first.
   "party.changed": "Another device changed table {table}, so it has been reloaded.",
@@ -2973,7 +2973,7 @@ export const es: Record<StringKey, string> = {
   "card.declined": "Tarjeta rechazada",
   "card.no_answer": "El lector de tarjetas no ha respondido",
   "card.pending_check":
-    "Waitron está comprobando el pago. Hasta conocer el resultado, no se puede cambiar el importe del pedido. Si no se resuelve, pide a un encargado que lo consulte en Pagos con tarjeta.",
+    "Waitron está comprobando el pago. Hasta conocer el resultado, no se puede cambiar el importe del pedido. Si no se resuelve, pide a un encargado que abra Comprobar pagos con tarjeta en Informes.",
   "card.insufficient_funds": "Tarjeta rechazada: fondos insuficientes",
   "card.expired": "Tarjeta rechazada: tarjeta caducada",
   "card.wrong_pin": "Tarjeta rechazada: PIN incorrecto",
@@ -3865,8 +3865,8 @@ export const es: Record<StringKey, string> = {
   "bill_pay.ticket_unread":
     "Pago registrado. No se ha podido cargar el recibo. Puedes seguir atendiendo.",
   "bill_pay.card_recovery":
-    "Abre Pagos con tarjeta e inicia sesión para terminar de registrar este pago. No vuelvas a cobrarlo.",
-  "bill_pay.card_recovery_open": "Pagos con tarjeta / acceder",
+    "Abre Comprobar pagos con tarjeta en Informes e inicia sesión para terminar de registrar este pago. No vuelvas a cobrarlo.",
+  "bill_pay.card_recovery_open": "Comprobar pagos con tarjeta / acceder",
   "bill_pay.payment_failed": "Este cobro consta como no cobrado. Puedes volver a cobrarlo.",
   "bill_pay.choose_later":
     "Estos artículos cuestan más de lo que queda por pagar en la cuenta. Elige cómo se pagan.",
@@ -3882,7 +3882,7 @@ export const es: Record<StringKey, string> = {
   "bill_pay.card_unreachable":
     "El lector no ha podido conectar con la red de pagos, así que no se ha cobrado nada. Vuelve a intentarlo, o vuelve atrás y cobra en efectivo.",
   "bill_pay.card_pending":
-    "El pago con tarjeta sigue en curso, así que se reservan {amount} en esta cuenta hasta que termine. Si no termina, un responsable puede anularlo en la pantalla Pagos con tarjeta del panel de gestión.",
+    "El pago con tarjeta sigue en curso, así que se reservan {amount} en esta cuenta hasta que termine. Si no termina, un responsable puede anularlo en la página Comprobar pagos con tarjeta, en Informes del panel de gestión.",
   "bill_pay.uncertain_title": "Aún no sabemos si se ha cobrado",
   "bill_pay.uncertain":
     "El lector no ha contestado. No cobres a este cliente de otra forma todavía: {amount} quedan reservados en la cuenta y esta pantalla se actualiza sola.",
@@ -3899,7 +3899,7 @@ export const es: Record<StringKey, string> = {
   "bill_pay.state_failed": "Fallido",
   "bill_pay.state_declined": "Rechazado",
   "bill_pay.pending_where":
-    "Si no termina, un responsable puede anularlo en la pantalla Pagos con tarjeta del panel de gestión.",
+    "Si no termina, un responsable puede anularlo en la página Comprobar pagos con tarjeta, en Informes del panel de gestión.",
   "bill_pay.refunded": "Devuelto: {amount}",
   "bill_pay.refund_waiting": "Devolución de {amount} esperando al proveedor de pagos",
   "bill_pay.refund_failed_row": "La devolución de {amount} no se completó",
@@ -3974,7 +3974,7 @@ export const es: Record<StringKey, string> = {
   "bill_refund.done_card": "Devuelto: {amount} a la tarjeta.",
   "bill_refund.done_terminal": "La devolución de {amount} en el datáfono queda registrada.",
   "bill_refund.pending":
-    "La devolución de {amount} con tarjeta está esperando al proveedor de pagos. Hasta que termine, esta cuenta no admite cobros ni devoluciones y no se puede cambiar su importe; enviar y marchar platos sigue funcionando. Si no termina, un responsable puede seguirla en la pantalla Pagos con tarjeta del panel de gestión.",
+    "La devolución de {amount} con tarjeta está esperando al proveedor de pagos. Hasta que termine, esta cuenta no admite cobros ni devoluciones y no se puede cambiar su importe; enviar y marchar platos sigue funcionando. Si no termina, un responsable puede seguirla en la página Comprobar pagos con tarjeta, en Informes del panel de gestión.",
   "bill_refund.failed":
     "La devolución de {amount} con tarjeta no se completó, así que no se ha devuelto nada.",
   "party.changed": "Otro dispositivo ha cambiado la mesa {table}, así que se ha vuelto a cargar.",

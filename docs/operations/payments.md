@@ -12,7 +12,7 @@ redesigns remain pending until their implementations land.
 ## Check the same payment after a lost answer
 
 Choose **Check again** before taking payment again. If the card outcome remains unknown,
-ask a manager to open **Card payments** in the dashboard. Check the listed payment with
+ask a manager to open **Check card payments** in Reporting on the dashboard. Check the listed payment with
 its provider. If the answer remains unclear, keep the bill unresolved and check the provider's
 transaction or ask its support.
 
@@ -42,7 +42,7 @@ rather than using an outcome record as a refund action.
 
 The [table screen](../../apps/till/src/screens/till-table-order-screen.ts) and
 [payment dialog](../../apps/till/src/widgets/bill-pay-dialog.ts) supply the payment choices.
-The [Card payments screen](../../apps/dashboard/src/screens/payments-screen.ts) supplies
+The [Check card payments page](../../apps/dashboard/src/screens/payments-screen.ts) supplies
 provider checks, confirmed outcomes and held-payment records. Their labels and required
 confirmation wording live in the [till](../../apps/till/src/i18n/strings.ts) and
 [dashboard](../../apps/dashboard/src/i18n/strings.ts) strings.

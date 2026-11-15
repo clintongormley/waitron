@@ -182,6 +182,7 @@ const CORE_SCREENS = [
   "email",
   "demo-printer",
   "payments",
+  "check-card-payments",
   "modules",
   "alerts",
 ] as const;
@@ -247,6 +248,11 @@ const NAV_GROUPS: NavGroup[] = [
     icon: "section-reports",
     items: [
       { screen: "sales", labelKey: "nav.sales" },
+      {
+        screen: "check-card-payments",
+        labelKey: "nav.check_card_payments",
+        requiresPermission: "hardware.manage",
+      },
       { screen: "vat-return", labelKey: "nav.vat_return", requiresPermission: "report.export" },
       {
         screen: "handover-intervals",
@@ -3337,8 +3343,15 @@ export class DashboardApp extends LitElement {
           .api=${this.api}
           .request=${this.request}
         ></dashboard-modules-screen>`;
+      case "check-card-payments":
+        return html`<dashboard-payments-screen
+          .api=${this.api}
+          .request=${this.request}
+          .surface=${"checks"}
+        ></dashboard-payments-screen>`;
       case "payments":
         return html`<dashboard-payments-screen
+          .surface=${"readers"}
           .api=${this.api}
           .request=${this.request}
           .mode=${this.onboardingIntent}

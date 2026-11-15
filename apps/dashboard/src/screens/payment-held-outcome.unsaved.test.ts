@@ -24,6 +24,7 @@ class HeldOutcomeLeaveApp extends LitElement {
     return html`<dashboard-payments-screen
         .api=${this.api}
         .panels=${[]}
+        .surface=${"checks"}
       ></dashboard-payments-screen>
       ${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
   }

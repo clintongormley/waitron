@@ -7691,6 +7691,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     ["cloud", "dashboard-cloud-services-screen"],
     ["email", "dashboard-email-screen"],
     ["payments", "dashboard-payments-screen"],
+    ["check-card-payments", "dashboard-payments-screen"],
     ["alerts", "dashboard-alerts-screen"],
   ])("opens %s for a manager from its address, with the shell's api", async (screen, tag) => {
     history.replaceState(null, "", `/manage/${screen}`);

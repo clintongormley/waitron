@@ -18,7 +18,7 @@ afterEach(async () => {
 });
 for (const locale of ["en", "es"] as const)
   for (const theme of ["light", "dark"] as const) {
-    it(`offers Card payments recovery accessibly in ${locale}/${theme}`, async () => {
+    it(`offers payment checks accessibly in ${locale}/${theme}`, async () => {
       setLocale(locale);
       for (const width of [390, 1280]) {
         await page.viewport(width, 900);
@@ -32,7 +32,7 @@ for (const locale of ["en", "es"] as const)
             refusal: {
               code: "sale.charged_not_recorded",
               reason: "disk_full",
-              recoveryUrl: "/manage/payments",
+              recoveryUrl: "/manage/check-card-payments",
             },
           },
           theme,

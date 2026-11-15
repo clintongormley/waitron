@@ -1295,6 +1295,7 @@ export const en = {
   "demo_printer.drawer_opened": "The cash drawer opened.",
   "nav.modules": "Modules",
   "nav.payments": "Card payments",
+  "nav.check_card_payments": "Check card payments",
   "nav.email": "Email",
   "email.title": "Email",
   "email.local_capture":
@@ -3009,7 +3010,7 @@ export const en = {
     "No reference: check in SumUp. Entries may describe the same refund.",
   "payments.refunds.invalid": "Provider refund evidence is malformed or conflicting",
   "payments.refunds.pending": "Provider refund pending; another check is scheduled",
-  "payments.backup.title": "Backup-machine comparison",
+  "payments.backup.title": "SumUp comparison",
   "payments.backup.day": "Venue calendar day",
   "payments.backup.incomplete":
     "Comparison incomplete. One or both daily checks are not available yet. The complete day is available after the following UTC midnight’s check.",
@@ -5562,6 +5563,7 @@ export const es: Record<StringKey, string> = {
   "demo_printer.drawer_opened": "Se abrió el cajón de efectivo.",
   "nav.modules": "Módulos",
   "nav.payments": "Pagos con tarjeta",
+  "nav.check_card_payments": "Comprobar pagos con tarjeta",
   "nav.email": "Correo",
   "email.title": "Correo",
   "email.local_capture":
@@ -7308,7 +7310,7 @@ export const es: Record<StringKey, string> = {
     "Sin referencia: compruébalo en SumUp. Las entradas pueden describir la misma devolución.",
   "payments.refunds.invalid": "Los datos de devolución de SumUp no son válidos o se contradicen",
   "payments.refunds.pending": "Devolución pendiente en SumUp; hay otra comprobación programada",
-  "payments.backup.title": "Comparación del datáfono de reserva",
+  "payments.backup.title": "Comparación de SumUp",
   "payments.backup.day": "Día natural del local",
   "payments.backup.incomplete":
     "Comparación incompleta. Falta una o ambas comprobaciones diarias. El día completo estará disponible tras la comprobación de la siguiente medianoche UTC.",

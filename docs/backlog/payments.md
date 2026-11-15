@@ -1,5 +1,7 @@
 # Payments and card readers — detail
 
+_2026-11-15, A1529: The recovery and comparison pages below moved to **Check card payments** in Reporting. Reader tools stay on **Card payments**. [Move plan](../superpowers/plans/2026-11-15-a1529-card-pages.md)._
+
 The open entries are listed in [the backlog](../backlog.md), under "Payments and card readers". This file holds
 their full text.
 

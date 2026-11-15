@@ -4,11 +4,12 @@ import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import type { DashboardContribution } from "@waitron/dashboard-kit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
-import { setLocale } from "./i18n/t.js";
+import { setLocale, t } from "./i18n/t.js";
 import type { DashboardApi } from "./api/client.js";
 import "./dashboard-app.js";
 import type { DashboardApp } from "./dashboard-app.js";
 import type { WtInput } from "@waitron/ui";
+import type { PaymentsScreen } from "./screens/payments-screen.js";
 
 // One module with three screens: its primary one and a second anyone with `test.use` may open, and
 // a third that asks for a permission this session does not hold.
@@ -265,3 +266,60 @@ it("redirects the old provider setup address to all card providers", async () =>
   );
   expect(location.pathname).toBe("/manage/modules/view/card-providers/state/all");
 });
+
+it.each([true, false])(
+  "gates payment checks under Reporting and leaves for a fresh readers page (hardware.manage=%s)",
+  async (allowed) => {
+    history.replaceState(null, "", "/manage/check-card-payments");
+    const api = stubApi();
+    vi.mocked(api.getMe).mockResolvedValue({
+      ...(await api.getMe()),
+      locale: "en",
+      permissions: allowed ? ["hardware.manage"] : [],
+      modules: [],
+    });
+    for (const name of [
+      "listPaymentProviders",
+      "listReaders",
+      "listReaderHolders",
+      "listStuckPayments",
+      "listStuckBillPayments",
+      "listStuckTenderRefunds",
+      "listStuckBillRefunds",
+      "listAbandonedRefunds",
+      "listHeldPayments",
+    ])
+      Object.assign(api, { [name]: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api,
+      request: async () => [] as never,
+    });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=account-menu]")).not.toBeNull(),
+    );
+    if (!allowed) {
+      await vi.waitFor(() => expect(location.pathname).not.toBe("/manage/check-card-payments"));
+      expect(navItem(el, "check-card-payments")).toBeNull();
+      expect(el.shadowRoot!.querySelector("dashboard-payments-screen")).toBeNull();
+      return;
+    }
+    expect(navItem(el, "check-card-payments")?.getAttribute("aria-current")).toBe("page");
+    expect(
+      el.shadowRoot!.querySelector("#nav-group-panel-reports [data-test=nav-check-card-payments]"),
+    ).not.toBeNull();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("dashboard-payments-screen")).not.toBeNull(),
+    );
+    const checks = el.shadowRoot!.querySelector<PaymentsScreen>("dashboard-payments-screen")!;
+    expect(checks.surface).toBe("checks");
+    expect(checks.shadowRoot!.querySelector("h1")?.textContent).toBe(t("payments.checks_title"));
+    navItem(el, "payments")!.click();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("dashboard-payments-screen")).not.toBe(checks),
+    );
+    expect(checks.isConnected).toBe(false);
+    expect(el.shadowRoot!.querySelector<PaymentsScreen>("dashboard-payments-screen")!.surface).toBe(
+      "readers",
+    );
+  },
+);

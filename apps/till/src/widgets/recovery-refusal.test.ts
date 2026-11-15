@@ -20,13 +20,13 @@ afterEach(() => {
 });
 
 for (const locale of ["en", "es"] as const) {
-  it(`does not claim a charge for an ordinary Card payments refusal in ${locale}`, async () => {
+  it(`does not claim a charge for an ordinary payment-check refusal in ${locale}`, async () => {
     setLocale(locale);
     const { el } = await mountWidget<TillPresentedPayDialog>("till-presented-pay-dialog", {
       open: true,
       amount: "35.00",
       takesCash: true,
-      refusal: { code: "storage.disk_full", recoveryUrl: "/manage/payments" },
+      refusal: { code: "storage.disk_full", recoveryUrl: "/manage/check-card-payments" },
     });
     expect(
       el.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error,
@@ -43,14 +43,18 @@ for (const locale of ["en", "es"] as const) {
       open: true,
       amount: "35.00",
       takesCash: true,
-      refusal: { code: "sale.charged_not_recorded", reason, recoveryUrl: "/manage/payments" },
+      refusal: {
+        code: "sale.charged_not_recorded",
+        reason,
+        recoveryUrl: "/manage/check-card-payments",
+      },
     });
     const actions = el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
       "wt-form-actions",
     )!;
     expect(actions.error).toBe(`${t(key)} ${t("bill_pay.card_recovery")}`);
     const link = el.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-recovery]")!;
-    expect(link.getAttribute("href")).toBe("/manage/payments");
+    expect(link.getAttribute("href")).toBe("/manage/check-card-payments");
     expect(link.textContent).toBe(t("bill_pay.card_recovery_open"));
     expect(link.target).toBe("_blank");
     expect(link.rel).toBe("noopener");

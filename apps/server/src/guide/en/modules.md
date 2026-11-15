@@ -7,7 +7,8 @@ The Card payments link shows every card provider, including those that still nee
 
 Choose **Configure** in the provider's row menu, enter its credentials and choose **Save**.
 Use **Cancel** to discard your changes. A configured provider can still refuse a payment;
-check reader status and unfinished payments on **Card payments**.
+check reader status on **Card payments**. For unfinished payments, open **Check card payments**
+in Reporting.
 
 The **Enabled**, **Disabled** and **All** filters show a module's state separately from its
 configuration. **Add a module** shows disabled modules in the same list. Choose **All categories**
@@ -57,7 +58,7 @@ Your personal-data download keeps your clock records in `clock-entries.json`; it
 
 ## Check abandoned-order refunds {#abandoned-refunds}
 
-If a customer leaves after a SumUp charge, open **Card payments** and check **Abandoned-order refunds**.
+If a customer leaves after a SumUp charge, open **Check card payments** in Reporting and check **Abandoned-order refunds**.
 Waitron attempts one full refund when SumUp identifies the payment as yours, the amount matches and no refund exists.
 A payment taken outside Waitron on the reader stays for you to check.
 
