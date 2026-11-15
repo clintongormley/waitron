@@ -1362,7 +1362,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 - **A1534. The device editor and the devices table made plain, and one profile per kitchen
   screen (owner, 2026-11-14).** Follows A1529, whose profile editor tabs this changes, and A1535's
   renames. Changes the venue-service and core schemas: rebuild their starting migrations, no data
-  migration (pre-live). Not started.
+  migration (pre-live). Start with the [reviewed, watcher-cleared shared focus fix](superpowers/plans/2026-11-15-a1534-device-simplification.md); the remaining areas follow in a split amendment.
   - **One profile per kitchen screen.** A profile's kitchen screen tab chooses ONE screen (Station,
     Pass or Pass display) and its stations and zones, instead of several screens for its devices to
     pick from. A device picks only its profile: the device editor loses Screen, its Stations and
