@@ -653,6 +653,49 @@ describe("position", () => {
     }
   });
 
+  test("in a 390x700 window, with too little room below the field for the sixteen, the open panel sits above the trigger without covering it", async () => {
+    await atViewport(390, 700, async () => {
+      const { el, panel, trigger } = await mountSixteen();
+      el.style.cssText = "position: fixed; left: 16px; top: 420px; width: 358px";
+      await openByClick(el);
+      expect(columns(el)).toBe(2);
+      const anchor = trigger.getBoundingClientRect();
+      // The sixteen really need more room than there is below the trigger.
+      expect(panel.scrollHeight).toBeGreaterThan(innerHeight - anchor.bottom - 8);
+      const box = panel.getBoundingClientRect();
+      expect(box.bottom).toBeLessThanOrEqual(anchor.top);
+      expect(box.top).toBeGreaterThanOrEqual(8 - 0.5);
+      expect(box.bottom).toBeLessThanOrEqual(innerHeight - 8 + 0.5);
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(innerWidth - 8 + 0.5);
+    });
+  });
+
+  test("a window made shorter while the sixteen sit above the field keeps them above the moved trigger and inside the window", async () => {
+    await atViewport(390, 700, async () => {
+      const { el, panel, trigger } = await mountSixteen();
+      el.style.cssText = "position: fixed; left: 16px; bottom: 224px; width: 358px";
+      await openByClick(el);
+      expect(panel.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        trigger.getBoundingClientRect().top,
+      );
+      const before = trigger.getBoundingClientRect().top;
+      await page.viewport(390, 600);
+      expect(window.innerHeight).toBe(600);
+      // The trigger moves up with the window's bottom edge, so a panel left where it was covers it.
+      expect(trigger.getBoundingClientRect().top).toBeLessThan(before - 50);
+      await vi.waitFor(() => {
+        const anchor = trigger.getBoundingClientRect();
+        expect(panel.scrollHeight).toBeGreaterThan(innerHeight - anchor.bottom - 8);
+        const box = panel.getBoundingClientRect();
+        expect(box.bottom).toBeLessThanOrEqual(anchor.top);
+        expect(box.top).toBeGreaterThanOrEqual(8 - 0.5);
+        expect(box.left).toBeGreaterThanOrEqual(0);
+        expect(box.right).toBeLessThanOrEqual(innerWidth - 8 + 0.5);
+      });
+    });
+  });
+
   test("in a 390x700 window, more names than fit keep the panel inside it, scrolling, and End brings the last tile into view", async () => {
     const [width, height] = [innerWidth, innerHeight];
     await page.viewport(390, 700);

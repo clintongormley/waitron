@@ -229,11 +229,6 @@ only once the page's own model loads (`render` in
 Staffing view sees the switch and the Opening hours error instead. Next: decide whether a
 module view draws without that model.
 
-## At 390 px the staff role dialog's open colour panel covers its own Colour field
-
-Picking a colour still works. See `positionPopup` in
-`packages/ui/src/components/wt-colour-chooser.ts`.
-
 ## A colour chooser left open while its window narrows may hide the chosen colour
 
 Read from
@@ -349,11 +344,8 @@ exists unused. Shown in A585's picker and warnings. After A586.
 
 ## Bundle: Colour chooser placement
 
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
 
-- **At 390 px the staff role dialog's open colour panel covers its own Colour field.** Left open
-  by A783.
-  [Detail](workforce.md#at-390-px-the-staff-role-dialogs-open-colour-panel-covers-its-own-colour-field).
 - **A colour chooser left open while its window narrows may hide the chosen colour.** Read by
   A783, not measured. Try it, and if it shows, keep the focused tile in view after the columns change.
   [Detail](workforce.md#a-colour-chooser-left-open-while-its-window-narrows-may-hide-the-chosen-colour).
