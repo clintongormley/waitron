@@ -497,7 +497,8 @@ export function mountHandoverEmergencyApi(
     )
       return { state: "catching-up" as const };
     await refuseRepeatedFailures();
-    // A passkey challenge or proof already lapsed is refused here, not after the stop restarts the box.
+    // A passkey challenge this box no longer holds, or a proof that fails a check needing no copy,
+    // is refused here, not after the stop restarts the box.
     await precheckSwitchCredentials(c, switchSignIn, signIn);
     await sourceSilent(sourceNodeId, false);
     let stopping = true;

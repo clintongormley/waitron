@@ -181,9 +181,9 @@ async function activate(
 }
 
 /**
- * `POST /api/node/handover/:operationId/activate`: a sign-in, or for an emergency this box's switch
- * proof, checked against the placed copy, then this box takes on its own filing identity under the
- * name its preparation selected.
+ * `POST /api/node/handover/:operationId/activate`: a password sign-in, or for an emergency a passkey
+ * or this box's switch proof, checked against the placed copy, then this box takes on its own filing
+ * identity under the name its preparation selected.
  */
 export function mountHandoverActivationApi(
   app: Hono,
