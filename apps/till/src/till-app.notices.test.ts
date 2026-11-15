@@ -28,6 +28,7 @@ import {
 } from "../test/allergy-app-fixture.js";
 import { en, es } from "./i18n/strings.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
+import { codeMessage } from "./i18n/codes.js";
 
 const notice = (key: string): StaffNotice => ({
   owner: "box",
@@ -257,11 +258,13 @@ describe("the staff notice strip on a signed-in till or handheld", () => {
     await vi.waitFor(() => expect(strip(el).drawn).toBeNull());
   });
 
-  it.each([false, true])(
+  it.each([false, true, "storage.disk_full"])(
     "keeps a shown unconfirmed-change warning while opening the drawer (refused: %s)",
     async (refused) => {
       const openDrawer = refused
-        ? vi.fn().mockRejectedValue({ code: "drawer.not_attached" })
+        ? vi.fn().mockRejectedValue({
+            code: typeof refused === "string" ? refused : "drawer.not_attached",
+          })
         : vi.fn().mockResolvedValue(undefined);
       const { el } = await mountEquipmentApp({
         getTill: vi
@@ -291,6 +294,10 @@ describe("the staff notice strip on a signed-in till or handheld", () => {
       await vi.waitFor(() => expect(openDrawer).toHaveBeenCalledOnce());
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(before);
+      if (refused === "storage.disk_full")
+        expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
+          codeMessage(refused),
+        );
     },
   );
 

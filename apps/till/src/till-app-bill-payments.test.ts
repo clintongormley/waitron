@@ -115,6 +115,27 @@ it.each([false, true])(
   },
 );
 
+it("a full disk refuses a partial card slip copy while keeping the recorded payment", async () => {
+  const balance = balanceOf({
+    payments: [paymentOf({ canCopySlip: true, method: "card", entry: "reader" })],
+  });
+  const { el } = await mountApp({
+    printBillPaymentSlip: vi.fn().mockRejectedValue({ code: "storage.disk_full" }),
+    getBillBalance: vi.fn().mockResolvedValue(balance),
+  });
+  await openTable(el);
+  await openDialog(el, "rest");
+
+  emit(dialog(el)!, "bill-slip-copy", { paymentId: "pay-1" });
+  await flush(el);
+
+  expect(text(await formMessageOf(dialog(el)!.shadowRoot!.querySelector("wt-form-actions")!))).toBe(
+    codeMessage("storage.disk_full"),
+  );
+  expect(dialog(el)!.balance).toEqual(balance);
+  expect(api.takeBillPayment).not.toHaveBeenCalled();
+});
+
 const fullInvoicesOn = () => ({
   getTill: vi.fn().mockResolvedValue({ ...till, fullInvoices: true }),
 });

@@ -118,6 +118,12 @@ imprima una reimpresión (una comanda desde la mesa, un recibo desde su venta) o
 **El servidor necesita atención · Avisa al encargado** es un aviso para el que este terminal no tiene
 texto, quizá de una versión más reciente del servidor. Avisa al encargado para que revise el servidor.
 
+Si una acción dice **No se ha guardado: el servidor no tiene espacio en disco. Avisa al encargado.**,
+avisa al encargado y espera a que se libere espacio antes de reintentarlo. Que se rechace la
+impresión de un recibo o justificante, o la apertura del cajón, no anula un pago; no lo cobres otra
+vez. Si el mensaje dice que se ha cobrado la tarjeta, sigue sus instrucciones de recuperación en
+lugar de volver a cobrar.
+
 ## Cuando se detiene la facturación por un conflicto de identidad {#invoice-conflict}
 
 Elige **Abrir recuperación** junto al rechazo para abrir la recuperación de este servidor en otra

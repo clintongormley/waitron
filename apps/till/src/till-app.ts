@@ -1101,6 +1101,7 @@ const HAND_OVER_REFUSALS = new Set([
   "working_order.not_settled",
   "ticket.not_fired",
   "submission.id_reused",
+  "storage.disk_full",
 ]);
 
 /** Refusals naming a line the table's offers can mark once they are read again. */
@@ -1528,7 +1529,8 @@ function lateChangeMessage(late: LateChange): string {
 }
 
 /** A drawer refusal the operator can act on keeps its own sentence; anything else is a retry. */
-function drawerErrorKey(code: string | undefined): StringKey {
+function drawerError(code: string | undefined): StringKey | { code: string } {
+  if (code === "storage.disk_full") return { code };
   return code === "drawer.not_attached" ? code : "drawer.error";
 }
 
@@ -1609,7 +1611,7 @@ type CounterError =
   | { billNameTakenOver: string }
   | { partyChanged: PartyChange }
   | { billChanged: BillChange }
-  | { lateChange: LateChange; also?: StringKey }
+  | { lateChange: LateChange; also?: StringKey | { code: string } }
   | { sentDishRefused: SentDishRefusal };
 
 /** A dish's change refused because the kitchen has it, said where its Sent window cannot. */
@@ -1794,7 +1796,10 @@ function errorText(
   const late = lateChangeMessage(error.lateChange);
   return error.also === undefined
     ? late
-    : html`<span class="error-part">${late}</span><span class="error-part">${t(error.also)}</span>`;
+    : html`<span class="error-part">${late}</span
+        ><span class="error-part"
+          >${typeof error.also === "string" ? t(error.also) : codeMessage(error.also.code)}</span
+        >`;
 }
 
 /** "Fired: 2 groups. Held: 3 groups.", leaving out a clause with nothing in it. */
@@ -9246,9 +9251,12 @@ export class TillApp extends LitElement {
         () => session === this.#operatorSession,
       );
       collected = true;
-    } catch {
+    } catch (error) {
       if (session !== this.#operatorSession) return;
-      this.errorKey = "station.collect_error";
+      this.errorKey =
+        (error as { code?: string } | undefined)?.code === "storage.disk_full"
+          ? { code: "storage.disk_full" }
+          : "station.collect_error";
     } finally {
       limit.done();
       this.#handingOver.delete(orderId);
@@ -9859,14 +9867,17 @@ export class TillApp extends LitElement {
       if (transaction) await this.api.reprintTransaction(workingOrderId, language);
       else if (language === undefined) await this.api.reprint(workingOrderId);
       else await this.api.reprint(workingOrderId, language);
-    } catch {
+    } catch (error) {
       if (
         !transaction ||
         (this.isConnected &&
           this.historicalReceipt === receipt &&
           session === this.#operatorSession)
       )
-        this.errorKey = "reprint.error";
+        this.errorKey =
+          (error as { code?: string } | undefined)?.code === "storage.disk_full"
+            ? { code: "storage.disk_full" }
+            : "reprint.error";
     }
   }
 
@@ -9906,8 +9917,12 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       await api.reprintTenderRefund(refundId, language);
-    } catch {
-      if (current()) this.errorKey = "reprint.error";
+    } catch (error) {
+      if (current())
+        this.errorKey =
+          (error as { code?: string } | undefined)?.code === "storage.disk_full"
+            ? { code: "storage.disk_full" }
+            : "reprint.error";
     } finally {
       if (current()) this.refundPrintBusy = false;
     }
@@ -10430,8 +10445,12 @@ export class TillApp extends LitElement {
         this.#readReceiptPrint(target, session, visit),
         this.#readInvoiceDeliveries(target, session, visit),
       ]);
-    } catch {
-      if (this.#ticketIsCurrent(target, session, visit)) this.errorKey = "receipt.error";
+    } catch (error) {
+      if (this.#ticketIsCurrent(target, session, visit))
+        this.errorKey =
+          (error as { code?: string } | undefined)?.code === "storage.disk_full"
+            ? { code: "storage.disk_full" }
+            : "receipt.error";
     } finally {
       if (this.#ticketIsCurrent(target, session, visit)) this.originalReceiptBusy = false;
     }
@@ -10443,8 +10462,11 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       await this.api.printPaymentSlip(this.ticketWorkingOrderId);
-    } catch {
-      this.errorKey = "payment_slip.error";
+    } catch (error) {
+      this.errorKey =
+        (error as { code?: string } | undefined)?.code === "storage.disk_full"
+          ? { code: "storage.disk_full" }
+          : "payment_slip.error";
     }
   }
 
@@ -10472,7 +10494,7 @@ export class TillApp extends LitElement {
 
   #showDrawerError(code?: string): void {
     const late = this.#lateChangeShown();
-    const key = drawerErrorKey(code);
+    const key = drawerError(code);
     this.errorKey = late === undefined ? key : { lateChange: late, also: key };
   }
 
@@ -21014,12 +21036,15 @@ export class TillApp extends LitElement {
     this.billPaying = { ...open, busy: true, refusal: null };
     try {
       await this.api!.printBillPaymentSlip(open.billId, paymentId);
-    } catch {
+    } catch (error) {
       const now = this.#billPayingNow(open.id);
       if (now !== null)
         this.billPaying = {
           ...now,
-          refusal: { code: "payment_slip.error", text: t("payment_slip.error") },
+          refusal:
+            (error as { code?: string } | undefined)?.code === "storage.disk_full"
+              ? { code: "storage.disk_full", text: codeMessage("storage.disk_full") }
+              : { code: "payment_slip.error", text: t("payment_slip.error") },
         };
     } finally {
       const now = this.#billPayingNow(open.id);

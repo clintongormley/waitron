@@ -6178,6 +6178,10 @@ describe("till-app", () => {
   it.each([
     ["drawer.no_printer", "No se pudo abrir el cajón, inténtalo de nuevo"],
     ["drawer.not_attached", "Esta impresora no tiene un cajón conectado"],
+    [
+      "storage.disk_full",
+      "No se ha guardado: el servidor no tiene espacio en disco. Avisa al encargado.",
+    ],
   ])(
     "open-drawer: %s surfaces a helpful banner and leaves the ticket open",
     async (code, message) => {
@@ -6271,6 +6275,10 @@ describe("till-app", () => {
   it.each([
     ["drawer.no_printer", "No se pudo abrir el cajón, inténtalo de nuevo"],
     ["drawer.not_attached", "Esta impresora no tiene un cajón conectado"],
+    [
+      "storage.disk_full",
+      "No se ha guardado: el servidor no tiene espacio en disco. Avisa al encargado.",
+    ],
   ])(
     "%s on the override closes the dialog and surfaces a helpful banner",
     async (code, message) => {
@@ -13588,6 +13596,28 @@ describe("till-app", () => {
       }
     });
 
+    it("a full disk refuses prep Collect and keeps the uncollected order visible", async () => {
+      const { el } = await mountApp({
+        zonePolicy: { serviceMode: "ticket_then_pay" },
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+        markCollected: vi.fn().mockRejectedValue({ code: "storage.disk_full" }),
+        getStationQueue: vi
+          .fn()
+          .mockResolvedValueOnce({ items: [stationGroup], notices: [] })
+          .mockRejectedValue({ code: "storage.disk_full" }),
+      });
+      const c = await toCounter(el);
+
+      emit(c, "mark-collected", { orderId: "wo-1" });
+      await flush(el);
+
+      expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
+        codeMessage("storage.disk_full"),
+      );
+      expect(counter(el)!.stationQueue).toEqual([stationGroup]);
+      expect(currentApi.getStationQueue).toHaveBeenCalledTimes(2);
+    });
+
     it("a failed mark-collected still refreshes the queue and shows a non-fatal error", async () => {
       const { el } = await mountApp({
         zonePolicy: { serviceMode: "ticket_then_pay" },
@@ -19424,7 +19454,12 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
     expect(alert(el)).toBeNull();
   });
 
-  it.each(["working_order.already_collected", "working_order.not_settled", "ticket.not_fired"])(
+  it.each([
+    "working_order.already_collected",
+    "working_order.not_settled",
+    "ticket.not_fired",
+    "storage.disk_full",
+  ])(
     "a hand over refused %s says why in the counter's words and reads the list again",
     async (code) => {
       const listCounterWaiting = vi.fn().mockResolvedValue([paidOrder]);
@@ -23882,6 +23917,24 @@ describe("A737 Find a bill page", () => {
       signal: expect.any(AbortSignal),
     });
   });
+  it("a full disk refuses an acknowledgment copy without losing the completed refund", async () => {
+    const { el, view } = await open({
+      getTill: vi.fn().mockResolvedValue({ ...till, receiptLanguages: ["es-ES"] }),
+      getTenderRefundAcknowledgment: vi.fn().mockResolvedValue(acknowledgment),
+      reprintTenderRefund: vi.fn().mockRejectedValue({ code: "storage.disk_full" }),
+    });
+    emit(view, "find-transaction-open", { row: refundRow() });
+    await vi.waitFor(() => expect(refundView(el)).not.toBeNull());
+    const receipt = refundView(el)!;
+
+    emit(receipt, "reprint");
+    await flush(el);
+
+    expect(el.shadowRoot!.textContent).toContain(codeMessage("storage.disk_full"));
+    expect(refundView(el)).toBe(receipt);
+    expect(receipt.busy).toBe(false);
+  });
+
   it("Bill gate opens only the first transaction while its receipt is loading", async () => {
     let finish!: (value: TillSaleResult) => void;
     const getTransactionReceipt = vi.fn(
