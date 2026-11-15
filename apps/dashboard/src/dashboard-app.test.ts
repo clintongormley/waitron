@@ -36,6 +36,7 @@ import {
 import { MenuPreviewPanel } from "./widgets/menu-preview.js";
 import { DashboardApp } from "./dashboard-app.js";
 import type { ProfileScreen } from "./screens/profile-screen.js";
+import type { CloudServicesScreen } from "./screens/cloud-services-screen.js";
 import type { AboutDialog } from "./widgets/about-dialog.js";
 import { diag } from "./diagnostics.js";
 import indexHtml from "../index.html?raw";
@@ -7701,7 +7702,24 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     const face = el.shadowRoot!.querySelector<HTMLElement & { api: DashboardApi }>(tag);
     expect(face).not.toBeNull();
     expect(face!.api).toBe(api);
+    if (screen === "cloud") expect((face as CloudServicesScreen).canManageEmergency).toBe(false);
     expect(location.pathname).toMatch(new RegExp(`^/manage/${screen}(/|$)`));
+  });
+
+  it("passes box-management permission to the Cloud screen", async () => {
+    history.replaceState(null, "", "/manage/cloud");
+    const api = faceApi();
+    api.getMe = vi.fn().mockResolvedValue({
+      ...meResponse,
+      permissions: [...meResponse.permissions, "node.manage"],
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { canManageEmergency: boolean }>(
+        "dashboard-cloud-services-screen",
+      )!.canManageEmergency,
+    ).toBe(true);
   });
 
   it("handles the retired Sections address as an unknown screen", async () => {

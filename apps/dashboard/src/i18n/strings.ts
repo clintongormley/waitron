@@ -626,6 +626,18 @@ export const en = {
   "cloud.billing_daily": "{price} per 30 days, charged by the day + {vat} VAT",
   "cloud.account": "Open Cloud account",
   "cloud.emergency": "Emergency start in Cloud",
+  "cloud.emergency_show_code": "Show code",
+  "cloud.emergency_code_unavailable":
+    "The emergency code could not be read. Showing it may not be available in Cloud yet. Open your Cloud account to check, or try again later.",
+  "cloud.emergency_hide_code": "Hide code",
+  "cloud.emergency_people": "Have permission and an authenticator",
+  "cloud.emergency_needs_authenticator": "Need to set up an authenticator first",
+  "cloud.emergency_nobody": "Nobody",
+  "cloud.emergency_people_unavailable":
+    "Who can start could not be read. Reload this page to try again.",
+  "cloud.emergency_permission":
+    "To see the code and who can start the venue, sign in with permission to manage the box.",
+  "cloud.emergency_sign_in": "Sign in as an administrator",
   "cloud.emergency_open":
     "Cloud reports that emergency start is available. Cloud checks again before starting the venue.",
   "cloud.emergency_setting_off":
@@ -4937,6 +4949,18 @@ export const es: Record<StringKey, string> = {
   "cloud.billing_daily": "{price} cada 30 días, cobrado por día + {vat} de IVA",
   "cloud.account": "Abrir la cuenta de Cloud",
   "cloud.emergency": "Inicio de emergencia en Cloud",
+  "cloud.emergency_show_code": "Mostrar código",
+  "cloud.emergency_code_unavailable":
+    "No se pudo consultar el código de emergencia. Puede que Cloud aún no permita mostrarlo. Abre tu cuenta de Cloud para comprobarlo o inténtalo más tarde.",
+  "cloud.emergency_hide_code": "Ocultar código",
+  "cloud.emergency_people": "Tienen permiso y autenticador",
+  "cloud.emergency_needs_authenticator": "Necesitan configurar un autenticador primero",
+  "cloud.emergency_nobody": "Nadie",
+  "cloud.emergency_people_unavailable":
+    "No se pudo consultar quién puede iniciar el local. Recarga esta página para volver a intentarlo.",
+  "cloud.emergency_permission":
+    "Para ver el código y quién puede iniciar el local, inicia sesión con permiso para gestionar el servidor.",
+  "cloud.emergency_sign_in": "Iniciar sesión como administrador",
   "cloud.emergency_open":
     "Cloud indica que el inicio de emergencia está disponible. Cloud lo comprueba de nuevo antes de iniciar el local.",
   "cloud.emergency_setting_off":

@@ -1769,6 +1769,17 @@ export interface CloudEmergency {
     | { status: "unavailable"; reason: "state_not_ready" };
   prices: CloudBilling["prices"];
 }
+export interface CloudEmergencyCode {
+  asOf: string;
+  code: string;
+  codeIssuedAt: string;
+  address: string;
+}
+export interface CloudEmergencyPerson {
+  personId: string;
+  displayName: string;
+  hasAuthenticator: boolean;
+}
 
 type CloudLevel = "registered" | "connected" | "hosted";
 /** `GET /management-api/cloud/billing`: Cloud's "Venue billing display, version 1", checked by
@@ -4840,6 +4851,12 @@ export class DashboardApi {
   }
   getCloudEmergency(): Promise<CloudEmergency> {
     return this.#request("/management-api/cloud/emergency", "GET");
+  }
+  getCloudEmergencyPeople(): Promise<CloudEmergencyPerson[]> {
+    return this.#request("/management-api/cloud/emergency/people", "GET");
+  }
+  revealCloudEmergencyCode(): Promise<CloudEmergencyCode> {
+    return this.#request("/management-api/cloud/emergency/code", "POST", {});
   }
   getCloudBilling(): Promise<CloudBilling> {
     return this.#request("/management-api/cloud/billing", "GET");

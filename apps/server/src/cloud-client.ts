@@ -17,7 +17,11 @@ import {
   type CloudInstallationStatus,
   type CloudObservation,
 } from "./cloud-installation.js";
-import { fetchEmergencyDisplay, type EmergencyDisplay } from "./cloud-emergency.js";
+import {
+  fetchEmergencyCode,
+  fetchEmergencyDisplay,
+  type EmergencyDisplay,
+} from "./cloud-emergency.js";
 import { fetchBillingDisplay, type BillingDisplay, type BillingRefusal } from "./cloud-billing.js";
 import {
   collectTranslation,
@@ -426,6 +430,17 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     | undefined;
   let emergencyFacts: { registration: string; display: EmergencyDisplay } | undefined;
   return {
+    async emergencyCode(staffOrigin: string, signal?: AbortSignal) {
+      const state = await leaseState(),
+        registration = registrationOf(state);
+      const code = await fetchEmergencyCode(state, staffOrigin, {
+        signal,
+        onRefusal: recordRefusal,
+      });
+      if (!registration || registrationOf(await read()) !== registration)
+        throw new AppError("cloud.unavailable", {});
+      return code;
+    },
     async emergency(
       staffOrigin: string,
       signal?: AbortSignal,

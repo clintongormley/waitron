@@ -117,6 +117,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Waitron could not reach Cloud or verify its reply. Try again.",
     es: "Waitron no pudo conectar con Cloud o verificar su respuesta. Vuelve a intentarlo.",
   },
+  "cloud.emergency_hosting_closed": {
+    en: "Emergency start is unavailable. Open your Cloud account to check its settings.",
+    es: "El inicio de emergencia no está disponible. Abre tu cuenta de Cloud para revisar la configuración.",
+  },
+  "cloud.emergency_code_rate_limited": {
+    en: "Too many code requests. Wait {seconds} seconds, then try again.",
+    es: "Demasiadas solicitudes de código. Espera {seconds} segundos y vuelve a intentarlo.",
+  },
   "cloud.tunnel_unavailable": {
     en: "The staff tunnel could not be configured on this box. Check its tunnel configuration and refresh status to try again.",
     es: "No se pudo configurar el túnel del personal en este servidor. Revisa su configuración del túnel y actualiza el estado para volver a intentarlo.",
@@ -1783,8 +1791,19 @@ export function fieldOf(error: unknown): string {
 export function codeMessage(
   code: string,
   locale: string = currentLocale(),
-  params?: { reason?: unknown; count?: unknown },
+  params?: { reason?: unknown; count?: unknown; seconds?: unknown },
 ): string {
+  if (code === "cloud.emergency_code_rate_limited" && typeof params?.seconds === "number")
+    return registeredCodeMessage(code, locale).replace("{seconds}", String(params.seconds));
+  if (
+    code === "cloud.emergency_hosting_closed" &&
+    ["setting_off", "level_inactive", "no_payment_method", "not_provisioned"].includes(
+      params?.reason as string,
+    )
+  ) {
+    const key = `cloud.emergency_${params!.reason}` as "cloud.emergency_setting_off";
+    return pickLocale({ en: en[key], es: es[key] }, locale);
+  }
   if (code === "venue.time_zone_not_ready") return zoneAdmissionMessage(params?.reason, locale);
   if (code === "receipt.language_orders_open" && typeof params?.count === "number")
     return ordersOpenMessage(params.count, locale);

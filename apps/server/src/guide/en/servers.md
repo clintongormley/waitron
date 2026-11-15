@@ -249,5 +249,10 @@ was issued.
 If emergency start is switched off, your Connected plan is inactive or a payment method is
 missing, open the Cloud account to put it right. **Cloud cannot start this venue yet** means the
 hosting path is not available for this venue. Earlier details are labelled as such; Cloud checks
-again before starting. The daily price is an estimate excluding VAT. This card shows details
-only; it does not start the venue or reveal its emergency code.
+again before starting. The daily price is an estimate excluding VAT.
+
+With permission to manage the box, choose **Show code** to fetch the current code. Check its
+issuance date before using a saved copy. **Hide code** removes it from the card; leaving this
+screen does too. The address beside the revealed code belongs to that code.
+The card also lists people with permission and an authenticator, and people who need to set
+one up in their profile. The card does not start the venue.

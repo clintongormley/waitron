@@ -263,7 +263,12 @@ export async function fetchCloudDisplay<T>(
   state: SavedCloudState,
   action: MachineAction,
   read: (value: unknown, exchange: { sentAt: number; receivedAt: number }) => T,
-  options: { signal?: AbortSignal; onRefusal?: OnRefusal; timeoutMs?: number } = {},
+  options: {
+    signal?: AbortSignal;
+    onRefusal?: OnRefusal;
+    timeoutMs?: number;
+    refusal?: (status: number, value: unknown, retryAfter: string | null) => AppError;
+  } = {},
 ): Promise<T> {
   const registration = state.view?.registration;
   const lease = state.lifecycle?.lease;
@@ -303,7 +308,10 @@ export async function fetchCloudDisplay<T>(
         await options.onRefusal?.("revoked", used, state.publicKey);
       if (response.status === 401 && code === "invalid_proof")
         await options.onRefusal?.("invalid_proof", used, state.publicKey);
-      throw refusal(response.status, response.headers.get("retry-after"));
+      throw (
+        options.refusal?.(response.status, value, response.headers.get("retry-after")) ??
+        refusal(response.status, response.headers.get("retry-after"))
+      );
     }
     return read(value, { sentAt, receivedAt });
   } catch (error) {
