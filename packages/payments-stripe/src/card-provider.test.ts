@@ -39,13 +39,20 @@ const FOUR_FIELDS = {
  * test can prove which key scoped the call and which reader was verified. */
 interface FakeCalls {
   secretKeys: string[];
+  clientOptions: (Stripe.StripeConfig | undefined)[];
   accountsRetrieved: number;
   readersRetrieved: string[];
   cancelled: string[];
 }
 
 function freshCalls(): FakeCalls {
-  return { secretKeys: [], accountsRetrieved: 0, readersRetrieved: [], cancelled: [] };
+  return {
+    secretKeys: [],
+    clientOptions: [],
+    accountsRetrieved: 0,
+    readersRetrieved: [],
+    cancelled: [],
+  };
 }
 
 /** A `(secretKey) => Stripe` seam double exposing only the calls the card-provider seat makes:
@@ -58,9 +65,10 @@ function fakeMakeStripe(
     list?: (...args: unknown[]) => Promise<unknown>;
   },
   calls: FakeCalls,
-): (secretKey: string) => Stripe {
-  return (secretKey: string) => {
+): (secretKey: string, options?: Stripe.StripeConfig) => Stripe {
+  return (secretKey: string, options?: Stripe.StripeConfig) => {
     calls.secretKeys.push(secretKey);
+    calls.clientOptions.push(options);
     return {
       accounts: {
         retrieve: async () => {
@@ -147,6 +155,7 @@ describe("STRIPE_CARD_PROVIDER.connect", () => {
     });
     expect(calls.secretKeys).toEqual(["sk_test_key"]);
     expect(calls.accountsRetrieved).toBe(1);
+    expect(calls.clientOptions).toEqual([undefined]);
   });
 
   it("falls back to the account id when the account has no display name", async () => {
@@ -296,6 +305,7 @@ describe("STRIPE_CARD_PROVIDER.readers", () => {
     const result = await seat.readers.add(deps, { name: "Counter", reference: "tmr_abc" });
     expect(result).toEqual({ providerRef: "tmr_abc", status: "paired" });
     expect(calls.readersRetrieved).toEqual(["tmr_abc"]);
+    expect(calls.clientOptions).toEqual([undefined]);
     expect(calls.secretKeys).toEqual(["sk_test_key"]);
   });
 
@@ -452,6 +462,7 @@ describe("deferredStripeClient", () => {
     await client.cancelReaderAction("tmr_abc");
     expect(calls.secretKeys).toEqual(["sk_test_key"]);
     expect(calls.cancelled).toEqual(["tmr_abc"]);
+    expect(calls.clientOptions).toEqual([undefined]);
     // A second call reuses the cached client rather than reading the credential again.
     await client.cancelReaderAction("tmr_def");
     expect(calls.secretKeys).toEqual(["sk_test_key"]);
@@ -560,4 +571,68 @@ describe("STRIPE_CARD_PROVIDER.readers.add through the real Stripe client", () =
       standIn.close();
     }
   });
+});
+
+describe("Stripe reader HTTP deadlines", () => {
+  it.each(["status", "list"] as const)(
+    "%s stops a trickling body without retrying",
+    async (method) => {
+      await seedStripe(FOUR_FIELDS);
+      const paths: string[] = [];
+      let received: Stripe.StripeConfig | undefined;
+      const server = createServer((req, res) => {
+        paths.push(`${req.method} ${req.url}`);
+        res.writeHead(200, { "content-type": "application/json" });
+        res.write(" ");
+        const trickle = setInterval(() => res.write(" "), 30);
+        const finish = setTimeout(
+          () =>
+            res.end(
+              JSON.stringify(
+                method === "list" ? { data: [] } : { id: "tmr_abc", status: "online" },
+              ),
+            ),
+          1_000,
+        );
+        res.on("close", () => {
+          clearInterval(trickle);
+          clearTimeout(finish);
+        });
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const { port } = server.address() as AddressInfo;
+      try {
+        const seat = createStripeCardProvider((key, options?: Stripe.StripeConfig) => {
+          received = options;
+          const client = defaultMakeStripe(key, {
+            ...options,
+            host: "127.0.0.1",
+            port,
+            protocol: "http",
+            timeout: 200,
+          });
+          if (client.getApiField("host") !== "127.0.0.1")
+            throw new Error("Local HTTP override missing");
+          return client;
+        });
+        const deps = { db: suite.db, ring };
+        const result = await (
+          method === "status" ? seat.readers.status(deps, "tmr_abc") : seat.readers.list(deps)
+        ).catch((error: unknown) => error);
+        expect(received?.timeout).toBe(20_000);
+        expect(received?.maxNetworkRetries).toBe(0);
+        expect(received?.httpClient?.getClientName()).toBe("fetch");
+        if (method === "status") expect(result).toEqual({ online: false, unreachable: true });
+        else expect(result).toBeInstanceOf(Stripe.errors.StripeConnectionError);
+        expect(paths).toEqual([
+          method === "status" ? "GET /v1/terminal/readers/tmr_abc" : "GET /v1/terminal/readers",
+        ]);
+      } finally {
+        server.closeAllConnections();
+        await new Promise<void>((resolve, reject) =>
+          server.close((error) => (error ? reject(error) : resolve())),
+        );
+      }
+    },
+  );
 });

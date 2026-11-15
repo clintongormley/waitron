@@ -1255,7 +1255,8 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   where the English says "Tip returned".
   [Detail](backlog/payments.md#tip-display-gaps)
 
-- **Reader status time limits** (bundle of 2, size S). [Detail](backlog/payments.md#bundle-reader-status-time-limits)
+- **Qualify concurrent reader status reads in a real browser against a silent provider, including
+  the box’s HTTP/1.1 connection limit.** [Detail](backlog/payments.md#the-w48-test-does-not-measure-a-real-silent-provider-or-the-boxs-http11-connection-limit)
 
 ### Users, sign-in and the dashboard shell
 
