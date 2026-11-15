@@ -4,10 +4,6 @@ import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { expect, it, onTestFinished, vi } from "vitest";
 
-vi.mock("node:crypto", async (original) => {
-  const actual = await original<typeof import("node:crypto")>();
-  return { ...actual, randomUUID: vi.fn(actual.randomUUID) };
-});
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -23,6 +19,11 @@ import { hasReturnedInvoices, returnedInvoices, storedBases } from "./returned-i
 import { VERIFACTU_HANDOVER } from "./handover-summary.js";
 import { VerifactuBackend } from "./backend.js";
 import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+
+vi.mock("node:crypto", async (original) => {
+  const actual = await original<typeof import("node:crypto")>();
+  return { ...actual, randomUUID: vi.fn(actual.randomUUID) };
+});
 
 const source = useVenueDb({ migrations: TEST_MIGRATIONS });
 const receiver = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -333,6 +334,7 @@ it("counts only marked rows, bounds pages and sorts receipt batches before stabl
     vi.mocked(randomUUID).mockImplementation(actual.randomUUID);
   });
   const node = await fixture();
+  // This weaker inside-word match keeps the invoice search wider than one page.
   await withTransaction(receiver.db, (tx) =>
     tx.execute(sql`update nodes set name = 'Node Returning a106' where id = ${node.nodeId}`),
   );
@@ -365,6 +367,7 @@ it("counts only marked rows, bounds pages and sorts receipt batches before stabl
   expect((await read(0, "ascending")).rows.map((row) => row.sequence)).toEqual(
     Array.from({ length: 50 }, (_, i) => i + 1),
   );
+  // The shared rank breaks this source-name tie by invoice text length before receipt time.
   for (const sortDirection of ["ascending", "descending"] as const) {
     const ranked = await withTransaction(receiver.db, (tx) =>
       returnedInvoices(tx, {

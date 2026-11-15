@@ -311,12 +311,17 @@ it("retries a refused move and keeps live refresh on the server-corrected page a
   vi.useFakeTimers();
   try {
     const input = table.shadowRoot!.querySelector<HTMLInputElement>('input[type="search"]')!;
+    const beforeSearch = read.mock.calls.length;
     input.value = "A/42 ";
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
     await table.updateComplete;
     table.dispatchEvent(new CustomEvent("wt-page-change", { detail: { page: 2 } }));
-    await vi.advanceTimersByTimeAsync(0);
-    expect(read.mock.lastCall![0]).toMatchObject({ page: 0, search: "A/42 " });
+    await vi.advanceTimersByTimeAsync(200);
+    expect(
+      read.mock.calls
+        .slice(beforeSearch)
+        .map(([query]) => ({ page: query.page, search: query.search })),
+    ).toEqual([{ page: 0, search: "A/42 " }]);
   } finally {
     vi.useRealTimers();
   }
