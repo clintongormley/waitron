@@ -363,9 +363,11 @@ it.each([
   [
     "a 21% split after an earlier correction named no line at 10% only",
     (d: Draft): void =>
-      void ((d.total = "-1.05"),
-      (d.lines = [line(1, 1, "21.00", "-0.87", "-1.05")]),
-      (d.split = [["21.00", "-0.87", "-0.18"]])),
+      void (
+        (d.total = "-1.05"),
+        (d.lines = [line(1, 1, "21.00", "-0.87", "-1.05")]),
+        (d.split = [["21.00", "-0.87", "-0.18"]])
+      ),
     "unnamedAt10",
   ],
 ] as const)("files %s as given", async (_name, change, earlier) => {
