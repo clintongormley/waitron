@@ -2,7 +2,7 @@ import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { ifDefined } from "lit/directives/if-defined.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, TableRequestController } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-dialog.js";
@@ -16,7 +16,13 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import "../widgets/staff-list.js";
 import "../widgets/person-form.js";
 import "../widgets/person-edit.js";
-import type { AccessRole, DashboardApi, PersonEditDetails, PersonSummary } from "../api/client.js";
+import type {
+  AccessRole,
+  DashboardApi,
+  PersonEditDetails,
+  PersonSummary,
+  PersonPageQuery,
+} from "../api/client.js";
 
 @customElement("dashboard-staff-screen")
 export class StaffScreen extends LitElement {
@@ -96,6 +102,28 @@ export class StaffScreen extends LitElement {
   @property({ type: Boolean }) canManageSchedule = false;
   @property({ type: Boolean }) canExportPersonalData = false;
   @state() private people: PersonSummary[] = [];
+  @state() private paging = { page: 0, pageSize: 50, total: 0 };
+  @state() private anyPeople = true;
+  #sort?: Pick<PersonPageQuery, "sortKey" | "sortDirection">;
+  #shownQuery?: Omit<PersonPageQuery, "page">;
+  readonly #pages = new TableRequestController<Omit<PersonPageQuery, "page">>(
+    this,
+    async (query, page) => {
+      try {
+        await this.#queries.watch("listStaffPage", [{ ...query, page }], (value) => {
+          this.#shownQuery = query;
+          this.people = value.rows;
+          this.paging = { page: value.page, pageSize: value.pageSize, total: value.total };
+          this.anyPeople = value.anyPeople;
+          if (this.#pages.query === query) this.#pages.page = value.page;
+        });
+      } catch {
+        if (this.#pages.query === query && this.#shownQuery === query)
+          this.#pages.page = this.paging.page;
+        /* The query controller owns the read message and its recovery. */
+      }
+    },
+  );
   @state() private formOpen = false;
   @state() private editingPerson: PersonSummary | null = null;
   @state() private editOpen = false;
@@ -246,32 +274,25 @@ export class StaffScreen extends LitElement {
 
   #editing = false;
 
-  #filtered?: { inputs: readonly unknown[]; people: PersonSummary[] };
-
-  /** The same array while the roster and filters are unchanged, so a typed search does not make
-   * the table fold every row again. */
-  #filteredPeople(): PersonSummary[] {
-    const inputs = [this.people, this.roleFilter, this.statusFilter];
-    if (this.#filtered?.inputs.every((input, index) => input === inputs[index]))
-      return this.#filtered.people;
-    const people = this.people.filter((person) => {
-      if (this.roleFilter.length > 0 && !this.roleFilter.some((id) => person.roleIds.includes(id)))
-        return false;
-      if (this.statusFilter === "current" && person.status === "suspended") return false;
-      return (
-        this.statusFilter === "current" ||
-        this.statusFilter === "all" ||
-        person.status === this.statusFilter
-      );
+  #requestPage(): void {
+    if (this.#sort === undefined) return;
+    this.#pages.setQuery({
+      search: this.search,
+      roleIds: [...this.roleFilter].sort(),
+      status: this.statusFilter,
+      ...this.#sort,
+      locale: currentLocale(),
     });
-    this.#filtered = { inputs, people };
-    return people;
+  }
+
+  protected override updated(): void {
+    this.#requestPage();
   }
 
   override connectedCallback(): void {
     super.connectedCallback();
     this.#showError(null);
-    void this.#load();
+    void this.#load(this.#pages.query !== undefined);
   }
 
   override disconnectedCallback(): void {
@@ -284,24 +305,22 @@ export class StaffScreen extends LitElement {
 
   /** Resolves whether the list now shown was read. The query controller settles a watch a newer
    * one replaced without reading, so a replaced load answers with the newest load's result. */
-  #load(): Promise<boolean> {
-    const load: Promise<boolean> = this.#readList().then((read) =>
+  #load(refresh = true): Promise<boolean> {
+    const load: Promise<boolean> = this.#readList(refresh).then((read) =>
       this.#newestLoad === load ? read : this.#newestLoad!,
     );
     this.#newestLoad = load;
     return load;
   }
 
-  async #readList(): Promise<boolean> {
+  async #readList(refresh: boolean): Promise<boolean> {
     if (this.#readErrorShown) this.#showError(null);
     try {
       await this.#queries.watch("listAccessRoles", [], (value) => {
         this.accessRoles = value;
       });
-      await this.#queries.watch("listStaff", [], (value) => {
-        this.people = value;
-      });
-      return true;
+      if (refresh) await this.#pages.reload();
+      return !this.#queries.failing("listStaffPage");
     } catch (error) {
       this.#showReadError(error);
       return false;
@@ -378,8 +397,10 @@ export class StaffScreen extends LitElement {
     event.stopPropagation();
     this.#editWith(async (id) => {
       await this.api.savePerson(id, event.detail);
-      if (this.editingPerson?.personId === id)
+      if (this.editingPerson?.personId === id) {
+        this.editingPerson = { ...this.editingPerson, ...event.detail };
         this.shadowRoot!.querySelector("dashboard-person-edit")!.closeSaved(event.detail);
+      }
     });
   }
 
@@ -441,9 +462,17 @@ export class StaffScreen extends LitElement {
     } catch (error) {
       const code = codeOf(error);
       const email = event.detail.email.trim().toLocaleLowerCase();
+      let people = this.people;
+      if (code === "person.email_taken") {
+        try {
+          people = await this.api.listStaff();
+        } catch {
+          /* Keep the original field refusal. */
+        }
+      }
       const inactive =
         code === "person.email_taken"
-          ? this.people.find(
+          ? people.find(
               (person) =>
                 person.status === "suspended" && person.email?.toLocaleLowerCase() === email,
             )
@@ -535,9 +564,22 @@ export class StaffScreen extends LitElement {
       </div>
       <dashboard-staff-list
         .accessRoles=${this.accessRoles}
-        .people=${this.#filteredPeople()}
+        .people=${this.people}
+        .serverPaging=${this.paging}
+        @wt-query-change=${(
+          event: CustomEvent<Pick<PersonPageQuery, "sortKey" | "sortDirection">>,
+        ) => {
+          event.stopPropagation();
+          this.#sort = { sortKey: event.detail.sortKey, sortDirection: event.detail.sortDirection };
+          this.#requestPage();
+        }}
+        @wt-page-change=${(event: CustomEvent<{ page: number }>) => {
+          event.stopPropagation();
+          if (this.#pages.query !== this.#shownQuery) void this.#pages.reload();
+          else this.#pages.move(event.detail.page);
+        }}
         .searchTerm=${this.search}
-        .emptyMessage=${this.people.length === 0 ? t("staff.empty") : tableNoMatches()}
+        .emptyMessage=${!this.anyPeople ? t("staff.empty") : tableNoMatches()}
         .currentPersonId=${this.currentPersonId}
         .canAdminister=${this.canAdminister}
         .canExportPersonalData=${this.canExportPersonalData}
@@ -546,7 +588,7 @@ export class StaffScreen extends LitElement {
           void this.#onDownloadPersonData(event)}
         @person-action=${(event: CustomEvent<{ personId: string; action: string }>) => this.#onRowAction(event)}
         @edit-person=${(e: CustomEvent<{ personId: string }>) => this.#onEditPerson(e)}
-        >${this.people.length === 0 ? this.#renderAdd("empty-action") : nothing}</dashboard-staff-list
+        >${!this.anyPeople ? this.#renderAdd("empty-action") : nothing}</dashboard-staff-list
       >
       ${
         this.errorKey && !this.editOpen && !this.formOpen && this.rowAction === null

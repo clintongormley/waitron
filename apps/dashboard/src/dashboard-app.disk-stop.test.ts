@@ -1,3 +1,4 @@
+import { withStaffPages } from "./testing/staff-page-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
@@ -39,7 +40,7 @@ const meResponse = {
 /** Every read the shell and the screens it mounts make on connect resolves: a stray rejection is a
  * finding. */
 function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
-  return {
+  return withStaffPages({
     getMe: vi.fn().mockResolvedValue({ ...meResponse }),
     forgetLocales: () => {},
     getLocales: vi.fn().mockResolvedValue({
@@ -149,7 +150,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       displayName: "Manager",
     }),
     ...overrides,
-  } as unknown as DashboardApi;
+  } as unknown as DashboardApi);
 }
 
 const MANAGER_EN =

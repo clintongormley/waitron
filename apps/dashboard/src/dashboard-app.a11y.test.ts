@@ -1,3 +1,4 @@
+import { withStaffPages } from "./testing/staff-page-fixture.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./widgets/test-helpers.js";
@@ -39,7 +40,7 @@ const people: PersonSummary[] = [
 ];
 
 function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
-  return {
+  return withStaffPages({
     getMe: vi.fn().mockResolvedValue({
       personId: "p1",
       roleIds: ["manager"],
@@ -123,7 +124,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
     getDiskStop: vi.fn().mockResolvedValue({ stopped: false, deleted: null }),
     ...overrides,
-  } as unknown as DashboardApi;
+  } as unknown as DashboardApi);
 }
 
 async function flush(el: DashboardApp): Promise<void> {

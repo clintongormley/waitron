@@ -165,14 +165,11 @@ After A760, decide whether to remove the redundant column and read the provider 
 
 ## Shared database-backed table paging, search and sorting
 
-- **Shared database-backed table paging, search and sorting** (owner decision 2026-09-12; users
-  first). 50 per page with a server-enforced maximum; search and sort over the whole dataset; debounce,
-  reset on filter change, ignore superseded responses, keep passive live refreshes.
-  Since A737 Part 1 (#1778), `wt-data-table` takes `serverPaging` and emits `wt-query-change`
-  (search text, sort and filters) and `wt-page-change`; only the till's find-bill screen
-  (`apps/till/src/screens/till-find-bill-screen.ts`) uses them, and no dashboard table does yet.
-  The dashboard tables waiting on it (A1530, 2026-11-14): Orders and the handover screen's
-  returned invoices, both read a page at a time from the server.
+- **Move the remaining dashboard tables onto shared database-backed requests.** Users now uses
+  `TableRequestController`, 50-row server pages, whole-dataset search/sort and passive live reads.
+  Orders and the handover screen's returned invoices already read server pages and are next
+  adopters, one PR per table. Find a bill retains its existing request state until its own adoption.
+  Large datasets keep SQL sorting or need a measurement before using Users' in-memory key sort.
 
 ## Typed values are only partly checked — a generic phone-format check landed, a country-specific one has not.
 
@@ -370,6 +367,13 @@ An untraced dialog focus line and retiring the summary once its last consumer mo
   “yes for now, then we can revisit later”. The owner's 15 November “Both now” choice keeps those
   normal-browser role sizes, uses rem for browser text preferences, and gives shared typing
   controls a 16px minimum. See [Structure](../developers/design-system.md#structure).
+
+- **Database-backed tables** (owner, 2026-09-12): 50 rows per page with a server-enforced maximum;
+  search/sort over the whole dataset, debounced typing, reset on filter change, ignored superseded
+  replies and passive live refresh. Users is the first adopter. The watcher cleared its server-key
+  sort on 2026-11-15 at 17:59; larger tables sort in SQL or measure first. See
+  [the shared table contract](../developers/design-system.md#remembered-searchable-filterable-tables).
+
 
 ### The form plumbing is hand-written per form
 

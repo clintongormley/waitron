@@ -1,4 +1,4 @@
-import { BUILT_IN_ROLE_NAMES } from "@waitron/shared";
+import { BUILT_IN_ROLE_NAMES, PERSON_STATUS_NAMES } from "@waitron/shared";
 import { currentLocale, resolveNameTable, type NameTable } from "@waitron/dashboard-kit";
 import type {
   AccessRole,
@@ -8,12 +8,6 @@ import type {
   Printer,
 } from "../api/client.js";
 import { fill, t } from "./t.js";
-
-const STATUS_NAMES: NameTable = {
-  pending: { en: "Pending", es: "Pendiente" },
-  active: { en: "Active", es: "Activo" },
-  suspended: { en: "Disabled", es: "Deshabilitado" },
-};
 
 const VAT_CLASS_NAMES: NameTable = {
   general: { en: "General", es: "General" },
@@ -183,7 +177,7 @@ export function swapDirectionName(direction: string, locale: string = currentLoc
 }
 
 export function statusName(value: string, locale: string = currentLocale()): string {
-  return resolveNameTable(STATUS_NAMES, value, locale);
+  return resolveNameTable(PERSON_STATUS_NAMES, value, locale);
 }
 
 export function homeDeviceName(device: HomeDevice): string {

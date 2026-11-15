@@ -1,3 +1,4 @@
+import { withStaffPages } from "../testing/staff-page-fixture.js";
 import { accessRoleChoices } from "../testing/access-role-fixture.js";
 import type { DownloadedFile } from "@waitron/dashboard-kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -59,11 +60,11 @@ const people: PersonSummary[] = [
 const FILE: DownloadedFile = { blob: new Blob(["zip"]), fileName: "ada-lovelace-2026-10-25.zip" };
 
 function stubApi(download?: () => Promise<DownloadedFile>): DashboardApi {
-  return {
+  return withStaffPages({
     listAccessRoles: async () => accessRoleChoices,
     listStaff: vi.fn().mockResolvedValue(people),
     downloadPersonalData: vi.fn(download ?? (() => Promise.resolve(FILE))),
-  } as unknown as DashboardApi;
+  } as unknown as DashboardApi);
 }
 
 function held(): {

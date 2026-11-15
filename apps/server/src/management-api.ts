@@ -19,6 +19,7 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import {
   AppError,
+  SUPPORTED_LOCALE_CODES,
   int4InRange,
   isAppError,
   isBumpMode,
@@ -62,6 +63,7 @@ import {
   inspectAccountAction,
   listActiveStaff,
   listPersons,
+  listPersonsPage,
   listAccessRoles,
   setPersonAccessRoles,
   loginManager,
@@ -1080,6 +1082,56 @@ export function mountManagementApi(
             roleIds: body.roleIds as string[],
             expectedRoleIds: body.expectedRoleIds as string[],
           }),
+        ),
+      );
+    }),
+  );
+
+  app.get("/management-api/staff/page", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const params = new URL(c.req.url).searchParams;
+      const allowed = ["page", "search", "roleId", "status", "sortKey", "sortDirection", "locale"];
+      for (const key of params.keys()) {
+        if (!allowed.includes(key) || (key !== "roleId" && params.getAll(key).length !== 1))
+          throw new AppError("management.request_invalid", { field: key });
+      }
+      const rawPage = params.get("page") ?? "0";
+      const page = Number(rawPage);
+      if (!/^\d+$/.test(rawPage) || !Number.isSafeInteger(page * 50))
+        throw new AppError("management.request_invalid", { field: "page" });
+      const roleIds = params.getAll("roleId");
+      if (roleIds.some((id) => !isUuid(id)))
+        throw new AppError("management.request_invalid", { field: "roleId" });
+      const query = {
+        page,
+        search: params.get("search") ?? "",
+        roleIds: [...new Set(roleIds.map((id) => id.toLowerCase()))],
+        status: requireEnum(params.get("status") ?? "current", "status", [
+          "current",
+          "all",
+          "active",
+          "pending",
+          "suspended",
+        ]),
+        sortKey: requireEnum(params.get("sortKey") ?? "displayName", "sortKey", [
+          "",
+          "displayName",
+          "legalName",
+          "role",
+          "email",
+          "telephone",
+          "status",
+        ]),
+        sortDirection: requireEnum(params.get("sortDirection") ?? "ascending", "sortDirection", [
+          "ascending",
+          "descending",
+        ]),
+        locale: requireEnum(params.get("locale") ?? "en-GB", "locale", SUPPORTED_LOCALE_CODES),
+      };
+      return c.json(
+        await withTransaction(deps.db, (tx) =>
+          listPersonsPage(tx, { managementSessionId: sessionId, ...query }),
         ),
       );
     }),

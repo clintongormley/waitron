@@ -1,3 +1,4 @@
+import { withStaffPages } from "../testing/staff-page-fixture.js";
 import { accessRoleChoices } from "../testing/access-role-fixture.js";
 import { userEvent } from "vitest/browser";
 import { afterEach, expect, it } from "vitest";
@@ -47,11 +48,11 @@ customElements.define("staff-edit-leave-test-app", StaffEditApp);
 async function mount(api: Partial<DashboardApi>) {
   setLocale("en-GB");
   const { el: app } = await mountWidget<StaffEditApp>("staff-edit-leave-test-app", {
-    api: {
+    api: withStaffPages({
       listAccessRoles: async () => accessRoleChoices,
       listStaff: async () => [person],
       ...api,
-    } as DashboardApi,
+    } as DashboardApi),
   });
   const screen = app.shadowRoot!.querySelector("dashboard-staff-screen")!;
   await expect

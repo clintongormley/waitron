@@ -14,6 +14,38 @@ function emptyResponse(): Response {
 }
 
 describe("DashboardApi", () => {
+  it("encodes the whole Users page query without trimming the final search word", async () => {
+    const result = { rows: [], page: 1, pageSize: 50, total: 51, anyPeople: true };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(result));
+    const api = new DashboardApi("", fetchImpl);
+    expect(
+      await api.listStaffPage({
+        page: 1,
+        search: "Ada & Bea ",
+        roleIds: ["11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"],
+        status: "all",
+        sortKey: "role",
+        sortDirection: "descending",
+        locale: "es-ES",
+      }),
+    ).toEqual(result);
+    const url = new URL(fetchImpl.mock.calls[0]![0], "https://venue.test");
+    expect(url.pathname).toBe("/management-api/staff/page");
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      page: "1",
+      search: "Ada & Bea ",
+      roleId: "22222222-2222-4222-8222-222222222222",
+      status: "all",
+      sortKey: "role",
+      sortDirection: "descending",
+      locale: "es-ES",
+    });
+    expect(url.searchParams.getAll("roleId")).toEqual([
+      "11111111-1111-4111-8111-111111111111",
+      "22222222-2222-4222-8222-222222222222",
+    ]);
+    expect(fetchImpl.mock.calls[0]![1].method).toBe("GET");
+  });
   it("moves a mixed folder selection through its dedicated route", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);

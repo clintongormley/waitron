@@ -11,7 +11,7 @@ it("quiets only the audited database queries while connected", () => {
     listExtraLists getExtraList getVenueTheme listThemes listPrinters listPrinterProfiles
     listPrinterStationNames listPagePrinters listPrinterStations getPrinterDeleteImpact listReaders
     listReaderHolders getProfileReaders listHeldPayments getDailyClose getSalesPeriod getCategorySales
-    getReportPrinters getOrderPrinters listOrderStaff listStaff getStaffRoster getProfile
+    getReportPrinters getOrderPrinters listOrderStaff listStaff listStaffPage getStaffRoster getProfile
     listPendingAbsences listPendingSwaps getRoster listMySwaps listMyAbsences listDeviceProfiles
     getDeviceProfile listProfileKitchenScreens getProfileScopeChoices listDevices listStations
     listCourses listZones getFloorPlan getStationDeleteImpact getCourseDeleteImpact getReceiptLanguage
@@ -1384,4 +1384,35 @@ it("refreshes the host network every minute even while connected, passively afte
   expect(new Headers(fetchImpl.mock.calls[0]![1].headers).has("x-waitron-live")).toBe(false);
   expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
   expect(active).toHaveBeenCalledOnce();
+});
+
+it("refreshes Users pages passively and watches all inputs to their displayed sort keys", async () => {
+  const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
+    async () =>
+      new Response(JSON.stringify({ rows: [], page: 0, pageSize: 50, total: 0, anyPeople: true }), {
+        status: 200,
+      }),
+  );
+  const api = new DashboardApi("", fetchImpl);
+  const query = dashboardQuery(api, "listStaffPage", [
+    {
+      page: 0,
+      search: "",
+      roleIds: [],
+      status: "current",
+      sortKey: "role",
+      sortDirection: "ascending",
+      locale: "en-GB",
+    },
+  ]);
+  expect(query.dependencies).toEqual([
+    { type: "persons" },
+    { type: "person_roles" },
+    { type: "roles" },
+  ]);
+  expect(query.quietWhileConnected).toBe(true);
+  await query.read();
+  await query.read();
+  expect(new Headers(fetchImpl.mock.calls[0]![1]?.headers).has("x-waitron-live")).toBe(false);
+  expect(new Headers(fetchImpl.mock.calls[1]![1]?.headers).get("x-waitron-live")).toBe("1");
 });

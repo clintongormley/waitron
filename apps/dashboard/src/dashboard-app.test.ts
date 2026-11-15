@@ -1,3 +1,4 @@
+import { withStaffPages } from "./testing/staff-page-fixture.js";
 import { profileAction, profileListRoot } from "./testing/profile-table.js";
 import { accessRoleChoices } from "./testing/access-role-fixture.js";
 import {
@@ -210,7 +211,7 @@ it.each(["prepare", "live", "demo", undefined] as const)(
 /** Every read the shell and the screens it mounts make on connect resolves: a stray rejection is a
  * finding. */
 function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
-  return {
+  return withStaffPages({
     getMe: vi.fn().mockResolvedValue({ ...meResponse }),
     getLocales: vi.fn().mockResolvedValue({
       locales: [
@@ -319,7 +320,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       displayName: "Manager",
     }),
     ...overrides,
-  } as unknown as DashboardApi;
+  } as unknown as DashboardApi);
 }
 
 it.each(["staff", "supervisor", "manager", "admin"])(

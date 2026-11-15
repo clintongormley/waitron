@@ -124,13 +124,14 @@ export {
   listActivePersonsWithPermission,
   listActiveStaff,
   listPersons,
+  listPersonsPage,
   normalizeAndValidateEmail,
   reactivatePersonForInvitation,
   resetPersonLogin,
   setPersonLocale,
   updatePersonDetails,
 } from "./staff.js";
-export type { PersonSummary, StaffListEntry } from "./staff.js";
+export type { PersonSummary, StaffListEntry, PersonPageQuery, PersonPage } from "./staff.js";
 export {
   ACCOUNT_ACTION_TTL_MS,
   ACCOUNT_ACTION_CODE_ATTEMPTS,
