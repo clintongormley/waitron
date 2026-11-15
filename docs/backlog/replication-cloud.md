@@ -656,6 +656,7 @@ the hosted runtime remain open.
 The [part 1 plan](../superpowers/plans/2026-11-14-a1188-part1-emergency-card.md) proposes two
 card slices and pins Cloud’s 14 November 13:33 CET agreement to the contract values.
 The [part 2 plan](../superpowers/plans/2026-11-15-a1188-part2-till-facts.md) covers saved facts and the till entrance; Claude reviewed it and the watcher cleared slice 2a on 15 November.
+The [part 3 proposal](../superpowers/plans/2026-11-15-a1188-part3-locked-start.md) puts fresh-node placement, the emergency TLS/lease profile, copy status and a repeated-start bound to Cloud. The watcher cleared sending it on 15 November at 15:20; neither its values nor a locked-start build are agreed.
 The watcher resumed the card on 2026-11-15 at 05:46, requiring a post-agreement plan read
 before build. Cloud hosting, endpoint and authenticated-route qualification remain open:
 [A1188 design](../superpowers/specs/2026-10-29-a1188-cloud-emergency-start-design.md).
