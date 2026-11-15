@@ -123,6 +123,10 @@ async function mount(
     mainAnswers?: (call: number) => Promise<Response>;
     /** The spare's passkey challenges and proof cookie, kept across mounts like a reload. */
     proof?: SwitchProof;
+    /** The clock comparison has no internet time, so the person confirms the time. */
+    noInternetTime?: boolean;
+    /** The proof lapses as the first select arrives. */
+    proofLapsesAtSelect?: boolean;
   } = {},
 ) {
   const posts: { path: string; body: Record<string, unknown> }[] = [];
@@ -139,6 +143,7 @@ async function mount(
   let takes = 0;
   let sent = false;
   let previewLost = false;
+  let proofLapsed = false;
   const later = [...(options.later ?? [])];
   const api = new SetupApi("", async (input, init) => {
     const path = String(input);
@@ -176,6 +181,15 @@ async function mount(
     const take = path.endsWith("/emergency/followed")
       ? (options.takes ?? ["taken"])[Math.min(takes, (options.takes ?? ["taken"]).length - 1)]
       : undefined;
+    if (
+      proof &&
+      options.proofLapsesAtSelect &&
+      !proofLapsed &&
+      (body.proposal as { action?: string } | undefined)?.action === "select"
+    ) {
+      proofLapsed = true;
+      proof.cookie = false;
+    }
     const proofRefusal = proof && switchSignIn(proof, path, body.signIn, take);
     if (proofRefusal) return proofRefusal;
     if (path.endsWith("/emergency/backup")) {
@@ -330,12 +344,12 @@ async function mount(
       });
     const action = (body.proposal as { action: string }).action;
     const clock = {
-      usable: ["box", "internet", "browser"].map((source) => ({
-        source,
-        lowerMs: Date.now(),
-        upperMs: Date.now(),
-      })),
-      unavailable: [],
+      usable: (options.noInternetTime ? ["box", "browser"] : ["box", "internet", "browser"]).map(
+        (source) => ({ source, lowerMs: Date.now(), upperMs: Date.now() }),
+      ),
+      unavailable: options.noInternetTime
+        ? [{ source: "internet", result: "unavailable", reason: "offline" }]
+        : [],
       secondClock: true,
       disagreement: false,
       releaseBlocked: false,
@@ -1791,6 +1805,61 @@ it("a refused passkey, or a lapsed proof, offers the passkey again rather than e
   declare.click();
   await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
   expect(get).toHaveBeenCalledTimes(3);
+});
+
+it("with no internet time, a passkey switch confirms the time, and a proof lapsed by the select asks for the passkey again", async () => {
+  const get = stubPasskey();
+  const { el, posts } = await mount({
+    proof: newProof(),
+    noInternetTime: true,
+    proofLapsesAtSelect: true,
+  });
+  const selects = () =>
+    posts
+      .filter(
+        ({ path, body }) =>
+          path.endsWith("/preparation") &&
+          (body.proposal as { action: string }).action === "select",
+      )
+      .map(({ body }) => [
+        body.proposal,
+        body.signIn === undefined
+          ? "none"
+          : "passkey" in (body.signIn as object)
+            ? "passkey"
+            : "other",
+      ]);
+  await choosePasskey(el);
+  q(el, "[data-test=emergency-preview]").click();
+  await vi.waitFor(() => expect(q(el, "[data-test=emergency-copy]")).not.toBeNull());
+  await declarationFields(el);
+  q(el, "[data-test=emergency-declare]").click();
+  await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
+  await startVenue(el);
+  const entry = q<LitElement>(el, "vf-recovery-hour");
+  await vi.waitFor(() => expect(q(entry, "[data-test=confirm-time]")).not.toBeNull());
+  expect(selects()).toEqual([]);
+  expect(get).toHaveBeenCalledTimes(1);
+  q(entry, "[data-test=confirm-time]").click();
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("handover.done")));
+  const confirmed = { action: "select", comparisonId: "comparison", confirmed: true };
+  expect(selects()).toEqual([
+    [confirmed, "none"],
+    [confirmed, "passkey"],
+  ]);
+  expect(
+    posts
+      .filter(({ path }) => path.endsWith("/preparation"))
+      .map(({ body }) => (body.proposal as { action: string }).action),
+  ).toEqual([
+    "clock-challenge",
+    "compare-clocks",
+    "clock-challenge",
+    "compare-clocks",
+    "select",
+    "select",
+  ]);
+  expect(get).toHaveBeenCalledTimes(2);
 });
 
 it.each(["passkey.not_registered", "passkey.verification_failed"])(
