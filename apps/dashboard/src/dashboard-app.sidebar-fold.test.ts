@@ -667,6 +667,28 @@ describe("a section with several pages opens a panel beside its icon", () => {
     });
   });
 
+  it.each(["isComposing", "keyCode 229"] as const)(
+    "an Escape that belongs to an input method's composition (%s) leaves it open",
+    async (how) => {
+      await atSize(1280, 800, async () => {
+        const { el } = await mountFoldedReading("team");
+        stripButton(el, "team").focus();
+        await userEvent.keyboard("{Enter}");
+        await el.updateComplete;
+        const event = new KeyboardEvent("keydown", {
+          key: "Escape",
+          isComposing: how === "isComposing",
+          bubbles: true,
+          composed: true,
+        });
+        if (how === "keyCode 229") Object.defineProperty(event, "keyCode", { value: 229 });
+        panelPages(el)[0]!.dispatchEvent(event);
+        await el.updateComplete;
+        expect(panel(el)).not.toBeNull();
+      });
+    },
+  );
+
   it("Enter on its icon opens it with focus on the first page, and Tab past the last page closes it", async () => {
     await atSize(1280, 800, async () => {
       const { el } = await mountFoldedReading("team");

@@ -8575,16 +8575,26 @@ describe("the nav search", () => {
     expect(header.querySelector(".chevron")).toBeNull();
   });
 
-  it("ignores Enter and Escape that belong to a text composition", async () => {
+  it("ignores Enter and Escape that belong to a text composition, flagged or by key code 229", async () => {
     const el = await mountSession(sessionIn("en-GB"), 390);
     await openDrawer(el);
     const path = new URL(location.href).pathname;
     await search(el, "print");
 
-    for (const key of ["Enter", "Escape"]) {
-      searchBox(el).dispatchEvent(
-        new KeyboardEvent("keydown", { key, isComposing: true, bubbles: true, composed: true }),
-      );
+    for (const [key, how] of [
+      ["Enter", "isComposing"],
+      ["Escape", "isComposing"],
+      ["Enter", "keyCode 229"],
+      ["Escape", "keyCode 229"],
+    ] as const) {
+      const event = new KeyboardEvent("keydown", {
+        key,
+        isComposing: how === "isComposing",
+        bubbles: true,
+        composed: true,
+      });
+      if (how === "keyCode 229") Object.defineProperty(event, "keyCode", { value: 229 });
+      searchBox(el).dispatchEvent(event);
       await flush(el);
       expect(overview(el)).toBeTruthy();
       expect(new URL(location.href).pathname).toBe(path);

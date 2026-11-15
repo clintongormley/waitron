@@ -1,6 +1,6 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
-import { submitOnEnter } from "./submit-on-enter.js";
+import { belongsToComposition, submitOnEnter } from "./submit-on-enter.js";
 import "./components/wt-input.js";
 import "./components/wt-button.js";
 
@@ -174,4 +174,25 @@ it("ignores an Enter that confirms an input-method character, as Safari reports 
   input.dispatchEvent(event);
   expect(clicked).not.toHaveBeenCalled();
   expect(event.defaultPrevented).toBe(false);
+});
+
+it.each([
+  { case: "an ordinary key", init: { key: "Enter" }, keyCode: undefined, expected: false },
+  {
+    case: "a key flagged as composing",
+    init: { key: "Enter", isComposing: true },
+    keyCode: undefined,
+    expected: true,
+  },
+  { case: "a key with key code 229 alone", init: { key: "Enter" }, keyCode: 229, expected: true },
+  {
+    case: "an ordinary key with its own key code",
+    init: { key: "Enter" },
+    keyCode: 13,
+    expected: false,
+  },
+])("belongsToComposition answers $expected for $case", ({ init, keyCode, expected }) => {
+  const event = new KeyboardEvent("keydown", init);
+  if (keyCode !== undefined) Object.defineProperty(event, "keyCode", { value: keyCode });
+  expect(belongsToComposition(event)).toBe(expected);
 });

@@ -10,6 +10,7 @@ import { live } from "lit/directives/live.js";
 import { repeat } from "lit/directives/repeat.js";
 import {
   baseStyles,
+  belongsToComposition,
   chooseTheme,
   iconButtonStyles,
   ThemeChoiceController,
@@ -2614,7 +2615,7 @@ export class DashboardApp extends LitElement {
 
   /** A no-op when the drawer is closed, so it never swallows Escape from anything else. */
   #onLayoutKeydown(e: KeyboardEvent): void {
-    if (e.key === "Escape" && !e.isComposing && this.drawerOpen) this.drawerOpen = false;
+    if (e.key === "Escape" && !belongsToComposition(e) && this.drawerOpen) this.drawerOpen = false;
   }
 
   /** The pages this person may open, group by group in nav order, each labelled in the current
@@ -2884,7 +2885,7 @@ export class DashboardApp extends LitElement {
   }
 
   #onStripPanelKeydown(event: KeyboardEvent): void {
-    if (event.key !== "Escape" || event.isComposing || this.stripPanel === null) return;
+    if (event.key !== "Escape" || belongsToComposition(event) || this.stripPanel === null) return;
     event.stopPropagation();
     const icon = this.#stripPanelParts()?.icon;
     this.stripPanel = null;
@@ -3009,9 +3010,9 @@ export class DashboardApp extends LitElement {
   }
 
   /** Escape is stopped only when it cleared a term, so on an empty box it still closes the drawer.
-   * A key reported with isComposing set belongs to an input method's composition, not the box. */
+   * A key that belongs to an input method's composition is left to it, not the box. */
   #onNavSearchKeydown(e: KeyboardEvent): void {
-    if (e.isComposing) return;
+    if (belongsToComposition(e)) return;
     if (e.key === "Enter" && this.navSearch.trim() !== "") {
       const first = this.#shownNav().find((section) => section.pages?.length)?.pages?.[0];
       if (first) this.#openFromNav(first.screen);

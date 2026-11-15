@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
-import { baseStyles, type DataTableColumn } from "@waitron/ui";
+import { baseStyles, belongsToComposition, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-toast.js";
@@ -913,7 +913,7 @@ export class MenuPricesTable extends LitElement {
   }
 
   #onKeydown(event: KeyboardEvent, line: Line): void {
-    if (event.key !== "Enter" && event.key !== "Escape") return;
+    if ((event.key !== "Enter" && event.key !== "Escape") || belongsToComposition(event)) return;
     event.preventDefault();
     event.stopPropagation();
     if (event.key === "Enter") this.#commit(line, "enter");

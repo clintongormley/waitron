@@ -13,6 +13,11 @@ const singleLineTypes = new Set([
   "week",
 ]);
 
+/** Safari's Enter that confirms an input method's text can arrive after the composition ends, with isComposing unset and key code 229. */
+export function belongsToComposition(event: KeyboardEvent): boolean {
+  return event.isComposing || event.keyCode === 229;
+}
+
 /** Bind to a form boundary or its fields, with that form's explicit submit control.
  * The native input comes from the composed path because wt-input has its own shadow root.
  * Clicking the existing control preserves its validation and in-flight guards.
@@ -21,8 +26,7 @@ export function submitOnEnter(event: KeyboardEvent, button: HTMLElement | null):
   if (
     event.key !== "Enter" ||
     event.defaultPrevented ||
-    event.isComposing ||
-    event.keyCode === 229 ||
+    belongsToComposition(event) ||
     event.repeat ||
     event.altKey ||
     event.ctrlKey ||

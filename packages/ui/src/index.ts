@@ -120,7 +120,7 @@ export type {
   FloorMapPulse,
 } from "./floor-map-fills.js";
 export { UndoHistory } from "./history.js";
-export { submitOnEnter } from "./submit-on-enter.js";
+export { belongsToComposition, submitOnEnter } from "./submit-on-enter.js";
 export { FormFeedback, bottomMessage } from "./form-feedback.js";
 export { breakAfterColons } from "./fingerprint.js";
 export {

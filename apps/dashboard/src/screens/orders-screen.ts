@@ -1,7 +1,13 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
-import { UrlStateController, baseStyles, pageTitleStyles, type DataTableColumn } from "@waitron/ui";
+import {
+  UrlStateController,
+  baseStyles,
+  belongsToComposition,
+  pageTitleStyles,
+  type DataTableColumn,
+} from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -369,7 +375,7 @@ export class OrdersScreen extends LitElement {
           .value=${this.filter.table ?? ""}
           @wt-change=${(event: CustomEvent<{ value: string }>) => this.#text("table", event.detail.value)}
           @keydown=${(event: KeyboardEvent) => {
-            if (event.key === "Enter" && !event.isComposing)
+            if (event.key === "Enter" && !belongsToComposition(event))
               this.#text("table", (event.currentTarget as HTMLInputElement).value, true);
           }}
         ></wt-input>
@@ -381,7 +387,7 @@ export class OrdersScreen extends LitElement {
           .value=${this.filter.q ?? ""}
           @wt-change=${(event: CustomEvent<{ value: string }>) => this.#text("q", event.detail.value)}
           @keydown=${(event: KeyboardEvent) => {
-            if (event.key === "Enter" && !event.isComposing)
+            if (event.key === "Enter" && !belongsToComposition(event))
               this.#text("q", (event.currentTarget as HTMLInputElement).value, true);
           }}
         ></wt-input>

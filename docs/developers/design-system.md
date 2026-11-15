@@ -4193,8 +4193,8 @@ nothing when nothing matches or the box is blank.
 Opening a page from a search, by Enter or by click, clears the term and closes the phone-width
 drawer, as any nav click does. Escape clears a term and goes no further, so an open drawer stays
 open; Escape in an empty box closes the drawer as it does anywhere else in the shell. An Enter or
-Escape reported with `isComposing` set (an input method's composition) is left alone: it opens no
-page, clears no term, and the shell's Escape handler does not close the drawer for it. Ordinary page rows are
+Escape that belongs to an input method's composition (reported with `isComposing` set, or by Safari
+with key code 229) is left alone: it opens no page, clears no term, and the shell's Escape handler does not close the drawer for it. Ordinary page rows are
 keyed by page, so at desktop width a page row pressed with Enter or Space keeps focus once the
 full list comes back. A language switch keeps the term and searches the new
 language's labels, and signing out empties the box.
@@ -5100,7 +5100,10 @@ and disabled binding: the keyboard path uses the same action as a click.
 
 Only single-line input fields submit implicitly. Enter in a textarea inserts a newline, and
 selectors, switches, file pickers, and keypad buttons retain their own keyboard behavior.
-Composition, held keys, and Enter with Shift, Control, Alt, or Meta do not submit. Leave live
+A key that belongs to an input method's composition (reported with `isComposing` set, or by Safari
+with key code 229), held keys, and Enter with Shift, Control, Alt, or Meta do not submit. A field
+that acts on Enter or Escape itself leaves such a key alone through `belongsToComposition`, which
+`@waitron/ui` exports beside `submitOnEnter`. Leave live
 filters and controls that persist each edit immediately unbound. If a field edits a draft that you
 commit with Save, bind it to that Save even when its preview updates as you type.
 
