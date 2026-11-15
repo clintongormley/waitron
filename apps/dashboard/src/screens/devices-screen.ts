@@ -11,7 +11,7 @@ import {
   draftScopeFor,
   leaveCoordinatorFor,
   saveActionState,
-  focusFirstInvalid,
+  FormFeedback,
   submitOnEnter,
   visuallyHiddenStyles,
   type DataTableColumn,
@@ -697,7 +697,7 @@ export class DevicesScreen extends LitElement {
   @state() private pairName = "";
   @state() private chosenProfileId = "";
   @state() private chosenScreens: KitchenDraft = {};
-  @state() private formAttempted = false;
+  readonly #pairFeedback = new FormFeedback(this);
   @state() private fieldRefusal: FieldRefusal = null;
   /** Set once the server has approved or deleted the request, so closing Pair has nothing to discard. */
   #pairSettled = false;
@@ -811,7 +811,7 @@ export class DevicesScreen extends LitElement {
   /** Each pass kind's stored choice of other stations' dishes, as opened or last saved. */
   #editSavedDisplay: Partial<Record<PassKind, boolean | null>> = {};
   #editOpenProfileId = "";
-  @state() private editAttempted = false;
+  readonly #editFeedback = new FormFeedback(this);
   @state() private editRefusal: FieldRefusal = null;
   @state() private editError: string | null = null;
   @state() private editSaving = false;
@@ -1192,7 +1192,7 @@ export class DevicesScreen extends LitElement {
     this.chosenProfileId = profileId;
     this.chosenScreens =
       back === null || profileId === "" ? {} : this.#draftFromRead(back.kitchenScreens, profileId);
-    this.formAttempted = false;
+    this.#pairFeedback.reset();
     this.fieldRefusal = null;
     this.pairError = null;
     this.#registerPairDraft();
@@ -1257,7 +1257,7 @@ export class DevicesScreen extends LitElement {
   }
 
   #ownErrors(): IdentityErrors {
-    return this.#identityErrors(this.formAttempted, {
+    return this.#identityErrors(this.#pairFeedback.attempted, {
       name: this.pairName,
       profileId: this.chosenProfileId,
       screens: this.chosenScreens,
@@ -1271,12 +1271,10 @@ export class DevicesScreen extends LitElement {
   async #submitPair(): Promise<void> {
     const request = this.pairRequest;
     if (request === null || this.submitting || this.#pairSettled) return;
-    this.formAttempted = true;
+    this.#pairFeedback.press();
     if (Object.values(this.#ownErrors()).some((error) => error !== "")) {
-      void this.updateComplete.then(() => {
-        const modal = this.renderRoot.querySelector("[data-test=pair-modal]");
-        if (modal) void focusFirstInvalid(modal);
-      });
+      const modal = this.renderRoot.querySelector("[data-test=pair-modal]");
+      if (modal) void this.#pairFeedback.focus(modal);
       return;
     }
     const submitted = this.#pairPayload();
@@ -1450,7 +1448,7 @@ export class DevicesScreen extends LitElement {
       approved: device.approvedProfileIds,
       display: { ...this.#editSavedDisplay },
     };
-    this.editAttempted = false;
+    this.#editFeedback.reset();
     this.editRefusal = null;
     this.editError = null;
     this.editSaving = false;
@@ -1555,7 +1553,7 @@ export class DevicesScreen extends LitElement {
   }
 
   #editOwnErrors(): IdentityErrors {
-    const errors = this.#identityErrors(this.editAttempted, this.editForm);
+    const errors = this.#identityErrors(this.#editFeedback.attempted, this.editForm);
     return !this.#sendScreens()
       ? { ...errors, stations: "", kitchenStations: "", zones: "" }
       : errors;
@@ -1777,12 +1775,10 @@ export class DevicesScreen extends LitElement {
   async #submitEdit(): Promise<void> {
     const device = this.editing;
     if (device === null || this.editSaving || this.#editSaveState().unchanged) return;
-    this.editAttempted = true;
+    this.#editFeedback.press();
     if (Object.values(this.#editOwnErrors()).some((error) => error !== "")) {
-      void this.updateComplete.then(() => {
-        const modal = this.renderRoot.querySelector("[data-test=edit-device-modal]");
-        if (modal) void focusFirstInvalid(modal);
-      });
+      const modal = this.renderRoot.querySelector("[data-test=edit-device-modal]");
+      if (modal) void this.#editFeedback.focus(modal);
       return;
     }
     const form = this.editForm;
