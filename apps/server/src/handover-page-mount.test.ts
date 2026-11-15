@@ -5,7 +5,7 @@ import { Hono } from "hono";
 import { beforeAll, afterAll, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withNodeTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { NODE_MIGRATIONS, setNodeModeTx } from "@waitron/node-db";
+import { NODE_MIGRATIONS, recordHandoverRestrictionTx, setNodeModeTx } from "@waitron/node-db";
 import { beginHandover } from "./handover-store.js";
 import { mountHandoverPage } from "./handover-page-mount.js";
 import { mountSpa } from "./spa-api.js";
@@ -29,7 +29,7 @@ beforeAll(async () => {
 afterAll(async () => {
   if (root !== undefined) await rm(root, { recursive: true, force: true });
 });
-async function build(mirror = false) {
+async function build(mirror = false, sells = false) {
   if (mirror) await withNodeTransaction(suite.node, (tx) => setNodeModeTx(tx, NODE, "mirror"));
   await beginHandover(
     { node: suite.node, nodeId: NODE },
@@ -45,7 +45,7 @@ async function build(mirror = false) {
   );
   const app = new Hono();
   if (mirror) app.use("*", spareReadGate());
-  mountHandoverPage(app, { root: root!, node: suite.node, nodeId: NODE }, () => {});
+  mountHandoverPage(app, { root: root!, node: suite.node, nodeId: NODE, sells }, () => {});
   mountSpa(app, { root: root!, basePath: "", navigationPath: "/tabs" }, () => {});
   return app;
 }
@@ -102,4 +102,37 @@ it("serves an operation page whose address carries a query, as without one", asy
   );
   expect(answer.status).toBe(200);
   expect(await answer.text()).toContain("./assets/app-123.js");
+});
+
+it("on a box that sells, /handover/emergency goes to Servers", async () => {
+  const app = await build(false, true);
+  for (const path of ["/handover/emergency", "/handover/emergency/"]) {
+    const answer = await app.request(path, { headers: { Accept: "text/html" } });
+    expect(answer.status).toBe(302);
+    expect(answer.headers.get("location")).toBe("/manage/servers");
+  }
+  expect((await app.request(`/handover/${OP}`, { headers: { Accept: "text/html" } })).status).toBe(
+    200,
+  );
+});
+
+it("on a waiting or fenced box it stays 404", async () => {
+  // A waiting start mounts the page with `sells: false` on a primary; a fenced box does not mount it.
+  const waiting = await build(false, false);
+  expect(
+    (await waiting.request("/handover/emergency", { headers: { Accept: "text/html" } })).status,
+  ).toBe(404);
+  const restricted = await build(false, true);
+  await withNodeTransaction(suite.node, (tx) =>
+    recordHandoverRestrictionTx(tx, {
+      nodeId: NODE,
+      operationId: null,
+      kind: "superseded",
+      successorNodeId: SOURCE,
+      membershipTerm: 3,
+    }),
+  );
+  expect(
+    (await restricted.request("/handover/emergency", { headers: { Accept: "text/html" } })).status,
+  ).toBe(404);
 });

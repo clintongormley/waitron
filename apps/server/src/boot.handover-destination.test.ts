@@ -316,6 +316,27 @@ describe("the spare's handover duty in a full start", () => {
     expect(await asset.text()).toBe('document.body.dataset.handover = "loaded";');
   }, 120_000);
 
+  it("on a box that sells, a full start sends /handover/emergency to Servers", async () => {
+    await boot(
+      "primary",
+      "abandoned",
+      async () => {},
+      async (stateDir) => {
+        const root = join(stateDir, "setup");
+        await mkdir(root, { recursive: true });
+        await writeFile(join(root, "index.html"), "<main>Handover fixture</main>");
+        return { WAITRON_SETUP_APP_DIR: root };
+      },
+    );
+    const answer = await fetch("http://127.0.0.1:" + httpPort() + "/handover/emergency", {
+      headers: { accept: "text/html" },
+      redirect: "manual",
+    });
+    // Failing case, with boot not passing `sells`: 404.
+    expect(answer.status).toBe(302);
+    expect(answer.headers.get("location")).toBe("/manage/servers");
+  }, 120_000);
+
   it("shares the password delay across preparation and activation in a real TLS start", async () => {
     const passwordAttemptClock = vi.spyOn(Date, "now").mockReturnValue(Date.now());
     onTestFinished(() => passwordAttemptClock.mockRestore());

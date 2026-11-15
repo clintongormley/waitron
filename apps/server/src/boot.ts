@@ -4308,6 +4308,7 @@ async function bootServer(
         root: config.setupAppDir,
         node: store.node,
         nodeId: tradingContext.nodeId,
+        sells: true,
       },
       log,
     );
