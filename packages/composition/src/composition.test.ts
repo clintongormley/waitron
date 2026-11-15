@@ -280,9 +280,8 @@ describe("ALL_MODULES configuration transfer contribution", () => {
       "time_entries",
       // A published version's document holds ids an import does not remap.
       "menu_versions",
-      "menu_publications",
+      "menu_releases",
       "menu_version_images",
-      "menu_scheduled_publications",
     ]) {
       expect(names).not.toContain(forbidden);
     }

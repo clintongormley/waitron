@@ -50,9 +50,8 @@ const TABLES = [
   "sections",
   "section_members",
   "menu_versions",
-  "menu_publications",
+  "menu_releases",
   "menu_version_images",
-  "menu_scheduled_publications",
 ];
 
 /**
@@ -66,6 +65,107 @@ async function columnsOf(table: string) {
     await db.execute<{ name: string; pk: number }>(sql`pragma table_info(${sql.raw(`'${table}'`)})`)
   ).rows;
 }
+
+describe("menu releases", () => {
+  async function version(menuId: string, number: number) {
+    const id = crypto.randomUUID();
+    await db.execute(sql`insert into menu_versions
+      (id, menu_id, number, document, content_hash, created_at, created_by)
+      values (${id}, ${menuId}, ${number}, '{}', 'hash', '2026-11-15T08:00:00.000Z', 'publisher')`);
+    return id;
+  }
+  async function menu() {
+    const [row] = await db.insert(menus).values({ name: "Releases" }).returning();
+    return row!.id;
+  }
+  const release = (
+    versionId: string,
+    menuId: string,
+    state: string,
+    cancelledAt: string | null = null,
+    cancelledBy: string | null = null,
+  ) =>
+    db.execute(sql`insert into menu_releases (version_id, menu_id, state, activates_at, cancelled_at, cancelled_by)
+      values (${versionId}, ${menuId}, ${state}, '2026-11-16T08:00:00.000Z', ${cancelledAt}, ${cancelledBy})`);
+
+  it("refuses two live releases for one menu and permits another menu and a superseded release", async () => {
+    const first = await menu();
+    const second = await menu();
+    await release(await version(first, 1), first, "live");
+    const error = await captureError(() => releaseVersion(first, 2, "live"));
+    expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toContain("menu_releases.menu_id");
+    await release(await version(second, 1), second, "live");
+    await release(await version(first, 3), first, "superseded");
+    expect((await db.execute(sql`select state from menu_releases order by state`)).rows).toEqual([
+      { state: "live" },
+      { state: "live" },
+      { state: "superseded" },
+    ]);
+  });
+  async function releaseVersion(menuId: string, number: number, state: string) {
+    return release(await version(menuId, number), menuId, state);
+  }
+
+  it("refuses two queued editions at one instant and permits a cancelled release beside them", async () => {
+    const id = await menu();
+    await releaseVersion(id, 1, "queued");
+    const error = await captureError(() => releaseVersion(id, 2, "queued"));
+    expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toContain(
+      "menu_releases.menu_id, menu_releases.activates_at",
+    );
+    await release(await version(id, 3), id, "cancelled", "2026-11-15T09:00:00.000Z", "canceller");
+    expect((await db.execute(sql`select state from menu_releases order by state`)).rows).toEqual([
+      { state: "cancelled" },
+      { state: "queued" },
+    ]);
+  });
+
+  it("requires both cancellation facts only on a cancelled release", async () => {
+    const id = await menu();
+    let number = 0;
+    for (const [state, at, by] of [
+      ["cancelled", null, null],
+      ["cancelled", "2026-11-15T09:00:00.000Z", null],
+      ["cancelled", null, "canceller"],
+      ["live", "2026-11-15T09:00:00.000Z", "canceller"],
+      ["queued", null, "canceller"],
+      ["superseded", "2026-11-15T09:00:00.000Z", null],
+    ] as const) {
+      const v = await version(id, ++number);
+      const error = await captureError(() => release(v, id, state, at, by));
+      expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+      expect(engineErrorMessage(error)).toContain("menu_releases_settled_ck");
+    }
+    for (const state of ["live", "queued", "superseded"]) await releaseVersion(id, ++number, state);
+    await release(
+      await version(id, ++number),
+      id,
+      "cancelled",
+      "2026-11-15T09:00:00.000Z",
+      "canceller",
+    );
+    expect((await db.execute(sql`select count(*) as n from menu_releases`)).rows).toEqual([
+      { n: 4 },
+    ]);
+  });
+
+  it("refuses an unknown state and a release for another menu's version", async () => {
+    const id = await menu();
+    const other = await menu();
+    const v = await version(id, 1);
+    const stateError = await captureError(() => release(v, id, "paused"));
+    expect(isRefusal(stateError, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(stateError)).toContain("menu_releases_state_ck");
+    const keyError = await captureError(() => release(v, other, "queued"));
+    expect(isRefusal(keyError, FOREIGN_KEY_VIOLATION)).toBe(true);
+    await release(v, id, "queued");
+    expect((await db.execute(sql`select version_id from menu_releases`)).rows).toEqual([
+      { version_id: v },
+    ]);
+  });
+});
 
 it("refuses a root section with a name and a plain section without one", async () => {
   const [menu] = await db.insert(menus).values({ name: "Root names" }).returning({ id: menus.id });
@@ -278,9 +378,8 @@ describe("the menu tables carry no taxpayer column", () => {
       sections: "id",
       section_members: "id",
       menu_versions: "id",
-      menu_publications: "menu_id",
+      menu_releases: "version_id",
       menu_version_images: "version_id, filename",
-      menu_scheduled_publications: "version_id",
     });
 
     expect(foreignKeys).toEqual({
@@ -302,12 +401,9 @@ describe("the menu tables carry no taxpayer column", () => {
       "section_members(section_id)": "sections(id) on delete cascade",
       "sections(owner_menu_id)": "menus(id) on delete no action",
       "menu_versions(menu_id)": "menus(id) on delete no action",
-      "menu_publications(menu_id)": "menus(id) on delete no action",
-      "menu_publications(version_id, menu_id)": "menu_versions(id, menu_id) on delete no action",
+      "menu_releases(menu_id)": "menus(id) on delete no action",
+      "menu_releases(version_id, menu_id)": "menu_versions(id, menu_id) on delete no action",
       "menu_version_images(version_id)": "menu_versions(id) on delete no action",
-      "menu_scheduled_publications(menu_id)": "menus(id) on delete no action",
-      "menu_scheduled_publications(version_id, menu_id)":
-        "menu_versions(id, menu_id) on delete no action",
     });
 
     expect(checks).toEqual({
@@ -336,10 +432,9 @@ describe("the menu tables carry no taxpayer column", () => {
       section_members_folder_image_ck: `"section_members"."folder_image" is null or "section_members"."folder_image_fixed" = 1`,
       section_members_folder_color_ck: `"section_members"."folder_color" is null or "section_members"."folder_color_fixed" = 1`,
       section_members_one_ref_ck: `("section_members"."product_id" is null or "section_members"."child_section_id" is null) and (("section_members"."product_id" is null and "section_members"."child_section_id" is null) = ("section_members"."missing_name" is not null))`,
+      menu_releases_state_ck: `"menu_releases"."state" in ('queued', 'live', 'superseded', 'cancelled')`,
+      menu_releases_settled_ck: `("menu_releases"."state" = 'cancelled') = ("menu_releases"."cancelled_at" is not null) and ("menu_releases"."cancelled_at" is null) = ("menu_releases"."cancelled_by" is null)`,
       menu_versions_number_ck: `"menu_versions"."number" >= 1`,
-      menu_scheduled_publications_state_ck: `"menu_scheduled_publications"."state" in ('queued', 'activated', 'cancelled')`,
-      menu_scheduled_publications_settled_ck: `("menu_scheduled_publications"."state" = 'queued' and "menu_scheduled_publications"."activated_at" is null and "menu_scheduled_publications"."cancelled_at" is null and "menu_scheduled_publications"."cancelled_by" is null) or ("menu_scheduled_publications"."state" = 'activated' and "menu_scheduled_publications"."activated_at" is not null and "menu_scheduled_publications"."cancelled_at" is null and "menu_scheduled_publications"."cancelled_by" is null) or ("menu_scheduled_publications"."state" = 'cancelled' and "menu_scheduled_publications"."cancelled_at" is not null and "menu_scheduled_publications"."cancelled_by" is not null and "menu_scheduled_publications"."activated_at" is null)`,
-      menu_scheduled_publications_after_queue_ck: `"menu_scheduled_publications"."activates_at" > "menu_scheduled_publications"."queued_at"`,
     });
   });
 
@@ -397,7 +492,8 @@ describe("the menu tables carry no taxpayer column", () => {
       menu_versions_menu_number_uq: { unique: true, columns: "menu_id, number" },
       menu_versions_id_menu_key: { unique: true, columns: "id, menu_id" },
       menu_version_images_filename_idx: { unique: false, columns: "filename" },
-      menu_scheduled_publications_queued_time_uq: {
+      menu_releases_one_live_uq: { unique: true, columns: "menu_id" },
+      menu_releases_queued_time_uq: {
         unique: true,
         columns: "menu_id, activates_at",
       },

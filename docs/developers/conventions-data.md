@@ -1826,6 +1826,10 @@ whose bodies read menu's `menu_version_images` and `menu_publications` — edges
 `scripts/module-graph-honesty.test.ts` now reads from their trigger bodies.
 `drizzle/0008_queued_edition_image_references.sql` re-creates those two so their bodies also read
 menu's `menu_scheduled_publications`, keeping a photo a queued edition names.
+_2026-11-15, A1308 mn10: the current parent triggers join `menu_version_images` to
+`menu_releases` and keep photos named by `live` or `queued` releases. The migration names and
+table names in this account record the earlier layout._
+
 `drizzle/0009_include_folder_image_references.sql` adds four for the photo an include's folder
 names (`section_members.folder_overrides`, key `image`): two ON menu's `section_members`, and
 two on `media_images` whose bodies read `section_members`. A menu rebuild of any menu

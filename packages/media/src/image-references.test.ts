@@ -17,8 +17,7 @@ import {
   createProduct,
   createSectionIn,
   menuVersionImages,
-  menuPublications,
-  menuScheduledPublications,
+  menuReleases,
   menuVersions,
   previewMenu,
   sectionMembers,
@@ -433,13 +432,13 @@ describe("an image a live menu version names", () => {
     expect(next.hash).not.toBe(old.hash);
     expect(next.live).toEqual(old.live);
     const beforeVersions = await suite.db.select().from(menuVersions);
-    const beforePointers = await suite.db.select().from(menuPublications);
+    const beforePointers = await suite.db.select().from(menuReleases);
     const beforeImages = await suite.db.select().from(menuVersionImages);
     await expect(
       withTransaction(suite.db, (tx) => publishMenu(tx, menuId, old.hash, "person-1")),
     ).rejects.toMatchObject({ code: "menu.changed_since_preview" });
     expect(await suite.db.select().from(menuVersions)).toEqual(beforeVersions);
-    expect(await suite.db.select().from(menuPublications)).toEqual(beforePointers);
+    expect(await suite.db.select().from(menuReleases)).toEqual(beforePointers);
     expect(await suite.db.select().from(menuVersionImages)).toEqual(beforeImages);
     await withTransaction(suite.db, (tx) => publishMenu(tx, menuId, next.hash, "person-1"));
     expect(await suite.db.select().from(menuVersions)).toHaveLength(beforeVersions.length + 1);
@@ -480,8 +479,8 @@ describe("an image a live menu version names", () => {
         number: 1,
         document: {} as never,
         contentHash: "hash",
-        publishedAt: new Date(),
-        publishedBy: "person-1",
+        createdAt: new Date(),
+        createdBy: "person-1",
       })
       .returning({ id: menuVersions.id });
     const insert = async (filename: string): Promise<void> => {
@@ -616,10 +615,8 @@ describe("an image a queued menu edition names", () => {
     );
     // Both editions are marked activated; the pointer moves once, straight to the third.
     expect(activated.map((each) => each.number)).toEqual([3]);
-    const states = await suite.db
-      .select({ state: menuScheduledPublications.state })
-      .from(menuScheduledPublications);
-    expect(states).toEqual([{ state: "activated" }, { state: "activated" }]);
+    const states = await suite.db.select({ state: menuReleases.state }).from(menuReleases);
+    expect(states).toEqual([{ state: "superseded" }, { state: "superseded" }, { state: "live" }]);
     await removeImage(ABSENT);
     expect(await filenames()).toEqual([PRESENT]);
   });
@@ -643,9 +640,9 @@ describe("an image a queued menu edition names", () => {
     const { menuId, productId } = await liveWithAbsentInLibrary();
     const versionId = await queueWithAbsent(menuId, productId, new Date(Date.now() - 2 * HOUR));
     const [row] = await suite.db
-      .select({ state: menuScheduledPublications.state })
-      .from(menuScheduledPublications)
-      .where(sql`${menuScheduledPublications.versionId} = ${versionId}`);
+      .select({ state: menuReleases.state })
+      .from(menuReleases)
+      .where(sql`${menuReleases.versionId} = ${versionId}`);
     expect(row).toEqual({ state: "queued" });
     await expect(removeImage(ABSENT)).rejects.toMatchObject({
       message: "menu_version_images_media_image_fk",

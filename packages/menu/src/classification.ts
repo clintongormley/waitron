@@ -14,8 +14,7 @@ export const MENU_TABLES = [
   "section_members",
   "menu_versions",
   "menu_version_images",
-  "menu_publications",
-  "menu_scheduled_publications",
+  "menu_releases",
   "content_suggestion_jobs",
   "content_suggestions",
 ] as const;

@@ -92,8 +92,7 @@ import {
   createMenu,
   createCategory,
   createProduct,
-  menuPublications,
-  menuScheduledPublications,
+  menuReleases,
   previewMenu,
   publishMenu,
   queueMenuPublication,
@@ -2894,18 +2893,20 @@ describe("startServer, against a migrated venue directory", () => {
         const reader = await openVenueDatabase(venue.directory, { exclusive: false });
         try {
           const [pointer] = await reader.venue
-            .select({ versionId: menuPublications.versionId })
-            .from(menuPublications)
-            .where(eq(menuPublications.menuId, menuId));
+            .select({ versionId: menuReleases.versionId })
+            .from(menuReleases)
+            .where(sql`${menuReleases.menuId} = ${menuId} and ${menuReleases.state} = 'live'`);
           expect(pointer?.versionId).toBe(queued[1]);
           const rows = await reader.venue
             .select({
-              versionId: menuScheduledPublications.versionId,
-              state: menuScheduledPublications.state,
+              versionId: menuReleases.versionId,
+              state: menuReleases.state,
             })
-            .from(menuScheduledPublications);
+            .from(menuReleases)
+            .where(sql`${menuReleases.versionId} in (${queued[0]}, ${queued[1]})`);
           expect(rows).toHaveLength(2);
-          for (const row of rows) expect(row.state).toBe("activated");
+          for (const row of rows)
+            expect(row.state).toBe(row.versionId === queued[1] ? "live" : "superseded");
         } finally {
           await reader.close();
         }

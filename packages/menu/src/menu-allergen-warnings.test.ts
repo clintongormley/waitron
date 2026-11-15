@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  menuPublications,
-  menuScheduledPublications,
+  menuReleases,
   menuVersionImages,
   menuVersions,
   withTransaction,
@@ -132,8 +131,8 @@ describe("unreviewed offered allergens", () => {
         app(async (tx) => ({
           versions: await tx.select().from(menuVersions),
           images: await tx.select().from(menuVersionImages),
-          queued: await tx.select().from(menuScheduledPublications),
-          publications: await tx.select().from(menuPublications),
+          queued: await tx.select().from(menuReleases),
+          publications: await tx.select().from(menuReleases),
         }));
       const storedBefore = await rows();
       await expect(publish(before.hash)).rejects.toMatchObject({

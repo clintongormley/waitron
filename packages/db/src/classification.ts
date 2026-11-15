@@ -334,8 +334,7 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
     "state",
     "the photos each menu version names, published or queued; copied to a standby, never drained back",
   ),
-  classify("menu_publications", "state", MENU_STATE),
-  classify("menu_scheduled_publications", "state", MENU_STATE),
+  classify("menu_releases", "state", MENU_STATE),
   classify("content_suggestion_jobs", "state", SUGGESTIONS),
   classify("content_suggestions", "state", SUGGESTIONS),
 

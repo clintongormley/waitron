@@ -1,3 +1,4 @@
+import { madridWithMenuReleases } from "./testing/madrid-releases.js";
 import { withTransaction, persons, deviceProfiles } from "@waitron/db";
 import { listStaffAdmittedTo } from "@waitron/identity";
 import { STARTER_JOB_ROLE_NAMES, DEMO_JOB_ROLE_NAMES } from "@waitron/provisioning";
@@ -454,6 +455,28 @@ for (const locale of ["en", "es"] as const) {
       "before" | "provisioned" | "seeded",
       CanonicalMadridSemantics
     >;
+    const publicationTemplate = expected.seeded.tables.menu_publications!;
+    const rows = Object.values(historicalSeeded.tables.menu_releases!.rows).map((row) => ({
+      menu_id: row.menu_id,
+      version_id: row.version_id,
+      published_at: row.activates_at,
+    }));
+    historicalSeeded.tables.menu_publications = {
+      ...publicationTemplate,
+      rows: Object.fromEntries(rows.map((row) => [stable(row), row])),
+    };
+    historicalSeeded.tables.menu_scheduled_publications = structuredClone(
+      expected.seeded.tables.menu_scheduled_publications!,
+    );
+    delete historicalSeeded.tables.menu_releases;
+    const historicalVersions = historicalSeeded.tables.menu_versions!;
+    historicalVersions.columns = expected.seeded.tables.menu_versions!.columns;
+    for (const row of Object.values(historicalVersions.rows)) {
+      row.published_at = row.created_at;
+      row.published_by = row.created_by;
+      delete row.created_at;
+      delete row.created_by;
+    }
     for (const [side, parent, key, fields] of [
       ["category_details", "categories", "category_id", ["parent_id", "color"]],
       [
@@ -1827,6 +1850,12 @@ for (const locale of ["en", "es"] as const) {
       delete phases[phase]!.menu_details;
       delete phases[phase]!.category_details;
       expected[phase] = madridWithSectionColumns(expected[phase]);
+      expected[phase] = madridWithMenuReleases(expected[phase]);
+      phases[phase]!.menu_releases =
+        phases[phase]!.menu_publications! + phases[phase]!.menu_scheduled_publications!;
+      delete phases[phase]!.menu_publications;
+      delete phases[phase]!.menu_scheduled_publications;
+      phases[phase] = byName(phases[phase]!);
 
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(expected[phase].tables));
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(phases[phase]!));

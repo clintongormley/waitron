@@ -7,7 +7,7 @@ import {
   units,
   contentSuggestionJobs,
   mediaImages,
-  menuPublications,
+  menuReleases,
   menuVersionImages,
   menuVersions,
   CORE_CLASSIFICATION,
@@ -77,8 +77,8 @@ beforeEach(async () => {
       number: 1,
       document: JSON.parse(documentText) as MenuDocument,
       contentHash: hash,
-      publishedAt: new Date("2026-10-20T08:00:00.000Z"),
-      publishedBy: person,
+      createdAt: new Date("2026-10-20T08:00:00.000Z"),
+      createdBy: person,
     });
     await suite.db.insert(mediaImages).values({ filename: image, names: { en: "Archive" } });
     await suite.db.insert(menuVersionImages).values({ versionId: version, filename: image });
@@ -144,21 +144,22 @@ describe("menu backup evidence", () => {
     const other = "10000000-0000-4000-8000-000000000099";
     for (const suite of [original, restored]) {
       await suite.db.insert(menus).values({ id: other, name: "Other" });
-      await suite.db.insert(menuPublications).values({
+      await suite.db.insert(menuReleases).values({
         menuId: menu,
         versionId: version,
-        publishedAt: new Date("2026-10-20T08:00:00.000Z"),
+        state: "live",
+        activatesAt: new Date("2026-10-20T08:00:00.000Z"),
       });
     }
     expect(await run()).toEqual(passed);
     for (const suite of [original, restored])
-      await corrupt(suite, `update menu_publications set menu_id='${other}'`);
+      await corrupt(suite, `update menu_releases set menu_id='${other}'`);
     expect((await run()).status).toBe("invalid");
   });
 
   it("preserves every immutable menu version and image reference", async () => {
     expect(await run()).toEqual(passed);
-    await corrupt(restored, "update menu_versions set published_by='changed'");
+    await corrupt(restored, "update menu_versions set created_by='changed'");
     expect((await run()).status).toBe("invalid");
   });
   it.each(["menu_versions", "menu_version_images"])("refuses missing %s history", async (table) => {
@@ -210,8 +211,8 @@ describe("menu backup evidence", () => {
         number: 2,
         document: JSON.parse(changed) as MenuDocument,
         contentHash: createHash("sha256").update(changed).digest("hex"),
-        publishedAt: new Date("2026-10-20T08:00:00.000Z"),
-        publishedBy: person,
+        createdAt: new Date("2026-10-20T08:00:00.000Z"),
+        createdBy: person,
       });
     expect((await run()).status).toBe("unsupported");
   });

@@ -11,8 +11,7 @@ import {
   createMenu,
   createProduct,
   menuDocumentHash,
-  menuPublications,
-  menuScheduledPublications,
+  menuReleases,
   menuVersionImages,
   menuVersions,
   previewMenu,
@@ -114,8 +113,8 @@ it("changes presentation without rewriting product, variant, section, folder, re
     members: await suite.db.select().from(sectionMembers),
     versions: await suite.db.select().from(menuVersions),
     images: await suite.db.select().from(menuVersionImages),
-    live: await suite.db.select().from(menuPublications),
-    queued: await suite.db.select().from(menuScheduledPublications),
+    live: await suite.db.select().from(menuReleases),
+    queued: await suite.db.select().from(menuReleases),
     receipts: await suite.db
       .select({ id: departments.id, receipt: departments.receiptText })
       .from(departments),
@@ -160,8 +159,8 @@ it("changes presentation without rewriting product, variant, section, folder, re
   await withTransaction(suite.db, (tx) => activateDueMenuPublications(tx, due));
   const [live] = await suite.db
     .select()
-    .from(menuPublications)
-    .where(eq(menuPublications.menuId, before.queued[0]!.menuId));
+    .from(menuReleases)
+    .where(eq(menuReleases.menuId, before.queued[0]!.menuId));
   expect(live!.versionId).toBe(before.queued[0]!.versionId);
   expect(await suite.db.select().from(menuVersions)).toEqual(before.versions);
   expect(await suite.db.select().from(menuVersionImages)).toEqual(before.images);

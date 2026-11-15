@@ -41,7 +41,7 @@ import {
   menuDocumentHash,
   menuStatus,
   menuVersions,
-  menuPublications,
+  menuReleases,
   optionLabels,
   queueMenuPublication,
   requireMenuRoot,
@@ -1285,9 +1285,9 @@ it("refuses format-2 menu reads through the till with the venue-reset code", asy
     })
     .returning({ id: menuVersions.id });
   await suite.db
-    .update(menuPublications)
+    .update(menuReleases)
     .set({ versionId: old!.id })
-    .where(eq(menuPublications.menuId, v.menuId));
+    .where(eq(menuReleases.menuId, v.menuId));
   for (const path of [
     `/api/service-zones/${v.zoneId}/offers`,
     "/api/default-service-zone/offers",

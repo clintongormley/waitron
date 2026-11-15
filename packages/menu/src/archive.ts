@@ -2,7 +2,7 @@ import { and, eq, gt, inArray } from "drizzle-orm";
 import {
   menus,
   extraListItems,
-  menuScheduledPublications,
+  menuReleases,
   menuVersions,
   now,
   recordActivity,
@@ -46,14 +46,9 @@ export async function publishedMenusHolding(
     documents.push(version.document!);
   for (const row of await tx
     .select({ document: menuVersions.document })
-    .from(menuScheduledPublications)
-    .innerJoin(menuVersions, eq(menuVersions.id, menuScheduledPublications.versionId))
-    .where(
-      and(
-        eq(menuScheduledPublications.state, "queued"),
-        gt(menuScheduledPublications.activatesAt, at),
-      ),
-    ))
+    .from(menuReleases)
+    .innerJoin(menuVersions, eq(menuVersions.id, menuReleases.versionId))
+    .where(and(eq(menuReleases.state, "queued"), gt(menuReleases.activatesAt, at))))
     documents.push(row.document);
   const served = new Map(
     (
