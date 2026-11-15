@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, vi } from "vitest";
+import { commands, page } from "vitest/browser";
 import { applyTokens } from "./tokens/index.js";
 import type { WtDialog } from "./components/wt-dialog.js";
 import type { WtFormActions } from "./components/wt-form-actions.js";
@@ -317,26 +318,36 @@ export function fileError(picker: Element): HTMLElement | null {
   return picker.shadowRoot!.querySelector<HTMLElement>("[data-error]");
 }
 
-/** Turns the forced-colours emulation (a Windows contrast theme) on or off for this page. On, it
- * checks the emulation took: the media query matches and a red, blue-shadowed box loses both. */
-export async function emulateForcedColours(value: "active" | "none"): Promise<void> {
-  const { cdp } = await import("vitest/browser");
-  await cdp().send("Emulation.setEmulatedMedia", { features: [{ name: "forced-colors", value }] });
+declare module "vitest/browser" {
+  interface BrowserCommands {
+    emulateForcedColors: (forcedColors: "active" | "none" | null) => Promise<void>;
+  }
+}
+
+/** Sets the forced-colours emulation (a Windows contrast theme) through Playwright, or hands it back
+ * to the browser with `null`. It checks the setting took: the media query answers it, and when
+ * active a red, blue-shadowed box loses both colours. */
+export async function emulateForcedColours(value: "active" | "none" | null): Promise<void> {
+  await commands.emulateForcedColors(value);
+  if (value === null) return;
+  expect(matchMedia("(forced-colors: active)").matches).toBe(value === "active");
   if (value === "none") return;
-  expect(matchMedia("(forced-colors: active)").matches).toBe(true);
-  const control = await mount(
-    '<div style="width: 40px; height: 40px; background: rgb(255, 0, 0); box-shadow: inset 0 0 0 10px rgb(0, 0, 255)"></div>',
-  );
-  const at = await elementPixels(control);
-  const box = control.getBoundingClientRect();
-  expect(at(box.left + 20, box.top + 20)).not.toEqual([255, 0, 0]);
-  expect(at(box.left + 2, box.top + 2)).not.toEqual([0, 0, 255]);
-  control.parentElement!.remove();
+  const control = document.createElement("div");
+  control.style.cssText =
+    "width: 40px; height: 40px; background: rgb(255, 0, 0); box-shadow: inset 0 0 0 10px rgb(0, 0, 255)";
+  document.body.appendChild(control);
+  try {
+    const at = await elementPixels(control);
+    const box = control.getBoundingClientRect();
+    expect(at(box.left + 20, box.top + 20)).not.toEqual([255, 0, 0]);
+    expect(at(box.left + 2, box.top + 2)).not.toEqual([0, 0, 255]);
+  } finally {
+    control.remove();
+  }
 }
 
 /** Reads an element's pixels from a real screenshot, as [r, g, b] at a point in page px. */
 export async function elementPixels(el: Element): Promise<(x: number, y: number) => number[]> {
-  const { page } = await import("vitest/browser");
   const shot: unknown = await page.screenshot({ element: el, base64: true, save: false });
   const image = new Image();
   image.src = `data:image/png;base64,${shot as string}`;

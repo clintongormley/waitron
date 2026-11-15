@@ -6,7 +6,7 @@ import "./wt-tabs.js";
 beforeEach(() => emulateForcedColours("active"));
 afterEach(async () => {
   cleanup();
-  await emulateForcedColours("none");
+  await emulateForcedColours(null);
 });
 
 async function tabs(): Promise<{ selected: HTMLElement; unselected: HTMLElement; el: WtTabs }> {
