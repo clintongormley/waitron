@@ -4113,7 +4113,7 @@ unreadable parent or a denied child gate removes its destinations. Click and Ent
 complete address through the draft-change question. Keep editing retains the search and drawer;
 accepted navigation clears them. Enter opens an inner destination only when no page matches.
 
-Settings inside department Details, Service, Transfers and Receipts add their tab to the location, for
+Settings inside department Details, Service, Tables, Transfers and Receipts add their tab to the location, for
 example **Remind to fire the next course after — in Departments and zones / Service**. One available
 department opens directly; several open a compact chooser, including the current department.
 Open stays quiet and disabled until you choose. Cancel keeps your search. A failed read offers
@@ -5843,7 +5843,7 @@ Keep passwords, PINs, pairing codes and unsaved form contents out of the URL.
 
 Module management tabs use `/manage/<section>/view/<key>`. Departments always opens its list
 at `/manage/venue-operations`. A department opens at
-`/manage/venue-operations/department/<id>` in its edit dialog; its Service, Receipts and Transfers tabs add
+`/manage/venue-operations/department/<id>` in its edit dialog; its Service, Tables, Receipts and Transfers tabs add
 `/view/service`, `/view/receipt` and `/view/transfers`, and a zone editor adds
 `/view/zones/zone/<id>`. The list stays beneath these dialogs. Closing one returns to the list; a removed subject closes its editor.
 Old top-level tab addresses are replaced with the list URL. Venue settings
@@ -6696,28 +6696,29 @@ Edit department is tabbed. Details holds name, trading name and, when the instal
 files one and the Receipts tab is offered (`venue.configure`), the invoice operation description. Details' Save writes the description through the
 receipt request the Receipts tab uses, with the saved receipt and not the Receipts tab's draft,
 after the department's settings; if that request is refused, the field shows the refusal and stays
-unsaved while the settings stand. Service holds three sections, each
-under its own heading: “Orders and payment”, with the service settings and the zones that differ,
-“Courses and stations”, with the reminder to fire the next course and the switch for a manager's
-PIN to send after a period ends, and “Table states”, with
-the Needs clearing switch and the department's service steps (a list with drag handles, a row menu
-with Delete, and Add step). Receipts, between Service and Transfers, holds the department's receipt
+unsaved while the settings stand. Service holds “Orders and payment”, with the service settings
+and the zones that differ, and “Courses and stations”, with the shared reminder and the manager's
+PIN switch for sending after a period ends. Tables follows Service: grey fixed moments for seating,
+bill requested and leaving, blue service-step rows with their existing start selectors, drag handles,
+Delete and Add step, and amber read-only course rows in course order with their current send/hold
+and reminder values. Needs clearing follows Party leaves. Receipts, between Tables and Transfers,
+holds the department's receipt
 editor, and is offered only to someone with `venue.configure`. Transfers holds the allowed
 destinations and the receiving desk profile, and is offered only while two or more departments are
 active. The dialog is wide whenever it offers Receipts, and standard otherwise, so changing tab
 never changes its width. Its fixed heading and sticky tabs stay above the scrolling content.
-Details, Service and Transfers share one draft and one Save; Receipts has its own draft.
+Details, Service, Tables and Transfers share one draft and one Save; Receipts has its own draft.
 The selected editor renders its Cancel/Save row directly into the modal footer, with its message
 above the buttons. Changing tab keeps both drafts. A Save closes the dialog only when the other draft
 is clean, and closing asks one question covering both. Changing tab never asks about unsaved
 changes, because the screen's `navigationScopes` (`venue-departments-shell.ts`) lets an address
 change between the open department's offered tabs through. The address keeps the open tab (`view` is
-`service`, `receipt` or `transfers`; Details has none); the list's “Set up the tax-agency
+`service`, `tables`, `receipt` or `transfers`; Details has none); the list's “Set up the tax-agency
 description” opens Details and focuses the description field once it appears, unless a tab
 change, a click or edit on Details, or another department comes first; the image library's
 receipt-logo link opens Receipts; and an address naming an unknown view, or a tab not offered, opens Details and replaces the address without adding a history
 entry. A refusal naming a field, or an invalid Save, of the shared draft shows the first of Details,
-Service and Transfers holding a marked field; a mark appearing in the receipt editor, such as a
+Service, Tables and Transfers holding a marked field; a mark appearing in the receipt editor, such as a
 refusal naming a field, while another tab shows brings back Receipts (`department-receipt-invalid`).
 A tab shown this way replaces the address, the field takes focus, and every tab holding a marked
 field is marked. A strip too wide for the dialog scrolls sideways inside it. Edit zone holds its

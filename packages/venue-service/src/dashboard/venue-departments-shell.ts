@@ -17,11 +17,11 @@ import "./zone-edit-dialog.js";
 import "./department-dialogs.js";
 import type { DepartmentDialog } from "./department-dialogs.js";
 
-type View = "settings" | "service" | "transfers" | "zones" | "receipt";
+type View = "settings" | "service" | "tables" | "transfers" | "zones" | "receipt";
 const tabOf = (view: View | null): DepartmentTab | undefined =>
   view === "settings" || view === null
     ? "details"
-    : view === "service" || view === "transfers" || view === "receipt"
+    : view === "service" || view === "tables" || view === "transfers" || view === "receipt"
       ? view
       : undefined;
 
@@ -374,7 +374,11 @@ export class VenueDepartmentsShell extends LitElement {
     this.departmentId = this.#url.read("department") ?? "";
     const view = this.#url.read("view");
     this.view =
-      view === "zones" || view === "receipt" || view === "service" || view === "transfers"
+      view === "zones" ||
+      view === "receipt" ||
+      view === "service" ||
+      view === "tables" ||
+      view === "transfers"
         ? view
         : "settings";
     this.unknownView = this.view === "settings" ? view : null;

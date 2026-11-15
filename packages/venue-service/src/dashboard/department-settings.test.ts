@@ -188,6 +188,61 @@ async function bottom(el: DepartmentSettings) {
   );
 }
 
+it("offers Tables after Service and keeps its clearing change in the shared Save", async () => {
+  const { el, writes } = await mount();
+  const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+  await tabs.updateComplete;
+  expect(tabs.items.map((item) => item.key)).toEqual(["details", "service", "tables", "transfers"]);
+  const tablesTab = tabs.shadowRoot!.querySelector("[role=tab][data-key=tables]")!;
+  await userEvent.click(page.elementLocator(tablesTab));
+  const panel = el.shadowRoot!.querySelector("[slot=tables]")!;
+  expect(panel.querySelector("department-service-steps")).not.toBeNull();
+  expect(panel.querySelector("[name=needsClearing]")).not.toBeNull();
+  expect(panel.querySelector("[name=lateSendNeedsManager]")).toBeNull();
+  const clearing = panel.querySelector<HTMLElementTagNameMap["wt-switch"]>("[name=needsClearing]")!;
+  await userEvent.click(page.elementLocator(clearing.shadowRoot!.querySelector("input")!));
+  await change(el, "name", "Evening restaurant");
+  await selectDepartmentTab(el, "service");
+  expect(save(el).disabled).toBe(false);
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]!.body).toMatchObject({ name: "Evening restaurant", needsClearing: true });
+});
+
+it("reads fixed moments, steps and current course firing in Tables without course editors", async () => {
+  const view = structuredClone(model);
+  view.courses = [
+    { id: "starter", name: "Starters", heldUntilFired: false },
+    { id: "main", name: "Mains", heldUntilFired: true },
+  ];
+  view.releaseReminderMinutesByDepartment = { d1: 10 };
+  const { el } = await mount(view);
+  await selectDepartmentTab(el, "tables");
+  const panel = shownPanel(el);
+  expect(
+    [...panel.querySelectorAll("[data-moment]")].map((row) => row.textContent!.trim()),
+  ).toEqual(["Party seated", "Bill requested", "Party leaves"]);
+  const courses = [...panel.querySelectorAll("[data-course]")];
+  expect(courses.map((row) => row.textContent!.replace(/\s+/g, " ").trim())).toEqual([
+    "Starters Fire now",
+    "Mains Hold for later 10 min",
+  ]);
+  expect(
+    courses.every((row) => row.querySelector("wt-input, wt-combobox, wt-switch, button") === null),
+  ).toBe(true);
+  const leaves = panel.querySelector("[data-moment=leaves]")!;
+  expect(
+    leaves.compareDocumentPosition(needsClearing(el)) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(
+    courses[1]!.compareDocumentPosition(leaves) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(
+    panel.querySelector("[data-moment=seated]")!.compareDocumentPosition(stepList(el)) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+});
+
 it("opens quiet with Cancel before Save and sends all settings in one request", async () => {
   const { el, writes } = await mount();
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
@@ -249,7 +304,7 @@ it("opens quiet with Cancel before Save and sends all settings in one request", 
 });
 it("a save that does not touch the steps sends none", async () => {
   const view = structuredClone(model);
-  view.courses = [{ id: "c1", name: "Mains" }];
+  view.courses = [{ id: "c1", name: "Mains", heldUntilFired: true }];
   view.serviceSteps = [
     { id: "s1", departmentId: "d1", name: "Set up", start: "seated", courseId: null, minutes: 0 },
     {
@@ -1252,14 +1307,24 @@ function tabEvents(el: DepartmentSettings) {
   el.addEventListener("department-tab-change", (e) => events.push((e as CustomEvent).detail));
   return events;
 }
-it("draws Details, Service and Transfers tabs with Details first and the name fields on it", async () => {
+it("draws Details, Service, Tables and Transfers tabs with Details first and the name fields on it", async () => {
   const { el } = await mount();
   await strip(el).updateComplete;
-  expect(strip(el).items.map((item) => item.key)).toEqual(["details", "service", "transfers"]);
-  expect(strip(el).items.map((item) => item.label)).toEqual(["Details", "Service", "Transfers"]);
+  expect(strip(el).items.map((item) => item.key)).toEqual([
+    "details",
+    "service",
+    "tables",
+    "transfers",
+  ]);
+  expect(strip(el).items.map((item) => item.label)).toEqual([
+    "Details",
+    "Service",
+    "Tables",
+    "Transfers",
+  ]);
   expect(strip(el).label).toBe("Department");
   expect(el.tab).toBe("details");
-  expect(el.offeredTabs).toEqual(["details", "service", "transfers"]);
+  expect(el.offeredTabs).toEqual(["details", "service", "tables", "transfers"]);
   const panel = shownPanel(el);
   expect(panel.querySelector("[name=name]")).not.toBeNull();
   expect(panel.querySelector("[name=tradingName]")).not.toBeNull();
@@ -1285,7 +1350,12 @@ it("names the tabs and the Orders and payment heading in Spanish", async () => {
   const { el } = await mount();
   await strip(el).updateComplete;
   expect(strip(el).label).toBe("Departamento");
-  expect(strip(el).items.map((item) => item.label)).toEqual(["Datos", "Servicio", "Traslados"]);
+  expect(strip(el).items.map((item) => item.label)).toEqual([
+    "Datos",
+    "Servicio",
+    "Mesas",
+    "Traslados",
+  ]);
   expect(el.shadowRoot!.querySelector("[slot=service] h3")!.textContent!.trim()).toBe(
     "Pedidos y cobro",
   );
@@ -1295,8 +1365,8 @@ it("offers no Transfers tab with one active department", async () => {
   view.departments[1]!.active = false;
   const { el } = await mount(view);
   await strip(el).updateComplete;
-  expect(strip(el).items.map((item) => item.key)).toEqual(["details", "service"]);
-  expect(el.offeredTabs).toEqual(["details", "service"]);
+  expect(strip(el).items.map((item) => item.key)).toEqual(["details", "service", "tables"]);
+  expect(el.offeredTabs).toEqual(["details", "service", "tables"]);
 });
 it("a draft typed on two tabs is sent by one Save", async () => {
   const { el, writes } = await mount();
@@ -1336,6 +1406,7 @@ it("Save with a blank name from the Service tab shows Details, marks it and focu
     "needs fixing",
     undefined,
     undefined,
+    undefined,
   ]);
   expect(shownPanel(el).querySelector("[name=name]")).not.toBeNull();
   await expect.poll(() => el.shadowRoot!.activeElement).toBe(field(el, "name"));
@@ -1356,6 +1427,7 @@ it("a refusal naming a Transfers field shows the Transfers tab and marks it", as
   expect(events).toEqual([{ tab: "transfers", replace: true }]);
   await strip(el).updateComplete;
   expect(strip(el).items.map((item) => item.marked)).toEqual([
+    undefined,
     undefined,
     undefined,
     "needs fixing",
@@ -1379,6 +1451,7 @@ it("a refusal naming a Service field shows the Service tab, marks it and focuses
   expect(strip(el).items.map((item) => item.marked)).toEqual([
     undefined,
     "needs fixing",
+    undefined,
     undefined,
   ]);
   const service = shownPanel(el).querySelector("dashboard-service-settings-fields")!;
@@ -1410,6 +1483,7 @@ it("a refusal landing while the name is blank marks Details and Transfers and sh
   expect(strip(el).items.map((item) => item.marked)).toEqual([
     "needs fixing",
     undefined,
+    undefined,
     "needs fixing",
   ]);
   expect(shownPanel(el).querySelector("[name=name]")).not.toBeNull();
@@ -1426,7 +1500,7 @@ it("losing the second department while Transfers shows returns to Details and ke
   await el.updateComplete;
   await strip(el).updateComplete;
   expect(el.tab).toBe("details");
-  expect(strip(el).items.map((item) => item.key)).toEqual(["details", "service"]);
+  expect(strip(el).items.map((item) => item.key)).toEqual(["details", "service", "tables"]);
   expect(shownPanel(el).querySelector("[name=name]")).not.toBeNull();
   expect(field(el, "name").value).toBe("Draft");
   expect(el.hasUnsavedChanges).toBe(true);
@@ -1444,16 +1518,16 @@ async function toggleNeedsClearing(el: DepartmentSettings, checked: boolean) {
   );
   await el.updateComplete;
 }
-it("shows Needs clearing under Table states on the Service tab, off for a department the model does not list", async () => {
+it("shows Needs clearing under Table states on the Tables tab, off for a department the model does not list", async () => {
   const { el } = await mount();
-  await selectDepartmentTab(el, "service");
+  await selectDepartmentTab(el, "tables");
   const panel = shownPanel(el);
   const section = needsClearing(el).closest("section")!;
   expect(panel.contains(section)).toBe(true);
   expect(section.getAttribute("aria-label")).toBe("Table states");
   expect(section.querySelector("h3")!.textContent!.trim()).toBe("Table states");
   const sections = [...panel.querySelectorAll("section")];
-  expect(sections.indexOf(section)).toBe(2);
+  expect(sections.indexOf(section)).toBe(0);
   expect(needsClearing(el).label).toBe("Needs clearing");
   expect(needsClearing(el).checked).toBe(false);
   expect(needsClearing(el).getAttribute("aria-invalid")).toBeNull();
@@ -1470,7 +1544,7 @@ it("shows it on for a department the model lists", async () => {
 });
 it("switching it on enables Save and saves it with the department", async () => {
   const { el, writes } = await mount();
-  await selectDepartmentTab(el, "service");
+  await selectDepartmentTab(el, "tables");
   expect(save(el).disabled).toBe(true);
   expect(save(el).variant).toBe("secondary");
   await toggleNeedsClearing(el, true);
@@ -1494,7 +1568,7 @@ it("saving a name change sends the stored minutes unchanged", async () => {
     releaseReminderMinutes: 25,
   });
 });
-it("a refusal naming the switch, sent while Details shows, brings back Service and marks it", async () => {
+it("a refusal naming the switch, sent while Details shows, brings back Tables and marks it", async () => {
   const { el } = await mount(structuredClone(model), {
     code: "management.request_invalid",
     params: { field: "needsClearing" },
@@ -1503,10 +1577,11 @@ it("a refusal naming the switch, sent while Details shows, brings back Service a
   expect(el.tab).toBe("details");
   const events = tabEvents(el);
   save(el).click();
-  await expect.poll(() => el.tab).toBe("service");
-  expect(events).toEqual([{ tab: "service", replace: true }]);
+  await expect.poll(() => el.tab).toBe("tables");
+  expect(events).toEqual([{ tab: "tables", replace: true }]);
   await strip(el).updateComplete;
   expect(strip(el).items.map((item) => item.marked)).toEqual([
+    undefined,
     undefined,
     "needs fixing",
     undefined,
@@ -1614,6 +1689,7 @@ it("a refusal naming the late-send switch, sent while Details shows, brings back
     undefined,
     "needs fixing",
     undefined,
+    undefined,
   ]);
   const control = lateSend(el);
   expect(shownPanel(el).contains(control)).toBe(true);
@@ -1669,14 +1745,13 @@ async function clickChosenReminder(el: DepartmentSettings): Promise<number> {
   await el.updateComplete;
   return sent;
 }
-it("shows the reminder under Courses and stations, between Orders and payment and Table states", async () => {
+it("shows the reminder under Courses and stations, after Orders and payment", async () => {
   const { el } = await mount(reminderView(10));
   await selectDepartmentTab(el, "service");
   const panel = shownPanel(el);
   expect([...panel.querySelectorAll("section > h3")].map((h) => h.textContent!.trim())).toEqual([
     "Orders and payment",
     "Courses and stations",
-    "Table states",
   ]);
   const control = reminder(el);
   const section = control.closest("section")!;
@@ -1836,6 +1911,7 @@ it("a refusal naming the reminder, sent while Details shows, brings back Service
     undefined,
     "needs fixing",
     undefined,
+    undefined,
   ]);
   const control = reminder(el);
   expect(shownPanel(el).contains(control)).toBe(true);
@@ -1883,8 +1959,8 @@ it("reads the reminder in Spanish", async () => {
 const stepsView = () => {
   const view = structuredClone(model);
   view.courses = [
-    { id: "c1", name: "Mains" },
-    { id: "c2", name: "Desserts" },
+    { id: "c1", name: "Mains", heldUntilFired: true },
+    { id: "c2", name: "Desserts", heldUntilFired: true },
   ];
   view.serviceSteps = [
     { id: "s1", departmentId: "d1", name: "Set up", start: "seated", courseId: null, minutes: 0 },
@@ -1972,21 +2048,21 @@ function stepErrors(el: DepartmentSettings) {
 }
 const REFUSED = "This value was not accepted. Change it and save again.";
 const COURSE_GONE = "That course was deleted. Choose another start.";
-it("shows Service steps under Table states, below Needs clearing, with this department's steps", async () => {
+it("shows Service steps under Table states, before Needs clearing, with this department's steps", async () => {
   const { el } = await mount(stepsView());
-  await selectDepartmentTab(el, "service");
+  await selectDepartmentTab(el, "tables");
   const list = stepList(el);
   const section = needsClearing(el).closest("section")!;
   expect(shownPanel(el).contains(list)).toBe(true);
   expect(section.contains(list)).toBe(true);
   expect(
-    needsClearing(el).compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING,
+    list.compareDocumentPosition(needsClearing(el)) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
   expect(list.shadowRoot!.querySelector("h4")!.textContent!.trim()).toBe("Service steps");
   expect(list.disabled).toBe(false);
   expect(list.courses).toEqual([
-    { id: "c1", name: "Mains" },
-    { id: "c2", name: "Desserts" },
+    { id: "c1", name: "Mains", heldUntilFired: true },
+    { id: "c2", name: "Desserts", heldUntilFired: true },
   ]);
   await settled(el);
   expect(stepRows(el).map((_, index) => stepControl(el, index, "Name").value)).toEqual([
@@ -2000,7 +2076,7 @@ it("shows Service steps under Table states, below Needs clearing, with this depa
 });
 it("adding a step enables Save; saving sends the whole list, the new step without an id", async () => {
   const { el, writes } = await mount(stepsView());
-  await selectDepartmentTab(el, "service");
+  await selectDepartmentTab(el, "tables");
   await settled(el);
   await addStep(el);
   expect(save(el).disabled).toBe(false);
@@ -2016,7 +2092,7 @@ it("adding a step enables Save; saving sends the whole list, the new step withou
 });
 it("follows a change to the steps another dashboard makes while the form is clean, and keeps the draft while it is not", async () => {
   const { el } = await mount(stepsView());
-  await selectDepartmentTab(el, "service");
+  await selectDepartmentTab(el, "tables");
   const renamed = stepsView();
   renamed.serviceSteps[1]!.name = "Take the order";
   el.model = renamed;
@@ -2035,7 +2111,7 @@ it("follows a change to the steps another dashboard makes while the form is clea
 });
 it("after a save, the model's copy with the new step's id replaces the clean draft, and the next step change sends that id", async () => {
   const { el, writes } = await mount(stepsView());
-  await selectDepartmentTab(el, "service");
+  await selectDepartmentTab(el, "tables");
   await settled(el);
   await addStep(el);
   await editStep(el, 3, "Name", "Coffee");
@@ -2095,7 +2171,7 @@ it("a step edited while the saved list's refresh is pending keeps the new step's
   await settled(el);
   const written: unknown[] = [];
   dialog.addEventListener("written", (event) => written.push(event));
-  await selectDepartmentTab(el, "service");
+  await selectDepartmentTab(el, "tables");
   await addStep(el);
   await editStep(el, 3, "Name", "Coffee");
   save(el).click();
@@ -2120,7 +2196,7 @@ it("a step edited while the saved list's refresh is pending keeps the new step's
 });
 it("a rename made before the saved list's refresh lands keeps the rename and takes the new step's id", async () => {
   const { el, writes } = await mount(stepsView());
-  await selectDepartmentTab(el, "service");
+  await selectDepartmentTab(el, "tables");
   await settled(el);
   await addStep(el);
   await editStep(el, 3, "Name", "Coffee");
@@ -2147,7 +2223,7 @@ it("a rename made before the saved list's refresh lands keeps the rename and tak
 });
 it("a step added before the saved list's refresh lands is still sent as new, beside the saved step's id", async () => {
   const { el, writes } = await mount(stepsView());
-  await selectDepartmentTab(el, "service");
+  await selectDepartmentTab(el, "tables");
   await settled(el);
   await addStep(el);
   await editStep(el, 3, "Name", "Coffee");
@@ -2175,11 +2251,11 @@ it("a step added before the saved list's refresh lands is still sent as new, bes
 });
 it("a step list another manager changed while a rename is in progress shows their list, and the rename saves", async () => {
   const { el, writes } = await mount(stepsView());
-  await selectDepartmentTab(el, "service");
+  await selectDepartmentTab(el, "tables");
   await settled(el);
   await change(el, "name", "Restaurant revised");
   const gone = stepsView();
-  gone.courses = [{ id: "c2", name: "Desserts" }];
+  gone.courses = [{ id: "c2", name: "Desserts", heldUntilFired: true }];
   gone.serviceSteps = gone.serviceSteps.filter((step) => step.id !== "s3");
   el.model = gone;
   await settled(el);
@@ -2196,7 +2272,7 @@ it("a step list another manager changed while a rename is in progress shows thei
 for (const refresh of ["before any refreshed model arrives", "after the refresh failed"]) {
   it(`a rename made after saving a new step, ${refresh}, keeps the new step and sends it with the next step save`, async () => {
     const { el, writes } = await mount(stepsView());
-    await selectDepartmentTab(el, "service");
+    await selectDepartmentTab(el, "tables");
     await settled(el);
     await addStep(el);
     await editStep(el, 3, "Name", "Coffee");
@@ -2230,7 +2306,7 @@ for (const refresh of ["before any refreshed model arrives", "after the refresh 
 }
 it("while a rename is unsaved, another manager's change back of a just-saved step name is followed once the saved list has arrived", async () => {
   const { el } = await mount(stepsView());
-  await selectDepartmentTab(el, "service");
+  await selectDepartmentTab(el, "tables");
   await settled(el);
   await editStep(el, 2, "Name", "Pudding?");
   save(el).click();
@@ -2248,7 +2324,7 @@ it("while a rename is unsaved, another manager's change back of a just-saved ste
 });
 it("a rename saves when another manager put a just-saved step's start back and deleted the course it had moved to", async () => {
   const { el, writes } = await mount(stepsView());
-  await selectDepartmentTab(el, "service");
+  await selectDepartmentTab(el, "tables");
   await settled(el);
   await chooseStart(el, 2, "course_served:c2");
   save(el).click();
@@ -2256,7 +2332,7 @@ it("a rename saves when another manager put a just-saved step's start back and d
   await expect.poll(() => save(el).disabled).toBe(true);
   await change(el, "name", "Restaurant revised");
   const back = stepsView();
-  back.courses = [{ id: "c1", name: "Mains" }];
+  back.courses = [{ id: "c1", name: "Mains", heldUntilFired: true }];
   el.model = back;
   await settled(el);
   expect(save(el).disabled).toBe(false);
@@ -2298,7 +2374,7 @@ function holdSaves(el: DepartmentSettings) {
 }
 it("the save reply attaches a new step's id without discarding edits made while it waited", async () => {
   const { el } = await mount(stepsView());
-  await selectDepartmentTab(el, "service");
+  await selectDepartmentTab(el, "tables");
   await settled(el);
   const { sent, finish } = holdSaves(el);
   await addStep(el);
@@ -2327,7 +2403,7 @@ const cancelButton = (el: DepartmentSettings) =>
 for (const other of ["renamed the first step", "renamed the first step and the trading name"]) {
   it(`a copy in which another manager ${other}, which arrived while a new step was unsaved, is not taken back once the step is saved`, async () => {
     const { el, writes } = await mount(stepsView());
-    await selectDepartmentTab(el, "service");
+    await selectDepartmentTab(el, "tables");
     await settled(el);
     await addStep(el);
     await editStep(el, 3, "Name", "Coffee");
@@ -2347,7 +2423,7 @@ for (const other of ["renamed the first step", "renamed the first step and the t
 }
 it("after a save overrides another manager's older copy, a step added before the refresh lands is sent beside the saved step's id", async () => {
   const { el, writes } = await mount(stepsView());
-  await selectDepartmentTab(el, "service");
+  await selectDepartmentTab(el, "tables");
   await settled(el);
   await addStep(el);
   await editStep(el, 3, "Name", "Coffee");
@@ -2367,7 +2443,7 @@ it("after a save overrides another manager's older copy, a step added before the
 for (const during of ["nothing else is edited", "the department is renamed"]) {
   it(`a copy in which another manager renamed a step, arriving while a new step's save is sent and ${during}, is not taken after the save answers`, async () => {
     const { el } = await mount(stepsView());
-    await selectDepartmentTab(el, "service");
+    await selectDepartmentTab(el, "tables");
     await settled(el);
     const { sent, finish } = holdSaves(el);
     await addStep(el);
@@ -2393,7 +2469,7 @@ for (const during of ["nothing else is edited", "the department is renamed"]) {
 }
 it("a step list another manager changed while a rename's save is sent is shown after the save answers", async () => {
   const { el } = await mount(stepsView());
-  await selectDepartmentTab(el, "service");
+  await selectDepartmentTab(el, "tables");
   await settled(el);
   const { sent, finish } = holdSaves(el);
   await change(el, "name", "Restaurant revised");
@@ -2417,7 +2493,7 @@ it("a step list another manager changed while a rename's save is sent is shown a
 });
 it("changing a step and changing it back sends no steps", async () => {
   const { el, writes } = await mount(stepsView());
-  await selectDepartmentTab(el, "service");
+  await selectDepartmentTab(el, "tables");
   await settled(el);
   await editStep(el, 1, "Name", "Take orders");
   expect(save(el).disabled).toBe(false);
@@ -2478,7 +2554,7 @@ it.each([
   "a blank name, a fraction of a minute, 0 for a repeating step and a first step after the step before are each marked after Save, and Save stays disabled until fixed: $rule",
   async ({ at, message, breakIt, fix }) => {
     const { el, writes } = await mount(stepsView());
-    await selectDepartmentTab(el, "service");
+    await selectDepartmentTab(el, "tables");
     await settled(el);
     await breakIt(el);
     const blank = [
@@ -2499,6 +2575,7 @@ it.each([
     await strip(el).updateComplete;
     expect(strip(el).items.map((item) => item.marked)).toEqual([
       undefined,
+      undefined,
       "needs fixing",
       undefined,
     ]);
@@ -2510,11 +2587,11 @@ it.each([
 );
 it("a step whose course another dashboard deleted is marked That course was deleted. Choose another start.", async () => {
   const { el, writes } = await mount(stepsView());
-  await selectDepartmentTab(el, "service");
+  await selectDepartmentTab(el, "tables");
   await settled(el);
   await editStep(el, 2, "Name", "Pudding?");
   const gone = stepsView();
-  gone.courses = [{ id: "c2", name: "Desserts" }];
+  gone.courses = [{ id: "c2", name: "Desserts", heldUntilFired: true }];
   gone.serviceSteps = gone.serviceSteps.filter((step) => step.id !== "s3");
   el.model = gone;
   await settled(el);
@@ -2529,7 +2606,7 @@ it("a step whose course another dashboard deleted is marked That course was dele
   expect(stepControl(el, 2, "Start").error).toBe("");
   expect(save(el).disabled).toBe(false);
 });
-it("a refusal naming a step's field, sent while Details shows, brings back Service, marks that field and focuses it", async () => {
+it("a refusal naming a step's field, sent while Details shows, brings back Tables, marks that field and focuses it", async () => {
   for (const [refusedField, index, control] of [
     ["serviceSteps.1.name", 1, "Name"],
     ["serviceSteps.0.courseId", 0, "Start"],
@@ -2539,20 +2616,21 @@ it("a refusal naming a step's field, sent while Details shows, brings back Servi
       code: "management.request_invalid",
       params: { field: refusedField },
     });
-    await selectDepartmentTab(el, "service");
+    await selectDepartmentTab(el, "tables");
     await settled(el);
     await editStep(el, 1, "Name", "Take orders");
     await selectDepartmentTab(el, "details");
     const events = tabEvents(el);
     save(el).click();
-    await expect.poll(() => el.tab).toBe("service");
-    expect(events).toEqual([{ tab: "service", replace: true }]);
+    await expect.poll(() => el.tab).toBe("tables");
+    expect(events).toEqual([{ tab: "tables", replace: true }]);
     await settled(el);
     expect(stepControl(el, index, control).error).toBe(REFUSED);
     expect(stepErrors(el).flat().filter(Boolean)).toEqual([REFUSED]);
     expect(listError(el)).toBe("");
     await strip(el).updateComplete;
     expect(strip(el).items.map((item) => item.marked)).toEqual([
+      undefined,
       undefined,
       "needs fixing",
       undefined,
@@ -2567,12 +2645,12 @@ it("a refusal naming a step's field, sent while Details shows, brings back Servi
       code: "management.request_invalid",
       params: { field: refusedField },
     });
-    await selectDepartmentTab(el, "service");
+    await selectDepartmentTab(el, "tables");
     await settled(el);
     await editStep(el, 1, "Name", "Take orders");
     await selectDepartmentTab(el, "details");
     save(el).click();
-    await expect.poll(() => el.tab).toBe("service");
+    await expect.poll(() => el.tab).toBe("tables");
     await settled(el);
     expect(listError(el)).toBe(REFUSED);
     expect(stepErrors(el).flat().filter(Boolean)).toEqual([]);
@@ -2587,7 +2665,7 @@ it("a course deleted meanwhile is named under every step that starts from it", a
     code: "course.not_found",
     params: { courseId: "c1" },
   });
-  await selectDepartmentTab(el, "service");
+  await selectDepartmentTab(el, "tables");
   await settled(el);
   await chooseStart(el, 1, "course_served:c1");
   save(el).click();
@@ -2617,7 +2695,7 @@ it("a course refusal landing after a step's start was changed to Everything serv
     await refused;
     throw { code: "course.not_found", params: { courseId: "c1" } };
   }) as DashboardRequest);
-  await selectDepartmentTab(el, "service");
+  await selectDepartmentTab(el, "tables");
   await settled(el);
   await chooseStart(el, 1, "course_served:c1");
   save(el).click();
@@ -2635,7 +2713,7 @@ it("a step another manager deleted says so, and Cancel emits cancelled", async (
     code: "service_step.not_found",
     params: { stepId: "s2" },
   });
-  await selectDepartmentTab(el, "service");
+  await selectDepartmentTab(el, "tables");
   await settled(el);
   await editStep(el, 1, "Name", "Take orders");
   save(el).click();
@@ -2656,7 +2734,7 @@ it("a list refusal beside a highlighted field keeps Correct the highlighted fiel
     code: "service_step.not_found",
     params: { stepId: "s2" },
   });
-  await selectDepartmentTab(el, "service");
+  await selectDepartmentTab(el, "tables");
   await settled(el);
   await editStep(el, 1, "Name", "Take orders");
   save(el).click();
@@ -2674,7 +2752,7 @@ it("a list refusal beside a highlighted field keeps Correct the highlighted fiel
 it("reads in Spanish: Pasos de servicio under Estados de la mesa", async () => {
   setLocale("es");
   const { el } = await mount(stepsView());
-  await selectDepartmentTab(el, "service");
+  await selectDepartmentTab(el, "tables");
   const section = needsClearing(el).closest("section")!;
   expect(section.querySelector("h3")!.textContent!.trim()).toBe("Estados de la mesa");
   const list = stepList(el);
@@ -2684,7 +2762,7 @@ it("reads in Spanish: Pasos de servicio under Estados de la mesa", async () => {
 
 it("hides each switch's visible hint from screen readers, which hear it as the switch's description", async () => {
   const { el } = await mount();
-  await selectDepartmentTab(el, "service");
+  await selectDepartmentTab(el, "tables");
   for (const control of [lateSend(el), needsClearing(el)]) {
     const hint = control.nextElementSibling!;
     expect(hint.classList.contains("hint"), control.name).toBe(true);

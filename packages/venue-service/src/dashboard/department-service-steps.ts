@@ -44,6 +44,13 @@ export class DepartmentServiceSteps extends LitElement {
         font-weight: var(--wt-font-weight-medium);
         color: var(--wt-color-text-muted);
       }
+      tbody td:first-child {
+        border-inline-start: var(--wt-space-1) solid var(--wt-color-primary);
+      }
+      h4 wt-icon {
+        color: var(--wt-color-primary);
+        margin-inline-end: var(--wt-space-2);
+      }
       tbody td {
         vertical-align: top;
       }
@@ -320,7 +327,9 @@ export class DepartmentServiceSteps extends LitElement {
   }
 
   override render(): TemplateResult {
-    return html`<h4 data-test="service-steps-heading">${t("venue.service_steps")}</h4>
+    return html`<h4 data-test="service-steps-heading">
+        <wt-icon name="bell"></wt-icon>${t("venue.service_steps")}
+      </h4>
       ${this.disabled ? nothing : this.#reorder.liveRegion()}
       ${
         this.steps.length === 0

@@ -93,7 +93,7 @@ const unsent = {
 const wait = (band: "warm" | "overdue" | "forgotten"): TableSignal => ({ kind: "long_wait", band });
 const unavailable: TableSignal = { kind: "held_unavailable", groupId: "g1", lineNames: ["Steak"] };
 const bill: TableSignal = { kind: "bill_requested", requestedAt: inMinutes(-3) };
-const takeOrder: TableSignal = dueStepSignal("Take order");
+const takeOrder: TableSignal = dueStepSignal("Take order", inMinutes(0));
 const held = (count: number): TableSignal => ({ kind: "held", count });
 const due = (m: number | null) =>
   party({ reminder: { groupId: "g2", dueAt: m === null ? null : inMinutes(m) } });
@@ -120,6 +120,41 @@ describe("MAP_PRECEDENCE", () => {
 });
 
 describe("mapLook", () => {
+  it("adds Waiting's outline five minutes after a step, retaining its blue fill and bell", () => {
+    const tbl = table({ signals: [dueStepSignal("Take order", inMinutes(0))] });
+    expect(mapLook([tbl], now + 299_999).outline).toBeNull();
+    expect(mapLook([tbl], now + 300_000)).toMatchObject({
+      fill: "seated",
+      outline: "waiting",
+      pulse: null,
+      cue: { icon: "floor-step", text: "5′" },
+      description: "Seated, Take order · Waiting 5 min",
+    });
+    expect(mapLook([tbl], now + 360_000).cue?.text).toBe("6′");
+  });
+
+  it("keeps stronger floor warnings above a late step", () => {
+    const late = dueStepSignal("Take order", inMinutes(-5));
+    expect(look([table({ signals: [late], timingBand: "forgotten" })])).toMatchObject({
+      fill: "danger",
+      outline: null,
+      pulse: "forgotten",
+    });
+    expect(look([table({ signals: [late, wait("overdue")] })])).toMatchObject({
+      outline: "overdue",
+      pulse: "overdue",
+    });
+    expect(look([table({ signals: [late, unavailable] })])).toMatchObject({
+      fill: "warning",
+      outline: null,
+    });
+    expect(look([table({ signals: [late], party: due(-1) })])).toMatchObject({
+      fill: "warning",
+      outline: null,
+      pulse: "fire",
+    });
+  });
+
   it.each<[string, Partial<TableState>, Look]>([
     [
       "forgotten",
@@ -671,6 +706,15 @@ describe("mapLook's description", () => {
 });
 
 describe("pinLook", () => {
+  it("keeps a late step's name on the pin without an elapsed clock of its own", () => {
+    expect(
+      pinLook([table({ signals: [dueStepSignal("Take order", inMinutes(-5))] })], now),
+    ).toEqual({
+      fill: "seated",
+      icon: "floor-step",
+      text: "Take order",
+    });
+  });
   const startLocale = currentLocale();
   afterEach(() => setLocale(startLocale));
   const pin = (members: TableState[]) => pinLook(members, now);
@@ -861,6 +905,15 @@ describe("reminderClock", () => {
 });
 
 describe("reminderClock and service steps", () => {
+  it("changes when a current step becomes late and on each elapsed minute", () => {
+    const tables = [table({ signals: [dueStepSignal("Take order", inMinutes(0))] })];
+    const at = (ms: number) => reminderClock(tables, now + ms);
+    expect(at(0)).toBe(at(299_999));
+    expect(at(299_999)).not.toBe(at(300_000));
+    expect(at(300_000)).toBe(at(359_999));
+    expect(at(359_999)).not.toBe(at(360_000));
+  });
+
   it("changes when a step falls due and not before", () => {
     const dueAt = now + 4 * 60_000;
     const tables = [
@@ -870,7 +923,7 @@ describe("reminderClock and service steps", () => {
           {
             kind: "service_step",
             steps: [
-              { stepId: "s1", name: "Set up", dueAt: inMinutes(-5) },
+              { stepId: "s1", name: "Set up", dueAt: inMinutes(0) },
               { stepId: "s2", name: "Dessert?", dueAt: new Date(dueAt).toISOString() },
             ],
           },
@@ -880,7 +933,7 @@ describe("reminderClock and service steps", () => {
     const at = (ms: number) => reminderClock(tables, ms);
     expect(at(now)).toBe(at(dueAt - 1));
     expect(at(dueAt - 1)).not.toBe(at(dueAt));
-    expect(at(dueAt)).toBe(at(dueAt + 5 * 60_000));
+    expect(at(dueAt)).toBe(at(dueAt + 4 * 60_000));
     expect(
       reminderClock([table({ id: "b", signals: [dueStepSignal("Set up", inMinutes(1))] })], now),
     ).toBe("");

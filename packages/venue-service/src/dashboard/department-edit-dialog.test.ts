@@ -23,7 +23,7 @@ afterEach(() => {
 it("puts the selected tab's sole action row in the modal footer", async () => {
   const { el, form, modal } = await mount();
   await supplyReceiptEditor(el, form);
-  for (const tab of ["details", "service", "receipt", "transfers"] as const) {
+  for (const tab of ["details", "service", "tables", "receipt", "transfers"] as const) {
     await selectDepartmentTab(form, tab);
     await expect.poll(() => modal.querySelector("wt-form-actions[slot=footer]")).toBeTruthy();
     const actions = modal.querySelector("wt-form-actions[slot=footer]")!;
@@ -228,7 +228,7 @@ it("passes its tab to the form, and a later tab moves the form there", async () 
   expect(form.tab).toBe("details");
 });
 
-it("offers Receipts between Service and Transfers when an editor is supplied, and is wide", async () => {
+it("offers Receipts between Tables and Transfers when an editor is supplied, and is wide", async () => {
   const { el, form, modal } = await mount();
   const editor = await supplyReceiptEditor(el, form);
   await modal.updateComplete;
@@ -243,6 +243,7 @@ it("offers Receipts between Service and Transfers when an editor is supplied, an
   ).toEqual([
     ["details", "Details"],
     ["service", "Service"],
+    ["tables", "Tables"],
     ["receipt", "Receipts"],
     ["transfers", "Transfers"],
   ]);
@@ -261,7 +262,7 @@ it("no editor, no Receipts tab, standard width", async () => {
     [...strip.shadowRoot!.querySelectorAll("[role=tab]")].map((tab) =>
       tab.getAttribute("data-key"),
     ),
-  ).toEqual(["details", "service", "transfers"]);
+  ).toEqual(["details", "service", "tables", "transfers"]);
   expect(form.shadowRoot!.querySelector("[slot=receipt]")).toBeNull();
   expect(modal.size).toBe("standard");
 });
@@ -419,6 +420,7 @@ it("a receipt refusal naming a field while Details shows selects Receipts, repla
   expect(tabMarks(form)).toEqual([
     ["details", undefined],
     ["service", undefined],
+    ["tables", undefined],
     ["receipt", "needs fixing"],
     ["transfers", undefined],
   ]);
@@ -426,7 +428,7 @@ it("a receipt refusal naming a field while Details shows selects Receipts, repla
   await expect.poll(() => editor.shadowRoot!.activeElement).toBe(field);
   expect(field.shadowRoot!.activeElement).toBe(receiptInput(editor));
   await editReceipt(editor, "Fixed");
-  await expect.poll(() => tabMarks(form)[2]).toEqual(["receipt", undefined]);
+  await expect.poll(() => tabMarks(form)[3]).toEqual(["receipt", undefined]);
   expect(changes).toHaveLength(1);
 });
 it("a receipt refusal while Receipts shows marks the tab and changes no tab", async () => {
@@ -437,7 +439,7 @@ it("a receipt refusal while Receipts shows marks the tab and changes no tab", as
   await editor.refuse();
   await form.updateComplete;
   await form.shadowRoot!.querySelector("wt-tabs")!.updateComplete;
-  expect(tabMarks(form)[2]).toEqual(["receipt", "needs fixing"]);
+  expect(tabMarks(form)[3]).toEqual(["receipt", "needs fixing"]);
   expect(form.tab).toBe("receipt");
   expect(changes).toEqual([]);
 });

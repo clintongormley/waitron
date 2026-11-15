@@ -564,19 +564,20 @@ describe("till-table-details-sheet", () => {
   });
 
   describe("a due service step", () => {
+    const stepNow = Date.parse("2026-10-22T20:00:00.000Z");
     const longName = "Ask whether they would like coffee, dessert or the cheese board";
     const stepped = (name = "Dessert?") =>
       table({
         ...seated,
         party: party(),
         signals: [
-          dueStepSignal(name),
+          dueStepSignal(name, "2026-10-22T20:00:00.000Z"),
           { kind: "bill_requested", requestedAt: "2026-10-10T12:00:00Z" },
         ],
       });
 
     it("draws the step's whole name with Done above the chips, and not again among them", async () => {
-      const el = await mount({ table: stepped(longName), canMarkSteps: true });
+      const el = await mount({ table: stepped(longName), canMarkSteps: true, now: stepNow });
       const chip = find(el, '[data-chip="service-step"]')!;
       expect(chip.querySelector(".step-name")!.textContent!.trim()).toBe(longName);
       expect(text(el, "[data-step-done]")).toBe(en["floor.step_done"]);
@@ -592,7 +593,7 @@ describe("till-table-details-sheet", () => {
     });
 
     it("sends service-step-done with the ids, then asks to close", async () => {
-      const el = await mount({ table: stepped(), canMarkSteps: true });
+      const el = await mount({ table: stepped(), canMarkSteps: true, now: stepNow });
       const seen = captureEvents(el);
       el.addEventListener("service-step-done", (event) => {
         expect(event.bubbles && event.composed).toBe(true);
@@ -600,13 +601,13 @@ describe("till-table-details-sheet", () => {
       });
       await userEvent.click(find(el, "[data-step-done]")!);
       expect(seen).toEqual([
-        'service-step-done {"partyId":"p1","stepId":"step-Dessert?","dueAt":"2000-01-01T00:00:00.000Z","tableId":"t1"}',
+        'service-step-done {"partyId":"p1","stepId":"step-Dessert?","dueAt":"2026-10-22T20:00:00.000Z","tableId":"t1"}',
         "details-close",
       ]);
     });
 
     it("shows the plain chip among the chips, with no Done, when the device cannot mark steps", async () => {
-      const el = await mount({ table: stepped(), canMarkSteps: false });
+      const el = await mount({ table: stepped(), canMarkSteps: false, now: stepNow });
       expect(find(el, "[data-step-done]")).toBeNull();
       const chip = find(el, '.chips [data-chip="service-step"]')!;
       expect(chip.textContent!.trim()).toBe("Dessert?");
