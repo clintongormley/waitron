@@ -99,7 +99,7 @@ export const departmentSettingFields = (
     ["orderStart", "venue.order_start"],
     ["paidWhen", "venue.counter_paid_when"],
     ["collectionNumber", "venue.print_collection_ticket"],
-    ["courseSettings", "venue.meal_courses"],
+    ["courseSettings", "venue.release_reminder"],
     ["lateSendNeedsManager", "venue.late_send_needs_manager"],
     ["needsClearing", "venue.needs_clearing"],
     ["serviceSteps", "venue.service_steps"],

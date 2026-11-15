@@ -5,6 +5,7 @@ import { leaveCoordinatorFor, navigationGuardFor, type WtInput } from "@waitron/
 import { cleanupWidgets } from "./widgets/test-helpers.js";
 import {
   mountReceiptApp,
+  venueServiceModel,
   departmentForm,
   departmentDialog,
 } from "./testing/department-receipt-app-fixture.js";
@@ -25,22 +26,35 @@ afterEach(async () => {
   vi.restoreAllMocks();
   await page.viewport(...originalViewport);
 });
-const reminder = "venue-service:department:releaseReminderMinutes";
+const reminder = "venue-service:department:courseSettings";
 it.each(["en-GB", "es-ES"])(
-  "finds the real reminder in %s and opens Service; Back restores the page",
+  "finds the real reminder in %s and opens Tables; Back restores the page",
   async (locale) => {
-    const { app } = await mountReceiptApp({ locale, path: "/manage/venue-operations" });
+    const { app } = await mountReceiptApp({
+      locale,
+      path: "/manage/venue-operations",
+      respond: (path) =>
+        path === "/management-api/venue-service"
+          ? Promise.resolve(
+              Response.json({
+                ...venueServiceModel(),
+                courses: [{ id: "mains", name: "Mains" }],
+                courseSettingsByDepartment: {},
+              }),
+            )
+          : undefined,
+    });
     await searchSettings(app, locale === "es-ES" ? "avisar" : "remind");
     const pushed = vi.spyOn(history, "pushState");
     await userEvent.click(searchResult(app, reminder)!);
-    await expect.poll(() => departmentDialog(app)?.tab).toBe("service");
+    await expect.poll(() => departmentDialog(app)?.tab).toBe("tables");
     await expect
-      .poll(() => departmentForm(app)?.shadowRoot?.querySelector("[name=releaseReminderMinutes]"))
+      .poll(() => departmentForm(app)?.shadowRoot?.querySelector("[name=course-mains-reminder]"))
       .toBeTruthy();
-    expect(location.pathname).toBe("/manage/venue-operations/department/bar/view/service");
+    expect(location.pathname).toBe("/manage/venue-operations/department/bar/view/tables");
     expect(searchBox(app).value).toBe("");
     expect(
-      pushed.mock.calls.some((call) => String(call[2]).includes("/department/bar/view/service")),
+      pushed.mock.calls.some((call) => String(call[2]).includes("/department/bar/view/tables")),
     ).toBe(true);
     history.back();
     await expect.poll(() => location.pathname).toBe("/manage/venue-operations");
@@ -77,7 +91,7 @@ it("retains the real same-department draft and protects a different department w
   await userEvent.click(
     settingChooser(app)!.querySelector<HTMLElement>("[data-test=setting-open]")!,
   );
-  await expect.poll(() => departmentDialog(app)?.tab).toBe("service");
+  await expect.poll(() => departmentDialog(app)?.tab).toBe("tables");
   expect(name().value).toBe("Edited bar");
   expect(leaveCoordinatorFor(app)!.isDirty()).toBe(true);
   const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
@@ -96,7 +110,7 @@ it("retains the real same-department draft and protects a different department w
     );
     await expect.poll(() => question.open).toBe(false);
     if (choice === "keep") {
-      expect(location.pathname).toBe("/manage/venue-operations/department/bar/view/service");
+      expect(location.pathname).toBe("/manage/venue-operations/department/bar/view/tables");
       expect(name().value).toBe("Edited bar");
       expect(searchBox(app).value).toBe("remind");
       expect(app.shadowRoot!.querySelector(".layout")!.classList.contains("drawer-open")).toBe(
@@ -106,7 +120,7 @@ it("retains the real same-department draft and protects a different department w
   }
   await expect
     .poll(() => location.pathname)
-    .toBe("/manage/venue-operations/department/restaurant/view/service");
+    .toBe("/manage/venue-operations/department/restaurant/view/tables");
   expect(leaveCoordinatorFor(app)!.isDirty()).toBe(false);
   expect(searchBox(app).value).toBe("");
   expect(app.shadowRoot!.querySelector(".layout")!.classList.contains("drawer-open")).toBe(false);

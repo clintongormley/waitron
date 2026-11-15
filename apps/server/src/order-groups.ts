@@ -2253,7 +2253,12 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     }));
   const byId = new Map(shown.map((group) => [group.id, group]));
   const ungrouped: CurrentOrderRow[] = [];
-  const dishes: { groupId: string | null; servedAt: string | null; fullyCancelled?: true }[] = [];
+  const dishes: {
+    groupId: string | null;
+    courseId: string | null;
+    servedAt: string | null;
+    fullyCancelled?: true;
+  }[] = [];
   const defaults = await readCourseFireNowZones(tx);
   const retainedCourses = new Map<string, CurrentOrders["retainedCourses"][number]>();
   for (const line of lines) {
@@ -2267,6 +2272,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     if (line.groupId !== null && group === undefined) continue;
     dishes.push({
       groupId: line.groupId,
+      courseId: line.courseId,
       servedAt: serviceCompletedAt(line),
       ...(line.cancelledQuantity >= line.quantity ? { fullyCancelled: true as const } : {}),
     });
@@ -2343,7 +2349,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     (group?.rows ?? ungrouped).push(row);
   }
   const settings = (await partyCourseSettings(tx, [partyId])).get(partyId) ?? [];
-  const minutesFor = groupReminderMinutes(lines, [...retainedCourses.values()], settings);
+  const minutesFor = groupReminderMinutes(dishes, [...retainedCourses.values()], settings);
   return {
     revision: party.revision,
     hasGroups: nextDisplayNumber > 1,
