@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { credentialRevision, putCredential, loadKeyRing } from "@waitron/credentials";
-import { withTransaction } from "@waitron/db";
+import {
+  credentialRevision,
+  getCredential,
+  tryGetCredential,
+  putCredential,
+  loadKeyRing,
+} from "@waitron/credentials";
+import { readSettings, saveSettings, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { isAppError } from "@waitron/shared";
@@ -16,6 +22,7 @@ import {
   type ArchiveSettings,
 } from "./archive-settings.js";
 import { recordMetaOf } from "./backup-settings-evidence.js";
+import { BACKUP_SETTINGS } from "./backup-settings-document.js";
 import type { StreamSettings } from "./stream-host.js";
 
 const VENUE = "c0000000-0000-4000-8000-000000000002";
@@ -557,6 +564,70 @@ describe("stored archive settings", () => {
   });
   const bucket = resolveArchiveChoice(custom, { stream: null, held: null });
   const input = without(settingsWith([bucket]), "revision");
+
+  it("a local folder archive seals nothing and reads back its settings", async () => {
+    const local = without(
+      settingsWith([{ kind: "local-fs", id: "primary", dir: "/var/backups" }]),
+      "revision",
+    );
+    const written = await withTransaction(suite.db, (tx) =>
+      writeArchiveSettings(tx, ring, local, null),
+    );
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        tryGetCredential(tx, ring, { purpose: ARCHIVE_PURPOSE }),
+      ),
+    ).toBeNull();
+    expect(await readArchiveSettings(suite.db, ring)).toEqual(written);
+    expect((await readSettings(suite.db, BACKUP_SETTINGS)).doc.archive).toMatchObject({
+      ...local,
+      revision: written.revision,
+    });
+  });
+
+  it("a bucket archive seals only its keys and keeps the bucket copy's part", async () => {
+    const streamPart = {
+      endpoint: null,
+      region: "eu-north-1",
+      bucket: "stream-bucket",
+      prefix: "",
+    };
+    await withTransaction(suite.db, (tx) =>
+      saveSettings(tx, BACKUP_SETTINGS, {
+        doc: { archive: null, stream: streamPart },
+        expectedRevision: 0,
+        personId: null,
+      }),
+    );
+    const written = await withTransaction(suite.db, (tx) =>
+      writeArchiveSettings(tx, ring, input, null),
+    );
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        getCredential(tx, ring, { purpose: ARCHIVE_PURPOSE }),
+      ),
+    ).toEqual({
+      accessKeyId: "AKIACUSTOM",
+      secretAccessKey: "custom-secret",
+    });
+    const { doc } = await readSettings(suite.db, BACKUP_SETTINGS);
+    expect(doc.stream).toEqual(streamPart);
+    expect(doc.archive?.destinations).toEqual([
+      {
+        kind: "s3",
+        id: "bucket",
+        bucket: {
+          endpoint: "https://other.example.test",
+          region: "eu-west-1",
+          bucket: "archive-bucket",
+          prefix: "box",
+        },
+      },
+    ]);
+    expect(JSON.stringify(doc)).not.toContain("AKIACUSTOM");
+    expect(JSON.stringify(doc)).not.toContain("custom-secret");
+    expect(await readArchiveSettings(suite.db, ring)).toEqual(written);
+  });
 
   it("reads nothing before anything is stored", async () => {
     expect(await readArchiveSettings(suite.db, ring)).toBeNull();
