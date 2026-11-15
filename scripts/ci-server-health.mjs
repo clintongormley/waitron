@@ -559,7 +559,11 @@ export async function main(command, env = process.env, request = githubRequest) 
         source = "snapshot (fresh read failed)";
       }
     }
-    report(`CI capacity source: ${source}`);
+    const readCapacity = capacity;
+    capacity = () => {
+      report(`CI capacity source: ${source}`);
+      return typeof readCapacity === "function" ? readCapacity() : readCapacity;
+    };
   }
   await healthCommand(
     command,

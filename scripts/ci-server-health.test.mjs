@@ -518,6 +518,53 @@ describe("server health recovery", () => {
     },
   );
 
+  it.each(["check", "route"])(
+    "reports the source only when capacity is consulted: %s",
+    async (command) => {
+      const directory = mkdtempSync(tmpdir() + "/unused-capacity-");
+      try {
+        const f = fixture();
+        f.job.runner_id = 8;
+        let reads = 0;
+        await health.main(
+          command,
+          {
+            GITHUB_REPOSITORY: "fixture/waitron",
+            GITHUB_REPOSITORY_ID: "42",
+            GITHUB_RUN_ID: "13",
+            GITHUB_RUN_ATTEMPT: "1",
+            CAPACITY_READ_TOKEN: "capacity-only",
+            GITHUB_OUTPUT: directory + "/output",
+            GITHUB_STEP_SUMMARY: directory + "/summary",
+          },
+          async (path, options) => {
+            if (path.endsWith("/actions/variables/DISPOSABLE_TESTS_CAPACITY")) {
+              reads++;
+              return {
+                value: JSON.stringify({
+                  observedAt: now,
+                  slots: 2,
+                  serverRunning: 0,
+                  serverWaiting: 0,
+                }),
+              };
+            }
+            if (command === "route") throw new Error("HTTP 404");
+            return f.request(path, options);
+          },
+        );
+        expect(reads).toBe(command === "route" ? 1 : 0);
+        const summary = readFileSync(directory + "/summary", "utf8");
+        expect(summary).not.toContain("CI capacity source:");
+        expect(summary).toContain(
+          command === "route" ? "CI route: hosted" : "No stalled server queue",
+        );
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
   it("limits a capacity credential to the explicit child request and keeps its inherited environment", () => {
     const calls = [];
     const execute = (...args) => (calls.push(args), '{"value":"{}"}');
