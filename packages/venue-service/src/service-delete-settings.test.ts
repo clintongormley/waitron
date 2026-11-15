@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, isNotNull } from "drizzle-orm";
 import { expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -8,7 +8,6 @@ import {
   menus,
   departmentDayRanges,
   departmentDays,
-  departmentReceipts,
   departments,
   departmentTransferDestinations,
   deviceProfileKitchenScreens,
@@ -33,7 +32,12 @@ import {
   zoneDays,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedDeviceProfiles, seedVenue } from "@waitron/db/testing/seed.js";
+import {
+  seedDevice,
+  seedDeviceProfiles,
+  seedVenue,
+  seedDepartmentReceipt,
+} from "@waitron/db/testing/seed.js";
 import {
   readServiceDeleteSettings,
   clearServiceDeleteSettings,
@@ -277,9 +281,7 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
       { sourceDepartmentId: f.beta, destinationDepartmentId: f.department },
       { sourceDepartmentId: f.alpha, destinationDepartmentId: f.beta },
     ]);
-    await tx
-      .insert(departmentReceipts)
-      .values({ departmentId: f.department, receipt: { email: "receipt@example.com" } });
+    await seedDepartmentReceipt(tx, f.department, { email: "receipt@example.com" });
     const tables = {
       cells: routingCells,
       children: routingCellPeriods,
@@ -287,11 +289,21 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
       staff: menuPeriodStaffMenus,
       policies: floorZones,
       routes: departmentTransferDestinations,
-      receipts: departmentReceipts,
       menus: menus,
     };
     const before: Record<string, Record<string, unknown>[]> = {};
     for (const [key, table] of Object.entries(tables)) before[key] = await tx.select().from(table);
+    const receiptRows = () =>
+      tx
+        .select({
+          departmentId: departments.id,
+          receipt: departments.receiptText,
+          logoRasters: departments.receiptLogoRasters,
+          updatedAt: departments.receiptUpdatedAt,
+        })
+        .from(departments)
+        .where(isNotNull(departments.receiptUpdatedAt));
+    before.receipts = await receiptRows();
     const departmentBefore = await tx.select().from(departments);
     expect(
       await readServiceDeleteSettings(tx, [f.gone, f.forbidden, f.allowed], f.department),
@@ -341,6 +353,7 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
         ),
       );
     }
+    expect(await receiptRows()).toEqual(before.receipts);
     expect(await tx.select().from(departmentTransferDestinations)).toEqual(
       before.routes!.filter((row) => row.sourceDepartmentId === f.alpha),
     );

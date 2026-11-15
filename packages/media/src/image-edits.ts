@@ -7,7 +7,7 @@ import {
   mediaImageEdits,
   mediaImages,
 } from "@waitron/db";
-import { departmentReceipts } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import { AppError, type ReceiptLogoRasters } from "@waitron/shared";
 import { validateFraming, type ImageEditInput } from "./framing.js";
 import {
@@ -76,22 +76,17 @@ export async function saveImage(
   }
   // Match receipts and themes inside the write transaction: a logo may have been attached while
   // pixels were prepared.
-  const logoMatch = sql`case when json_valid(${departmentReceipts.receipt}) then
-    case when json_type(${departmentReceipts.receipt}) = 'object' and json_type(${departmentReceipts.receipt}, '$.logo') = 'text'
-    then json_extract(${departmentReceipts.receipt}, '$.logo') else null end else null end = ${current.filename}`;
+  const logoMatch = eq(departments.receiptLogoImageId, current.id);
   if (pixelsChanged) {
-    const users = await tx
-      .select({ id: departmentReceipts.departmentId })
-      .from(departmentReceipts)
-      .where(logoMatch);
+    const users = await tx.select({ id: departments.id }).from(departments).where(logoMatch);
     const themeMatch = sql`${themeLogoName("light")} = ${current.filename}`;
     const themes = await tx.select({ id: customThemes.id }).from(customThemes).where(themeMatch);
     if ((users.length || themes.length) && (!rasters?.["58mm"] || !rasters["80mm"]))
       throw new Error("Receipt logo requires both printable pictures");
     if (users.length)
       await tx
-        .update(departmentReceipts)
-        .set({ logoRasters: rasters!, updatedAt: nowIso() })
+        .update(departments)
+        .set({ receiptLogoRasters: rasters!, receiptUpdatedAt: nowIso() })
         .where(logoMatch);
     // A theme's updated_at is set only by its save, rename or switch in use; a redraw is none of those.
     if (themes.length)

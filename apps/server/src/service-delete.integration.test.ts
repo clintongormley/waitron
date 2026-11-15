@@ -1,5 +1,5 @@
 import { ensureOperator } from "./testing/cancel-line.js";
-import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -36,7 +36,6 @@ import {
   createServiceZone,
   configureZone,
   departments,
-  departmentReceipts,
   addFloorPlanSet,
   menuPeriods,
   departmentTransferRequests,
@@ -102,10 +101,7 @@ async function target() {
       name: randomUUID(),
       orderStart: "table",
     });
-    await tx.insert(departmentReceipts).values({
-      departmentId: department.id,
-      receipt: { operationDescription: "Restaurante" },
-    });
+    await seedDepartmentReceipt(tx, department.id, { operationDescription: "Restaurante" });
     const zone = await createServiceZone(tx, {
       name: randomUUID(),
       departmentId: department.id,
@@ -858,7 +854,6 @@ const HISTORY_ROWS = [
   "sale_settlements",
   "bill_payments",
   "sale_receipt_headers",
-  "department_receipts",
   "registros_facturacion",
   "cadenas",
   "order_amendments",
@@ -1063,14 +1058,14 @@ it.each(["zone", "department"] as const)(
         resolvedAt: NOW.toISOString(),
       });
       await tx
-        .update(departmentReceipts)
+        .update(departments)
         .set({
-          receipt: {
+          receiptText: {
             operationDescription: "Restaurante",
             headerSubtitle: { "es-ES": "Retained table service" },
           },
         })
-        .where(eq(departmentReceipts.departmentId, f.departmentId));
+        .where(eq(departments.id, f.departmentId));
       const [timekeeper] = await tx
         .select()
         .from(persons)
@@ -1170,7 +1165,6 @@ it.each(["zone", "department"] as const)(
     for (const context of unaffectedLineContexts)
       expect(context).toMatchObject({ department_id: unaffectedContext.department_id });
     for (const name of [
-      "department_receipts",
       "bill_payments",
       "tenders",
       "sale_settlements",

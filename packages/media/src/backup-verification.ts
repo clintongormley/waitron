@@ -159,7 +159,6 @@ async function checkMedia(query: BackupQuery): Promise<boolean> {
     ["sections", "image", null],
     ["section_members", "folder_overrides", "image"],
     ["menu_version_images", "filename", null],
-    ["department_receipts", "receipt", "logo"],
   ] as const) {
     if (!(await has(query, table))) continue;
     for await (const row of query.rows(`select ${ident(column)} as value from ${ident(table)}`)) {
@@ -167,6 +166,23 @@ async function checkMedia(query: BackupQuery): Promise<boolean> {
         const object = jsonObject(row.value);
         if (object === null || !(await reference(object[nested], false))) return false;
       } else if (!(await reference(row.value, table === "menu_version_images"))) return false;
+    }
+  }
+  if (await has(query, "departments")) {
+    for await (const row of query.rows(
+      "select receipt_logo_image_id as id from departments where receipt_logo_image_id is not null",
+    )) {
+      if (
+        typeof row.id !== "string" ||
+        !images ||
+        !data ||
+        !(await first(
+          query,
+          "select 1 from media_images i join media_image_data d on d.image_id=i.id where i.id=?",
+          [row.id],
+        ))
+      )
+        return false;
     }
   }
   return true;

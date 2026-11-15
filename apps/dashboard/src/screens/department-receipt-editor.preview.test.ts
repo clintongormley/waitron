@@ -49,7 +49,7 @@ it("coalesces edits behind one in-flight preview and sends only the latest draft
   await editReceipt(el, "email", "first@example.com");
   await editReceipt(el, "email", "last@example.com");
   // A new live snapshot drives the same desired preview; it must not dispatch a second request.
-  api.liveData.invalidate([{ type: "department_receipts" }]);
+  api.liveData.invalidate([{ type: "departments" }]);
   await expect.poll(() => api.getDepartmentReceipt.mock.calls.length).toBe(2);
   await new Promise<void>((resolve) => setTimeout(resolve, 350));
   expect(api.previewReceiptDraft).toHaveBeenCalledTimes(1);
@@ -66,7 +66,7 @@ it("an unchanged live snapshot leaves an in-flight preview current and does not 
   api.previewReceiptDraft.mockImplementationOnce(() => held.promise);
   const { el } = await mountReceiptEditor(api);
   await expect.poll(() => api.previewReceiptDraft.mock.calls.length).toBe(1);
-  api.liveData.invalidate([{ type: "department_receipts" }]);
+  api.liveData.invalidate([{ type: "departments" }]);
   await expect.poll(() => api.getDepartmentReceipt.mock.calls.length).toBe(2);
   held.resolve(preview("CURRENT"));
   await expect

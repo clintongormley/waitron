@@ -10,7 +10,7 @@ import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js"
 import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
 import { writeModuleConfig } from "./module-config.js";
 import { ownedHourSetup } from "../test/owned-hour-setup.js";
-import { departments, departmentReceipts } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import { uploadImage } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import {
@@ -475,7 +475,15 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
     expect(await seen()).not.toBe(beforePreview);
   } finally {
     await liveFixture(port, async (db) => {
-      await db.delete(departmentReceipts).where(eq(departmentReceipts.departmentId, departmentId));
+      await db
+        .update(departments)
+        .set({
+          receiptText: null,
+          receiptLogoImageId: null,
+          receiptLogoRasters: null,
+          receiptUpdatedAt: null,
+        })
+        .where(eq(departments.id, departmentId));
       await db.delete(departments).where(eq(departments.id, departmentId));
       await db.execute(sql`delete from management_sessions where person_id = ${personId}`);
       await db.execute(sql`delete from persons where id = ${personId}`);

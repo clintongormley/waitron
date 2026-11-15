@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
+  departments,
   menus,
   mediaImages,
   mediaImageData,
@@ -293,4 +294,19 @@ describe("media backup evidence", () => {
     expect([owner.secrets, owner.entries, owner.effects]).toEqual([[], [], []]);
     expect(validateBackupModuleResult(passed, owner, false)).toEqual(passed);
   });
+});
+
+it("refuses a copy with a department logo id naming no image", async () => {
+  await restored.db
+    .insert(departments)
+    .values({ id: "receipt-department", name: "Dining", tradingName: "Dining" });
+  await restored.db.execute(sql`pragma foreign_keys = off`);
+  try {
+    await restored.db.execute(
+      sql`update departments set receipt_logo_image_id = 'missing-image' where id = 'receipt-department'`,
+    );
+  } finally {
+    await restored.db.execute(sql`pragma foreign_keys = on`);
+  }
+  expect((await run()).status).toBe("invalid");
 });

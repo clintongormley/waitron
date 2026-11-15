@@ -2,13 +2,8 @@ import { expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "@waitron/db/testing/seed.js";
-import {
-  createDepartment,
-  deleteDepartment,
-  departmentReceipts,
-  departments,
-} from "@waitron/venue-service";
+import { seedVenue, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
+import { createDepartment, deleteDepartment, departments } from "@waitron/venue-service";
 import { deleteImage, listImages, listImageUsages, readImage, uploadImage } from "./images.js";
 import { samplePreparedImage } from "./testing/sample-image.js";
 
@@ -39,11 +34,9 @@ it("counts only department logos and protects each until cleared despite retired
       { fallbackLanguage: "en" },
     );
 
-    await tx.insert(departmentReceipts).values([
-      { departmentId: rows[0]!.id, receipt: { logo: image.filename } },
-      { departmentId: rows[1]!.id, receipt: { logo: image.filename } },
-      { departmentId: rows[2]!.id, receipt: {} },
-    ]);
+    await seedDepartmentReceipt(tx, rows[0]!.id, { logo: image.filename });
+    await seedDepartmentReceipt(tx, rows[1]!.id, { logo: image.filename });
+    await seedDepartmentReceipt(tx, rows[2]!.id, {});
     const departmentUses = [
       { kind: "department_receipt", id: rows[1]!.id, name: "Bar", active: false },
       { kind: "department_receipt", id: rows[0]!.id, name: "Dining", active: true },
@@ -58,9 +51,9 @@ it("counts only department logos and protects each until cleared despite retired
     }
     expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
     await tx
-      .update(departmentReceipts)
-      .set({ receipt: {} })
-      .where(eq(departmentReceipts.departmentId, rows[0]!.id));
+      .update(departments)
+      .set({ receiptLogoImageId: null, receiptText: {} })
+      .where(eq(departments.id, rows[0]!.id));
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
     expect(await deleteImage(tx, image.id)).toEqual({
       deleted: false,
@@ -70,9 +63,9 @@ it("counts only department logos and protects each until cleared despite retired
     expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses: [departmentUses[0]] });
     expect((await readImage(tx, image.id)).usageCount).toBe(1);
     await tx
-      .update(departmentReceipts)
-      .set({ receipt: {} })
-      .where(eq(departmentReceipts.departmentId, rows[1]!.id));
+      .update(departments)
+      .set({ receiptLogoImageId: null, receiptText: {} })
+      .where(eq(departments.id, rows[1]!.id));
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(0);
     expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
   });
@@ -99,11 +92,9 @@ it.each(["{", "null", "[]", "123", '{"logo":null}', '{"logo":[]}', '{"logo":{}}'
         { image: photo, names: { en: "Logo" } },
         { fallbackLanguage: "en" },
       );
-      await tx
-        .insert(departmentReceipts)
-        .values({ departmentId: good!.id, receipt: { logo: image.filename } });
+      await seedDepartmentReceipt(tx, good!.id, { logo: image.filename });
       await tx.execute(
-        sql`insert into department_receipts (department_id, receipt, updated_at) values (${broken!.id}, ${bad}, '2026-10-10T00:00:00Z')`,
+        sql`update departments set receipt_text = ${bad}, receipt_updated_at = '2026-10-10T00:00:00Z' where id = ${broken!.id}`,
       );
       const uses = [{ kind: "department_receipt", id: good!.id, name: "Dining", active: true }];
       expect(await listImageUsages(tx, image.id)).toEqual(uses);
@@ -128,9 +119,7 @@ it("protects a deleted department's retained receipt logo after its name is reus
       { image: photo, names: { en: "Retained logo" } },
       { fallbackLanguage: "en" },
     );
-    await tx
-      .insert(departmentReceipts)
-      .values({ departmentId: old.id, receipt: { logo: image.filename } });
+    await seedDepartmentReceipt(tx, old.id, { logo: image.filename });
     await deleteDepartment(
       tx,
       {
@@ -148,8 +137,8 @@ it("protects a deleted department's retained receipt logo after its name is reus
     for (const sort of ["date", "name"] as const)
       expect((await listImages(tx, { sort })).images[0]!.usageCount).toBe(1);
     expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
-    expect(await tx.select().from(departmentReceipts)).toEqual([
-      expect.objectContaining({ departmentId: old.id, receipt: { logo: image.filename } }),
+    expect(await tx.select().from(departments).where(eq(departments.id, old.id))).toEqual([
+      expect.objectContaining({ id: old.id, receiptLogoImageId: image.id, receiptText: {} }),
     ]);
   });
 });

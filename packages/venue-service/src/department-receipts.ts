@@ -1,6 +1,6 @@
 import { and, eq, sql, type SQL } from "drizzle-orm";
 import {
-  departmentReceipts,
+  mediaImages,
   departments,
   nowIso,
   orderServiceContexts,
@@ -33,21 +33,21 @@ function object(value: unknown): value is Record<string, unknown> {
 }
 
 function validDocument(
-  column: SQL | typeof departmentReceipts.receipt | typeof departmentReceipts.logoRasters,
+  column: SQL | typeof departments.receiptText | typeof departments.receiptLogoRasters,
 ) {
   return sql`case when json_valid(${column}) then ${column} else '{}' end`;
 }
 
 function stringField(field: string, max: number) {
-  const value = sql`json_extract(${validDocument(departmentReceipts.receipt)}, ${`$.${field}`})`;
+  const value = sql`json_extract(${validDocument(departments.receiptText)}, ${`$.${field}`})`;
   return sql<
     string | null
-  >`case when json_type(${validDocument(departmentReceipts.receipt)}, ${`$.${field}`}) = 'text' and length(cast(${value} as blob)) <= ${max} then ${value} else null end`;
+  >`case when json_type(${validDocument(departments.receiptText)}, ${`$.${field}`}) = 'text' and length(cast(${value} as blob)) <= ${max} then ${value} else null end`;
 }
 
 function textMap(field: string, languages: readonly string[]) {
   if (languages.length === 0) return sql<string>`'{}'`;
-  const doc = validDocument(departmentReceipts.receipt);
+  const doc = validDocument(departments.receiptText);
   const path = `$.${field}`;
   const map = sql`case when json_type(${doc}, ${path}) = 'object' then json_extract(${doc}, ${path}) else '{}' end`;
   const entries = sql`(select json_group_object(key, value) from json_each(${map}) where key in (${sql.join(
@@ -60,7 +60,7 @@ function textMap(field: string, languages: readonly string[]) {
 }
 
 function picture(paper: ReceiptPaperWidth) {
-  const value = sql`json_extract(${validDocument(departmentReceipts.logoRasters)}, ${`$."${paper}"`})`;
+  const value = sql`json_extract(${validDocument(departments.receiptLogoRasters)}, ${`$."${paper}"`})`;
   const maxBytes =
     Math.ceil((Math.ceil(safeWidthDots(paper) / 8) * LOGO_MAX_HEIGHT_DOTS) / 3) * 4 + 128;
   return sql<
@@ -73,9 +73,9 @@ function trimProjection(cfg: DepartmentReceiptScope) {
     departmentId: departments.id,
     printAddress: sql<
       string | null
-    >`json_type(${validDocument(departmentReceipts.receipt)}, '$.printAddress')`,
+    >`json_type(${validDocument(departments.receiptText)}, '$.printAddress')`,
     operationDescription: stringField("operationDescription", 2000),
-    logo: stringField("logo", 255),
+    logo: mediaImages.filename,
     phone: stringField("phone", 120),
     email: stringField("email", 1016),
     headerSubtitle: textMap("headerSubtitle", cfg.receiptLanguages),
@@ -170,7 +170,7 @@ export async function listDepartmentReceiptReadiness(tx: Transaction) {
   const rows = await tx
     .select({ ...trimProjection({ receiptLanguages: [] }), name: departments.name })
     .from(departments)
-    .leftJoin(departmentReceipts, eq(departmentReceipts.departmentId, departments.id))
+    .leftJoin(mediaImages, eq(mediaImages.id, departments.receiptLogoImageId))
     .where(eq(departments.active, true));
   return rows.flatMap((row) =>
     parseReceipt(row).operationDescription === undefined
@@ -193,7 +193,7 @@ export async function readDepartmentReceipt(
   const [row] = await tx
     .select(trimProjection(cfg))
     .from(departments)
-    .leftJoin(departmentReceipts, eq(departmentReceipts.departmentId, departments.id))
+    .leftJoin(mediaImages, eq(mediaImages.id, departments.receiptLogoImageId))
     .where(and(rowQuery(departmentId), eq(departments.active, true)));
   if (!row) throw new AppError("department.not_found", { departmentId });
   return parseReceipt(row);
@@ -207,7 +207,7 @@ export async function readRetainedDepartmentReceipt(
   const [row] = await tx
     .select(trimProjection(cfg))
     .from(departments)
-    .leftJoin(departmentReceipts, eq(departmentReceipts.departmentId, departments.id))
+    .leftJoin(mediaImages, eq(mediaImages.id, departments.receiptLogoImageId))
     .where(rowQuery(departmentId));
   if (!row) throw new AppError("department.not_found", { departmentId });
   return parseReceipt(row);
@@ -219,26 +219,24 @@ export async function readPrintedDepartmentReceipt(
   departmentId: string,
   paperWidth: ReceiptPaperWidth,
 ): Promise<PrintedDepartmentReceipt> {
-  const doc = departmentReceipts.receipt;
+  const doc = departments.receiptText;
   try {
     const [row] = await tx
       .select({
         ...trimProjection(cfg),
         picture: picture(paperWidth),
-        receiptRow: departmentReceipts.departmentId,
+        receiptRow: departments.receiptUpdatedAt,
         top: sql<string | null>`case when json_valid(${doc}) then json_type(${doc}) end`,
-        hasLogoKey: sql<
-          number | null
-        >`case when json_valid(${doc}) then json_type(${doc}, '$.logo') is not null end`,
+        hasLogoKey: departments.receiptLogoImageId,
       })
       .from(departments)
-      .leftJoin(departmentReceipts, eq(departmentReceipts.departmentId, departments.id))
+      .leftJoin(mediaImages, eq(mediaImages.id, departments.receiptLogoImageId))
       .where(rowQuery(departmentId));
     if (!row) return { receipt: {}, logo: null, unreadable: true };
     if (row.receiptRow !== null && row.top !== "object")
       return { receipt: {}, logo: null, unreadable: true };
     const receipt = parseReceipt(row);
-    if (row.hasLogoKey === 1 && !receipt.logo) return { receipt, logo: null, unreadable: true };
+    if (row.hasLogoKey !== null && !receipt.logo) return { receipt, logo: null, unreadable: true };
     return { receipt, logo: receipt.logo ? parsePicture(row.picture, paperWidth) : null };
   } catch {
     try {
@@ -261,12 +259,12 @@ export async function readDepartmentLogoRasters(
   const [row] = await tx
     .select({
       id: departments.id,
-      logo: stringField("logo", 255),
+      logo: mediaImages.filename,
       narrow: picture("58mm"),
       wide: picture("80mm"),
     })
     .from(departments)
-    .leftJoin(departmentReceipts, eq(departmentReceipts.departmentId, departments.id))
+    .leftJoin(mediaImages, eq(mediaImages.id, departments.receiptLogoImageId))
     .where(and(rowQuery(departmentId), eq(departments.active, true)));
   if (!row) throw new AppError("department.not_found", { departmentId });
   if (!row.logo || !MEDIA_FILENAME.test(row.logo) || row.narrow === null || row.wide === null)
@@ -291,11 +289,25 @@ export async function writeDepartmentReceipt(
     (!rasters || !decode(rasters["58mm"], "58mm") || !decode(rasters["80mm"], "80mm"))
   )
     throw new Error("Receipt logo requires both printable pictures");
-  const values = { receipt, logoRasters: receipt.logo ? rasters! : null, updatedAt: nowIso() };
+  const { logo, ...receiptText } = receipt;
+  let receiptLogoImageId: string | null = null;
+  if (logo !== undefined) {
+    const [image] = await tx
+      .select({ id: mediaImages.id })
+      .from(mediaImages)
+      .where(eq(mediaImages.filename, logo));
+    if (!image) throw new AppError("receipt.invalid", { reason: "image_not_found", field: "logo" });
+    receiptLogoImageId = image.id;
+  }
   await tx
-    .insert(departmentReceipts)
-    .values({ departmentId, ...values })
-    .onConflictDoUpdate({ target: departmentReceipts.departmentId, set: values });
+    .update(departments)
+    .set({
+      receiptText,
+      receiptLogoImageId,
+      receiptLogoRasters: logo ? rasters! : null,
+      receiptUpdatedAt: nowIso(),
+    })
+    .where(eq(departments.id, departmentId));
 }
 
 export async function receiptDepartmentForSale(

@@ -8,7 +8,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { nodes, stampDeployment, withTransaction } from "@waitron/db";
 import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { departmentReceipts, departments } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import { parseModuleConfig } from "@waitron/module";
 import { provisionBillVenue } from "./testing/bill-venue.js";
 import { ALL_MODULES } from "./modules.js";
@@ -40,7 +40,15 @@ it.each(["ES-common", "GB-vat"])(
     const rows = await suite.db.select().from(departments);
     expect(rows.length).toBeGreaterThan(0);
     for (const row of rows)
-      await suite.db.delete(departmentReceipts).where(eq(departmentReceipts.departmentId, row.id));
+      await suite.db
+        .update(departments)
+        .set({
+          receiptText: null,
+          receiptLogoImageId: null,
+          receiptLogoRasters: null,
+          receiptUpdatedAt: null,
+        })
+        .where(eq(departments.id, row.id));
     await stampDeployment(suite.db, "preproduction");
     const scratch = await mkdtemp(join(tmpdir(), "a493-boot-description-"));
     let server: StartedServer | undefined;

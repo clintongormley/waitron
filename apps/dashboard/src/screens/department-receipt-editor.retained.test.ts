@@ -304,7 +304,7 @@ it("adopts untouched receipt fields and translations while retaining typed value
       footerMessage: { "ca-ES": "Remote footer" },
     },
   });
-  api.liveData.invalidate([{ type: "department_receipts" }]);
+  api.liveData.invalidate([{ type: "departments" }]);
   await expect.poll(() => receiptField(el, "phone").value).toBe("933333333");
   expect(receiptField(el, "headerSubtitle-es-ES").value).toBe("Typed");
   expect(receiptField(el, "headerSubtitle-ca-ES").value).toBe("Cafè");

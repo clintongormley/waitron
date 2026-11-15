@@ -6,7 +6,7 @@ import { expect, it } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { nodes, stampDeployment } from "@waitron/db";
-import { departmentReceipts, departments } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import { parseModuleConfig } from "@waitron/module";
 import { provisionBillVenue } from "./testing/bill-venue.js";
 import { ALL_MODULES } from "./modules.js";
@@ -30,7 +30,15 @@ it("a trading boot without a fiscal description field accepts a department's emp
   await suite.db.update(nodes).set({ filingModule: "none" }).where(eq(nodes.id, venue.cfg.nodeId));
   const rows = await suite.db.select().from(departments);
   for (const row of rows)
-    await suite.db.delete(departmentReceipts).where(eq(departmentReceipts.departmentId, row.id));
+    await suite.db
+      .update(departments)
+      .set({
+        receiptText: null,
+        receiptLogoImageId: null,
+        receiptLogoRasters: null,
+        receiptUpdatedAt: null,
+      })
+      .where(eq(departments.id, row.id));
   await stampDeployment(suite.db, "preproduction");
   const scratch = await mkdtemp(join(tmpdir(), "a493-boot-description-"));
   let server: StartedServer | undefined;

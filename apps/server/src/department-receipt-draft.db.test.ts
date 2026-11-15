@@ -1,5 +1,5 @@
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -8,7 +8,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import {} from "@waitron/menu";
 import { startManagementSession } from "@waitron/identity";
-import { departments, departmentReceipts } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import { type DepartmentReceiptWrite } from "@waitron/shared";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import { checkedDepartmentReceiptWrite } from "./department-receipt-draft.js";
@@ -40,12 +40,9 @@ async function fixture(role: "manager" | "staff" = "manager") {
     .values({ name: randomUUID(), tradingName: "Deli" })
     .returning();
   await suite.db.update(departments).set(policy).where(eq(departments.id, department!.id));
-  await suite.db.insert(departmentReceipts).values({
-    departmentId: department!.id,
-    receipt: {
-      operationDescription: "Meals",
-      footerMessage: { "eu-ES": "Eskerrik asko", "es-ES": "Antes" },
-    },
+  await seedDepartmentReceipt(suite.db, department!.id, {
+    operationDescription: "Meals",
+    footerMessage: { "eu-ES": "Eskerrik asko", "es-ES": "Antes" },
   });
   const [person] = await seedPersons(suite.db, { displayName: randomUUID(), role });
   const session = await withTransaction(suite.db, (tx) =>
@@ -99,7 +96,7 @@ describe("checked department receipt write", () => {
     });
     expect(checked.input).toEqual(input);
     await save(f, input);
-    expect((await suite.db.select().from(departmentReceipts))[0]!.receipt).toEqual(input.receipt);
+    expect((await suite.db.select().from(departments))[0]!.receiptText).toEqual(input.receipt);
     await withTransaction(suite.db, async (tx) => {
       expect((await departmentReceiptLanguages(tx)).languages).toEqual(["gl-ES", "es-ES", "ca-ES"]);
       const printed = await VENUE_SERVICE.readPrintedDepartmentReceipt(
@@ -114,7 +111,7 @@ describe("checked department receipt write", () => {
   it("allows decoration editing with venue permission when both policies are unchanged", async () => {
     const f = await fixture();
     await save(f, body());
-    expect((await suite.db.select().from(departmentReceipts))[0]!.receipt).toEqual({
+    expect((await suite.db.select().from(departments))[0]!.receiptText).toEqual({
       operationDescription: "Deli meals",
     });
     expect((await suite.db.select().from(departments))[0]).toMatchObject(policy);
@@ -123,18 +120,18 @@ describe("checked department receipt write", () => {
     "refuses changed policy %j without its permission and leaves both rows unchanged",
     async (changed) => {
       const f = await fixture("staff");
-      const before = await suite.db.select().from(departmentReceipts);
+      const before = await suite.db.select().from(departments);
       await expect(save(f, body({ policy: changed }))).rejects.toMatchObject({
         code: "authorization.not_permitted",
         params: { permission: "venue.configure" },
       });
-      expect(await suite.db.select().from(departmentReceipts)).toEqual(before);
+      expect(await suite.db.select().from(departments)).toEqual(before);
       expect((await suite.db.select().from(departments))[0]).toMatchObject(policy);
     },
   );
   it("refuses changed hidden text and leaves receipt and policy unchanged", async () => {
     const f = await fixture();
-    const before = await suite.db.select().from(departmentReceipts);
+    const before = await suite.db.select().from(departments);
     await expect(
       save(
         f,
@@ -146,7 +143,7 @@ describe("checked department receipt write", () => {
       code: "receipt.invalid",
       params: { reason: "invalid_language", field: "footerMessage", language: "eu-ES" },
     });
-    expect(await suite.db.select().from(departmentReceipts)).toEqual(before);
+    expect(await suite.db.select().from(departments)).toEqual(before);
     expect((await suite.db.select().from(departments))[0]).toMatchObject(policy);
   });
   it("preserves the current policy when venue permission is lost after an earlier read", async () => {
@@ -174,7 +171,7 @@ describe("checked department receipt write", () => {
       code: "receipt.invalid",
       params: { reason: "invalid_language", field: "footerMessage", language: "ca-ES" },
     });
-    expect((await suite.db.select().from(departmentReceipts))[0]!.receipt.footerMessage).toEqual({
+    expect((await suite.db.select().from(departments))[0]!.receiptText!.footerMessage).toEqual({
       "eu-ES": "Eskerrik asko",
       "es-ES": "Antes",
     });
@@ -186,14 +183,16 @@ describe("checked department receipt write", () => {
     });
     await check(f, input);
     await suite.db
-      .update(departmentReceipts)
-      .set({ receipt: { operationDescription: "Meals", footerMessage: { "eu-ES": "New text" } } })
-      .where(eq(departmentReceipts.departmentId, f.departmentId));
+      .update(departments)
+      .set({
+        receiptText: { operationDescription: "Meals", footerMessage: { "eu-ES": "New text" } },
+      })
+      .where(eq(departments.id, f.departmentId));
     await expect(save(f, input)).rejects.toMatchObject({
       code: "receipt.invalid",
       params: { language: "eu-ES" },
     });
-    expect((await suite.db.select().from(departmentReceipts))[0]!.receipt.footerMessage).toEqual({
+    expect((await suite.db.select().from(departments))[0]!.receiptText!.footerMessage).toEqual({
       "eu-ES": "New text",
     });
   });

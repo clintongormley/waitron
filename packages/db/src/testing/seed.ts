@@ -1,3 +1,5 @@
+import type { DepartmentReceiptConfig, ReceiptLogoRasters } from "@waitron/shared";
+import { mediaImages } from "../schema/media/images.js";
 import { withPrinter } from "../station-printer-list.js";
 import { parties } from "../schema/parties.js";
 import { partyAllergyGuests } from "../schema/venue-service/party-allergy.js";
@@ -372,4 +374,31 @@ export async function attachStationPrinterForTest(
     .update(kitchenStations)
     .set({ printerIds: withPrinter(station!.printerIds, printerId) })
     .where(eq(kitchenStations.id, stationId));
+}
+
+export async function seedDepartmentReceipt(
+  db: Database | Transaction,
+  departmentId: string,
+  receipt: DepartmentReceiptConfig,
+  logoRasters: ReceiptLogoRasters | null = null,
+): Promise<void> {
+  const { logo, ...receiptText } = receipt;
+  let receiptLogoImageId: string | null = null;
+  if (logo !== undefined) {
+    const [image] = await db
+      .select({ id: mediaImages.id })
+      .from(mediaImages)
+      .where(eq(mediaImages.filename, logo));
+    if (!image) throw new Error(`Receipt logo image not found: ${logo}`);
+    receiptLogoImageId = image.id;
+  }
+  await db
+    .update(departments)
+    .set({
+      receiptText,
+      receiptLogoImageId,
+      receiptLogoRasters: logoRasters,
+      receiptUpdatedAt: nowIso(),
+    })
+    .where(eq(departments.id, departmentId));
 }

@@ -91,7 +91,7 @@ it("a live receipt read after Cancel begins cannot keep the dialog open", async 
     ).length;
   expect(reads()).toBe(1);
   hold = true;
-  api.liveData.invalidate([{ type: "department_receipts" }]);
+  api.liveData.invalidate([{ type: "departments" }]);
   await expect.poll(reads).toBe(2);
   expect(await modal.requestClose("cancel")).toBe(true);
   expect(modal.open).toBe(false);

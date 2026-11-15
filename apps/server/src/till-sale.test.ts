@@ -1,5 +1,5 @@
 import type { TradingContext } from "./trading-context.js";
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateHeldOrder, updateOrderLine } from "./testing/order-writer-fixture.js";
@@ -48,12 +48,7 @@ import {
   rateLines,
 } from "@waitron/menu";
 import type { AvailableProduct } from "@waitron/menu";
-import {
-  departments,
-  departmentReceipts,
-  saleReceiptHeaders,
-  workingLineContexts,
-} from "@waitron/venue-service";
+import { departments, saleReceiptHeaders, workingLineContexts } from "@waitron/venue-service";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -138,9 +133,8 @@ function nextNif(): string {
 
 async function readyDepartment(): Promise<void> {
   const [department] = await suite.db.select({ id: departments.id }).from(departments);
-  await suite.db.insert(departmentReceipts).values({
-    departmentId: department!.id,
-    receipt: { operationDescription: "Venta en establecimiento" },
+  await seedDepartmentReceipt(suite.db, department!.id, {
+    operationDescription: "Venta en establecimiento",
   });
 }
 
@@ -2893,9 +2887,9 @@ describe("per-answer receipt presentation", () => {
       const [department] = await suite.db.select().from(departments);
 
       await suite.db
-        .update(departmentReceipts)
+        .update(departments)
         .set({
-          receipt: {
+          receiptText: {
             operationDescription: "Venta en establecimiento",
             headerSubtitle: { "es-ES": "Department subtitle" },
             footerMessage: { "es-ES": "Department footer" },
@@ -2903,7 +2897,7 @@ describe("per-answer receipt presentation", () => {
             email: "department@example.test",
           },
         })
-        .where(eq(departmentReceipts.departmentId, department!.id));
+        .where(eq(departments.id, department!.id));
       const req: TillSaleRequest = {
         zoneId,
         workingOrderId: randomUUID(),
@@ -2932,9 +2926,9 @@ describe("per-answer receipt presentation", () => {
         sql`select count(*) as n from registros_facturacion`,
       );
       await suite.db
-        .update(departmentReceipts)
-        .set({ receipt: { footerMessage: { "es-ES": "New department footer" } } })
-        .where(eq(departmentReceipts.departmentId, department!.id));
+        .update(departments)
+        .set({ receiptText: { footerMessage: { "es-ES": "New department footer" } } })
+        .where(eq(departments.id, department!.id));
       await seedVenueSettings(suite.db, { addressLine1: "Current street" });
       const replay = await recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, req);
       expect(replay).toMatchObject({
@@ -3033,15 +3027,15 @@ describe("receipt presentation sources", () => {
       const [department] = await suite.db.select().from(departments);
 
       await suite.db
-        .update(departmentReceipts)
+        .update(departments)
         .set({
-          receipt: {
+          receiptText: {
             operationDescription: "Venta en establecimiento",
             footerMessage: { "es-ES": "Own footer" },
             email: "own@example.test",
           },
         })
-        .where(eq(departmentReceipts.departmentId, department!.id));
+        .where(eq(departments.id, department!.id));
       const req: TillSaleRequest = {
         zoneId,
         workingOrderId: randomUUID(),
@@ -3059,7 +3053,7 @@ describe("receipt presentation sources", () => {
       try {
         if (hiddenDepartment)
           await suite.db.execute(
-            sql`alter table department_receipts rename to test_hidden_department_receipts`,
+            sql`alter table departments rename column receipt_text to test_hidden_receipt_text`,
           );
         const presentation = await withTransaction(suite.db, (tx) =>
           readReceiptPresentation(tx, saved!.saleId, "es-ES"),
@@ -3086,7 +3080,7 @@ describe("receipt presentation sources", () => {
       } finally {
         if (hiddenDepartment)
           await suite.db.execute(
-            sql`alter table test_hidden_department_receipts rename to department_receipts`,
+            sql`alter table departments rename column test_hidden_receipt_text to receipt_text`,
           );
         warning.mockRestore();
       }
@@ -3099,14 +3093,14 @@ describe("receipt presentation address failure", () => {
     const { cfg, zoneId, waterOfferId } = await setupVenue();
     const [department] = await suite.db.select().from(departments);
     await suite.db
-      .update(departmentReceipts)
+      .update(departments)
       .set({
-        receipt: {
+        receiptText: {
           operationDescription: "Venta en establecimiento",
           headerSubtitle: { "es-ES": "Surviving subtitle" },
         },
       })
-      .where(eq(departmentReceipts.departmentId, department!.id));
+      .where(eq(departments.id, department!.id));
     const address = vi
       .spyOn(venueAddressReads, "readVenueAddress")
       .mockRejectedValue(new Error("current address read refused"));

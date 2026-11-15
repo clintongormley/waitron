@@ -35,7 +35,7 @@ import {
   replaceMenuWeek,
   readBusinessDayScheduleRevision,
   setProfileServiceScope,
-  departmentReceipts,
+  writeDepartmentReceipt,
 } from "@waitron/venue-service";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { ServerConfig } from "./config.js";
@@ -102,9 +102,8 @@ async function prepareSale(config: ServerConfig) {
         departmentId: department.id,
         orderStart: "counter",
       });
-      await tx.insert(departmentReceipts).values({
-        departmentId: department.id,
-        receipt: { operationDescription: venue.operationDescription },
+      await writeDepartmentReceipt(tx, department.id, {
+        operationDescription: venue.operationDescription,
       });
       const period = await saveMenuPeriod(tx, department.id, {
         name,

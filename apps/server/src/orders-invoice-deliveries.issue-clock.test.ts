@@ -1,3 +1,4 @@
+import { seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -10,7 +11,7 @@ import { recordSale } from "@waitron/core";
 import { seriesId as brandSeriesId, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import { inTx, send } from "./testing/bill-venue.js";
 import { collect, parked, provisionOrderVenue, type OrderVenue } from "./testing/order-venue.js";
-import { departmentReceipts, departments } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 
 // These cases issue invoices on a fixed past clock, so their database holds no record from a later
 // clock: the chain refuses a record more than a minute earlier than the latest one.
@@ -52,10 +53,7 @@ useVenueDb({
       officeId = office!.id;
       const receipt = { operationDescription: "Restaurante", email: "facturas@example.test" };
       for (const { id } of await tx.select({ id: departments.id }).from(departments)) {
-        await tx
-          .insert(departmentReceipts)
-          .values({ departmentId: id, receipt })
-          .onConflictDoUpdate({ target: departmentReceipts.departmentId, set: { receipt } });
+        await seedDepartmentReceipt(tx, id, receipt);
       }
     });
   },

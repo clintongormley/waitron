@@ -1359,12 +1359,12 @@ it.each([
   },
 );
 
-it("refreshes the library passively when department_receipts changes", async () => {
+it("refreshes the library passively when departments changes", async () => {
   const liveData = new LiveData();
   const background = api();
   const client = Object.assign(api(), { background, liveData });
   await mount(client);
-  liveData.invalidate([{ type: "department_receipts" }]);
+  liveData.invalidate([{ type: "departments" }]);
   await vi.waitFor(() => expect(background.listImages).toHaveBeenCalledOnce());
 });
 
@@ -2193,7 +2193,7 @@ it("shows a theme's logo use as 'Logo of theme {name}', linking to the Appearanc
   expect(client.deleteImage).not.toHaveBeenCalled();
 });
 
-it.each(["department_receipts", "departments", "custom_themes"])(
+it.each(["departments", "custom_themes"])(
   "refreshes image counts passively when %s changes",
   async (type) => {
     const liveData = new LiveData();

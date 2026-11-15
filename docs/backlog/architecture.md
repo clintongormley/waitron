@@ -910,6 +910,13 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
   from time to time, not per slice (owner, 2026-11-10;
   [when](../developers/testing-guide.md#when-the-bench-runs)). Next is
   [the build order](../superpowers/plans/2026-11-08-a1308-build-order.md).
+  Drop the department receipt raster cache and convert at print time in a separate PR after vb5,
+  before vb6 (watcher, 2026-11-15 13:48, Lane H `questions.md`: “the next PR after vb5, before vb6”).
+  The owner assigned Lane H the test-box timing: the Waitron wordmark took a median 16.886 ms over
+  11 warmed conversions, below [the spec’s approximate 20 ms criterion](../superpowers/specs/2026-11-02-rationalisation/tables-venuebox.md).
+  The first conversion took 155.131 ms; this sample does not measure every logo. The image was
+  `1129ca229bf6`, Node 26.13.0 x64, at 504 printer dots across. Exact samples and source remain in
+  `~/waitron-campaign-h/receipts/a1308-vb5/box-timing.json` and `box-timing-source.ts`.
   **Open:** the design does not cover A790's six tables, A802's eleven or A739's; each later slice
   must fold in the ones it touches. 246 tables become 145, or 144 once A1323 removes
   `recovery_packs`, in eight migration sets instead of sixteen. The job runner is built with scheduled
@@ -1041,16 +1048,8 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 - **`DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1** — left behind
   by the tenant-column removal (#378, 2026-09-16).
   [Detail](architecture.md#drainresulttenantswithwork-is-named-for-a-count-that-can-now-only-be-0-or-1)
-- **A department's receipt logo save re-checks only the image's revision, not its id** — found in
-  A841 slice 7's review, read, not run.
-  [Detail](printers.md#a-departments-receipt-logo-save-re-checks-only-the-images-revision-not-its-id)
-- **A copied department receipt that names `logo` twice, or once more as `"logo\u0000"`, may split
-  its two readers** — believed from A841 slice 7's review, not run through a receipt.
-  [Detail](printers.md#a-copied-department-receipt-that-names-logo-twice-or-once-more-as-logou0000-may-split-its-two-readers)
-- **Left open by #1261's review (W111):** database enforcement of logo retention remains open.
-  A theme's logo (A841 slice 7) is a second image whose deletion only the app refuses; this entry
-  covers it too.
-  [Detail](printers.md#left-open-by-1261s-review-not-acted-on-2026-10-05)
+- **Left open by #1261's review (W111):** database enforcement of theme-logo retention remains open, as do the receipt editor's copied phone and email limits. [Detail](printers.md#left-open-by-1261s-review-not-acted-on-2026-10-05).
+
 - **Drop `printers.ticket_scope` at the next reset — OPEN (3d, W20).** — left open by the product
   folders work. Printing no longer reads the column. Dropping it rebuilds `printers`, so leave it
   until the venue reset that permits the rebuild.

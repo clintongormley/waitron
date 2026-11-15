@@ -1,4 +1,4 @@
-import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import type { TradingContext } from "./trading-context.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
@@ -53,7 +53,7 @@ import {
   cardReaderHolders,
   cardReaders,
 } from "@waitron/payments";
-import { routingCells, departments, departmentReceipts } from "@waitron/venue-service";
+import { routingCells, departments } from "@waitron/venue-service";
 import { createPrinter } from "@waitron/printing";
 import { CARD_PROVIDERS } from "@waitron/composition";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
@@ -177,9 +177,8 @@ async function setupVenue(): Promise<{
 
   const cfg = tillConfigFromVenue(venue);
   const [department] = await suite.db.select().from(departments);
-  await suite.db.insert(departmentReceipts).values({
-    departmentId: department!.id,
-    receipt: { operationDescription: "Venta en establecimiento" },
+  await seedDepartmentReceipt(suite.db, department!.id, {
+    operationDescription: "Venta en establecimiento",
   });
   const { menuId, available, operatorId } = await withTransaction(suite.db, async (tx) => {
     const cat = await createMenu(tx, { name: "Delicatessen" });

@@ -1,11 +1,11 @@
 import { readVenueSettings } from "@waitron/db";
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { sales, printJobs } from "@waitron/db";
-import { departments, departmentReceipts } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { uploadImage } from "@waitron/media";
@@ -116,7 +116,7 @@ describe("POST receipt draft preview", () => {
       .where(eq(departments.id, departmentId));
     const snapshot = async () => ({
       departments: await suite.db.select().from(departments),
-      receipts: await suite.db.select().from(departmentReceipts),
+      receipts: await suite.db.select().from(departments),
 
       sales: await suite.db.select().from(sales),
       jobs: await suite.db.select().from(printJobs),
@@ -134,9 +134,9 @@ describe("POST receipt draft preview", () => {
     expect(await snapshot()).toEqual(before);
   });
   it("refuses null department drafts without reading stored department or global decoration", async () => {
-    await suite.db
-      .insert(departmentReceipts)
-      .values({ departmentId, receipt: { headerSubtitle: { "es-ES": "Stored department" } } });
+    await seedDepartmentReceipt(suite.db, departmentId, {
+      headerSubtitle: { "es-ES": "Stored department" },
+    });
 
     const response = await ask({
       departmentId: null,
@@ -157,7 +157,7 @@ describe("POST receipt draft preview", () => {
 
   it("does not persist the draft, a sale or a print job", async () => {
     const snapshot = async () => ({
-      receipt: await suite.db.select().from(departmentReceipts),
+      receipt: await suite.db.select().from(departments),
 
       sales: await suite.db.select().from(sales),
       jobs: await suite.db.select().from(printJobs),
@@ -235,11 +235,12 @@ describe("POST receipt draft preview", () => {
       data: Buffer.from([1, 2, 3, 4]).toString("base64"),
     };
 
-    await suite.db.insert(departmentReceipts).values({
+    await seedDepartmentReceipt(
+      suite.db,
       departmentId,
-      receipt: { logo: stored.filename },
-      logoRasters: { "58mm": own, "80mm": own },
-    });
+      { logo: stored.filename },
+      { "58mm": own, "80mm": own },
+    );
 
     const ownPreview = await drawn({
       ...draft(),
@@ -264,7 +265,7 @@ describe("POST receipt draft preview", () => {
     const { image: stored } = await withTransaction(suite.db, (tx) =>
       uploadImage(tx, { image, names: { es: "Draft logo" } }),
     );
-    const before = await suite.db.select().from(departmentReceipts);
+    const before = await suite.db.select().from(departments);
     const answer = await drawn({ ...draft(), receipt: { logo: stored.filename } });
     expect(answer.marks.logo).not.toBeNull();
     expect(answer.preview.blocks[answer.marks.logo!.start + 1]).toMatchObject({
@@ -272,7 +273,7 @@ describe("POST receipt draft preview", () => {
       width: 504,
       height: 151,
     });
-    expect(await suite.db.select().from(departmentReceipts)).toEqual(before);
+    expect(await suite.db.select().from(departments)).toEqual(before);
     await suite.db.execute(
       sql`update media_image_data set bytes = ${Buffer.from([1, 2, 3])} where image_id = ${stored.id}`,
     );

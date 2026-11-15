@@ -1,15 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, invoiceSeries, sales, withTransaction, floorZones } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedVenue, seedWorkingOrder, seedZone } from "@waitron/db/testing/seed.js";
 import {
-  departments,
-  orderServiceContexts,
-  saleReceiptHeaders,
-  departmentReceipts,
-} from "@waitron/venue-service";
+  seedNode,
+  seedVenue,
+  seedWorkingOrder,
+  seedZone,
+  seedDepartmentReceipt,
+} from "@waitron/db/testing/seed.js";
+import { departments, orderServiceContexts, saleReceiptHeaders } from "@waitron/venue-service";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 
 const suite = useVenueDb({
@@ -86,10 +87,7 @@ async function fixture(nullHeader = false) {
   };
 }
 async function authored(departmentId: string, receipt: Record<string, unknown>) {
-  await suite.db
-    .insert(departmentReceipts)
-    .values({ departmentId, receipt })
-    .onConflictDoUpdate({ target: departmentReceipts.departmentId, set: { receipt } });
+  await seedDepartmentReceipt(suite.db, departmentId, receipt);
 }
 const read = (
   cfg: { operationDescriptionDefault?: string },
@@ -166,8 +164,10 @@ describe("department operation description", () => {
     expect(
       await suite.db
         .select()
-        .from(departmentReceipts)
-        .where(eq(departmentReceipts.departmentId, f.primary)),
+        .from(departments)
+        .where(
+          sql`${departments.id} = ${f.primary} and ${departments.receiptUpdatedAt} is not null`,
+        ),
     ).toEqual([]);
     const withDefault = { operationDescriptionDefault: "Seat default" };
     for (const source of [

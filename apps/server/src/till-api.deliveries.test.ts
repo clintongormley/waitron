@@ -1,4 +1,4 @@
-import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -74,7 +74,7 @@ import {
   type PagePrintJob,
 } from "./invoice-page-print.js";
 import { DEVICE_COOKIE } from "./device-session.js";
-import { departmentReceipts, departments } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import { claimInvoiceDelivery, reserveInvoiceDelivery } from "./invoice-delivery.js";
 import { runInvoiceEmailPass } from "./invoice-email-worker.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
@@ -212,10 +212,7 @@ async function venue(): Promise<Venue> {
       .returning({ id: pagePrinters.id });
     const receipt = { email: "facturas@example.test" };
     for (const { id } of await tx.select({ id: departments.id }).from(departments)) {
-      await tx
-        .insert(departmentReceipts)
-        .values({ departmentId: id, receipt })
-        .onConflictDoUpdate({ target: departmentReceipts.departmentId, set: { receipt } });
+      await seedDepartmentReceipt(tx, id, receipt);
     }
     return {
       menuItemId: offers.offerFor(available.find((p) => p.pricingUnit === "each")!.id),
@@ -1751,7 +1748,12 @@ describe("POST /api/sales/:id/deliveries (email)", () => {
     v.email.transport = false;
     expect(await emailIt(v, orderId)).toEqual(refusal(409, "invoice_delivery.email_unavailable"));
     v.email.transport = true;
-    await suite.db.delete(departmentReceipts);
+    await suite.db.update(departments).set({
+      receiptText: null,
+      receiptLogoImageId: null,
+      receiptLogoRasters: null,
+      receiptUpdatedAt: null,
+    });
     expect(await emailIt(v, orderId)).toEqual(refusal(409, "invoice_delivery.email_unavailable"));
     expect(await deliveryRows(saleId)).toEqual([]);
   });
@@ -1879,7 +1881,12 @@ describe("POST /api/sales/:id/deliveries (email)", () => {
     expect(failing.status).toBe(200);
     expect(failing.body).toMatchObject({ actions: { email: null } });
     v.email.transport = true;
-    await suite.db.delete(departmentReceipts);
+    await suite.db.update(departments).set({
+      receiptText: null,
+      receiptLogoImageId: null,
+      receiptLogoRasters: null,
+      receiptUpdatedAt: null,
+    });
     expect((await readStatus(v, orderId)).body).toMatchObject({ actions: { email: null } });
   });
 
@@ -2152,7 +2159,12 @@ describe("POST /api/sales/:id/deliveries/:deliveryId/retry (email again)", () =>
       refusal(409, "invoice_delivery.email_unavailable"),
     );
     v.email.transport = true;
-    await suite.db.delete(departmentReceipts);
+    await suite.db.update(departments).set({
+      receiptText: null,
+      receiptLogoImageId: null,
+      receiptLogoRasters: null,
+      receiptUpdatedAt: null,
+    });
     expect(await retry(v, orderId, failed)).toEqual(
       refusal(409, "invoice_delivery.email_unavailable"),
     );

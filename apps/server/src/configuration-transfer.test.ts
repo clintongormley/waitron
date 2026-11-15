@@ -17,6 +17,7 @@ import {
   seedZone,
   seedActivityActor,
   attachStationPrinterForTest,
+  seedDepartmentReceipt,
 } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { deleteCourse } from "./course-delete.js";
@@ -142,7 +143,6 @@ import {
   saveServiceSteps,
   listServiceSteps,
   deleteDepartment,
-  departmentReceipts,
   setDepartmentTransferSettings,
   setProfileServiceScope,
   createServiceZone,
@@ -294,10 +294,7 @@ it("transfers two photo identities sharing replacement bytes with framing, names
       })
     ).image;
     const department = await createDepartment(tx, { name: "Photo receipt" });
-    await tx.insert(departmentReceipts).values({
-      departmentId: department.id,
-      receipt: { logo: a.filename, phone: "+34 600 111 222" },
-    });
+    await seedDepartmentReceipt(tx, department.id, { logo: a.filename, phone: "+34 600 111 222" });
     for (const [index, image] of [a, b].entries())
       await saveImage(
         tx,
@@ -471,7 +468,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 38,
+  version: 39,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -5563,7 +5560,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(38);
+  expect(exported.version).toBe(39);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)
@@ -6715,17 +6712,14 @@ it("transfers department receipt maps and pictures with remapped ids and no venu
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const {
-    readDepartmentReceipt,
-    readPrintedDepartmentReceipt,
-    writeDepartmentReceipt,
-    departmentReceipts,
-  } = await import("@waitron/venue-service");
+  const { readDepartmentReceipt, readPrintedDepartmentReceipt, writeDepartmentReceipt } =
+    await import("@waitron/venue-service");
   const { resolveReceiptTrim } = await import("@waitron/shared");
   const cfg = {
     receiptLanguages: ["es-ES", "ca-ES"],
   };
-  const logo = `${"a".repeat(64)}.png`;
+  const photo = await samplePreparedImage({ width: 12 });
+  const logo = photo.filename;
   const pictures = {
     "58mm": { widthDots: 8, heightDots: 1, data: "gA==" },
     "80mm": { widthDots: 8, heightDots: 1, data: "QA==" },
@@ -6743,13 +6737,11 @@ it("transfers department receipt maps and pictures with remapped ids and no venu
     const own = await createDepartment(tx, { name: "Own receipt" });
     const empty = await createDepartment(tx, { name: "Empty receipt" });
     const imported = await createDepartment(tx, { name: "Bad optional receipt" });
+    await uploadImage(tx, { image: photo, names: { es: "Receipt logo" } }, {});
     await writeDepartmentReceipt(tx, own.id, authored, pictures);
-    await tx.insert(departmentReceipts).values({
-      departmentId: imported.id,
-      receipt: {
-        email: "good@example.com",
-        headerSubtitle: { "es-ES": "x".repeat(100_000), "ca-ES": "Good" },
-      },
+    await seedDepartmentReceipt(tx, imported.id, {
+      email: "good@example.com",
+      headerSubtitle: { "es-ES": "x".repeat(100_000), "ca-ES": "Good" },
     });
     return [own.id, empty.id, imported.id];
   });
@@ -6761,7 +6753,9 @@ it("transfers department receipt maps and pictures with remapped ids and no venu
     new Date("2026-10-10T00:00:00Z"),
     versions,
   );
-  expect(exported.tables.department_receipts).toHaveLength(2);
+  expect(
+    exported.tables.departments!.filter((row) => row.receipt_updated_at !== null),
+  ).toHaveLength(2);
   expect(exported.tables).not.toHaveProperty("tenant_receipts");
 
   await applyVenue(planVenue(venue("B13572477"), ALL_MODULES), {
@@ -7225,10 +7219,7 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
       name: "Shared zone name",
       departmentId: old.id,
     });
-    await tx.insert(departmentReceipts).values({
-      departmentId: old.id,
-      receipt: { headerSubtitle: { "es-ES": "Retained subtitle" } },
-    });
+    await seedDepartmentReceipt(tx, old.id, { headerSubtitle: { "es-ES": "Retained subtitle" } });
     await createTable(tx, cfg, { label: "Old table", zoneId: zone.id });
     await deleteDepartment(
       tx,
@@ -7244,9 +7235,7 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
       name: "Shared zone name",
       departmentId: live.id,
     });
-    await tx
-      .insert(departmentReceipts)
-      .values({ departmentId: live.id, receipt: { headerSubtitle: { "es-ES": "Live subtitle" } } });
+    await seedDepartmentReceipt(tx, live.id, { headerSubtitle: { "es-ES": "Live subtitle" } });
     await createTable(tx, cfg, { label: "Live table", zoneId: liveZone.id });
     await saveLayout(
       tx,
@@ -7297,13 +7286,13 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
       .floor_zones!.filter((row) => row.name === "Shared zone name")
       .map((row) => row.id),
   ).toEqual([ids.liveZone]);
-  expect(transferred.tables.department_receipts).toEqual([
-    {
-      department_id: ids.live,
-      receipt: JSON.stringify({ headerSubtitle: { "es-ES": "Live subtitle" } }),
-      logo_rasters: null,
-      updated_at: expect.any(String),
-    },
+  expect(transferred.tables.departments!.filter((row) => row.receipt_updated_at !== null)).toEqual([
+    expect.objectContaining({
+      id: ids.live,
+      receipt_text: JSON.stringify({ headerSubtitle: { "es-ES": "Live subtitle" } }),
+      receipt_logo_rasters: null,
+      receipt_updated_at: expect.any(String),
+    }),
   ]);
   for (const table of ["departments", "floor_zones"])
     expect(JSON.stringify(transferred.tables[table])).not.toContain(ids.old);
@@ -7320,7 +7309,7 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
     table_id: string;
     receipt: string;
   }>(
-    sql`select d.id department, z.id zone, t.id table_id, r.receipt from departments d join floor_zones z on z.department_id=d.id join dining_tables t on t.zone_id=z.id join department_receipts r on r.department_id=d.id where d.name='Shared service name'`,
+    sql`select d.id department, z.id zone, t.id table_id, d.receipt_text as receipt from departments d join floor_zones z on z.department_id=d.id join dining_tables t on t.zone_id=z.id where d.name='Shared service name'`,
   );
   expect(rows.rows).toHaveLength(1);
   const imported = rows.rows[0]!;

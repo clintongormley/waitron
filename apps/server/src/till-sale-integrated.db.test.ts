@@ -7,7 +7,7 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { ownsEveryPayment } from "@waitron/payments/test/seed.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateOrderLine, placeOrder } from "./testing/order-writer-fixture.js";
-import { departments, departmentReceipts } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
@@ -101,7 +101,12 @@ import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
-import { ensureFixtureJobRole, seedNode, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import {
+  ensureFixtureJobRole,
+  seedNode,
+  seedVenueSettings,
+  seedDepartmentReceipt,
+} from "@waitron/db/testing/seed.js";
 import {
   seedSessionDevice,
   openTillSession,
@@ -217,9 +222,8 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
   const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   const rows = await suite.db.select().from(departments);
   for (const department of rows)
-    await suite.db.insert(departmentReceipts).values({
-      departmentId: department.id,
-      receipt: { operationDescription: "Venta en establecimiento" },
+    await seedDepartmentReceipt(suite.db, department.id, {
+      operationDescription: "Venta en establecimiento",
     });
   const { available, offers } = await withTransaction(suite.db, async (tx) => {
     const [admin] = await tx
@@ -3699,10 +3703,16 @@ describe("integrated answer receipt presentation", () => {
       sql`select department_id from floor_zones where id = ${coffee.zoneId}`,
     );
     await suite.db
-      .delete(departmentReceipts)
-      .where(eq(departmentReceipts.departmentId, departmentId));
+      .update(departments)
+      .set({
+        receiptText: null,
+        receiptLogoImageId: null,
+        receiptLogoRasters: null,
+        receiptUpdatedAt: null,
+      })
+      .where(eq(departments.id, departmentId));
     suite.db.run(
-      sql`insert into department_receipts (department_id, receipt, updated_at) values (${departmentId}, '{"operationDescription":"Venta en establecimiento","headerSubtitle":{"es-ES":"Connected subtitle"},"printAddress":true}', '2026-10-10T00:00:00Z')`,
+      sql`update departments set receipt_text = '{"operationDescription":"Venta en establecimiento","headerSubtitle":{"es-ES":"Connected subtitle"},"printAddress":true}', receipt_updated_at = '2026-10-10T00:00:00Z' where id = ${departmentId}`,
     );
 
     const provider = new SimulatorPaymentProvider(suite.db);
@@ -3722,9 +3732,7 @@ describe("integrated answer receipt presentation", () => {
     if (first.outcome !== "captured") throw new Error("Expected capture");
     expect(first.ticket.receiptTrim).toEqual({ headerSubtitle: "Connected subtitle" });
     expect(first.ticket.receiptSettings).toEqual({ printAddress: true });
-    suite.db.run(
-      sql`update department_receipts set receipt = '{}' where department_id = ${departmentId}`,
-    );
+    suite.db.run(sql`update departments set receipt_text = '{}' where id = ${departmentId}`);
     const replay = await payWorkingOrderIntegrated(
       { ...deps, admission: testTradingAdmission() },
       cfg,
@@ -3766,12 +3774,20 @@ describe("receipt presentation across invoice-first and recovery paths", () => {
         sql`update departments set trading_name = 'Recorded counter' where id = ${departmentId}`,
       );
       await suite.db
-        .delete(departmentReceipts)
-        .where(eq(departmentReceipts.departmentId, departmentId));
-      suite.db.run(sql`insert into department_receipts (department_id, receipt, updated_at)
-      values (${departmentId}, '{"operationDescription":"Venta en establecimiento","headerSubtitle":{"ca-ES":"Bon dia","es-ES":"Buenos días"},"email":"counter@example.test","printAddress":true}', '2026-10-10T00:00:00Z')`);
-      suite.db.run(sql`insert into department_receipts (department_id, receipt, updated_at)
-      values (${otherId}, '{"operationDescription":"Venta en establecimiento","headerSubtitle":{"ca-ES":"Other subtitle"},"phone":"910999999"}', '2026-10-10T00:00:00Z')`);
+        .update(departments)
+        .set({
+          receiptText: null,
+          receiptLogoImageId: null,
+          receiptLogoRasters: null,
+          receiptUpdatedAt: null,
+        })
+        .where(eq(departments.id, departmentId));
+      suite.db.run(
+        sql`update departments set receipt_text = '{"operationDescription":"Venta en establecimiento","headerSubtitle":{"ca-ES":"Bon dia","es-ES":"Buenos días"},"email":"counter@example.test","printAddress":true}', receipt_updated_at = '2026-10-10T00:00:00Z' where id = ${departmentId}`,
+      );
+      suite.db.run(
+        sql`update departments set receipt_text = '{"operationDescription":"Venta en establecimiento","headerSubtitle":{"ca-ES":"Other subtitle"},"phone":"910999999"}', receipt_updated_at = '2026-10-10T00:00:00Z' where id = ${otherId}`,
+      );
 
       await makeReceiptPrinter(cfg);
       const id = randomUUID();
@@ -3849,7 +3865,7 @@ describe("receipt presentation across invoice-first and recovery paths", () => {
         sql`update departments set trading_name = 'Changed brand' where id = ${departmentId}`,
       );
       suite.db.run(
-        sql`update department_receipts set receipt = '{"operationDescription":"Venta en establecimiento","headerSubtitle":{"es-ES":"Texto actual"}}' where department_id = ${departmentId}`,
+        sql`update departments set receipt_text = '{"operationDescription":"Venta en establecimiento","headerSubtitle":{"es-ES":"Texto actual"}}' where id = ${departmentId}`,
       );
 
       suite.db.run(

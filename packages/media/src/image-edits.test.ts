@@ -10,8 +10,13 @@ import {
   mediaImages,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTaxpayer, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
-import { departmentReceipts, departments } from "@waitron/venue-service";
+import {
+  seedTaxpayer,
+  seedVenueSettings,
+  seedBusinessDay,
+  seedDepartmentReceipt,
+} from "@waitron/db/testing/seed.js";
+import { departments } from "@waitron/venue-service";
 import type { ReceiptLogoRasters } from "@waitron/shared";
 import { DEFAULT_FRAMING } from "./framing.js";
 import { readCurrentImage, saveImage } from "./image-edits.js";
@@ -402,9 +407,10 @@ async function attachLogo(filename: string, active: boolean) {
       active,
     })
     .returning();
-  await suite.db.insert(departmentReceipts).values({
-    departmentId: department!.id,
-    receipt: { logo: filename, phone: "123", footerMessage: { en: "Bye" } },
+  await seedDepartmentReceipt(suite.db, department!.id, {
+    logo: filename,
+    phone: "123",
+    footerMessage: { en: "Bye" },
   });
   return department!.id;
 }
@@ -442,34 +448,30 @@ it("refreshes currently attached active and inactive logos atomically without ov
     ),
   );
   for (const id of [active, inactive]) {
-    const [row] = await suite.db
-      .select()
-      .from(departmentReceipts)
-      .where(eq(departmentReceipts.departmentId, id));
-    expect(row!.receipt).toEqual({
-      logo: image.filename,
+    const [row] = await suite.db.select().from(departments).where(eq(departments.id, id));
+    expect(row!.receiptText).toEqual({
       phone: "123",
       footerMessage: { en: "Bye" },
     });
-    expect(row!.logoRasters).toEqual(rasters);
+    expect(row!.receiptLogoRasters).toEqual(rasters);
   }
-  const before = await suite.db.select().from(departmentReceipts);
+  const before = await suite.db.select().from(departments);
   await withTransaction(suite.db, (tx) =>
     updateImage(tx, image.id, { names: { en: "Name only" } }, "en"),
   );
-  expect(await suite.db.select().from(departmentReceipts)).toEqual(before);
+  expect(await suite.db.select().from(departments)).toEqual(before);
 });
 
 it("rolls back picture, names, framing and every raster if a final logo update throws", async () => {
   await seedTaxpayer(suite.db);
   const image = (await upload()).image;
   await attachLogo(image.filename, true);
-  const receipts = await suite.db.select().from(departmentReceipts);
+  const receipts = await suite.db.select().from(departments);
   const attachedImage = await readImage(suite.db, image.id);
   await expect(
     withTransaction(suite.db, async (tx) => {
       await tx.execute(
-        sql`create trigger refuse_picture before update on department_receipts begin select raise(abort,'picture refused'); end`,
+        sql`create trigger refuse_picture before update on departments begin select raise(abort,'picture refused'); end`,
       );
       return saveImage(
         tx,
@@ -482,7 +484,7 @@ it("rolls back picture, names, framing and every raster if a final logo update t
     }),
   ).rejects.toThrow("picture refused");
   expect(await readImage(suite.db, image.id)).toEqual(attachedImage);
-  expect(await suite.db.select().from(departmentReceipts)).toEqual(receipts);
+  expect(await suite.db.select().from(departments)).toEqual(receipts);
   expect((await suite.db.execute(sql`select count(*) as n from media_image_blobs`)).rows).toEqual([
     { n: 0 },
   ]);
@@ -493,7 +495,7 @@ it("rolls back already refreshed rasters and names when the final override updat
   const image = (await upload()).image;
   await attachLogo(image.filename, true);
   const before = await readImage(suite.db, image.id);
-  const receipts = await suite.db.select().from(departmentReceipts);
+  const receipts = await suite.db.select().from(departments);
   await expect(
     withTransaction(suite.db, async (tx) => {
       await tx.execute(
@@ -510,7 +512,7 @@ it("rolls back already refreshed rasters and names when the final override updat
     }),
   ).rejects.toMatchObject({ message: "override refused", errcode: 1811 });
   expect(await readImage(suite.db, image.id)).toEqual(before);
-  expect(await suite.db.select().from(departmentReceipts)).toEqual(receipts);
+  expect(await suite.db.select().from(departments)).toEqual(receipts);
   expect((await suite.db.execute(sql`select count(*) as n from media_image_blobs`)).rows).toEqual([
     { n: 0 },
   ]);

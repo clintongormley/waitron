@@ -6,7 +6,6 @@ export {
   billNumberAllocations,
   departmentDayRanges,
   departmentDays,
-  departmentReceipts,
   departments,
   departmentTransferDestinations,
   departmentTransferRequests,

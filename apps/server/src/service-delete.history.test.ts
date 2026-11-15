@@ -1,3 +1,4 @@
+import { seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import {
@@ -17,7 +18,6 @@ import {
   createDepartment,
   createServiceZone,
   deleteDepartment,
-  departmentReceipts,
   departments,
   deviceProfileServiceAccess,
   departmentTransferRequests,
@@ -63,15 +63,15 @@ it("deleted department reprints its original receipt configuration and frozen he
       .set({ printTradingName: true })
       .where(eq(departments.id, departmentId));
     await tx
-      .update(departmentReceipts)
+      .update(departments)
       .set({
-        receipt: {
+        receiptText: {
           operationDescription: "Restaurante",
           headerSubtitle: { "es-ES": "Retained service subtitle" },
           phone: "911111111",
         },
       })
-      .where(eq(departmentReceipts.departmentId, departmentId));
+      .where(eq(departments.id, departmentId));
     return survivor.id;
   });
   const billId = await counterOrder(venue, "Paella");
@@ -110,7 +110,15 @@ it("deleted department reprints its original receipt configuration and frozen he
     contexts: await tx.select().from(orderServiceContexts),
     lineContexts: await tx.select().from(workingLineContexts),
     headers: await tx.select().from(saleReceiptHeaders),
-    receipt: await tx.select().from(departmentReceipts),
+    receipt: await tx
+      .select({
+        departmentId: departments.id,
+        receipt: departments.receiptText,
+        logoRasters: departments.receiptLogoRasters,
+        updatedAt: departments.receiptUpdatedAt,
+      })
+      .from(departments)
+      .where(eq(departments.id, departmentId)),
     fiscal: (await tx.execute(sql`select * from registros_facturacion order by id`)).rows,
   }));
   const transfer = await run(async (tx) => {
@@ -168,9 +176,8 @@ it("deleted department reprints its original receipt configuration and frozen he
       tradingName: "Replacement brand",
     });
     await createServiceZone(tx, { name: "counter", departmentId: reused.id });
-    await tx.insert(departmentReceipts).values({
-      departmentId: reused.id,
-      receipt: { headerSubtitle: { "es-ES": "Replacement subtitle" } },
+    await seedDepartmentReceipt(tx, reused.id, {
+      headerSubtitle: { "es-ES": "Replacement subtitle" },
     });
   });
   await run((tx) => enqueueReceiptReprint(tx, venue.cfg, ticket, sale!.id));
@@ -210,9 +217,14 @@ it("deleted department reprints its original receipt configuration and frozen he
     lineContexts: await tx.select().from(workingLineContexts),
     headers: await tx.select().from(saleReceiptHeaders),
     receipt: await tx
-      .select()
-      .from(departmentReceipts)
-      .where(eq(departmentReceipts.departmentId, departmentId)),
+      .select({
+        departmentId: departments.id,
+        receipt: departments.receiptText,
+        logoRasters: departments.receiptLogoRasters,
+        updatedAt: departments.receiptUpdatedAt,
+      })
+      .from(departments)
+      .where(eq(departments.id, departmentId)),
     fiscal: (await tx.execute(sql`select * from registros_facturacion order by id`)).rows,
   }));
   expect(after).toEqual(before);

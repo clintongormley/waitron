@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "6dee7f1a-d377-4f7d-a325-d43de74e29c8",
+  "id": "8edc54e2-5d4d-4267-8117-a14b692518cd",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -14892,6 +14892,34 @@
           "notNull": false,
           "autoincrement": false
         },
+        "receipt_text": {
+          "name": "receipt_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "receipt_logo_image_id": {
+          "name": "receipt_logo_image_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "receipt_logo_rasters": {
+          "name": "receipt_logo_rasters",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "receipt_updated_at": {
+          "name": "receipt_updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "text",
@@ -14930,6 +14958,19 @@
             "id"
           ],
           "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "departments_receipt_logo_fk": {
+          "name": "departments_receipt_logo_fk",
+          "tableFrom": "departments",
+          "tableTo": "media_images",
+          "columnsFrom": [
+            "receipt_logo_image_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },
@@ -16658,58 +16699,6 @@
           "value": "\"device_profile_kitchen_screens\".\"screen\" <> 'station' or \"device_profile_kitchen_screens\".\"every_zone\" = 0"
         }
       }
-    },
-    "department_receipts": {
-      "name": "department_receipts",
-      "columns": {
-        "department_id": {
-          "name": "department_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "receipt": {
-          "name": "receipt",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "logo_rasters": {
-          "name": "logo_rasters",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "department_receipts_department_fk": {
-          "name": "department_receipts_department_fk",
-          "tableFrom": "department_receipts",
-          "tableTo": "departments",
-          "columnsFrom": [
-            "department_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
     },
     "department_day_ranges": {
       "name": "department_day_ranges",

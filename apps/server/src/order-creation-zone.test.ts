@@ -1,3 +1,4 @@
+import { departments } from "@waitron/db";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -7,7 +8,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { SimulatorPaymentProvider } from "@waitron/payments";
 import {
-  departmentReceipts,
   orderServiceContexts,
   setProfileServiceScope,
   replaceZoneClosedWeek,
@@ -31,9 +31,9 @@ beforeEach(async () => {
   );
   counterDepartmentId = zone.departmentId;
   await suite.db
-    .update(departmentReceipts)
-    .set({ receipt: { operationDescription: "Counter meals" } })
-    .where(eq(departmentReceipts.departmentId, counterDepartmentId));
+    .update(departments)
+    .set({ receiptText: { operationDescription: "Counter meals" } })
+    .where(eq(departments.id, counterDepartmentId));
 });
 
 function context(id: string) {

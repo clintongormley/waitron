@@ -1,7 +1,11 @@
 import { personStaffRoles, persons } from "@waitron/db";
 import { ADJUSTMENTS_PERMISSIONS } from "@waitron/adjustments";
 import { registerModulePermissions } from "@waitron/identity";
-import { ensureFixtureJobRole, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import {
+  ensureFixtureJobRole,
+  seedDeviceProfiles,
+  seedDepartmentReceipt,
+} from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./trading-admission.js";
 import { observedClosingBody } from "./party-close-fixture.js";
@@ -9,7 +13,7 @@ import { observedWholePaymentBody } from "./whole-payment-fixture.js";
 import { observedPaymentBody } from "./bill-payment-fixture.js";
 import { placeOrder } from "./order-writer-fixture.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
-import { departments, departmentReceipts } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import { readBillEditState, readPartyBillIds } from "../bill-editing.js";
 import { issueOrderInvoice } from "./issue-order.js";
 import { randomUUID } from "node:crypto";
@@ -166,9 +170,7 @@ export async function provisionBillVenue(
   });
   const rows = await db.select().from(departments);
   for (const department of rows)
-    await db
-      .insert(departmentReceipts)
-      .values({ departmentId: department.id, receipt: { operationDescription: "Restaurante" } });
+    await seedDepartmentReceipt(db, department.id, { operationDescription: "Restaurante" });
   const seeded = await withTransaction(db, async (tx) => {
     const cat = await createMenu(tx, { name: `Bill menu ${cfg.nodeId}` });
     const platos = await createCategory(tx, { name: "Platos" });

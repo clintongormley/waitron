@@ -177,7 +177,7 @@ it("live reads preserve a dirty draft and read recovery cannot erase a failed sa
     ...receiptModel,
     receipt: { operationDescription: "New", email: "remote@example.com" },
   });
-  api.liveData.invalidate([{ type: "department_receipts" }]);
+  api.liveData.invalidate([{ type: "departments" }]);
   await expect.poll(() => api.getDepartmentReceipt.mock.calls.length).toBe(2);
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   expect(receiptField(el, "email").value).toBe("draft@example.com");

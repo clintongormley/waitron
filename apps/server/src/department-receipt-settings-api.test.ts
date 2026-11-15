@@ -1,5 +1,5 @@
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { Hono } from "hono";
@@ -14,13 +14,14 @@ import {
   MEDIA_MODULE,
   mediaImages,
   mediaImageBlobs,
+  mediaImageEdits,
   uploadImage,
   prepareImage,
   saveImage,
   readCurrentImage,
 } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
-import { departments, departmentReceipts } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import { nodeId, type DepartmentReceiptWrite } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
@@ -72,9 +73,7 @@ async function fixture(role: "manager" | "staff" = "manager", withFiscal = true)
     .values({ name: randomUUID(), tradingName: "Deli" })
     .returning();
   await suite.db.update(departments).set(policy).where(eq(departments.id, department!.id));
-  await suite.db
-    .insert(departmentReceipts)
-    .values({ departmentId: department!.id, receipt: savedReceipt });
+  await seedDepartmentReceipt(suite.db, department!.id, savedReceipt);
   const [person] = await seedPersons(suite.db, { displayName: randomUUID(), role });
   const session = await withTransaction(suite.db, (tx) =>
     startManagementSession(tx, { personId: person!.id }),
@@ -112,7 +111,14 @@ const body = (extra: Partial<DepartmentReceiptWrite> = {}): DepartmentReceiptWri
 });
 async function rows() {
   return {
-    receipts: await suite.db.select().from(departmentReceipts),
+    receipts: await suite.db
+      .select({
+        departmentId: departments.id,
+        receipt: departments.receiptText,
+        logoRasters: departments.receiptLogoRasters,
+        logoImageId: departments.receiptLogoImageId,
+      })
+      .from(departments),
     policies: await suite.db.select().from(departments),
   };
 }
@@ -138,8 +144,14 @@ describe("the fiscal seat's default description", () => {
     if (operationDescriptionDefault !== undefined)
       f.cfg.operationDescriptionDefault = operationDescriptionDefault;
     await suite.db
-      .delete(departmentReceipts)
-      .where(eq(departmentReceipts.departmentId, f.departmentId));
+      .update(departments)
+      .set({
+        receiptText: null,
+        receiptLogoImageId: null,
+        receiptLogoRasters: null,
+        receiptUpdatedAt: null,
+      })
+      .where(eq(departments.id, f.departmentId));
     return f;
   }
   const read = async (f: Awaited<ReturnType<typeof fixture>>) => {
@@ -359,7 +371,7 @@ describe("replacement department receipt HTTP contract", () => {
           new Set([replacement ? 0 : 255]),
         );
       }
-      expect((await rows()).receipts[0]!.receipt.logo).toBe(image.filename);
+      expect((await rows()).receipts[0]!.logoImageId).toBe(image.id);
     },
   );
 
@@ -398,6 +410,36 @@ describe("replacement department receipt HTTP contract", () => {
     expect(await rows()).toEqual(before);
   });
 
+  it("refuses a logo replaced by another image under the same filename and revision", async () => {
+    const f = await fixture();
+    const logo = await libraryImage();
+    const before = await rows();
+    const draw = logoModule.drawLogoRasters;
+    const replacementId = randomUUID();
+    vi.spyOn(logoModule, "drawLogoRasters").mockImplementation(async (bytes) => {
+      await withTransaction(suite.db, async (tx) => {
+        const [image] = await tx.select().from(mediaImages).where(eq(mediaImages.filename, logo));
+        const [edit] = await tx
+          .select()
+          .from(mediaImageEdits)
+          .where(eq(mediaImageEdits.imageId, image!.id));
+        await tx.delete(mediaImages).where(eq(mediaImages.filename, logo));
+        await tx.insert(mediaImages).values({ ...image!, id: replacementId });
+        await tx.insert(mediaImageEdits).values({ ...edit!, imageId: replacementId });
+        await tx.execute(
+          sql`insert into media_image_data (image_id, bytes) values (${replacementId}, ${bytes})`,
+        );
+      });
+      return draw(bytes);
+    });
+    await refusal(
+      await f.put(body({ receipt: { logo, operationDescription: "Meals" } })),
+      409,
+      "image.changed",
+      { imageId: replacementId },
+    );
+    expect(await rows()).toEqual(before);
+  });
   it("a kept-raster shortcut refuses a replacement queued between its snapshot and final write", async () => {
     const f = await fixture();
     const source = await splitPicture();
@@ -444,7 +486,7 @@ describe("replacement department receipt HTTP contract", () => {
     const afterPhoto = await rows();
     await refusal(await saving, 409, "image.changed", { imageId: image.id });
     expect(await rows()).toEqual(afterPhoto);
-    expect((await rows()).receipts[0]!.receipt.operationDescription).toBe("Deli meals");
+    expect((await rows()).receipts[0]!.receipt!.operationDescription).toBe("Deli meals");
     expect((await rows()).receipts[0]!.logoRasters).toEqual(rasters);
   });
 
@@ -555,26 +597,32 @@ describe("replacement department receipt HTTP contract", () => {
       .insert(departments)
       .values({ name: "Attached", tradingName: "Attached" })
       .returning();
-    await suite.db.insert(departmentReceipts).values([
-      { departmentId: retained!.id, receipt: { logo: image.filename }, logoRasters: rasters },
-      { departmentId: attached!.id, receipt: {} },
-    ]);
+    await seedDepartmentReceipt(suite.db, retained!.id, { logo: image.filename }, rasters);
+    await seedDepartmentReceipt(suite.db, attached!.id, {});
     let prepared: Awaited<ReturnType<typeof logoModule.drawLogoRasters>> | undefined;
     const mediaApp = mediaRoute(f, async (bytes) => {
       prepared = await logoModule.drawLogoRasters(bytes);
       await withTransaction(suite.db, async (tx) => {
         await tx
-          .update(departmentReceipts)
-          .set({ receipt: { operationDescription: "Deli meals" }, logoRasters: null })
-          .where(eq(departmentReceipts.departmentId, f.departmentId));
+          .update(departments)
+          .set({
+            receiptText: { operationDescription: "Deli meals" },
+            receiptLogoImageId: null,
+            receiptLogoRasters: null,
+          })
+          .where(eq(departments.id, f.departmentId));
         await tx
-          .update(departmentReceipts)
-          .set({ receipt: { logo: otherImage.filename }, logoRasters: otherRasters })
-          .where(eq(departmentReceipts.departmentId, retained!.id));
+          .update(departments)
+          .set({
+            receiptText: {},
+            receiptLogoImageId: otherImage.id,
+            receiptLogoRasters: otherRasters,
+          })
+          .where(eq(departments.id, retained!.id));
         await tx
-          .update(departmentReceipts)
-          .set({ receipt: { logo: image.filename }, logoRasters: rasters })
-          .where(eq(departmentReceipts.departmentId, attached!.id));
+          .update(departments)
+          .set({ receiptText: {}, receiptLogoImageId: image.id, receiptLogoRasters: rasters })
+          .where(eq(departments.id, attached!.id));
       });
       return prepared;
     });
@@ -593,11 +641,13 @@ describe("replacement department receipt HTTP contract", () => {
     const receipts = (await rows()).receipts;
     expect(receipts.find((row) => row.departmentId === f.departmentId)!.logoRasters).toBeNull();
     expect(receipts.find((row) => row.departmentId === retained!.id)!).toMatchObject({
-      receipt: { logo: otherImage.filename },
+      logoImageId: otherImage.id,
+      receipt: {},
       logoRasters: otherRasters,
     });
     expect(receipts.find((row) => row.departmentId === attached!.id)!).toMatchObject({
-      receipt: { logo: image.filename },
+      logoImageId: image.id,
+      receipt: {},
       logoRasters: prepared,
     });
   });
@@ -633,9 +683,11 @@ describe("replacement department receipt HTTP contract", () => {
           }
           if (kind === "hidden-text")
             await tx
-              .update(departmentReceipts)
-              .set({ receipt: { ...savedReceipt, footerMessage: { "eu-ES": "New hidden text" } } })
-              .where(eq(departmentReceipts.departmentId, f.departmentId));
+              .update(departments)
+              .set({
+                receiptText: { ...savedReceipt, footerMessage: { "eu-ES": "New hidden text" } },
+              })
+              .where(eq(departments.id, f.departmentId));
           if (kind === "image") await tx.delete(mediaImages).where(eq(mediaImages.filename, logo));
         });
         concurrent = await rows();

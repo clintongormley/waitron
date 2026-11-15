@@ -244,7 +244,10 @@ describe("the venue-service tables carry no taxpayer column", () => {
     expect(shape).toEqual({
       departments: {
         primaryKey: ["id"],
-        foreignKeys: ["(transfer_desk_profile_id) -> device_profiles(id) on delete set null"],
+        foreignKeys: [
+          "(receipt_logo_image_id) -> media_images(id) on delete restrict",
+          "(transfer_desk_profile_id) -> device_profiles(id) on delete set null",
+        ],
       },
       floor_zones: {
         primaryKey: ["id"],

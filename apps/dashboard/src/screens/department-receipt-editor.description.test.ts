@@ -59,7 +59,7 @@ it("announces the description when it loads and when a live read brings a new sa
       ...receiptModel,
       receipt: { ...receiptModel.receipt, operationDescription: "New elsewhere" },
     });
-    api.liveData.invalidate([{ type: "department_receipts" }]);
+    api.liveData.invalidate([{ type: "departments" }]);
     await expect.poll(() => el.savedOperationDescription).toBe("New elsewhere");
     await expect.poll(() => seen).toEqual(["bar", "bar"]);
   } finally {
@@ -107,7 +107,7 @@ it("a description save keeps what another session saved under a field edited her
       operationDescription: "New elsewhere",
     },
   });
-  api.liveData.invalidate([{ type: "department_receipts" }]);
+  api.liveData.invalidate([{ type: "departments" }]);
   await expect.poll(() => el.savedOperationDescription).toBe("New elsewhere");
   expect(await el.saveOperationDescription("Counter service")).toBeUndefined();
   expect(api.putDepartmentReceipt).toHaveBeenCalledExactlyOnceWith("bar", {

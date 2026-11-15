@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, invoiceSeries, sales, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, invoiceSeries, mediaImages, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { departments, departmentReceipts, saleReceiptHeaders } from "@waitron/venue-service";
+import { seedNode, seedVenue, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
+import { departments, saleReceiptHeaders } from "@waitron/venue-service";
 import { readReceiptPresentation } from "./receipt-presentation.js";
 import { uploadImage, saveImage, readPresentations } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
@@ -55,10 +55,7 @@ async function fixture(header: "department" | "null" | "absent" = "department") 
     });
 
   const authored = async (receipt: Record<string, unknown>) => {
-    await suite.db
-      .insert(departmentReceipts)
-      .values({ departmentId: department!.id, receipt })
-      .onConflictDoUpdate({ target: departmentReceipts.departmentId, set: { receipt } });
+    await seedDepartmentReceipt(suite.db, department!.id, receipt);
   };
   const read = (language = "es-ES") =>
     withTransaction(suite.db, (tx) => readReceiptPresentation(tx, sale!.id, language));
@@ -69,6 +66,7 @@ describe("department-only on-screen receipt", () => {
   it("keeps optional receipt facts when the logo presentation read fails and reports that read", async () => {
     const f = await fixture();
     const logo = `${"d".repeat(64)}.png`;
+    await suite.db.insert(mediaImages).values({ filename: logo, names: {} });
     await f.authored({ logo, phone: "910111111" });
     const read = vi
       .spyOn(media, "readPresentations")
@@ -147,6 +145,7 @@ describe("department-only on-screen receipt", () => {
     "requires explicit address consent %j while keeping department wording",
     async (printAddress) => {
       const f = await fixture();
+      await suite.db.insert(mediaImages).values({ filename: `${"b".repeat(64)}.png`, names: {} });
       await f.authored({
         ...(printAddress === undefined ? {} : { printAddress }),
         logo: `${"b".repeat(64)}.png`,
@@ -158,6 +157,8 @@ describe("department-only on-screen receipt", () => {
       const presentation = await f.read("ca-ES");
       expect(presentation.receiptTrim).toEqual({
         logo: `${"b".repeat(64)}.png`,
+        logoUrl:
+          "/media/renditions/v1/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png/display/5000-5000-100.webp",
         phone: "910111111",
         email: "own@example.test",
         headerSubtitle: "Own Catalan",
@@ -202,7 +203,7 @@ describe("department-only on-screen receipt", () => {
       try {
         if (hiddenDepartment)
           await suite.db.execute(
-            sql`alter table department_receipts rename to test_hidden_department_receipts`,
+            sql`alter table departments rename column receipt_text to test_hidden_receipt_text`,
           );
         const presentation = await f.read();
         expect(presentation.receiptTrim).toEqual(
@@ -226,7 +227,7 @@ describe("department-only on-screen receipt", () => {
       } finally {
         if (hiddenDepartment)
           await suite.db.execute(
-            sql`alter table test_hidden_department_receipts rename to department_receipts`,
+            sql`alter table departments rename column test_hidden_receipt_text to receipt_text`,
           );
         warning.mockRestore();
       }

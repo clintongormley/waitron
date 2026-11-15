@@ -1,3 +1,4 @@
+import { seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -21,7 +22,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decimal } from "@waitron/shared";
-import { departmentReceipts, departments } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import * as selection from "./invoice-selection.js";
 import { issueUnpaidInvoice, priceForIssuance, readOrderRevision } from "./working-order.js";
 import { provisionBillVenue, tabWith, type BillVenue } from "./testing/bill-venue.js";
@@ -39,10 +40,7 @@ beforeEach(async () => {
     const receipt = { operationDescription: "Restaurante", email: "dining@example.test" };
     const rows = await tx.select({ id: departments.id }).from(departments);
     for (const { id } of rows) {
-      await tx
-        .insert(departmentReceipts)
-        .values({ departmentId: id, receipt })
-        .onConflictDoUpdate({ target: departmentReceipts.departmentId, set: { receipt } });
+      await seedDepartmentReceipt(tx, id, receipt);
     }
   });
 });

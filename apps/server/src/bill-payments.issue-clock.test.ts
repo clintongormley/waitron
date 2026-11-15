@@ -1,3 +1,4 @@
+import { seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -13,7 +14,7 @@ import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { createPrinter } from "@waitron/printing";
-import { departmentReceipts, departments } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
@@ -130,9 +131,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
   });
   const rows = await db.select().from(departments);
   for (const department of rows)
-    await db
-      .insert(departmentReceipts)
-      .values({ departmentId: department.id, receipt: { operationDescription: "Restaurante" } });
+    await seedDepartmentReceipt(db, department.id, { operationDescription: "Restaurante" });
   const operator = {
     personId: OPERATOR,
     sessionId: await openTillSession(db, { deviceId: cfg.origin.deviceId, personId: OPERATOR }),

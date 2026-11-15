@@ -2249,8 +2249,13 @@ CREATE TABLE `departments` (
 	`collection_number` text DEFAULT 'none' NOT NULL,
 	`print_trading_name` integer DEFAULT true NOT NULL,
 	`transfer_desk_profile_id` text,
+	`receipt_text` text,
+	`receipt_logo_image_id` text,
+	`receipt_logo_rasters` text,
+	`receipt_updated_at` text,
 	`created_at` text NOT NULL,
 	FOREIGN KEY (`transfer_desk_profile_id`) REFERENCES `device_profiles`(`id`) ON UPDATE no action ON DELETE set null,
+	FOREIGN KEY (`receipt_logo_image_id`) REFERENCES `media_images`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "departments_order_start_ck" CHECK("departments"."order_start" in ('table', 'counter')),
 	CONSTRAINT "departments_paid_when_ck" CHECK("departments"."paid_when" in ('prepay', 'ticket_then_pay')),
 	CONSTRAINT "departments_collection_number_ck" CHECK("departments"."collection_number" in ('none', 'numbered'))
@@ -2511,14 +2516,6 @@ CREATE TABLE `device_profile_kitchen_screens` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `device_profile_kitchen_screens_kind_key` ON `device_profile_kitchen_screens` (`device_profile_id`,`screen`);--> statement-breakpoint
-CREATE TABLE `department_receipts` (
-	`department_id` text PRIMARY KEY NOT NULL,
-	`receipt` text NOT NULL,
-	`logo_rasters` text,
-	`updated_at` text NOT NULL,
-	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action
-);
---> statement-breakpoint
 CREATE TABLE `department_day_ranges` (
 	`id` text PRIMARY KEY NOT NULL,
 	`day_id` text NOT NULL,

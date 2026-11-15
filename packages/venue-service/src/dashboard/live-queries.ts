@@ -192,7 +192,6 @@ export const QUERY_DEPENDENCIES = {
     "special_day_dates",
   ],
   operations: [
-    "department_receipts",
     "taxpayer",
     "settings.business_day",
     "settings.venue",

@@ -344,7 +344,6 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("department_courses", "state", SERVICE_STATE),
   classify("service_steps", "state", SERVICE_STATE),
   classify("service_step_completions", "state", SERVICE_STATE),
-  classify("department_receipts", "state", SERVICE_STATE),
   classify("department_transfer_destinations", "state", SERVICE_STATE),
   classify("department_transfer_requests", "state", SERVICE_STATE),
   appendOnly("sale_receipt_headers", "ledger", "receipt header as issued for a sale"),

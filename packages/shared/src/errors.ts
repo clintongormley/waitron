@@ -25,6 +25,32 @@
  * an import written in a comment or string of another file the barrel reaches fakes an edge.
  */
 export interface ErrorParams {
+  // Receipt params name known fields and approved languages, never authored text or unknown keys.
+  "receipt.invalid": {
+    reason:
+      | "not_object"
+      | "not_string"
+      | "invalid_language"
+      | "too_long"
+      | "unknown_field"
+      | "invalid_phone"
+      | "invalid_description"
+      | "invalid_email"
+      | "not_boolean"
+      | "invalid_logo"
+      | "image_not_found";
+    field?:
+      | "headerSubtitle"
+      | "footerMessage"
+      | "phone"
+      | "email"
+      | "printAddress"
+      | "logo"
+      | "operationDescription";
+    language?: string;
+    maxLength?: number;
+  };
+
   "venue.time_zone_invalid": { reason: "missing" | "invalid" | "country" };
   "venue.time_zone_conversion_failed": { reason: "invalid_instant" | "unreadable_offset" };
   "venue.time_zone_target_invalid": { reason: "node" | "mismatch" };

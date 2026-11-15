@@ -38,7 +38,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import { registroSif, registrosFacturacion, VerifactuBackend } from "@waitron/fiscal-verifactu";
-import { ensureFixtureJobRole, seedNode } from "@waitron/db/testing/seed.js";
+import { ensureFixtureJobRole, seedNode, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
 import {
@@ -53,7 +53,7 @@ import {
   enqueueOriginalReceipt,
   readOriginalReceiptPrint,
 } from "./receipt-print.js";
-import { departmentReceipts, departments, orderServiceContexts } from "@waitron/venue-service";
+import { departments, orderServiceContexts } from "@waitron/venue-service";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import {
@@ -200,9 +200,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
   });
   const rows = await db.select().from(departments);
   for (const department of rows)
-    await db
-      .insert(departmentReceipts)
-      .values({ departmentId: department.id, receipt: { operationDescription: "Restaurant" } });
+    await seedDepartmentReceipt(db, department.id, { operationDescription: "Restaurant" });
   const operator = {
     personId: OPERATOR,
     sessionId: await openTillSession(db, { deviceId: cfg.origin.deviceId, personId: OPERATOR }),
@@ -374,25 +372,25 @@ async function withDepartmentContact(
   body: () => Promise<void>,
 ): Promise<void> {
   const written = { operationDescription: "Restaurant", ...receipt };
-  const original = await inTx((tx) => tx.select().from(departmentReceipts));
+  const original = await inTx((tx) => tx.select().from(departments));
   try {
     await inTx(async (tx) => {
       const rows = await tx.select({ id: departments.id }).from(departments);
       for (const { id } of rows) {
-        await tx
-          .insert(departmentReceipts)
-          .values({ departmentId: id, receipt: written })
-          .onConflictDoUpdate({
-            target: departmentReceipts.departmentId,
-            set: { receipt: written },
-          });
+        await seedDepartmentReceipt(tx, id, written);
       }
     });
     await body();
   } finally {
     await inTx(async (tx) => {
-      await tx.delete(departmentReceipts);
-      if (original.length > 0) await tx.insert(departmentReceipts).values(original);
+      await tx.update(departments).set({
+        receiptText: null,
+        receiptLogoImageId: null,
+        receiptLogoRasters: null,
+        receiptUpdatedAt: null,
+      });
+      for (const row of original)
+        await tx.update(departments).set(row).where(eq(departments.id, row.id));
     });
   }
 }
@@ -2549,22 +2547,23 @@ describe("the invoice at full payment", () => {
             })
             .returning(),
         );
-        const original = await inTx((tx) => tx.select().from(departmentReceipts));
+        const original = await inTx((tx) => tx.select().from(departments));
         try {
           await inTx(async (tx) => {
             await tx
               .update(orderServiceContexts)
               .set({ departmentId: own!.id })
               .where(eq(orderServiceContexts.workingOrderId, billId));
-            await tx.delete(departmentReceipts);
+            await tx.update(departments).set({
+              receiptText: null,
+              receiptLogoImageId: null,
+              receiptLogoRasters: null,
+              receiptUpdatedAt: null,
+            });
             if (contacts.own)
-              await tx
-                .insert(departmentReceipts)
-                .values({ departmentId: own!.id, receipt: { email: "terrace@example.test" } });
+              await seedDepartmentReceipt(tx, own!.id, { email: "terrace@example.test" });
             if (contacts.fallback)
-              await tx
-                .insert(departmentReceipts)
-                .values({ departmentId: fallback!.id, receipt: { email: "default@example.test" } });
+              await seedDepartmentReceipt(tx, fallback!.id, { email: "default@example.test" });
           });
           if (stages) {
             expect(await stageEmail(billId)).toBe(1);
@@ -2584,8 +2583,14 @@ describe("the invoice at full payment", () => {
               .update(orderServiceContexts)
               .set({ departmentId: context!.departmentId })
               .where(eq(orderServiceContexts.workingOrderId, billId));
-            await tx.delete(departmentReceipts);
-            if (original.length > 0) await tx.insert(departmentReceipts).values(original);
+            await tx.update(departments).set({
+              receiptText: null,
+              receiptLogoImageId: null,
+              receiptLogoRasters: null,
+              receiptUpdatedAt: null,
+            });
+            for (const row of original)
+              await tx.update(departments).set(row).where(eq(departments.id, row.id));
             await tx.delete(departments).where(eq(departments.id, own!.id));
           });
         }
@@ -3472,40 +3477,22 @@ describe("bill answer receipt presentation", () => {
     const billId = await tabWith("Beer");
     const departmentId = await invoiceContactDepartment();
     const [original] = await inTx((tx) =>
-      tx.select().from(departmentReceipts).where(eq(departmentReceipts.departmentId, departmentId)),
+      tx.select().from(departments).where(eq(departments.id, departmentId)),
     );
     try {
       await inTx((tx) =>
-        tx
-          .insert(departmentReceipts)
-          .values({
-            departmentId,
-            receipt: {
-              operationDescription: "Restaurant",
-              headerSubtitle: { "es-ES": "Bill subtitle" },
-              printAddress: false,
-            },
-          })
-          .onConflictDoUpdate({
-            target: departmentReceipts.departmentId,
-            set: {
-              receipt: {
-                operationDescription: "Restaurant",
-                headerSubtitle: { "es-ES": "Bill subtitle" },
-                printAddress: false,
-              },
-            },
-          }),
+        seedDepartmentReceipt(tx, departmentId, {
+          operationDescription: "Restaurant",
+          headerSubtitle: { "es-ES": "Bill subtitle" },
+          printAddress: false,
+        }),
       );
       const request = cash("3.00");
       const first = await take(billId, request);
       expect(first.invoice?.receiptTrim).toEqual({ headerSubtitle: "Bill subtitle" });
       expect(first.invoice?.receiptSettings).toEqual({ printAddress: false });
       await inTx((tx) =>
-        tx
-          .update(departmentReceipts)
-          .set({ receipt: {} })
-          .where(eq(departmentReceipts.departmentId, departmentId)),
+        tx.update(departments).set({ receiptText: {} }).where(eq(departments.id, departmentId)),
       );
       const replay = await take(billId, request);
       expect(replay.invoice?.receiptTrim).toEqual({});
@@ -3517,14 +3504,27 @@ describe("bill answer receipt presentation", () => {
     } finally {
       if (original === undefined)
         await inTx((tx) =>
-          tx.delete(departmentReceipts).where(eq(departmentReceipts.departmentId, departmentId)),
+          tx
+            .update(departments)
+            .set({
+              receiptText: null,
+              receiptLogoImageId: null,
+              receiptLogoRasters: null,
+              receiptUpdatedAt: null,
+            })
+            .where(eq(departments.id, departmentId)),
         );
       else
         await inTx((tx) =>
           tx
-            .update(departmentReceipts)
-            .set({ receipt: original.receipt })
-            .where(eq(departmentReceipts.departmentId, departmentId)),
+            .update(departments)
+            .set({
+              receiptText: original.receiptText,
+              receiptLogoImageId: original.receiptLogoImageId,
+              receiptLogoRasters: original.receiptLogoRasters,
+              receiptUpdatedAt: original.receiptUpdatedAt,
+            })
+            .where(eq(departments.id, departmentId)),
         );
     }
   });

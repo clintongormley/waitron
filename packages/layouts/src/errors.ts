@@ -1,33 +1,8 @@
 import "@waitron/shared";
 import type { ThemeNameRefusal, ThemeRefusalReason } from "@waitron/ui-core/theme";
 
-// Receipt params name known fields and approved languages, never authored text or unknown keys.
 declare module "@waitron/shared" {
   interface ErrorParams {
-    "receipt.invalid": {
-      reason:
-        | "not_object"
-        | "not_string"
-        | "invalid_language"
-        | "too_long"
-        | "unknown_field"
-        | "invalid_phone"
-        | "invalid_description"
-        | "invalid_email"
-        | "not_boolean"
-        | "invalid_logo"
-        | "image_not_found";
-      field?:
-        | "headerSubtitle"
-        | "footerMessage"
-        | "phone"
-        | "email"
-        | "printAddress"
-        | "logo"
-        | "operationDescription";
-      language?: string;
-      maxLength?: number;
-    };
     "device_profile.invalid": {
       reason:
         | "bad_capabilities"

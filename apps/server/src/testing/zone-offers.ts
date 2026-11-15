@@ -1,12 +1,11 @@
-import { seedZone } from "@waitron/db/testing/seed.js";
+import { seedZone, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import { menus, floorZones, products, readVenue } from "@waitron/db";
+import { menus, floorZones, products, readVenue, departments } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { addProducts, createMenu, menuItems, requireMenuRoot } from "@waitron/menu";
 import {
   configureZone,
   createDepartment,
-  departmentReceipts,
   setRoutingCell,
   setZoneSalePolicyOverride,
   listDepartments,
@@ -104,13 +103,14 @@ async function resolveZone(
     .where(eq(floorZones.id, zoneId));
   const departmentId = policy?.departmentId ?? (await department(tx, orderStart));
   const venueDoc = await readVenue(tx);
-  await tx
-    .insert(departmentReceipts)
-    .values({
-      departmentId,
-      receipt: { operationDescription: venueDoc.operationDescription },
-    })
-    .onConflictDoNothing({ target: departmentReceipts.departmentId });
+  const [receipt] = await tx
+    .select({ saved: departments.receiptUpdatedAt })
+    .from(departments)
+    .where(eq(departments.id, departmentId));
+  if (receipt?.saved === null)
+    await seedDepartmentReceipt(tx, departmentId, {
+      operationDescription: venueDoc.operationDescription,
+    });
   await configureZone(tx, { zoneId, departmentId, orderStart });
   if (zone === "counter") {
     await tx.update(floorZones).set({ isCounterDefault: true }).where(eq(floorZones.id, zoneId));

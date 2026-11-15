@@ -54,7 +54,7 @@ it("the host-supplied editor reads the initial model actively and its live refre
     .poll(() => fetchImpl.mock.calls.some(([path]) => path.endsWith("receipt-preview")))
     .toBe(true);
   expect(el.savedOperationDescription).toBe("Dining service");
-  liveData.invalidate([{ type: "department_receipts" }]);
+  liveData.invalidate([{ type: "departments" }]);
   await expect
     .poll(() => fetchImpl.mock.calls.filter(([path]) => path.endsWith("/bar/receipt")).length)
     .toBe(2);

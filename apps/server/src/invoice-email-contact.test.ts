@@ -3,13 +3,14 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, invoiceSeries, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedVenue, seedWorkingOrder, seedZone } from "@waitron/db/testing/seed.js";
 import {
-  departments,
-  orderServiceContexts,
-  saleReceiptHeaders,
-  departmentReceipts,
-} from "@waitron/venue-service";
+  seedNode,
+  seedVenue,
+  seedWorkingOrder,
+  seedZone,
+  seedDepartmentReceipt,
+} from "@waitron/db/testing/seed.js";
+import { departments, orderServiceContexts, saleReceiptHeaders } from "@waitron/venue-service";
 import { resolveInvoiceEmailContact } from "./invoice-email-contact.js";
 
 const suite = useVenueDb({
@@ -80,10 +81,7 @@ async function fixture(nullHeader = false) {
   };
 }
 async function authored(departmentId: string, receipt: Record<string, unknown>) {
-  await suite.db
-    .insert(departmentReceipts)
-    .values({ departmentId, receipt })
-    .onConflictDoUpdate({ target: departmentReceipts.departmentId, set: { receipt } });
+  await seedDepartmentReceipt(suite.db, departmentId, receipt);
 }
 const read = (source: Parameters<typeof resolveInvoiceEmailContact>[1]) =>
   withTransaction(suite.db, (tx) => resolveInvoiceEmailContact(tx, source));
@@ -198,7 +196,7 @@ it("propagates a recorded contact storage failure instead of selecting a fallbac
   let failed = false;
   const spy = vi.spyOn(session, "prepareQuery").mockImplementation((...args) => {
     const query = args[0] as { sql: string };
-    if (!failed && query.sql.includes('left join "department_receipts"')) {
+    if (!failed && query.sql.includes('left join "media_images"')) {
       failed = true;
       throw failure;
     }

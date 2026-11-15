@@ -900,7 +900,6 @@ it("scopes department receipt subscriptions by department and refreshes passivel
   // The runtime boundary also makes a missing registry entry fail on its undefined dependencies.
   const query = dashboardQuery(api, "getDepartmentReceipt", ["bar"]);
   expect(query.dependencies).toEqual([
-    { type: "department_receipts" },
     { type: "departments" },
     { type: "settings.business_day" },
     { type: "settings.venue" },
@@ -942,7 +941,6 @@ it("department receipt, policy, content and address refresh through the departme
     for (const [index, type] of [
       "settings.venue",
       "settings.business_day",
-      "department_receipts",
       "departments",
     ].entries()) {
       api.liveData.invalidate([{ type }]);
