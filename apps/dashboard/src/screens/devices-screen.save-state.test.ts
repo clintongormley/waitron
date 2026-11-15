@@ -400,7 +400,13 @@ describe("the Edit dialog's Save", () => {
   it.each(["k1", "k2"])("opens quiet on kitchen display %s without screen choices", async (id) => {
     const { el, api } = await openEdit(id);
     expect(q(el, "[data-test=edit-screen]")).toBeNull();
-    expect(value(el, "edit-receipt-printer")).toBe("pr1");
+    for (const test of [
+      "edit-receipt-printer",
+      "edit-slip-printer",
+      "edit-cash-drawer",
+      "edit-invoice-printer",
+    ])
+      expect(q(el, `[data-test=${test}]`)).toBeNull();
     expect(checked(el, "edit-approved-profiles")).toEqual([["pl", true]]);
     expect(await state(el, "edit-save")).toEqual(quiet);
     await press(el, "edit-save");

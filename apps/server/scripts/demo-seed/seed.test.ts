@@ -251,7 +251,7 @@ describe("seedDemoRestaurant", () => {
     ]);
   });
 
-  it("connects the demo printer to every device profile and the preparation stations", async () => {
+  it("connects the demo printer to ordering profiles and preparation stations", async () => {
     const venue = await provisionVenue();
     await seedDemoRestaurant(suite.db, {
       venue,
@@ -280,25 +280,30 @@ describe("seedDemoRestaurant", () => {
         ticket_stations: 4,
       },
     ]);
-    // The seeded venue has no devices yet; one paired later prints on its profile's defaults.
     const demoId = printers[0]!.id;
     const defaults = await withTransaction(suite.db, async (tx) => {
       const found = [];
-      for (const p of await tx.select({ id: deviceProfiles.id }).from(deviceProfiles)) {
-        found.push(await readProfilePrinterLists(tx, p.id));
+      for (const profile of await tx
+        .select({ id: deviceProfiles.id, formFactor: deviceProfiles.formFactor })
+        .from(deviceProfiles)) {
+        found.push({
+          formFactor: profile.formFactor,
+          lists: await readProfilePrinterLists(tx, profile.id),
+        });
       }
       return found;
     });
-    expect(defaults.length).toBeGreaterThan(0);
-    expect(
-      new Set(
-        defaults.flatMap((p) => [
-          p.receiptPrinterDefaultId,
-          p.paymentSlipPrinterDefaultId,
-          p.cashDrawerPrinterDefaultId,
-        ]),
-      ),
-    ).toEqual(new Set([demoId]));
+    expect(defaults.some((profile) => profile.formFactor === "kds")).toBe(true);
+    expect(defaults.some((profile) => profile.formFactor !== "kds")).toBe(true);
+    for (const profile of defaults) {
+      const expected = profile.formFactor === "kds" ? null : demoId;
+      expect({
+        receipt: profile.lists.receiptPrinterDefaultId,
+        slip: profile.lists.paymentSlipPrinterDefaultId,
+        drawer: profile.lists.cashDrawerPrinterDefaultId,
+        invoice: profile.lists.invoicePrinterDefaultId,
+      }).toEqual({ receipt: expected, slip: expected, drawer: expected, invoice: expected });
+    }
   });
 
   it("refuses a production environment before writing anything", async () => {
