@@ -24,8 +24,9 @@ import {
   menuPeriods,
   replaceMenuWeek,
   replaceZoneClosedWeek,
+  saveMenuPeriod,
 } from "@waitron/venue-service";
-import { createExtraList, createProduct, writeProductModifiers } from "@waitron/menu";
+import { createExtraList, createMenu, createProduct, writeProductModifiers } from "@waitron/menu";
 import { createTable } from "./testing/live-table.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { provisionBillVenue, send as rawGroupSend, type BillVenue } from "./testing/bill-venue.js";
@@ -312,12 +313,40 @@ describe("existing service in a closed zone", () => {
     ).toEqual([{ note: "No ice", quantity: 1000 }]);
   });
 
-  it("adds an extra to a stored dish", async () => {
+  it("adds an extra to a dish sent before its period ended", async () => {
     const v = await venue();
     const offers = (await request(v, "GET", `/api/service-zones/${v.zoneId}/offers`)).json
       .offers as { id: string; productId: string; menuId: string }[];
     const cana = offers.find((offer) => offer.id === v.offerFor("Caña"))!;
     const extras = await withTransaction(suite.db, async (tx) => {
+      const [zone] = await tx.select().from(floorZones).where(eq(floorZones.id, v.zoneId));
+      const [period] = await tx
+        .select()
+        .from(menuPeriods)
+        .where(
+          and(eq(menuPeriods.departmentId, zone!.departmentId), eq(menuPeriods.name, "Always")),
+        );
+      const nightMenu = (await createMenu(tx, { name: "Night" })).id;
+      await publishWorkingMenu(tx, nightMenu);
+      const night = await saveMenuPeriod(tx, zone!.departmentId, {
+        name: "Night",
+        menuId: nightMenu,
+        staffMenuIds: [],
+      });
+      // The department stays open past the Always period, so the zone's 23:30 closure applies.
+      await replaceMenuWeek(
+        tx,
+        zone!.departmentId,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots: [
+            { periodId: period!.id, startsAt: "21:00", endsAt: "23:00" },
+            { periodId: night.id, startsAt: "23:00", endsAt: "06:00" },
+          ],
+        })),
+        new Date(),
+        1,
+      );
       const lemon = await createProduct(tx, {
         categoryId: null,
         name: "Lemon",
@@ -339,23 +368,37 @@ describe("existing service in a closed zone", () => {
       await publishWorkingMenu(tx, cana.menuId);
       return [{ listId: list.id, picks: [{ productId: lemon.id, quantity: 1 }] }];
     });
-    const id = await park(v);
-    const before = await request(v, "GET", `/api/working-orders/${id}`);
-    at("23:45");
+    at("22:30");
+    const seated = await seat(v);
     expect(
       (
-        await request(v, "PUT", `/api/working-orders/${id}/lines/1`, {
-          portionLineNos: [],
-          revision: before.json.revision,
-          extras,
+        await request(v, "POST", `/api/parties/${seated.partyId}/groups`, {
+          submissionId: randomUUID(),
+          expectedPartyRevision: seated.revision,
+          allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+          groups: [{ lines: [line(v)], release: "fire" }],
         })
       ).status,
     ).toBe(200);
+    at("23:45");
+    const addLemon = async (lateSend?: { menuIds: string[] }) =>
+      request(v, "PUT", `/api/working-orders/${seated.tabId}/lines/1`, {
+        portionLineNos: [],
+        revision: (await request(v, "GET", `/api/working-orders/${seated.tabId}`)).json.revision,
+        expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, seated.tabId)),
+        extras,
+        ...(lateSend === undefined ? {} : { lateSend }),
+      });
+    expect(await addLemon()).toMatchObject({
+      status: 409,
+      json: { code: "menu_period.ended", params: { menuItemIds: [cana.id] } },
+    });
+    expect((await addLemon({ menuIds: [cana.menuId] })).status).toBe(200);
     expect(
       await suite.db
         .select({ id: workingOrderLines.id })
         .from(workingOrderLines)
-        .where(eq(workingOrderLines.workingOrderId, id)),
+        .where(eq(workingOrderLines.workingOrderId, seated.tabId)),
     ).toHaveLength(2);
   });
 
