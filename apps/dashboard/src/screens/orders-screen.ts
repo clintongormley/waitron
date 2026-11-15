@@ -129,10 +129,7 @@ export class OrdersScreen extends LitElement {
           this.#shownQuery = query;
           this.loading = false;
           this.refusal = null;
-          if (this.#pages.query === query) {
-            this.#pages.page = value.page;
-            if (value.page !== page) void this.#pages.reload();
-          }
+          if (this.#pages.query === query) this.#pages.move(value.page);
         },
       );
     } catch {

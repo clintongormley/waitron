@@ -130,6 +130,21 @@ afterEach(() => {
 });
 
 describe("dashboard Orders", () => {
+  it("draws Loading orders until the first page answers", async () => {
+    let finish!: (value: OrdersPageDto) => void;
+    const first = new Promise<OrdersPageDto>((resolve) => {
+      finish = resolve;
+    });
+    const api = stubApi({ listOrdersPage: vi.fn().mockReturnValue(first) });
+    const { el } = await mountWidget<OrdersScreen>("dashboard-orders-screen", { api });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await vi.waitFor(() => expect(api.listOrdersPage).toHaveBeenCalledTimes(1));
+    expect(table.shadowRoot!.textContent).toContain("Loading orders");
+    finish(PAGE);
+    await vi.waitFor(() => expect(table.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(1));
+    expect(table.shadowRoot!.textContent).not.toContain("Loading orders");
+  });
+
   it("keeps the status and staff choices readable in the filter bar", async () => {
     const { el } = await loaded();
     for (const name of ["status", "staff"]) {

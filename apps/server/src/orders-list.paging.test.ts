@@ -134,6 +134,7 @@ describe("Orders table pages", () => {
           .returning({ id: invoiceSeries.id }),
       );
       await billlessSale({ ...venue, seriesId: seriesId(series!.id) });
+      if (code === "lower") await billlessSale({ ...venue, seriesId: seriesId(series!.id) });
     }
     for (const direction of ["ascending", "descending"] as const) {
       const page = await withTransaction(venue.db, (tx) =>
@@ -145,8 +146,8 @@ describe("Orders table pages", () => {
       );
       expect(page.rows.map((row) => row.invoiceNumber)).toEqual(
         direction === "ascending"
-          ? ["lower/1", "Middle/1", "UPPER/1"]
-          : ["UPPER/1", "Middle/1", "lower/1"],
+          ? ["lower/1", "lower/2", "Middle/1", "UPPER/1"]
+          : ["UPPER/1", "Middle/1", "lower/2", "lower/1"],
       );
     }
   });
