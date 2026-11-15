@@ -2021,7 +2021,7 @@ Any other column the export
 carries that holds a row's id arrives holding the EXPORTING venue's id. Before W72a (#1230) the
 import replaced any text equal to a bundle id in every column, so a product named like an id arrived
 renamed; the narrowing is what makes this rule necessary. A reference the schema cannot give a
-foreign key goes in `references`, as `option_lists.default_label_id` does.
+foreign key goes in `references`.
 
 Cost: W72a's narrowing (#1230) made two existing columns need a `references` entry; without them
 two transfer cases failed.
