@@ -161,7 +161,9 @@ chrony) with `systemctl stop`, sets the clock with `timedatectl set-time`, and s
 service again, also when the request is killed at its 15-second limit. It never disables the time
 service, so after a power cut part way through, the time service starts at the next boot as usual.
 Each set it begins writes one line, naming the time asked for and the ids of who asked, to the
-system journal: `journalctl -t waitron-box` shows them.
+system journal: `journalctl -t waitron-box` shows them. When the app finds time synchronisation
+switched off, the service also switches it back on with `timedatectl set-ntp true`, writing a
+`clock.sync-on` line to the same journal.
 
 The box has no secret it needs before it boots: the venue's databases are files in the `state`
 volume that open with no password, and every other setting has a default in the image that suits a

@@ -4594,7 +4594,7 @@ suspend. `boot.clock-correction.test.ts` checks that boot hands the watch the bo
 
 Built by A798-B slice 9b ([plan](../superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md)).
 The app's container cannot set the clock, so a small root program on the box's own system, outside
-the container — the **host service** — sets it when the server asks. The box sets its clock
+the container — the **host service** — sets it, or switches its time synchronisation back on, when the server asks. The box sets its clock
 inside a stop it already has (before 28-10-2024, `clock.unusable`), and, from a till's time or an administrator's own device, while a start waits for its time to be
 confirmed ([below](#every-start-confirms-the-boxs-time-before-it-trades)), and from the setup,
 restore and handover pages' clock step. It opens no stop of its own.

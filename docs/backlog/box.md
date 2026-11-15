@@ -310,9 +310,8 @@ qualify power loss during placement; A1415's process-kill tests establish restar
 - **The box image carries the WireGuard link.**
 - **The box image keeps its clock synchronised, with no terminal** (A798). The server reads
   the time service through the box's host service (`apps/server/src/box-host-client.ts`) and
-  reports "unavailable" when that service does not answer. Since A798's revision 5 (owner, 2026-10-19) a box whose clock
-  reads earlier than its last recorded sale stops taking payment until the clock is set, so the
-  image should also keep time through a power cut (hardware with a battery-backed clock), and set
+  reports "unavailable" when that service does not answer. Every start of a box that files records waits for its time to be
+  confirmed, so the image should also keep time through a power cut (hardware with a battery-backed clock), and set
   it as soon as it is online. Since A798-B slice 10, `waitron.sh install` runs `timedatectl
   set-ntp true` and says so, or says that unless another time service runs nothing keeps the clock
   right, and the running server switches it back on whenever it reads it switched off
