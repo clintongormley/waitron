@@ -412,7 +412,7 @@ The remaining work concerns live routing qualification and the action-repository
   both retained failures, runs 42550200310 and 42525659420, stop at the Bluetooth check
   with `dbus_unreachable`. Guest diagnosis remains open.
   The health check chooses hosted while the server queue is stuck, and the independent
-  watchdog dispatches trusted-main health recovery for untouched queued PR planners;
+  watchdog dispatches trusted-main health recovery for untouched queued PR planners, with run/job skip reasons in its log;
   other stuck work is reported without moving runs. First-attempt PR planners use published
   spare capacity; non-PR planning remains hosted. A1473’s reviewed controller is installed. Each router list now restarts once after an empty page
   or a changed valid total, discarding partial rows; persistent mismatch remains unknown.

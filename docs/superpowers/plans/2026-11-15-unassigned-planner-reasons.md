@@ -7,9 +7,9 @@ left it waiting. This diagnoses a recurrence; it does not repair the earlier inc
 **Request:** Lane I queue, UNASSIGNED-PLANNER-REASON (queued 2026-11-15 11:52):
 “Make Waitron's existing recovery pass log, for each old unassigned planner job it
 declines to rescue, the job and run id and the reason (server full, PR link missing,
-head mismatch, not stalled long enough…).” The watcher cleared diagnostic scope,
-not this implementation plan. Codex wrote the plan; Claude reviewed it; build
-awaits the watcher's clearance. All first-read findings are accepted below.
+head mismatch, not stalled long enough…).” Codex wrote this plan; Claude reviewed it in two reads. The watcher cleared the
+build on 2026-11-15 at 12:08 in Lane I's questions.md, with the two changes below.
+No owner approval of the design or plan is recorded.
 
 **Approach:** Reuse `serverHealth`, `recoverServer`, their existing inventories,
 `old`, server labels and `options.report`. Emit a plain line such as
@@ -32,6 +32,9 @@ For full capacity, emit the existing full-server line before any diagnostic read
 Then read only run/job lists to name old, unassigned planning jobs; no PR reads,
 `eligible()` or writes. Catch every diagnostic-read error, report it, and retain
 today's successful full-server return. These extra reads cannot enable recovery.
+The watcher's 12:08 changes: the full-server path names marked and retry runs too,
+using only `server full`; test a throwing diagnostic job read for an excluded run,
+keeping the existing result/output and no writes to that run while the pass continues.
 
 **Files:** `scripts/ci-server-health.mjs` adds planner reasons for capacity, age,
 label, hosted marker, retry, missing/changed PR link, changed run/head/PR identity,

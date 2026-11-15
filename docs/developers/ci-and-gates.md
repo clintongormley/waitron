@@ -299,6 +299,19 @@ minutes without assignment. It skips runs already marked for hosted recovery and
 whose capacity snapshot under five minutes old shows every positive slot occupied.
 Missing or stale capacity permits rescue; other server progress does not hide a waiting planner.
 It checks complete job inventories and the PR head again before cancellation and retry.
+To find why a planning job remains queued, read `Planner rescue skipped: run=…
+attempt=… job=…; reason.` in the health log. The scan names missing or changed PR
+identity, incorrect planning labels, unknown job age, waits under five minutes,
+hosted recovery markers, retries and work assigned or completed before cancellation.
+A full server is reported before diagnostic reads; every old unassigned planning job
+seen there gets only `server full`, including marked runs and retries. Failed diagnostic
+reads on these skipped paths are reported without enabling recovery or failing the pass.
+A cancelled run keeps its existing outcome report instead of a skip reason.
+
+An absent line does not establish that a job could be recovered. Only owned PR runs in
+the queued/running CI inventory and queued unassigned self-hosted `changes` jobs are
+examined; fork and non-PR planning stays hosted. Unreadable inventories, an earlier
+error, the step deadline or a pass that never starts can leave a job unseen or unreached.
 The pass attempts eligible planners in order; its five-minute step limit can end a busy pass
 before every planner is reached. Later passes reconsider work that is still queued.
 After cancellation, an interrupted retry is reported for intervention; later passes do not
