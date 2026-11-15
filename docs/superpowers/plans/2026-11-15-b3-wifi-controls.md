@@ -27,3 +27,5 @@ Lane K queue, watcher 2026-11-15 06:42; ask with the watcher’s corrected attri
 **15 November build cut.** The complete controls cut reached 1,173 changed lines after its focused tests passed. Under the watcher’s 07:24 split direction above, this PR delivers Scan and Join. Forget with its confirmation remains for a second PR; Last change still describes host-reported Forget operations. No new host mechanism or physical qualification is included.
 
 **15 November 08:22 watcher clearance.** The reviewer fixes brought Scan/Join to about 1,165 changed lines after Forget was split. The watcher cleared that size and directed applying the sharper publication-verification assertion, restoring “password”, then pushing once. Those corrections are applied. This is watcher clearance, not owner design approval. The available choice primitive is `wt-combobox`; no `wt-select` is present.
+
+**15 November remaining cut.** The separate Forget cut adds the named saved-network confirmation and safe Stop, with the same separate running and boot-copy outcomes. Real adapter/restart/power-cut qualification remains unrun; parent B3 remains 0/6.
