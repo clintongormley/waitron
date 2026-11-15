@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
+import type { WtDataTable } from "@waitron/ui";
 import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
@@ -337,12 +338,16 @@ describe("dashboard Orders", () => {
         .dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
     choose("2026-08-01");
     await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("wt-input[name=to]")!.error).not.toBe(""),
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=to]")!.error,
+      ).not.toBe(""),
     );
     choose("2026-09-02");
     await vi.waitFor(() => expect(api.background.listOrdersPage).toHaveBeenCalledTimes(1));
     await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("wt-input[name=to]")!.error).toBe(""),
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=to]")!.error,
+      ).toBe(""),
     );
   });
 
@@ -350,7 +355,8 @@ describe("dashboard Orders", () => {
     const { el, api } = await loaded();
     const push = vi.spyOn(history, "pushState");
     const replace = vi.spyOn(history, "replaceState");
-    const search = el.shadowRoot!.querySelector("wt-input[name=q]")!;
+    const search =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=q]")!;
     const read = vi.mocked(api.background.listOrdersPage);
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
@@ -388,7 +394,7 @@ describe("dashboard Orders", () => {
     const status = el.shadowRoot!.querySelector("[name=status]")!;
     const choose = (value: string) =>
       status.dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
-    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const table = el.shadowRoot!.querySelector<WtDataTable<OrderRowDto>>("wt-data-table")!;
     const header = table.shadowRoot!.querySelector<HTMLButtonElement>('button[data-sort="total"]')!;
     await userEvent.click(header);
     await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
