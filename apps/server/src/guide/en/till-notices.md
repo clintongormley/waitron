@@ -105,6 +105,11 @@ table, a receipt from its sale) or a resend from **Printers** has printed.
 **The server needs attention · Tell a manager** is a notice this till has no words for, perhaps from
 a newer version of the server. Tell a manager so they can check the server.
 
+If an action says **Not saved: the server is out of disk space. Tell a manager.**, tell a manager
+and wait for space to be freed before trying again. A refused receipt or payment-slip print does
+not undo a payment; do not take it again. If the message says a card was charged, follow its
+recovery instructions instead of charging again.
+
 ## When invoices stop after an identity conflict {#invoice-conflict}
 
 Choose **Open recovery** beside the refusal to open this server's recovery page in a separate tab.

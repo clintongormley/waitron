@@ -1776,6 +1776,29 @@ describe("till-app receipt issuance", () => {
     ["reprint", "reprint"],
     ["print-receipt", "printReceipt"],
     ["payment-slip", "printPaymentSlip"],
+  ] as const)("a full disk refuses %s without losing the paid ticket", async (event, method) => {
+    const { el } = await mountApp({
+      [method]: vi.fn().mockRejectedValue({ code: "storage.disk_full" }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    await el.updateComplete;
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    const paid = ticket(el)!.result;
+
+    emit(ticket(el)!, event);
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage("storage.disk_full"));
+    expect(ticket(el)!.result).toEqual(paid);
+    expect(api.recordSale).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["reprint", "reprint"],
+    ["print-receipt", "printReceipt"],
+    ["payment-slip", "printPaymentSlip"],
   ] as const)("a %s request with no filed sale on screen sends nothing", async (type, method) => {
     const { el } = await mountApp();
     const c = await toCounter(el);

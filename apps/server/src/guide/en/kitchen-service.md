@@ -70,6 +70,9 @@ affects, and **Got it** clears it. Each station printer prints one slip listing 
 stations it serves. A party with more than one affected bill gets one notice per station and one
 slip per printer, listing those bill numbers. Read the list before acknowledging it.
 
+If **Got it** is refused because the server is out of disk space, the notice stays on screen.
+Tell a manager and keep using its instructions until you can acknowledge it.
+
 ## Match changed names to the original orders {#party-names}
 
 Correction slips show the party's current name beside the order number. If staff name, rename or

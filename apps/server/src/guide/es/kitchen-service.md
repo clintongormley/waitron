@@ -76,6 +76,9 @@ platos de las estaciones a las que sirve. Un grupo de comensales con varias cuen
 un aviso por estación y un ticket por impresora, con los números de esas cuentas. Lee la lista antes
 de confirmar.
 
+Si **Entendido** se rechaza porque el servidor no tiene espacio en disco, el aviso sigue en pantalla.
+Avisa al encargado y sigue sus instrucciones hasta que puedas confirmarlo.
+
 ## Relaciona los nombres cambiados con los pedidos originales {#party-names}
 
 Los tickets de corrección muestran el nombre actual del grupo de comensales junto al número de

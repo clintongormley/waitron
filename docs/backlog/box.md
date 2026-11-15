@@ -1357,9 +1357,6 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
 - **The floor-state and invoice-delivery status reads still answer 507 on a full disk while a
   notification waits, even when no reconciliation is due.** Their write-capable transactions remain;
   the pure-read cut does not close this part of the original read entry.
-- **Till write surfaces other than the draft save, the unpaid departure and the station screen were
-  not checked for a full-disk refusal's words**
-  [Detail](box.md#till-write-surfaces-not-checked-for-a-full-disk-refusals-words)
 - **The strip draws no tinted background and no coloured words, unlike picture 2.** No token is
   named for the tints and `color-mix()` is refused; tint tokens with their contrast checks would let
   it. Left open by A798-B slice 6 (#1977).
@@ -1943,18 +1940,6 @@ Not closed in slice 1, because product writes go through `withTransaction`, whic
   savepoint; or
 - a root guard refusing a bare `.transaction(` on the venue database outside `withWriteLock` in
   product code.
-
-## Till write surfaces not checked for a full-disk refusal's words
-
-Left open by A798-B slice 6 (#1977), from design §4.6 item 2. Since slice 3, once a
-save has failed for a full disk, or the box started with less than 16 MiB free, every till write
-except the open ones answers `507 storage.disk_full` until the venue folder has 16 MiB free
-([conventions-data.md](../developers/conventions-data.md#a-full-disk-stops-the-tills-writes)). The
-draft save's refusals and the unpaid departure already say "Not saved: the server is out of
-disk space…" (the paths measured 2026-10-22, slice 6's plan; the words since A1382), and since slice 6 the station screen does too, on a
-kitchen display and on a till's Station tab. The rest were not checked: audit the catch sites in
-`apps/till/src` that do not fall back to `codeMessage(code)`. The pass screens on a kitchen display,
-which has no strip, were not checked either.
 
 ## Backup data verification and Cloud release
 
