@@ -10,6 +10,7 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-switch.js";
+import "../widgets/switch-label.js";
 import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -179,6 +180,7 @@ export class ServersScreen extends LitElement {
   #focusTarget: HTMLElement | null = null;
 
   @state() private handoverTarget: ServerRow | null = null;
+  @state() private switchLabel: { address: string; opener: HTMLElement | null } | null = null;
   @state() private handoverHasPassword: boolean | null = null;
   @state() private handoverProfileFailed = false;
   @state() private handoverError = "";
@@ -453,6 +455,22 @@ export class ServersScreen extends LitElement {
     return row.contactUrl === "" ? `${t("servers.machine")} ${this.#shortId(row)}` : row.contactUrl;
   }
 
+  /** The dashboard does not know the venue's network name, so any https address is offered. */
+  #hasSwitchPage(row: ServerRow): boolean {
+    return (
+      (row.standing === "serving-primary" || row.standing === "serving-secondary") &&
+      row.contactUrl.startsWith("https://")
+    );
+  }
+
+  #openSwitchLabel(row: ServerRow, event: Event): void {
+    const menu = (event.currentTarget as HTMLElement).closest("wt-row-actions");
+    this.switchLabel = {
+      address: row.contactUrl,
+      opener: menu?.shadowRoot?.querySelector<HTMLButtonElement>("button") ?? null,
+    };
+  }
+
   #onPrimary(): boolean {
     return this.servers.some((row) => row.isSelf && row.standing === "serving-primary");
   }
@@ -516,10 +534,11 @@ export class ServersScreen extends LitElement {
             !row.isSelf &&
             row.standing === "serving-secondary" &&
             row.contactUrl !== "";
-          return actions.length === 0 && !handover
+          const switchLabel = this.#hasSwitchPage(row);
+          return actions.length === 0 && !handover && !switchLabel
             ? nothing
             : html`<wt-row-actions label=${`${t("servers.actions")}: ${this.#rowName(row)}`}
-                >${handover ? html`<wt-button data-test=${`handover-${row.nodeId}`} @click=${() => this.#openHandover(row)}>${t("servers.hand_over")}</wt-button>` : nothing}${actions.map(
+                >${handover ? html`<wt-button data-test=${`handover-${row.nodeId}`} @click=${() => this.#openHandover(row)}>${t("servers.hand_over")}</wt-button>` : nothing}${switchLabel ? html`<wt-button data-test=${`switch-label-${row.nodeId}`} @click=${(event: Event) => this.#openSwitchLabel(row, event)}>${t("servers.switch_label")}</wt-button>` : nothing}${actions.map(
                   (action) =>
                     html`<wt-button
                       data-test=${`${action}-${row.nodeId}`}
@@ -642,6 +661,17 @@ export class ServersScreen extends LitElement {
         .errorMessage=${this.loadErrorKey === null ? "" : codeMessage(this.loadErrorKey)}
       ></wt-data-table>
       ${this.#renderDialog("remove")} ${this.#renderDialog("clear")} ${this.#renderHandover()}
+      ${
+        this.switchLabel === null
+          ? nothing
+          : html`<dashboard-switch-label
+              .address=${this.switchLabel.address}
+              .opener=${this.switchLabel.opener}
+              @wt-close=${() => {
+                this.switchLabel = null;
+              }}
+            ></dashboard-switch-label>`
+      }
     `;
   }
 }

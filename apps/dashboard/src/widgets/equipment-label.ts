@@ -30,6 +30,8 @@ export interface EquipmentLabelContent {
   qr: string;
   code: string;
   name: string;
+  /** A line under the code; a label with one prints its name above the QR. */
+  note?: string;
 }
 
 /**
@@ -69,7 +71,12 @@ export function printEquipmentLabel(
     code.textContent = label.code;
     const name = doc.createElement("p");
     name.textContent = label.name;
-    doc.body.append(image, name, code);
+    if (label.note === undefined) doc.body.append(image, name, code);
+    else {
+      const note = doc.createElement("p");
+      note.textContent = label.note;
+      doc.body.append(name, image, code, note);
+    }
     view.addEventListener("afterprint", () => frame.remove(), { once: true });
     image.decode().then(
       () => printFrame(view),

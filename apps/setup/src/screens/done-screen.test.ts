@@ -433,6 +433,24 @@ describe("setup-done-screen", () => {
     },
   );
 
+  it.each([
+    [
+      "en-GB",
+      "Print a switch label for each server: open the primary's dashboard, then System, then Servers, and choose Print switch label in each server's row menu.",
+    ],
+    [
+      "es-ES",
+      "Imprime una etiqueta de cambio para cada servidor: abre el panel del servidor principal, luego Sistema y luego Servidores, y elige Imprimir etiqueta de cambio en el menú de la fila de cada servidor.",
+    ],
+  ] as const)(
+    "tells the joining server's person to print switch labels (%s)",
+    async (locale, words) => {
+      setLocale(locale);
+      const el = await mountDone(() => new Promise(() => {}), { mirrorJoin: true });
+      expect(q(el, "[data-test=joining-switch-label]")!.textContent!.trim()).toBe(words);
+    },
+  );
+
   it.each(["en-GB", "es-ES"] as const)(
     "sends the person to nobody on the mirror path (%s)",
     async (locale) => {

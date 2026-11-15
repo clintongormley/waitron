@@ -231,9 +231,38 @@ describe("servers screen list", () => {
   it("offers Remove, in a row menu, only on the rows the server says can be removed", async () => {
     const el = await mount();
     expect(rowMenu(el, STANDBY)!.querySelector(`[data-test="remove-${STANDBY}"]`)).not.toBeNull();
-    for (const other of [SELF, FORMER]) expect(rowMenu(el, other)).toBeNull();
+    expect(rowMenu(el, FORMER)).toBeNull();
     // The removed row keeps a menu, because the server marks it clearable.
     for (const other of [SELF, FORMER, REMOVED]) expect(inTable(el, `remove-${other}`)).toBeNull();
+  });
+
+  it("offers a switch label for the main server and the spare, and opens the row's label", async () => {
+    const el = await mount();
+    for (const other of [FORMER, REMOVED]) expect(inTable(el, `switch-label-${other}`)).toBeNull();
+    const order = [...rowMenu(el, STANDBY)!.querySelectorAll("wt-button")].map((button) =>
+      button.getAttribute("data-test"),
+    );
+    expect(order.indexOf(`switch-label-${STANDBY}`)).toBeLessThan(
+      order.indexOf(`remove-${STANDBY}`),
+    );
+    for (const [nodeId, address] of [
+      [SELF, "https://till.venue.example"],
+      [STANDBY, "https://standby.venue.example:8443"],
+    ] as const) {
+      menuTrigger(el, nodeId).click();
+      const item = rowMenu(el, nodeId)!.querySelector<HTMLElement>(
+        `[data-test="switch-label-${nodeId}"]`,
+      )!;
+      expect(item.textContent!.trim()).toBe(t("servers.switch_label"));
+      item.click();
+      await flush(el);
+      const label = el.shadowRoot!.querySelector("dashboard-switch-label")!;
+      expect(label.address).toBe(address);
+      expect(label.opener).toBe(menuTrigger(el, nodeId));
+      label.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("dashboard-switch-label")).toBeNull();
+    }
   });
 
   it("names the address in the row menu's accessible name", async () => {
@@ -372,6 +401,7 @@ describe("servers screen list", () => {
     expect(rowMenu(el, BLANK)!.getAttribute("label")).toBe(
       `${t("servers.actions")}: ${t("servers.machine")} 55555555`,
     );
+    expect(inTable(el, `switch-label-${BLANK}`)).toBeNull();
     await openRemove(el, BLANK);
     const body = dialog(el).textContent!.replace(/\s+/g, " ");
     expect(body).toContain(t("servers.no_address"));
@@ -1054,7 +1084,7 @@ describe("servers screen at phone width", () => {
         expect(family).not.toBe("");
         host.style.setProperty("--wt-font-family", `Verdana, ${family}`);
         await flush(el);
-        expectRowMenusOnScreen(el.shadowRoot!.querySelector("wt-data-table")!, 1);
+        expectRowMenusOnScreen(el.shadowRoot!.querySelector("wt-data-table")!, 2);
       } finally {
         setLocale(before);
         await page.viewport(width, height);

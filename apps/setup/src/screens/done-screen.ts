@@ -255,6 +255,7 @@ export class SetupDoneScreen extends LitElement {
     return html`
       <h1>${t("done.joining.heading")}</h1>
       <p data-test="joining-body">${t("done.joining.body")}</p>
+      <p data-test="joining-switch-label">${t("done.joining.switch_label")}</p>
       ${this.#breakGlass()}
     `;
   }
