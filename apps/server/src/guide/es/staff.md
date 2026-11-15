@@ -15,6 +15,11 @@ La búsqueda y la ordenación por columnas abarcan a todas las personas que coin
 Como gerente, abre el menú de una persona y elige **Editar** para cambiar sus nombres y teléfono.
 Su correo es su dirección de acceso. Cambiar el de otra persona requiere un permiso adicional, que solo tiene Admin de forma predeterminada.
 
+Elige **Idioma** y **Guardar** para fijar su idioma guardado. Si su panel sigue el idioma del
+navegador, elige el idioma expresamente, aunque ya aparezca seleccionado. El panel lo aplica al
+recargar, al volver a iniciar sesión o al regresar a la pestaña; la caja lo usa en el próximo acceso.
+Si cambias aquí tu propia preferencia, la página actual mantiene su idioma.
+
 ## Acceso a la cuenta {#account-access}
 
 Mantén al menos un administrador activo que pueda entrar al panel con contraseña, Google o una

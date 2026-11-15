@@ -24,6 +24,7 @@ const person: PersonSummary = {
   email: "ada@example.com",
   roleIds: ["manager"],
   status: "pending",
+  locale: null,
   hasPassword: false,
   hasTotp: false,
 };
@@ -107,6 +108,7 @@ it("staff edit commits the submitted details before a failed list refresh", asyn
       telephone: null,
       email: "new@example.com",
       status: "pending",
+      locale: null,
     },
   });
   await expect.poll(() => mounted.form.open).toBe(false);

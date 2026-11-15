@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./person-edit.js";
 import type { PersonEdit } from "./person-edit.js";
@@ -10,12 +10,27 @@ const person: PersonSummary = {
   displayName: "Ada",
   roleIds: ["manager"],
   status: "active",
+  locale: null,
   hasPassword: true,
   hasTotp: false,
   email: null,
 };
 
-afterEach(cleanupWidgets);
+beforeEach(() => {
+  vi.spyOn(DashboardApi.prototype, "getLocales").mockResolvedValue({
+    locales: [
+      { code: "en-GB", label: "English" },
+      { code: "es-ES", label: "Español" },
+    ],
+    venueDefault: "en-GB",
+    loginDefault: "en-GB",
+    venueName: "Venue",
+  });
+});
+afterEach(() => {
+  cleanupWidgets();
+  vi.restoreAllMocks();
+});
 
 describe.each(["light", "dark"] as const)("person-edit a11y (%s theme)", (theme) => {
   it("renders accessibly when open", async () => {
@@ -105,6 +120,9 @@ describe.each(["light", "dark"] as const)("manager staff editor (%s)", (theme) =
           .values,
       ).toEqual(["waiter"]),
     );
+    await expectNoA11yViolations(host);
+    el.error = "locale.unsupported";
+    await el.updateComplete;
     await expectNoA11yViolations(host);
   });
 });

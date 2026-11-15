@@ -22,6 +22,7 @@ const ada: PersonSummary = {
   telephone: "+44 20 7946 0000",
   roleIds: ["manager"],
   status: "pending",
+  locale: null,
   hasPassword: false,
   hasTotp: false,
   email: "ada@example.com",
@@ -31,6 +32,7 @@ const sparse: PersonSummary = {
   displayName: "Grace",
   roleIds: ["staff"],
   status: "active",
+  locale: null,
   hasPassword: true,
   hasTotp: false,
   email: null,
@@ -157,6 +159,7 @@ it("an edited person is ready and sends the stored details beside the edit", asy
     telephone: "+44 20 7946 0001",
     email: "ada@example.com",
     status: "pending",
+    locale: null,
   });
 });
 

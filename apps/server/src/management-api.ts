@@ -1238,6 +1238,7 @@ export function mountManagementApi(
         telephone?: unknown;
         email?: unknown;
         status?: unknown;
+        locale?: unknown;
       }>(c);
       for (const field of ["displayName", "firstNames", "lastNames", "email"] as const) {
         if (typeof body[field] !== "string") {
@@ -1247,6 +1248,8 @@ export function mountManagementApi(
       if (body.telephone !== null && typeof body.telephone !== "string") {
         throw new AppError("management.request_invalid", { field: "telephone" });
       }
+      if (body.locale !== undefined && body.locale !== null && typeof body.locale !== "string")
+        throw new AppError("management.request_invalid", { field: "locale" });
       const status = requireEnum(body.status, "status", ["pending", "active", "suspended"]);
       await withTransaction(deps.db, async (tx) => {
         await updatePersonDetails(tx, {
@@ -1258,6 +1261,7 @@ export function mountManagementApi(
           telephone: body.telephone as string | null,
           email: body.email as string,
           status,
+          locale: body.locale as string | null | undefined,
         });
       });
       return c.body(null, 204);

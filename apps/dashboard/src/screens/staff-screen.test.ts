@@ -35,6 +35,7 @@ const people: PersonSummary[] = [
     telephone: "+44 20",
     roleIds: ["manager"],
     status: "active",
+    locale: null,
     hasPassword: true,
     hasTotp: false,
     email: "ada@x.com",
@@ -47,6 +48,7 @@ const people: PersonSummary[] = [
     telephone: null,
     roleIds: ["staff"],
     status: "suspended",
+    locale: null,
     hasPassword: false,
     hasTotp: false,
     email: null,
@@ -960,6 +962,7 @@ describe("staff-screen — row edit", () => {
       telephone: "+44 21",
       email: "ada@example.com",
       status: "active" as const,
+      locale: null,
     };
     editForm(el).dispatchEvent(
       new CustomEvent("save-person", { detail: details, bubbles: true, composed: true }),
@@ -1012,6 +1015,7 @@ describe("staff-screen — row edit", () => {
           email: "ada@x.com",
           roleIds: ["manager"],
           status: "active",
+          locale: null,
         },
         bubbles: true,
         composed: true,
@@ -1048,6 +1052,7 @@ describe("staff-screen — row edit", () => {
           email: "ada@x.com",
           roleIds: ["manager"],
           status: "active",
+          locale: null,
         },
         bubbles: true,
         composed: true,
@@ -1068,6 +1073,7 @@ describe("staff-screen — row edit", () => {
     telephone: null,
     email: "ada@x.com",
     status: "active" as const,
+    locale: null,
   };
   function dispatchSave(el: StaffScreen): void {
     editForm(el).dispatchEvent(
@@ -1540,6 +1546,7 @@ describe("staff-screen — row actions, filters and edit races", () => {
           email: "bea@x.com",
           roleIds: ["manager"],
           status: "active",
+          locale: null,
         },
         bubbles: true,
         composed: true,

@@ -1,5 +1,5 @@
 import { accessRoleChoices } from "../testing/access-role-fixture.js";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController, registerIcons } from "@waitron/ui";
@@ -21,8 +21,20 @@ import {
 import "./person-edit.js";
 
 registerIcons(DASHBOARD_ICONS);
+beforeEach(() => {
+  vi.spyOn(DashboardApi.prototype, "getLocales").mockResolvedValue({
+    locales: [
+      { code: "en-GB", label: "English" },
+      { code: "es-ES", label: "Español" },
+    ],
+    venueDefault: "en-GB",
+    loginDefault: "en-GB",
+    venueName: "Venue",
+  });
+});
 afterEach(() => {
   cleanupWidgets();
+  vi.restoreAllMocks();
   setLocale("en-GB");
 });
 const person: PersonSummary = {
@@ -34,6 +46,7 @@ const person: PersonSummary = {
   email: "ada@example.com",
   roleIds: ["manager"],
   status: "active",
+  locale: null,
   hasPassword: true,
   hasTotp: false,
 };
@@ -150,6 +163,42 @@ for (const route of ["escape"] as const) {
     expect(app.leave.coordinator.isDirty()).toBe(false);
   });
 }
+it("protects a language-only choice on Keep and discards it once", async () => {
+  const { app, form } = await mount();
+  const language = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    'wt-combobox[name="locale"]',
+  )!;
+  await expect.poll(() => language.disabled).toBe(false);
+  await expect
+    .poll(
+      () =>
+        form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+          'wt-combobox[name="accessRoles"]',
+        )?.disabled,
+    )
+    .toBe(false);
+  await chooseOption(language, "es-ES");
+  await form.updateComplete;
+  expect(
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!
+      .disabled,
+  ).toBe(false);
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  const q = await question(app);
+  await expect.poll(() => q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>('[data-choice="keep"]')!.click();
+  await expect.poll(() => q.open).toBe(false);
+  expect(language.value).toBe("es-ES");
+  await userEvent.keyboard("{Escape}");
+  await question(app);
+  q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();
+  await expect.poll(() => app.closes).toBe(1);
+  await closeReportsDelivered();
+  expect(app.closes).toBe(1);
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+});
+
 it("Edit staff normalizes reverted values and leaves clean forms without a question", async () => {
   const { app, form } = await mount();
   await edit(form, "telephone", "+44 20");
@@ -235,6 +284,7 @@ it("a completed staff save invalidates a pending discard question and closes onc
     telephone: null,
     email: "new@example.com",
     status: "active" as const,
+    locale: null,
   };
   expect(form.closeSaved(submitted)).toBe(true);
   await expect.poll(() => q.open).toBe(false);
@@ -352,6 +402,7 @@ it("warns about job-role edits even after the person's details were saved", asyn
       telephone: null,
       email: "ada@example.com",
       status: "active",
+      locale: null,
     }),
   ).toBe(false);
   const email = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
@@ -394,6 +445,7 @@ it("protects access-role changes independently of a saved details draft", async 
       telephone: null,
       email: "ada@example.com",
       status: "active",
+      locale: null,
     }),
   ).toBe(false);
   const email = emailField(form);

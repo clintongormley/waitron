@@ -1,6 +1,11 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { deriveDisplayName, isValidEmail, isValidTelephone } from "@waitron/shared";
+import {
+  deriveDisplayName,
+  isValidEmail,
+  isValidTelephone,
+  isSupportedLocale,
+} from "@waitron/shared";
 import {
   baseStyles,
   draftScopeFor,
@@ -28,8 +33,15 @@ import { fill, t } from "../i18n/t.js";
 import { refusedField } from "./person-form.js";
 import { sameValue } from "./product-editor-model.js";
 
-type EditableField = "displayName" | "firstNames" | "lastNames" | "email";
-const FIELDS: readonly string[] = ["firstNames", "lastNames", "displayName", "email", "telephone"];
+type EditableField = "displayName" | "firstNames" | "lastNames" | "email" | "locale";
+const FIELDS: readonly string[] = [
+  "firstNames",
+  "lastNames",
+  "displayName",
+  "email",
+  "telephone",
+  "locale",
+];
 
 @customElement("dashboard-person-edit")
 export class PersonEdit extends LitElement {
@@ -105,7 +117,13 @@ export class PersonEdit extends LitElement {
     telephone: null,
     email: "",
     status: "pending",
+    locale: null,
   };
+  @state() private locales: Array<{ code: string; label: string }> = [];
+  @state() private venueLocale = "en-GB";
+  @state() private localesReady = false;
+  @state() private localeLoadError: string | null = null;
+  #localeGeneration = 0;
   readonly #feedback = new FormFeedback(this);
   #personId: string | null = null;
   #scope?: DraftScope<PersonEditDetails>;
@@ -127,6 +145,7 @@ export class PersonEdit extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#localeGeneration++;
     this.#scope?.dispose();
     this.#scope = undefined;
     this.#leave = undefined;
@@ -142,6 +161,12 @@ export class PersonEdit extends LitElement {
       this.#scope = undefined;
       this.#loadPerson();
     }
+    if (!this.open || !this.person) {
+      this.#localeGeneration++;
+      this.localesReady = false;
+      this.localeLoadError = null;
+    } else if (this.api && (personChanged || changed.has("open") || changed.has("api")))
+      void this.#loadLocales();
     if (!this.open || !this.person || !this.canManageSchedule) this.#disposeJobRoles();
     else if (
       this.api &&
@@ -184,14 +209,36 @@ export class PersonEdit extends LitElement {
   }
 
   override updated(changed: PropertyValues<this>): void {
-    if (changed.has("error") && refusedField(this.error, this.errorField) !== undefined)
+    if (changed.has("error") && this.#refusedField() !== undefined)
       void focusFirstInvalid(this.shadowRoot!);
+  }
+
+  #refusedField(): string | undefined {
+    return this.error === "locale.unsupported" || this.errorField === "locale"
+      ? "locale"
+      : refusedField(this.error, this.errorField);
+  }
+
+  async #loadLocales(): Promise<void> {
+    const generation = ++this.#localeGeneration;
+    this.localesReady = false;
+    this.localeLoadError = null;
+    try {
+      const value = await (this.api!.background ?? this.api!).getLocales();
+      if (generation !== this.#localeGeneration || !this.isConnected || !this.open) return;
+      this.locales = value.locales;
+      this.venueLocale = value.venueDefault;
+      this.localesReady = true;
+    } catch (error) {
+      if (generation === this.#localeGeneration && this.isConnected && this.open)
+        this.localeLoadError = codeOf(error);
+    }
   }
 
   #refused(): Record<string, string> {
     if (!this.error) return {};
     const refused = {
-      [refusedField(this.error, this.errorField) ?? "_form"]: codeMessage(this.error),
+      [this.#refusedField() ?? "_form"]: codeMessage(this.error),
     };
     return this.#feedback.remaining(refused);
   }
@@ -211,6 +258,7 @@ export class PersonEdit extends LitElement {
       telephone: person?.telephone ?? null,
       email: person?.email ?? "",
       status: person?.status ?? "pending",
+      locale: person?.locale ?? null,
     };
     this.#feedback.reset();
   }
@@ -252,6 +300,8 @@ export class PersonEdit extends LitElement {
     else if (!isValidEmail(this.details.email.trim())) {
       errors.email = codeMessage("person.email_invalid");
     }
+    if (this.details.locale !== null && !isSupportedLocale(this.details.locale))
+      errors.locale = codeMessage("locale.unsupported");
     const tel = this.details.telephone?.trim() ?? "";
     if (tel && !isValidTelephone(tel)) errors.telephone = codeMessage("person.telephone_invalid");
     return errors;
@@ -276,6 +326,7 @@ export class PersonEdit extends LitElement {
       telephone: this.details.telephone?.trim() || null,
       email: this.details.email.trim(),
       status: this.details.status,
+      locale: this.details.locale,
     };
   }
 
@@ -636,6 +687,21 @@ export class PersonEdit extends LitElement {
                   )}
                   ${this.#input("edit-email", "email", t("person.email"), "email", errors)}
                   ${this.#input("edit-telephone", "telephone", t("person.telephone"), "telephone", errors)}
+                  <wt-combobox
+                    name="locale"
+                    label=${t("profile.language")}
+                    required
+                    ?disabled=${this.busy || !this.localesReady}
+                    search="auto"
+                    searchPlaceholder=${t("categories.combobox_search")}
+                    noResultsLabel=${t("categories.combobox_no_results")}
+                    .options=${this.locales.map((locale) => ({ value: locale.code, label: locale.label }))}
+                    .value=${this.details.locale ?? this.venueLocale}
+                    error=${this.localeLoadError ? codeMessage(this.localeLoadError) : (errors.locale ?? "")}
+                    @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change("locale", event)}
+                  ></wt-combobox>
+                  ${this.localeLoadError ? html`<wt-button data-test="locale-retry" variant="secondary" ?disabled=${this.busy} @click=${() => void this.#loadLocales()}>${t("action.retry")}</wt-button>` : nothing}
+
                   <wt-combobox
                     ?preserve-order=${true /* Preserve account lifecycle. */}
                     data-test="edit-status"

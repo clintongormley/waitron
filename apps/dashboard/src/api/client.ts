@@ -483,6 +483,7 @@ export interface PersonSummary {
   firstNames?: string | null;
   lastNames?: string | null;
   telephone?: string | null;
+  locale?: string | null;
   roleIds: string[];
   status: "pending" | "active" | "suspended";
   hasPassword: boolean;
@@ -514,6 +515,7 @@ export interface PersonEditDetails {
   telephone: string | null;
   email: string;
   status: "pending" | "active" | "suspended";
+  locale: string | null;
 }
 
 export type PasskeyOptions = Record<string, unknown>;

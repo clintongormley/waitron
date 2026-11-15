@@ -951,6 +951,7 @@ describe("Management API staff + session routes", () => {
       telephone: "+1 222 333 4444",
       email: "grace@example.com",
       status: "active",
+      locale: "es-ES",
     };
     const saved = await app.request(`/management-api/staff/${staffId}`, {
       method: "PUT",
@@ -964,6 +965,17 @@ describe("Management API staff + session routes", () => {
       ...details,
       roleIds: [builtIns.staff],
     });
+    for (const locale of [true, 42, [], {}]) {
+      const refused = await app.request(`/management-api/staff/${staffId}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ ...details, locale }),
+      });
+      expect(refused.status).toBe(400);
+      expect(await refused.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "locale" } },
+      });
+    }
   });
 
   it("create with a duplicate email → 409 person.email_taken, no row lands", async () => {
