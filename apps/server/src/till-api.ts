@@ -1827,6 +1827,9 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       );
       assertProfileAction(session.device, "take-orders");
       await assertRequestDevice(deps, c, session);
+      if (!Array.isArray(body.lines)) throw invalid("lines");
+      if (body.tender === null || typeof body.tender !== "object" || Array.isArray(body.tender))
+        throw invalid("tender");
       const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
       await gateZones(
         deps,
@@ -2817,6 +2820,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       await gateZones(deps, session, [{ orderId: id }]);
       const body = await readJsonBody<{ reason: string; override?: unknown }>(c);
+      if (typeof body.reason !== "string")
+        throw new AppError("working_order.reason_required", { workingOrderId: id });
       const override = parseOverrideField(body.override);
       await cancelPlacedOrder(
         {

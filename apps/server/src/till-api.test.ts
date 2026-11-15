@@ -2403,6 +2403,28 @@ describe("zone-offer menu routes", () => {
 });
 
 describe("POST /api/sales (session-guarded sale)", () => {
+  it.each([
+    [{}, "lines"],
+    [{ lines: null }, "lines"],
+    [{ lines: [] }, "tender"],
+    [{ lines: [], tender: null }, "tender"],
+    [{ lines: [], tender: [] }, "tender"],
+    [{ lines: [], tender: "cash" }, "tender"],
+  ])("refuses malformed sale fields in %j as %s", async (body, field) => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
+    const res = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify(body),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field } },
+    });
+  });
+
   it("REJECTS (401 session.required) when no cookie is present — the sale never runs unauthenticated", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
@@ -3872,6 +3894,25 @@ describe("/api/working-orders/:id/collect (malformed id — the fiscal happy pat
 });
 
 describe("/api/working-orders/:id/cancel", () => {
+  it.each([{}, { reason: null }, { reason: 42 }])(
+    "refuses a cancellation with no text reason in %j",
+    async (body) => {
+      const app = new Hono();
+      mountTillApi(app, deps(suite.db), collect([]));
+      const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
+      const id = randomUUID();
+      const res = await app.request(`/api/working-orders/${id}/cancel`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify(body),
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "working_order.reason_required", params: { workingOrderId: id } },
+      });
+    },
+  );
+
   it("POST cancels a PLACED order (placed → abandoned) given a reason", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));

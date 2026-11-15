@@ -664,16 +664,6 @@ which resizes the outer page and leaves the components' own iframe alone
 Printer identity remains sub-project C of the
 [device enrolment design](../superpowers/specs/2026-08-30-device-auth-enrolment-fail-closed-design.md).
 
-## Malformed sale and cancellation bodies
-
-A941's 2026-10-21 loopback HTTP probe on `dc1772c4dd147e65ff2c46251b0dfe6d5f60a644`
-observed `500 server.internal` for `POST /api/sales` with `{}` or `{"lines": []}`, and for
-`POST /api/working-orders/:id/cancel` with `{}` and a syntactically valid unknown order id.
-The requests carried a real PIN session whose enrolled profile permitted the actions. These
-were malformed-body probes, not successful payment or cancellation attempts. Next: reproduce
-with a focused route test, validate the missing fields, and assert the domain error code.
-A941 does not change these handlers' request validation.
-
 ## Screen faults seen during menus Task 9's look on 2026-09-27
 
 Seen on the dev stack while
