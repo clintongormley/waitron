@@ -1447,7 +1447,7 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
   [Detail](backlog/box.md#a1323-one-master-key-for-the-venue)
 
 - **A1187 part 2: the recovery pack's emergency start page (owner, 2026-10-29).**
-  Waits for A1188 part 1, whose card facts the page prints, for people holding `node.manage`.
+  PR 2 still needs the Cloud shortcut opening the existing pack maker, status checks and missing-code wording. The printed page is built for people holding `node.manage`; live codes require Cloud to enable hosting.
   [Detail](backlog/box.md#a1187-part-2-the-recovery-packs-emergency-start-page-owner-2026-10-29).
 
 - **A1187 part 3: the recovery pack's disk key page.** B3's development startup now creates and retains the key through `scripts/box/disk-key.mjs`; the protected host delivery and pack integration remain to be built. A pack

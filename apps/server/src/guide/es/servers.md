@@ -314,3 +314,6 @@ en su perfil. La tarjeta no inicia el local.
 Si la caja principal deja de responder, mantén el terminal abierto. Cuando la franja roja ofrezca **Iniciar el local en la nube**, elige la opción para ver la dirección de emergencia y un código QR. Escanéalo con el móvil o elige **Abrir aquí** para salir del terminal y abrirla en este navegador. **Cerrar** vuelve al terminal.
 
 Ten a mano el código de emergencia, tu contraseña de Waitron y un código del autenticador o de recuperación. El diálogo indica los roles que pueden iniciar el local; Cloud comprueba la disponibilidad antes de continuar. La opción permanece oculta hasta que Cloud habilite el alojamiento de emergencia para tu local.
+
+
+En **Copias de seguridad**, elige **Hacer paquete de recuperación** en el servidor principal mientras Cloud esté disponible. Con permiso para gestionar el servidor, el paquete incluye la dirección y el código de emergencia, sus códigos QR y la fecha de emisión del código. Guárdalo bajo llave fuera del servidor. El código inicia una copia bloqueada; aún necesitas tu contraseña y, si lo tienes configurado, tu autenticador o un código de recuperación. Las llaves de acceso no funcionan allí. Si falta la página de emergencia o ha fallado, lee su línea en la portada y haz un paquete nuevo cuando esté disponible.

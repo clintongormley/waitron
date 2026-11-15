@@ -1496,7 +1496,7 @@ export const en = {
   "recovery_pack_dialog.stop": "Stop",
   "recovery_pack.title": "Recovery pack",
   "recovery_pack.intro":
-    "One printed document with what you need when the box fails: the restore codes for your bucket copy and archives, and the server key. Keep it locked away, off the box.",
+    "One printed document with what you need when the box fails: the emergency-start code, the restore codes for your bucket copy and archives, and the server key. Keep it locked away, off the box.",
   "recovery_pack.none": "No recovery pack has been made on this box.",
   "recovery_pack.up_to_date": "Recovery pack {number}, made on {date} by {name}, is up to date.",
   "recovery_pack.up_to_date_unnamed": "Recovery pack {number}, made on {date}, is up to date.",
@@ -5845,7 +5845,7 @@ export const es: Record<StringKey, string> = {
   "recovery_pack_dialog.stop": "Parar",
   "recovery_pack.title": "Paquete de recuperación",
   "recovery_pack.intro":
-    "Un documento impreso con lo que necesitas si el servidor falla: los códigos de restauración de tu copia en el bucket y de los archivos, y la clave del servidor. Guárdalo bajo llave, lejos del servidor.",
+    "Un documento impreso con lo que necesitas si el servidor falla: el código de inicio de emergencia, los códigos de restauración de tu copia en el bucket y de los archivos, y la clave del servidor. Guárdalo bajo llave, lejos del servidor.",
   "recovery_pack.none": "Aún no se ha hecho ningún paquete de recuperación en este servidor.",
   "recovery_pack.up_to_date":
     "El paquete de recuperación {number}, hecho el {date} por {name}, está al día.",

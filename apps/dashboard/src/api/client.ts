@@ -2196,7 +2196,7 @@ export interface MadeRecoveryPack {
   key: RecoveryPackKeyState;
 }
 
-type RecoveryPackPart = "bucket" | "archives" | "server-key";
+type RecoveryPackPart = "bucket" | "archives" | "server-key" | "emergency";
 
 /** Each reason names only the parts the box can give it for. */
 export type RecoveryPackReason =

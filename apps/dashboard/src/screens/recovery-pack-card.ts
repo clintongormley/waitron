@@ -403,7 +403,7 @@ export class RecoveryPackCard extends LitElement {
         packDate: pack.date,
       });
     const holds = status.latest!.parts.some(
-      (part) => part.part !== "server-key" && part.state === "included",
+      (part) => (part.part === "bucket" || part.part === "archives") && part.state === "included",
     );
     return fill(holds ? "recovery_pack.backup_key_same" : "recovery_pack.backup_key_absent", pack);
   }

@@ -969,3 +969,17 @@ describe("making a pack", () => {
     );
   });
 });
+
+it("does not claim an emergency-only pack carries a backup key", async () => {
+  const el = await mount(
+    stubApi(
+      status({
+        latest: latest({ parts: [{ part: "emergency", state: "included" }] }),
+        upToDate: true,
+      }),
+    ),
+  );
+  expect(row(el, "backup-key")).toBe(
+    fill("recovery_pack.backup_key_absent", { number: "3", date: DAYS["en-GB"].made }),
+  );
+});

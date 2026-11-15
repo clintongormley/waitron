@@ -26,6 +26,8 @@ import {
 } from "./backup-config.js";
 import { MIN_RECOVERY_KEY_LENGTH } from "./backup-config.js";
 import { readStreamSettingsIn, STREAM_PURPOSE } from "./stream-host.js";
+import type { EmergencyCode } from "./cloud-emergency.js";
+import type { readEmergencyPeople } from "./cloud-emergency-people.js";
 import "./errors.js";
 
 /** What every part builder needs; the box env is read before the transaction opens. */
@@ -53,6 +55,64 @@ export type BuiltPart = {
   /** For the log only: a refusal's code, `unexpected` for any other error, never a message. */
   readonly failedWith?: string;
 };
+
+export type EmergencyPartInput =
+  | { state: "included"; code: EmergencyCode }
+  | { state: "absent"; reason: keyof (typeof PART_WORDS)["en"]["emergency"]["absent"] }
+  | { state: "failed"; failedWith: string };
+
+export function buildEmergencyPart(
+  context: PartsContext,
+  input: EmergencyPartInput,
+  people: Awaited<ReturnType<typeof readEmergencyPeople>>,
+): BuiltPart {
+  const words = PART_WORDS[context.locale].emergency;
+  const record = { part: "emergency", state: input.state } as const;
+  if (input.state === "absent")
+    return {
+      part: { kind: "emergency", state: "absent", absentReason: words.absent[input.reason] },
+      record,
+      file: {},
+    };
+  if (input.state === "failed")
+    return {
+      part: { kind: "emergency", state: "failed", failure: words.failed },
+      record,
+      file: {},
+      failedWith: input.failedWith,
+    };
+  const { code } = input;
+  const dates = packDates(context.locale, context.timeZone);
+  const names = (enrolled: boolean) =>
+    people
+      .filter((p) => p.hasAuthenticator === enrolled)
+      .map((p) => p.displayName)
+      .join(", ") || words.nobody;
+  return {
+    part: {
+      kind: "emergency",
+      state: "included",
+      lastChanged: dayIn(context.timeZone, code.codeIssuedAt),
+      page: {
+        title: words.title,
+        intro: words.intro,
+        address: { label: words.address, text: code.address, qr: true },
+        secret: { label: words.code, text: code.code, qr: true },
+        rows: [
+          {
+            label: words.issued,
+            value: `${dates.longAt(code.codeIssuedAt)} ${dates.timeAt(code.codeIssuedAt)}`,
+          },
+          { label: words.ready, value: names(true) },
+          { label: words.notEnrolled, value: names(false) },
+        ],
+        notes: words.steps,
+      },
+    },
+    record: { ...record, codeIssuedAt: code.codeIssuedAt },
+    file: {},
+  };
+}
 
 type Kind = PackPart["kind"];
 
@@ -383,7 +443,8 @@ export function withServerKeyPageNumber(parts: BuiltPart[], locale: PackLocale):
   const sentence = PART_WORDS[locale].alsoServerKey(serverKeyPage);
   return parts.map((built) => {
     const page = built.part.page;
-    if (built.part.kind === "server-key" || page === undefined) return built;
+    if ((built.part.kind !== "bucket" && built.part.kind !== "archives") || page === undefined)
+      return built;
     const intro = page.intro === undefined ? sentence : `${page.intro} ${sentence}`;
     return { ...built, part: { ...built.part, page: { ...page, intro } } };
   });

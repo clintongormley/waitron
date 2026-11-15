@@ -309,9 +309,9 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
       .stroke("black");
     pdf.y = bottom + 12;
   };
-  const qr = (text: string, x: number, y: number) => {
+  const qr = (text: string, x: number, y: number, size: number) => {
     const modules = qrModules(text);
-    const cell = QR_SIZE / (modules.length + 8);
+    const cell = size / (modules.length + 8);
     pdf.save();
     modules.forEach((row, r) =>
       row.forEach((dark, c) => {
@@ -320,9 +320,9 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
     );
     pdf.fill("black");
     pdf.restore();
-    pdf.rect(x, y, QR_SIZE, QR_SIZE).lineWidth(0.5).stroke(LINE);
+    pdf.rect(x, y, size, size).lineWidth(0.5).stroke(LINE);
   };
-  const secret = (value: NonNullable<RecoveryPackPage["secret"]>) => {
+  const secret = (value: NonNullable<RecoveryPackPage["secret"]>, size = QR_SIZE) => {
     // A drawn space cannot be counted, and one at either end cannot be seen; a passphrase may
     // hold either. The QR code still carries the text itself.
     const spaced = value.exactSpaces === true && value.text.includes(" ");
@@ -332,7 +332,7 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
         ).join("")
       : value.text;
     const top = pdf.y;
-    const textWidth = width() - 24 - QR_SIZE - 16;
+    const textWidth = width() - 24 - size - 16;
     pdf
       .fillColor(GREY)
       .fontSize(8)
@@ -352,8 +352,8 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
         .fontSize(8)
         .text(safe(words.spaceMark), LEFT + 12, pdf.y, { width: textWidth });
     }
-    qr(value.text, LEFT + width() - 12 - QR_SIZE, top + 12);
-    const bottom = Math.max(pdf.y, top + 12 + QR_SIZE) + 12;
+    qr(value.text, LEFT + width() - 12 - size, top + 12, size);
+    const bottom = Math.max(pdf.y, top + 12 + size) + 12;
     pdf
       .rect(LEFT, top, width(), bottom - top)
       .lineWidth(1.2)
@@ -441,6 +441,9 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
       write(
         [
           opens,
+          parts.some((part) => part.kind === "emergency" && part.state === "included")
+            ? words.emergencyWarning
+            : undefined,
           words.whichToKeep,
           serverKeyPage === undefined ? undefined : words.serverKeyPage(serverKeyPage),
         ]
@@ -465,6 +468,7 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
       const page = part.page!;
       write(page.title, 18, "black", 8);
       if (page.intro) write(page.intro, 10, "black", 12);
+      if (page.address) secret(page.address, 96);
       if (page.secret) secret(page.secret);
       if (page.rows.length > 0)
         table(

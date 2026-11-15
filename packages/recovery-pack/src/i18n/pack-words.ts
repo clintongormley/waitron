@@ -1,5 +1,5 @@
 export type PackLocale = "en" | "es";
-export type PartKind = "bucket" | "archives" | "server-key";
+export type PartKind = "bucket" | "archives" | "server-key" | "emergency";
 
 type Words = {
   title: string;
@@ -23,6 +23,7 @@ type Words = {
   anyoneHoldingBackupsAndServerKey: string;
   /** For a pack holding the server key and no restore code or recovery key. */
   anyoneHoldingServerKey: string;
+  emergencyWarning: string;
   whichToKeep: string;
   serverKeyPage: (page: number) => string;
   part: Record<PartKind, string>;
@@ -41,6 +42,8 @@ type Words = {
 export const PACK_WORDS: Record<PackLocale, Words> = {
   en: {
     title: "Waitron recovery pack",
+    emergencyWarning:
+      "The emergency code starts a locked copy in the cloud. You still need your password and, when set up, your authenticator or a recovery code. Passkeys do not work there.",
     header: (venue, number, day) => `${venue} · Recovery pack ${number} · ${day}`,
     page: (n, of) => `Page ${n} of ${of}`,
     madeBy: (day, time, person) => `Made on ${day} at ${time} by ${person}.`,
@@ -65,18 +68,26 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
       "When you make a new pack, the dashboard's Backups screen says which older packs to keep and until when.",
     serverKeyPage: (page) =>
       `Always keep the pack that holds the server key (page ${page} says which).`,
-    part: { bucket: "Bucket copy", archives: "Archives", "server-key": "Server key" },
+    part: {
+      bucket: "Bucket copy",
+      archives: "Archives",
+      "server-key": "Server key",
+      emergency: "Emergency start",
+    },
     situation: {
+      emergency: "The box has died and you need to start the venue in the cloud.",
       bucket: "You are setting up a new box and want the venue back from your bucket copy.",
       archives: "You need one old archive back (for example a month-end copy).",
       "server-key": "You are recovering the server's own key with a backup.",
     },
     notSetUp: {
+      emergency: "Cloud cannot start this venue yet.",
       bucket: "This box has no bucket copy.",
       archives: "This box makes no archives.",
       "server-key": "This box has no server key yet.",
     },
     absent: {
+      emergency: "Emergency start is not available for this pack.",
       bucket: "This box has no bucket copy.",
       archives: "This box makes no archives.",
       "server-key": "This venue files no invoices with the tax agency.",
@@ -94,6 +105,8 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
   },
   es: {
     title: "Paquete de recuperación de Waitron",
+    emergencyWarning:
+      "El código de emergencia inicia una copia bloqueada en la nube. Aún necesitas tu contraseña y, si lo tienes configurado, tu autenticador o un código de recuperación. Las llaves de acceso no funcionan allí.",
     header: (venue, number, day) => `${venue} · Paquete de recuperación ${number} · ${day}`,
     page: (n, of) => `Página ${n} de ${of}`,
     madeBy: (day, time, person) => `Hecho el ${day} a las ${time} por ${person}.`,
@@ -120,22 +133,26 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
     serverKeyPage: (page) =>
       `Guarda siempre el paquete que tiene la clave del servidor (la página ${page} dice cuál).`,
     part: {
+      emergency: "Inicio de emergencia",
       bucket: "Copia en el bucket",
       archives: "Archivos",
       "server-key": "Clave del servidor",
     },
     situation: {
+      emergency: "El servidor ha fallado y necesitas iniciar el local en la nube.",
       bucket:
         "Estás instalando un servidor nuevo y quieres recuperar el local desde tu copia en el bucket.",
       archives: "Necesitas recuperar un archivo antiguo (por ejemplo, una copia de fin de mes).",
       "server-key": "Estás recuperando la clave propia del servidor junto con una copia.",
     },
     notSetUp: {
+      emergency: "Cloud aún no puede iniciar este local.",
       bucket: "Este servidor no tiene copia en el bucket.",
       archives: "Este servidor no hace archivos.",
       "server-key": "Este servidor aún no tiene clave del servidor.",
     },
     absent: {
+      emergency: "El inicio de emergencia no está disponible en este paquete.",
       bucket: "Este servidor no tiene copia en el bucket.",
       archives: "Este servidor no hace archivos.",
       "server-key": "Este local no presenta facturas a la Agencia Tributaria.",
@@ -157,6 +174,28 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
 export type PartFailure = { what: string; todo: string };
 
 type PartWords = {
+  emergency: {
+    title: string;
+    intro: string;
+    address: string;
+    code: string;
+    issued: string;
+    ready: string;
+    notEnrolled: string;
+    nobody: string;
+    steps: string[];
+    absent: Record<
+      | "not_connected"
+      | "not_primary"
+      | "permission"
+      | "setting_off"
+      | "level_inactive"
+      | "no_payment_method"
+      | "not_provisioned",
+      string
+    >;
+    failed: PartFailure;
+  };
   bucket: {
     title: string;
     intro: string;
@@ -196,6 +235,43 @@ type PartWords = {
 
 export const PART_WORDS: Record<PackLocale, PartWords> = {
   en: {
+    emergency: {
+      title: "Emergency start in the cloud",
+      intro:
+        "This code starts a locked copy of the venue. Sign in with your password and, if set up, your authenticator or a recovery code. Passkeys do not work there.",
+      address: "Emergency address",
+      code: "Emergency code",
+      issued: "Code issued",
+      ready: "With an authenticator",
+      notEnrolled: "Without an authenticator",
+      nobody: "Nobody",
+      steps: [
+        "1. Unplug the old box so it cannot start again.",
+        "2. Open the emergency address and enter this code.",
+        "3. Sign in with your password and your authenticator or recovery code when asked.",
+        "4. Review any missing minutes and confirm that the old box is stopped.",
+        "5. Follow the page to join the tills to the cloud copy.",
+      ],
+      absent: {
+        not_connected:
+          "This box is not connected to Cloud. Connect it from Cloud services, then make a new pack.",
+        not_primary: "This box is not the main box. Make the pack on the main box.",
+        permission:
+          "The maker cannot start the venue in the cloud; the code is left out. An administrator can make a pack with the code.",
+        setting_off: "Emergency start is off. Enable it in Cloud, then make a new pack.",
+        level_inactive:
+          "The Cloud level for emergency start is inactive. Check it in Cloud, then make a new pack.",
+        no_payment_method:
+          "Cloud has no payment method for emergency start. Add one in Cloud, then make a new pack.",
+        not_provisioned:
+          "Cloud cannot start this venue yet. Make a new pack when emergency start is available.",
+      },
+      failed: {
+        what: "The emergency code could not be read from Cloud.",
+        todo: "Make a new pack when Cloud answers; if you just requested a code, try again in a minute.",
+      },
+    },
+
     bucket: {
       title: "Bucket copy",
       intro:
@@ -278,6 +354,43 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
     },
   },
   es: {
+    emergency: {
+      title: "Inicio de emergencia en la nube",
+      intro:
+        "Este código inicia una copia bloqueada del local. Entra con tu contraseña y, si lo tienes configurado, tu autenticador o un código de recuperación. Las llaves de acceso no funcionan allí.",
+      address: "Dirección de emergencia",
+      code: "Código de emergencia",
+      issued: "Código emitido",
+      ready: "Con autenticador",
+      notEnrolled: "Sin autenticador",
+      nobody: "Nadie",
+      steps: [
+        "1. Desenchufa el servidor antiguo para que no pueda volver a arrancar.",
+        "2. Abre la dirección de emergencia e introduce este código.",
+        "3. Entra con tu contraseña y tu autenticador o código de recuperación cuando se solicite.",
+        "4. Revisa los minutos que falten y confirma que el servidor antiguo está parado.",
+        "5. Sigue la página para conectar las cajas a la copia en la nube.",
+      ],
+      absent: {
+        not_connected:
+          "Este servidor no está conectado a Cloud. Conéctalo desde Servicios en la nube y haz un paquete nuevo.",
+        not_primary: "Este no es el servidor principal. Haz el paquete en el servidor principal.",
+        permission:
+          "Quien hizo el paquete no puede iniciar el local en la nube; se omite el código. Un administrador puede hacer un paquete con el código.",
+        setting_off:
+          "El inicio de emergencia está desactivado. Actívalo en Cloud y haz un paquete nuevo.",
+        level_inactive:
+          "El nivel de Cloud para el inicio de emergencia está inactivo. Revísalo en Cloud y haz un paquete nuevo.",
+        no_payment_method:
+          "Cloud no tiene un método de pago para el inicio de emergencia. Añade uno en Cloud y haz un paquete nuevo.",
+        not_provisioned:
+          "Cloud aún no puede iniciar este local. Haz un paquete nuevo cuando el inicio de emergencia esté disponible.",
+      },
+      failed: {
+        what: "No se pudo leer el código de emergencia de Cloud.",
+        todo: "Haz un paquete nuevo cuando Cloud responda; si acabas de pedir un código, vuelve a intentarlo en un minuto.",
+      },
+    },
     bucket: {
       title: "Copia en el bucket",
       intro:

@@ -623,6 +623,8 @@ account". Left open by A1185.
 
 ## A1188. Someone at the venue can start the venue in the cloud when the box has died (owner, 2026-10-29)
 
+Before A1188 activation ships, recheck A1187-2’s printed emergency steps against the actual hosted flow; printing the page does not qualify hosted activation.
+
 Part of A1018 and Cloud's P6. The tills learn the venue's cloud address and
 show the emergency link to an administrator when the box disappears. The locked copy Cloud
 restores after a valid emergency code offers only an administrator sign-in; a manager

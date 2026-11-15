@@ -121,3 +121,33 @@ describe("recovery pack records", () => {
     expect(await suite.db.select().from(recoveryPacks)).toEqual([]);
   });
 });
+
+it("records the emergency issue date while refusing the emergency code", async () => {
+  const emergency = {
+    part: "emergency",
+    state: "included",
+    codeIssuedAt: "2026-10-12T08:00:00.000Z",
+  };
+  await withTransaction(suite.db, (tx) =>
+    insertRecoveryPack(tx, {
+      nodeId: "node-a",
+      number: 1,
+      madeAt,
+      madeBy: null,
+      parts: [emergency as RecoveryPackPartRecord],
+    }),
+  );
+  expect((await readRecoveryPack(suite.db, "node-a", 1))!.parts).toEqual([emergency]);
+  await expect(
+    withTransaction(suite.db, (tx) =>
+      insertRecoveryPack(tx, {
+        nodeId: "node-a",
+        number: 2,
+        madeAt,
+        madeBy: null,
+        parts: [{ ...emergency, code: "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ" } as RecoveryPackPartRecord],
+      }),
+    ),
+  ).rejects.toThrow("recovery pack part record refused");
+  expect(await readRecoveryPack(suite.db, "node-a", 2)).toBeNull();
+});

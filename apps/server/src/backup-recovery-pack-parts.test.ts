@@ -13,11 +13,13 @@ import { parseRecoveryKit } from "@waitron/stream";
 import { decodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { ARCHIVE_PURPOSE, writeArchiveSettings, type ArchiveSettings } from "./archive-settings.js";
 import {
+  buildEmergencyPart,
   buildArchivesPart,
   buildBucketPart,
   buildServerKeyPart,
   serverKeySeat,
   withServerKeyPageNumber,
+  type BuiltPart,
   type PartsContext,
   type ServerKeyInput,
   type ServerKeySeat,
@@ -638,4 +640,44 @@ describe("the server key's page number on the other pages", () => {
     ];
     expect(withServerKeyPageNumber(parts, "en")[0]!.part.page!.intro).toBe("Intro.");
   });
+});
+
+it("keeps both authenticator groups in bounded rows and reserves server-key hints for backups", async () => {
+  const emergency = buildEmergencyPart(
+    context,
+    {
+      state: "included",
+      code: {
+        version: 1,
+        installationId: "i",
+        venueId: "v",
+        countryCode: "ES",
+        asOf: context.madeAt,
+        codeIssuedAt: "2026-10-20T08:00:00.000Z",
+        address: "https://rescue.venue.example/",
+        code: "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ",
+      },
+    },
+    [
+      { personId: "ready", displayName: "Alex Smith", hasAuthenticator: true },
+      { personId: "not-enrolled", displayName: "Robin Jones", hasAuthenticator: false },
+    ],
+  );
+  expect(emergency.part.page!.rows).toEqual([
+    { label: "Code issued", value: "20 October 2026 10:00" },
+    { label: "With an authenticator", value: "Alex Smith" },
+    { label: "Without an authenticator", value: "Robin Jones" },
+  ]);
+  const serverKey: BuiltPart = {
+    part: {
+      kind: "server-key",
+      state: "included",
+      page: { title: "Server key", rows: [], notes: [] },
+    },
+    record: { part: "server-key", state: "included" },
+    file: {},
+  };
+  const parts = withServerKeyPageNumber([emergency, serverKey], "en");
+  expect(parts[0]!.part.page!.intro).toBe(PART_WORDS.en.emergency.intro);
+  expect(parts[1]!.part.page!.intro).toBeUndefined();
 });
