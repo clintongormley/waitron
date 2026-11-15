@@ -3030,3 +3030,35 @@ it("refreshes declarations in the draft of a table without a seated party", asyn
   await poll(el);
   expect(line.product.allergens).toEqual({ eggs: {} });
 });
+
+it("keeps the displayed table bill after a declaration read fails and retries on the next poll", async () => {
+  const held = {
+    ...tabLemonade,
+    id: "held-table-line",
+    sentAt: null,
+    nutrition: { allergens: { milk: {} }, dietaryDeclarations: [] },
+  };
+  const listGroups = vi.fn().mockResolvedValue({ groups: [], printProblems: [] });
+  const { el } = await mountApp(
+    tableStubs(DINING, {
+      getTabLines: vi.fn().mockResolvedValue({ lines: [held], revision: 0 }),
+      listGroups,
+    }),
+  );
+  await toTable(el);
+  const groupsRead = listGroups.mock.calls.length;
+  api.getTabLines.mockRejectedValue(new TypeError("offline"));
+  api.listZoneOffers.mockResolvedValue({ ...DINING, liveFields: "changed" });
+  api.menuState.mockResolvedValue({ ...menuState("v1"), liveFields: "changed" });
+  await poll(el);
+  expect(tableScreen(el).lines).toHaveLength(1);
+  expect(tableScreen(el).lines[0]!.nutrition?.allergens).toEqual({ milk: {} });
+  expect(listGroups.mock.calls.length).toBe(groupsRead);
+  api.getTabLines.mockResolvedValue({
+    lines: [{ ...held, nutrition: { allergens: { eggs: {} }, dietaryDeclarations: [] } }],
+    revision: 0,
+  });
+  await poll(el);
+  expect(tableScreen(el).lines[0]!.nutrition?.allergens).toEqual({ eggs: {} });
+  expect(listGroups.mock.calls.length).toBe(groupsRead);
+});

@@ -6765,7 +6765,7 @@ export class TillApp extends LitElement {
         void this.#reloadTableOffers(zoneId).then((read) => {
           if (read) {
             this.#reconcileDraft(false);
-            void this.#loadTabLines();
+            void this.#refreshTableLines();
           }
         });
     }
@@ -12777,6 +12777,21 @@ export class TillApp extends LitElement {
       placed.push({ ...line, place: { ...placement.place } });
     }
     return placed;
+  }
+
+  async #refreshTableLines(): Promise<void> {
+    const billId = this.activeTabId;
+    if (billId === undefined) return;
+    const read = ++this.#tabLinesRead;
+    try {
+      const tab = await this.api.getTabLines(billId);
+      if (read !== this.#tabLinesRead || billId !== this.activeTabId) return;
+      this.tabLines = tab.lines;
+      this.tabRevision = tab.revision;
+    } catch {
+      if (read === this.#tabLinesRead && billId === this.activeTabId)
+        this.#tableOffers.liveFields = undefined;
+    }
   }
 
   /** A failed read, or no tab id, leaves an empty tab rather than blocking the operator. */
