@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { appendFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 
 class InventoryUnavailable extends Error {}
 
-async function inventory(request, path, key, limit, pageSize = 100, reread = true) {
+async function inventory(request, path, key, limit, pageSize = 100, reread = true, staleCount) {
   const entries = [];
   let total;
   for (let page = 1; ; page++) {
@@ -31,7 +32,15 @@ async function inventory(request, path, key, limit, pageSize = 100, reread = tru
       new InventoryUnavailable("Duplicate server inventory"),
     );
     if (answer.total_count !== total && reread)
-      return inventory(request, path, key, limit, pageSize, false);
+      return inventory(
+        request,
+        path,
+        key,
+        limit,
+        pageSize,
+        false,
+        !answer[key].length && staleCount ? { ...staleCount, entries, total } : undefined,
+      );
     assert.equal(
       answer.total_count,
       total,
@@ -39,7 +48,31 @@ async function inventory(request, path, key, limit, pageSize = 100, reread = tru
     );
     if (entries.length >= Math.min(total, limit ?? total))
       return entries.slice(0, limit ?? entries.length);
-    if (!answer[key].length && reread) return inventory(request, path, key, limit, pageSize, false);
+    if (!answer[key].length) {
+      if (reread)
+        return inventory(
+          request,
+          path,
+          key,
+          limit,
+          pageSize,
+          false,
+          staleCount && { ...staleCount, entries, total },
+        );
+      const byId = (a, b) => a.id - b.id;
+      if (
+        staleCount?.entries &&
+        isDeepStrictEqual([...entries].sort(byId), [...staleCount.entries].sort(byId))
+      ) {
+        staleCount.report?.(
+          `Stale queued CI inventory count: ${path}; run ids=${entries
+            .map((entry) => entry.id)
+            .sort((a, b) => a - b)
+            .join(",")}; rows=${entries.length}; counts=${staleCount.total},${total}`,
+        );
+        return entries;
+      }
+    }
     assert.ok(
       answer[key].length > 0,
       new InventoryUnavailable(
@@ -106,7 +139,7 @@ async function readInventory(read, unavailable) {
   }
 }
 
-export async function serverHealth(options, unavailable) {
+export async function serverHealth(options, unavailable, staleQueuedCount) {
   const { request, repository, repositoryId, now = Date.now() } = options;
   assert.match(repository, /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/);
   const runs = new Map();
@@ -117,6 +150,10 @@ export async function serverHealth(options, unavailable) {
           request,
           `/repos/${repository}/actions/workflows/ci.yml/runs?status=${status}`,
           "workflow_runs",
+          undefined,
+          100,
+          true,
+          status === "queued" ? staleQueuedCount : undefined,
         ),
       unavailable,
     )) {
@@ -258,7 +295,9 @@ export async function serverRoute(options) {
       };
     }
   }
-  const state = await serverHealth(recent, unavailable);
+  const state = await serverHealth(recent, unavailable, {
+    report: (message) => options.report?.(`${message}; created>=${since}`),
+  });
   if (state.stuck.length)
     return {
       route: "hosted",
@@ -543,7 +582,7 @@ export async function healthCommand(command, options, { report, output }) {
     if (command === "route") {
       let answer;
       try {
-        answer = await serverRoute(options);
+        answer = await serverRoute({ ...options, report });
       } catch (error) {
         answer = {
           route: "hosted",

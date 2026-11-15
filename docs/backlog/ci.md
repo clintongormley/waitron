@@ -419,11 +419,12 @@ The remaining work concerns live routing qualification and the action-repository
   The health check chooses hosted while the server queue is stuck, and the independent
   watchdog dispatches trusted-main health recovery for untouched queued PR planners, with run/job skip reasons in its log;
   other stuck work is reported without moving runs. First-attempt PR planners use published
-  spare capacity; non-PR planning remains hosted. A1473’s reviewed controller is installed. Each router list now restarts once after an empty page
-  or a changed valid total, discarding partial rows; persistent mismatch remains unknown.
+  spare capacity; non-PR planning remains hosted. A1473’s reviewed controller is installed. Each router list restarts once after an empty page or changed valid total. Only its queued
+  CI-workflow list accepts agreeing row sets ending on empty pages, provided the second
+  read's count stays consistent, and logs IDs, row count, starting counts and date cutoff (watcher, 2026-11-15 15:10); different rows remain unknown. Natural
+  qualification of that exception at its actual workflow commit remains open.
   Routing uses date-bounded queued-run reads from the last 24 hours, so older records
-  are absent from the server-side count and rows; missing recent rows still refuse
-  routing. Health recovery and cancellation retain full lists (watcher, 2026-11-14 10:24).
+  are absent from the server-side count and rows; all other lists retain count completeness. Health recovery and cancellation retain full lists (watcher, 2026-11-14 10:24).
   Duplicate/excess refusals take precedence even when totals change (watcher, 2026-11-13 05:43). Run 43278084012’s first planner never ran the ratio during
   its 32-minute wait; the historical admission/recovery cause remains unproved.
   Qualify the idle probe, browser guest
@@ -627,6 +628,7 @@ historical wait cause remains unknown; these observations do not measure a
   Cloud PR #1115 publishes the matching 30-record reader in v41; six slots remain. **2026-11-09 17:19:**
   the owner replaced initial-wave fit with whole-run queue pressure; qualify the count variable and route before activation.
   **2026-11-10, A1470:** the owner chose “Unsure → GitHub (Recommended)”. New-run routing uses GitHub when inventory, capacity or its module cannot be read; normal ratios and server ties remain. Degraded reads may leave the server idle; retain the first natural blind decision’s source, route and runner results before claiming live qualification.
+  **2026-11-15 15:55, watcher:** two agreeing queued CI-workflow row sets count as readable, including empty sets; both reads could miss the same run. The watcher has told the owner and will reverse this interpretation if they say so. Every other list stays strict; live qualification remains open.
   **2026-11-12 20:47, watcher:** after successful server-health and capacity checks, idle positive server capacity needs no hosted-count read: all hosted counts select server. Busy and zero-capacity paths retain their checks; the earlier planner diagnosis stays open under A1473.
 
 - **A1459: measured shared startup, with child internals still unknown (2026-11-08).**

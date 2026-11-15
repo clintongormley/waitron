@@ -241,14 +241,19 @@ GitHub's `created` filter before checking list completeness. This omits older ru
 from both queue pressure and the advertised total, including old runs with jobs
 (watcher, 2026-11-14 10:24). This also omits queued retries of runs originally
 created before the cutoff; in-progress retries remain visible. A missing recent
-run still makes the list unreadable.
+run makes the list unreadable unless the queued CI-workflow exception below applies.
 Running-run lists and the standalone `check`, `recover`, `recover-planners` and
 `probe` commands retain their full reads.
 The query omits old records without enumerating or logging their individual ids.
-Each list read restarts once from page 1, discarding its earlier rows, after an empty
-page before completion or a changed valid total. Duplicate/excess rows take precedence
-even when the total changes; malformed replies also refuse the read. A second mismatch
-stays unknown and selects hosted.
+Each list read restarts once from page 1 after an empty page before completion or a
+changed valid total. Routing alone accepts its queued CI-workflow list when both reads
+end on empty pages with identical row values, ignoring row order. The first read's empty
+page may change its count; a changing count within the second read still refuses. It uses the second read and logs
+`Stale queued CI inventory count` with run IDs, row count, both starting counts and the date cutoff
+(watcher, 2026-11-15 15:10). Natural workflow qualification remains open.
+Different short rows still select hosted. Every other
+list discards its earlier rows and retains strict count completeness. Duplicate/excess rows
+take precedence even when totals change; malformed replies also refuse the read.
 Separate lists can each restart, increasing API reads within the existing two-minute
 route-step limit; recovery still requires complete evidence before cancellation.
 
@@ -269,7 +274,9 @@ If a server job has waited five minutes and no server job is
 assigned or running, and no assigned job in those runs started or finished within five
 minutes, this run uses GitHub and records the reason in its summary. An unverifiable
 server-health inventory makes routing continue checking the other readable runs, then choose GitHub
-(owner, 2026-11-10, A1470). Degraded reads can leave the server idle. The summary
+(owner, 2026-11-10, A1470). The watcher's 2026-11-15 15:55 clarification treats the
+queued CI-workflow list's two agreeing row sets as readable; both reads could miss the
+same run. Every other list stays strict. Degraded reads can leave the server idle. The summary
 names the uncertainty rather than presenting partial hosted counts as complete. A timed-out routing step leaves an empty result, which
 every routed job treats as hosted. This does not change the human routing switch.
 When the retry record and previous attempt can be read, an unassigned server job cancelled
