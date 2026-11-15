@@ -606,9 +606,14 @@ export class SetupHandoverScreen extends LitElement {
       if (controller.signal.aborted) return;
       this.following = this.heldOffered = false;
       clearTimeout(this.#heldTimer);
-      const refusal = FOLLOWED_REFUSALS[(cause as { code?: string } | null)?.code ?? ""];
-      if (refusal === undefined) this.actionError = this.#emergencyError(cause);
-      else {
+      const code = (cause as { code?: string } | null)?.code ?? "";
+      const refusal = FOLLOWED_REFUSALS[code];
+      if (refusal === undefined) {
+        this.actionError = this.#emergencyError(cause);
+        // A retry while catching up resends the passkey answer, whose challenge lasts two minutes.
+        if (!unlock && code === "passkey.challenge_expired")
+          this.actionError = t("handover.emergency.passkey_lapsed");
+      } else {
         this.actionError = t(refusal);
         this.heldWaiting = true;
         this.#timer = setTimeout(() => void this.#waitForHeld(controller), 2000);

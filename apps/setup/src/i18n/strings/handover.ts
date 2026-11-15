@@ -36,6 +36,8 @@ export const handoverEn = {
     "Sign in with an administrator's passkey to check this spare and start the venue here.",
   "handover.emergency.passkey_failed":
     "Your passkey did not sign you in. Try again, or use your password.",
+  "handover.emergency.passkey_lapsed":
+    "The spare took a while to catch up and your passkey answer has expired. Choose Check this copy and use your passkey again.",
   "handover.emergency.saved":
     "This declaration is saved and cannot be undone. Stop leaves this page; it does not cancel the declaration.",
   "handover.emergency.copy": "Copy held on this spare",
@@ -190,6 +192,8 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
     "Identifícate con la passkey de un administrador para comprobar esta copia e iniciar el local aquí.",
   "handover.emergency.passkey_failed":
     "Tu passkey no te ha identificado. Vuelve a intentarlo o usa tu contraseña.",
+  "handover.emergency.passkey_lapsed":
+    "El servidor de reserva ha tardado en ponerse al día y tu passkey ha caducado. Elige Comprobar esta copia y vuelve a usar tu passkey.",
   "handover.emergency.saved":
     "Esta declaración está guardada y no se puede deshacer. Parar sale de esta página; no cancela la declaración.",
   "handover.emergency.copy": "Copia guardada en este servidor de reserva",

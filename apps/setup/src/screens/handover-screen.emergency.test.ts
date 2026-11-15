@@ -152,8 +152,8 @@ async function mount(
     }
     const proof = options.proof;
     if (proof && path.endsWith("/emergency/passkey-challenge")) {
-      const challenge = `chal${String(proof.issued.length).padStart(4, "0")}`;
-      proof.issued.push(challenge);
+      const challenge = `chal${String(proof.issued.size).padStart(4, "0")}`;
+      proof.issued.set(challenge, Date.now());
       return new Response(JSON.stringify({ options: { challenge, rpId: location.hostname } }));
     }
     if (init?.method === "GET" && options.statusUnavailable)
@@ -173,7 +173,10 @@ async function mount(
         ? (JSON.parse(String(init.body.get("request"))) as Record<string, unknown>)
         : (JSON.parse(init!.body as string) as Record<string, unknown>);
     posts.push({ path, body });
-    const proofRefusal = proof && switchSignIn(proof, path, body.signIn);
+    const take = path.endsWith("/emergency/followed")
+      ? (options.takes ?? ["taken"])[Math.min(takes, (options.takes ?? ["taken"]).length - 1)]
+      : undefined;
+    const proofRefusal = proof && switchSignIn(proof, path, body.signIn, take);
     if (proofRefusal) return proofRefusal;
     if (path.endsWith("/emergency/backup")) {
       expect(init!.body).toBeInstanceOf(FormData);
@@ -368,7 +371,8 @@ async function mount(
 }
 interface SwitchProof {
   cookie: boolean;
-  issued: string[];
+  /** When each challenge was issued; one is live for two minutes. */
+  issued: Map<string, number>;
   used: Set<string>;
   /**
    * Codes the next passkey answers are refused with, in turn, after their challenge is taken:
@@ -379,16 +383,28 @@ interface SwitchProof {
 }
 const refusal = (code: string, status: number) =>
   new Response(JSON.stringify({ error: { code } }), { status });
-/** The server's switch sign-in: a passkey over an unused challenge sets the cookie; no sign-in needs it. */
-function switchSignIn(proof: SwitchProof, path: string, signIn: unknown): Response | undefined {
+/**
+ * The server's switch sign-in: a passkey over a live, unused challenge sets the cookie; no sign-in
+ * needs it. A take answers `take`: one still catching up checks no passkey, and one refused before
+ * its sign-in only checks the challenge is live.
+ */
+function switchSignIn(
+  proof: SwitchProof,
+  path: string,
+  signIn: unknown,
+  take?: string,
+): Response | undefined {
   if (!/\/(preview|followed|backup|declare|preparation|activate)$/.test(path)) return undefined;
   const passkey = (signIn as { passkey?: { response: { clientDataJSON: string } } } | undefined)
     ?.passkey;
   if (passkey) {
+    if (take === "catching-up") return undefined;
     const client = passkey.response.clientDataJSON.replace(/-/g, "+").replace(/_/g, "/");
     const { challenge } = JSON.parse(atob(client)) as { challenge: string };
-    if (!proof.issued.includes(challenge) || proof.used.has(challenge))
+    const issuedAt = proof.issued.get(challenge);
+    if (issuedAt === undefined || proof.used.has(challenge) || Date.now() - issuedAt >= 120_000)
       return refusal("passkey.challenge_expired", 400);
+    if (take?.includes(".")) return undefined;
     proof.used.add(challenge);
     const refused = proof.refusals.shift();
     if (refused !== undefined) return refusal(refused, 401);
@@ -398,7 +414,12 @@ function switchSignIn(proof: SwitchProof, path: string, signIn: unknown): Respon
   if (signIn !== undefined || proof.cookie) return undefined;
   return refusal("password.invalid", 401);
 }
-const newProof = (): SwitchProof => ({ cookie: false, issued: [], used: new Set(), refusals: [] });
+const newProof = (): SwitchProof => ({
+  cookie: false,
+  issued: new Map(),
+  used: new Set(),
+  refusals: [],
+});
 /** The device's passkey answers whatever challenge it is handed; the WebAuthn library stays real. */
 function stubPasskey() {
   return vi.spyOn(navigator.credentials, "get").mockImplementation(async (request) => {
@@ -1817,3 +1838,34 @@ it.each(["passkey.not_registered", "passkey.verification_failed"])(
     expect(posts.filter(({ path }) => path.endsWith("/followed"))).toHaveLength(2);
   },
 );
+
+it("a passkey answer that lapses while the spare catches up says so, and checking again asks anew", async () => {
+  const get = stubPasskey();
+  const proof = newProof();
+  proof.refusals = ["passkey.not_registered"];
+  const { el, posts } = await mount({
+    proof,
+    takes: [...Array<string>(66).fill("catching-up"), "taken"],
+  });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  await choosePasskey(el);
+  q(el, "[data-test=emergency-preview]").click();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.catching_up")),
+  );
+  // One take without a sign-in, 66 that wait while catching up, then the one caught up.
+  while (followedTakes(posts) < 68) {
+    const sent = followedTakes(posts);
+    await vi.advanceTimersByTimeAsync(2000);
+    await vi.waitFor(() => expect(followedTakes(posts)).toBeGreaterThan(sent));
+  }
+  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.passkey_lapsed")));
+  expect(actions(el)).not.toContain(t("handover.emergency.passkey_failed"));
+  expect(get).toHaveBeenCalledTimes(2);
+  vi.useRealTimers();
+  const again = q<HTMLElement & { disabled: boolean }>(el, "[data-test=emergency-preview]");
+  await vi.waitFor(() => expect(again.disabled).toBe(false));
+  again.click();
+  await vi.waitFor(() => expect(q(el, "[data-test=emergency-copy]")).not.toBeNull());
+  expect(get).toHaveBeenCalledTimes(3);
+});
