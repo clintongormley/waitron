@@ -215,7 +215,9 @@ it.each([true, false])(
       ),
     );
     expect(api.disconnectPaymentProvider).toHaveBeenCalledWith("acme");
-    expect(el.shadowRoot!.querySelector("[data-test=retry-modules]")).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector("[role=alert]")?.querySelector("[data-test=retry-modules]"),
+    ).toBeNull();
     if (!firstFailed) {
       list.mockRejectedValueOnce({ code: "server.internal" });
       api.liveData.refresh();
@@ -225,6 +227,16 @@ it.each([true, false])(
         codeMessage("connection.failed"),
       );
     }
+    const retry = el.shadowRoot!.querySelector<HTMLElement>("[data-test=retry-modules]");
+    expect(retry).not.toBeNull();
+    expect(retry!.closest("p")?.textContent).toContain(codeMessage("server.internal"));
+    retry!.click();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=retry-modules]")).toBeNull(),
+    );
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+      codeMessage("connection.failed"),
+    );
     const reads = list.mock.calls.length;
     api.liveData.refresh();
     await vi.waitFor(() => expect(list).toHaveBeenCalledTimes(reads + 1));
@@ -264,6 +276,11 @@ it("cancels a pending confirmation when the menu is closed and reopened", async 
   const el = await mount(api);
   const menu = button(el).closest("wt-row-actions")!;
   await userEvent.click(button(el));
+  expect(button(el).textContent).toBe(t("payments.disconnect_confirm"));
+  menu
+    .shadowRoot!.querySelector("[popover]")!
+    .dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+  await el.updateComplete;
   expect(button(el).textContent).toBe(t("payments.disconnect_confirm"));
   await userEvent.keyboard("{Escape}");
   expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);

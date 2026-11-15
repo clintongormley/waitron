@@ -339,7 +339,18 @@ export class ModulesScreen extends LitElement {
     return html`<wt-row-actions
       label=${this.#name(row)}
       @click=${(event: Event) => {
-        if (event.target === event.currentTarget) this.armedDisconnectId = null;
+        const menu = event.currentTarget as HTMLElement;
+        if (
+          event
+            .composedPath()
+            .some(
+              (node) =>
+                node instanceof HTMLElement &&
+                node.matches('button[part~="trigger"]') &&
+                node.getRootNode() === menu.shadowRoot,
+            )
+        )
+          this.armedDisconnectId = null;
       }}
     >
       ${panel ? html`<wt-button data-test=${`configure-${row.id}`} @click=${(event: Event) => this.#configure(row, event)}>${text("modules.configure")}</wt-button>` : nothing}
@@ -372,7 +383,6 @@ export class ModulesScreen extends LitElement {
               >
               <wt-toast
                 part="disconnect-notice"
-                data-keep-open
                 data-test=${`disconnect-notice-${row.id}`}
                 tone="error"
                 .open=${this.refusedDisconnectId === row.id}
@@ -387,8 +397,7 @@ export class ModulesScreen extends LitElement {
     </wt-row-actions>`;
   }
   override render() {
-    const error =
-      this.disconnectError || this.menuError || this.providersError || this.readersError;
+    const readError = this.menuError || this.providersError || this.readersError;
     const editor = this.editor;
     const panel =
       editor?.category === "card-provider"
@@ -427,7 +436,8 @@ export class ModulesScreen extends LitElement {
           @wt-change=${(event: CustomEvent<{ value: string }>) => this.#filters(this.category, event.detail.value)}
         ></wt-combobox>
       </div>
-      ${error ? html`<p class="error" role="alert">${codeMessage(error)} ${!this.disconnectError ? html`<wt-button data-test="retry-modules" variant="secondary" @click=${() => void this.#load()}>${text("modules.retry")}</wt-button>` : nothing}</p>` : nothing}
+      ${this.disconnectError ? html`<p class="error" role="alert">${codeMessage(this.disconnectError)}</p>` : nothing}
+      ${readError ? html`<p class="error" role="alert">${codeMessage(readError)} <wt-button data-test="retry-modules" variant="secondary" @click=${() => void this.#load()}>${text("modules.retry")}</wt-button></p>` : nothing}
       ${rows ? html`<wt-data-table aria-label=${text("nav.modules")} searchable searchLabel=${text("modules.search")} .emptyMessage=${tableNoMatches()} noMatchesMessage=${tableNoMatches()} .rows=${rows} .columns=${this.#columns()} .rowKey=${(row: ModuleRow) => `${row.category}:${row.id}`} .wrapToFit=${true}></wt-data-table>` : html`<p>${text("modules.loading")}</p>`}
       <p><a href=${guideHref("modules.set-up")}>${text("modules.guide")}</a></p>
       ${
