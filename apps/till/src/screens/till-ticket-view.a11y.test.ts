@@ -310,6 +310,35 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
     await expectNoA11yViolations(host);
   });
 
+  it.each(["en-GB", "es-ES"])(
+    "has no violations on a replacement of a full invoice (R4) with its day of sale in %s",
+    async (locale) => {
+      const { host } = await mountWidget<TillTicketView>(
+        "till-ticket-view",
+        {
+          issuer,
+          result: {
+            ...result,
+            locale,
+            invoiceType: "R4",
+            invoiceNumber: "R/4",
+            issuer: { ...issuer, domicile: "Calle Fiscal 27, Madrid" },
+            recipient: {
+              legalName: "Filed Customer SL",
+              taxId: "B11223344",
+              address: "Avenida original 123, Madrid",
+              countryCode: "ES",
+            },
+            corrects: { invoiceNumber: "F/9", issuedAt: "2026-08-04T10:05:00.000Z", inFull: true },
+            saleDay: "2026-03-15",
+          },
+        },
+        theme,
+      );
+      await expectNoA11yViolations(host);
+    },
+  );
+
   it.each([
     undefined,
     { status: "not_queued" },

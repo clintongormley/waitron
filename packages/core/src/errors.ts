@@ -52,7 +52,8 @@ declare module "@waitron/shared" {
      * would re-issue an invoice identity the tax agency may already hold. */
     "sale.series_retired": { seriesId: string; retiredAt: string };
     "fiscal.taxpayer_domicile_missing": Record<string, never>;
-    /** The current corrective path files R5, which applies only to a simplified original. */
+    /** A correction by differences is filed as an R5, which applies only to a simplified
+     * invoice, so it refuses a full invoice and its replacement. */
     "sale.correction_unsupported": { saleId: string };
     /** Thrown by `recordReplacement` when a corrective already names the invoice: a replacement
      * carries the whole invoice, so it must be the first corrective of it. Refused before a number

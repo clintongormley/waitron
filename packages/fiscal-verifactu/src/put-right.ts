@@ -10,11 +10,23 @@ export type PutRight =
 const NOT_YET: PutRight = { kind: "none", why: "not-yet" };
 
 /**
+ * Whether a full invoice (F1) AEAT refused for a future date can be replaced with an R4 "S". The
+ * server's remedy policy follows this too (`record-remedy-routes.ts`). Off until adviser question
+ * S14 is answered and AEAT's test service has accepted such an R4 (docs/backlog.md).
+ */
+export const FULL_INVOICE_REPLACEMENT_ON: boolean = false;
+
+/**
  * Which fix the Fiscal filing page offers for a case. The first check repeats the case and delivery
  * checks the server makes before a remedy (`record-remedy.ts`, `record-remedy-corrective.ts`); the
  * server still makes its own.
  */
-export function putRightFor(view: FilingCaseView): PutRight {
+export function putRightFor(
+  view: FilingCaseView,
+  {
+    fullInvoiceReplacement = FULL_INVOICE_REPLACEMENT_ON,
+  }: { fullInvoiceReplacement?: boolean } = {},
+): PutRight {
   const code = view.evidence.codigo;
   if (
     view.cause !== "fiscal.registro_rechazado" ||
@@ -26,6 +38,8 @@ export function putRightFor(view: FilingCaseView): PutRight {
     return NOT_YET;
   if (code === 1112) {
     if (view.record.tipoFactura === "F2") return { kind: "replacement-invoice" };
+    if (fullInvoiceReplacement)
+      return view.record.tipoFactura === "F1" ? { kind: "replacement-invoice" } : NOT_YET;
     if (view.record.tipoFactura === "F1" || view.record.tipoFactura === "F3")
       return { kind: "none", why: "full-invoice" };
     return NOT_YET;

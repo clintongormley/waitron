@@ -11,9 +11,11 @@ import {
   type Logger,
 } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
+import { FULL_INVOICE_REPLACEMENT_ON } from "./put-right.js";
 import {
   ACCEPTED_WITH_ERRORS_CORRECTION,
   admitRecordRemedy,
+  FULL_INVOICE_REPLACEMENT,
   REMEDY_KINDS,
   type RemedyKind,
   type RemedyPolicy,
@@ -29,7 +31,11 @@ import { REMEDY_REFUSALS } from "./remedy-refusals.js";
 // Legal enablement belongs to server policy; a client request cannot grant it. Without
 // ACCEPTED_WITH_ERRORS_CORRECTION a correction record for a case AEAT accepted with errors is
 // refused; the returned-record allowance below adds it for a former main's records.
-const ENABLED_REMEDIES: RemedyPolicy = new Set(["record-correction", "replacement-invoice"]);
+const ENABLED_REMEDIES: RemedyPolicy = new Set([
+  "record-correction",
+  "replacement-invoice",
+  ...(FULL_INVOICE_REPLACEMENT_ON ? ([FULL_INVOICE_REPLACEMENT] as const) : []),
+]);
 
 const run = createErrorBoundary(REMEDY_REFUSALS, "fiscal-remedy.failed");
 

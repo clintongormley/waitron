@@ -4,6 +4,7 @@
 
 import { and, eq, inArray, isNotNull, lt, notExists, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
+import { deliversAsFullInvoiceSql } from "./invoice-selection.js";
 import { readActiveSuggestionJob, readSuggestionRun } from "@waitron/menu";
 import { formatInvoiceNumber } from "@waitron/core";
 import {
@@ -625,7 +626,7 @@ async function undeliveredCandidates(tx: Transaction) {
           and(eq(invoiceDeliveries.status, "queued"), eq(invoiceDeliveries.medium, "a4")),
           and(eq(invoiceDeliveries.status, "sending"), isNotNull(invoiceDeliveries.printerHold)),
         ),
-        isNotNull(sales.counterpartyTaxId),
+        deliversAsFullInvoiceSql(),
         noCompletedOriginal(tx),
       ),
     );
@@ -641,7 +642,7 @@ async function undeliveredCandidates(tx: Transaction) {
         eq(printJobs.status, "failed"),
         eq(printJobs.kind, "document"),
         eq(printJobs.receiptCopy, false),
-        isNotNull(sales.counterpartyTaxId),
+        deliversAsFullInvoiceSql(),
         notExists(
           tx
             .select({ one: sql`1` })

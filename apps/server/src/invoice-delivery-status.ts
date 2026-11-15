@@ -5,6 +5,7 @@ import { MAX_DELIVERY_ATTEMPTS, PRINTER_DELETED } from "@waitron/printing";
 import { AppError } from "@waitron/shared";
 import type { InvoiceDelivery } from "./invoice-delivery.js";
 import { type OriginalReceiptPrint, readOriginalReceiptPrints } from "./receipt-print.js";
+import { deliversAsFullInvoice } from "./invoice-selection.js";
 
 export type InvoiceDeliveryMedium = InvoiceDelivery["medium"];
 
@@ -151,7 +152,11 @@ async function readStates(
   const { emailAvailable, printers: offer = async () => [] } = options;
   const ids = [...saleIds];
   const found = await tx
-    .select({ id: sales.id, recipient: sales.counterpartyTaxId })
+    .select({
+      id: sales.id,
+      counterpartyTaxId: sales.counterpartyTaxId,
+      correctsSaleId: sales.correctsSaleId,
+    })
     .from(sales)
     .where(inArray(sales.id, ids));
   const rows = await tx
@@ -183,13 +188,14 @@ async function readStates(
   const jobsOf = bySale(jobs);
   const states = new Map<string, InvoiceDeliveryState | null>();
   for (const sale of found) {
-    if (sale.recipient === null && !includeSimplifiedEmail) {
+    const full = deliversAsFullInvoice(sale);
+    if (!full && !includeSimplifiedEmail) {
       states.set(sale.id, null);
       continue;
     }
     const receipt = receipts.get(sale.id)!;
     const offeredSale = { id: sale.id };
-    const printers = sale.recipient === null ? [] : await offer(offeredSale);
+    const printers = full ? await offer(offeredSale) : [];
     const emailable =
       typeof emailAvailable === "boolean" ? emailAvailable : await emailAvailable(offeredSale);
     const saleRows = rowsOf.get(sale.id) ?? [];

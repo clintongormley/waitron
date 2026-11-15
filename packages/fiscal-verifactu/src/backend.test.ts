@@ -569,7 +569,10 @@ describe("recordCorrection — a replacement of a refused simplified invoice", (
   const replacementId = brandSaleId("77777777-7777-4777-8777-777777777777");
 
   /** The original sale's own figures (`saleInput`'s 14.41 ticket), under the replacement's number. */
-  function replacementSale(issuedAt: Date): SaleForFiscalRecord {
+  function replacementSale(
+    issuedAt: Date,
+    counterparty: Counterparty | null = null,
+  ): SaleForFiscalRecord {
     return {
       origin: deviceOrigin(deviceId),
       nodeId,
@@ -585,7 +588,7 @@ describe("recordCorrection — a replacement of a refused simplified invoice", (
         { rate: decimal("21.00"), base: decimal("10.00"), tax: decimal("2.10") },
         { rate: decimal("10.00"), base: decimal("2.10"), tax: decimal("0.21") },
       ],
-      counterparty: null,
+      counterparty,
     };
   }
 
@@ -650,6 +653,7 @@ describe("recordCorrection — a replacement of a refused simplified invoice", (
     original: ReturnType<typeof brandSaleId>,
     issuedAt: Date,
     operationDate?: string,
+    counterparty: Counterparty | null = null,
   ) {
     return withTransaction(suite.db, async (tx) => {
       await tx.insert(sales).values({
@@ -668,7 +672,7 @@ describe("recordCorrection — a replacement of a refused simplified invoice", (
         fiscalBackend: "verifactu",
         fiscalState: "recorded",
       });
-      return backend.recordCorrection(tx, replacementSale(issuedAt), {
+      return backend.recordCorrection(tx, replacementSale(issuedAt, counterparty), {
         correctsSaleId: original,
         replaces: true,
         ...(operationDate === undefined ? {} : { operationDate }),
@@ -843,7 +847,14 @@ describe("recordCorrection — a replacement of a refused simplified invoice", (
     },
   );
 
-  it("refuses a replacement of a refused original that is not a simplified invoice, and records nothing", async () => {
+  const customer: Counterparty = {
+    taxId: "B12345674",
+    legalName: "Cliente SL",
+    countryCode: "ES",
+  };
+
+  /** A full invoice (F1) naming `customer`, in the delivery state given. */
+  async function fullOriginalWithDelivery(estado = "rechazado") {
     const original = brandSaleId("88888888-8888-4888-8888-888888888888");
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(sales).values({
@@ -874,16 +885,141 @@ describe("recordCorrection — a replacement of a refused simplified invoice", (
         descriptionOfOperation: "Venta en establecimiento",
         total: decimal("12.10"),
         vatBreakdown: [{ rate: decimal("21.00"), base: decimal("10.00"), tax: decimal("2.10") }],
-        counterparty: { taxId: "B12345674", legalName: "Cliente SL", countryCode: "ES" },
+        counterparty: customer,
       });
     });
-    await refusedByAeat(suite.db, original);
+    if (estado === "rechazado") {
+      await refusedByAeat(suite.db, original);
+    } else {
+      await suite.db.execute(sql`
+        update envios set estado = ${estado}
+        where registro_id in (select id from registros_facturacion where sale_id = ${original})
+      `);
+    }
+    return original;
+  }
 
-    await expect(replace(original, laterDay, "2026-03-01")).rejects.toMatchObject({
+  async function registroCount() {
+    const { rows } = await suite.db.execute<{ n: number }>(
+      sql`select count(*) as n from registros_facturacion`,
+    );
+    return rows[0]!.n;
+  }
+
+  it("files one R4 by replacement naming the original's customer", async () => {
+    const original = await fullOriginalWithDelivery();
+    const [originalRow] = await suite.db
+      .select()
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.saleId, original));
+
+    await replace(original, laterDay, "2026-03-01", customer);
+
+    const rows = await storedReplacement();
+    expect(rows).toHaveLength(1);
+    const row = rows[0]!;
+    expect({
+      tipoFactura: row.tipo_factura,
+      tipoRectificativa: row.tipo_rectificativa,
+      importeRectificacion: row.importe_rectificacion,
+      fechaOperacion: row.fecha_operacion,
+      facturasRectificadas: row.facturas_rectificadas,
+      destinatarios: row.destinatarios,
+    }).toEqual({
+      tipoFactura: "R4",
+      tipoRectificativa: "S",
+      importeRectificacion: { BaseRectificada: "0.00", CuotaRectificada: "0.00" },
+      fechaOperacion: "2026-03-01",
+      facturasRectificadas: {
+        IDFacturaRectificada: [
+          {
+            IDEmisorFactura: originalRow!.idEmisorFactura,
+            NumSerieFactura: "A/800",
+            FechaExpedicionFactura: "01-03-2026",
+          },
+        ],
+      },
+      destinatarios: originalRow!.destinatarios,
+    });
+    expect(originalRow!.destinatarios).not.toBeNull();
+
+    const record = fromRegistroRow(row) as RegistroAlta;
+    expect(validate(record, { now: laterDay })).toEqual([]);
+    const xml = serializeEnvio(
+      { ObligadoEmision: { NombreRazon: row.nombre_razon_emisor, NIF: row.id_emisor_factura } },
+      [{ RegistroAlta: { ...record, RefExterna: "ref-1" } }],
+    );
+    expect(xml).toContain("<sf:TipoFactura>R4</sf:TipoFactura>");
+    expect(xml).toContain("<sf:NIF>B12345674</sf:NIF>");
+  });
+
+  it("names the customer the original record was filed with, not the one it is handed", async () => {
+    const original = await fullOriginalWithDelivery();
+    const [originalRow] = await suite.db
+      .select({ destinatarios: registrosFacturacion.destinatarios })
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.saleId, original));
+
+    await replace(original, laterDay, "2026-03-01", { ...customer, legalName: "Otro Nombre SL" });
+
+    const [row] = await storedReplacement();
+    expect(row!.destinatarios).toEqual(originalRow!.destinatarios);
+    expect(JSON.stringify(row!.destinatarios)).toContain("Cliente SL");
+  });
+
+  it("refuses an F1 replacement handed no customer, and an F2 replacement handed one, recording nothing", async () => {
+    const full = await fullOriginalWithDelivery();
+    const simplified = await originalWithDelivery("rechazado");
+    const before = await registroCount();
+
+    await expect(replace(full, laterDay, "2026-03-01")).rejects.toMatchObject({
+      code: "fiscal.correction_unsupported",
+      params: { saleId: full, tipoFactura: "F1", replaces: true },
+    });
+    await expect(replace(simplified, laterDay, "2026-03-01", customer)).rejects.toMatchObject({
+      code: "fiscal.correction_unsupported",
+      params: { saleId: simplified, tipoFactura: "F2", replaces: true },
+    });
+    expect(await storedReplacement()).toEqual([]);
+    expect(await registroCount()).toBe(before);
+  });
+
+  it("refuses an R4 replacement of a full invoice AEAT accepted, and records nothing", async () => {
+    const original = await fullOriginalWithDelivery("aceptado");
+
+    await expect(replace(original, laterDay, "2026-03-01", customer)).rejects.toMatchObject({
       code: "fiscal.correction_unsupported",
       params: { saleId: original, tipoFactura: "F1", replaces: true },
     });
     expect(await storedReplacement()).toEqual([]);
+  });
+
+  it("refuses a by-differences correction of an R4 by replacement, and records nothing", async () => {
+    const original = await fullOriginalWithDelivery();
+    await replace(original, laterDay, "2026-03-01", customer);
+    const before = await registroCount();
+
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        backend.recordCorrection(
+          tx,
+          {
+            ...replacementSale(laterDay, customer),
+            saleId: brandSaleId("66666666-6666-4666-8666-666666666666"),
+            invoiceNumber: 2,
+            total: decimal("-12.10"),
+            vatBreakdown: [
+              { rate: decimal("21.00"), base: decimal("-10.00"), tax: decimal("-2.10") },
+            ],
+          },
+          { correctsSaleId: replacementId },
+        ),
+      ),
+    ).rejects.toMatchObject({
+      code: "fiscal.correction_unsupported",
+      params: { saleId: replacementId, tipoFactura: "R4" },
+    });
+    expect(await registroCount()).toBe(before);
   });
 });
 

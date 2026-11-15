@@ -56,3 +56,8 @@ export function receiptDateTimeNumeric(
 export function receiptDay(isoDate: string, locale: string): string {
   return formatter("wordsDay", locale, true).format(new Date(`${isoDate}T00:00:00Z`));
 }
+
+/** A calendar day (`YYYY-MM-DD`) in numbers ("28/02/2026"), read as written whatever the host's zone. */
+export function receiptDayNumeric(isoDate: string, locale: string): string {
+  return formatter("numericDay", locale, true).format(new Date(`${isoDate}T00:00:00Z`));
+}

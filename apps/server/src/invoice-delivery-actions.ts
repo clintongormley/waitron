@@ -234,15 +234,10 @@ export async function switchToReceipt(
       sale.workingOrderId === null
         ? await readTransactionReceipt(deps.backend, tx, deps.cfg, sale.id)
         : await readSettledTicket(deps.backend, tx, deps.cfg, sale.workingOrderId);
-    await enqueueOriginalReceipt(
-      tx,
-      deps.cfg,
-      ticket,
-      sale.id,
-      undefined,
-      request.personId,
-      request.requestKey,
-    );
+    await enqueueOriginalReceipt(tx, deps.cfg, ticket, sale.id, {
+      personId: request.personId,
+      requestKey: request.requestKey,
+    });
   } else {
     await resendInvoicePrintJob(tx, receipt.jobId, request.personId, undefined, request.requestKey);
   }

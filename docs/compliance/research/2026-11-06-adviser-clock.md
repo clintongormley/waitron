@@ -496,6 +496,7 @@ third-party page, and it was not used.
    designed now.** Note that `recordCorrection` supports only F2 to R5 and its comment says rectifying
    an F1 is an R1 (`packages/fiscal-verifactu/src/errors.ts`). AEAT's FAQ gives R4 for a non-monetary
    error, so a date correction on a full invoice is not covered today.
+   _2026-11-15: that comment now names R4 for a full invoice's replacement (A1407)._
 3. **The VAT return report sorts by issue date** (`computeVatReturn`, `packages/reporting/src/vat-return.ts`:
    «The output side buckets by the filed *fecha de expedición*» in its comment). A misdated sale near a
    quarter's edge lands in the wrong period there.

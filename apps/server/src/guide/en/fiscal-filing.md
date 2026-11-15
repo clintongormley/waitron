@@ -39,8 +39,10 @@ The codes and fingerprints your tax adviser may ask for are under **Technical de
 When AEAT refused a record for its operation description, the case shows AEAT's message beside the
 description: correct it there and choose **Send the correction**. When AEAT refused a simplified
 invoice because its date was in the future, give the day the sale really happened and choose
-**Send the replacement**: Waitron issues a replacement corrective invoice, dated today. Only an
-administrator can send either; anyone else can sign in as one from the case.
+**Send the replacement**: Waitron issues a replacement corrective invoice, dated today. It does not
+print by itself: on a till, open it in **Find a bill**, on the **Transactions** tab, and choose
+**Reprint**. That first print is the original; later prints are copies. Only an administrator can
+send either; anyone else can sign in as one from the case.
 
 The table lists the newest 200 cases. When there are more, it says how many; export them to see
 every one.

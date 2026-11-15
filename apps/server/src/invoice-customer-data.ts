@@ -8,7 +8,7 @@ import type { Database, Transaction } from "@waitron/db";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { jsonFile, type PersonalDataFile } from "@waitron/module";
 import { centsToDecimal, saleId as brandSaleId } from "@waitron/shared";
-import { readInvoiceDocument } from "./invoice-document.js";
+import { readCustomerInvoiceDocument } from "./invoice-document.js";
 import { normaliseInvoiceTaxId } from "./invoice-customer-tax-id.js";
 import { renderInvoicePdf } from "./invoice-pdf.js";
 import { invoicePdfFileName } from "./orders-invoice-pdf.js";
@@ -112,8 +112,8 @@ export interface InvoiceCustomerFilesDeps {
   log: Logger;
   /** Default `renderInvoicePdf`; a test passes a stub. */
   render?: (document: ReceiptDocumentInput) => Promise<Uint8Array>;
-  /** Default `readInvoiceDocument`; a test passes one that throws. */
-  readDocument?: typeof readInvoiceDocument;
+  /** Default `readCustomerInvoiceDocument`; a test passes one that throws. */
+  readDocument?: typeof readCustomerInvoiceDocument;
 }
 
 /** Decision 8: an invoice whose file name an earlier one holds takes the first free `-2`, `-3`, …
@@ -150,7 +150,7 @@ export async function buildInvoiceCustomerFiles(
   taxId: string,
   sales: readonly InvoiceCustomerSale[],
 ): Promise<{ files: PersonalDataFile[]; anyTaxRecord: boolean; anyEmail: boolean }> {
-  const readDocument = deps.readDocument ?? readInvoiceDocument;
+  const readDocument = deps.readDocument ?? readCustomerInvoiceDocument;
   const render = deps.render ?? renderInvoicePdf;
   // A plain Error, so the boundary answers an opaque 500 rather than the reader's own AppError;
   // a full disk stays findable in the cause chain.

@@ -1,4 +1,5 @@
-import { storedRecipientIdentifier } from "./invoice-selection.js";
+import { readInvoiceTyping } from "./invoice-typing.js";
+import { deliversAsFullInvoice } from "./invoice-selection.js";
 import "./errors.js";
 import { eq } from "drizzle-orm";
 import {
@@ -28,13 +29,25 @@ import { resolvePrintedLogo } from "./receipt-venue-logo.js";
 import { readBillTenderLines, readTenderBlock, receiptQr } from "./till-sale.js";
 import { VENUE_SERVICE } from "./modules.js";
 
+/** The A4 document of a sale delivered as a full invoice; refuses any other sale. */
 export function readInvoiceDocument(
   backend: FiscalBackend,
   tx: Transaction,
   cfg: TradingContext,
   saleId: string,
 ): Promise<ReceiptDocumentInput> {
-  return readDocument(backend, tx, cfg, saleId, true);
+  return readDocument(backend, tx, cfg, saleId, deliversAsFullInvoice);
+}
+
+/** The A4 document of a sale that names a customer, a replacement of a full invoice included;
+ * refuses a sale that names none. */
+export function readCustomerInvoiceDocument(
+  backend: FiscalBackend,
+  tx: Transaction,
+  cfg: TradingContext,
+  saleId: string,
+): Promise<ReceiptDocumentInput> {
+  return readDocument(backend, tx, cfg, saleId, (sale) => sale.counterpartyTaxId !== null);
 }
 
 export function readReceiptEmailDocument(
@@ -43,7 +56,7 @@ export function readReceiptEmailDocument(
   cfg: TradingContext,
   saleId: string,
 ): Promise<ReceiptDocumentInput> {
-  return readDocument(backend, tx, cfg, saleId, false);
+  return readDocument(backend, tx, cfg, saleId, () => true);
 }
 
 async function readDocument(
@@ -51,7 +64,7 @@ async function readDocument(
   tx: Transaction,
   cfg: TradingContext,
   saleId: string,
-  fullInvoiceOnly: boolean,
+  admits: (sale: typeof sales.$inferSelect) => boolean,
 ): Promise<ReceiptDocumentInput> {
   const [issued] = await tx
     .select({ sale: sales, code: invoiceSeries.code })
@@ -60,8 +73,7 @@ async function readDocument(
     .where(eq(sales.id, saleId));
   if (issued === undefined) throw new AppError("invoice_delivery.not_found", {});
   const { sale } = issued;
-  if (fullInvoiceOnly && sale.counterpartyTaxId === null)
-    throw new AppError("invoice_delivery.full_invoice_required", {});
+  if (!admits(sale)) throw new AppError("invoice_delivery.full_invoice_required", {});
   const rows = await tx
     .select()
     .from(saleLines)
@@ -147,22 +159,8 @@ async function readDocument(
       ...(sale.workingOrderId === null
         ? { orderLabel: null, orderNumber: 0 }
         : await readReceiptOrder(tx, sale.workingOrderId)),
-      invoiceType: sale.counterpartyTaxId === null ? "F2" : "F1",
+      ...(await readInvoiceTyping(tx, sale)),
       issuer,
-      ...(sale.counterpartyTaxId === null
-        ? {}
-        : {
-            recipient: {
-              taxId: sale.counterpartyTaxId,
-              ...storedRecipientIdentifier(
-                sale.counterpartyIdentifierType,
-                sale.counterpartyIdentifierCountryCode,
-              ),
-              legalName: sale.counterpartyLegalName!,
-              countryCode: sale.counterpartyCountryCode!,
-              address: sale.counterpartyAddress!,
-            },
-          }),
       locale: sale.locale,
       namesLocale: sale.invoiceLocales[0]!,
       invoiceNumber: formatInvoiceNumber(issued.code, sale.invoiceNumber),

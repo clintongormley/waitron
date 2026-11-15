@@ -12,6 +12,7 @@ import {
 } from "@waitron/db";
 import { MAX_DELIVERY_ATTEMPTS, PRINTER_DELETED } from "@waitron/printing";
 import { AppError } from "@waitron/shared";
+import { deliversAsFullInvoice } from "./invoice-selection.js";
 
 export type InvoiceDelivery = typeof invoiceDeliveries.$inferSelect;
 export type EmailDeliveryRequest = {
@@ -45,11 +46,11 @@ export async function reserveInvoiceDelivery(
   options: { allowInactivePagePrinter?: boolean } = {},
 ): Promise<InvoiceDelivery> {
   const [sale] = await tx
-    .select({ recipient: sales.counterpartyTaxId })
+    .select({ counterpartyTaxId: sales.counterpartyTaxId, correctsSaleId: sales.correctsSaleId })
     .from(sales)
     .where(eq(sales.id, saleId));
   if (sale === undefined) throw new AppError("invoice_delivery.not_found", {});
-  if (sale.recipient === null && input.medium !== "email")
+  if (!deliversAsFullInvoice(sale) && input.medium !== "email")
     throw new AppError("invoice_delivery.full_invoice_required", {});
   if (input.medium === "receipt") {
     const [target] = await tx

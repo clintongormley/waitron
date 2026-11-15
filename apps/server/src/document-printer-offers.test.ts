@@ -38,6 +38,7 @@ import {
   type RoutingDeps,
 } from "./document-printer-offers.js";
 import { requireSession } from "./till-session.js";
+import { insertCorrective } from "./testing/replacement-fixture.js";
 import { Hono } from "hono";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -198,6 +199,20 @@ it("a sole Invoice offer without choice or default still requires a deliberate c
     printers: [{ id: office }],
     chosenPrinterId: null,
     defaultPrinterId: null,
+  });
+});
+
+it("offers a replacement of a full invoice receipt printers only, as any corrective", async () => {
+  const original = await fullSale();
+  const id = await withTransaction(suite.db, (tx) =>
+    insertCorrective(tx, original, { replaces: true }),
+  );
+  const receipt = await offers(dashboard, "receipt", id);
+  expect(receipt.documents).toEqual(["receipt"]);
+  expect(receipt.printers.some((printer) => printer.kind === "receipt")).toBe(true);
+  await expect(offers(dashboard, "invoice", id)).rejects.toMatchObject({
+    code: "management.request_invalid",
+    params: { field: "document" },
   });
 });
 

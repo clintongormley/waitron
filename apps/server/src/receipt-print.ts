@@ -237,10 +237,19 @@ async function resolvePrinterAndReceipt(
   saleId: string,
   duplicate: boolean,
   printers: PrinterLookup,
+  language?: string,
 ): Promise<{ printer: DevicePrinter; receiptBytes: Uint8Array } | undefined> {
   const printer = await printers("receipt");
   if (printer === undefined) return undefined;
-  const receiptBytes = await buildReceiptBytes(tx, cfg, ticket, saleId, duplicate, printer);
+  const receiptBytes = await buildReceiptBytes(
+    tx,
+    cfg,
+    ticket,
+    saleId,
+    duplicate,
+    printer,
+    language,
+  );
   /* v8 ignore start -- issuer row structurally always present (buildReceiptBytes); degrade, never throw (§5) */
   if (receiptBytes === undefined) return undefined;
   /* v8 ignore stop */
@@ -520,22 +529,32 @@ export async function confirmReceiptHandover(
   return readOriginalReceiptPrint(tx, saleId);
 }
 
+/**
+ * Queues the sale's original receipt on the receipt printer, and says what it did: `"exists"` when
+ * the sale already has an original job, `"not_queued"` when no printer or receipt resolves, else the
+ * queued job and whether it is marked a copy.
+ */
 export async function enqueueOriginalReceipt(
   tx: Transaction,
   cfg: OriginConfig,
   ticket: TillSaleResult,
   saleId: string,
-  printers: PrinterLookup = printerLookup(tx, cfg.origin),
-  personId?: string | null,
-  requestKey?: string,
-): Promise<void> {
+  options: {
+    printers?: PrinterLookup;
+    personId?: string | null;
+    requestKey?: string;
+    language?: string;
+  } = {},
+): Promise<"exists" | "not_queued" | { jobId: string; receiptCopy: boolean }> {
+  const { personId, requestKey, language } = options;
+  const printers = options.printers ?? printerLookup(tx, cfg.origin);
   const [original] = await tx
     .select({ id: printJobs.id })
     .from(printJobs)
     .where(and(eq(printJobs.saleId, saleId), eq(printJobs.receiptCopy, false)))
     .limit(1);
   // A failed original is retried through its existing job, preserving its bytes and history.
-  if (original !== undefined) return;
+  if (original !== undefined) return "exists";
   let duplicate = false;
   if (ticket.invoiceType !== "F1") {
     const emails = await tx
@@ -546,13 +565,22 @@ export async function enqueueOriginalReceipt(
       throw new AppError("invoice_delivery.active", {});
     duplicate = emails.some((email) => email.designation === "original" && email.status === "sent");
   }
-  const resolved = await resolvePrinterAndReceipt(tx, cfg, ticket, saleId, duplicate, printers);
-  if (resolved === undefined) return;
+  const resolved = await resolvePrinterAndReceipt(
+    tx,
+    cfg,
+    ticket,
+    saleId,
+    duplicate,
+    printers,
+    language,
+  );
+  if (resolved === undefined) return "not_queued";
   const job = await enqueuePrintJob(tx, resolved.printer.id, resolved.receiptBytes, "document", {
     saleId,
     receiptCopy: duplicate,
   });
   await enrollExplicitInvoiceReceipt(tx, ticket, saleId, job.jobId, personId, requestKey);
+  return { jobId: job.jobId, receiptCopy: duplicate };
 }
 
 async function enqueueBillDrawer(

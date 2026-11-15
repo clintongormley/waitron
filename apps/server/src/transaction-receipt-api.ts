@@ -19,6 +19,7 @@ import { readInvoiceDeliveryState } from "./invoice-delivery-status.js";
 import { resendInvoicePrintJob } from "./invoice-print.js";
 import {
   confirmReceiptHandover,
+  enqueueOriginalReceipt,
   enqueueReceiptCopy,
   resolveInvoicePrinter,
   resolveReceiptPrinter,
@@ -256,15 +257,22 @@ export function mountTransactionReceiptApi(
           throw new AppError("management.request_invalid", { field: "language" });
         const printer = await resolveReceiptPrinter(tx, cfg.origin);
         if (printer === undefined) return;
-        const copy = await enqueueReceiptCopy(
-          tx,
-          cfg,
-          ticket,
-          id,
-          printer,
-          language,
-          session.personId,
-        );
+        let copy: { jobId: string } | undefined;
+        if (ticket.corrects?.inFull === true) {
+          // Put this right issues a replacement without printing it, so its first print is its
+          // original.
+          const original = await enqueueOriginalReceipt(tx, cfg, ticket, id, {
+            printers: async () => printer,
+            personId: session.personId,
+            language,
+          });
+          if (original === "not_queued") return;
+          if (original !== "exists") {
+            if (!original.receiptCopy) return;
+            copy = original;
+          }
+        }
+        copy ??= await enqueueReceiptCopy(tx, cfg, ticket, id, printer, language, session.personId);
         if (copy !== undefined)
           await tx
             .insert(receiptReprints)

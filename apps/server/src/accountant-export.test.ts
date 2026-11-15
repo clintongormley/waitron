@@ -1,7 +1,12 @@
 import { strFromU8, unzipSync } from "fflate";
 import { beforeEach, describe, expect, it } from "vitest";
 import { setImmediate as nextTurn } from "node:timers/promises";
-import { CORE_MIGRATIONS, invoiceSeries, sales, withTransaction } from "@waitron/db";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { recordReplacement, recordSale } from "@waitron/core";
+import { CORE_MIGRATIONS, invoiceSeries, sales, taxpayer, withTransaction } from "@waitron/db";
+import type { TrustedClock } from "@waitron/fiscal";
+import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   seedVenueWithSeries,
@@ -12,7 +17,7 @@ import {
   seedPurchaseInvoice,
   type SeededVenue,
 } from "@waitron/reporting/test/fixtures.js";
-import { decimal } from "@waitron/shared";
+import { decimal, deviceOrigin, seriesId as brandSeriesId } from "@waitron/shared";
 import { listAccountantExport, renderAccountantWorkbook } from "./accountant-export.js";
 import { ACCOUNTANT_EXPORT_WORDS } from "./i18n/accountant-export.js";
 
@@ -604,6 +609,99 @@ describe("accountant period selection", () => {
       correctsSaleId: original,
       originalInvoiceNumber: "A/1",
     });
+  });
+
+  it("exports a replaced full invoice's replacement under the replacement type, naming the original's customer", async () => {
+    await FakeFiscalBackend.install(suite.db);
+    const backend = new FakeFiscalBackend(suite.db);
+    await suite.db.update(taxpayer).set({ taxpayerDomicile: "8 Tax Street, 28001 Madrid" });
+    const [full, rectificative] = await suite.db
+      .insert(invoiceSeries)
+      .values([
+        { nodeId: venue.nodeId, code: "F", purpose: "full" },
+        { nodeId: venue.nodeId, code: "R", purpose: "rectificative" },
+      ])
+      .returning({ id: invoiceSeries.id });
+    const [person] = await seedPersons(suite.db, {
+      displayName: "Supervisor",
+      pinHash: hashPin("1234"),
+      role: "supervisor",
+    });
+    const clockOn = (day: string): TrustedClock => ({
+      now: () => ({
+        instant: new Date(`${day}T12:00:00.000Z`),
+        offsetMinutes: 60,
+        confident: true,
+        confidence: "anchored",
+        anchorAgeSeconds: 0,
+      }),
+      anchor: () => {
+        throw new Error("anchor() is not used here");
+      },
+      currentAnchor: () => null,
+    });
+    const { saleId: original } = await withTransaction(suite.db, async (tx) => {
+      await backend.registerNode(tx, venue.nodeId);
+      return recordSale(tx, backend, {
+        origin: deviceOrigin(venue.deviceId),
+        nodeId: venue.nodeId,
+        seriesId: brandSeriesId(full!.id),
+        locale: "es-ES",
+        invoiceLocales: ["es-ES"],
+        total: "12.10",
+        lines: [
+          {
+            lineNo: 1,
+            name: "Menu",
+            descriptions: { "es-ES": "Menu" },
+            quantity: "1",
+            unitPrice: "12.10",
+            vatRate: "21.00",
+            lineTotal: "10.00",
+            lineGross: "12.10",
+          },
+        ],
+        settlement: {
+          kind: "immediate",
+          tenders: [{ method: "card", amount: "12.10", tipAmount: "0.00", settledAt: new Date() }],
+        },
+        counterparty: { taxId: "12345678Z", legalName: "Harbour Foods", countryCode: "ES" },
+        recipientAddress: "2 Main Street, 28013 Madrid, Spain",
+        clock: clockOn("2026-11-02"),
+      });
+    });
+    const { saleId: replacement } = await withTransaction(suite.db, async (tx) =>
+      recordReplacement(tx, backend, {
+        origin: deviceOrigin(venue.deviceId),
+        nodeId: venue.nodeId,
+        seriesId: brandSeriesId(rectificative!.id),
+        correctsSaleId: original,
+        authz: {
+          sessionId: (
+            await loginWithPin(tx, { deviceId: venue.deviceId, personId: person!.id, pin: "1234" })
+          ).id,
+        },
+        clock: clockOn("2026-11-05"),
+      }),
+    );
+
+    const exported = await list();
+    expect(exported.invoices.map((row) => [row.id, row.invoiceType])).toEqual([
+      [original, "F1"],
+      [replacement, "replacement"],
+    ]);
+    const xml = strFromU8(
+      unzipSync(await renderAccountantWorkbook(exported, "en"))["xl/worksheets/sheet1.xml"]!,
+    );
+    expect([row(xml, 2).slice(3, 7), row(xml, 3).slice(3, 7)]).toEqual([
+      ["F1", "2026-11-02", "Harbour Foods", "12345678Z"],
+      [
+        "Replacement corrective — do not add (repeats the original)",
+        "2026-11-05",
+        "Harbour Foods",
+        "12345678Z",
+      ],
+    ]);
   });
 
   it("lists a sale with ordinary refunds once, under its own type", async () => {

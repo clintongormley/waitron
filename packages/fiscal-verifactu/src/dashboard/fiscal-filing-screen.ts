@@ -43,7 +43,12 @@ import type {
   ReplyMismatchView,
   WarnedRecordView,
 } from "../filing-overview-types.js";
-import { descriptionProblem, putRightFor, type PutRight } from "../put-right.js";
+import {
+  descriptionProblem,
+  FULL_INVOICE_REPLACEMENT_ON,
+  putRightFor,
+  type PutRight,
+} from "../put-right.js";
 import type { FiscalFilingClient } from "./fiscal-filing-client.js";
 import { calendarDay } from "./dates.js";
 import { REFUSAL_WORDS, refusalKey } from "./put-right-words.js";
@@ -676,6 +681,7 @@ export class FiscalFilingScreen extends LitElement {
 
   @property({ attribute: false }) client!: FiscalFilingClient;
   @property({ attribute: false }) permissionContinuation?: DashboardPermissionContinuation;
+  fullInvoiceReplacement = FULL_INVOICE_REPLACEMENT_ON;
 
   @state() private overview: FilingOverviewAnswer | null = null;
   @state() private loading = true;
@@ -690,6 +696,7 @@ export class FiscalFilingScreen extends LitElement {
   @state() private sending = false;
   @state() private refusal = "";
   @state() private caseChanged = false;
+  @state() private replacementIssued = false;
 
   #generation = 0;
   #unsubscribeLocale?: () => void;
@@ -721,8 +728,11 @@ export class FiscalFilingScreen extends LitElement {
   #open(row: FilingCaseView): void {
     this.#forget();
     this.caseChanged = false;
+    this.replacementIssued = false;
     this.viewing = row;
-    const { kind } = (this.#fix = putRightFor(row));
+    const { kind } = (this.#fix = putRightFor(row, {
+      fullInvoiceReplacement: this.fullInvoiceReplacement,
+    }));
     if (kind === "none") return;
     const describes = kind === "record-correction";
     // The day is never prefilled: a refused future date is wrong by definition, and a prefill
@@ -931,6 +941,7 @@ export class FiscalFilingScreen extends LitElement {
     if (!sameOpening()) return;
     this.#scope?.commit(sent);
     this.#close();
+    this.replacementIssued = replaces;
   }
 
   #replacement(found: FilingCaseView, problem: string): TemplateResult {
@@ -947,7 +958,13 @@ export class FiscalFilingScreen extends LitElement {
       <h3 id="fiscal-filing-put-right" data-test="put-right-heading">
         ${t("fiscal_filing.put_right.replace.heading")}
       </h3>
-      <p>${t("fiscal_filing.put_right.replace.intro")}</p>
+      <p data-test="put-right-intro">
+        ${t(
+          record.tipoFactura === "F1"
+            ? "fiscal_filing.put_right.replace.intro_full"
+            : "fiscal_filing.put_right.replace.intro",
+        )}
+      </p>
       <wt-input
         name="operationDate"
         type="date"
@@ -1265,6 +1282,13 @@ export class FiscalFilingScreen extends LitElement {
         this.caseChanged
           ? html`<p class="changed" role="status" data-test="case-changed">
               ${t("fiscal_filing.refused.changed")}
+            </p>`
+          : nothing
+      }
+      ${
+        this.replacementIssued
+          ? html`<p class="changed" role="status" data-test="replacement-issued">
+              ${t("fiscal_filing.put_right.replace.issued")}
             </p>`
           : nothing
       }

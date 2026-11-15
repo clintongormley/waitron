@@ -9,6 +9,7 @@ import {
   saleSubstitutions,
   saleVoids,
   sales,
+  taxpayer,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, centsToDecimal, decimal } from "@waitron/shared";
@@ -18,7 +19,7 @@ import { authorize, authorizeManager, type AuthzInput } from "@waitron/identity"
 import { insertSale } from "./insert-sale.js";
 import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
-import { requireSupportedCorrection } from "./correction-eligibility.js";
+import { storedCounterparty } from "./counterparty.js";
 import { requireCorrectiveSeries } from "./corrective-series.js";
 import { operationDescriptionFor } from "./operation-description.js";
 
@@ -57,6 +58,11 @@ export async function recordReplacement(
       invoiceLocales: sales.invoiceLocales,
       total: sales.total,
       counterpartyTaxId: sales.counterpartyTaxId,
+      counterpartyLegalName: sales.counterpartyLegalName,
+      counterpartyCountryCode: sales.counterpartyCountryCode,
+      counterpartyIdentifierType: sales.counterpartyIdentifierType,
+      counterpartyIdentifierCountryCode: sales.counterpartyIdentifierCountryCode,
+      counterpartyAddress: sales.counterpartyAddress,
       vatBreakdown: sales.vatBreakdown,
       correctsSaleId: sales.correctsSaleId,
       correctionCount: sql<number>`(select count(*) from sales c where c.corrects_sale_id = ${sales}.id)`,
@@ -102,8 +108,6 @@ export async function recordReplacement(
           override: input.authz.override,
         });
 
-  requireSupportedCorrection(original.counterpartyTaxId, input.correctsSaleId);
-
   // A replacement carries the whole invoice; an earlier corrective's change would then be counted
   // beside it.
   if (original.correctionCount > 0) {
@@ -137,6 +141,16 @@ export async function recordReplacement(
     pending.push({ error: now.warning, severity: "warning" });
   }
 
+  const counterparty = storedCounterparty(original);
+  // The replacement is a new invoice issued today, so it names the business's address as it is now.
+  const [taxpayerRow] =
+    counterparty === null
+      ? []
+      : await tx.select({ domicile: taxpayer.taxpayerDomicile }).from(taxpayer);
+  if (counterparty !== null && !taxpayerRow?.domicile?.trim()) {
+    throw new AppError("fiscal.taxpayer_domicile_missing", {});
+  }
+
   const invoiceNumber = await allocateInvoiceNumber(tx, input.seriesId);
 
   const saleId = await insertSale(tx, {
@@ -156,6 +170,13 @@ export async function recordReplacement(
     correctsSaleId: input.correctsSaleId,
     replacesOriginal: true,
     supplyDay: input.operationDate ?? null,
+    counterpartyTaxId: original.counterpartyTaxId,
+    counterpartyLegalName: original.counterpartyLegalName,
+    counterpartyCountryCode: original.counterpartyCountryCode,
+    counterpartyIdentifierType: original.counterpartyIdentifierType,
+    counterpartyIdentifierCountryCode: original.counterpartyIdentifierCountryCode,
+    counterpartyAddress: original.counterpartyAddress,
+    taxpayerDomicile: taxpayerRow?.domicile ?? null,
     authorizedBy: authorization.authorizedBy,
   });
 
@@ -201,7 +222,7 @@ export async function recordReplacement(
         base: decimal(group.base),
         tax: decimal(group.tax),
       })),
-      counterparty: null,
+      counterparty,
     },
     {
       correctsSaleId: input.correctsSaleId,

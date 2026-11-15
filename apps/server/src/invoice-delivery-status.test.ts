@@ -46,6 +46,7 @@ import {
 import { endInvoicePrintDeliveries } from "./invoice-print.js";
 import { renewInvoicePagePrint } from "./invoice-page-print.js";
 import { readOriginalReceiptPrint } from "./receipt-print.js";
+import { insertCorrective } from "./testing/replacement-fixture.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const clock: TrustedClock = {
@@ -497,6 +498,18 @@ describe("readInvoiceDeliveries", () => {
       },
       history: [],
     });
+  });
+
+  it("tracks no delivery of a replacement of a full invoice, while its original keeps its own", async () => {
+    const v = await venue();
+    const saleId = await invoice(v.nodeId);
+    await pagePrinter();
+    const replacement = await withTransaction(suite.db, (tx) =>
+      insertCorrective(tx, saleId, { replaces: true }),
+    );
+
+    expect(await read(replacement)).toBeNull();
+    expect(await read(saleId)).not.toBeNull();
   });
 
   it("offers exactly the printers its caller offers, in their order", async () => {

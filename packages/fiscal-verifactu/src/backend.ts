@@ -115,9 +115,10 @@ type OriginalAlta = Pick<
  * The columns `recordCorrection` reads off the alta being corrected. Narrower than `OriginalAlta`
  * in one axis and wider in another: no origin (the corrective's OWN `sale` carries it, unlike a
  * void which must recover it), but `tipo_factura` too — the R-type is derived from it (F2 → R5;
- * an R5 by replacement is corrected like the F2 it replaced), so it is read here rather than
- * assumed. The three identity columns feed `FacturasRectificadas` directly, the same shortcut
- * `recordVoid` takes for the anulada identity.
+ * F1 → R4 by replacement; an R5 by replacement is corrected like the F2 it replaced), so it is
+ * read here rather than assumed. The three identity columns feed `FacturasRectificadas` directly,
+ * the same shortcut `recordVoid` takes for the anulada identity, and an R4 names the customer the
+ * original's own `destinatarios` named.
  */
 type OriginalAltaForCorrection = Pick<
   RegistroRow,
@@ -127,6 +128,7 @@ type OriginalAltaForCorrection = Pick<
   | "fecha_expedicion_factura"
   | "tipo_factura"
   | "tipo_rectificativa"
+  | "destinatarios"
 >;
 
 /**
@@ -513,9 +515,9 @@ export class VerifactuBackend implements FiscalBackend {
       });
     }
     const chart = await this.admitIssuance(tx, sale.nodeId);
-    const { rows } = await tx.execute<OriginalAltaForCorrection>(sql`
+    const { rows } = await tx.execute<Record<string, unknown>>(sql`
       select id, id_emisor_factura, num_serie_factura, fecha_expedicion_factura, tipo_factura,
-        tipo_rectificativa
+        tipo_rectificativa, destinatarios
       from registros_facturacion
       where sale_id = ${correction.correctsSaleId} and tipo_registro = 'alta'
         and not exists (
@@ -524,23 +526,27 @@ export class VerifactuBackend implements FiscalBackend {
         )
       limit 1
     `);
-    const original = rows[0];
+    const original: OriginalAltaForCorrection | undefined =
+      rows[0] === undefined ? undefined : decodeRegistroRow(rows[0]);
     if (original === undefined) {
       throw new AppError("fiscal.sale_not_recorded", { saleId: correction.correctsSaleId });
     }
     // An R5 by replacement stands in for the simplified invoice it replaced, so a later correction
     // names it by differences, as for an F2.
     const replacement = original.tipo_factura === "R5" && original.tipo_rectificativa === "S";
+    // A full invoice's replacement names its customer and a simplified one's names none.
+    const replacesFull = original.tipo_factura === "F1" && sale.counterparty !== null;
+    const replacesSimplified = original.tipo_factura === "F2" && sale.counterparty === null;
     // A replacement files the sale's full amounts with nothing rectified, which is right only if
     // AEAT holds no record of the original. This checks only what Waitron stored: every record
     // it filed under the original's identity was refused, none with `3000`.
-    const replacesRefusedF2 =
+    const replacesRefused =
       correction.replaces === true &&
-      original.tipo_factura === "F2" &&
+      (replacesFull || replacesSimplified) &&
       (await this.refusedEveryRecordOf(tx, original));
     if (
       correction.replaces === true
-        ? !replacesRefusedF2
+        ? !replacesRefused
         : original.tipo_factura !== "F2" && !replacement
     ) {
       throw new AppError("fiscal.correction_unsupported", {
@@ -557,7 +563,7 @@ export class VerifactuBackend implements FiscalBackend {
     const desglose = sale.vatBreakdown.map(toDetalleDesglose);
     const cuotaTotal = sumDecimals(sale.vatBreakdown.map((line) => line.tax));
     const fechaOperacion =
-      replacesRefusedF2 &&
+      replacesRefused &&
       operationDate !== undefined &&
       toAeatDate(operationDate) !== formatDate(sale.issuedAt, sale.offsetMinutes)
         ? // The same offset cancellation as `recordVoid`'s `FechaExpedicionFacturaAnulada`.
@@ -570,8 +576,8 @@ export class VerifactuBackend implements FiscalBackend {
       NumSerieFactura: formatInvoiceNumber(sale.seriesCode, sale.invoiceNumber),
       FechaExpedicionFactura: sale.issuedAt,
       NombreRazonEmisor: taxpayer.legalName,
-      TipoFactura: "R5",
-      TipoRectificativa: replacesRefusedF2 ? "S" : "I",
+      TipoFactura: replacesRefused && replacesFull ? "R4" : "R5",
+      TipoRectificativa: replacesRefused ? "S" : "I",
       FacturasRectificadas: [
         {
           IDEmisorFactura: original.id_emisor_factura,
@@ -583,12 +589,16 @@ export class VerifactuBackend implements FiscalBackend {
           ),
         },
       ],
-      // Zero: AEAT refused every record of the original filed from here (see `replacesRefusedF2`).
-      ...(replacesRefusedF2 && {
+      // Zero: AEAT refused every record of the original filed from here (see `replacesRefused`).
+      ...(replacesRefused && {
         ImporteRectificacion: { BaseRectificada: "0.00", CuotaRectificada: "0.00" },
       }),
       ...(fechaOperacion !== undefined && { FechaOperacion: fechaOperacion }),
       DescripcionOperacion: sale.descriptionOfOperation,
+      // The customer AEAT was sent, as stored, rather than rebuilt from today's sale columns.
+      ...(replacesRefused &&
+        replacesFull &&
+        original.destinatarios !== null && { Destinatarios: original.destinatarios }),
       Desglose: desglose,
       CuotaTotal: cuotaTotal,
       ImporteTotal: sale.total,

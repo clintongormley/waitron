@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { receiptDateTime, receiptDateTimeNumeric, receiptDay } from "./receipt-dates.js";
+import {
+  receiptDateTime,
+  receiptDateTimeNumeric,
+  receiptDay,
+  receiptDayNumeric,
+} from "./receipt-dates.js";
 
 const AT = (time: string) => `2026-01-15T${time}:00.000Z`;
 
@@ -94,5 +99,24 @@ describe("receiptDay", () => {
     ["eu-ES", "2026(e)ko ots. 28(a)"],
   ])("prints a calendar day in %s", (locale, want) => {
     expect(receiptDay("2026-02-28", locale)).toBe(want);
+  });
+});
+
+describe("receiptDayNumeric", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it.each([
+    ["es-ES", "28/02/2026"],
+    ["en-GB", "28/02/2026"],
+    ["eu-ES", "2026/02/28"],
+  ])("prints a calendar day in %s in numbers", (locale, want) => {
+    expect(receiptDayNumeric("2026-02-28", locale)).toBe(want);
+  });
+
+  it("prints the day as written in a host zone behind UTC", () => {
+    vi.stubEnv("TZ", "America/Los_Angeles");
+    expect(receiptDayNumeric("2026-02-28", "es-ES")).toBe("28/02/2026");
   });
 });

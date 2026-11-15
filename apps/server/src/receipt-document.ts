@@ -29,7 +29,13 @@ import {
   type FiledLine,
   type GroupDiscount,
 } from "./receipt-figures.js";
-import { receiptDateTime, receiptDateTimeNumeric } from "./receipt-dates.js";
+import {
+  receiptDateTime,
+  receiptDateTimeNumeric,
+  receiptDay,
+  receiptDayNumeric,
+} from "./receipt-dates.js";
+import { printsAsFullInvoice } from "./invoice-typing.js";
 import { groupByParent, mergeIdenticalGroups, type LineGroup } from "./receipt-lines.js";
 import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
 import type { ReceiptTable, ReceiptTableRow } from "./receipt-table.js";
@@ -154,7 +160,7 @@ export function buildReceiptDocument({
   const issuer = result.issuer ?? currentIssuer;
   const locale = invoiceLocale;
   const label = receiptLabelsFor(locale);
-  const simplified = result.invoiceType !== "F1";
+  const simplified = !printsAsFullInvoice(result.invoiceType);
   const itemAmount = (value: string): string =>
     simplified ? formatAmount(value, locale) : formatMoney(value, locale);
   const elements: ReceiptElement[] = [];
@@ -237,30 +243,34 @@ export function buildReceiptDocument({
 
   if (result.orderLabel !== null || result.orderNumber !== 0)
     row(result.orderLabel ?? "", `${label.order} ${result.orderNumber}`, 0, undefined, 2);
+  const dated = (invoice: {
+    invoiceNumber: string;
+    issuedAt: string;
+    issuedOffsetMinutes?: number;
+  }) => {
+    const date =
+      paperWidth === "58mm"
+        ? receiptDateTimeNumeric(invoice.issuedAt, locale, invoice.issuedOffsetMinutes)
+        : receiptDateTime(invoice.issuedAt, locale, invoice.issuedOffsetMinutes);
+    // Two spaces at least, or the invoice number running into the date reads as one figure.
+    row(invoice.invoiceNumber, date, 0, undefined, 2);
+  };
+  if (result.corrects) text(label.correctiveInvoice, 0, { bold: true });
   if (simplified) {
-    const dated = (invoice: {
-      invoiceNumber: string;
-      issuedAt: string;
-      issuedOffsetMinutes?: number;
-    }) => {
-      const date =
-        paperWidth === "58mm"
-          ? receiptDateTimeNumeric(invoice.issuedAt, locale, invoice.issuedOffsetMinutes)
-          : receiptDateTime(invoice.issuedAt, locale, invoice.issuedOffsetMinutes);
-      // Two spaces at least, or the invoice number running into the date reads as one figure.
-      row(invoice.invoiceNumber, date, 0, undefined, 2);
-    };
-    if (result.corrects) text(label.correctiveInvoice, 0, { bold: true });
     dated(result);
-    if (result.corrects) {
-      text(result.corrects.inFull ? label.replacesInvoiceInFull : label.correctsInvoice);
-      dated(result.corrects);
-      // Invoicing regulation art. 15.5: a replacement states the rectification's amount, zero.
-      if (result.corrects.inFull) row(label.rectificationAmount, formatMoney("0.00", locale));
-    }
   } else {
     row(label.invoiceHeading, result.invoiceNumber, 0, { bold: true });
     row(label.date, receiptDateTime(result.issuedAt, locale, result.issuedOffsetMinutes));
+  }
+  if (result.saleDay !== undefined) {
+    const day = paperWidth === "58mm" ? receiptDayNumeric : receiptDay;
+    row(label.saleDate, day(result.saleDay, locale));
+  }
+  if (result.corrects) {
+    text(result.corrects.inFull ? label.replacesInvoiceInFull : label.correctsInvoice);
+    dated(result.corrects);
+    // Invoicing regulation art. 15.5: a replacement states the rectification's amount, zero.
+    if (result.corrects.inFull) row(label.rectificationAmount, formatMoney("0.00", locale));
   }
   rule();
   if (!simplified && result.recipient) {

@@ -87,6 +87,7 @@ export const RECEIPT_LABEL_KEYS = [
   "correctsInvoice",
   "replacesInvoiceInFull",
   "rectificationAmount",
+  "saleDate",
   "customer",
   "unitsColumn",
   "itemColumn",

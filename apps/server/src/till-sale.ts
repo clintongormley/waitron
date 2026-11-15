@@ -337,14 +337,16 @@ export interface BillTenderRefund {
 export interface TillSaleResult extends ReceiptPresentation {
   invoiceEvidence?: import("@waitron/fiscal").FiledInvoiceEvidence;
   issuedOffsetMinutes?: number;
-  invoiceType?: "F1" | "F2" | "R5";
-  /** On a corrective invoice (R5), the invoice it corrects; `inFull` when it replaces it whole. */
+  invoiceType?: "F1" | "F2" | "R4" | "R5";
+  /** On a corrective invoice (R4, R5), the invoice it corrects; `inFull` when it replaces it whole. */
   corrects?: {
     invoiceNumber: string;
     issuedAt: string;
     issuedOffsetMinutes?: number;
     inFull?: true;
   };
+  /** On a replacement, the real day (`YYYY-MM-DD`) of the sale, when it is not its issue day. */
+  saleDay?: string;
   issuer?: { venueName: string; nif: string; domicile?: string };
   recipient?: {
     taxId: string;
@@ -977,7 +979,7 @@ export async function printSaleReceipt(
     if (existing === undefined) return;
     const ticket = await readSettledTicket(deps.backend, tx, cfg, workingOrderId);
     if (duplicate) await enqueueReceiptReprint(tx, cfg, ticket, existing.id, language, personId);
-    else await enqueueOriginalReceipt(tx, cfg, ticket, existing.id, undefined, personId);
+    else await enqueueOriginalReceipt(tx, cfg, ticket, existing.id, { personId });
   });
 }
 

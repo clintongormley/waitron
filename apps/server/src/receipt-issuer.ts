@@ -1,4 +1,4 @@
-import { storedRecipientIdentifier } from "./invoice-selection.js";
+import { readInvoiceTyping, type InvoiceTyping, type TypedSale } from "./invoice-typing.js";
 import { eq } from "drizzle-orm";
 import { sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -6,61 +6,52 @@ import type { FiscalBackend } from "@waitron/fiscal";
 import type { SaleId } from "@waitron/shared";
 import type { TillSaleResult } from "./till-sale.js";
 
+type IssuerSale = TypedSale & Pick<typeof sales.$inferSelect, "taxpayerDomicile">;
+
+/** `loaded` is the sale's own row when the caller already holds it; otherwise it is read here. */
 export async function readReceiptIssuer(
   backend: FiscalBackend,
   tx: Transaction,
   saleId: SaleId,
+  loaded?: IssuerSale,
 ): Promise<
   Partial<
-    Pick<
-      TillSaleResult,
-      "issuer" | "recipient" | "invoiceType" | "issuedOffsetMinutes" | "invoiceEvidence"
-    >
+    Pick<TillSaleResult, "issuer" | "issuedOffsetMinutes" | "invoiceEvidence"> & InvoiceTyping
   >
 > {
   const filed = await backend.filedReceiptFor(tx, saleId);
-  const [sale] = await tx
-    .select({
-      domicile: sales.taxpayerDomicile,
-      issuedOffsetMinutes: sales.issuedOffsetMinutes,
-      recipientTaxId: sales.counterpartyTaxId,
-      identifierType: sales.counterpartyIdentifierType,
-      identifierCountryCode: sales.counterpartyIdentifierCountryCode,
-      recipientLegalName: sales.counterpartyLegalName,
-      recipientCountryCode: sales.counterpartyCountryCode,
-      recipientAddress: sales.counterpartyAddress,
-    })
-    .from(sales)
-    .where(eq(sales.id, saleId));
+  const [sale] = loaded
+    ? [loaded]
+    : await tx
+        .select({
+          taxpayerDomicile: sales.taxpayerDomicile,
+          issuedOffsetMinutes: sales.issuedOffsetMinutes,
+          issuedAt: sales.issuedAt,
+          correctsSaleId: sales.correctsSaleId,
+          replacesOriginal: sales.replacesOriginal,
+          supplyDay: sales.supplyDay,
+          counterpartyTaxId: sales.counterpartyTaxId,
+          counterpartyIdentifierType: sales.counterpartyIdentifierType,
+          counterpartyIdentifierCountryCode: sales.counterpartyIdentifierCountryCode,
+          counterpartyLegalName: sales.counterpartyLegalName,
+          counterpartyCountryCode: sales.counterpartyCountryCode,
+          counterpartyAddress: sales.counterpartyAddress,
+        })
+        .from(sales)
+        .where(eq(sales.id, saleId));
   const issueOffset = sale === undefined ? {} : { issuedOffsetMinutes: sale.issuedOffsetMinutes };
   if (!filed?.issuer) return issueOffset;
   const invoiceEvidence = await backend.invoiceEvidenceFor?.(tx, saleId);
   return {
     ...issueOffset,
     ...(invoiceEvidence === undefined ? {} : { invoiceEvidence }),
-    invoiceType:
-      sale?.recipientTaxId === null || sale === undefined ? ("F2" as const) : ("F1" as const),
-    ...(sale?.recipientTaxId !== null &&
-    sale?.recipientTaxId !== undefined &&
-    sale.recipientLegalName !== null &&
-    sale.recipientCountryCode !== null &&
-    sale.recipientAddress !== null
-      ? {
-          recipient: {
-            taxId: sale.recipientTaxId,
-            ...storedRecipientIdentifier(sale.identifierType, sale.identifierCountryCode),
-            legalName: sale.recipientLegalName,
-            countryCode: sale.recipientCountryCode,
-            address: sale.recipientAddress,
-          },
-        }
-      : {}),
+    ...(sale === undefined ? { invoiceType: "F2" as const } : await readInvoiceTyping(tx, sale)),
     issuer: {
       venueName: filed.issuer.legalName,
       nif: filed.issuer.taxId,
-      ...(sale?.domicile === null || sale?.domicile === undefined
+      ...(sale?.taxpayerDomicile === null || sale?.taxpayerDomicile === undefined
         ? {}
-        : { domicile: sale.domicile }),
+        : { domicile: sale.taxpayerDomicile }),
     },
   };
 }

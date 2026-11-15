@@ -26,8 +26,12 @@ export const REMEDY_KINDS = [
 export type RemedyKind = (typeof REMEDY_KINDS)[number];
 /** A reach `record-correction` does not carry by itself: correcting a case AEAT accepted with errors. */
 export const ACCEPTED_WITH_ERRORS_CORRECTION = "accepted-with-errors-correction";
-/** Server policy: the remedy kinds it enables, and whether a correction may answer an acceptance with errors. */
-export type RemedyPolicy = ReadonlySet<RemedyKind | typeof ACCEPTED_WITH_ERRORS_CORRECTION>;
+/** A reach `replacement-invoice` does not carry by itself: replacing a full invoice (F1) with an R4. */
+export const FULL_INVOICE_REPLACEMENT = "full-invoice-replacement";
+/** Server policy: the remedy kinds it enables, and the reaches beyond them it allows. */
+export type RemedyPolicy = ReadonlySet<
+  RemedyKind | typeof ACCEPTED_WITH_ERRORS_CORRECTION | typeof FULL_INVOICE_REPLACEMENT
+>;
 
 export async function admitRecordRemedy(
   tx: Transaction,

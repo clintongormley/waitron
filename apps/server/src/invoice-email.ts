@@ -4,6 +4,7 @@ import { Socket } from "node:net";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { renderInvoicePdf } from "./invoice-pdf.js";
+import { printsAsFullInvoice } from "./invoice-typing.js";
 import type { InvoiceDeliveryOutcome } from "./invoice-delivery.js";
 import type { Database, Transaction } from "@waitron/db";
 import type { FiscalBackend } from "@waitron/fiscal";
@@ -74,9 +75,10 @@ export function createInvoiceEmailSender(config: SmtpConnection): InvoiceEmailSe
   return async ({ recipient, document, privacy }) => {
     const pdf = await renderInvoicePdf(document);
     const labels = receiptLabelsFor(document.invoiceLocale);
-    const simplified = document.result.invoiceType !== "F1";
+    const { invoiceType } = document.result;
+    const simplified = !printsAsFullInvoice(invoiceType);
     const title =
-      document.result.invoiceType === "R5"
+      invoiceType === "R4" || invoiceType === "R5"
         ? labels.correctiveInvoice
         : simplified
           ? labels.simplifiedInvoice

@@ -236,11 +236,11 @@ function adjustmentRow(
   locale: string,
   labels: ReceiptLabels,
   kind: "adjustment" | "bill-adjustment",
-  invoiceType: TillSaleResult["invoiceType"],
+  full: boolean,
 ) {
   return html`<li class="line ${kind}">
     <span class="line-name"
-      >${adjustmentLabel(adjustment, locale, labels)}${invoiceType === "F1" ? ` (${labels.vatIncluded})` : ""}</span
+      >${adjustmentLabel(adjustment, locale, labels)}${full ? ` (${labels.vatIncluded})` : ""}</span
     >
     <span class="line-gross">-${formatMoney(adjustment.amount, locale)}</span>
   </li>`;
@@ -258,6 +258,13 @@ function issueDate(iso: string, locale: string, offsetMinutes?: number): string 
     .formatToParts(date)
     .map((part) => (part.type === "hour" ? part.value.padStart(2, "0") : part.value))
     .join("");
+}
+
+/** A calendar day (`YYYY-MM-DD`) in words, read as written whatever the browser's zone. */
+function saleDay(isoDate: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(
+    new Date(`${isoDate}T00:00:00Z`),
+  );
 }
 
 function tenderRow(label: string, amount: string, locale: string) {
@@ -1161,6 +1168,8 @@ export class TillTicketView extends LitElement {
     const language = r.locale ?? this.invoiceLocale;
     const names = r.namesLocale ?? language;
     const labels = receiptLabelsFor(language);
+    // A replacement of a full invoice (R4) is laid out as the full invoice it replaces.
+    const full = r.invoiceType === "F1" || r.invoiceType === "R4";
     // Browsers ship no number or date formats for some receipt languages (Galician and Basque in
     // Chromium 153 and Chrome 154), and would write those amounts the English way.
     const format =
@@ -1237,7 +1246,7 @@ export class TillTicketView extends LitElement {
           ${r.receiptTrim?.email ? html`<p class="contact">${r.receiptTrim.email}</p>` : nothing}
           <p class="nif">${labels.nif}: ${issuer.nif}</p>
           ${
-            r.invoiceType === "F1" && r.issuer?.domicile
+            full && r.issuer?.domicile
               ? html`<p class="domicile">${r.issuer.domicile}</p>`
               : nothing
           }
@@ -1259,6 +1268,14 @@ export class TillTicketView extends LitElement {
             <span class="meta-label">${labels.date}</span>
             <span>${issueDate(r.issuedAt, format, r.issuedOffsetMinutes)}</span>
           </div>
+          ${
+            r.saleDay !== undefined
+              ? html`<div class="meta-row" data-test="sale-day">
+                  <span class="meta-label">${labels.saleDate}</span>
+                  <span>${saleDay(r.saleDay, format)}</span>
+                </div>`
+              : nothing
+          }
           ${
             r.corrects
               ? html`<p class="corrects meta-label" data-test="corrects-invoice">
@@ -1290,7 +1307,7 @@ export class TillTicketView extends LitElement {
         </div>
 
         ${
-          r.invoiceType === "F1" && r.recipient
+          full && r.recipient
             ? html`<section class="recipient">
                 <p>${r.recipient.legalName}</p>
                 <p>
@@ -1303,7 +1320,7 @@ export class TillTicketView extends LitElement {
         }
 
         <ul class="lines">
-          ${(r.invoiceType === "F1"
+          ${(full
             ? groupByParent(r.lines)
             : mergeIdenticalGroups(groupByParent(r.lines), r.vatBreakdown.length <= 1)
           ).map(
@@ -1319,9 +1336,9 @@ export class TillTicketView extends LitElement {
                       : ` ${resolveSnapshotText(group.dish.unitName, names, names)}`
                   }</span
                 >
-                ${r.invoiceType === "F1" && group.dish.net !== undefined ? nothing : lineGross(group.dish, format)}
+                ${full && group.dish.net !== undefined ? nothing : lineGross(group.dish, format)}
               </li>
-              ${r.invoiceType === "F1" ? netFacts(group.dish, names, format, labels) : nothing}
+              ${full ? netFacts(group.dish, names, format, labels) : nothing}
               ${optionAnswers(group.dish.optionSnapshots, { reads: "customer", locale: names }).map((answer) => html`<li class="line option modifier-answer"><span class="line-name">${answer}</span></li>`)}
               ${group.options
                 .filter(
@@ -1332,7 +1349,7 @@ export class TillTicketView extends LitElement {
                 )
                 .map((option) => {
                   let amount: string;
-                  if (r.invoiceType === "F1") {
+                  if (full) {
                     const unit =
                       option.unitName == null
                         ? ""
@@ -1349,9 +1366,9 @@ export class TillTicketView extends LitElement {
                       <span class="line-name"
                         >${group.dish.setLunch ? labels.supplement.replace("{item}", () => lineName(option.descriptions, names)) : lineName(option.descriptions, names)}${amount}</span
                       >
-                      ${r.invoiceType === "F1" && option.net !== undefined ? nothing : lineGross(option, format)}
+                      ${full && option.net !== undefined ? nothing : lineGross(option, format)}
                     </li>
-                    ${r.invoiceType === "F1" ? netFacts(option, names, format, labels) : nothing}
+                    ${full ? netFacts(option, names, format, labels) : nothing}
                   `;
                 })}
               ${
@@ -1374,13 +1391,13 @@ export class TillTicketView extends LitElement {
               }
               ${[group.dish, ...group.options].flatMap((line) =>
                 (line.adjustments ?? []).map((adjustment) =>
-                  adjustmentRow(adjustment, format, labels, "adjustment", r.invoiceType),
+                  adjustmentRow(adjustment, format, labels, "adjustment", full),
                 ),
               )}
             `,
           )}
           ${(r.billAdjustments ?? []).map((adjustment) =>
-            adjustmentRow(adjustment, format, labels, "bill-adjustment", r.invoiceType),
+            adjustmentRow(adjustment, format, labels, "bill-adjustment", full),
           )}
         </ul>
 

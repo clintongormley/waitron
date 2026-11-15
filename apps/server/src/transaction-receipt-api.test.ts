@@ -42,6 +42,9 @@ import {
 import type { TillSaleResult } from "./till-sale.js";
 import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { DEVICE_COOKIE } from "./device-session.js";
+import { invoiceDeliveryAlertSource } from "./alert-sources.js";
+import { createPageTestPages } from "./page-test-pages.js";
+import { reserveInvoiceDelivery } from "./invoice-delivery.js";
 const store = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let venue: OrderVenue;
 beforeEach(async () => {
@@ -951,4 +954,146 @@ it("reads every pre-invoice payment in order without replaying settlement", asyn
     { method: "cash", amount: "2.00", tip: "0.00", tendered: "2.00", change: "0.00", refunds: [] },
   ]);
   expect(await snapshot()).toEqual(before);
+});
+async function correctiveOf(
+  originalId: string,
+  replacesOriginal: boolean,
+  patch: Partial<typeof sales.$inferInsert> = {},
+) {
+  const [series] = await inTx(venue, (tx) =>
+    tx
+      .select({ id: invoiceSeries.id })
+      .from(invoiceSeries)
+      .where(
+        and(eq(invoiceSeries.nodeId, venue.cfg.nodeId), eq(invoiceSeries.purpose, "rectificative")),
+      ),
+  );
+  return projectionInvoice({
+    seriesId: series!.id,
+    correctsSaleId: originalId,
+    replacesOriginal,
+    ...patch,
+  });
+}
+it("prints a replacement corrective's first till print as its original and later ones as copies", async () => {
+  const original = await projectionInvoice();
+  const replacement = await correctiveOf(original.id, true);
+  const before = await snapshot();
+  const { decodeTicket } = await import("./testing/decode-ticket.js");
+  expect((await reprint(replacement.id)).status).toBe(200);
+  const first = await jobs();
+  expect(first.prints).toEqual([
+    expect.objectContaining({ saleId: replacement.id, kind: "document", receiptCopy: false }),
+  ]);
+  expect(decodeTicket(first.prints[0]!.payload)).not.toContain("DUPLICADO");
+  expect(first.reprints).toEqual([]);
+  expect(first.drawers).toEqual([]);
+  expect((await reprint(replacement.id)).status).toBe(200);
+  const second = await jobs();
+  expect(second.prints).toHaveLength(2);
+  const copy = second.prints.find((row) => row.id !== first.prints[0]!.id)!;
+  expect(copy).toMatchObject({ saleId: replacement.id, receiptCopy: true });
+  expect(decodeTicket(copy.payload)).toContain("DUPLICADO");
+  expect(second.reprints).toEqual([
+    expect.objectContaining({ saleId: replacement.id, printJobId: copy.id }),
+  ]);
+  expect(second.drawers).toEqual([]);
+  expect(await snapshot()).toEqual(before);
+});
+it("prints a replacement's original in the language chosen at the till", async () => {
+  const original = await projectionInvoice({ locale: "ca-ES", invoiceLocales: ["ca-ES"] });
+  const replacement = await correctiveOf(original.id, true, {
+    locale: "ca-ES",
+    invoiceLocales: ["ca-ES"],
+  });
+  expect((await reprint(replacement.id, { language: "es-ES" })).status).toBe(200);
+  const { prints } = await jobs();
+  expect(prints).toEqual([expect.objectContaining({ saleId: replacement.id, receiptCopy: false })]);
+  const { decodeTicket } = await import("./testing/decode-ticket.js");
+  const text = decodeTicket(prints[0]!.payload);
+  expect(text).toContain("Base imponible");
+  expect(text).not.toContain("Base imposable");
+});
+it("prints one original when two tills reprint a replacement at once", async () => {
+  const original = await projectionInvoice();
+  const replacement = await correctiveOf(original.id, true);
+  const answers = await Promise.all([reprint(replacement.id), reprint(replacement.id)]);
+  expect(answers.map((answer) => answer.status)).toEqual([200, 200]);
+  const { prints } = await jobs();
+  expect(prints.map((row) => row.receiptCopy).sort()).toEqual([false, true]);
+});
+it("records every till print of a replacement emailed as its original as a reprint", async () => {
+  const original = await projectionInvoice();
+  const replacement = await correctiveOf(original.id, true);
+  const email = await inTx(venue, (tx) =>
+    reserveInvoiceDelivery(tx, replacement.id, {
+      medium: "email",
+      requestKey: randomUUID(),
+      personId: venue.operatorId,
+      recipient: "guest@example.test",
+    }),
+  );
+  expect(email.designation).toBe("original");
+  await inTx(venue, (tx) =>
+    tx.update(invoiceDeliveries).set({ status: "sent" }).where(eq(invoiceDeliveries.id, email.id)),
+  );
+  expect((await reprint(replacement.id)).status).toBe(200);
+  expect((await reprint(replacement.id)).status).toBe(200);
+  const { prints, reprints } = await jobs();
+  expect(prints).toEqual([
+    expect.objectContaining({ saleId: replacement.id, kind: "document", receiptCopy: true }),
+    expect.objectContaining({ saleId: replacement.id, kind: "document", receiptCopy: true }),
+  ]);
+  expect(reprints.map((row) => row.printJobId).sort()).toEqual(prints.map((row) => row.id).sort());
+  expect(reprints).toEqual([
+    expect.objectContaining({ saleId: replacement.id, personId: venue.operatorId }),
+    expect.objectContaining({ saleId: replacement.id, personId: venue.operatorId }),
+  ]);
+});
+it("still prints a refund corrective that never printed as a copy", async () => {
+  const original = await projectionInvoice();
+  const refund = await correctiveOf(original.id, false);
+  expect((await reprint(refund.id)).status).toBe(200);
+  const { prints, reprints } = await jobs();
+  expect(prints).toEqual([expect.objectContaining({ saleId: refund.id, receiptCopy: true })]);
+  expect(reprints).toEqual([expect.objectContaining({ saleId: refund.id })]);
+});
+it("raises no undelivered-invoice alert when a replacement of a full invoice's original print fails", async () => {
+  const customer = {
+    counterpartyTaxId: "B00000000",
+    counterpartyLegalName: "Stored recipient",
+    counterpartyCountryCode: "ES",
+    counterpartyAddress: "2 Main Street, 28013 Madrid, Madrid",
+  };
+  const original = await projectionInvoice(customer);
+  const [series] = await inTx(venue, (tx) =>
+    tx
+      .select({ id: invoiceSeries.id })
+      .from(invoiceSeries)
+      .where(
+        and(eq(invoiceSeries.nodeId, venue.cfg.nodeId), eq(invoiceSeries.purpose, "rectificative")),
+      ),
+  );
+  const replacement = await projectionInvoice({
+    ...customer,
+    seriesId: series!.id,
+    correctsSaleId: original.id,
+    replacesOriginal: true,
+  });
+  expect((await reprint(replacement.id)).status).toBe(200);
+  const [printed] = (await jobs()).prints;
+  expect(printed).toMatchObject({ saleId: replacement.id, receiptCopy: false });
+  await inTx(venue, (tx) =>
+    tx
+      .update(printJobs)
+      .set({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS })
+      .where(eq(printJobs.id, printed!.id)),
+  );
+  const alerts = await inTx(venue, (tx) =>
+    invoiceDeliveryAlertSource({ testPages: createPageTestPages(() => new Date()) }).read({
+      tx,
+      now: new Date(),
+    }),
+  );
+  expect(alerts).toEqual([]);
 });

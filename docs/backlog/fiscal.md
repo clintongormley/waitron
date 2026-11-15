@@ -1089,6 +1089,8 @@ receipts; an automatic filing and a replayed request print nothing, and a reprin
 and opens no drawer. When it prints is the watcher's rule (lane L `questions.md`, 2026-11-13 01:05);
 the print-receipt condition follows the card slip's and came from this branch's review. Both are
 for the owner to confirm at landing.
+_2026-11-15 (A1407): a replacement corrective's first till reprint is its original; later ones are
+copies._
 
 ### A444: a full invoice shows only the date it was created (owner, 2026-11-12)
 
@@ -1108,6 +1110,20 @@ worktrees that were never pushed, and its plan on `docs/a444-revised-plan`.
 _2026-11-14 (owner's answer B, Q37-FIX): the one exception is a replacement corrective (R5 "S") of
 a refused simplified invoice, which files the original sale's real day as `FechaOperacion` when it
 differs from its own date._
+_2026-11-15 (A1407): an R4 "S" replacing a refused full invoice is the same exception, filing the
+real day as `FechaOperacion` when it differs from its own date; it is built but switched off
+(`FULL_INVOICE_REPLACEMENT_ON`). The owner, 2026-11-15 01:58, relayed by the watcher: "the operation
+date is when the table closes, which normally coincides with the invoice date", and "where an
+invoice is issued days after the meal finished … the operation date and the invoice date should be
+distinct". So a replacement corrective, R4 and R5 alike, prints a "Date of the sale" row with that
+real day when it differs from its own issue date (Task 3a of the
+[A1407 plan](../superpowers/plans/2026-11-15-a1407-full-invoice-replacement.md)). The owner's
+reading has two parts: the creation-date rule above covers an invoice issued at the end of the meal,
+when the table closes, which normally coincides with the invoice date; an invoice issued days after
+the meal carries a separate date of sale. A1407 step 2 applies that to replacement correctives. The owner
+ruled on 2026-11-15 at 05:28 that an invoice issued on a later day (card recovery, a bill paid or
+left open for days, a takeaway collected days later) files and prints the sale date too, queued as
+LATER-SALE-DATE; nothing about those paths has changed yet._
 
 ### A1481: a fix never changes an invoice's amounts (owner, 2026-11-11)
 
@@ -1138,6 +1154,11 @@ day as its operation date, the printed copy says it replaces the invoice in full
 rectification, and a later refund names the replacement. E: the sale counts in its real day's VAT
 period (owner, 2026-11-14 17:20). The replacement is dated today (watcher, 11:54); the real day is
 asked of the administrator and stored as `sales.supply_day` (watcher, 18:22).
+_2026-11-15 (A1407): a full invoice refused the same way is to be put right by an R4 "S" naming
+the same customer, with the same rectified amounts, real day and VAT period (Q37's A, C and E
+carried over by the plan's default 4; not confirmed by the owner). It is built but
+switched off (`FULL_INVOICE_REPLACEMENT_ON` in `packages/fiscal-verifactu/src/put-right.ts`) until
+adviser question S14 is answered and AEAT's test service has accepted one._
 
 ### A1425 part 1: after a takeover (owner, 2026-11-08)
 

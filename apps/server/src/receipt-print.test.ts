@@ -2879,7 +2879,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
     expect(await suite.db.select().from(printJobs)).toEqual([]);
     expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
     await withTransaction(suite.db, (tx) =>
-      enqueueOriginalReceipt(tx, cfg, ticket, saleId, undefined, personId),
+      enqueueOriginalReceipt(tx, cfg, ticket, saleId, { personId }),
     );
     expect(await suite.db.select().from(printJobs)).toEqual([
       expect.objectContaining({ saleId, receiptCopy: false, kind: "document" }),
@@ -2905,7 +2905,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
         .where(eq(invoiceDeliveries.id, email.id));
       const print = () =>
         withTransaction(suite.db, (tx) =>
-          enqueueOriginalReceipt(tx, cfg, ticket, saleId, undefined, personId),
+          enqueueOriginalReceipt(tx, cfg, ticket, saleId, { personId }),
         );
       if (status === "sent") {
         await print();
@@ -3043,7 +3043,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
     try {
       await expect(
         withTransaction(suite.db, (tx) =>
-          enqueueOriginalReceipt(tx, cfg, ticket, saleId, undefined, personId),
+          enqueueOriginalReceipt(tx, cfg, ticket, saleId, { personId }),
         ),
       ).rejects.toThrow("explicit receipt refusal");
       expect(await suite.db.select().from(sales)).toEqual(before);
@@ -3054,7 +3054,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
       await suite.db.execute(sql`drop trigger test_receipt_delivery_refusal`);
     }
     await withTransaction(suite.db, (tx) =>
-      enqueueOriginalReceipt(tx, cfg, ticket, saleId, undefined, personId),
+      enqueueOriginalReceipt(tx, cfg, ticket, saleId, { personId }),
     );
     const jobs = await suite.db.select().from(printJobs);
     expect(jobs).toHaveLength(1);
@@ -3121,7 +3121,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
     const invoices = await suite.db.select().from(sales);
     const fiscal = await suite.db.select().from(registrosFacturacion);
     await withTransaction(suite.db, (tx) =>
-      enqueueOriginalReceipt(tx, cfg, ticket, saleId, undefined, personId),
+      enqueueOriginalReceipt(tx, cfg, ticket, saleId, { personId }),
     );
     const jobs = await suite.db.select().from(printJobs);
     expect(jobs).toHaveLength(1);
@@ -3140,7 +3140,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
     expect(decodeTicket(new Uint8Array(jobs[0]!.payload))).not.toContain("DUPLICADO");
     expect(opensDrawer(new Uint8Array(jobs[0]!.payload))).toBe(false);
     await withTransaction(suite.db, (tx) =>
-      enqueueOriginalReceipt(tx, cfg, ticket, saleId, undefined, personId),
+      enqueueOriginalReceipt(tx, cfg, ticket, saleId, { personId }),
     );
     expect(await suite.db.select().from(printJobs)).toEqual(jobs);
     expect(await suite.db.select().from(invoiceDeliveries)).toHaveLength(1);
@@ -3410,7 +3410,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
   it("refuses a competing email after an explicit paper original", async () => {
     const { cfg, saleId, ticket, personId } = await issued();
     await withTransaction(suite.db, (tx) =>
-      enqueueOriginalReceipt(tx, cfg, ticket, saleId, undefined, personId),
+      enqueueOriginalReceipt(tx, cfg, ticket, saleId, { personId }),
     );
     await expect(
       withTransaction(suite.db, (tx) =>
@@ -3437,7 +3437,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
     );
     await expect(
       withTransaction(suite.db, (tx) =>
-        enqueueOriginalReceipt(tx, cfg, ticket, saleId, undefined, personId),
+        enqueueOriginalReceipt(tx, cfg, ticket, saleId, { personId }),
       ),
     ).rejects.toMatchObject({ code: "invoice_delivery.active" });
     expect(await suite.db.select().from(printJobs)).toEqual([]);
@@ -3447,7 +3447,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
   it("preserves an unattributed sale's paper original without inventing a staff identity", async () => {
     const { cfg, saleId, ticket } = await issued(false);
     await withTransaction(suite.db, (tx) =>
-      enqueueOriginalReceipt(tx, cfg, ticket, saleId, undefined, null),
+      enqueueOriginalReceipt(tx, cfg, ticket, saleId, { personId: null }),
     );
     expect(await suite.db.select().from(printJobs)).toEqual([
       expect.objectContaining({ saleId, receiptCopy: false }),
@@ -3458,7 +3458,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
     ]);
     expect((await suite.db.select().from(sales))[0]!.operatorId).toBeNull();
     await withTransaction(suite.db, (tx) =>
-      enqueueOriginalReceipt(tx, cfg, ticket, saleId, undefined, null),
+      enqueueOriginalReceipt(tx, cfg, ticket, saleId, { personId: null }),
     );
     expect(await suite.db.select().from(printJobs)).toHaveLength(1);
     expect(await suite.db.select().from(invoiceDeliveries)).toHaveLength(1);

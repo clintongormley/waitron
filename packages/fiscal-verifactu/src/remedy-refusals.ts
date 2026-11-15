@@ -34,6 +34,7 @@ export const REMEDY_REFUSALS = {
   "sale.replacement_not_first": 400,
   "fiscal.correction_unsupported": 409,
   "series.no_rectificative_for_node": 409,
+  "fiscal.taxpayer_domicile_missing": 409,
 } as const;
 
 export type RemedyRefusal = keyof typeof REMEDY_REFUSALS;
