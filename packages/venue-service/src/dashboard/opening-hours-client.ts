@@ -34,6 +34,11 @@ export class OpeningHoursApi {
     this.#watches = new ModelWatches(liveData);
     this.specialDays = new SpecialDaysApi(request, liveData);
   }
+  readOpeningHours(): Promise<OpeningHoursModel> {
+    return this.request<OpeningHoursModel>(`${BASE}/opening-hours`, "GET", undefined, {
+      passive: true,
+    });
+  }
   watchOpeningHours(
     apply: (model: OpeningHoursModel) => void,
     failed: (error: unknown) => void,
@@ -42,10 +47,7 @@ export class OpeningHoursApi {
     return this.#watches.watch(
       "venue-service:opening-hours",
       QUERY_DEPENDENCIES["opening-hours"],
-      () =>
-        this.request<OpeningHoursModel>(`${BASE}/opening-hours`, "GET", undefined, {
-          passive: true,
-        }),
+      () => this.readOpeningHours(),
       apply,
       failed,
       recovered,

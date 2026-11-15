@@ -257,45 +257,87 @@ it("keeps a missing selected season marked with a useful heading until leaving",
   ).toBe(true);
 });
 
-it("refreshes the clock revision and lost hours before confirming a refused Delete again", async () => {
-  let data = painterModel();
-  let impacts = 0;
-  const revisions: number[] = [];
-  const table = await mount((async (path, method, body) => {
-    if (path.endsWith("/delete-impact")) {
-      impacts++;
-      return { departments: [{ id: "d1", name: impacts === 1 ? "Restaurant" : "Terrace" }] };
+it.each(["before", "after"])(
+  "refreshes a refused Delete when live hours arrive %s its refusal",
+  async (update) => {
+    let data = painterModel();
+    let impacts = 0;
+    const revisions: number[] = [];
+    const table = await mount((async (path, method, body) => {
+      if (path.endsWith("/delete-impact")) {
+        impacts++;
+        return { departments: [{ id: "d1", name: impacts === 1 ? "Restaurant" : "Terrace" }] };
+      }
+      if (method !== "GET") {
+        const revision = (body as { expectedClockRevision: number }).expectedClockRevision;
+        revisions.push(revision);
+        if (revision !== data.clockRevision) throw { code: "hours.clock_changed" };
+        return data.seasons;
+      }
+      return structuredClone(data);
+    }) as DashboardRequest);
+    table
+      .shadowRoot!.querySelector<HTMLElement>('[data-row-key="spring"] [data-test=delete-season]')!
+      .click();
+    await expect
+      .poll(() => screen.shadowRoot!.querySelector("[data-test=delete-impact]")?.textContent)
+      .toContain("Restaurant");
+    data = {
+      ...data,
+      clockRevision: 5,
+      seasons: data.seasons.map((s) => (s.id === "winter" ? { ...s, name: "New winter" } : s)),
+    };
+    if (update === "before") {
+      screen.api.rereadWatches();
+      await expect.poll(() => (table.rows[0] as { name: string }).name).toBe("New winter");
     }
-    if (method !== "GET") {
-      const revision = (body as { expectedClockRevision: number }).expectedClockRevision;
-      revisions.push(revision);
-      if (revision !== data.clockRevision) throw { code: "hours.clock_changed" };
-      return data.seasons;
-    }
-    return structuredClone(data);
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
+    await expect
+      .poll(() => screen.shadowRoot!.querySelector("wt-form-actions")?.error)
+      .not.toBe("");
+    await expect
+      .poll(() => screen.shadowRoot!.querySelector("[data-test=delete-impact]")?.textContent)
+      .toContain("Terrace");
+    const impactText = screen.shadowRoot!.querySelector("[data-test=delete-impact]")!.textContent;
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
+    await expect.poll(() => revisions).toEqual([4, 5]);
+    expect(impacts).toBe(2);
+    expect(impactText).toContain("Terrace");
+    expect(impactText).toContain("New winter");
+    await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
+  },
+);
+
+it("keeps Cancel available while refreshing a clock-refused deletion's lost hours", async () => {
+  let reads = 0;
+  let finish!: (value: { departments: [] }) => void;
+  const pending = new Promise<{ departments: [] }>((resolve) => {
+    finish = resolve;
+  });
+  const table = await mount((async (path, method) => {
+    if (path.endsWith("/delete-impact")) return ++reads === 1 ? { departments: [] } : pending;
+    if (method !== "GET") throw { code: "hours.clock_changed" };
+    return painterModel();
   }) as DashboardRequest);
-  table
-    .shadowRoot!.querySelector<HTMLElement>('[data-row-key="spring"] [data-test=delete-season]')!
-    .click();
-  await expect
-    .poll(() => screen.shadowRoot!.querySelector("[data-test=delete-impact]")?.textContent)
-    .toContain("Restaurant");
-  data = {
-    ...data,
-    clockRevision: 5,
-    seasons: data.seasons.map((s) => (s.id === "winter" ? { ...s, name: "New winter" } : s)),
-  };
-  screen.api.rereadWatches();
-  await expect.poll(() => (table.rows[0] as { name: string }).name).toBe("New winter");
-  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
-  await expect.poll(() => screen.shadowRoot!.querySelector("wt-form-actions")?.error).not.toBe("");
-  const impactText = screen.shadowRoot!.querySelector("[data-test=delete-impact]")!.textContent;
-  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
-  await expect.poll(() => revisions).toEqual([4, 5]);
-  expect(impacts).toBe(2);
-  expect(impactText).toContain("Terrace");
-  expect(impactText).toContain("New winter");
-  await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
+  try {
+    table.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-season]")!.click();
+    await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
+    await expect.poll(() => reads).toBe(2);
+    const cancel = screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      'wt-button[slot="cancel"]',
+    )!;
+    await expect.poll(() => cancel.disabled).toBe(false);
+    const modal = screen.shadowRoot!.querySelector("wt-modal")!;
+    const closed = new Promise<void>((done) =>
+      modal.addEventListener("wt-close", () => done(), { once: true }),
+    );
+    cancel.click();
+    await closed;
+    await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
+  } finally {
+    finish({ departments: [] });
+  }
 });
 
 it("keeps a delete's opening revision through a live update and takes a new one after Cancel", async () => {

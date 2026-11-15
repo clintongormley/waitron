@@ -1757,7 +1757,7 @@ const es: Record<keyof typeof en, string> = {
   "period.delete_clock_changed":
     "Ha cambiado el inicio del día. Revisa qué cambia al eliminarlo y vuelve a eliminarlo.",
   "season.delete_clock_changed":
-    "Ha cambiado el inicio del día. Revisa qué cambia al eliminarlo y vuelve a eliminarlo.",
+    "Ha cambiado el inicio del día. Revisa qué cambia al eliminarla y vuelve a eliminarla.",
   "menu.name_required": "Indica un nombre.",
   "menu.menu_required": "Elige una carta.",
   "menu.name_taken": "Otro periodo de este departamento ya tiene este nombre.",

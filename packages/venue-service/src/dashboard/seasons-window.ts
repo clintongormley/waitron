@@ -305,10 +305,9 @@ export class SeasonsWindow extends LitElement {
   }
   private readonly usedByLabel = (colour: string, names: string) =>
     format("hours.colour_used_by", { colour, names });
-  async requestClose(): Promise<boolean> {
-    if (this.busy) return false;
+  requestClose(): void {
+    if (this.busy) return;
     this.dispatchEvent(new CustomEvent("season-cancel", { bubbles: true, composed: true }));
-    return true;
   }
   private dayOptions(month: string) {
     return Array.from({ length: month ? daysIn(month) : 31 }, (_, index) => ({

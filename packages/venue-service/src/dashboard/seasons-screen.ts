@@ -111,8 +111,14 @@ export class SeasonsScreen extends LitElement {
     this.actionError = "";
     void this.readImpact(deletion);
   }
-  private async readImpact(deletion: NonNullable<SeasonsScreen["deleting"]>) {
+  private async readImpact(deletion: NonNullable<SeasonsScreen["deleting"]>, refresh = false) {
     try {
+      if (refresh) {
+        const model = await this.api.readOpeningHours();
+        if (this.deleting !== deletion) return;
+        deletion.revision = model.clockRevision;
+        deletion.receivers = seasonReceivers(deletion.season, draftOf(model.seasons).rows);
+      }
       const impact = await this.api.readSeasonDeleteImpact(deletion.season.key);
       if (this.deleting === deletion) deletion.impact = impact;
     } catch {
@@ -133,15 +139,12 @@ export class SeasonsScreen extends LitElement {
     } catch (error) {
       if (this.deleting !== deletion || !this.isConnected) return;
       const refusal = refusalOf(error);
-      deletion.error = clockChangeConflictText(refusal) ?? seasonRefusalText(refusal);
       if (refusal.code === "hours.clock_changed") {
-        deletion.revision = this.model!.clockRevision;
-        deletion.receivers = seasonReceivers(deletion.season, draftOf(this.model!.seasons).rows);
         deletion.error = t("season.delete_clock_changed");
         deletion.loading = true;
         deletion.impact = undefined;
-        await this.readImpact(deletion);
-      }
+        void this.readImpact(deletion, true);
+      } else deletion.error = clockChangeConflictText(refusal) ?? seasonRefusalText(refusal);
       if (refusal.code === "season.not_found") {
         this.actionError = deletion.error;
         this.deleting = undefined;
