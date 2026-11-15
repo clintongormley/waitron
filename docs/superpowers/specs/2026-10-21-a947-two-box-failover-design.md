@@ -1999,6 +1999,9 @@ the code depends. _(2026-10-22: slice 4a added that test, `packages/fiscal-verif
   > tills and phones: [2026-11-15-a947-4d-measurements.md](../../research/2026-11-15-a947-4d-measurements.md).
   > The cookie reaches a server's own name only when it names the venue's domain, which by reading
   > a box does not set today.
+  >
+  > **Pointer, 2026-11-15.** The image now sets it (`WAITRON_VENUE_DOMAIN=waitron.local`,
+  > `deploy/Dockerfile`).
 - The card payment in flight at the moment of the switch (A764).
 - The clock check's 30 seconds is a starting value: how far tills and boxes drift with the internet
   down is not measured, and the rehearsal measures it (§6.5).

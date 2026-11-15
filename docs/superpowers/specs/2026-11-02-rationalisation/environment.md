@@ -2,6 +2,9 @@
 
 # Environment variables — a rationalised design
 
+> **2026-11-15:** the box image and compose now set `WAITRON_VENUE_DOMAIN` (default `waitron.local`);
+> the `WAITRON_TENANT_DOMAIN` row below describes the code before that change.
+>
 > **2026-11-09, #2543:** the legacy relay tunnel is removed: `packages/tunnel`, `tunnel-http.ts` and the
 > four `WAITRON_TUNNEL_*` variables are gone, and the staff tunnel is its own compose service. Rows
 > below that name them describe the code before that change; the A1308 plans (jr1–jr3, env1, env7)
