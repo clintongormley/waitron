@@ -57,8 +57,6 @@ it.each([
             "ES-common",
             "--locale",
             "es-ES",
-            "--operation-description",
-            "Restaurante",
             "--address-line1",
             "Mayor 1",
             "--address-line2",

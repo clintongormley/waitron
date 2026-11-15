@@ -122,8 +122,6 @@ export const startEn = {
   "server_fields.taxpayer_domicile": "Enter the full registered business address.",
   "server_fields.series_code":
     "Use letters, numbers, and the characters / _ . and - only, up to 21 characters.",
-  "server_fields.operation_description":
-    "Waitron filled in a hidden venue detail wrongly. This is a fault in Waitron, not in what you entered.",
 } as const;
 
 export const startEs: Record<keyof typeof startEn, string> = {
@@ -249,6 +247,4 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "server_fields.taxpayer_domicile": "Introduce el domicilio fiscal completo del negocio.",
   "server_fields.series_code":
     "Usa solo letras, números y los caracteres / _ . y - (hasta 21 caracteres).",
-  "server_fields.operation_description":
-    "Waitron ha rellenado mal un dato oculto del local. Es un fallo de Waitron, no de lo que has introducido.",
 };

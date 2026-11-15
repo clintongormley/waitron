@@ -34,7 +34,6 @@ it("the installed command refuses a missing host-state directory before creating
     "venue-name": "Olivo",
     territory: "ES-common",
     locale: "es-ES",
-    "operation-description": "Restaurant",
     "address-line1": "Mayor 1",
     "address-line2": "Local 2",
     "postal-code": "28001",

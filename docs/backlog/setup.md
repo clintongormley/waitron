@@ -87,7 +87,7 @@ Unknown setup addresses go
 each says whether it was seen in a run or only read in the code:
 
 The shell routes
-  a refused `seriesCode`, `rectificativeSeriesCode` or `operationDescription` back to the venue
+  a refused `seriesCode` or `rectificativeSeriesCode` back to the venue
   screen whatever the mode (`apps/setup/src/setup-app.ts`, the venue case of the refusal routing).
   The refusal's sentence shows above Next and pressing Next moves on to the review screen, which
   sends the same series codes again, so the operator has nothing to change if the server refused

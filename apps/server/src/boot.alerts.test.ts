@@ -1,3 +1,4 @@
+import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -60,7 +61,7 @@ async function fullInvoice(venue: Venue): Promise<string> {
   return (
     await recordSyntheticInvoice(suite.db, venue.cfg.nodeId, {
       seriesCode: "FB",
-      operationDescription: "Venta en establecimiento",
+      operationDescription: FISCAL_SLOT.venueFields!.defaults!.operationDescription!,
     })
   ).saleId;
 }

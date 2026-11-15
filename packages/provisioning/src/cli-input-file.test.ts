@@ -42,8 +42,6 @@ const args = [
   "ES-common",
   "--locale",
   "es-ES",
-  "--operation-description",
-  "Venta",
   "--address-line1",
   "Calle Mayor 1",
   "--postal-code",

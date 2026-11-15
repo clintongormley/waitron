@@ -49,8 +49,6 @@ const VENUE_ARGS = [
   "ES-common",
   "--locale",
   "es-ES",
-  "--operation-description",
-  "Restaurante",
   "--address-line1",
   "Calle Mayor 1",
   "--postal-code",

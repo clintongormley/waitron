@@ -1,3 +1,4 @@
+import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -96,7 +97,9 @@ it("enrols a real till and records a primary cash sale on the copy, continuing i
         copy.venue.all(
           sql`select operation_description from departments where name like 'Upgrade check %'`,
         ),
-      ).toEqual([{ operation_description: "Venta en establecimiento" }]);
+      ).toEqual([
+        { operation_description: FISCAL_SLOT.venueFields!.defaults!.operationDescription! },
+      ]);
     } finally {
       await copy.close();
     }

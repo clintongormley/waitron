@@ -209,6 +209,12 @@ questions. The follow-ups and the rows:
 
 ## A913's fix items: general code English only
 
+**2026-11-15, A1308 vb6:** the retired venue fixture field is removed. The historical
+operation-description references below no longer describe that venue field; recording helpers
+now pass their original description explicitly, and department receipts store theirs in
+`departments.operation_description`. Remaining language cleanup is tracked by the root
+English-only guard and its debt list.
+
 **Audit done 2026-10-20 on main `a3be14ba4`: [english-only-audit.md](english-only-audit.md).** The
 owner answered points 2–8 on 2026-10-20 (the campaign's questions file has the words): 2, 4, 7 and 8
 as recommended; 3, 5 and 6 in the owner's own words, recorded in
@@ -617,6 +623,12 @@ control that creates an unwanted sale or record on the new bill and reaches thos
 while retaining the dish-name, sale-count, record-count and open-status checks.
 
 ## A976. Finish the server's English test-venue defaults.
+
+**2026-11-15, A1308 vb6:** the retired venue fixture field is removed. The historical
+operation-description references below no longer describe that venue field; recording helpers
+now pass their original description explicitly, and department receipts store theirs in
+`departments.operation_description`. Remaining language cleanup is tracked by the root
+English-only guard and its debt list.
 
 - **A976. Finish the server's English test-venue defaults.**
   The VAT-class, issue-rate, line-transfer and move/merge filing suites use Administrator for their staff sample; their location and dish samples remain.

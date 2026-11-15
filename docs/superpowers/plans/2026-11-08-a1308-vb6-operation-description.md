@@ -260,3 +260,10 @@ unchanged text: the copied fixture's “Restaurante” becomes the contribution 
 (`scripts/box/upgrades/candidate.mjs`; the eight candidate-wrapper tests passed under a Docker stub).
 The base/candidate `upgrade-sale.test.ts` probes each asserted the newest stored fiscal description
 and passed. This exception does not authorise changing a real venue's filed description.
+
+**Watcher, 2026-11-15 18:20:** remove the 114 now-clean English-debt paths and lower
+the pin; use the contribution default in the two server fixtures. Four core fixtures retain
+their exact prior Spanish fiscal text with individual `KEEPS_NON_ENGLISH` entries, exact finding
+counts and a byte-preservation reason. No debt paths are added or scanner rules broadened.
+The watcher also cleared about 1,200 conservative gross handwritten lines at 17:55; past that,
+stop and split.
