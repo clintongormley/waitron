@@ -1,7 +1,7 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { AppError } from "@waitron/shared";
 import { readManagementSessionToken } from "@waitron/server-kit";
-import { readSessionToken } from "./till-session.js";
+import { hasSessionCookie } from "./till-session.js";
 import { readDeviceCookie } from "./device-session.js";
 import type { OriginAllowlist } from "./allowed-origins.js";
 import type { Logger } from "./logger.js";
@@ -44,7 +44,7 @@ export function requireManagementChangeFromOwnPage(
     const code =
       readManagementSessionToken(c) !== null
         ? "management.origin_refused"
-        : readSessionToken(c) !== null || readDeviceCookie(c) !== null
+        : hasSessionCookie(c) || readDeviceCookie(c) !== null
           ? "till.origin_refused"
           : null;
     if (code === null) return next();

@@ -26,3 +26,5 @@ Run server Vitest on `src/{own-page,allowed-origins,boot.management-origin,boot.
 
 **Expected additions/removals:** production +25/−5; tests +180/−20; support 0/0; prose including plan +55/−15, total about 300 changed lines. Past about 450 lines, or a material scope change, return to the watcher before further build; not a ceiling.
 **Clearance:** the watcher wrote at 22:41, “Widen the existing own-page check as planned (~300 lines). It touches auth, so finish-branch runs both run-it angles. Not an owner approval.”
+
+**2026-11-15 23:41 watcher-cleared exception:** export `hasSessionCookie` from `till-session.ts` and consume only that boolean in `own-page.ts`. The existing raw-token reader guard and every assertion stay unchanged. This replaces the unchanged-exports constraint above; no authentication lookup or cookie behavior changes.
