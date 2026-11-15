@@ -161,7 +161,7 @@ describe("Save sends only the paint the draft changed", () => {
     await drag(el, DEC_15, at(from), at("23:30"));
   }
 
-  it("shrinking Restaurant on a date cuts Terrace's closure that date in the same Save", async () => {
+  it("shrinking Restaurant on a date leaves Terrace's stored closure unchanged", async () => {
     const { painter, writes } = await mount({
       days: { sd1: terraceClosed([{ kind: "closed", startsAt: "21:00", endsAt: "23:00" }]) },
     });
@@ -174,13 +174,7 @@ describe("Save sends only the paint the draft changed", () => {
         ranges: [{ periodId: null, startsAt: "22:00", endsAt: "23:30" }],
       },
     ]);
-    expect(body(writes[0]!).zonePaint).toEqual([
-      {
-        zoneId: "z2",
-        date: DEC_15,
-        ranges: [{ kind: "closed", startsAt: "21:00", endsAt: "22:00" }],
-      },
-    ]);
+    expect(Object.keys(body(writes[0]!))).not.toContain("zonePaint");
   });
 
   it("Terrace's Open paint that date is kept", async () => {
@@ -194,16 +188,7 @@ describe("Save sends only the paint the draft changed", () => {
     });
     await shrinkRestaurant(painter, "22:00");
     await save(painter, writes);
-    expect(body(writes[0]!).zonePaint).toEqual([
-      {
-        zoneId: "z2",
-        date: DEC_15,
-        ranges: [
-          { kind: "open", startsAt: "20:00", endsAt: "21:00" },
-          { kind: "closed", startsAt: "21:00", endsAt: "22:00" },
-        ],
-      },
-    ]);
+    expect(Object.keys(body(writes[0]!))).not.toContain("zonePaint");
   });
 
   it("a department change that leaves the zone inside sends no zone entry", async () => {
@@ -272,7 +257,7 @@ describe("Save sends only the paint the draft changed", () => {
     expect(Object.keys(body(writes[0]!))).not.toContain("zonePaint");
   });
 
-  it("only Terrace's Closed paint is cut: its Open paint past the new hours is kept, in time order", async () => {
+  it("department edits preserve a zone's Closed and Open paint", async () => {
     const { painter, writes } = await mount({
       days: {
         sd1: terraceClosed([
@@ -283,16 +268,7 @@ describe("Save sends only the paint the draft changed", () => {
     });
     await shrinkRestaurant(painter, "22:00");
     await save(painter, writes);
-    expect(body(writes[0]!).zonePaint).toEqual([
-      {
-        zoneId: "z2",
-        date: DEC_15,
-        ranges: [
-          { kind: "closed", startsAt: "21:00", endsAt: "22:00" },
-          { kind: "open", startsAt: "22:30", endsAt: "23:30" },
-        ],
-      },
-    ]);
+    expect(Object.keys(body(writes[0]!))).not.toContain("zonePaint");
   });
 
   it("a department change on a date with no season day leaves its zones' paint that date", async () => {
@@ -795,43 +771,6 @@ describe("a refused save", () => {
     expect(frame(painter).refusal).toBe(text);
     expect(pickerValue(painter)).toBe("zone:z2");
     expect(grid(painter).columnErrors.size).toBe(0);
-  });
-
-  it("an outside_hours refusal shows that zone, marks the date and says why", async () => {
-    const { painter, writes } = await mount({
-      refusals: [
-        {
-          code: "special_day.invalid",
-          params: {
-            field: "zonePaint.0.ranges.0",
-            reason: "outside_hours",
-            zoneId: "z2",
-            date: DEC_15,
-          },
-        },
-      ],
-    });
-    await pick(painter, "zone:z2");
-    await drag(painter, DEC_15, at("21:00"), at("22:00"));
-    await pick(painter, "d1");
-    await save(painter, writes);
-    const why = "A zone can only close while its department is open.";
-    expect(frame(painter).refusal).toBe(`Terrace, ${formatDate(DEC_15)}: ${why}`);
-    expect(pickerValue(painter)).toBe("zone:z2");
-    expect([...grid(painter).columnErrors]).toEqual([[DEC_15, why]]);
-  });
-
-  it("over a standing Save refusal, a zone stroke cut to nothing says why beside Save", async () => {
-    const { painter, writes } = await mount({
-      refusals: [{ code: "special_day.invalid", params: {} }],
-    });
-    await paintDinner(painter, DEC_14);
-    await save(painter, writes);
-    expect(frame(painter).refusal).toBe("This could not be saved. Try again.");
-    await pick(painter, "zone:z2");
-    await drag(painter, DEC_15, at("12:00"), at("14:00"));
-    expect(grid(painter).days.get(DEC_15) ?? []).toEqual([]);
-    expect(frame(painter).refusal).toBe("A zone can only close while its department is open.");
   });
 
   it("a date already taken marks its column, and not when it is a later year's date", async () => {

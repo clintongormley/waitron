@@ -137,7 +137,7 @@ export async function seedDemoRestaurant(
       zone.id,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
-        ranges: [{ startsAt: "23:00", endsAt: "00:00" }],
+        ranges: [{ startsAt: "23:00", endsAt: "05:00" }],
       })),
       await readBusinessDayScheduleRevision(tx),
     );

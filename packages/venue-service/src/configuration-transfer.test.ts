@@ -1132,10 +1132,10 @@ describe("season weeks in a configuration bundle", () => {
     };
   }
 
-  it("refuses a zone closure outside its department's hours at zone_day_ranges", () => {
+  it("accepts raw zone closures beyond department hours", () => {
     const tables = seasonTables();
     tables.zone_day_ranges![0]!.ends_at = "04:00:00";
-    expect(() => validate(tables, clock)).toThrowError(refusal("zone_day_ranges"));
+    expect(() => validate(tables, clock)).not.toThrow();
   });
 
   it("are transferred after the periods and zone policies they name, parents first", () => {
@@ -1263,12 +1263,12 @@ describe("season weeks in a configuration bundle", () => {
     expect(() => validate(tables, clock)).toThrowError(refusal(field));
   });
 
-  it("refuses zone season weeks closed where the department has no hours", () => {
+  it("accepts zone season closures when the department has no hours", () => {
     const tables = seasonTables();
     delete tables.menu_periods;
     tables.department_days = [];
     tables.department_day_ranges = [];
-    expect(() => validate(tables, clock)).toThrowError(refusal("zone_day_ranges"));
+    expect(() => validate(tables, clock)).not.toThrow();
   });
 
   it("accepts a zone season week with no closures in a bundle with no periods", () => {
@@ -1582,89 +1582,14 @@ describe("special days in a configuration bundle", () => {
     expect(() => validate(zone, clock)).toThrowError(refusal("zone_day_ranges"));
   });
 
-  /** Friday 20 November 2026, its department paint replaced by `paint`, with the terrace closed
-   *  `startsAt`–`endsAt`; with `season`, an Autumn season opening Bar 20:00–23:00 on Fridays. */
-  function zoneClosedOn(paint: Row[], startsAt: string, endsAt: string, season: boolean): Tables {
+  it("accepts special-date closure tails independently of department paint", () => {
     const tables = painted("2026-11-20", 0, "20:00:00", "23:00:00");
-    tables.department_day_ranges = paint;
-    if (season) {
-      tables.seasons = [
-        {
-          id: "s-autumn",
-          name: "Autumn",
-          starts_on: "09-01",
-          colour: "orange",
-        },
-      ];
-      tables.department_days!.push({
-        id: "a-fri",
-        department_id: RESTAURANT,
-        season_id: "s-autumn",
-        weekday: 5,
-        special_day_date_id: null,
-      });
-      tables.department_day_ranges.push(range("a-fri", BAR_PERIOD, "20:00:00", "23:00:00"));
-    }
     tables.zone_days = specialTables().zone_days!;
     tables.zone_day_ranges = [
-      { id: "zr", day_id: "zd-15", kind: "closed", starts_at: startsAt, ends_at: endsAt },
+      { id: "zr", day_id: "zd-15", kind: "closed", starts_at: "18:00:00", ends_at: "05:00:00" },
     ];
-    return tables;
-  }
-
-  it("refuses a zone's special-date closure outside the department's hours on that date", () => {
-    const paint = () => [range("dd-15", BAR_PERIOD, "20:00:00", "23:00:00")];
-    expect(() =>
-      validate(zoneClosedOn(paint(), "18:00:00", "19:00:00", false), clock),
-    ).toThrowError(refusal("zone_day_ranges"));
-    expect(() =>
-      validate(zoneClosedOn(paint(), "21:00:00", "22:00:00", false), clock),
-    ).not.toThrow();
-  });
-
-  it("accepts a zone closure outside the season week but inside the department's special-date paint", () => {
-    const tables = zoneClosedOn(
-      [range("dd-15", BAR_PERIOD, "18:00:00", "23:00:00")],
-      "18:00:00",
-      "19:00:00",
-      true,
-    );
     expect(() => validate(tables, clock)).not.toThrow();
-  });
-
-  it("refuses a zone closure inside the season week but under the department's Closed special-date paint", () => {
-    const tables = zoneClosedOn(
-      [range("dd-15", null, "21:00:00", "22:00:00")],
-      "21:00:00",
-      "22:00:00",
-      true,
-    );
-    expect(() => validate(tables, clock)).toThrowError(refusal("zone_day_ranges"));
-  });
-
-  it("checks a zone's special-date closure against its department's season week on that date's weekday", () => {
-    const tables = zoneClosedOn([], "21:00:00", "22:00:00", true);
-    expect(() => validate(tables, clock)).not.toThrow();
-    tables.special_day_dates![0]!.date = "2026-11-19";
-    expect(() => validate(tables, clock)).toThrowError(refusal("zone_day_ranges"));
-  });
-
-  it("checks a zone's special-date closure against the season that date falls in", () => {
-    const tables = zoneClosedOn([], "21:00:00", "22:00:00", true);
-    tables.seasons!.push({
-      id: "s-winter",
-      name: "Winter",
-      starts_on: "11-01",
-      colour: "blue",
-    });
-    expect(() => validate(tables, clock)).toThrowError(refusal("zone_day_ranges"));
-    tables.special_day_dates![0]!.date = "2026-10-16";
-    expect(() => validate(tables, clock)).not.toThrow();
-  });
-
-  it("does not check a zone's closure on a date closed all day", () => {
-    const tables = zoneClosedOn([], "18:00:00", "19:00:00", false);
-    tables.special_day_dates![0]!.closed_all_day = 1;
+    tables.department_day_ranges = [range("dd-15", null, "18:00:00", "05:00:00")];
     expect(() => validate(tables, clock)).not.toThrow();
   });
 

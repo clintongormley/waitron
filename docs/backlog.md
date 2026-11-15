@@ -687,7 +687,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **Loose ends left by A720.**
   [Detail](backlog/service-periods.md#loose-ends-left-by-a720)
 
-- **One rule for zone closures and department hours, after A760's opening_hours** (bundle of 9, size M). Holds A1542. The owner's answer: a closure outside its department's hours is ignored when read, and stops being an error. [Detail](backlog/service-periods.md#bundle-one-rule-for-zone-closures-and-department-hours-after-a760s-opening_hours)
 
 - **Calendar marks** (bundle of 2, size S). [Detail](backlog/service-periods.md#bundle-calendar-marks)
 

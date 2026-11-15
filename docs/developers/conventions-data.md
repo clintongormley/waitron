@@ -780,17 +780,15 @@ _2026-11-14: DEAD-CODE-1 retires the separate menu-week and closed-week HTTP rou
 named below. The season painter saves through `PUT …/seasons/:seasonId/weeks`;
 `replaceMenuWeek` and `replaceZoneClosedWeek` remain in-process writers._
 
-**2026-10-18, A723.** Stored closures can still lie outside a department's hours (backlog,
-Service periods). The routes refuse a closed range the request writes outside its department's hours, read in the same transaction
-after the write (`packages/venue-service/src/zone-closure-hours.ts`): `PUT …/seasons/:seasonId/weeks`
-and `PUT …/zones/:zoneId/closed-week` with `zone_closed_time.invalid`, reason `outside_hours`,
-naming `field` (`zones.<i>.days.<j>.ranges.<k>`, or `days.<j>.ranges.<k>` on the closed-week
-route), `zoneId` and `weekday`; the special-day routes with `special_day.invalid`, reason
-`outside_hours`, naming `field` (`zonePaint.<i>.ranges.<k>`), `zoneId` and `date`, skipping a date
-Closed all day. A configuration import refuses the same as `setup.request_invalid` with field
-`zone_day_ranges` (`validateSeasonWeeks`, `configuration-transfer.ts`). The writers themselves do
-not check: the season-week, closed-week and special-day routes pass the check to
-`saveSeasonWeeks`, `replaceZoneClosedWeek` and `saveSpecialDay` as their `afterWrite` hook.
+**2026-11-15, zone closures.** Saves and configuration imports retain closure stretches beyond
+department hours. `zoneClosureDays` intersects the layered zone closures with the department's
+resolved hours for the actual business day, sharing one day plan and batched department read.
+A department without hours, including an inactive one, contributes no effective zone closure.
+Saved keep-open extensions are subtracted after that intersection. Time shape, quarter-hour,
+overlap, skipped-time, ownership and business-day-change checks remain at their existing writers.
+The reader cases are in `zone-closed-times.test.ts` and `keep-open.test.ts`; route and import
+acceptance cases are in `menu-timetable-routes.test.ts`, `special-days-routes.test.ts` and
+`configuration-transfer.test.ts` under `packages/venue-service/src/`.
 
 ### Seasons and season weeks
 
@@ -936,9 +934,8 @@ delete dialog sends it back as `expectedClockRevision`.
 A configuration transfer carries both tables (`VENUE_SERVICE_CONFIGURATION_TRANSFER`). The import refuses, as `setup.request_invalid` naming
 the field, a bundle the writer could not have stored: two special-day dates on one date; a
 special-day day row with a season or a weekday; paint off the quarter-hour or overlapping; paint at a time the clocks skip, a repeating date checked at its
-next occurrence from the venue's date of the bundle's `createdAt`; and a zone's Closed paint outside its department's hours on that date
-(field `zone_day_ranges`), which the special-day routes refuse though `saveSpecialDay` alone would
-store it. The cases are under "special days in a configuration bundle" in
+next occurrence from the venue's date of the bundle's `createdAt`. Zone closure tails outside
+department hours are accepted and become effective only where the resolved hours overlap them. The cases are under "special days in a configuration bundle" in
 `packages/venue-service/src/configuration-transfer.test.ts` and "special days in a configuration
 transfer" in `apps/server/src/configuration-transfer.test.ts`.
 

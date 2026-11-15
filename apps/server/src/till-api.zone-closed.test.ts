@@ -101,6 +101,48 @@ async function orderRows() {
 }
 
 describe("closed zones take no new service", () => {
+  it("after department hours, permits seating but refuses a new order by its menu period", async () => {
+    const v = await venue();
+    await withTransaction(suite.db, async (tx) => {
+      const [zone] = await tx.select().from(floorZones).where(eq(floorZones.id, v.zoneId));
+      const [period] = await tx
+        .select()
+        .from(menuPeriods)
+        .where(eq(menuPeriods.departmentId, zone!.departmentId));
+      await replaceMenuWeek(
+        tx,
+        zone!.departmentId,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots: [{ periodId: period!.id, startsAt: "21:00", endsAt: "23:00" }],
+        })),
+        new Date(),
+        1,
+      );
+      await replaceZoneClosedWeek(
+        tx,
+        v.zoneId,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          ranges: [{ startsAt: "22:00", endsAt: "05:00" }],
+        })),
+        1,
+        new Date(),
+      );
+    });
+    vi.setSystemTime(new Date("2026-10-06T00:30:00+02:00"));
+    await seat(v);
+    const before = await orderRows();
+    const answer = await request(v, "POST", "/api/working-orders", {
+      id: randomUUID(),
+      zoneId: v.zoneId,
+      lines: [line(v)],
+    });
+    expect(answer.status).toBe(400);
+    expect(answer.json).toMatchObject({ code: "menu_period.not_running" });
+    expect(await orderRows()).toEqual(before);
+  });
+
   it("seats immediately before closure and refuses at the exact start without writing a party", async () => {
     const v = await venue();
     at("23:29");

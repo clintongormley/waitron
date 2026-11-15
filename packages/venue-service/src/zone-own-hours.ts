@@ -94,20 +94,6 @@ export function joinPlacedRanges(pieces: readonly Piece[]): Piece[] {
   return spans;
 }
 
-/** The index of the first closure not wholly inside the department's ranges, or -1. */
-export function closureOutsideHours(
-  department: readonly ClosedRange[],
-  closures: readonly ClosedRange[],
-  day: { dayCutover: string; endMinute: number },
-): number {
-  const place = placeOnDay(day);
-  const spans = joinPlacedRanges(department.map(place));
-  return closures.findIndex((closure) => {
-    const { start, end } = place(closure);
-    return !spans.some((span) => span.start <= start && end <= span.end);
-  });
-}
-
 /** The closures cut to the department's ranges: what lies outside is dropped, and pieces that
  *  touch join. In day order. */
 export function closuresInHours(

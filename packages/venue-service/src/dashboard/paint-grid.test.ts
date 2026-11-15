@@ -1520,16 +1520,16 @@ test("a grid taken off the page and put back still marks the side with hidden co
 const shut = (startsAt: string, endsAt: string): Paint => ({ periodId: null, startsAt, endsAt });
 async function zoneGrid(
   days: Record<string, Paint[]>,
-  closedWithin: Record<string, Paint[]>,
+  underlay: Record<string, Paint[]>,
   chosen: string | null = null,
 ) {
   const el = await grid(days, { chosen, closedErases: false });
-  el.closedWithin = new Map(Object.entries(closedWithin));
+  el.underlay = new Map(Object.entries(underlay));
   await el.updateComplete;
   return el;
 }
 
-test("with closedWithin, a Closed stroke keeps only what lies in the column's hours", async () => {
+test("a zone Closed stroke retains its tail beyond the department underlay", async () => {
   const el = await zoneGrid(
     { mon: [], thu: [] },
     {
@@ -1544,262 +1544,9 @@ test("with closedWithin, a Closed stroke keeps only what lies in the column's ho
   await drag(el, "mon", 1050, 1260);
   await drag(el, "thu", 540, 660);
   expect(seen).toEqual([
-    { key: "mon", day: [shut("23:30", "02:00")] },
+    { key: "mon", day: [shut("23:30", "03:00")] },
     { key: "thu", day: [shut("15:00", "17:00")] },
   ]);
-});
-
-test("a Closed stroke cut to the hours leaves the paint where it was cut away, and the kept part paints over it", async () => {
-  const open: Paint = { periodId: "open", startsAt: "17:00", endsAt: "22:00" };
-  const el = await zoneGrid(
-    { mon: [open] },
-    { mon: [{ periodId: "dinner", startsAt: "20:00", endsAt: "23:00" }] },
-  );
-  const seen = changes(el);
-  await drag(el, "mon", 720, 900);
-  expect(seen).toEqual([
-    {
-      key: "mon",
-      day: [
-        { periodId: "open", startsAt: "17:00", endsAt: "20:00" },
-        shut("20:00", "21:00"),
-        { periodId: "open", startsAt: "21:00", endsAt: "22:00" },
-      ],
-    },
-  ]);
-});
-
-test("a Closed stroke cut into two pieces by the hours paints both pieces and leaves the paint between them", async () => {
-  const open: Paint = { periodId: "open", startsAt: "12:00", endsAt: "20:00" };
-  const el = await zoneGrid(
-    { mon: [open] },
-    {
-      mon: [
-        { periodId: "lunch", startsAt: "13:00", endsAt: "15:00" },
-        { periodId: "dinner", startsAt: "17:00", endsAt: "19:00" },
-      ],
-    },
-  );
-  const seen = changes(el);
-  await drag(el, "mon", 360, 720);
-  expect(seen).toEqual([
-    {
-      key: "mon",
-      day: [
-        { periodId: "open", startsAt: "12:00", endsAt: "13:00" },
-        shut("13:00", "15:00"),
-        { periodId: "open", startsAt: "15:00", endsAt: "17:00" },
-        shut("17:00", "18:00"),
-        { periodId: "open", startsAt: "18:00", endsAt: "20:00" },
-      ],
-    },
-  ]);
-});
-
-test("a stroke wholly outside the hours emits nothing", async () => {
-  const el = await zoneGrid(
-    { mon: [shut("20:00", "21:00")] },
-    { mon: [{ periodId: "dinner", startsAt: "19:30", endsAt: "23:00" }] },
-  );
-  const seen = changes(el);
-  await drag(el, "mon", 120, 240);
-  expect(seen).toEqual([]);
-});
-
-test("a block changed to Closed and a day copied to another column are cut to that column's hours", async () => {
-  const el = await zoneGrid(
-    { mon: [lunch], tue: [], thu: [shut("13:00", "16:00")] },
-    {
-      mon: [{ periodId: "lunch", startsAt: "14:00", endsAt: "15:00" }],
-      tue: [{ periodId: "dinner", startsAt: "15:00", endsAt: "17:00" }],
-    },
-  );
-  const seen = changes(el);
-  await userEvent.click(block(el, "mon"));
-  await userEvent.click(menuButton(el, "Closed"));
-  expect(seen).toEqual([{ key: "mon", day: [shut("14:00", "15:00")] }]);
-  await openChooser(el, "thu");
-  await userEvent.click(choice(el, "tue"));
-  await el.updateComplete;
-  await userEvent.click(chooserButton(el, "Copy"));
-  await el.updateComplete;
-  expect(seen.at(-1)).toEqual({ key: "tue", day: [shut("15:00", "16:00")] });
-});
-
-test("Open paint (a period id) is not cut, and a column closedWithin does not name is not bounded", async () => {
-  const el = await zoneGrid(
-    { mon: [], thu: [] },
-    { thu: [{ periodId: "lunch", startsAt: "13:00", endsAt: "16:00" }] },
-    "dinner",
-  );
-  const seen = changes(el);
-  await drag(el, "thu", 840, 1050);
-  expect(seen).toEqual([
-    { key: "thu", day: [{ periodId: "dinner", startsAt: "20:00", endsAt: "23:30" }] },
-  ]);
-  el.chosen = null;
-  await el.updateComplete;
-  await drag(el, "mon", 120, 240);
-  expect(seen.at(-1)).toEqual({ key: "mon", day: [shut("08:00", "10:00")] });
-});
-
-test("a Closed stroke wholly outside the column's hours sends paint-outside with its column, and a stroke that keeps something does not", async () => {
-  const el = await zoneGrid(
-    { mon: [] },
-    { mon: [{ periodId: "dinner", startsAt: "19:30", endsAt: "23:00" }] },
-  );
-  const outside: { key: string }[] = [];
-  el.addEventListener("paint-outside", (event) => outside.push(event.detail));
-  const seen = changes(el);
-  await drag(el, "mon", 120, 240);
-  expect(outside).toEqual([{ key: "mon" }]);
-  expect(seen).toEqual([]);
-  await drag(el, "mon", 840, 1050);
-  expect(outside).toHaveLength(1);
-  expect(seen).toEqual([{ key: "mon", day: [shut("20:00", "23:00")] }]);
-});
-
-test("a block changed to Closed wholly outside the column's hours sends paint-outside and leaves the day", async () => {
-  const el = await zoneGrid(
-    { mon: [lunch] },
-    { mon: [{ periodId: "dinner", startsAt: "19:30", endsAt: "23:00" }] },
-  );
-  const outside: { key: string }[] = [];
-  el.addEventListener("paint-outside", (event) => outside.push(event.detail));
-  const seen = changes(el);
-  await userEvent.click(block(el, "mon"));
-  await userEvent.click(menuButton(el, "Closed"));
-  await el.updateComplete;
-  expect(outside).toEqual([{ key: "mon" }]);
-  expect(seen).toEqual([]);
-});
-
-test("a block changed to Closed wholly outside the hours, touching Closed paint inside them, sends paint-outside and leaves the day", async () => {
-  const el = await zoneGrid(
-    { mon: [lunch, shut("16:00", "17:00")] },
-    { mon: [{ periodId: "dinner", startsAt: "16:00", endsAt: "23:00" }] },
-  );
-  const outside: { key: string }[] = [];
-  el.addEventListener("paint-outside", (event) => outside.push(event.detail));
-  const seen = changes(el);
-  await userEvent.click(block(el, "mon"));
-  await userEvent.click(menuButton(el, "Closed"));
-  await el.updateComplete;
-  expect(outside).toEqual([{ key: "mon" }]);
-  expect(seen).toEqual([]);
-});
-
-test("a Closed block wholly outside the hours changed to a period is changed, with no paint-outside", async () => {
-  const el = await zoneGrid(
-    { mon: [shut("13:00", "16:00")] },
-    { mon: [{ periodId: "dinner", startsAt: "19:30", endsAt: "23:00" }] },
-  );
-  const outside: { key: string }[] = [];
-  el.addEventListener("paint-outside", (event) => outside.push(event.detail));
-  const seen = changes(el);
-  await userEvent.click(block(el, "mon"));
-  await userEvent.click(menuButton(el, "Lunch"));
-  await el.updateComplete;
-  expect(outside).toEqual([]);
-  expect(seen).toEqual([{ key: "mon", day: [lunch] }]);
-});
-
-test("Copy whose Closed paint lies wholly outside a bounded column's hours lands what survives the cut there and sends paint-outside for it", async () => {
-  const kept = shut("20:00", "21:00");
-  const el = await zoneGrid(
-    { mon: [shut("08:00", "10:00")], tue: [kept] },
-    { tue: [{ periodId: "dinner", startsAt: "19:30", endsAt: "23:00" }] },
-  );
-  const outside: { key: string }[] = [];
-  el.addEventListener("paint-outside", (event) => outside.push(event.detail));
-  const seen = changes(el);
-  await openChooser(el, "mon");
-  await userEvent.click(choice(el, "tue"));
-  await el.updateComplete;
-  await userEvent.click(chooserButton(el, "Copy"));
-  await el.updateComplete;
-  expect(outside).toEqual([{ key: "tue" }]);
-  expect(seen).toEqual([{ key: "tue", day: [] }]);
-});
-
-test("Copy cuts a bounded target to its hours even when the target already holds the source's paint", async () => {
-  const el = await zoneGrid(
-    { mon: [shut("21:00", "23:00")], tue: [shut("21:00", "23:00")] },
-    {
-      mon: [{ periodId: "dinner", startsAt: "20:00", endsAt: "23:00" }],
-      tue: [{ periodId: "dinner", startsAt: "20:00", endsAt: "22:00" }],
-    },
-  );
-  const outside: { key: string }[] = [];
-  el.addEventListener("paint-outside", (event) => outside.push(event.detail));
-  const seen = changes(el);
-  await openChooser(el, "mon");
-  await userEvent.click(choice(el, "tue"));
-  await el.updateComplete;
-  await userEvent.click(chooserButton(el, "Copy"));
-  await el.updateComplete;
-  expect(seen).toEqual([{ key: "tue", day: [shut("21:00", "22:00")] }]);
-  expect(outside).toEqual([]);
-});
-
-test("Copy onto a bounded target already holding the source's paint, all of it outside the target's hours, clears it and sends paint-outside", async () => {
-  const el = await zoneGrid(
-    { mon: [shut("21:00", "23:00")], tue: [shut("21:00", "23:00")] },
-    { tue: [{ periodId: "lunch", startsAt: "13:00", endsAt: "16:00" }] },
-  );
-  const outside: { key: string }[] = [];
-  el.addEventListener("paint-outside", (event) => outside.push(event.detail));
-  const seen = changes(el);
-  await openChooser(el, "mon");
-  await userEvent.click(choice(el, "tue"));
-  await el.updateComplete;
-  await userEvent.click(chooserButton(el, "Copy"));
-  await el.updateComplete;
-  expect(seen).toEqual([{ key: "tue", day: [] }]);
-  expect(outside).toEqual([{ key: "tue" }]);
-});
-
-test("Copy onto an unbounded target already holding the source's paint sends nothing", async () => {
-  const el = await zoneGrid(
-    { mon: [shut("21:00", "23:00")], tue: [shut("21:00", "23:00")] },
-    { mon: [{ periodId: "dinner", startsAt: "20:00", endsAt: "23:00" }] },
-  );
-  const outside: { key: string }[] = [];
-  el.addEventListener("paint-outside", (event) => outside.push(event.detail));
-  const seen = changes(el);
-  await openChooser(el, "mon");
-  await userEvent.click(choice(el, "tue"));
-  await el.updateComplete;
-  await userEvent.click(chooserButton(el, "Copy"));
-  await el.updateComplete;
-  expect(seen).toEqual([]);
-  expect(outside).toEqual([]);
-});
-
-test("Copy of Open paint beside Closed paint wholly outside a column's hours lands the Open there and sends paint-outside for that column alone, after every change", async () => {
-  const open: Paint = { periodId: "open", startsAt: "17:00", endsAt: "19:00" };
-  const el = await zoneGrid(
-    { mon: [shut("08:00", "10:00"), open], tue: [], wed: [] },
-    {
-      tue: [{ periodId: "dinner", startsAt: "19:30", endsAt: "23:00" }],
-      wed: [{ periodId: "lunch", startsAt: "07:00", endsAt: "11:00" }],
-    },
-  );
-  const log: string[] = [];
-  el.addEventListener("paint-outside", (event) => log.push(`outside ${event.detail.key}`));
-  el.addEventListener("paint-change", (event) => log.push(`change ${event.detail.key}`));
-  const seen = changes(el);
-  await openChooser(el, "mon");
-  await userEvent.click(choice(el, "tue"));
-  await userEvent.click(choice(el, "wed"));
-  await el.updateComplete;
-  await userEvent.click(chooserButton(el, "Copy"));
-  await el.updateComplete;
-  expect(seen).toEqual([
-    { key: "tue", day: [open] },
-    { key: "wed", day: [shut("08:00", "10:00"), open] },
-  ]);
-  expect(log).toEqual(["change tue", "change wed", "outside tue"]);
 });
 
 test("closedBehind draws its label across the whole day behind the column's paint, which stays drawn and clickable, and a stroke there still runs", async () => {
@@ -1825,21 +1572,7 @@ test("closedBehind draws its label across the whole day behind the column's pain
   expect(seen).toEqual([{ key: "thu", day: [shut("08:00", "10:00"), stored] }]);
 });
 
-test("Copy whose Closed paint lies wholly outside an empty bounded column's hours sends no change for it", async () => {
-  const el = await zoneGrid(
-    { mon: [shut("08:00", "10:00")], tue: [] },
-    { tue: [{ periodId: "dinner", startsAt: "19:30", endsAt: "23:00" }] },
-  );
-  const seen = changes(el);
-  await openChooser(el, "mon");
-  await userEvent.click(choice(el, "tue"));
-  await el.updateComplete;
-  await userEvent.click(chooserButton(el, "Copy"));
-  await el.updateComplete;
-  expect(seen).toEqual([]);
-});
-
-test("a bounded column's emitted day is in time order when Closed paint lands before an open block", async () => {
+test("a zone's emitted day is in time order when Closed paint lands before an Open block", async () => {
   const dinner: Paint = { periodId: "dinner", startsAt: "19:00", endsAt: "23:00" };
   const el = await zoneGrid(
     { mon: [dinner] },

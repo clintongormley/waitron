@@ -26,13 +26,6 @@ import "./errors.js";
 
 const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6] as const;
 
-/** The clock and the departments of the zones a save read, as it read them in its transaction,
- *  handed to its `afterWrite`. */
-export interface ServingRead {
-  clock: BusinessDayClock;
-  departmentOf: ReadonlyMap<string, string>;
-}
-
 /** Touching ranges of the same period become one; input sorted from the changeover. */
 export function joinTouching<T extends { startsAt: string; endsAt: string }>(
   ranges: readonly T[],
@@ -309,8 +302,7 @@ async function within<T>(prefix: string, fn: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Every listed department week and zone week of one season, under one revision check; once every
- *  week is written `afterWrite` runs with the clock and zones this save read. */
+/** Every listed department week and zone week of one season, under one revision check. */
 export async function saveSeasonWeeks(
   tx: Transaction,
   seasonId: string,
@@ -323,7 +315,6 @@ export async function saveSeasonWeeks(
   },
   at: Date,
   expectedClockRevision: number,
-  afterWrite?: (read: ServingRead) => Promise<void>,
 ): Promise<void> {
   const season = (await seasonsNaming(tx, seasonId)).own;
   const clock = await readVenueClock(tx);
@@ -366,6 +357,5 @@ export async function saveSeasonWeeks(
   const changed = [...departmentWeeks, ...zoneWeeks].some((week) => week.changed);
   await assertBusinessDayScheduleWrite(tx, changed ? "time" : "metadata", expectedClockRevision);
   for (const week of [...departmentWeeks, ...zoneWeeks]) await week.write();
-  await afterWrite?.({ clock, departmentOf: serving });
   if (changed) await assertWaitingChangeFits(tx, at, clock);
 }

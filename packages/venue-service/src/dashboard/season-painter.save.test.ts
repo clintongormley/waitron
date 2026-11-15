@@ -128,7 +128,7 @@ it("saves exactly the edited department and zone in one request, then is clean a
   ]);
 });
 
-it("shrinking Restaurant's Tuesday cuts Terrace's Tuesday in the same Save", async () => {
+it("shrinking Restaurant's Tuesday keeps Terrace's Tuesday unchanged", async () => {
   const { painter, writes } = await mount(
     withDays(withBar(), "d1", { 2: [slot("p1", "13:00", "18:00")] }),
   );
@@ -154,20 +154,7 @@ it("shrinking Restaurant's Tuesday cuts Terrace's Tuesday in the same Save", asy
           ],
         },
       ],
-      zones: [
-        {
-          zoneId: "z2",
-          days: [
-            open(1),
-            { weekday: 2, ranges: [{ startsAt: "15:00", endsAt: "16:00" }] },
-            open(3),
-            open(4),
-            open(5),
-            open(6),
-            open(0),
-          ],
-        },
-      ],
+      zones: [],
       expectedClockRevision: 4,
     },
   ]);
@@ -278,37 +265,6 @@ it("a zone refusal on a day shows that zone and marks its heading; the next save
   expect(grid(painter).columnErrors.size).toBe(0);
   expect(frame(painter).refusal).toBe("");
   expect(frame(painter).dirty).toBe(false);
-});
-
-it("an outside_hours refusal shows the zone, marks the day and says why", async () => {
-  const { painter, writes } = await mount(thursdayOpen(), [
-    {
-      code: "zone_closed_time.invalid",
-      params: { field: "zones.0.days.3.ranges.0", reason: "outside_hours" },
-    },
-  ]);
-  await pick(painter, "zone:z2");
-  await drag(painter, "4", 0, 3 * 60);
-  await pick(painter, "d1");
-  await save(painter, writes);
-  const message = "A zone can only close while its department is open.";
-  expect(
-    painter.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=department]")!
-      .value,
-  ).toBe("zone:z2");
-  expect([...grid(painter).columnErrors]).toEqual([["4", message]]);
-  expect(frame(painter).refusal).toBe(`Terrace, Thursday: ${message}`);
-});
-
-it("over a standing Save refusal, a zone stroke cut to nothing says why beside Save", async () => {
-  const { painter, writes } = await mount(thursdayOpen(), [{ code: "hours.clock_changed" }]);
-  await pick(painter, "zone:z2");
-  await drag(painter, "4", 0, 3 * 60);
-  await save(painter, writes);
-  expect(frame(painter).refusal).toBe("The business-day start changed. Reload hours.");
-  await drag(painter, "3", 0, 3 * 60);
-  expect(grid(painter).days.get("3")).toEqual([]);
-  expect(frame(painter).refusal).toBe("A zone can only close while its department is open.");
 });
 
 it("a Save refusal replaces a removal notice, and a save clears one", async () => {

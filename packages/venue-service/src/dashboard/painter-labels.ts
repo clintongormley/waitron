@@ -61,7 +61,6 @@ export function ownerName(model: Model, key: string): string {
 
 export function refusalReason(code: string, reason: unknown): string {
   if (reason === "clock_skips") return t("menu.time_skipped");
-  if (reason === "outside_hours") return t("opening.closed_outside");
   if (code === "zone_closed_time.invalid") return t("opening.closed_invalid");
   if (code === "menu_timetable.invalid") return t("opening.check_day");
   return t("menu.save_error");

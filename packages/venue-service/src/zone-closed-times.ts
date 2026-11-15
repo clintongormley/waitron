@@ -9,7 +9,14 @@ import { departments, floorZones, readVenueClock, type Transaction } from "@wait
 import { AppError, type BusinessDayClock } from "@waitron/shared";
 import { resolveZoneContext, wireTime } from "./operations.js";
 import { parseClosedRanges, type ClosedRange, rangeSpan, rangeSpanInDay } from "./service-day.js";
-import { momentAt, resolveZoneClosedDays, type ServiceDay } from "./day-resolver.js";
+import {
+  momentAt,
+  readDayPlan,
+  resolveDepartmentsDays,
+  resolveZoneClosedDays,
+  type ServiceDay,
+} from "./day-resolver.js";
+import { closuresInHours } from "./zone-own-hours.js";
 import {
   joinTouching,
   readZoneSeasonWeeks,
@@ -199,37 +206,46 @@ export async function zoneClosureDays(
   const zones = new Map<string, ZoneClosure>();
   if (moment === null) return { clock, moment, dayContext: null, cutover: clock.dayCutover, zones };
   const dayContext = serviceDayContext(clock, moment.businessDay);
-  const closures = await resolveZoneClosedDays(
-    tx,
-    zoneIds,
-    [moment.businessDay],
-    clock,
-    prepared?.moment?.businessDay === moment.businessDay ? prepared.plan : undefined,
-  );
-  const extensions =
+  const plan =
+    (prepared?.moment?.businessDay === moment.businessDay ? prepared.plan : undefined) ??
+    (await readDayPlan(tx, [moment.businessDay]));
+  const closures = await resolveZoneClosedDays(tx, zoneIds, [moment.businessDay], clock, plan);
+  const parents =
     closures.size === 0
       ? []
       : await tx
           .select({
             zoneId: floorZones.id,
+            departmentId: floorZones.departmentId,
+            keptOpenDay: floorZones.keptOpenDay,
             startsAt: floorZones.keptOpenFrom,
             endsAt: floorZones.keptOpenUntil,
           })
           .from(floorZones)
-          .where(
-            and(
-              eq(floorZones.keptOpenDay, moment.businessDay),
-              zoneIds === undefined ? undefined : inArray(floorZones.id, [...zoneIds]),
-            ),
-          );
+          .innerJoin(departments, eq(departments.id, floorZones.departmentId))
+          .where(and(inArray(floorZones.id, [...closures.keys()]), eq(departments.active, true)));
+  const hours = await resolveDepartmentsDays(
+    tx,
+    [...new Set(parents.map((zone) => zone.departmentId))],
+    [moment.businessDay],
+    clock,
+    plan,
+  );
+  const parentOf = new Map(parents.map((zone) => [zone.zoneId, zone]));
   for (const [zoneId, days] of closures) {
-    const extension = extensions.find((entry) => entry.zoneId === zoneId);
+    const parent = parentOf.get(zoneId);
     zones.set(zoneId, {
-      ranges: days.get(moment.businessDay) ?? [],
+      ranges: closuresInHours(
+        parent === undefined
+          ? []
+          : (hours.get(parent.departmentId)?.get(moment.businessDay)?.ranges ?? []),
+        days.get(moment.businessDay) ?? [],
+        dayContext,
+      ),
       extension:
-        extension === undefined
+        parent?.keptOpenDay !== moment.businessDay
           ? null
-          : { startsAt: wireTime(extension.startsAt!), endsAt: wireTime(extension.endsAt!) },
+          : { startsAt: wireTime(parent.startsAt!), endsAt: wireTime(parent.endsAt!) },
     });
   }
   return { clock, moment, dayContext, cutover: dayContext.dayCutover, zones };

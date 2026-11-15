@@ -1725,6 +1725,18 @@ it.each([
     weekday: 6,
     dayCutover: "02:30",
   });
+  await withTransaction(suite.db, (tx) =>
+    replaceMenuWeek(
+      tx,
+      v.departmentId,
+      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+        weekday,
+        slots: weekday === 6 ? [{ periodId: v.periodId, startsAt: "02:30", endsAt: "02:30" }] : [],
+      })),
+      at,
+      1,
+    ),
+  );
   const read = (time: string) =>
     withTransaction(suite.db, (tx) => readZoneKeepOpenState(tx, v.zoneId!, new Date(time)));
   expect(await read(instant)).toMatchObject({
