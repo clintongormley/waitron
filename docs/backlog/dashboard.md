@@ -75,7 +75,7 @@ Move repeated bottom-message assembly, attempt, refusal-dismissal and render-bef
 plumbing in the remaining dashboard editors and the till's forms onto `FormFeedback` in
 `@waitron/ui`. The product editor, Department receipt, Venue privacy and time-zone repair
 form, invoice-customer Find, menu-publication Schedule, stream settings, office-printer Add,
-the main Access roles editor, Add to menus, Devices Pair/Edit, VAT-return download and configuration export also use it;
+the main Access roles editor, Add to menus, Devices Pair/Edit, VAT-return download, configuration export and the floor-plan Add tables/Add joined table dialogs also use it;
 keep their field-specific or guarded refusal focus local. Inventory each later batch before
 migrating it; leave single-job forms local.
 Keep the translation editor local: the helper removes no duplicated logic while its refusal clearing and reveal/focus remain local.
