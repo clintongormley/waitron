@@ -16362,15 +16362,24 @@ describe("the main-server strip", () => {
     }[] = bothServers,
     overrides: Record<string, unknown> = {},
   ) {
-    const router = new ServerRouter({
-      origin: ORIGIN,
-      fetchImpl: venueFetch(),
-      storage: memoryStorage(),
-    });
+    const fetchImpl = venueFetch();
+    const router = new ServerRouter({ origin: ORIGIN, fetchImpl, storage: memoryStorage() });
     const api = stubApi({ getTill: vi.fn().mockResolvedValue({ ...till, servers }), ...overrides });
     const { el } = await mountWidget<TillApp>("till-app", { api, router });
     await settle(el);
-    return { el, router };
+    return { el, router, fetchImpl };
+  }
+
+  /** The next fetch stays pending until the returned function fails it. */
+  function holdNextFetch(fetchImpl: typeof fetch): () => void {
+    let fail!: (reason: Error) => void;
+    vi.mocked(fetchImpl).mockImplementationOnce(
+      () =>
+        new Promise<Response>((_resolve, reject) => {
+          fail = reject;
+        }),
+    );
+    return () => fail(new TypeError("Failed to fetch"));
   }
 
   async function signIn(el: TillApp, permissions: string[]): Promise<void> {
@@ -16475,6 +16484,23 @@ describe("the main-server strip", () => {
     expect(`${opened.origin}${opened.pathname}`).toBe(`${SPARE}/handover/emergency`);
     expect(opened.searchParams.get("back")).toBe(location.href);
     expect(shellStrip(el)!.refused).toBe(false);
+  });
+
+  it("a press does not navigate when the spare stops answering during the final probe", async () => {
+    const { el, router, fetchImpl } = await mount();
+    const navigate = vi.fn();
+    el.navigate = navigate;
+    await silentFor(el, router, 20_000);
+    const failProbe = holdNextFetch(fetchImpl);
+    press(lockStrip(el)!);
+    answering.spare = false;
+    await router.probeNow();
+    await settle(el);
+    expect(router.spare?.answering).toBe(false);
+    failProbe();
+    await settle(el);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(lockStrip(el)!.spareAnswering).toBe(false);
   });
 
   it("a till that reaches no server shows no switch", async () => {

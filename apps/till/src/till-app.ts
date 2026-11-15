@@ -2591,7 +2591,7 @@ export class TillApp extends LitElement {
       return;
     }
     const spare = router.spare;
-    if (spare === undefined) return;
+    if (spare?.answering !== true) return;
     const url = new URL("/handover/emergency", spare.url);
     url.searchParams.set("back", location.href);
     this.navigate(url.href);
