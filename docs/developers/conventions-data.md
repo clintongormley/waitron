@@ -6594,3 +6594,37 @@ export is refused as outdated. The pre-product-unit-column case in
 Your export carries an options list's preference as `option_labels.is_default` and uses format 34.
 The list no longer carries `default_label_id`. A format-33 export is refused as outdated by the
 pre-option-default-flag case in `apps/server/src/configuration-import.test.ts`.
+
+## Root receipts moved on 2026-11-15
+
+These excerpts are from `CLAUDE.md` at `53688274b5`; they are not new measurements. Each heading
+names the root entry the excerpt was cut from; the entry keeps its rule, guard and pointer.
+
+### A production start on a bundle built without a release version refuses `server.unreleased_build`; a start from source is not refused
+
+> weaker than the rule: a test bundle, never the image's; image-smoke's `check-release` step reads
+> the image's stamp but starts nothing.
+
+### `registros_facturacion` is immutable: never work around its append-only update/delete triggers
+
+> `append-only-watch` is weaker than its name: stored text only; selected declarations and existing
+> append-only tables of toggleable modules.
+
+### While the box's internet time service is synchronised, a till's time, a jump or the latest record's time never stops a sale
+
+> (owner, 2026-11-11 14:34: "we trust NTP over everything else")
+
+> (the stop, owner, 2026-11-10 14:59: "we should respond appropriately by stopping selling and
+> resetting the clock", and 2026-11-11 14:34: "or AEAT refuses an invoice because of time"; no
+> hold, 2026-11-10 15:31: "We fix the clock we start sending correct invoices … No waiting";
+> devices, A1420 D9, the watcher's, 2026-11-10 17:28, not the owner's)
+
+### From go-live, a migration that rebuilds a table first drops every trigger on another table whose body reads it
+
+> Guard: `scripts/migration-upgrade.test.ts`, weaker than the rule: a reading trigger dropped and
+> never created again passes it.
+
+### A refused statement normally backs out itself, not its transaction; full-disk and explicit ROLLBACK/FAIL variants are exceptions
+
+> Guards: `packages/store/src/disk-full.test.ts` and `write-queue.test.ts`, weaker than their
+> names: page limits, not a real disk; at-commit cases are stand-ins.
