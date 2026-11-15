@@ -2,6 +2,7 @@
 # The box's host side of app requests: one request line in on stdin, one JSON line out
 # on stdout, run as root by waitron-box@.service for each connection to /run/waitron-box/box.sock.
 #
+#   waitron-box.sh --network-monitor     observe outside network changes
 #   waitron-box.sh <instance>            answer a host request
 #   waitron-box.sh --restore <instance>  the unit's ExecStopPost: start again a time service the
 #                                        instance stopped, after any end of it (a kill included)
@@ -152,8 +153,9 @@ clock_set() {
 }
 
 network_monitor() {
-  # SECONDS can tick just after a read; the extra tick keeps the full wait.
-  local monitor_pid waiter_pid="" dirty=1 due=$((SECONDS + 2)) retry=1 state rc line was_running=0
+  # Setting the box's date must not move the observer's grace or retry waits.
+  local monitor_pid waiter_pid="" dirty=1 due retry=1 state rc line was_running=0
+  due=$(( $(uptime_ms) + 1000 ))
   exec 3< <(exec stdbuf -oL nmcli monitor)
   monitor_pid=$!
   trap '[ -z "$waiter_pid" ] || { kill "$waiter_pid" 2>/dev/null || true; wait "$waiter_pid" 2>/dev/null || true; }; kill "$monitor_pid" 2>/dev/null || true; wait "$monitor_pid" 2>/dev/null || true; exec 3<&-' EXIT
@@ -167,12 +169,12 @@ network_monitor() {
         [ "$was_running" = 0 ] || dirty=1
       else
         dirty=1
-        due=$((SECONDS + retry + 1))
+        due=$(( $(uptime_ms) + retry * 1000 ))
         retry=$((retry * 2))
         [ "$retry" -le 60 ] || retry=60
       fi
     fi
-    if [ -z "$waiter_pid" ] && [ "$dirty" = 1 ] && [ "$SECONDS" -ge "$due" ]; then
+    if [ -z "$waiter_pid" ] && [ "$dirty" = 1 ] && [ "$(uptime_ms)" -ge "$due" ]; then
       if state="$(systemctl show --property=ActiveState --value waitron-network-change.service)"; then
         was_running=0
         case "$state" in active|activating|deactivating) was_running=1 ;; esac
@@ -180,7 +182,7 @@ network_monitor() {
         systemctl start waitron-network-change.service &
         waiter_pid=$!
       else
-        due=$((SECONDS + retry + 1))
+        due=$(( $(uptime_ms) + retry * 1000 ))
         retry=$((retry * 2))
         [ "$retry" -le 60 ] || retry=60
       fi

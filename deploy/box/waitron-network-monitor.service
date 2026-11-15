@@ -10,10 +10,11 @@ StartLimitIntervalSec=0
 Type=simple
 ExecStart=/usr/local/lib/waitron/waitron-box.sh --network-monitor
 Restart=on-failure
+SuccessExitStatus=143
 RestartSec=1
 LimitCORE=0
 StandardOutput=journal
 StandardError=journal
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=multi-user.target NetworkManager.service

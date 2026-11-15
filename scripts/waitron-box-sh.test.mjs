@@ -8,6 +8,7 @@ import {
   openSync,
   mkdtempSync,
   readFileSync,
+  renameSync,
   rmSync,
   writeFileSync,
   writeSync,
@@ -635,13 +636,22 @@ it.each([0, 1])("takes the worker lock before its adapter (lock refusal %s)", (r
   expect(sb.calls()).toContainEqual(["flock", "-w", "15", "9"]);
 });
 
-async function observing(sb) {
+async function observing(sb, { manualClock = false } = {}) {
   const dir = join(sb.dir, "observer");
   mkdirSync(dir);
   writeFileSync(join(dir, "state"), "inactive");
   const fifo = join(dir, "events");
   expect(spawnSync("mkfifo", [fifo]).status).toBe(0);
   const fd = openSync(fifo, "r+");
+  let steadyMs = 100000;
+  const clockBegan = performance.now();
+  const tick = () => {
+    const value = steadyMs + (manualClock ? 0 : performance.now() - clockBegan);
+    writeFileSync(sb.paths.uptime + ".next", `${(value / 1000).toFixed(3)} 0.00\n`);
+    renameSync(sb.paths.uptime + ".next", sb.paths.uptime);
+  };
+  tick();
+  const clock = manualClock ? null : setInterval(tick, 100);
   const child = spawn("bash", [HANDLER, "--network-monitor"], {
     env: { ...sb.env, WB_MONITOR_DIR: dir },
     stdio: ["ignore", "pipe", "pipe"],
@@ -667,10 +677,15 @@ async function observing(sb) {
     count,
     ended,
     endEvents,
+    advanceUptime: (ms) => {
+      steadyMs += ms;
+      tick();
+    },
     send: (text) => writeSync(fd, text + "\n"),
     finish: (n, code = 0) => writeFileSync(join(dir, `finish.${n}`), String(code)),
     stderr: () => stderr,
     async stop() {
+      clearInterval(clock);
       endEvents();
       if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
       await ended;
@@ -679,29 +694,69 @@ async function observing(sb) {
 }
 
 describe("outside network changes", () => {
+  it("starts from elapsed host uptime without waiting for wall-clock seconds", async () => {
+    const observer = await observing(sandbox(), { manualClock: true });
+    try {
+      await expect
+        .poll(() => existsSync(join(observer.dir, "observer.pid")), { timeout: 1000 })
+        .toBe(true);
+      observer.advanceUptime(1001);
+      observer.send("profile changed");
+      await expect.poll(observer.count, { timeout: 500 }).toBe(1);
+    } finally {
+      await observer.stop();
+    }
+  }, 20000);
+
   it("starts after the grace and retains a burst while the worker is running", async () => {
     const sb = sandbox();
     const began = performance.now();
     const observer = await observing(sb);
     try {
       observer.send("NetworkManager is running");
-      await expect.poll(observer.count, { timeout: 3000 }).toBe(1);
+      await expect.poll(observer.count, { timeout: 6000 }).toBe(1);
       expect(performance.now() - began).toBeGreaterThanOrEqual(800);
       observer.send("profile changed\nprofile changed\nprofile removed");
       observer.finish(1);
-      await expect.poll(observer.count, { timeout: 3000 }).toBe(2);
+      await expect.poll(observer.count, { timeout: 6000 }).toBe(2);
       expect(sb.calls().filter(([cmd, sub]) => cmd === "systemctl" && sub === "start")).toEqual([
         ["systemctl", "start", "waitron-network-change.service"],
         ["systemctl", "start", "waitron-network-change.service"],
       ]);
+      const worker = Number(readFileSync(join(observer.dir, "start.2")));
+      observer.finish(2);
+      await expect
+        .poll(() => {
+          try {
+            process.kill(worker, 0);
+            return true;
+          } catch {
+            return false;
+          }
+        })
+        .toBe(false);
+      await sleep(2200);
+      expect(observer.count()).toBe(2);
     } finally {
       await observer.stop();
     }
-  }, 10000);
-  it("retries a refused worker without another event, increasing the wait", async () => {
+  }, 20000);
+  it("keeps a refused pass pending without another notification", async () => {
     const observer = await observing(sandbox());
     try {
-      await expect.poll(observer.count, { timeout: 3000 }).toBe(1);
+      await expect.poll(observer.count, { timeout: 6000 }).toBe(1);
+      observer.finish(1, 1);
+      await expect.poll(observer.count, { timeout: 6000 }).toBe(2);
+    } finally {
+      await observer.stop();
+    }
+  }, 18000);
+
+  it("grows retries despite incoming events and resets the wait after success", async () => {
+    const observer = await observing(sandbox());
+    const events = setInterval(() => observer.send("profile changed"), 30);
+    try {
+      await expect.poll(observer.count, { timeout: 6000 }).toBe(1);
       let failedAt = performance.now();
       observer.finish(1, 1);
       await expect.poll(observer.count, { timeout: 4000 }).toBe(2);
@@ -710,23 +765,28 @@ describe("outside network changes", () => {
       observer.finish(2, 1);
       await expect.poll(observer.count, { timeout: 5000 }).toBe(3);
       expect(performance.now() - failedAt).toBeGreaterThanOrEqual(1800);
+      observer.finish(3);
+      await expect.poll(observer.count, { timeout: 3000 }).toBe(4);
+      observer.finish(4, 1);
+      await expect.poll(observer.count, { timeout: 3000 }).toBe(5);
     } finally {
+      clearInterval(events);
       await observer.stop();
     }
-  }, 15000);
+  }, 30000);
 
   it("requests a fresh pass when start only waited for an already-running service", async () => {
     const observer = await observing(sandbox());
     try {
       writeFileSync(join(observer.dir, "state"), "activating");
-      await expect.poll(observer.count, { timeout: 3000 }).toBe(1);
+      await expect.poll(observer.count, { timeout: 6000 }).toBe(1);
       writeFileSync(join(observer.dir, "state"), "inactive");
       observer.finish(1);
-      await expect.poll(observer.count, { timeout: 3000 }).toBe(2);
+      await expect.poll(observer.count, { timeout: 6000 }).toBe(2);
     } finally {
       await observer.stop();
     }
-  }, 10000);
+  }, 20000);
 
   it.each(["eof", "signal"])(
     "ends on %s and reaps only its observer and service client",
@@ -734,13 +794,13 @@ describe("outside network changes", () => {
       const sb = sandbox();
       const observer = await observing(sb);
       try {
-        await expect.poll(observer.count, { timeout: 3000 }).toBe(1);
+        await expect.poll(observer.count, { timeout: 6000 }).toBe(1);
         const pids = ["observer.pid", "start.1"].map((name) =>
           Number(readFileSync(join(observer.dir, name))),
         );
         if (end === "eof") observer.endEvents();
         else observer.child.kill("SIGTERM");
-        await expect.poll(() => observer.child.exitCode, { timeout: 3000 }).not.toBeNull();
+        await expect.poll(() => observer.child.exitCode, { timeout: 6000 }).not.toBeNull();
         expect((await observer.ended).code).toBe(end === "eof" ? 1 : 143);
         for (const pid of pids) expect(() => process.kill(pid, 0)).toThrow();
         expect(sb.calls().filter(([cmd, sub]) => cmd === "systemctl" && sub === "stop")).toEqual(
@@ -751,6 +811,6 @@ describe("outside network changes", () => {
         await observer.stop();
       }
     },
-    10000,
+    20000,
   );
 });

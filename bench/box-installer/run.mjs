@@ -595,17 +595,27 @@ const observe=async(label,check)=>{
   throw Error("live network copy deadline: "+label);
 };
 (async()=>{
-if(${name === "first"})cp.execFileSync("systemctl",["is-enabled","--quiet","waitron-network-monitor.service"]);
-cp.execFileSync("systemctl",["enable","--now","waitron-network-monitor.service"]);
+if(${name === "first"}){
+  cp.execFileSync("systemctl",["is-enabled","--quiet","waitron-network-monitor.service"]);
+  cp.execFileSync("systemctl",["is-active","--quiet","waitron-network-monitor.service"]);
+}
+cp.execFileSync("systemctl",["stop","waitron-network-monitor.service"]);
 if(fs.existsSync(profile))cp.execFileSync("nmcli",["connection","delete","uuid","22222222-2222-4222-8222-222222222222"]);
-await observe("initial absence",(value,status)=>value===null&&status.bootCopy.state==="absent");
+cp.execFileSync("systemctl",["enable","--now","waitron-network-monitor.service"]);
+const observerStarted=Number(cp.execFileSync("systemctl",["show","--property=ActiveEnterTimestampMonotonic","--value","waitron-network-monitor.service"],{encoding:"utf8"}));
+const startupMs=await observe("startup pass",(value,status)=>{
+  const lines=cp.execFileSync("systemctl",["show","waitron-network-change.service","--property=ActiveState","--property=ExecMainStartTimestampMonotonic","--property=ExecMainExitTimestampMonotonic"],{encoding:"utf8"});
+  const worker=Object.fromEntries(lines.trim().split("\\n").map(line=>line.split("=")));
+  return value===null&&status.bootCopy.state==="absent"&&worker.ActiveState==="inactive"&&Number(worker.ExecMainStartTimestampMonotonic)>=observerStarted+1000000&&Number(worker.ExecMainExitTimestampMonotonic)>=Number(worker.ExecMainStartTimestampMonotonic);
+});
 load("live-first-password");
 const createdMs=await observe("create",(value,status)=>value?.psk==="live-first-password"&&status.wifi.savedSsidHex==="41"&&status.bootCopy.state==="current");
 cp.execFileSync("nmcli",["connection","modify","uuid","22222222-2222-4222-8222-222222222222","wifi-sec.psk","live-second-password"]);
 const changedMs=await observe("change",(value,status)=>value?.psk==="live-second-password"&&status.wifi.savedSsidHex==="41"&&status.bootCopy.state==="current");
 cp.execFileSync("nmcli",["connection","delete","uuid","22222222-2222-4222-8222-222222222222"]);
 const deletedMs=await observe("delete",(value,status)=>value===null&&status.wifi.savedSsidHex===null&&status.bootCopy.state==="absent");
-console.log("B3_NETWORK_MONITOR:"+JSON.stringify({created:true,changed:true,deleted:true,createdMs,changedMs,deletedMs}));
+console.log("B3_NETWORK_MONITOR:"+JSON.stringify({created:true,changed:true,deleted:true,startupMs,createdMs,changedMs,deletedMs}));
+cp.execFileSync("systemctl",["stop","waitron-network-monitor.service"]);
 load("rehearsal-password");cp.execFileSync("systemctl",["restart","waitron-network-change.service"]);
 const saved=JSON.parse(fs.readFileSync(copy)),savedCopy=saved.ssidHex==="41"&&saved.psk==="rehearsal-password";
 const reply=await new Promise((resolve,reject)=>{const c=net.connect("/run/waitron-box/box.sock");let text="";c.setTimeout(5000,()=>{c.destroy();reject(Error("forget deadline"))});c.on("connect",()=>c.write('network.forget {"ssidHex":"41","actor":{"source":"person","person":"rehearsal-owner"}}\\n'));c.on("data",b=>text+=b);c.on("end",()=>resolve(JSON.parse(text)));c.on("error",reject)});
@@ -619,7 +629,7 @@ console.log("B3_NETWORK_RECONCILE:"+JSON.stringify({savedCopy,forgotten,startupC
 })().catch(e=>{console.error(e);process.exitCode=1});`;
       const reconcileProbe = probe(reconcile);
       const checks =
-        `; ${networkProbe}; ${operationsProbe}; ${reconcileProbe}` +
+        `; ${networkProbe}; ${reconcileProbe}; ${operationsProbe}` +
         (caseName === "existing-stick"
           ? `; ${probe(clock)}; ${probe(deny, true)}${name === "again" ? `; ${probe(stayedUpCheck)}` : ""}`
           : "");
