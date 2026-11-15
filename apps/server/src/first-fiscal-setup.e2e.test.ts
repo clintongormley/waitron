@@ -169,9 +169,9 @@ it.each([
       WAITRON_MANAGEMENT_ORIGIN: "https://localhost",
     };
     let server: StartedServer | undefined, agent: Agent | undefined;
-    vi.spyOn(process, "kill").mockReturnValue(true);
+    const seams = { testClock: time.clock, restart: () => {} };
     try {
-      if (launch === "direct") server = await startServer(env, {}, { testClock: time.clock });
+      if (launch === "direct") server = await startServer(env, {}, seams);
       else
         await runEntry({
           args: [],
@@ -182,8 +182,7 @@ it.each([
           loadBoxEnv,
           readRecoveryState,
           writeRecoveryState,
-          startServer: async (merged, base) =>
-            (server = await startServer(merged, base, { testClock: time.clock })),
+          startServer: async (merged, base) => (server = await startServer(merged, base, seams)),
           serveRecovery: async () => {
             throw new Error("unexpected recovery mode");
           },
@@ -513,7 +512,7 @@ it.each([
         code: "ENOENT",
       });
       const merged = await loadBoxEnv(env, stateDir);
-      server = await startServer(merged, env, { testClock: time.clock });
+      server = await startServer(merged, env, seams);
       const health = await fetch(url + "/health", { dispatcher: agent } as RequestInit);
       expect(health.status).toBe(200);
       const undeclared = async (directory: string) =>
@@ -560,7 +559,7 @@ it("keeps English working names through fresh Live publication with Spanish rece
     migrations = join(root, "migrations");
   await copyMigrationsRoot(migrations);
   const [port] = await freePorts(1);
-  const restart = vi.spyOn(process, "kill").mockReturnValue(true);
+  const restart = vi.fn();
   const server = await startServer(
     {
       WAITRON_ENV: "production",
@@ -574,7 +573,7 @@ it("keeps English working names through fresh Live publication with Spanish rece
       WAITRON_MANAGEMENT_ORIGIN: "https://localhost",
     },
     {},
-    { testClock: time.clock },
+    { testClock: time.clock, restart },
   );
   const agent = new Agent({ connect: { ca: await readFile(join(stateDir, "tls/ca.crt")) } });
   try {
@@ -613,7 +612,7 @@ it("keeps English working names through fresh Live publication with Spanish rece
       status: 200,
       body: { provisioned: true },
     });
-    await vi.waitFor(() => expect(restart).toHaveBeenCalledWith(process.pid, "SIGTERM"));
+    await vi.waitFor(() => expect(restart).toHaveBeenCalledWith("signal"));
   } finally {
     await server.close();
     await agent.close();

@@ -1965,10 +1965,6 @@ For package distribution and the four-minute target, use the
 
 - **apps/server's test speed: restart tests, measured speed-ups, fixed PINs** (bundle of 3, size L). [Detail](backlog/ci.md#bundle-appsservers-test-speed-restart-tests-measured-speed-ups-fixed-pins)
 
-- **One failing success-branch check in the first-fiscal-setup end-to-end file ends its worker.**
-  The later rows never run; the run still exits 1. Cause not found.
-  [Detail](backlog/ci.md#one-failing-success-branch-check-in-the-first-fiscal-setup-end-to-end-file-ends-its-worker)
-
 For browser storage checks, inspect the operation's own entry and every write, comparing complete
 values rather than PIN substrings inside random IDs. See the
 [testing guide](developers/testing-guide.md#check-stored-secrets-as-values-and-inspect-every-write).
