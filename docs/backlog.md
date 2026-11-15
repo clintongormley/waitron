@@ -1083,10 +1083,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Nothing covers the order screen's bar** (bundle of 2, size S, needs the owner). Holds A1211, A1212. [Detail](backlog/till.md#bundle-nothing-covers-the-order-screens-bar)
 
-- **A1140. Splitting a counter order delivered to a table leaves the new bill with no delivery
-  table.** Left open by slice 8b (its plan's D3): copy the delivery table on a split.
-  [Detail](backlog/till.md#a1140-splitting-a-counter-order-delivered-to-a-table-leaves-the-new-bill-with-no-delivery-table)
-
 - **Each browser tab as its own device, in Demo too (A271, owner 2026-10-04) — OPEN, after A268.**
   Only dev mode lets a tab act as a separate device, and it names the device by id alone
   (`x-waitron-dev-device`, `apps/server/src/device-session.ts`); the sign-in cookie is shared by the

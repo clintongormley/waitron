@@ -312,7 +312,7 @@ export async function moveDishes(
       existingService: true,
       copyServiceContextFrom: fromBillId,
     });
-    if (path.partyId === null)
+    if (path.partyId === null) {
       await inheritKitchenNote(
         tx,
         cfg,
@@ -320,6 +320,15 @@ export async function moveDishes(
         { workingOrderId: destinationId },
         "copy",
       );
+      const [delivery] = await tx
+        .select({
+          deliveryTableId: workingOrders.deliveryTableId,
+          deliveryTableLabel: workingOrders.deliveryTableLabel,
+        })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, fromBillId));
+      await tx.update(workingOrders).set(delivery!).where(eq(workingOrders.id, destinationId));
+    }
     invoices = await checkMoveInvoice(
       tx,
       destinationId,
