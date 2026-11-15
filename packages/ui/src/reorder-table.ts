@@ -328,7 +328,7 @@ export class ReorderController implements ReactiveController {
   }
 
   #startDrag(event: PointerEvent, id: string): void {
-    if (this.#model.busy() || this.#drag !== null) return;
+    if (event.button !== 0 || this.#model.busy() || this.#drag !== null) return;
     // Keep the press from selecting the row's text or starting the browser's own drag.
     event.preventDefault();
     const row = (event.currentTarget as HTMLElement).closest("tr")!;

@@ -1616,3 +1616,23 @@ it("edge scrolls a row pressed inside the edge band while the pointer has not mo
     document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 87 }));
   }
 });
+
+it("a right-button press on the grip starts no drag and moves nothing", async () => {
+  const el = await mount();
+  const down = new PointerEvent("pointerdown", {
+    bubbles: true,
+    cancelable: true,
+    pointerId: 1,
+    button: 2,
+    buttons: 2,
+    clientY: rowCentre(el, "a"),
+  });
+  handle(el, "a").dispatchEvent(down);
+  pointer(document, "pointermove", 1, rowCentre(el, "c"));
+  await el.updateComplete;
+  expect(el.dragging).toBe(false);
+  expect(row(el, "a").hasAttribute("data-dragging")).toBe(false);
+  expect(down.defaultPrevented).toBe(false);
+  expect(order(el)).toEqual(["a", "b", "c"]);
+  pointer(document, "pointerup", 1);
+});
