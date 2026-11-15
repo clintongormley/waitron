@@ -106,8 +106,8 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 [Small checks and indexes that are cheap only inside A1308's fresh tables](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables). A1306's history rewrite is A1308's last step (owner, 2026-11-06).
 
 **4. Released by the hold, once A760 lands.** Build order: the pay window, A446 pre-bill,
-close the day, then A947 and its handover bundles. A1150 (allergens from the live product) is needed before go-live and has
-no design yet.
+close the day, then A947 and its handover bundles. A1150 (allergens from the live product) is needed before go-live; its
+[design](superpowers/specs/2026-11-15-a1150-live-product-declarations-design.md) is ready, and its implementation plan is next.
 
 - [The pay window, after A739](backlog/till.md#bundle-the-pay-window-after-a739)
 - [Close the day: count the cash, record cash in and out, waiter floats](backlog/till.md#bundle-close-the-day-count-the-cash-record-cash-in-and-out-waiter-floats)
@@ -635,7 +635,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **The menu patch window: split the file first** (bundle of 9, size M). [Detail](backlog/menu.md#bundle-the-menu-patch-window-split-the-file-first)
 
 - **A1150. Allergens and diet labels come from the live product on every screen** (owner,
-  2026-10-27). Needs its own design before it is built. Today the till's menu and product info
+  2026-10-27). [Design](superpowers/specs/2026-11-15-a1150-live-product-declarations-design.md) reviewed by Claude and cleared by the watcher on 15 November; implementation plan and build remain. Today the till's menu and product info
   read them from the published menu version, while the kitchen screen, the table's allergy check
   and unsent table lines read the live product (`apps/server/src/line-nutrition.ts`). Sent till
   lines and Orders history detail use the live product captured at first sending under the owner’s

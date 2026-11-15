@@ -4,7 +4,8 @@ You should not have to publish a menu to correct an allergen. A1150 applies the 
 27 October choice of one live source, recorded in [the backlog](../../backlog.md).
 [A1517 decision 6](2026-11-11-a1517-allergen-proposal.md#owner-decisions-2026-11-11) is the
 exception: sent till dishes and Orders history keep declarations captured at first send.
-This proposed design has no watcher clearance or owner approval.
+Claude reviewed this design; the watcher cleared it on 15 November at 18:46.
+No owner approval of this design is recorded.
 
 Change a burger from milk to eggs without publishing: its menu information, unsent basket,
 held dishes and next kitchen read show eggs. Its already-sent till/history details keep milk;
@@ -57,7 +58,7 @@ Guest pages refresh on regeneration/reload; paper already printed cannot change.
 (`cloud-guest-menu.ts:143–163`), independently of menu publication events. These are source reads,
 not a delivery guarantee.
 
-## Publication, transition and guidance
+## Publication and guidance
 
 Keep the existing single full-document hash. With declarations absent from new frozen content,
 status, preview tokens, schedules, patches, included-menu checks and backup integrity share it.
@@ -66,19 +67,16 @@ Remove declaration comparisons/navigation in `menu-document.ts`/`menu-navigation
 stale-preview refusal for publishable edits. Warnings hydrate current working offers (`menu-publication.ts:532–540`), retaining
 advisory unreviewed-dish/active-variant policy; `{}` never warns. A1151 patches still exclude declarations.
 
-**Proposed transition for watcher settlement:** retain the current document format and untouched
-stored versions/hashes. A retained old edition can show Changed with no listed change until ordinary
-republishing omits its old fields; an old queued edition activating later can repeat this. Included-menu
-‘also on’ labels can be noisy meanwhile. Current declarations overlay retained editions immediately.
-No migration, second hash, compatibility layer or reset. Once active content has the new shape,
-declaration edits alone leave Current and no change row. Resolve A1308 collisions on rebase.
+Keep the current document format and all recorded versions/hashes. No migration, second hash,
+compatibility layer or reset. The watcher cleared this choice at 18:46 on 15 November: old
+edition status noise affects preproduction venues, which can republish or reset; do not add
+transition guidance. Resolve A1308 collisions on rebase.
 
 Update EN/ES Products, Modifiers and Table service guides, retaining anchors. Products EN
 `:266,494–507,526` and ES `:278,521–534,555` contain republish/published-declaration wording.
 Update developer `design-system.md:7027` and `products.md:785` too. Explain saving without
 republishing, inheritance, separate extras, Recorded when sent, live kitchen reads and reopening
-menu/paper previews after edits. Explain transition noise and republishing menus together when
-their drafts are ready; publishing still includes other staged edits and old queued editions need review.
+menu/paper previews after edits. Guides describe the live source, with no transition text.
 
 ## Acceptance and limits
 
@@ -86,5 +84,5 @@ The later plan names checks in menu-document/allergen-warnings/change-navigation
 menu-allergen-workflow/sent-line-nutrition/guest-menu API and till filter/product-info/basket suites.
 Check inheritance, null/empty, dietary-only edits, same-version refresh, preserved prices and sent
 versus held, all four guest producers, Cloud reconciliation, unchanged full-hash verification and
-the one-time transition. No suites ran for this design. No new tables, protocols, fiscal work or
+preservation of recorded versions/hashes. No suites ran for this design. No new tables, protocols, fiscal work or
 A1517 redesign. A separate reviewed plan precedes implementation.
