@@ -244,7 +244,7 @@ describe("the venue-service tables carry no taxpayer column", () => {
     expect(shape).toEqual({
       departments: {
         primaryKey: ["id"],
-        foreignKeys: [],
+        foreignKeys: ["(transfer_desk_profile_id) -> device_profiles(id) on delete set null"],
       },
       floor_zones: {
         primaryKey: ["id"],
@@ -1002,6 +1002,92 @@ describe("the kitchen notices table refuses what its rules forbid", () => {
       expect(isRefusal(onOther, CHECK_VIOLATION)).toBe(true);
       expect(engineErrorMessage(onOther)).toContain("kitchen_notices_cancelled_extra_kind_ck");
     }
+  });
+});
+
+describe("department policy columns", () => {
+  async function department() {
+    const [row] = await db
+      .insert(departments)
+      .values({ name: "Deli", tradingName: "Deli" })
+      .returning();
+    return row!.id;
+  }
+
+  it("a new department holds its default sale rules without a side row", async () => {
+    const id = await department();
+    expect(
+      (
+        await db.execute(sql`select order_start, paid_when, collection_number,
+      print_trading_name, transfer_desk_profile_id from departments where id = ${id}`)
+      ).rows,
+    ).toEqual([
+      {
+        order_start: "counter",
+        paid_when: "prepay",
+        collection_number: "none",
+        print_trading_name: 1,
+        transfer_desk_profile_id: null,
+      },
+    ]);
+  });
+
+  it.each([
+    ["order_start", "tab", "table", "counter", "departments_order_start_ck"],
+    ["paid_when", "later", "ticket_then_pay", "prepay", "departments_paid_when_ck"],
+    ["collection_number", "ticket", "numbered", "none", "departments_collection_number_ck"],
+  ])(
+    "refuses an invalid %s and accepts both allowed values",
+    async (column, invalid, first, second, constraint) => {
+      const id = await department();
+      const field = sql.identifier(column!);
+      const error = await captureError(() =>
+        withTransaction(db, (tx) =>
+          tx.execute(sql`update departments set ${field} = ${invalid} where id = ${id}`),
+        ),
+      );
+      expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+      expect(engineErrorMessage(error)).toContain(constraint!);
+      for (const value of [first, second]) {
+        await db.execute(sql`update departments set ${field} = ${value} where id = ${id}`);
+        expect(
+          (await db.execute(sql`select ${field} as value from departments where id = ${id}`)).rows,
+        ).toEqual([{ value }]);
+      }
+    },
+  );
+
+  it("refuses a transfer profile that does not exist", async () => {
+    const id = await department();
+    const error = await captureError(() =>
+      withTransaction(db, (tx) =>
+        tx.execute(
+          sql`update departments set transfer_desk_profile_id = ${randomUUID()} where id = ${id}`,
+        ),
+      ),
+    );
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toContain("FOREIGN KEY constraint failed");
+  });
+
+  it("deleting a transfer profile clears the desk and keeps the department", async () => {
+    const id = await department();
+    const [profile] = await seedDeviceProfiles(db, { name: "Front till", formFactor: "till" });
+    await db.execute(
+      sql`update departments set transfer_desk_profile_id = ${profile!.id} where id = ${id}`,
+    );
+    expect(
+      (await db.execute(sql`select transfer_desk_profile_id from departments where id = ${id}`))
+        .rows,
+    ).toEqual([{ transfer_desk_profile_id: profile!.id }]);
+    await db.execute(sql`delete from device_profiles where id = ${profile!.id}`);
+    expect(
+      (
+        await db.execute(
+          sql`select name, transfer_desk_profile_id from departments where id = ${id}`,
+        )
+      ).rows,
+    ).toEqual([{ name: "Deli", transfer_desk_profile_id: null }]);
   });
 });
 

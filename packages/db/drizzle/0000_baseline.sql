@@ -2266,7 +2266,16 @@ CREATE TABLE `departments` (
 	`active` integer DEFAULT true NOT NULL,
 	`needs_clearing` integer DEFAULT false NOT NULL,
 	`late_send_needs_manager` integer DEFAULT false NOT NULL,
-	`created_at` text NOT NULL
+	`order_start` text DEFAULT 'counter' NOT NULL,
+	`paid_when` text DEFAULT 'prepay' NOT NULL,
+	`collection_number` text DEFAULT 'none' NOT NULL,
+	`print_trading_name` integer DEFAULT true NOT NULL,
+	`transfer_desk_profile_id` text,
+	`created_at` text NOT NULL,
+	FOREIGN KEY (`transfer_desk_profile_id`) REFERENCES `device_profiles`(`id`) ON UPDATE no action ON DELETE set null,
+	CONSTRAINT "departments_order_start_ck" CHECK("departments"."order_start" in ('table', 'counter')),
+	CONSTRAINT "departments_paid_when_ck" CHECK("departments"."paid_when" in ('prepay', 'ticket_then_pay')),
+	CONSTRAINT "departments_collection_number_ck" CHECK("departments"."collection_number" in ('none', 'numbered'))
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `departments_name_key` ON `departments` (`name`) WHERE "departments"."active" = 1;--> statement-breakpoint

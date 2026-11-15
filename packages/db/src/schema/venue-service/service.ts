@@ -31,9 +31,22 @@ export const departments = table(
     active: flag("active").notNull().default(true),
     needsClearing: flag("needs_clearing").notNull().default(false),
     lateSendNeedsManager: flag("late_send_needs_manager").notNull().default(false),
+    orderStart: orderStart("order_start").notNull().default("counter"),
+    paidWhen: paidWhen("paid_when").notNull().default("prepay"),
+    collectionNumber: collectionNumber("collection_number").notNull().default("none"),
+    printTradingName: flag("print_trading_name").notNull().default(true),
+    transferDeskProfileId: id("transfer_desk_profile_id"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
+    check("departments_order_start_ck", enumCheck(t.orderStart)),
+    check("departments_paid_when_ck", enumCheck(t.paidWhen)),
+    check("departments_collection_number_ck", enumCheck(t.collectionNumber)),
+    foreignKey({
+      columns: [t.transferDeskProfileId],
+      foreignColumns: [deviceProfiles.id],
+      name: "departments_transfer_desk_profile_fk",
+    }).onDelete("set null"),
     uniqueIndex("departments_name_key")
       .on(t.name)
       .where(sql`${t.active} = 1`),
