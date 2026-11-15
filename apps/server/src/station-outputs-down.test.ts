@@ -286,9 +286,14 @@ describe("station output status", () => {
       { kind: "pass", stationIds: [f.grill], zoneIds: null },
     );
     expect(await withTransaction(suite.db, (tx) => stationScreensDark(tx, at))).toEqual([]);
+    const [stationProfile] = await seedDeviceProfiles(suite.db, {
+      name: "Station screen",
+      formFactor: "kds",
+      capabilities: [],
+    });
     await stationScreenDevice({
       stationId: f.grill,
-      deviceProfileId: profile!.id,
+      deviceProfileId: stationProfile!.id,
       label: "Dark Grill",
       tokenHash: "hash",
       lastSeenAt: "2026-10-02T17:55:00.000Z",
@@ -713,18 +718,15 @@ describe("passScreensDark", () => {
     expect(await read()).toEqual([]);
   });
 
-  it("does not list a pass a narrowing took", async () => {
+  it("does not list a device switched to an unconfigured profile", async () => {
     const f = await passFixture();
     await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
     const pass = await passDevice(f, "pass");
     const bare = await profile(suite.db, "kds");
-    await withTransaction(suite.db, (tx) =>
-      VENUE_SERVICE.narrowDeviceKitchenScreens(tx, pass, bare),
-    );
     await suite.db.update(devices).set({ deviceProfileId: bare }).where(eq(devices.id, pass));
     expect(
       await withTransaction(suite.db, (tx) => VENUE_SERVICE.readDeviceKitchenScreens(tx, pass)),
-    ).toMatchObject([{ kind: "pass", available: false }]);
+    ).toEqual([]);
     expect(await read()).toEqual([]);
   });
 

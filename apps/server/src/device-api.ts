@@ -43,14 +43,10 @@ import {
   assertNoPaymentInProgress,
   endSessionsNotAdmitted,
   keepApprovedAfterSwitch,
-  parseKitchenScreenDisplay,
-  parseKitchenScreens,
   readApprovedAlternatives,
   readApprovedProfiles,
   requireDeviceName,
   requireDeviceProfile,
-  resolveDeviceKitchenScreens,
-  setKitchenScreenDisplay,
   switchActiveProfile,
   updateDeviceSettings,
 } from "./device.js";
@@ -195,7 +191,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // A wrong number denies the request (the row is already gone), so this is a plain request fault.
   "device.join_mismatch": 400,
   "join_request.not_found": 404,
-  "kitchen_screen.required": 400,
   "kitchen_screen.invalid": 400,
   "kitchen_screen.not_allowed": 400,
   "kitchen_screen.zone_not_allowed": 400,
@@ -572,20 +567,6 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
     }),
   );
 
-  // Presentation only, so no cooking action is asked (master Contract 12).
-  app.put("/api/device/kitchen-screen-display", (c) =>
-    leverRun(c, log, async () => {
-      const proof = await requireDeviceProof({ db: deps.db, devMode: deps.devMode }, c);
-      const { kind, value } = parseOwnKitchenScreenDisplay(await readJsonBody<unknown>(c));
-      await withTransaction(deps.db, async (tx) => {
-        const device = await assertDeviceStillProven(tx, proof);
-        await kitchenScreenOf(tx, c, device, kind);
-        await VENUE_SERVICE.setDeviceKitchenScreenDisplay(tx, device.deviceId, kind, value);
-      });
-      return c.body(null, 204);
-    }),
-  );
-
   app.get("/api/device/pass-board", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
@@ -842,8 +823,6 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       const body = await readJsonBody<{
         name?: unknown;
         profileId?: unknown;
-        kitchenScreens?: unknown;
-        kitchenScreenDisplay?: unknown;
         receiptPrinterId?: unknown;
         paymentSlipPrinterId?: unknown;
         cashDrawerPrinterId?: unknown;
@@ -867,8 +846,6 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
         }
         const label = requireDeviceName(body.name);
         const profileId = requireBodyUuid(body.profileId, "profileId");
-        const kitchenScreens = parseKitchenScreens(body.kitchenScreens);
-        const display = parseKitchenScreenDisplay(body.kitchenScreenDisplay);
         const chosen: Partial<Record<ProfilePrinterRole, string | null>> = {
           receipt: requireNullableBodyUuid(body.receiptPrinterId, "receiptPrinterId"),
           payment_slip: requireNullableBodyUuid(body.paymentSlipPrinterId, "paymentSlipPrinterId"),
@@ -900,28 +877,8 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
         await refuseDeletedPrinters(tx, Object.values(chosen));
         const switching = profileId !== device.deviceProfileId;
         if (switching) await assertNoPaymentInProgress(tx, id);
-        if (kitchenScreens !== undefined) {
-          await resolveDeviceKitchenScreens(tx, {
-            profileId,
-            kitchenScreens,
-            deviceId: id,
-          });
-        } else {
-          await requireDeviceProfile(tx, profileId);
-          if (switching) {
-            await VENUE_SERVICE.narrowDeviceKitchenScreens(tx, id, profileId);
-            await VENUE_SERVICE.assertKitchenDisplayHasScreen(tx, id, profileId);
-          }
-        }
+        await requireDeviceProfile(tx, profileId);
         const held = await updateDeviceSettings(tx, { id, ...device }, { label, profileId });
-        if (kitchenScreens !== undefined) {
-          await VENUE_SERVICE.setDeviceKitchenScreens(tx, {
-            deviceId: id,
-            profileId,
-            screens: kitchenScreens,
-          });
-        }
-        await setKitchenScreenDisplay(tx, id, display);
         // Only a choice that differs from the stored one is applied: a new choice must be switched
         // on, and a device may still hold a listed one since switched off.
         for (const role of ["receipt", "payment_slip", "cash_drawer", "invoice"] as const) {
@@ -987,24 +944,6 @@ const EQUIPMENT_ROLES: readonly EquipmentRole[] = [
   "card_terminal",
 ];
 
-/** `PUT /api/device/kitchen-screen-display`'s body: a pass kind and a choice, null for the profile's. */
-function parseOwnKitchenScreenDisplay(body: unknown): {
-  kind: "pass" | "pass_monitor";
-  value: boolean | null;
-} {
-  const fields: Record<string, unknown> =
-    typeof body === "object" && body !== null && !Array.isArray(body)
-      ? (body as Record<string, unknown>)
-      : {};
-  const kind = fields.kind;
-  if (kind !== "pass" && kind !== "pass_monitor")
-    throw new AppError("management.request_invalid", { field: "kind" });
-  const value = fields.showNonPassStations;
-  if (typeof value !== "boolean" && value !== null)
-    throw new AppError("management.request_invalid", { field: "showNonPassStations" });
-  return { kind, value };
-}
-
 /** `PUT /api/device/equipment`'s body, each field checked for shape. */
 function parseEquipmentChoice(
   body: Record<string, unknown>,
@@ -1044,10 +983,6 @@ function parseEquipmentChoice(
   return { role, selection: chosen, via: body.via, takeOver: body.takeOver === true };
 }
 
-/**
- * The device's station screen, which a narrowing may have emptied. Refuses as
- * {@link kitchenScreenOf} does.
- */
 async function stationScreenOf(
   tx: Transaction,
   c: Context,
@@ -1064,19 +999,10 @@ function passBoardAnswer(board: PassBoard, screen: ResolvedKitchenScreen) {
     zones: screen.zones,
     display: {
       showNonPassStations: screen.showNonPassStations,
-      nonPassStationsOverride: screen.nonPassStationsOverride,
     },
   };
 }
 
-/**
- * The device's kitchen screen of `kind`, and the person signed in on it. Refuses
- * `device.unauthorized` when the device has no screen of that kind, or a narrowing took it, so a
- * kitchen display re-boots to what its identity now says; and, on any device but a kitchen display,
- * where nobody can sign in yet, `session.required` when nobody is signed in on it and
- * `session.person_not_signed_in` when the request names someone else or nobody. A kitchen display answers
- * either as for nobody signed in.
- */
 async function kitchenScreenOf(
   tx: Transaction,
   c: Context,
@@ -1100,7 +1026,7 @@ async function stationScreenSlots(
   screen: ResolvedKitchenScreen,
 ): Promise<{ slots: ScreenSlot[]; queues: Map<string, StationQueueGroup[]> }> {
   const worked = (slot: ScreenSlot) => slot.available || slot.switchedOff;
-  if (!(screen.everyStation && screen.profileEveryStation)) {
+  if (!screen.everyStation) {
     const queues = await listStationQueues(
       tx,
       screen.stations.filter(worked).map((slot) => slot.id),
@@ -1132,7 +1058,7 @@ async function worksStation(
 ): Promise<boolean> {
   const slot = screen.stations.find((candidate) => candidate.id === stationId);
   if (slot !== undefined) return slot.available || slot.switchedOff;
-  if (!(screen.everyStation && screen.profileEveryStation)) return false;
+  if (!screen.everyStation) return false;
   const [station] = await tx
     .select({ active: kitchenStations.active })
     .from(kitchenStations)

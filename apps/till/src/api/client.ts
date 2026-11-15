@@ -1763,15 +1763,10 @@ export interface ScreenSlot {
 
 export interface ResolvedKitchenScreen {
   kind: KitchenScreenKind;
-  /** False when a profile narrowing took this kind from the device. */
   available: boolean;
   stations: ScreenSlot[];
   /** null: no zone filter. */
   zones: ScreenSlot[] | null;
-  /** The device's own stored choice of showing other stations' dishes; null when it holds none
-   *  (or no choice of this kind), and always null on a station screen. */
-  nonPassStationsOverride: boolean | null;
-  /** `nonPassStationsOverride`, else the profile's row of this kind, else true. */
   showNonPassStations: boolean;
 }
 
@@ -2027,7 +2022,7 @@ export interface DevicePassBoard {
   stations: ScreenSlot[];
   /** null: no zone filter. */
   zones: ScreenSlot[] | null;
-  display: Pick<ResolvedKitchenScreen, "showNonPassStations" | "nonPassStationsOverride">;
+  display: Pick<ResolvedKitchenScreen, "showNonPassStations">;
 }
 
 /** A card's `releaseTicketItemIds` and `releaseContext`, sent back unchanged. */
@@ -3615,11 +3610,6 @@ export class TillApi {
     return this.#request<DeviceJoinStatus>("/api/device/join/status", "GET");
   }
 
-  /**
-   * The device's station screen → `GET /api/device/station-screen`. A missing, rejected or revoked
-   * cookie, or a device with no station screen or one a narrowing took, rejects
-   * `device.unauthorized` (401).
-   */
   getDeviceStationScreen(options: ReadOptions = {}): Promise<DeviceStationScreen> {
     return this.#request<DeviceStationScreen>(
       "/api/device/station-screen",
@@ -3649,28 +3639,10 @@ export class TillApi {
     );
   }
 
-  /** The till's All stations board → `GET /api/expo/board`: every station and zone, nothing to
-   *  release; needs a signed-in person. */
-  getExpoBoard(options: ReadOptions = {}): Promise<{ board: PassBoard }> {
-    return this.#request<{ board: PassBoard }>("/api/expo/board", "GET", undefined, options.signal);
-  }
-
   /** The pass's Fire → `POST /api/device/pass-screen/release`. A stale card rejects
    *  `ticket.pass_context_changed`. */
   releaseDevicePass(ask: PassReleaseAsk): Promise<PassReleaseResult> {
     return this.#request<PassReleaseResult>("/api/device/pass-screen/release", "POST", ask);
-  }
-
-  /** The device's own choice of showing other stations' dishes on its pass or pass monitor →
-   *  `PUT /api/device/kitchen-screen-display`; null takes the profile's. */
-  async setDeviceKitchenScreenDisplay(
-    kind: "pass" | "pass_monitor",
-    value: boolean | null,
-  ): Promise<void> {
-    await this.#request<void>("/api/device/kitchen-screen-display", "PUT", {
-      kind,
-      showNonPassStations: value,
-    });
   }
 
   async bumpDeviceBillReady(orderId: string): Promise<void> {

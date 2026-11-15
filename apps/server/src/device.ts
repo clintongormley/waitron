@@ -24,14 +24,12 @@ import { IN_PROGRESS_PAYMENT_STATES, payments } from "@waitron/payments";
 import { getDeviceProfile, isSharedDisplay } from "@waitron/layouts";
 import type { DeviceKind, FormFactor } from "@waitron/layouts";
 import type {
-  DeviceKitchenScreen,
   KitchenScreenKind,
   ProfileKitchenScreen,
   ProfileKitchenScreens,
 } from "@waitron/module";
 import { settleDevice } from "./device-equipment.js";
 import { KITCHEN_SCREEN_KINDS } from "@waitron/venue-service";
-import { VENUE_SERVICE } from "./modules.js";
 
 /** A device's kind is DERIVED from its profile's form factor via `kindOfFormFactor`. */
 export type { DeviceKind };
@@ -286,8 +284,7 @@ export async function endSessionsNotAdmitted(
 /**
  * Switch the device's active profile to `profileId` for the person signed in on `sessionId`: one
  * the device is approved for and the person may sign in on, with no payment of the device's in
- * progress. The device's kitchen screens narrow to what the new profile offers, recording what they
- * lost. Its equipment settles through
+ * progress. Its equipment settles through
  * {@link updateDeviceSettings}; the sessions of people the new profile does not admit end, every
  * one when it is a shared display. Choosing the active profile changes nothing.
  */
@@ -318,8 +315,6 @@ export async function switchActiveProfile(
   if (!(await canUseDeviceProfile(tx, input.profileId, input.personId)))
     throw new AppError("device_profile.not_admitted", {});
   await assertNoPaymentInProgress(tx, device.id);
-  // Before the move is written: the narrowing reads the current profile as what the device had.
-  await VENUE_SERVICE.narrowDeviceKitchenScreens(tx, device.id, input.profileId);
   await updateDeviceSettings(tx, device, { label: device.label, profileId: input.profileId });
   await keepApprovedAfterSwitch(tx, device.id, device.deviceProfileId, input.profileId);
   await endSessionsNotAdmitted(tx, device.id, input.profileId);
@@ -352,61 +347,6 @@ function asRecord(value: unknown): Record<string, unknown> {
   return (typeof value === "object" && value !== null ? value : {}) as Record<string, unknown>;
 }
 
-/** A request's `kitchenScreens`: absent stays absent; anything else must be a list of screens. */
-export function parseKitchenScreens(value: unknown): DeviceKitchenScreen[] | undefined {
-  if (value === undefined) return undefined;
-  if (!Array.isArray(value))
-    throw new AppError("management.request_invalid", { field: KITCHEN_SCREENS_FIELD });
-  return value.map((entry: unknown) => {
-    const screen = asRecord(entry);
-    if (!KITCHEN_SCREEN_KINDS.includes(screen.kind as KitchenScreenKind))
-      throw new AppError("management.request_invalid", { field: KITCHEN_SCREENS_FIELD });
-    return {
-      kind: screen.kind as KitchenScreenKind,
-      stationIds: screenIds(screen.stationIds),
-      zoneIds: screenIds(screen.zoneIds),
-    };
-  });
-}
-
-const KITCHEN_SCREEN_DISPLAY_FIELD = "kitchenScreenDisplay";
-
-/** A device request's `kitchenScreenDisplay`: each pass kind it names with true, false or null (the
- * profile's); absent names none. */
-export function parseKitchenScreenDisplay(
-  value: unknown,
-): ["pass" | "pass_monitor", boolean | null][] {
-  if (value === undefined) return [];
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    throw new AppError("management.request_invalid", { field: KITCHEN_SCREEN_DISPLAY_FIELD });
-  return Object.entries(value).map(([kind, shown]) => {
-    if (
-      (kind !== "pass" && kind !== "pass_monitor") ||
-      (shown !== null && typeof shown !== "boolean")
-    )
-      throw new AppError("management.request_invalid", { field: KITCHEN_SCREEN_DISPLAY_FIELD });
-    return [kind, shown];
-  });
-}
-
-/** Sets each named kind's display value, after the device's screens are written. A kind its
- * effective choice has no screen of is the request's fault, not the device's. */
-export async function setKitchenScreenDisplay(
-  tx: Transaction,
-  deviceId: string,
-  display: readonly ["pass" | "pass_monitor", boolean | null][],
-): Promise<void> {
-  for (const [kind, shown] of display) {
-    try {
-      await VENUE_SERVICE.setDeviceKitchenScreenDisplay(tx, deviceId, kind, shown);
-    } catch (error) {
-      if (error instanceof AppError && error.code === "device.unauthorized")
-        throw new AppError("management.request_invalid", { field: KITCHEN_SCREEN_DISPLAY_FIELD });
-      throw error;
-    }
-  }
-}
-
 /** A profile request's `kitchenScreens`: absent stays absent; anything else must map each offered
  * kind to its lists. */
 export function parseProfileKitchenScreens(value: unknown): ProfileKitchenScreens | undefined {
@@ -432,26 +372,4 @@ export function parseProfileKitchenScreens(value: unknown): ProfileKitchenScreen
     };
   }
   return screens;
-}
-
-export async function resolveDeviceKitchenScreens(
-  tx: Transaction,
-  input: {
-    profileId: string;
-    kitchenScreens?: readonly DeviceKitchenScreen[];
-    deviceId?: string;
-  },
-): Promise<{
-  kitchenScreens: readonly DeviceKitchenScreen[];
-  formFactor: FormFactor;
-}> {
-  const profile = await requireDeviceProfile(tx, input.profileId);
-  const kitchenScreens = input.kitchenScreens ?? [];
-  await VENUE_SERVICE.assertDeviceKitchenScreens(
-    tx,
-    input.profileId,
-    kitchenScreens,
-    input.deviceId,
-  );
-  return { kitchenScreens, formFactor: profile.formFactor };
 }

@@ -105,7 +105,6 @@ const identity = (kind: "pass" | "pass_monitor"): DeviceIdentity => ({
       available: true,
       stations: [],
       zones: null,
-      nonPassStationsOverride: null,
       showNonPassStations: true,
     },
   ],
@@ -116,11 +115,15 @@ function stubApi(board: PassBoard, overrides: Record<string, unknown> = {}) {
     board,
     stations: [],
     zones: null,
-    display: { showNonPassStations: true, nonPassStationsOverride: null },
+    display: { showNonPassStations: true },
   };
   return {
-    getExpoBoard: vi.fn().mockResolvedValue({ board }),
-    getDeviceIdentity: vi.fn().mockResolvedValue({ ...identity("pass"), kitchenScreens: [] }),
+    getDeviceIdentity: vi.fn().mockResolvedValue({
+      ...identity("pass"),
+      kitchenScreens: [
+        { kind: "pass", available: true, stations: [], zones: null, showNonPassStations: true },
+      ],
+    }),
     getDevicePassBoard: vi.fn().mockResolvedValue(read),
     getDevicePassMonitorBoard: vi.fn().mockResolvedValue(read),
     bumpBillReady: vi.fn().mockResolvedValue(undefined),
@@ -167,7 +170,7 @@ const mountPass = (board: PassBoard = courseBoard()) => {
       board,
       stations: [],
       zones: null,
-      display: { showNonPassStations: true, nonPassStationsOverride: null },
+      display: { showNonPassStations: true },
     },
   }).then((mounted) => ({ ...mounted, api }));
 };
@@ -184,7 +187,7 @@ const mountMonitor = (board: PassBoard = courseBoard()) =>
       board,
       stations: [],
       zones: null,
-      display: { showNonPassStations: true, nonPassStationsOverride: null },
+      display: { showNonPassStations: true },
     },
   });
 

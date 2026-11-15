@@ -1874,19 +1874,6 @@ describe("TillApi", () => {
     ]);
   });
 
-  describe("A773 pass board: all stations", () => {
-    it("getExpoBoard GETs every station's board with the caller's signal", async () => {
-      const board = { held: [], toFire: [], inProgress: [], ready: [], overview: [] };
-      const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ board }));
-      const signal = new AbortController().signal;
-      expect(await new TillApi("", fetchStub).getExpoBoard({ signal })).toEqual({ board });
-      expect(fetchStub).toHaveBeenCalledWith(
-        "/api/expo/board",
-        expect.objectContaining({ method: "GET", credentials: "include", signal }),
-      );
-    });
-  });
-
   it("A773 pass Fire posts the ask as its body and returns the released ids", async () => {
     const ask = {
       submissionId: "sub-1",
@@ -1903,21 +1890,6 @@ describe("TillApi", () => {
       expect.objectContaining({ method: "POST", credentials: "include" }),
     );
     expect(JSON.parse(fetchStub.mock.calls[0]![1].body as string)).toEqual(ask);
-  });
-
-  it("A773 pass display PUTs the device's own choice for a kind, null for the profile's (empty 204 body)", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
-    const api = new TillApi("", fetchStub);
-    await expect(api.setDeviceKitchenScreenDisplay("pass", false)).resolves.toBeUndefined();
-    await api.setDeviceKitchenScreenDisplay("pass_monitor", null);
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/device/kitchen-screen-display",
-      expect.objectContaining({ method: "PUT", credentials: "include" }),
-    );
-    expect(fetchStub.mock.calls.map((call) => JSON.parse(call[1].body as string))).toEqual([
-      { kind: "pass", showNonPassStations: false },
-      { kind: "pass_monitor", showNonPassStations: null },
-    ]);
   });
 
   it("bumpBillReady POSTs an empty object to the bill /ready route (empty 200 body)", async () => {
@@ -3488,7 +3460,6 @@ describe("TillApi", () => {
             { id: "st-2", name: "Deli", available: false },
           ],
           zones: [{ id: "z-1", name: "Terraza", available: true }],
-          nonPassStationsOverride: null,
           showNonPassStations: true,
         },
         {
@@ -3496,7 +3467,6 @@ describe("TillApi", () => {
           available: false,
           stations: [],
           zones: null,
-          nonPassStationsOverride: null,
           showNonPassStations: true,
         },
       ],

@@ -61,7 +61,14 @@ for (const locale of ["en", "es"]) {
               deviceId: "dev-1",
               formFactor: "till",
               name: "Till",
-              kitchenScreens: [],
+              kitchenScreens: [
+                {
+                  kind: "station",
+                  available: true,
+                  stations: stations.map(({ id, name }) => ({ id, name, available: true })),
+                  zones: null,
+                },
+              ],
             }),
             getStationQueue: vi.fn().mockResolvedValue({ items: [], notices: [] }),
           } as unknown as TillApi;

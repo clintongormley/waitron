@@ -767,8 +767,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este pedido es de una zona que esta vista de pase no muestra.",
   },
   "kitchen_screen.not_allowed": {
-    en: "This device no longer shows that screen. Choose its screens again in the dashboard, under Devices.",
-    es: "Este dispositivo ya no muestra esa pantalla. Vuelve a elegir sus pantallas en el panel, en Dispositivos.",
+    en: "This device no longer shows that screen. Choose its profile's screen in the dashboard, under Device profiles.",
+    es: "Este dispositivo ya no muestra esa pantalla. Elige la pantalla de su perfil en el panel, en Perfiles de dispositivo.",
   },
   "device.pairing_closed": {
     en: "New devices aren't being accepted right now. Ask a manager to open Add a device in the dashboard.",

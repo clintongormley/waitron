@@ -561,7 +561,7 @@ export type KitchenScreenKind = "station" | "pass" | "pass_monitor";
 /**
  * null stationIds = every station; null zoneIds = every zone. A station screen never filters by
  * zone: it is stored with every_zone 0 and no zone rows, and read back with zoneIds null. On a
- * device, "every" means every one its profile allows less its recorded removals.
+ * device, the profile supplies both lists.
  */
 export interface KitchenScreenScope {
   readonly stationIds: readonly string[] | null;
@@ -587,46 +587,23 @@ export interface Named {
   readonly name: string;
 }
 
-/** A device a profile save narrowed, and what it lost. */
-export interface NarrowedDevice {
-  readonly deviceId: string;
-  readonly deviceName: string;
-  readonly lost: {
-    readonly screens: readonly KitchenScreenKind[];
-    readonly stations: readonly Named[];
-    readonly zones: readonly Named[];
-  };
-}
-
 /** One station or zone of a device's kitchen screen: shown, or no longer available. */
 export interface ScreenSlot {
   readonly id: string;
   readonly name: string;
   readonly available: boolean;
-  /** The stored active flag is false, rather than a recorded profile removal. */
   readonly switchedOff: boolean;
 }
 
 export interface ResolvedKitchenScreen {
   readonly kind: KitchenScreenKind;
-  /** False when a profile narrowing took this kind from the device. */
   readonly available: boolean;
-  /** The device's own station list is "every" (`stationIds` null). False on a kind it holds no
-   *  choice of, as when a narrowing took the kind or emptied its list. */
   readonly everyStation: boolean;
   /** As `everyStation`, for zones; a station screen's is true, since it never filters by zone. */
   readonly everyZone: boolean;
-  /** The profile's station list for this kind is "every", or it has no row for it. False on a
-   *  kind the device holds no choice of. */
-  readonly profileEveryStation: boolean;
-  /** Display order; unavailable when a narrowing took it or it is switched off. */
   readonly stations: readonly ScreenSlot[];
   /** null: no zone filter; otherwise zone order. */
   readonly zones: readonly ScreenSlot[] | null;
-  /** The device's own stored choice of showing other stations' dishes; null when it holds none
-   *  (or no choice of this kind), and always null on a station screen. */
-  readonly nonPassStationsOverride: boolean | null;
-  /** `nonPassStationsOverride`, else the profile's row of this kind, else true. */
   readonly showNonPassStations: boolean;
 }
 
@@ -1012,25 +989,14 @@ export interface VenueServiceContribution {
     tx: Transaction,
     profileId: string,
     screens: ProfileKitchenScreens,
-  ): Promise<NarrowedDevice[]>;
+  ): Promise<void>;
   /** Copies a live source's kitchen screens, retaining its explicit empty zone bounds. */
   copyProfileKitchenScreens(tx: Transaction, sourceId: string, targetId: string): Promise<void>;
-  /** Narrows the device from its current profile to `profileId`, before a switch writes it,
-   *  recording what it lost and giving back what `profileId` allows again, as a profile save does;
-   *  never refuses. Null: it lost nothing, or the device is unknown. */
-  narrowDeviceKitchenScreens(
-    tx: Transaction,
-    deviceId: string,
-    profileId: string,
-  ): Promise<NarrowedDevice | null>;
-  /** Adds the screen's stations and zones to the profile's row of its kind, creating the row when
-   *  there is none; never removes anything and never narrows a device. Unchecked: for test set-up. */
   addProfileKitchenScreen(
     tx: Transaction,
     profileId: string,
     screen: DeviceKitchenScreen,
   ): Promise<void>;
-  /** The device's stored kitchen screens, then the kinds a narrowing took from it. */
   readDeviceKitchenScreens(tx: Transaction, deviceId: string): Promise<ResolvedKitchenScreen[]>;
   /** Each named device's `readDeviceKitchenScreens`, in a fixed number of queries; one unknown
    *  here reads none. */
@@ -1038,59 +1004,16 @@ export interface VenueServiceContribution {
     tx: Transaction,
     deviceIds: readonly string[],
   ): Promise<Map<string, ResolvedKitchenScreen[]>>;
-  /** Refuses `kitchen_screen.required` when `profileId` is a kitchen display's and the device's
-   *  choice, less what narrowings took, holds no kitchen screen. */
-  assertKitchenDisplayHasScreen(
-    tx: Transaction,
-    deviceId: string,
-    profileId: string,
-  ): Promise<void>;
-  /** Replaces the device's kitchen screens and forgets what narrowings took from it. Refused
-   *  `kitchen_screen.*` or `station.not_allowed` as `assertDeviceKitchenScreens` says. */
-  setDeviceKitchenScreens(
-    tx: Transaction,
-    input: { deviceId: string; profileId: string; screens: readonly DeviceKitchenScreen[] },
-  ): Promise<void>;
-  /** Sets the device's own choice of showing other stations' dishes on its screen of `kind`
-   *  (null: the profile's), changing nothing else. Refused `device.unauthorized` for a kind other
-   *  than a pass or a pass monitor, and when the device's effective choice has no screen of that
-   *  kind (a kind a narrowing took keeps its row and stored value). */
-  setDeviceKitchenScreenDisplay(
-    tx: Transaction,
-    deviceId: string,
-    kind: "pass" | "pass_monitor",
-    value: boolean | null,
-  ): Promise<void>;
   readDeviceZoneSelection(tx: Transaction, deviceId: string): Promise<DeviceZoneSelection>;
   setDeviceZoneSelection(
     tx: Transaction,
     deviceId: string,
     input: DeviceZoneSelectionInput,
   ): Promise<DeviceZoneSelection>;
-  /** A kitchen display takes exactly one kitchen screen (`kitchen_screen.required`, or
-   *  `kitchen_screen.invalid` `one_only`), each kind at most once and never both a pass screen and
-   *  a pass monitor (`one_only`), of a kind its profile offers (`kitchen_screen.not_allowed`; on
-   *  any form factor a pass monitor needs a profile row); stations and zones within the profile's
-   *  lists (`station.not_allowed`, `kitchen_screen.zone_not_allowed`). Deleted nonempty zone and
-   *  station choices refuse (`kitchen_screen.invalid`); a device's stored empty zone bound may stay.
-   *  Writes nothing. */
-  assertDeviceKitchenScreens(
-    tx: Transaction,
-    profileId: string,
-    screens: readonly DeviceKitchenScreen[],
-    deviceId?: string,
-  ): Promise<void>;
-  /** Refuses an order's zone (null: an order in no zone) the device's pass screen does not show,
-   *  and any order on a device with no pass screen once narrowings' removals are taken out
-   *  (`kitchen_screen.not_allowed`). */
+  /** Refuses a zone outside the inherited Pass screen. */
   assertPassScreenZone(tx: Transaction, deviceId: string, zoneId: string | null): Promise<void>;
-  /** Each active kitchen display running a station screen, with the stations it shows now; with
-   *  `withSwitchedOff`, also the switched-off ones its explicit list names (never "every"'s, never
-   *  one a narrowing took). */
-  readStationScreens(
-    tx: Transaction,
-    options?: { withSwitchedOff?: boolean },
-  ): Promise<{ deviceId: string; stationIds: string[] }[]>;
+
+  readStationScreens(tx: Transaction): Promise<{ deviceId: string; stationIds: string[] }[]>;
   /** Each named profile's scope as last saved: `allowedZoneIds` null means every zone of the
    *  department, and a zone switched off since is still named. No saved scope reads all null. */
   readProfileServiceScopes(

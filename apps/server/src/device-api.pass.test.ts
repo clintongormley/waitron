@@ -3,7 +3,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { Hono } from "hono";
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   deviceProfiles,
@@ -30,7 +30,6 @@ import { routeProductTo } from "./testing/zone-offers.js";
 import { boardCards, boardItems } from "./testing/pass-board-probe.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { mountDeviceApi } from "./device-api.js";
-import { deleteDevice, disableDevice } from "./device-delete.js";
 import { mountTillApi } from "./till-api.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 import { createPairingMode } from "./pairing-mode.js";
@@ -93,8 +92,45 @@ async function fixture() {
     profileId: string,
     choice: { kitchenScreen?: DeviceKitchenScreen; stationId?: string },
   ) => {
+    const requested =
+      choice.kitchenScreen ??
+      (choice.stationId === undefined
+        ? undefined
+        : {
+            kind: "station" as const,
+            stationIds: [choice.stationId],
+            zoneIds: null,
+          });
+    const saved = (await inTx(v, (tx) => VENUE_SERVICE.readProfileKitchenScreens(tx))).find(
+      (entry) => entry.profileId === profileId,
+    )?.screens;
+    const idsEqual = (a: readonly string[] | null, b: readonly string[] | null) =>
+      a === null || b === null ? a === b : a.length === b.length && a.every((id) => b.includes(id));
+    if (
+      requested !== undefined &&
+      saved !== undefined &&
+      Object.keys(saved).length > 0 &&
+      (saved[requested.kind] === undefined ||
+        !idsEqual(saved[requested.kind]!.stationIds, requested.stationIds) ||
+        !idsEqual(saved[requested.kind]!.zoneIds, requested.zoneIds))
+    ) {
+      const [source] = await suite.db
+        .select()
+        .from(deviceProfiles)
+        .where(eq(deviceProfiles.id, profileId));
+      const [copy] = await seedDeviceProfiles(suite.db, {
+        name: `${name} profile`,
+        formFactor: source!.formFactor as "kds" | "till",
+        capabilities: source!.capabilities as string[],
+      });
+      profileId = copy!.id;
+    }
     const joined = await enrolDeviceForTest(suite.db, v.cfg, { name, profileId, ...choice });
-    return { id: joined.deviceId, cookie: `${DEVICE_COOKIE}=${joined.deviceId}.${joined.token}` };
+    return {
+      profileId,
+      id: joined.deviceId,
+      cookie: `${DEVICE_COOKIE}=${joined.deviceId}.${joined.token}`,
+    };
   };
   const a = await device("Pass A", kds, { kitchenScreen: EVERY_PASS });
   const b = await device("Pass B", kds, { kitchenScreen: EVERY_PASS });
@@ -185,7 +221,7 @@ describe("the pass screen's device routes", () => {
       board: { held: [], toFire: [], inProgress: [], ready: [], overview: [] },
       stations: screen!.stations,
       zones: null,
-      display: { showNonPassStations: true, nonPassStationsOverride: null },
+      display: { showNonPassStations: true },
     });
     expect(board.stations.map((s) => s.id)).toContain(f.grill);
   });
@@ -298,7 +334,7 @@ describe("the pass screen's device routes", () => {
     );
   });
 
-  it("answers a pass screen or pass monitor a narrowing took device.unauthorized, so the display boots to its notice", async () => {
+  it("refuses a Pass read after its profile changes to Station and exposes the inherited Station screen", async () => {
     const f = await fixture();
     const itemId = await burgerOrder(f.v);
     const narrowed = await inTx(f.v, (tx) =>
@@ -312,11 +348,12 @@ describe("the pass screen's device routes", () => {
     expect(items(await read(f.app, monitor.cookie, "/api/device/pass-monitor-board"))).toEqual([
       itemId,
     ]);
-    await inTx(f.v, (tx) =>
-      VENUE_SERVICE.setProfileKitchenScreens(tx, narrowed[0]!.id, {
-        station: { stationIds: null, zoneIds: null },
-      }),
-    );
+    for (const target of [pass, monitor])
+      await inTx(f.v, (tx) =>
+        VENUE_SERVICE.setProfileKitchenScreens(tx, target.profileId, {
+          station: { stationIds: null, zoneIds: null },
+        }),
+      );
     for (const [cookie, path] of [
       [pass.cookie, "/api/device/pass-board"],
       [monitor.cookie, "/api/device/pass-monitor-board"],
@@ -330,19 +367,8 @@ describe("the pass screen's device routes", () => {
     const screens = await withTransaction(suite.db, (tx) =>
       VENUE_SERVICE.readDeviceKitchenScreens(tx, pass.id),
     );
-    expect(screens).toEqual([
-      {
-        kind: "pass",
-        available: false,
-        everyStation: false,
-        everyZone: false,
-        profileEveryStation: false,
-        showNonPassStations: true,
-        nonPassStationsOverride: null,
-        stations: [],
-        zones: null,
-      },
-    ]);
+    expect(screens).toMatchObject([{ kind: "station", available: true }]);
+    expect(screens[0]!.stations.map((slot) => slot.id)).toContain(f.grill);
   });
 
   it("retires malformed Done and mixed local/foreign Done and Undo", async () => {
@@ -663,10 +689,19 @@ describe("A773 pass display policy", () => {
   const shown = async (f: Awaited<ReturnType<typeof fixture>>, cookie: string, path: string) =>
     (await read(f.app, cookie, path)) as ShownBoard;
 
-  const choose = (deviceId: string, kind: "pass" | "pass_monitor", value: boolean | null) =>
-    withTransaction(suite.db, (tx) =>
-      VENUE_SERVICE.setDeviceKitchenScreenDisplay(tx, deviceId, kind, value),
-    );
+  const choose = (deviceId: string, kind: "pass" | "pass_monitor", value: boolean) =>
+    withTransaction(suite.db, async (tx) => {
+      const [device] = await tx
+        .select({ profileId: devices.deviceProfileId })
+        .from(devices)
+        .where(eq(devices.id, deviceId));
+      const profile = (await VENUE_SERVICE.readProfileKitchenScreens(tx)).find(
+        (entry) => entry.profileId === device!.profileId,
+      )!;
+      await VENUE_SERVICE.setProfileKitchenScreens(tx, device!.profileId, {
+        [kind]: { ...profile.screens[kind]!, showNonPassStations: value },
+      });
+    });
 
   /** The dishes Hide keeps on their cards without drawing them. */
   const hiddenIds = (board: PassBoard) =>
@@ -686,7 +721,7 @@ describe("A773 pass display policy", () => {
       releaseContext: card.releaseContext,
     }));
 
-  it("moves a pass's dimmed dishes to their card's hidden dishes and drops their overview facts when its device hides them, leaving every card's column and release as shown", async () => {
+  it("moves a pass's dimmed dishes to their card's hidden dishes and drops their overview facts when its profile hides them, leaving every card's column and release as shown", async () => {
     const f = await fixture();
     const { burger, riceDish } = await burgerAndRiceDish(f, true);
     /** The board shown, then hidden, by the device's own choice. */
@@ -714,7 +749,6 @@ describe("A773 pass display policy", () => {
     expect(facts(requestedPair.after.board)).toEqual(facts(requestedPair.before.board));
     expect(requestedPair.after.display).toEqual({
       showNonPassStations: false,
-      nonPassStationsOverride: false,
     });
 
     await inTx(f.v, (tx) =>
@@ -756,10 +790,10 @@ describe("A773 pass display policy", () => {
     expect(hiddenIds(read.board)).toEqual([]);
     expect(boardCards(read.board).length).toBeGreaterThan(0);
     for (const card of boardCards(read.board)) expect(card).not.toHaveProperty("hiddenItems");
-    expect(read.display).toEqual({ showNonPassStations: false, nonPassStationsOverride: false });
+    expect(read.display).toEqual({ showNonPassStations: false });
   });
 
-  it("applies a pass monitor's own choice and still names nothing to release", async () => {
+  it("applies a pass monitor's profile choice and still names nothing to release", async () => {
     const f = await fixture();
     const { burger, riceDish } = await burgerAndRiceDish(f, true);
     const monitor = await f.device("Pass monitor", f.kds, {
@@ -768,7 +802,7 @@ describe("A773 pass display policy", () => {
     await choose(f.a.id, "pass", false);
     const before = await shown(f, monitor.cookie, "/api/device/pass-monitor-board");
     expect(boardItems(before.board)).toHaveLength(2);
-    expect(before.display).toEqual({ showNonPassStations: true, nonPassStationsOverride: null });
+    expect(before.display).toEqual({ showNonPassStations: true });
 
     await choose(monitor.id, "pass_monitor", false);
     const after = await shown(f, monitor.cookie, "/api/device/pass-monitor-board");
@@ -779,297 +813,7 @@ describe("A773 pass display policy", () => {
       expect(card.releaseTicketItemIds).toEqual([]);
       expect(card.releaseContext).toBeNull();
     }
-    expect(after.display).toEqual({ showNonPassStations: false, nonPassStationsOverride: false });
-  });
-
-  it("hides by the profile's choice when the device's own is cleared", async () => {
-    const f = await fixture();
-    const { burger, riceDish } = await burgerAndRiceDish(f, true);
-    await inTx(f.v, (tx) =>
-      VENUE_SERVICE.setProfileKitchenScreens(tx, f.kds, {
-        pass: { stationIds: null, zoneIds: null, showNonPassStations: false },
-      }),
-    );
-    await choose(f.a.id, "pass", null);
-    const read = await shown(f, f.a.cookie, "/api/device/pass-board");
-    expect(boardItems(read.board).map((item) => item.id)).toEqual([burger]);
-    expect(hiddenIds(read.board)).toEqual([riceDish]);
-    expect(read.display).toEqual({ showNonPassStations: false, nonPassStationsOverride: null });
-  });
-
-  it("answers the device's own choice, and the profile's once the device clears it", async () => {
-    const f = await fixture();
-    await choose(f.a.id, "pass", true);
-    expect((await shown(f, f.a.cookie, "/api/device/pass-board")).display).toEqual({
-      showNonPassStations: true,
-      nonPassStationsOverride: true,
-    });
-    await choose(f.a.id, "pass", null);
-    expect((await shown(f, f.a.cookie, "/api/device/pass-board")).display).toEqual({
-      showNonPassStations: true,
-      nonPassStationsOverride: null,
-    });
-  });
-});
-
-describe("A773 pass display policy: the device's own route", () => {
-  const put = (app: Hono, cookie: string | null, body: unknown) =>
-    app.request("/api/device/kitchen-screen-display", {
-      method: "PUT",
-      headers: { ...(cookie === null ? {} : { cookie }), "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
-
-  /** Every device's kitchen-screen rows, their stations and zones, and the narrowings' removals. */
-  const stored = async () => {
-    const rows = async (query: ReturnType<typeof sql>) =>
-      (await suite.db.execute<Record<string, unknown>>(query)).rows;
-    return {
-      screens: await rows(
-        sql`select device_id, screen, every_station, every_zone, show_non_pass_stations from device_kitchen_screens order by device_id, screen`,
-      ),
-      stations: await rows(
-        sql`select device_id, screen, station_id from device_kitchen_screen_stations order by device_id, screen, station_id`,
-      ),
-      zones: await rows(
-        sql`select device_id, screen, zone_id from device_kitchen_screen_zones order by device_id, screen, zone_id`,
-      ),
-      removals: await rows(
-        sql`select id, device_id, screen, station_id, zone_id from device_kitchen_screen_removals order by id`,
-      ),
-    };
-  };
-
-  const valueOf = async (deviceId: string) =>
-    (
-      await suite.db.execute<{ screen: string; value: number | null }>(
-        sql`select screen, show_non_pass_stations as value from device_kitchen_screens where device_id = ${deviceId}`,
-      )
-    ).rows.map((row) => [row.screen, row.value === null ? null : Boolean(row.value)]);
-
-  async function refused(
-    send: () => Response | Promise<Response>,
-    status: number,
-    error: Record<string, unknown>,
-  ) {
-    const before = await stored();
-    const answer = await send();
-    expect({ status: answer.status, body: await answer.json() }).toEqual({
-      status,
-      body: { error },
-    });
-    expect(await stored()).toEqual(before);
-  }
-
-  const display = async (f: Awaited<ReturnType<typeof fixture>>, cookie: string, path: string) =>
-    ((await read(f.app, cookie, path)) as Board & { display: unknown }).display;
-
-  it("sets and clears a kitchen display's own choice, read back on its next board, touching no other device and no narrowing's removal", async () => {
-    const f = await fixture();
-    const cold = (await inTx(f.v, (tx) => createStation(tx, { name: "Cold" }))).id;
-    await suite.db.execute(
-      sql`insert into device_kitchen_screen_removals (id, device_id, screen, station_id, removed_at) values (${randomUUID()}, ${f.a.id}, 'pass', ${cold}, ${new Date().toISOString()})`,
-    );
-    const before = await stored();
-
-    expect(
-      (await put(f.app, f.a.cookie, { kind: "pass", showNonPassStations: false })).status,
-    ).toBe(204);
-    expect(await display(f, f.a.cookie, "/api/device/pass-board")).toEqual({
-      showNonPassStations: false,
-      nonPassStationsOverride: false,
-    });
-    expect(await valueOf(f.a.id)).toEqual([["pass", false]]);
-    expect(await valueOf(f.b.id)).toEqual([["pass", null]]);
-
-    expect((await put(f.app, f.a.cookie, { kind: "pass", showNonPassStations: true })).status).toBe(
-      204,
-    );
-    expect(await valueOf(f.a.id)).toEqual([["pass", true]]);
-    expect((await put(f.app, f.a.cookie, { kind: "pass", showNonPassStations: null })).status).toBe(
-      204,
-    );
-    expect(await display(f, f.a.cookie, "/api/device/pass-board")).toEqual({
-      showNonPassStations: true,
-      nonPassStationsOverride: null,
-    });
-    expect(await stored()).toEqual(before);
-  });
-
-  it("sets a pass monitor's own choice", async () => {
-    const f = await fixture();
-    const monitor = await f.device("Pass monitor", f.kds, {
-      kitchenScreen: { kind: "pass_monitor", stationIds: null, zoneIds: null },
-    });
-    const answer = await put(f.app, monitor.cookie, {
-      kind: "pass_monitor",
-      showNonPassStations: false,
-    });
-    expect(answer.status).toBe(204);
-    expect(await display(f, monitor.cookie, "/api/device/pass-monitor-board")).toEqual({
-      showNonPassStations: false,
-      nonPassStationsOverride: false,
-    });
-  });
-
-  it("succeeds on a profile without prepare-orders: choosing what the pass shows is no cooking action", async () => {
-    const f = await fixture();
-    await inTx(f.v, (tx) =>
-      tx
-        .update(deviceProfiles)
-        .set({ capabilities: ["act-as-kds", "run-the-pass"] })
-        .where(eq(deviceProfiles.id, f.kds)),
-    );
-    expect(
-      (await put(f.app, f.a.cookie, { kind: "pass", showNonPassStations: false })).status,
-    ).toBe(204);
-    expect(await valueOf(f.a.id)).toEqual([["pass", false]]);
-  });
-
-  it("on a till, refuses with nobody signed in and sets it for the person signed in", async () => {
-    const f = await fixture();
-    const till = await f.device("Till pass", f.till, { kitchenScreen: EVERY_PASS });
-    await refused(
-      () => put(f.app, till.cookie, { kind: "pass", showNonPassStations: false }),
-      401,
-      {
-        code: "session.required",
-        params: {},
-      },
-    );
-    const [person] = await inTx(f.v, (tx) => listAdminHolders(tx));
-    const { token } = await inTx(f.v, (tx) =>
-      loginWithPin(tx, { deviceId: till.id, personId: person!.id, pin: "1234" }),
-    );
-    const signedIn = `${till.cookie}; ${SESSION_COOKIE}=${token}`;
-    expect((await put(f.app, signedIn, { kind: "pass", showNonPassStations: false })).status).toBe(
-      204,
-    );
-    expect(await valueOf(till.id)).toEqual([["pass", false]]);
-  });
-
-  it("refuses a till with no pass screen and nobody signed in device.unauthorized, as its board read does", async () => {
-    const f = await fixture();
-    const till = await f.device("Till", f.till, {});
-    const board = await f.app.request("/api/device/pass-board", {
-      headers: { cookie: till.cookie },
-    });
-    expect({ status: board.status, body: await board.json() }).toEqual({
-      status: 401,
-      body: { error: { code: "device.unauthorized", params: {} } },
-    });
-    await refused(
-      () => put(f.app, till.cookie, { kind: "pass", showNonPassStations: false }),
-      401,
-      { code: "device.unauthorized", params: {} },
-    );
-  });
-
-  it("refuses a device without a screen of the kind it names device.unauthorized", async () => {
-    const f = await fixture();
-    const station = await f.device("Grill screen", f.kds, { stationId: f.grill });
-    await refused(
-      () => put(f.app, f.a.cookie, { kind: "pass_monitor", showNonPassStations: false }),
-      401,
-      {
-        code: "device.unauthorized",
-        params: {},
-      },
-    );
-    await refused(
-      () => put(f.app, station.cookie, { kind: "pass", showNonPassStations: false }),
-      401,
-      {
-        code: "device.unauthorized",
-        params: {},
-      },
-    );
-  });
-
-  it("refuses without device proof, and a device disabled or deleted, as the release route does", async () => {
-    const f = await fixture();
-    const ask = { kind: "pass", showNonPassStations: false };
-    await refused(() => put(f.app, null, ask), 401, { code: "device.unauthorized", params: {} });
-    await refused(() => put(f.app, `${f.a.cookie}x`, ask), 401, {
-      code: "device.unauthorized",
-      params: {},
-    });
-    await inTx(f.v, (tx) => disableDevice(tx, f.a.id));
-    await refused(() => put(f.app, f.a.cookie, ask), 401, {
-      code: "device.unauthorized",
-      params: {},
-    });
-    await inTx(f.v, (tx) => deleteDevice(tx, f.v.cfg, f.b.id));
-    await refused(() => put(f.app, f.b.cookie, ask), 401, {
-      code: "device.unauthorized",
-      params: {},
-    });
-  });
-
-  it("refuses a display disabled after its proof was checked, writing nothing", async () => {
-    const f = await fixture();
-    let reading!: () => void;
-    const started = new Promise<void>((resolve) => {
-      reading = resolve;
-    });
-    let send!: () => void;
-    const sent = new Promise<void>((resolve) => {
-      send = resolve;
-    });
-    const body = new ReadableStream<Uint8Array>(
-      {
-        async pull(controller) {
-          reading();
-          await sent;
-          controller.enqueue(
-            new TextEncoder().encode(JSON.stringify({ kind: "pass", showNonPassStations: false })),
-          );
-          controller.close();
-        },
-      },
-      { highWaterMark: 0 },
-    );
-    await refused(
-      async () => {
-        const answer = Promise.resolve(
-          f.app.request("/api/device/kitchen-screen-display", {
-            method: "PUT",
-            headers: { cookie: f.a.cookie, "content-type": "application/json" },
-            body,
-            duplex: "half",
-          } as RequestInit),
-        );
-        const first = await Promise.race([
-          started.then(() => "reading"),
-          answer.then(() => "answered"),
-        ]);
-        expect(first, "the route answered before reading the body").toBe("reading");
-        await inTx(f.v, (tx) =>
-          tx.update(devices).set({ active: false }).where(eq(devices.id, f.a.id)),
-        );
-        send();
-        return answer;
-      },
-      401,
-      { code: "device.unauthorized", params: {} },
-    );
-  });
-
-  it("refuses a station kind, an unknown kind and a value of another type, writing nothing", async () => {
-    const f = await fixture();
-    const station = await f.device("Grill screen", f.kds, { stationId: f.grill });
-    for (const [cookie, body, field] of [
-      [station.cookie, { kind: "station", showNonPassStations: false }, "kind"],
-      [f.a.cookie, { kind: "elsewhere", showNonPassStations: false }, "kind"],
-      [f.a.cookie, { showNonPassStations: false }, "kind"],
-      [f.a.cookie, { kind: "pass", showNonPassStations: "no" }, "showNonPassStations"],
-      [f.a.cookie, { kind: "pass" }, "showNonPassStations"],
-      [f.a.cookie, [], "kind"],
-    ] as const)
-      await refused(() => put(f.app, cookie, body), 400, {
-        code: "management.request_invalid",
-        params: { field },
-      });
+    expect(after.display).toEqual({ showNonPassStations: false });
   });
 });
 

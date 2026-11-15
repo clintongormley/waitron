@@ -38,10 +38,6 @@ export function stationDeleteCopy(): DeleteDialogCopy {
           "prep.delete_station_routing_periods",
           "prep.delete_station_routing_periods_one",
         ],
-        station_device_screens: [
-          "prep.delete_station_device_screens",
-          "prep.delete_station_device_screens_one",
-        ],
         station_profile_screens: [
           "prep.delete_station_profile_screens",
           "prep.delete_station_profile_screens_one",

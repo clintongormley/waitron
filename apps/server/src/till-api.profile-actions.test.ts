@@ -630,7 +630,6 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
       "GET /api/device/station-screen",
       "GET /api/device/stations",
       "PUT /api/device/battery",
-      "PUT /api/device/kitchen-screen-display",
     ],
   },
   {

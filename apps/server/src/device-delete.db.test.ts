@@ -587,7 +587,6 @@ describe("the device delete impact", () => {
     expect(before.incidents!.length).toBeGreaterThan(0);
     expect(before.drawer_opens!.length).toBeGreaterThan(0);
     expect(before.order_groups!.some((row) => row.fired_by_device_id === s.barTill)).toBe(true);
-    expect(before.device_kitchen_screens!.some((row) => row.device_id === s.barTill)).toBe(true);
     expect(before.join_requests!.some((row) => row.id === s.barTill)).toBe(true);
 
     const impact = await inTx((tx) => deleteDevice(tx, s.cfg, s.barTill));
@@ -671,8 +670,6 @@ describe("the device delete impact", () => {
       ["device_made_here_stations", "device_id"],
       ["device_approved_profiles", "device_id"],
       ["device_card_readers", "device_id"],
-      ["device_kitchen_screens", "device_id"],
-      ["device_kitchen_screen_stations", "device_id"],
     ] as const) {
       expect(passRows(before, table, column).length, table).toBeGreaterThan(0);
       expect(passRows(after, table, column), table).toEqual(passRows(before, table, column));

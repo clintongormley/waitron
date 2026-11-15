@@ -46,7 +46,6 @@ export async function enrolDeviceForTest(
     const accepted = await acceptDeviceJoinRequest(tx, cfg, made.joinId, {
       label: input.name,
       profileId: input.profileId,
-      kitchenScreens,
     });
     return { deviceId: accepted.deviceId, token: made.token };
   });

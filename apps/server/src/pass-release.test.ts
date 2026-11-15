@@ -645,7 +645,7 @@ describe("A773 pass release: authority", () => {
     const screens = await withTransaction(db, (tx) =>
       VENUE_SERVICE.readDeviceKitchenScreens(tx, narrowed.deviceId),
     );
-    expect(screens.find((screen) => screen.kind === "pass")).toMatchObject({ available: false });
+    expect(screens.find((screen) => screen.kind === "pass")).toBeUndefined();
     await refusedWhole(release(f.venue, by, askOf(hotCard!)), "device.unauthorized", [
       f.burger,
       f.salad,
@@ -1748,7 +1748,7 @@ describe("A773 pass release: races", () => {
         const shows = (stationId: string) =>
           screen.stations.find((slot) => slot.id === stationId)?.available;
         expect([shows(f.venue.stations.grill), shows(f.venue.stations.fryer)]).toEqual([
-          kind === "zones",
+          kind === "zones" ? true : undefined,
           true,
         ]);
       });

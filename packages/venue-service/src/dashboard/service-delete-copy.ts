@@ -17,7 +17,6 @@ const itemKeys = {
     "venue.delete_item_profile_starting_zones_one",
   ],
   screen_zones: ["venue.delete_item_screen_zones", "venue.delete_item_screen_zones_one"],
-  screen_notices: ["venue.delete_item_screen_notices", "venue.delete_item_screen_notices_one"],
   floor_plan_sets: ["venue.delete_item_floor_plan_sets", "venue.delete_item_floor_plan_sets_one"],
   transfer_desks: ["venue.delete_item_transfer_desks", "venue.delete_item_transfer_desks_one"],
   transfer_routes: ["venue.delete_item_transfer_routes", "venue.delete_item_transfer_routes_one"],

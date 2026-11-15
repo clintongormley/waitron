@@ -237,7 +237,7 @@ describe("A773 station policy: pass coverage", () => {
     );
   });
 
-  it("case 9: a pass screen a profile narrowing took covers nothing", async () => {
+  it("case 9: changing the profile from Pass to Station removes Fire coverage", async () => {
     const venue = await setupSplitExtrasVenue();
     await waiting(venue, "grill");
     const pass = await passOn(venue, "Narrowed", null);
@@ -249,7 +249,7 @@ describe("A773 station policy: pass coverage", () => {
     const screens = await withTransaction(db, (tx) =>
       VENUE_SERVICE.readDeviceKitchenScreens(tx, pass.deviceId),
     );
-    expect(screens.find((screen) => screen.kind === "pass")).toMatchObject({ available: false });
+    expect(screens.map((screen) => screen.kind)).toEqual(["station"]);
     expect(await coverage()).toEqual(
       await gaps(venue, [
         ["grill", venue.party.zoneId],

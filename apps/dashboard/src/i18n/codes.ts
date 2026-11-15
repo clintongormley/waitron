@@ -867,10 +867,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This request is no longer waiting for your approval. If the device is not in the list, ask it to try again",
     es: "Esta solicitud ya no espera tu aprobación. Si el dispositivo no está en la lista, pídele que lo vuelva a intentar",
   },
-  "kitchen_screen.required": {
-    en: "Choose what this prep station display shows",
-    es: "Elige qué muestra esta pantalla de estación",
-  },
   "kitchen_screen.not_allowed": {
     en: "This device's profile does not offer that screen. Choose one it offers",
     es: "El perfil de este dispositivo no ofrece esa pantalla. Elige una de las que ofrece",

@@ -31,11 +31,7 @@ import {
   attachStationPrinterForTest,
 } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import {
-  closeStationForToday,
-  setDeviceKitchenScreens,
-  setProfileKitchenScreens,
-} from "@waitron/venue-service";
+import { closeStationForToday, setProfileKitchenScreens } from "@waitron/venue-service";
 import { deleteDevice } from "./device-delete.js";
 import { deleteStation, readStationDeleteImpact } from "./station-delete.js";
 import { createStation, listStations, updateStation, setDefaultStation } from "./kitchen.js";
@@ -129,12 +125,10 @@ async function binding(v: PartyVenue, id: string) {
       station: { stationIds: null, zoneIds: null },
     });
     const { deviceId } = await seedDevice(tx, { profileId: profile!.id, label: "Bound display" });
-    await setDeviceKitchenScreens(tx, {
-      deviceId,
-      profileId: profile!.id,
-      screens: [{ kind: "station", stationIds: [id], zoneIds: null }],
+    await setProfileKitchenScreens(tx, profile!.id, {
+      ["station"]: { stationIds: [id], zoneIds: null },
     });
-    return { id: deviceId };
+    return { id: deviceId, profileId: profile!.id };
   });
 }
 async function snapshot(v: PartyVenue) {
@@ -145,9 +139,6 @@ async function snapshot(v: PartyVenue) {
       "device_made_here_stations",
       "routing_cells",
       "routing_cell_periods",
-      "device_kitchen_screens",
-      "device_kitchen_screen_stations",
-      "device_kitchen_screen_removals",
       "device_profile_kitchen_screens",
       "device_profile_kitchen_screen_stations",
       "working_orders",
@@ -199,9 +190,9 @@ describe("permanent station deletion", () => {
       ends: [],
       removes: [
         {
-          key: "station_device_screens",
+          key: "station_profile_screens",
           count: 1,
-          targets: [{ id: display.id, name: "Bound display" }],
+          targets: [{ id: display.profileId, name: "Display profile" }],
         },
       ],
     });

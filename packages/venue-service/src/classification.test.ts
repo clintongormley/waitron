@@ -42,15 +42,11 @@ describe("VENUE_SERVICE_CLASSIFICATION", () => {
       ),
     ).toEqual([["routing_cells", "state"]]);
   });
-  it("classifies the kitchen screens profiles offer and devices choose as replicated state", () => {
+  it("classifies the kitchen screens profiles configure as replicated state", () => {
     const kitchenScreens = [
       "device_profile_kitchen_screens",
       "device_profile_kitchen_screen_stations",
       "device_profile_kitchen_screen_zones",
-      "device_kitchen_screens",
-      "device_kitchen_screen_stations",
-      "device_kitchen_screen_zones",
-      "device_kitchen_screen_removals",
     ];
     expect(
       VENUE_SERVICE_CLASSIFICATION.filter((entry) => kitchenScreens.includes(entry.table)).map(

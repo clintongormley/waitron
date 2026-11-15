@@ -16,17 +16,20 @@ afterEach(() => {
 
 type Mode = "all" | "pass" | "monitor";
 
-/** `all`: a till on All stations; `pass`: a kitchen display's pass; `monitor`: a pass monitor. */
+/** `all`: a till on configured Pass; `pass`: a kitchen display's pass; `monitor`: a pass monitor. */
 async function mount(mode: Mode, board: PassBoard, theme: "light" | "dark" = "light") {
   const read = {
     board,
     stations: [],
     zones: null,
-    display: { showNonPassStations: true, nonPassStationsOverride: null },
+    display: { showNonPassStations: true },
   };
   const api = {
-    getExpoBoard: vi.fn(async () => ({ board })),
-    getDeviceIdentity: vi.fn(async () => ({ kitchenScreens: [] })),
+    getDeviceIdentity: vi.fn(async () => ({
+      kitchenScreens: [
+        { kind: "pass", available: true, stations: [], zones: null, showNonPassStations: true },
+      ],
+    })),
     getDevicePassBoard: vi.fn(async () => read),
     getDevicePassMonitorBoard: vi.fn(async () => read),
   } as unknown as TillApi;
@@ -37,6 +40,7 @@ async function mount(mode: Mode, board: PassBoard, theme: "light" | "dark" = "li
       deviceName: "Kitchen pass",
       deviceMode: mode === "pass",
       monitor: mode === "monitor",
+      embedded: mode === "all",
       ...(mode === "all" ? {} : { initialBoard: read }),
     },
     theme,

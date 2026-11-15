@@ -1,5 +1,9 @@
 > Appendix to [README.md](README.md), the rationalisation design of 2 November 2026: one researcher's proposal for this area, written to the shared rules. Where README.md §5 decides differently, README.md wins.
 
+> **15 November 2026 — A1534:** the profile now owns one kitchen screen, inherited by all its
+> devices. Device screen choices, narrowing history and the four device-screen tables are retired.
+> See [the remaining-device plan](../../plans/2026-11-15-a1534-remaining-devices.md).
+
 # Target design: devices, device profiles and printers
 
 Area: devices, join requests, device profiles and everything hanging off them, print agents,

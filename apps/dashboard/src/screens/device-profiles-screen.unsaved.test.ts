@@ -235,20 +235,20 @@ it("W69 kitchen profile lists are protected with clean reverts", async () => {
   expect(unload()).toBe(true);
   change(screen, "profile-station-screen-station-s1", true);
   expect(unload()).toBe(false);
-  change(screen, "profile-pass-monitor", true);
+  change(screen, "profile-kitchen-screens", "pass_monitor");
   expect(unload()).toBe(true);
-  change(screen, "profile-pass-monitor", false);
+  change(screen, "profile-kitchen-screens", "station");
   expect(unload()).toBe(false);
 });
 
 it("A366 a till's pass monitor is protected, and leaving with it asks", async () => {
   const { app, screen } = await mount();
-  change(screen, "profile-pass-monitor", true);
+  change(screen, "profile-kitchen-screens", "pass_monitor");
   expect(unload()).toBe(true);
   void app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed() {} });
   await choose(app, "keep");
   expect(q(screen, "editor-form")).not.toBeNull();
-  change(screen, "profile-pass-monitor", false);
+  change(screen, "profile-kitchen-screens", "station");
   expect(unload()).toBe(false);
 });
 
@@ -284,7 +284,7 @@ it("A773 a pass monitor's other-stations switch is protected, leaving with it ch
   expect(unload()).toBe(false);
 });
 
-it("A366 reconnect: a departed save's narrowed devices stay off the screen, and a kitchen screen changed after it still asks", async () => {
+it("A366 reconnect: a departed save does not replace a later screen edit, which still asks", async () => {
   let finish!: () => void;
   const kds = { ...profile, formFactor: "kds" as const, capabilities: [], startingScreen: null };
   const { app, screen } = await mount(
@@ -295,13 +295,6 @@ it("A366 reconnect: a departed save's narrowed devices stay off the screen, and 
         });
         return {
           ...kds,
-          narrowedDevices: [
-            {
-              deviceId: "dv1",
-              deviceName: "Pass screen",
-              lost: { screens: [], stations: [{ id: "s1", name: "Kitchen" }], zones: [] },
-            },
-          ],
         };
       },
     },
@@ -316,19 +309,17 @@ it("A366 reconnect: a departed save's narrowed devices stay off the screen, and 
   await profileAction(screen, "edit-p1");
   await expect.poll(() => q(screen, "profile-name")).not.toBeNull();
   await screen.updateComplete;
-  change(screen, "profile-pass-monitor", true);
+  change(screen, "profile-kitchen-screens", "pass_monitor");
   finish();
   await new Promise((resolve) => setTimeout(resolve, 0));
   await screen.updateComplete;
-  expect(q(screen, "narrowed-devices")).toBeNull();
-  expect((q(screen, "profile-pass-monitor") as HTMLElement & { checked: boolean }).checked).toBe(
-    true,
+  expect((q(screen, "profile-kitchen-screens") as HTMLElement & { value: string }).value).toBe(
+    "pass_monitor",
   );
   expect(unload()).toBe(true);
   q(screen, "profile-cancel")!.click();
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   await expect.poll(() => q(screen, "editor-form")).toBeNull();
-  expect(q(screen, "narrowed-devices")).toBeNull();
   expect(unload()).toBe(false);
 });
 

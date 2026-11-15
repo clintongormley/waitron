@@ -1767,6 +1767,24 @@ describe("validateServiceSteps", () => {
 });
 
 describe("A773 pass display policy", () => {
+  it("refuses two kitchen screens for one profile while accepting separate profiles", () => {
+    const rows = [
+      { device_profile_id: "station-profile", screen: "station", every_station: 1, every_zone: 1 },
+      { device_profile_id: "pass-profile", screen: "pass", every_station: 1, every_zone: 1 },
+    ];
+    expect(() =>
+      VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({ device_profile_kitchen_screens: rows }),
+    ).not.toThrow();
+    expect(() =>
+      VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
+        device_profile_kitchen_screens: rows.map((row) => ({
+          ...row,
+          device_profile_id: "same-profile",
+        })),
+      }),
+    ).toThrowError(refusal("device_profile_kitchen_screens.screen"));
+  });
+
   it("carries a profile's kitchen-screen rows, whole, and leaves every device's choice behind", () => {
     const names: string[] = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
     expect(VENUE_SERVICE_CONFIGURATION_TRANSFER.tables).toContainEqual({

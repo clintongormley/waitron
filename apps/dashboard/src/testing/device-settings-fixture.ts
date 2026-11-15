@@ -55,10 +55,8 @@ export const savedScreen = (kind: KitchenScreenKind): DeviceRow["kitchenScreens"
   available: true,
   everyStation: true,
   everyZone: true,
-  profileEveryStation: true,
   stations: [{ id: "s1", name: "Hot line", available: true, switchedOff: false }],
   zones: [],
-  nonPassStationsOverride: null,
   showNonPassStations: true,
 });
 export function deviceResponses(

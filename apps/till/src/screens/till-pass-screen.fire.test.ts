@@ -42,7 +42,7 @@ const deviceBoard = (board: PassBoard = toFireBoard()): DevicePassBoard => ({
   board,
   stations: [],
   zones: null,
-  display: { showNonPassStations: true, nonPassStationsOverride: null },
+  display: { showNonPassStations: true },
 });
 
 function identity(kind: "pass" | "pass_monitor" | null): DeviceIdentity {
@@ -59,7 +59,6 @@ function identity(kind: "pass" | "pass_monitor" | null): DeviceIdentity {
               available: true,
               stations: [],
               zones: null,
-              nonPassStationsOverride: null,
               showNonPassStations: true,
             },
           ],
@@ -72,7 +71,7 @@ type FakeApi = TillApi &
     | "getDeviceIdentity"
     | "getDevicePassBoard"
     | "getDevicePassMonitorBoard"
-    | "getExpoBoard"
+    | "getDevicePassBoard"
     | "releaseDevicePass",
     Fn
   >;
@@ -82,7 +81,6 @@ function fakeApi(overrides: Record<string, unknown> = {}): FakeApi {
     getDeviceIdentity: vi.fn().mockResolvedValue(identity("pass")),
     getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard()),
     getDevicePassMonitorBoard: vi.fn().mockResolvedValue(deviceBoard()),
-    getExpoBoard: vi.fn().mockResolvedValue({ board: toFireBoard() }),
     releaseDevicePass: vi.fn().mockResolvedValue({ releasedTicketItemIds: ["r-1", "r-2"] }),
     ...overrides,
   } as unknown as FakeApi;
@@ -290,7 +288,6 @@ describe("A773 pass screen: Fire", () => {
 
   for (const [where, props] of [
     ["a pass monitor", { monitor: true, initialBoard: deviceBoard() }],
-    ["a till's All stations", {}],
   ] as const) {
     it(`never releases from ${where}`, async () => {
       const api = fakeApi({ getDeviceIdentity: vi.fn().mockResolvedValue(identity(null)) });
@@ -400,9 +397,8 @@ describe("A773 pass screen: Fire", () => {
     }
     expect(switched).not.toHaveBeenCalled();
     expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
-    expect(api.getExpoBoard).toHaveBeenCalledOnce();
-    expect(boardOf(el)!.mode).toBe("all_stations");
-    expect(tableChanged(el)!.textContent!.trim()).toBe(t("station.table_changed"));
+    expect(boardOf(el)).toBeNull();
+    expect(el.shadowRoot!.textContent).toContain(t("kitchen_screen.none"));
     expect(leverError(el)).toBeNull();
     expect(el.shadowRoot!.textContent).not.toContain(codeMessage("device.unauthorized"));
   });
@@ -567,12 +563,10 @@ describe("A773 pass screen: Fire", () => {
       const el = await mountTill(api);
       await pressFire(el);
       await refresh(el);
-      expect(boardOf(el)!.mode).toBe("all_stations");
-      expect(api.getExpoBoard).toHaveBeenCalledOnce();
+      expect(boardOf(el)).toBeNull();
       answer.reject(refused("device.forbidden_action", 403));
       await flush(el);
       expect(leverError(el)).toBeNull();
-      expect(api.getExpoBoard).toHaveBeenCalledOnce();
       expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
     }));
 });

@@ -78,11 +78,6 @@ it.each([
     "Quita 2 reglas de enrutamiento por periodo.",
   ],
   [
-    "station_device_screens",
-    "Remove this station from these devices: Grill, Bar.",
-    "Quita esta estación de estos dispositivos: Grill, Bar.",
-  ],
-  [
     "station_profile_screens",
     "Remove this station from these profiles: Grill, Bar.",
     "Quita esta estación de estos perfiles: Grill, Bar.",
@@ -210,12 +205,6 @@ it.each([
     [],
     "Remove 1 period routing rule.",
     "Quita 1 regla de enrutamiento por periodo.",
-  ],
-  [
-    "station_device_screens",
-    grill,
-    "Remove this station from this device: Grill.",
-    "Quita esta estación de este dispositivo: Grill.",
   ],
   [
     "station_profile_screens",

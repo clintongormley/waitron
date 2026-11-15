@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "6f0a930b-cb27-4494-96b3-6b9297d6cac1",
+  "id": "d3b59da6-6551-4f11-ab47-551aed4328e0",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -16579,345 +16579,6 @@
         }
       }
     },
-    "device_kitchen_screen_removals": {
-      "name": "device_kitchen_screen_removals",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "device_id": {
-          "name": "device_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "screen": {
-          "name": "screen",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "station_id": {
-          "name": "station_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "zone_id": {
-          "name": "zone_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "removed_at": {
-          "name": "removed_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "device_kitchen_screen_removals_device_idx": {
-          "name": "device_kitchen_screen_removals_device_idx",
-          "columns": [
-            "device_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "device_kitchen_screen_removals_device_fk": {
-          "name": "device_kitchen_screen_removals_device_fk",
-          "tableFrom": "device_kitchen_screen_removals",
-          "tableTo": "devices",
-          "columnsFrom": [
-            "device_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "device_kitchen_screen_removals_station_fk": {
-          "name": "device_kitchen_screen_removals_station_fk",
-          "tableFrom": "device_kitchen_screen_removals",
-          "tableTo": "kitchen_stations",
-          "columnsFrom": [
-            "station_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "device_kitchen_screen_removals_zone_fk": {
-          "name": "device_kitchen_screen_removals_zone_fk",
-          "tableFrom": "device_kitchen_screen_removals",
-          "tableTo": "floor_zones",
-          "columnsFrom": [
-            "zone_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "device_kitchen_screen_removals_screen_ck": {
-          "name": "device_kitchen_screen_removals_screen_ck",
-          "value": "\"device_kitchen_screen_removals\".\"screen\" in ('station', 'pass', 'pass_monitor')"
-        },
-        "device_kitchen_screen_removals_one_target_ck": {
-          "name": "device_kitchen_screen_removals_one_target_ck",
-          "value": "\"device_kitchen_screen_removals\".\"station_id\" is null or \"device_kitchen_screen_removals\".\"zone_id\" is null"
-        }
-      }
-    },
-    "device_kitchen_screen_stations": {
-      "name": "device_kitchen_screen_stations",
-      "columns": {
-        "device_id": {
-          "name": "device_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "screen": {
-          "name": "screen",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "station_id": {
-          "name": "station_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "device_kitchen_screen_stations_screen_fk": {
-          "name": "device_kitchen_screen_stations_screen_fk",
-          "tableFrom": "device_kitchen_screen_stations",
-          "tableTo": "device_kitchen_screens",
-          "columnsFrom": [
-            "device_id",
-            "screen"
-          ],
-          "columnsTo": [
-            "device_id",
-            "screen"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "device_kitchen_screen_stations_station_fk": {
-          "name": "device_kitchen_screen_stations_station_fk",
-          "tableFrom": "device_kitchen_screen_stations",
-          "tableTo": "kitchen_stations",
-          "columnsFrom": [
-            "station_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "device_kitchen_screen_stations_pk": {
-          "columns": [
-            "device_id",
-            "screen",
-            "station_id"
-          ],
-          "name": "device_kitchen_screen_stations_pk"
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "device_kitchen_screen_stations_screen_ck": {
-          "name": "device_kitchen_screen_stations_screen_ck",
-          "value": "\"device_kitchen_screen_stations\".\"screen\" in ('station', 'pass', 'pass_monitor')"
-        }
-      }
-    },
-    "device_kitchen_screen_zones": {
-      "name": "device_kitchen_screen_zones",
-      "columns": {
-        "device_id": {
-          "name": "device_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "screen": {
-          "name": "screen",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "zone_id": {
-          "name": "zone_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "device_kitchen_screen_zones_screen_fk": {
-          "name": "device_kitchen_screen_zones_screen_fk",
-          "tableFrom": "device_kitchen_screen_zones",
-          "tableTo": "device_kitchen_screens",
-          "columnsFrom": [
-            "device_id",
-            "screen"
-          ],
-          "columnsTo": [
-            "device_id",
-            "screen"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "device_kitchen_screen_zones_zone_fk": {
-          "name": "device_kitchen_screen_zones_zone_fk",
-          "tableFrom": "device_kitchen_screen_zones",
-          "tableTo": "floor_zones",
-          "columnsFrom": [
-            "zone_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "device_kitchen_screen_zones_pk": {
-          "columns": [
-            "device_id",
-            "screen",
-            "zone_id"
-          ],
-          "name": "device_kitchen_screen_zones_pk"
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "device_kitchen_screen_zones_screen_ck": {
-          "name": "device_kitchen_screen_zones_screen_ck",
-          "value": "\"device_kitchen_screen_zones\".\"screen\" in ('station', 'pass', 'pass_monitor')"
-        },
-        "device_kitchen_screen_zones_not_station_ck": {
-          "name": "device_kitchen_screen_zones_not_station_ck",
-          "value": "\"device_kitchen_screen_zones\".\"screen\" <> 'station'"
-        }
-      }
-    },
-    "device_kitchen_screens": {
-      "name": "device_kitchen_screens",
-      "columns": {
-        "device_id": {
-          "name": "device_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "screen": {
-          "name": "screen",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "every_station": {
-          "name": "every_station",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
-        "every_zone": {
-          "name": "every_zone",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
-        "show_non_pass_stations": {
-          "name": "show_non_pass_stations",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "device_kitchen_screens_device_fk": {
-          "name": "device_kitchen_screens_device_fk",
-          "tableFrom": "device_kitchen_screens",
-          "tableTo": "devices",
-          "columnsFrom": [
-            "device_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "device_kitchen_screens_pk": {
-          "columns": [
-            "device_id",
-            "screen"
-          ],
-          "name": "device_kitchen_screens_pk"
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "device_kitchen_screens_screen_ck": {
-          "name": "device_kitchen_screens_screen_ck",
-          "value": "\"device_kitchen_screens\".\"screen\" in ('station', 'pass', 'pass_monitor')"
-        },
-        "device_kitchen_screens_station_zones_ck": {
-          "name": "device_kitchen_screens_station_zones_ck",
-          "value": "\"device_kitchen_screens\".\"screen\" <> 'station' or \"device_kitchen_screens\".\"every_zone\" = 0"
-        }
-      }
-    },
     "device_profile_kitchen_screen_stations": {
       "name": "device_profile_kitchen_screen_stations",
       "columns": {
@@ -17076,7 +16737,7 @@
         "device_profile_id": {
           "name": "device_profile_id",
           "type": "text",
-          "primaryKey": false,
+          "primaryKey": true,
           "notNull": true,
           "autoincrement": false
         },
@@ -17112,7 +16773,16 @@
           "default": true
         }
       },
-      "indexes": {},
+      "indexes": {
+        "device_profile_kitchen_screens_kind_key": {
+          "name": "device_profile_kitchen_screens_kind_key",
+          "columns": [
+            "device_profile_id",
+            "screen"
+          ],
+          "isUnique": true
+        }
+      },
       "foreignKeys": {
         "device_profile_kitchen_screens_profile_fk": {
           "name": "device_profile_kitchen_screens_profile_fk",
@@ -17128,15 +16798,7 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {
-        "device_profile_kitchen_screens_pk": {
-          "columns": [
-            "device_profile_id",
-            "screen"
-          ],
-          "name": "device_profile_kitchen_screens_pk"
-        }
-      },
+      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
         "device_profile_kitchen_screens_screen_ck": {

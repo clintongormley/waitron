@@ -13,20 +13,14 @@ export function deviceSettingSearchDestinations(
     locationKey: "action.edit",
     requiresPermission: "hardware.manage",
     async resolve() {
-      const [devices, deviceProfiles, kitchenScreens, stations, zones] = await Promise.all([
+      const [devices, deviceProfiles] = await Promise.all([
         api.background.listDevices(),
         api.background.listDeviceProfiles(),
-        api.background.listProfileKitchenScreens(),
-        api.background.listStations(),
-        api.background.listZones(),
       ]);
       return devices
         .filter((row) =>
           deviceSettingIsOffered(field.name, row, {
             deviceProfiles,
-            kitchenScreens,
-            stations,
-            zones,
           }),
         )
         .map((row) => ({

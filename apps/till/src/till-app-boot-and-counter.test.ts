@@ -88,7 +88,6 @@ function kitchenScreen(kind: KitchenScreenKind, available = true): ResolvedKitch
     available,
     stations: [],
     zones: null,
-    nonPassStationsOverride: null,
     showNonPassStations: true,
   };
 }
@@ -216,7 +215,12 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listCounterWaiting: vi.fn().mockResolvedValue([]),
     listStations: vi.fn().mockResolvedValue([]),
     getStationQueue: vi.fn().mockResolvedValue({ items: [], notices: [] }),
-    getExpoBoard: vi.fn().mockResolvedValue({ board: passBoard() }),
+    getDevicePassBoard: vi.fn().mockResolvedValue({
+      board: passBoard(),
+      stations: [],
+      zones: null,
+      display: { showNonPassStations: true },
+    }),
     getTablesState: vi.fn().mockResolvedValue([]),
     listZones: vi.fn().mockResolvedValue([]),
     recordSale: vi.fn().mockResolvedValue(saleResult),
@@ -1056,8 +1060,8 @@ describe("till-app session activity", () => {
     {
       name: "a kitchen display with no kitchen screen says so",
       kitchenScreens: [],
-      en: "This screen has nothing to show yet. Choose a screen for this device in the dashboard, under Devices.",
-      es: "Esta pantalla aún no tiene nada que mostrar. Elige una pantalla para este dispositivo en el panel, en Dispositivos.",
+      en: "This screen has nothing to show yet. Choose a screen in its profile in the dashboard, under Device profiles.",
+      es: "Esta pantalla aún no tiene nada que mostrar. Elige una pantalla en su perfil en el panel, en Perfiles de dispositivo.",
       guidance: { en: null, es: null },
     },
     {
@@ -1066,8 +1070,8 @@ describe("till-app session activity", () => {
       en: "This screen is no longer available: Pass",
       es: "Esta pantalla ya no está disponible: Pase",
       guidance: {
-        en: "Choose this device's screens again in the dashboard, under Devices.",
-        es: "Vuelve a elegir las pantallas de este dispositivo en el panel, en Dispositivos.",
+        en: "Set this device's screen, stations and zones in the dashboard, under Device profiles.",
+        es: "Configura la pantalla, las estaciones y las zonas de este dispositivo en el panel, en Perfiles de dispositivo.",
       },
     },
   ])("$name", ({ kitchenScreens, en, es, guidance }) => {
@@ -2561,6 +2565,12 @@ describe("till-app shell navigation", () => {
 
   it("opens Schedule and Expo as overlays over the fixed primary screen", async () => {
     const { el } = await mountApp({
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        deviceId: "till-dev",
+        name: "Till 1",
+        formFactor: "till",
+        kitchenScreens: [kitchenScreen("pass")],
+      }),
       getTill: vi.fn().mockResolvedValue({ ...till, formFactor: "till" }),
     });
     await toCounter(el);
@@ -6760,6 +6770,12 @@ describe("A738 counter order views", () => {
     async (onboardingIntent) => {
       history.replaceState(null, "", "/tabs/counter/view/station");
       const { el } = await mountApp({
+        getDeviceIdentity: vi.fn().mockResolvedValue({
+          deviceId: "till-dev",
+          name: "Till 1",
+          formFactor: "till",
+          kitchenScreens: [kitchenScreen("station")],
+        }),
         getTill: vi.fn().mockResolvedValue({ ...till, onboardingIntent }),
       });
       const c = await toCounter(el);

@@ -29,13 +29,7 @@ it("resolves offered rows through passive lists and encodes device addresses", a
   });
   const fetchImpl = vi.fn(async (path: string) => new Response(JSON.stringify(answers[path])));
   const api = new DashboardApi("", fetchImpl);
-  const methods = [
-    "listDevices",
-    "listDeviceProfiles",
-    "listProfileKitchenScreens",
-    "listStations",
-    "listZones",
-  ] as const;
+  const methods = ["listDevices", "listDeviceProfiles"] as const;
   const reads = methods.map((method) => vi.spyOn(api.background, method));
   for (const method of methods)
     vi.spyOn(api, method).mockRejectedValue(new Error("foreground read"));
@@ -44,12 +38,12 @@ it("resolves offered rows through passive lists and encodes device addresses", a
     entries
       .find((e) => e.id === `dashboard:device:${name}`)!
       .resolve({ request: createRequest({ fetchImpl }) });
-  expect(await resolve("screenZones")).toEqual([
-    { id: "d/+", label: "Pass", path: "/manage/devices/device/d%2F%2B" },
-    { id: "empty", label: "Counter till", path: "/manage/devices/device/empty" },
-  ]);
-  expect((await resolve("showNonPassStations")).map((row) => row.id)).toEqual(["d/+"]);
-  expect((await resolve("kitchenScreen")).map((row) => row.id)).toEqual(["kds"]);
+  expect(entries.map((entry) => entry.id)).not.toContain("dashboard:device:kitchenScreen");
+  expect(await resolve("name")).toContainEqual({
+    id: "d/+",
+    label: "Pass",
+    path: "/manage/devices/device/d%2F%2B",
+  });
   expect((await resolve("madeHereStationIds")).map((row) => row.id)).toEqual([
     "d/+",
     "gone",
@@ -57,6 +51,6 @@ it("resolves offered rows through passive lists and encodes device addresses", a
   ]);
   expect((await resolve("name")).map((row) => row.id)).toEqual(["d/+", "kds", "gone", "empty"]);
   expect(await resolve("approvedProfileIds")).toEqual([]);
-  for (const read of reads) expect(read).toHaveBeenCalledTimes(6);
+  for (const read of reads) expect(read).toHaveBeenCalledTimes(4);
   vi.restoreAllMocks();
 });

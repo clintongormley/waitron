@@ -471,7 +471,7 @@ describe("a kitchen display's retained Ready actions", () => {
 
   it("readies the counter's bill card on a pass limited to the counter zone", async () => {
     const f = await fixture();
-    const display = await f.device("Counter pass", f.runner, {
+    const display = await f.device("Counter pass", await f.profile("kds", RUNS_THE_PASS), {
       kitchenScreen: { kind: "pass", stationIds: null, zoneIds: [f.v.counter.zoneId] },
     });
     const counter = await counterOrder(f.v, "Burger");
@@ -562,7 +562,11 @@ describe("a kitchen display's retained Ready actions", () => {
       { stationId: grill.id },
       { kitchenScreen: { kind: "pass_monitor" as const, stationIds: null, zoneIds: null } },
     ]) {
-      const display = await f.device(`Other screen ${randomUUID()}`, f.runner, choice);
+      const display = await f.device(
+        `Other screen ${randomUUID()}`,
+        await f.profile("kds", RUNS_THE_PASS),
+        choice,
+      );
       for (const path of readyPaths(held)) {
         const answer = await send(f.app, display.cookie, path, {
           submissionId: randomUUID(),
@@ -580,7 +584,7 @@ describe("a kitchen display's retained Ready actions", () => {
   it("refuses both Ready routes outside the pass's zones", async () => {
     const f = await fixture();
     const held = await f.heldBurger();
-    const display = await f.device("Counter pass", f.runner, {
+    const display = await f.device("Counter pass", await f.profile("kds", RUNS_THE_PASS), {
       kitchenScreen: { kind: "pass", stationIds: null, zoneIds: [f.v.counter.zoneId] },
     });
     for (const path of readyPaths(held)) {
@@ -605,7 +609,7 @@ describe("a kitchen display's retained Ready actions", () => {
       orderNumber: 999001,
       status: "open",
     });
-    const display = await f.device("Table pass", f.runner, {
+    const display = await f.device("Table pass", await f.profile("kds", RUNS_THE_PASS), {
       kitchenScreen: { kind: "pass", stationIds: null, zoneIds: [f.v.tables.zoneId] },
     });
     const path = billPath(order!.id);

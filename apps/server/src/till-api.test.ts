@@ -2038,8 +2038,9 @@ it.each(["till", "phone-portrait", "tablet-landscape", "kds"] as const)(
       expect(body).toHaveProperty("inactivityTimeoutSeconds", 42);
       expect(body).not.toHaveProperty("startingScreen");
     } finally {
-      await suite.db.execute(sql`delete from device_kitchen_screens where device_id in
-        (select id from devices where device_profile_id = ${profile!.id})`);
+      await suite.db.execute(
+        sql`delete from device_profile_kitchen_screens where device_profile_id = ${profile!.id}`,
+      );
       await suite.db.execute(sql`delete from devices where device_profile_id = ${profile!.id}`);
       await suite.db.delete(deviceProfiles).where(eq(deviceProfiles.id, profile!.id));
     }

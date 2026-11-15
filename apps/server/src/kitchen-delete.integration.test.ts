@@ -13,7 +13,6 @@ import {
   saveMenuPeriod,
   listDepartments,
   setProfileKitchenScreens,
-  setDeviceKitchenScreens,
   routingCells,
   routingCellPeriods,
 } from "@waitron/venue-service";
@@ -212,10 +211,8 @@ it("keeps retained draft, group, course and ready station history through manage
       profileId: profile!.id,
       label: "Dessert display",
     });
-    await setDeviceKitchenScreens(tx, {
-      deviceId,
-      profileId: profile!.id,
-      screens: [{ kind: "station", stationIds: [station.id], zoneIds: null }],
+    await setProfileKitchenScreens(tx, profile!.id, {
+      ["station"]: { stationIds: [station.id], zoneIds: null },
     });
     return { id: deviceId, deviceProfileId: profile!.id };
   });
@@ -226,10 +223,8 @@ it("keeps retained draft, group, course and ready station history through manage
   });
   expect(await history()).toEqual(before);
   await inTx(v, (tx) =>
-    setDeviceKitchenScreens(tx, {
-      deviceId: display.id,
-      profileId: display.deviceProfileId!,
-      screens: [{ kind: "station", stationIds: null, zoneIds: null }],
+    setProfileKitchenScreens(tx, display.deviceProfileId!, {
+      ["station"]: { stationIds: null, zoneIds: null },
     }),
   );
   const deleted = await remove("stations", station.id);

@@ -2712,9 +2712,7 @@ const stationScreen = (
   available: true,
   everyStation: false,
   everyZone: true,
-  profileEveryStation: true,
   showNonPassStations: true,
-  nonPassStationsOverride: null,
   stations,
   zones: null,
 });
@@ -6064,10 +6062,6 @@ describe("A773 station policy: the pass coverage warning", () => {
       "devices",
       "device_profiles",
       // readDevicesKitchenScreens
-      "device_kitchen_screens",
-      "device_kitchen_screen_stations",
-      "device_kitchen_screen_zones",
-      "device_kitchen_screen_removals",
       "device_profile_kitchen_screens",
       "device_profile_kitchen_screen_stations",
       "device_profile_kitchen_screen_zones",
@@ -6105,7 +6099,7 @@ describe("A773 station policy: the pass coverage warning", () => {
       await settle(el);
       await settle(el);
     };
-    for (const type of ["floor_zones", "device_kitchen_screen_removals", "devices"]) {
+    for (const type of ["floor_zones", "device_profile_kitchen_screens", "devices"]) {
       const before = passCoverageCalls(a);
       liveData.invalidate([{ type }]);
       await vi.waitFor(() => expect(passCoverageCalls(a)).toBe(before + 1));

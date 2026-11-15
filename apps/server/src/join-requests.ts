@@ -14,8 +14,8 @@ import {
 import { deviceTokenMatches, endDeviceSessions, hashDeviceToken } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import type { FormFactor } from "@waitron/layouts";
-import type { DeviceKitchenScreen, ResolvedKitchenScreen } from "@waitron/module";
-import { insertDevice, resolveDeviceKitchenScreens, updateDeviceSettings } from "./device.js";
+import type { ResolvedKitchenScreen } from "@waitron/module";
+import { insertDevice, requireDeviceProfile, updateDeviceSettings } from "./device.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { settleDevice } from "./device-equipment.js";
 import type { PairingMode } from "./pairing-mode.js";
@@ -507,7 +507,6 @@ export async function acceptDeviceJoinRequest(
   input: {
     label: string;
     profileId: string;
-    kitchenScreens?: readonly DeviceKitchenScreen[];
   },
 ): Promise<{ deviceId: string; name: string; formFactor: FormFactor }> {
   await sweepLapsed(tx, cfg);
@@ -527,16 +526,7 @@ export async function acceptDeviceJoinRequest(
   if (existing !== undefined && existing.deletedAt !== null)
     throw new AppError("join_request.not_found", {});
 
-  const { kitchenScreens, formFactor } = await resolveDeviceKitchenScreens(tx, {
-    profileId: input.profileId,
-    kitchenScreens: input.kitchenScreens,
-  });
-  const writeKitchenScreens = () =>
-    VENUE_SERVICE.setDeviceKitchenScreens(tx, {
-      deviceId: row.id,
-      profileId: input.profileId,
-      screens: kitchenScreens,
-    });
+  const { formFactor } = await requireDeviceProfile(tx, input.profileId);
 
   if (existing !== undefined && !existing.active) {
     // An ACTIVE row with this id is left to the insert below, which refuses it.
@@ -546,7 +536,6 @@ export async function acceptDeviceJoinRequest(
       { label: input.label, profileId: input.profileId },
       { active: true, tokenHash: row.tokenHash },
     );
-    await writeKitchenScreens();
     // A device switched off outside Delete may still have open sessions.
     await endDeviceSessions(tx, row.id);
     return { deviceId: row.id, name: input.label, formFactor };
@@ -560,7 +549,6 @@ export async function acceptDeviceJoinRequest(
     active: true,
   });
   await settleDevice(tx, row.id, { acquire: true });
-  await writeKitchenScreens();
 
   return { deviceId: row.id, name: input.label, formFactor };
 }

@@ -235,16 +235,12 @@ export class TillStationScreen extends LitElement {
   @property({ type: Boolean }) canMoveStation = false;
 
   @state() private stations: Station[] = [];
-  /** The device's chosen stations a narrowing took away, shown above the picker. */
   @state() private lostStations: ScreenSlot[] = [];
-  /** A narrowing took the device's station screen itself. */
   @state() private stationScreenGone = false;
-  /** A read of the device's choice has answered; until one does, every station shows. */
   #choiceRead = false;
   #choiceRequest = 0;
   #appliedChoice = 0;
-  /** The stations the device chose, or null when it shows every station. */
-  #chosenIds: ReadonlySet<string> | null = null;
+  #chosenIds: ReadonlySet<string> = new Set();
   /** Every station, chosen or not, so a closed station names where its dishes go. */
   @state() private allStations: Station[] = [];
   @state() private activeStationId?: string;
@@ -503,11 +499,6 @@ export class TillStationScreen extends LitElement {
     return notices.filter((notice) => !this.#acknowledged.has(notice.id));
   }
 
-  /**
-   * The picker lists the device's chosen stations, or every station when it has no choice; a choice
-   * a narrowing emptied lists none. Run again at each refresh, keeping the open station when it is
-   * still listed. Once a read has answered, a failed one keeps what it said.
-   */
   async #load(signal?: AbortSignal): Promise<void> {
     const request = ++this.#choiceRequest;
     const choice = this.#readStationChoice(signal);
@@ -519,15 +510,14 @@ export class TillStationScreen extends LitElement {
       if (screen !== null || !this.#choiceRead) {
         this.#choiceRead = screen !== null;
         const slots = screen?.stations ?? [];
-        this.#chosenIds = screen
-          ? new Set(slots.filter((slot) => slot.available).map((slot) => slot.id))
-          : null;
+        this.#chosenIds = new Set(slots.filter((slot) => slot.available).map((slot) => slot.id));
         this.lostStations = slots.filter((slot) => !slot.available);
         this.stationScreenGone = screen?.available === false;
       }
       const chosen = this.#chosenIds;
       this.allStations = listed;
-      this.stations = chosen === null ? listed : listed.filter((station) => chosen.has(station.id));
+      if (screen === null) this.stale = true;
+      this.stations = listed.filter((station) => chosen.has(station.id));
       this.#stationsLoaded = true;
     } catch {
       if (request > this.#appliedChoice) this.stale = true;
@@ -671,8 +661,6 @@ export class TillStationScreen extends LitElement {
     await this.#reload();
   }
 
-  /** On a kitchen display, a press refused because the device no longer has this screen asks the
-   * app to re-read the device's choice now. */
   #switched(error: unknown): boolean {
     if (!this.deviceMode || (error as { code?: unknown } | null)?.code !== "device.unauthorized")
       return false;
@@ -951,7 +939,9 @@ export class TillStationScreen extends LitElement {
           ? this.#body()
           : this.stationScreenGone || this.lostStations.length > 0
             ? emptiedScreenGuidance(this.stationScreenGone)
-            : this.#noStations()
+            : this.stale && !this.#choiceRead
+              ? html`<p class="empty">${t("kitchen_screen.read_failed")}</p>`
+              : this.#noStations()
       }`,
     });
   }

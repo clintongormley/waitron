@@ -69,7 +69,7 @@ const deviceBoard = (): DevicePassBoard => ({
   board: passBoard({ toFire: [fireCard] }),
   stations: [],
   zones: null,
-  display: { showNonPassStations: true, nonPassStationsOverride: null },
+  display: { showNonPassStations: true },
 });
 
 function stubApi(overrides: Record<string, unknown> = {}): TillApi {
@@ -96,7 +96,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     getDeviceStationScreen: vi.fn().mockResolvedValue({ stations: [] }),
     getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard()),
     getDevicePassMonitorBoard: vi.fn().mockResolvedValue(deviceBoard()),
-    getExpoBoard: vi.fn().mockResolvedValue({ board: passBoard({ toFire: [fireCard] }) }),
     releaseDevicePass: vi.fn().mockResolvedValue({ releasedTicketItemIds: ["r-1"] }),
     listDefaultZoneOffers: vi.fn().mockResolvedValue(counterOffers),
     listZoneOffers: vi.fn().mockResolvedValue(counterOffers),
@@ -148,6 +147,46 @@ async function mountDisplay(kind: KitchenScreenKind, capabilities: CapabilityFla
 }
 
 describe("A773 pass screen: app", () => {
+  it.each([
+    ["station", ["show-station", "show-expo"], true, false],
+    ["pass", ["show-station", "show-expo"], false, true],
+    ["pass_monitor", ["show-station", "show-expo"], false, true],
+    [null, ["show-station", "show-expo"], false, false],
+    ["station", [], false, false],
+    ["pass", [], false, false],
+    ["pass_monitor", [], false, false],
+  ] as const)(
+    "offers only %s navigation allowed by capabilities %j",
+    async (kind, capabilities, stationShown, passShown) => {
+      const api = stubApi({
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          formFactor: "phone-portrait",
+          capabilities: [...capabilities],
+        }),
+        getDeviceIdentity: vi.fn().mockResolvedValue({
+          deviceId: "handheld",
+          formFactor: "phone-portrait",
+          name: "Handheld",
+          kitchenScreens:
+            kind === null ? [] : [{ kind, available: true, stations: [], zones: null }],
+        }),
+      });
+      const { el } = await mountWidget<TillApp>("till-app", { api });
+      await flush(el);
+      emit(el.shadowRoot!.querySelector("till-lock-screen")!, "logged-in", {
+        personId: "p1",
+        displayName: "Staff",
+        permissions: [],
+      });
+      await flush(el);
+      const shell = el.shadowRoot!.querySelector("till-shell")!;
+      await shell.updateComplete;
+      expect(Boolean(shell.shadowRoot!.querySelector("wt-button.station"))).toBe(stationShown);
+      expect(Boolean(shell.shadowRoot!.querySelector("wt-button.expo"))).toBe(passShown);
+    },
+  );
+
   it("a kitchen display without act-as-kds mounts no pass or station screen", async () => {
     const { el } = await mountDisplay("pass", ["run-the-pass"]);
     expect(passScreen(el)).toBeNull();
@@ -184,8 +223,15 @@ describe("A773 pass screen: app", () => {
     expect(api.releaseDevicePass).not.toHaveBeenCalled();
   });
 
-  it("the till's Pass drill with no pass choice mounts the pass on the venue's board, and Back returns to the counter", async () => {
-    const api = stubApi() as TillApi & Record<string, ReturnType<typeof vi.fn>>;
+  it("the till's configured Pass drill uses its profile board, and Back returns to the counter", async () => {
+    const api = stubApi({
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        deviceId: "till-dev",
+        name: "Till 1",
+        formFactor: "till",
+        kitchenScreens: [{ kind: "pass", available: true, stations: [], zones: null }],
+      }),
+    }) as TillApi & Record<string, ReturnType<typeof vi.fn>>;
     const { el } = await mountWidget<TillApp>("till-app", { api });
     await flush(el);
     emit(el.shadowRoot!.querySelector("till-lock-screen")!, "logged-in", {
@@ -201,8 +247,7 @@ describe("A773 pass screen: app", () => {
     expect(screen!.getAttribute("slot")).toBe("drill");
     expect(screen!.deviceId).toBe("till-dev");
     expect(screen!.serverOrigin).toBe(location.origin);
-    expect(api.getExpoBoard).toHaveBeenCalled();
-    expect(api.getDevicePassBoard).not.toHaveBeenCalled();
+    expect(api.getDevicePassBoard).toHaveBeenCalled();
     expect(boardOf(el)).not.toBeNull();
     screen!.shadowRoot!.querySelector<HTMLElement>("[data-back]")!.click();
     await flush(el);

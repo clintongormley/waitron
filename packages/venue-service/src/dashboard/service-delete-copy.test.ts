@@ -46,11 +46,6 @@ it.each([
     "Quita {count} selecciones de zonas de pantallas: {names}.",
   ],
   [
-    "screen_notices",
-    "Removes {count} screen notices: {names}.",
-    "Quita {count} avisos de pantallas: {names}.",
-  ],
-  [
     "transfer_desks",
     "Removes the transfer desk for this profile: {names}.",
     "Quita el puesto de traslado de este perfil: {names}.",
@@ -309,11 +304,6 @@ it.each([
       "Quita {count} selección de zona de pantalla: {names}.",
       "Quita {count} selecciones de zonas de pantallas: {names}.",
     ],
-  ],
-  [
-    "screen_notices",
-    ["Removes {count} screen notice: {names}.", "Removes {count} screen notices: {names}."],
-    ["Quita {count} aviso de pantalla: {names}.", "Quita {count} avisos de pantallas: {names}."],
   ],
   [
     "floor_plan_sets",

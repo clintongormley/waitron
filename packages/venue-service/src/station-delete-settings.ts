@@ -1,7 +1,5 @@
 import { and, eq, inArray, isNull, isNotNull, or } from "drizzle-orm";
 import {
-  deviceKitchenScreenRemovals,
-  deviceKitchenScreenStations,
   deviceProfileKitchenScreenStations,
   deviceProfiles,
   devices,
@@ -43,21 +41,6 @@ async function settings(tx: Transaction, id: string) {
         ),
       ),
     );
-  const memberships = await tx
-    .select({ id: devices.id, name: devices.label, active: devices.active })
-    .from(deviceKitchenScreenStations)
-    .innerJoin(devices, eq(devices.id, deviceKitchenScreenStations.deviceId))
-    .where(eq(deviceKitchenScreenStations.stationId, id));
-  const notices = await tx
-    .select({
-      id: deviceKitchenScreenRemovals.id,
-      deviceId: devices.id,
-      name: devices.label,
-      active: devices.active,
-    })
-    .from(deviceKitchenScreenRemovals)
-    .innerJoin(devices, eq(devices.id, deviceKitchenScreenRemovals.deviceId))
-    .where(eq(deviceKitchenScreenRemovals.stationId, id));
   const profiles = await tx
     .select({ id: deviceProfiles.id, name: deviceProfiles.name })
     .from(deviceProfileKitchenScreenStations)
@@ -100,7 +83,7 @@ async function settings(tx: Transaction, id: string) {
       screens.some(
         (screen) =>
           screen.available &&
-          !(screen.everyStation && screen.profileEveryStation) &&
+          !screen.everyStation &&
           screen.stations.some((slot) => slot.id === id && slot.available),
       )
     )
@@ -116,25 +99,12 @@ async function settings(tx: Transaction, id: string) {
         ]),
       ).values(),
     ].sort((a, b) => compare(a.name, b.name) || a.id.localeCompare(b.id));
-  const deviceTargets = targets([
-    ...memberships.map(({ id, name, active }) => ({
-      id,
-      name,
-      ...(active ? {} : { deleted: true }),
-    })),
-    ...notices.map((row) => ({
-      id: row.deviceId,
-      name: row.name,
-      ...(row.active ? {} : { deleted: true }),
-    })),
-  ]);
   const profileTargets = targets(profiles);
   const destinationTargets = targets(incoming);
   const closedDefaultTargets = targets(preferring);
   const removes: DeleteImpactItem[] = [
     { key: "station_routing_cells", count: cells.length, targets: [] },
     { key: "station_routing_periods", count: periods.length, targets: [] },
-    { key: "station_device_screens", count: deviceTargets.length, targets: deviceTargets },
     { key: "station_profile_screens", count: profileTargets.length, targets: profileTargets },
     { key: "station_daily_states", count: daily.length, targets: [] },
     {
@@ -181,11 +151,9 @@ export async function clearStationDeleteSettings(tx: Transaction, id: string): P
         rows.cells.map((row) => row.id),
       ),
     );
-  await tx.delete(deviceKitchenScreenStations).where(eq(deviceKitchenScreenStations.stationId, id));
   await tx
     .delete(deviceProfileKitchenScreenStations)
     .where(eq(deviceProfileKitchenScreenStations.stationId, id));
-  await tx.delete(deviceKitchenScreenRemovals).where(eq(deviceKitchenScreenRemovals.stationId, id));
   await tx
     .update(kitchenStations)
     .set({ closedOnDay: null, closedSendsToStationId: null, whenClosedSendsToStationId: null })

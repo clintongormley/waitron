@@ -729,7 +729,6 @@ describe("acceptDeviceJoinRequest", () => {
         return acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
           label: "Racer",
           profileId,
-          kitchenScreens: [stationScreen(venue.defaultStationId)],
         });
       });
 
@@ -892,7 +891,7 @@ describe("a returning disabled device", () => {
     expect(await printersOf()).toEqual({ receiptPrinterId: null, paymentSlipPrinterId: null });
   });
 
-  it("gives the kitchen display it comes back as the station screen the accept names", async () => {
+  it("gives a returning kitchen display its profile screen", async () => {
     const venue = await setupVenue(suite.db);
     const till = await seedProfile("till");
     const kds = await seedProfile("kds");
@@ -900,24 +899,7 @@ describe("a returning disabled device", () => {
       offerOnProfile(tx, kds, stationScreen(venue.defaultStationId)),
     );
     const deviceId = await disabledDevice(venue, till);
-    const accepted = await comeBack(venue, deviceId, { label: "Pass", profileId: kds }).catch(
-      (e: unknown) => e,
-    );
-    expect(accepted).toMatchObject({ code: "kitchen_screen.required" });
-
-    const tokenHash = await storedHash(deviceId);
-    await withTransaction(suite.db, async (tx) => {
-      await createJoinRequest(tx, venue.cfg, {
-        kind: "device",
-        label: "Pass",
-        returning: { deviceId, tokenHash },
-      });
-      await acceptDeviceJoinRequest(tx, venue.cfg, deviceId, {
-        label: "Pass",
-        profileId: kds,
-        kitchenScreens: [stationScreen(venue.defaultStationId)],
-      });
-    });
+    await comeBack(venue, deviceId, { label: "Pass", profileId: kds });
     const [row] = await suite.db
       .select({ active: devices.active, label: devices.label })
       .from(devices)
@@ -928,7 +910,7 @@ describe("a returning disabled device", () => {
     ]);
   });
 
-  it("refuses to enable a kitchen screen on its deleted station and retains the empty bound", async () => {
+  it("enables a returning screen without widening its profile's deleted station bound", async () => {
     const venue = await setupVenue(suite.db);
     const kds = await seedProfile("kds");
     const station = await withTransaction(suite.db, (tx) => createStation(tx, { name: "Oven" }));
@@ -938,7 +920,6 @@ describe("a returning disabled device", () => {
       await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
         label: "Oven",
         profileId: kds,
-        kitchenScreens: [stationScreen(station.id)],
       });
       return made.joinId;
     });
@@ -959,16 +940,15 @@ describe("a returning disabled device", () => {
         await acceptDeviceJoinRequest(tx, venue.cfg, deviceId, {
           label: "Oven",
           profileId: kds,
-          kitchenScreens: [stationScreen(station.id)],
         });
       }),
     );
-    expect(code).toBe("kitchen_screen.invalid");
+    expect(code).toBeUndefined();
     const [row] = await suite.db
       .select({ active: devices.active })
       .from(devices)
       .where(eq(devices.id, deviceId));
-    expect(row).toEqual({ active: false });
+    expect(row).toEqual({ active: true });
     expect(await shownOn(deviceId)).toMatchObject([
       { kind: "station", stations: [], everyStation: false },
     ]);
@@ -1079,13 +1059,13 @@ describe("a returning disabled device", () => {
     expect([...disabled.keys()]).toEqual([made.joinId]);
   });
 
-  it("carries the returning device's kitchen screens, and an accept re-choosing them stores the new choice", async () => {
+  it("carries the returning device's kitchen screens, and acceptance inherits a later profile change", async () => {
     const venue = await setupVenue(suite.db);
     const profileId = await seedProfile("kds");
     const grill = await withTransaction(suite.db, (tx) => createStation(tx, { name: "Grill" }));
     await withTransaction(suite.db, (tx) =>
       VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, {
-        pass: { stationIds: null, zoneIds: null },
+        pass: { stationIds: [venue.defaultStationId], zoneIds: null },
       }),
     );
     const deviceId = await withTransaction(suite.db, async (tx) => {
@@ -1093,7 +1073,6 @@ describe("a returning disabled device", () => {
       await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
         label: "Pass",
         profileId,
-        kitchenScreens: [{ kind: "pass", stationIds: [venue.defaultStationId], zoneIds: null }],
       });
       return made.joinId;
     });
@@ -1116,10 +1095,14 @@ describe("a returning disabled device", () => {
     ]);
 
     await withTransaction(suite.db, (tx) =>
+      VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, {
+        pass: { stationIds: null, zoneIds: null },
+      }),
+    );
+    await withTransaction(suite.db, (tx) =>
       acceptDeviceJoinRequest(tx, venue.cfg, deviceId, {
         label: "Pass",
         profileId,
-        kitchenScreens: [{ kind: "pass", stationIds: null, zoneIds: null }],
       }),
     );
     const shown = await withTransaction(suite.db, (tx) =>
@@ -1130,20 +1113,19 @@ describe("a returning disabled device", () => {
 
   it("reads several returning devices' kitchen screens in one batch, each its own", async () => {
     const venue = await setupVenue(suite.db);
-    const profileId = await seedProfile("kds");
     const grill = await withTransaction(suite.db, (tx) => createStation(tx, { name: "Grill" }));
-    await withTransaction(suite.db, (tx) =>
-      VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, {
-        pass: { stationIds: null, zoneIds: null },
-      }),
-    );
     const returningWith = async (label: string, stationIds: string[]) => {
+      const profileId = await seedProfile("kds");
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.setProfileKitchenScreens(tx, profileId, {
+          pass: { stationIds, zoneIds: null },
+        }),
+      );
       const deviceId = await withTransaction(suite.db, async (tx) => {
         const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label });
         await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
           label,
           profileId,
-          kitchenScreens: [{ kind: "pass", stationIds, zoneIds: null }],
         });
         return made.joinId;
       });
@@ -1731,27 +1713,10 @@ describe("deleted zone joins", () => {
       createJoinRequest(tx, venue.cfg, { kind: "device", label: "Pending pass" }),
     );
     await suite.db.update(floorZones).set({ active: false }).where(eq(floorZones.id, zone!.id));
-    await expect(
-      withTransaction(suite.db, (tx) =>
-        acceptDeviceJoinRequest(tx, venue.cfg, pending.joinId, {
-          label: "Pending pass",
-          profileId,
-          kitchenScreens: [screen],
-        }),
-      ),
-    ).rejects.toMatchObject({
-      code: "kitchen_screen.invalid",
-      params: { field: "zoneIds", reason: "not_found", screen: "pass" },
-    });
-    expect(await suite.db.select().from(devices).where(eq(devices.id, pending.joinId))).toEqual([]);
-    expect(
-      await suite.db.select().from(joinRequests).where(eq(joinRequests.id, pending.joinId)),
-    ).toHaveLength(1);
     await withTransaction(suite.db, (tx) =>
       acceptDeviceJoinRequest(tx, venue.cfg, pending.joinId, {
         label: "Restricted pass",
         profileId,
-        kitchenScreens: [{ ...screen, zoneIds: null }],
       }),
     );
     const shown = await withTransaction(suite.db, (tx) =>

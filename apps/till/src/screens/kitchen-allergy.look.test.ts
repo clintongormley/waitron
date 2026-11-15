@@ -45,11 +45,20 @@ describe("A669 kitchen blocks LOOK", () => {
                 board: allergyBoard(),
                 stations: [],
                 zones: null,
-                display: { showNonPassStations: true, nonPassStationsOverride: null },
+                display: { showNonPassStations: true },
               });
               const api = {
-                getExpoBoard: vi.fn(async () => ({ board: allergyBoard() })),
-                getDeviceIdentity: vi.fn(async () => ({ kitchenScreens: [] })),
+                getDeviceIdentity: vi.fn(async () => ({
+                  kitchenScreens: [
+                    {
+                      kind: "pass",
+                      available: true,
+                      stations: [],
+                      zones: null,
+                      showNonPassStations: true,
+                    },
+                  ],
+                })),
                 getDevicePassBoard: vi.fn(async () => board()),
                 getDevicePassMonitorBoard: vi.fn(async () => board()),
               } as unknown as TillApi;
@@ -60,6 +69,7 @@ describe("A669 kitchen blocks LOOK", () => {
                   deviceName: "Kitchen pass",
                   deviceMode: surface === "pass",
                   monitor: surface === "monitor",
+                  embedded: surface === "all",
                   ...(surface === "pass" || surface === "monitor" ? { initialBoard: board() } : {}),
                 },
                 theme,

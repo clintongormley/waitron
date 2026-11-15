@@ -17,7 +17,6 @@ describe("a kitchen display's notice in place of a queue", () => {
       available: false,
       stations: [],
       zones: null,
-      nonPassStationsOverride: null,
       showNonPassStations: true,
     },
   ]);
@@ -27,7 +26,6 @@ describe("a kitchen display's notice in place of a queue", () => {
       available: true,
       stations: [],
       zones: null,
-      nonPassStationsOverride: null,
       showNonPassStations: true,
     },
   ]);
@@ -85,7 +83,6 @@ describe("a kitchen display's notice in place of a queue", () => {
             available: false,
             stations: [],
             zones: null,
-            nonPassStationsOverride: null,
             showNonPassStations: true,
           },
         ]),

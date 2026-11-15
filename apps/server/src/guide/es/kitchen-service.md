@@ -295,17 +295,10 @@ Barra**. Un plato de una estación o zona de servicio que este pase no cubre sol
 tarjeta que también lleva un plato que este pase cubre, y, cuando se muestra, se atenúa; mientras espera a su
 propio pase dice **Barra: esperando a su pase**. Los platos atenuados son solo información.
 
-En una vista de pase o una pantalla de pase (solo lectura), **Columnas** ofrece también **Platos de otras
-estaciones**: **Usar la configuración del perfil**, **Mostrar** u **Ocultar**. **Ocultar** quita de
-las tarjetas los platos atenuados; mientras nada de lo que cubre este pase está atenuado, solo son
-platos de estaciones y zonas de servicio que no cubre. Una tarjeta se queda en su columna con sus
-botones aunque **Ocultar** la deje sin ningún plato. **Ocultar** solo cambia qué platos se dibujan:
-el color de la tarjeta y el número de tarjetas con retraso son los mismos que con **Mostrar**. La
-elección es de este dispositivo y sustituye la que un encargado eligió para el dispositivo en el
-panel. Allí, en **Perfiles de dispositivo**, la vista de pase y la pantalla de pase (solo lectura) de un perfil
-tienen cada uno **Mostrar en el pase los platos de otras estaciones**, activado al principio; en
-**Dispositivos**, la ventana **Editar** de un dispositivo tiene el mismo ajuste para su pantalla de
-pase o su pantalla de pase (solo lectura), con **Usar la configuración del perfil**, **Mostrar** y **Ocultar**.
+En **Perfiles de dispositivo**, elige una pantalla y sus estaciones y zonas. Todos los dispositivos
+que usan ese perfil heredan estas opciones. Para una vista de pase o una pantalla de pase (solo
+lectura), desactiva **Mostrar en el pase los platos de otras estaciones** para ocultar los platos
+atenuados. Usa **Columnas** en el pase para elegir y ordenar sus columnas.
 
 En cada tarjeta en **En curso**, toca **Listo** para marcar como listos sus platos enviados en todas
 las estaciones, también los que oculta este pase. El botón cubre toda la tarjeta, incluidos los
@@ -313,10 +306,9 @@ pedidos de mostrador y los platos sin curso. Los platos en espera o esperando al
 como están. **Marchar** y **Listo** requieren **Lleva el pase** en el perfil del dispositivo.
 En un terminal, una tarjeta que no está en espera ofrece además **Reimprimir** por cada una de sus cuentas.
 
-Una pantalla de pase (solo lectura) muestra el mismo tablero para mirarlo, sin **Marchar**, botones de listo ni
-**Reimprimir**. Un terminal cuyo dispositivo no tiene vista de pase ni pantalla de pase (solo lectura) abre
-**Pase** con todas las estaciones y zonas de servicio, sin **Marchar**: solo marcha una pantalla
-de pase.
+Una pantalla de pase (solo lectura) muestra el mismo tablero para mirarlo, sin **Marchar**, botones de
+listo ni **Reimprimir**. Elige **Pase** o **Pantalla de pase (solo lectura)** en el perfil del
+dispositivo antes de abrir **Pase** en él.
 
 Toca la cabecera de una columna para plegarla en una franja estrecha que conserva su nombre y su
 número; tócala otra vez para abrirla. **Columnas**, al final de la fila encima de las columnas, lista
@@ -440,16 +432,12 @@ una reimpresión lo vuelve a comprobar.
 Solo una vista de pase cuyo dispositivo puede pulsar **Marchar** envía los platos. Para los
 platos de una estación en una zona de servicio, hacen falta las dos cosas:
 
-- En **Perfiles de dispositivo**, el perfil del dispositivo ofrece una vista de pase con la
-  estación y la zona en sus listas: **Pase** en **Pantallas de estación que pueden usar
-  sus dispositivos** en una pantalla de estación, **Botón Pase** en **Pantallas que muestra** en una
-  caja o un terminal de camarero. También tiene activado **Prepara pedidos** en **Qué puede hacer**,
-  y **Lleva el pase** en **Pantallas que muestra**. En un perfil de caja o de terminal de camarero
-  con un departamento, la zona también tiene que ser una de las que sirve, en **Dónde sirve**.
-- En **Dispositivos**, el dispositivo está habilitado y su ventana **Editar** elige la pantalla de
-  pase (**Pantalla** en una pantalla de estación, **La vista de pase muestra** en una caja o un
-  terminal de camarero), con la estación y la zona en sus listas. Un plato cuyo pedido no tiene zona
-  de servicio necesita una vista de pase con todas las zonas.
+- En **Perfiles de dispositivo**, elige **Pase** e incluye la estación y la zona en sus listas.
+  Activa **Prepara pedidos** y **Lleva el pase**. En un perfil de caja o terminal de camarero con
+  un departamento, incluye la zona también en **Dónde sirve**.
+- En **Dispositivos**, habilita el dispositivo y elige ese perfil. El dispositivo hereda su pantalla,
+  estaciones y zonas. Un plato cuyo pedido no tiene zona de servicio necesita una vista de pase
+  con todas las zonas.
 
 Puedes guardar una estación que espera al pase aunque ningún pase la cubra. Hasta que
 alguno la cubra, **Estaciones de preparación** lo dice encima de sus pestañas, zona por zona, por

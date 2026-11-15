@@ -21,7 +21,7 @@ import {
   requireManagementSession,
   requireString,
 } from "@waitron/server-kit";
-import { parseKitchenScreens, requireDeviceName } from "./device.js";
+import { requireDeviceName } from "./device.js";
 import {
   acceptDeviceJoinRequest,
   acceptPrintAgentJoinRequest,
@@ -53,7 +53,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // whether or not the request still exists.
   "join_request.not_found": 404,
   "device.join_mismatch": 400,
-  "kitchen_screen.required": 400,
   "kitchen_screen.invalid": 400,
   "kitchen_screen.not_allowed": 400,
   "kitchen_screen.zone_not_allowed": 400,
@@ -335,12 +334,10 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
       const body = await readJsonBody<{
         name?: unknown;
         profileId?: unknown;
-        kitchenScreens?: unknown;
       }>(c);
       const accepted = await gated(sessionId, "hardware.manage", async (tx) => {
         const label = requireDeviceName(body.name);
         const profileId = requireBodyUuid(body.profileId, "profileId");
-        const kitchenScreens = parseKitchenScreens(body.kitchenScreens);
         if (!isUuid(id)) throw new AppError("join_request.not_found", {});
         // Before the claim, so a print agent's ask answers 404, as on the check route.
         if ((await findJoinRequest(tx, deps.cfg, id))?.kind === "print_agent")
@@ -353,7 +350,6 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
         return acceptDeviceJoinRequest(tx, deps.cfg, id, {
           label,
           profileId,
-          kitchenScreens,
         });
       });
       deps.pairingMode.dropClaim(id);

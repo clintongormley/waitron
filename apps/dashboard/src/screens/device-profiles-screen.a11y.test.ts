@@ -2,6 +2,7 @@ import { selectProfileTab, profileAction } from "../testing/profile-table.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setHelpMode } from "@waitron/ui";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./device-profiles-screen.js";
@@ -403,7 +404,6 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
             profileId: "p2",
             screens: {
               station: { stationIds: ["s1", "s-off"], zoneIds: null },
-              pass_monitor: { stationIds: null, zoneIds: ["z1"] },
             },
           },
         ]),
@@ -427,10 +427,6 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
       expect(
         el.shadowRoot!.querySelector("[data-test=profile-station-screen-station-s1]"),
       ).not.toBeNull();
-      await selectProfileTab(el, "capabilities");
-      expect(
-        el.shadowRoot!.querySelector("[data-test=profile-pass-monitor-zone-z1]"),
-      ).not.toBeNull();
       expect(el.scrollWidth).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
       el.shadowRoot!.querySelector("[data-test=profile-station-screen-station-s2]")!.dispatchEvent(
@@ -449,57 +445,53 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
     },
   );
 
-  it("renders the pass's other-stations switches accessibly, on and off", async () => {
-    const kitchen: DeviceProfile = {
-      ...profiles[0]!,
-      id: "p2",
-      name: "Pass",
-      formFactor: "kds",
-      capabilities: [],
-      receiptPrinterIds: [],
-      paymentSlipPrinterIds: [],
-    };
-    const api = stubApi(venuePrinters, {
-      listDeviceProfiles: vi.fn().mockResolvedValue([...profiles, kitchen]),
-      getDeviceProfile: vi.fn().mockResolvedValue(kitchen),
-      listProfileKitchenScreens: vi.fn().mockResolvedValue([
-        {
-          profileId: "p2",
-          screens: {
-            pass: { stationIds: null, zoneIds: null, showNonPassStations: true },
-            pass_monitor: { stationIds: null, zoneIds: null, showNonPassStations: false },
+  it.each(["pass", "pass_monitor"] as const)(
+    "renders %s other-stations policy accessibly, on and off",
+    async (kind) => {
+      const kitchen: DeviceProfile = {
+        ...profiles[0]!,
+        id: "p2",
+        name: "Pass",
+        formFactor: "kds",
+        capabilities: [],
+        receiptPrinterIds: [],
+        paymentSlipPrinterIds: [],
+      };
+      const api = stubApi(venuePrinters, {
+        listDeviceProfiles: vi.fn().mockResolvedValue([...profiles, kitchen]),
+        getDeviceProfile: vi.fn().mockResolvedValue(kitchen),
+        listProfileKitchenScreens: vi.fn().mockResolvedValue([
+          {
+            profileId: "p2",
+            screens: { [kind]: { stationIds: null, zoneIds: null, showNonPassStations: true } },
           },
-        },
-      ]),
-    });
-    const { el, host } = await mountWidget<DeviceProfilesScreen>(
-      "dashboard-device-profiles-screen",
-      { api },
-      theme,
-    );
-    await flush(el);
-    await profileAction(el, "edit-p2");
-    await flush(el);
-    await selectProfileTab(el, "kitchen");
-    const other = (kind: string) =>
-      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
-        `[data-test=profile-${kind}-other-stations]`,
+        ]),
+      });
+      const { el, host } = await mountWidget<DeviceProfilesScreen>(
+        "dashboard-device-profiles-screen",
+        { api },
+        theme,
+      );
+      await flush(el);
+      await profileAction(el, "edit-p2");
+      await flush(el);
+      await selectProfileTab(el, "kitchen");
+      const other = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+        `[data-test=profile-${kind === "pass" ? "pass-screen" : "pass-monitor"}-other-stations]`,
       )!;
-    expect([other("pass-screen").checked, other("pass-monitor").checked]).toEqual([true, false]);
-    await expectNoA11yViolations(host);
-    other("pass-screen").dispatchEvent(
-      new CustomEvent("wt-change", { detail: { checked: false }, bubbles: true, composed: true }),
-    );
-    other("pass-monitor").dispatchEvent(
-      new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
-    );
-    await flush(el);
-    expect([other("pass-screen").checked, other("pass-monitor").checked]).toEqual([false, true]);
-    await expectNoA11yViolations(host);
-  });
+      expect(other.checked).toBe(true);
+      await expectNoA11yViolations(host);
+      other.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { checked: false }, bubbles: true, composed: true }),
+      );
+      await flush(el);
+      expect(other.checked).toBe(false);
+      await expectNoA11yViolations(host);
+    },
+  );
 
   it.each([390, 1280])(
-    "renders a till's Kitchen and Pass lists with a pass monitor, and the narrowed devices after a save, accessibly at %ipx",
+    "renders a till's inherited Pass display lists and saved screen change accessibly at %ipx",
     async (width) => {
       await page.viewport(width, 900);
       const till: DeviceProfile = { ...profiles[0]!, capabilities: ["show-station", "show-expo"] };
@@ -522,24 +514,12 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
           {
             profileId: "p1",
             screens: {
-              station: { stationIds: ["s1"], zoneIds: null },
               pass_monitor: { stationIds: ["s1"], zoneIds: ["z1"] },
             },
           },
         ]),
         updateDeviceProfile: vi.fn().mockResolvedValue({
           ...till,
-          narrowedDevices: [
-            {
-              deviceId: "dv1",
-              deviceName: "Pass screen near the terrace",
-              lost: {
-                screens: ["pass_monitor"],
-                stations: [{ id: "s1", name: "Grill" }],
-                zones: [{ id: "z1", name: "Dining room" }],
-              },
-            },
-          ],
         }),
       });
       const { el, host } = await mountWidget<DeviceProfilesScreen>(
@@ -555,14 +535,11 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
       ).not.toBeNull();
       expect(el.scrollWidth).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
-      el.shadowRoot!.querySelector("[data-test=profile-pass-monitor]")!.dispatchEvent(
-        new CustomEvent("wt-change", { detail: { checked: false }, bubbles: true, composed: true }),
-      );
+      await chooseOption(el.shadowRoot!.querySelector("[data-test=profile-kitchen-screens]")!, "");
       await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
       await flush(el);
       await flush(el);
-      expect(el.shadowRoot!.querySelector("[data-test=narrowed-devices]")).not.toBeNull();
       expect(el.scrollWidth).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
       await page.viewport(1280, 900);

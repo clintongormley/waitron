@@ -21,7 +21,7 @@ afterEach(() => {
 });
 
 type Kind = "course" | "group";
-type Mode = "all" | "pass" | "device" | "monitor";
+type Mode = "pass" | "device" | "monitor";
 
 function dish(overrides: Partial<PassCardItem> = {}): PassCardItem {
   return passItem({
@@ -100,10 +100,9 @@ async function mount(mode: Mode, board: PassBoard) {
     board,
     stations: [],
     zones: null,
-    display: { showNonPassStations: true, nonPassStationsOverride: null },
+    display: { showNonPassStations: true },
   };
   const api = {
-    getExpoBoard: vi.fn().mockResolvedValue({ board }),
     getDeviceIdentity: vi.fn().mockResolvedValue({
       deviceId: "dev-1",
       formFactor: "till",
@@ -141,7 +140,7 @@ const AWAY = "[data-away], [data-group-away]";
 
 describe("A773 no dispatch presentation", () => {
   for (const kind of ["course", "group"] as const)
-    for (const mode of ["all", "pass", "device", "monitor"] as const)
+    for (const mode of ["pass", "device", "monitor"] as const)
       it(`${kind} on ${mode} keeps ready food and its late flags with no Away and no Ready`, async () => {
         setLocale("en");
         const { root } = await mount(mode, readyBoard(kind));
@@ -157,7 +156,7 @@ describe("A773 no dispatch presentation", () => {
         const buttons = [...readyCard.querySelectorAll("button, wt-button, [role='button']")];
         // A till reprints the bill; a kitchen display and a monitor draw no button on a Ready card.
         expect(buttons.map((button) => button.getAttribute("data-reprint"))).toEqual(
-          mode === "all" || mode === "pass" ? ["bill-1"] : [],
+          mode === "pass" ? ["bill-1"] : [],
         );
       });
 

@@ -845,7 +845,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/till/src/widgets/invoice-recipient-dialog.test.ts",
   "apps/till/src/widgets/invoice-recipient-dialog.unsaved.test.ts",
   "apps/till/src/widgets/keep-open-dialog.test.ts",
-  "apps/till/src/widgets/kitchen-columns-dialog.test.ts",
   "apps/till/src/widgets/late-send-dialog.test.ts",
   "apps/till/src/widgets/menu-browser.a11y.test.ts",
   "apps/till/src/widgets/menu-browser.home-columns.test.ts",
@@ -1151,7 +1150,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "packages/venue-service/src/order-kitchen-notes.test.ts",
   "packages/venue-service/src/routing-store.test.ts",
   "packages/venue-service/src/special-days.holiday-name.test.ts",
-  "packages/venue-service/src/station-delete-settings.test.ts",
   "packages/venue-service/src/station-times.test.ts",
   "packages/workforce/test/fixtures.ts",
 ];

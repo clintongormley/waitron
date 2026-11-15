@@ -12,7 +12,7 @@ import {
   attachStationPrinterForTest,
 } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setDeviceKitchenScreens, setProfileKitchenScreens } from "@waitron/venue-service";
+import { setProfileKitchenScreens } from "@waitron/venue-service";
 import { createCourse, createStation } from "./kitchen.js";
 import { mountManagementApi } from "./management-api.js";
 import { inTx, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
@@ -270,10 +270,8 @@ it("station bound to an active KDS refuses deletion with distinct device count",
     id: (await seedDevice(suite.db, { profileId: profile!.id, label: "Bound display" })).deviceId,
   };
   await inTx(v, (tx) =>
-    setDeviceKitchenScreens(tx, {
-      deviceId: device!.id,
-      profileId: profile!.id,
-      screens: [{ kind: "station", stationIds: [station], zoneIds: null }],
+    setProfileKitchenScreens(tx, profile!.id, {
+      ["station"]: { stationIds: [station], zoneIds: null },
     }),
   );
   const preview = await request("stations", "GET", station, "/delete-impact");
@@ -289,9 +287,9 @@ it("station bound to an active KDS refuses deletion with distinct device count",
     ],
     removes: [
       {
-        key: "station_device_screens",
+        key: "station_profile_screens",
         count: 1,
-        targets: [{ id: device!.id, name: "Bound display" }],
+        targets: [{ id: profile!.id, name: "KDS" }],
       },
     ],
   });

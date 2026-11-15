@@ -1,5 +1,9 @@
 # Service times, departments, zones and prep stations
 
+> **15 November 2026 — A1534:** the profile now owns one kitchen screen, inherited by all its
+> devices. Device screen choices, narrowing history and the four device-screen tables are retired.
+> See [the remaining-device plan](../plans/2026-11-15-a1534-remaining-devices.md).
+
 > **2026-10-12, A493 supersession:** departments and zones share one list with protected
 > editors. The department page and its tabs, including the zone panel and receipt tab, are
 > retired. Floor-plan editing returns to the list. Receipt decoration and the tax-agency

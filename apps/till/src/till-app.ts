@@ -3303,7 +3303,10 @@ export class TillApp extends LitElement {
         this.#tabNeedsFloorData(tab)
       )
         void this.#refreshFloorZones();
-      const zones = this.#readLiveDeviceZones(signal);
+      const zones = Promise.all([
+        this.#readLiveDeviceZones(signal),
+        this.#readIdentity(signal),
+      ]).then(() => undefined);
       if (this.#menuZones().length > 0) return zones;
       // A failed setup read must not end the tick, or change how the zones read's failure is judged.
       return Promise.all([zones, this.#followSetup(signal).catch(() => undefined)]).then(
@@ -3802,6 +3805,7 @@ export class TillApp extends LitElement {
   /** The profiles the device may be switched to, the active one first, as the server last said. */
   @state() private approvedProfiles: ProfileChoice[] = [];
   @state() private activeProfileId = "";
+  @state() private profileKitchenScreen: KitchenScreenKind | null = null;
   @state() private profileOpen = false;
   @state() private profileNotice: ProfileNotice = null;
   @state() private profileBusy = false;
@@ -4849,7 +4853,12 @@ export class TillApp extends LitElement {
     }
     if (changed.has("api") || changed.has("operatorName") || changed.has("permissions"))
       this.#syncDepartmentTransfers();
-    if (changed.has("formFactor") || changed.has("capabilities") || changed.has("onboardingIntent"))
+    if (
+      changed.has("formFactor") ||
+      changed.has("capabilities") ||
+      changed.has("onboardingIntent") ||
+      changed.has("profileKitchenScreen")
+    )
       this.#affordanceList = this.#affordances();
     if (changed.has("activeTableId")) this.#rememberFloorReturnZone();
     // `router` may be assigned after `connectedCallback`.
@@ -5051,8 +5060,6 @@ export class TillApp extends LitElement {
           show = await this.#readKitchenScreen(identity.kitchenScreens);
         } catch (error) {
           if ((error as { code?: string }).code !== "device.unauthorized") throw error;
-          // A narrowing that lands between the two reads refuses the screen it took, from a device
-          // still enrolled: the identity, read again, says what it shows now.
           const again = await this.api.getDeviceIdentity();
           show = await this.#readKitchenScreen(again.kitchenScreens);
         }
@@ -10934,19 +10941,26 @@ export class TillApp extends LitElement {
   }
 
   /** Reads the device again; a failed read keeps the profiles last known. */
-  async #readIdentity(): Promise<void> {
+  #identityRequest = 0;
+
+  async #readIdentity(signal?: AbortSignal): Promise<void> {
+    const request = ++this.#identityRequest;
     let identity: DeviceIdentity;
     try {
-      identity = await this.api.getDeviceIdentity();
+      identity =
+        signal === undefined
+          ? await this.api.getDeviceIdentity()
+          : await this.api.getDeviceIdentity({ signal });
     } catch {
       return;
     }
-    this.#holdIdentity(identity);
+    if (!signal?.aborted && request === this.#identityRequest) this.#holdIdentity(identity);
   }
 
   #holdIdentity(identity: DeviceIdentity): void {
     this.approvedProfiles = identity.approvedProfiles ?? [];
     this.activeProfileId = identity.profileId ?? "";
+    this.profileKitchenScreen = identity.kitchenScreens?.[0]?.kind ?? null;
   }
 
   /** Reads the device again first, so approvals changed since boot are what is offered. */
@@ -21583,6 +21597,10 @@ export class TillApp extends LitElement {
       ...(["station", "expo", "schedule"] as const).filter(
         (screen) =>
           this.capabilities.includes(`show-${screen}`) &&
+          (screen !== "station" || this.profileKitchenScreen === "station") &&
+          (screen !== "expo" ||
+            this.profileKitchenScreen === "pass" ||
+            this.profileKitchenScreen === "pass_monitor") &&
           (screen !== "station" || this.formFactor !== "till" || this.#testingKitchen()),
       ),
       "find-bill",

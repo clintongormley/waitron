@@ -202,7 +202,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
         profileId: "p2",
         screens: {
           station: { stationIds: ["s-off", "s1"], zoneIds: null },
-          pass_monitor: { stationIds: null, zoneIds: null },
         },
       },
     ]),
@@ -467,7 +466,7 @@ describe("the device profile editor's Save", () => {
     expect(q(el, "profile-station-screen-station-s-off")).toBeNull();
     expect(checked(el, "profile-station-screen-station-s1")).toBe(true);
     expect(checked(el, "profile-station-screen-every-station")).toBe(false);
-    expect(checked(el, "profile-pass-monitor")).toBe(true);
+    expect(value(el, "profile-kitchen-screens")).toBe("station");
     expect(await state(el)).toEqual(quiet);
     await press(el);
     expect(api.updateDeviceProfile).not.toHaveBeenCalled();
@@ -628,10 +627,7 @@ describe("the device profile editor's Save", () => {
     expect(await state(el)).toEqual(ready);
   });
 
-  it.each([
-    ["a station", "profile-station-screen-station-s2"],
-    ["a kind of screen", "profile-pass-screen"],
-  ])(
+  it.each([["a station", "profile-station-screen-station-s2"]])(
     "on a kitchen profile, wakes on %s and goes quiet when it is unticked",
     async (_name, test) => {
       const { el } = await openEdit("p2");
@@ -644,14 +640,23 @@ describe("the device profile editor's Save", () => {
 
   it("on a kitchen profile, wakes on switching a kind off and goes quiet when it is switched back on", async () => {
     const { el } = await openEdit("p2");
-    await change(el, "profile-pass-monitor", false);
+    await change(el, "profile-kitchen-screens", "");
     expect(await state(el)).toEqual(ready);
-    await change(el, "profile-pass-monitor", true);
+    await change(el, "profile-kitchen-screens", "station");
     expect(await state(el)).toEqual(quiet);
   });
 
-  it("on a till, wakes on its Kitchen list going to chosen stations and goes quiet when Every station is back", async () => {
-    const { el } = await openEdit();
+  it("on a till, wakes on its Station list going to chosen stations and goes quiet when Every station is back", async () => {
+    const { el } = await openEdit(
+      "p1",
+      stubApi({
+        listProfileKitchenScreens: vi
+          .fn()
+          .mockResolvedValue([
+            { profileId: "p1", screens: { station: { stationIds: null, zoneIds: null } } },
+          ]),
+      }),
+    );
     await change(el, "profile-station-screen-every-station", false);
     expect(await state(el)).toEqual(ready);
     await change(el, "profile-station-screen-every-station", true);
@@ -661,15 +666,24 @@ describe("the device profile editor's Save", () => {
   it("on a till, wakes on a pass monitor and goes quiet when it is switched off", async () => {
     const { el } = await openEdit();
     await change(el, "cap-show-expo", true);
-    await change(el, "profile-pass-monitor", true);
+    await change(el, "profile-kitchen-screens", "pass_monitor");
     expect(await state(el)).toEqual(ready);
-    await change(el, "profile-pass-monitor", false);
+    await change(el, "profile-kitchen-screens", "");
     await change(el, "cap-show-expo", false);
     expect(await state(el)).toEqual(quiet);
   });
 
   it("on a kitchen profile, wakes on the pass monitor's other-stations switch, quiets when it is back, and sends it inside that entry", async () => {
-    const { el, api } = await openEdit("p2");
+    const { el, api } = await openEdit(
+      "p2",
+      stubApi({
+        listProfileKitchenScreens: vi
+          .fn()
+          .mockResolvedValue([
+            { profileId: "p2", screens: { pass_monitor: { stationIds: null, zoneIds: null } } },
+          ]),
+      }),
+    );
     expect(checked(el, "profile-pass-monitor-other-stations")).toBe(true);
     expect(await state(el)).toEqual(quiet);
     await change(el, "profile-pass-monitor-other-stations", false);
@@ -680,7 +694,6 @@ describe("the device profile editor's Save", () => {
     await press(el);
     expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![6]).toEqual({
       kitchenScreens: {
-        station: { stationIds: ["s1"], zoneIds: null },
         pass_monitor: { stationIds: null, zoneIds: null, showNonPassStations: false },
       },
     });
@@ -691,6 +704,11 @@ describe("the device profile editor's Save", () => {
     const { el } = await openEdit(
       "p1",
       stubApi({
+        listProfileKitchenScreens: vi
+          .fn()
+          .mockResolvedValue([
+            { profileId: "p1", screens: { pass: { stationIds: null, zoneIds: null } } },
+          ]),
         listDeviceProfiles: vi.fn().mockResolvedValue([passTill, kds]),
         getDeviceProfile: vi.fn(async (id: string) => (id === "p2" ? kds : passTill)),
       }),

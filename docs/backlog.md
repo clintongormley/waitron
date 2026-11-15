@@ -1286,15 +1286,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   renames. Changes the venue-service and core schemas: rebuild their starting migrations, no data
   migration (pre-live). The watcher (15 November 02:58) requires the remaining device/profile work
   split by area in the next amendment, in pull requests of about 1,000 lines or less.
-  - **One profile per kitchen screen.** A profile's kitchen screen tab chooses ONE screen (Station,
-    Pass or Pass display) and its stations and zones, instead of several screens for its devices to
-    pick from. A device picks only its profile: the device editor loses Screen, its Stations and
-    Zones toggles and "Show other stations' dishes", and no device narrows what its profile
-    allows, tills and handhelds included (`device_kitchen_screens` and its station, zone and
-    removal tables go; `packages/db/src/schema/venue-service/kitchen-screens.ts`). The owner's
-    reason: the device dialog repeated the profile's toggles, and nobody could tell which won.
-    Revises the 2026-10-07 stations design §9.4 ("a device picks its profile, then its kitchen
-    screen"): give it a dated note.
   - **A kitchen profile and its devices offer no receipt printer, payment slip printer, cash
     drawer or invoice printer.** On the Devices table those cells are empty for kitchen devices.
   - **An inherited value shows as the value itself in grey italics**, the house style for an
@@ -1303,14 +1294,13 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
     the profile's setting". A value set on the device shows in normal text. Same on the Devices
     table: no "(default)" after an inherited printer or drawer.
   - **The device editor is split into headed sections, not tabs**: name and profile, then
-    Printers, Card reader and Made here. It is at most eight fields once the kitchen fields go.
+    Printers, Card reader and Made here. Keep Approved profiles under Name and profile: the owner allowed nine fields on 15 November 05:25.
   - **"Made here, no ticket" becomes one choice, "This device stands at"**: Nowhere (the default)
     or one station, with the hint "Items for that station are made here: no ticket, not on
     kitchen screens." It stays on the device, not the profile: two counter tills on one profile can
     stand at different bars. That settles A270. A handheld does not show it. Today's
     `device_made_here_stations` allows several stations per device; it becomes one.
-  - **The Devices table drops its Shows column**, which only repeats the profile once the profile
-    fixes the screen.
+
 
 
 - **A1089: account-access recovery needs an authenticated decision when no offered sign-in works.**
