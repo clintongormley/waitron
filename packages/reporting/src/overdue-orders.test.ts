@@ -477,6 +477,23 @@ describe("computeOverdueOrders", () => {
     ]);
   });
 
+  it("keeps ageing a released pass-controlled dish from when it was requested", async () => {
+    const { orderId } = await seedOpenOrder(
+      suite.db,
+      { deviceId: venue.deviceId, nodeId: venue.nodeId },
+      1,
+    );
+    await seedFiredLine(
+      suite.db,
+      { nodeId: venue.nodeId, stationId },
+      { orderId, lineNo: 1, ageMinutes: 2, requestedAgeMinutes: 12, released: true },
+    );
+
+    expect(await run()).toEqual([
+      expect.objectContaining({ orderId, band: "overdue", ageMinutes: 12 }),
+    ]);
+  });
+
   it("returns [] when there are no ticket items at all", async () => {
     expect(await run()).toEqual([]);
   });

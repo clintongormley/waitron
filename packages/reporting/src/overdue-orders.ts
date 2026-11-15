@@ -28,7 +28,7 @@ function minutesSince(stamp: string, nowMs: number): number {
  * (`working_order_lines.served_at`) or the order is collected (`working_orders.collected_at`), and
  * an order stays "open" while it is not abandoned and not yet collected — wider than
  * `status = 'open'` (a `settled` walk-up awaiting counter handover still ages). Bands come from the
- * shared `classifyBand`/`worstBand`, never a hand-rolled SQL CASE.
+ * shared `classifyBand`/`worstBand`.
  *
  * Among the lines tied at an order's WORST band, the one with the GREATEST age is named — the most
  * urgent line to show.
@@ -36,6 +36,8 @@ function minutesSince(stamp: string, nowMs: number): number {
 export async function computeOverdueOrders(tx: Transaction): Promise<OverdueOrder[]> {
   // Read ONCE, so every row in this run is aged and classified against the SAME instant.
   const nowMs = Date.now();
+  // A copy of `apps/server/src/table-signals.ts`'s wait start and fired-or-requested filter (D65),
+  // which this package cannot import.
   const waitStart = sql<string>`case when ${ticketItems.passControlled} then coalesce(${ticketItems.requestedAt}, ${ticketItems.queuedAt}) else ${ticketItems.queuedAt} end`;
   const rows = await tx
     .select({
