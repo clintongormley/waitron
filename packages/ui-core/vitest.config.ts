@@ -4,9 +4,10 @@ import type { BrowserCommand } from "vitest/node";
 import { parkPointerCommands } from "./src/vitest-park-pointer.js";
 
 type ColorScheme = "light" | "dark" | null;
+type ForcedColors = "active" | "none" | null;
 
 interface PlaywrightPage {
-  emulateMedia(options: { colorScheme?: ColorScheme }): Promise<void>;
+  emulateMedia(options: { colorScheme?: ColorScheme; forcedColors?: ForcedColors }): Promise<void>;
   context(): {
     newCDPSession(page: PlaywrightPage): Promise<{
       send(method: string, params?: object): Promise<unknown>;
@@ -35,6 +36,14 @@ const emulateColorScheme: BrowserCommand<[colorScheme: ColorScheme]> = async (
 ) => {
   const { page } = context as unknown as { page: PlaywrightPage };
   await page.emulateMedia({ colorScheme });
+};
+
+const emulateForcedColors: BrowserCommand<[forcedColors: ForcedColors]> = async (
+  context,
+  forcedColors,
+) => {
+  const { page } = context as unknown as { page: PlaywrightPage };
+  await page.emulateMedia({ forcedColors });
 };
 
 // Forces Chromium's pseudo-class paint; it does not fill or save a credential.
@@ -91,6 +100,7 @@ export default defineConfig({
       instances: [{ browser: "chromium" }],
       commands: {
         emulateColorScheme,
+        emulateForcedColors,
         forceAutofillPseudoState,
         ...parkPointerCommands,
       },

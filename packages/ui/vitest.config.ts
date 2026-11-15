@@ -5,11 +5,13 @@ import { parkPointerCommands } from "./src/vitest-park-pointer.js";
 
 type ColorScheme = "light" | "dark" | null;
 type ReducedMotion = "reduce" | "no-preference" | null;
+type ForcedColors = "active" | "none" | null;
 
 interface PlaywrightPage {
   emulateMedia(options: {
     colorScheme?: ColorScheme;
     reducedMotion?: ReducedMotion;
+    forcedColors?: ForcedColors;
   }): Promise<void>;
 }
 
@@ -28,6 +30,14 @@ const emulateReducedMotion: BrowserCommand<[reducedMotion: ReducedMotion]> = asy
 ) => {
   const { page } = context as unknown as { page: PlaywrightPage };
   await page.emulateMedia({ reducedMotion });
+};
+
+const emulateForcedColors: BrowserCommand<[forcedColors: ForcedColors]> = async (
+  context,
+  forcedColors,
+) => {
+  const { page } = context as unknown as { page: PlaywrightPage };
+  await page.emulateMedia({ forcedColors });
 };
 
 interface NewPageClick {
@@ -121,6 +131,7 @@ export default defineConfig({
       commands: {
         emulateColorScheme,
         emulateReducedMotion,
+        emulateForcedColors,
         clickForNewPage,
         ...parkPointerCommands,
       },

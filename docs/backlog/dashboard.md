@@ -345,6 +345,16 @@ An untraced dialog focus line and retiring the summary once its last consumer mo
 - **Loose ends left by C47 (#838/#839/#840/#841).**
   [Detail](dashboard.md#loose-ends-left-by-c47-838839840841)
 
+## Contrast-theme styles for the remaining primitives
+
+Under a Windows contrast theme, primitives that draw an edge or a state with a box-shadow, a
+background or a transparent border lose it — among them `wt-help-switch`'s pressed state,
+`wt-combobox`'s open-list line, `wt-colour-chooser`'s checked ring, `wt-data-table`, `wt-floor-map`
+and the floor plan's overdue and forgotten rings (`packages/ui/src/floor-ring.ts`), read from their
+CSS, not run. The field box, `wt-switch` and `wt-tabs` already do this; the rule and how to test it
+are in [design-system.md](../developers/design-system.md#forced-colours-windows-contrast-themes).
+Size M.
+
 ## Bundle: Other browser check
 
 4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).

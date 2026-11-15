@@ -24,7 +24,9 @@ and Cloud screens remain separate release work.
 `oklch()`/`color()`/`color-mix()` colours, no named colours (`red`, `blue`, …), no font sizes, no radii, no
 px spacing above `1`, and no `rem`/`em` sizing at all (not even inside `min()`/`max()`/`clamp()`)
 in any component or view. Every such value reads a token instead. `transparent`, `currentColor`,
-and `inherit` are legitimate escape hatches, not chrome.
+and `inherit` are legitimate escape hatches, not chrome, and so are the system colours inside
+`@media (forced-colors: active)` (see "Forced colours", below); no guard checks where a system
+colour is used.
 `packages/ui/src/no-hardcoded-chrome.test.ts` discovers primitives via
 `import.meta.glob("./components/*.ts", ...)` (excluding `*.test.ts`), scans each one's `static
 styles`, and fails on violations. It covers a new primitive automatically.
@@ -2591,6 +2593,41 @@ the input fill exactly that box via `inset: 0` with no size of its own. If you b
 where the hit target is a covering, invisible native control, size the _container_, not the
 control.
 
+### Forced colours (Windows contrast themes)
+
+With a Windows contrast theme on, the browser repaints the page in a few system colours: it deletes
+box-shadows, paints backgrounds as the page colour and paints transparent borders in the text
+colour. So a primitive that draws an edge, a focus mark or a state with a box-shadow, a background
+or a transparent border also draws it inside `@media (forced-colors: active)`, with an ordinary
+border or outline in system colours (`CanvasText`, `Canvas`, `Highlight`, `HighlightText`,
+`GrayText`). It uses `forced-color-adjust: none` only where the browser would otherwise repaint a
+colour it needs, and then also sets any focus ring on that element, which the theme would otherwise
+leave in the brand colour. Three do so today:
+
+- the shared field box (`fieldStyles`) draws its bottom line in `CanvasText` on a `::after` laid
+  over the box, so the box is the same height with the theme on or off; an invalid field's line is
+  drawn at the focus line's width (`--wt-field-line-width-active`), and a disabled field's is a
+  single dashed `GrayText` line; an outline in `Highlight` marks focus, and a focused invalid
+  field's line sits just above the outline's bottom band, so it still reads thicker than a focused
+  valid field's;
+- `wt-switch` outlines its track and fills its thumb; ON fills the track in `Highlight` with a
+  `HighlightText` thumb at the far end; a disabled switch, label included, is drawn in `GrayText` at
+  full strength rather than faded, except that an ON switch's thumb stays `HighlightText`; and a keyboard-focused switch is ringed in
+  `Highlight`;
+- `wt-tabs` underlines only the selected tab, in `Highlight`.
+
+The others do not yet, among them `wt-help-switch`'s pressed state, `wt-combobox`'s open-list
+line, `wt-colour-chooser`'s checked ring, `wt-data-table`, `wt-floor-map` and the floor plan's
+rings (`floor-ring.ts`); see
+[the backlog](../backlog/dashboard.md#contrast-theme-styles-for-the-remaining-primitives).
+
+The tests for those three turn the theme on with `emulateForcedColours` from the package's `src/test-helpers.ts`,
+which calls the `emulateForcedColors` browser command in the package's `vitest.config.ts`, checks
+the theme took, and reads pixels from a real screenshot with `elementPixels`:
+`packages/ui-core/src/components/wt-input.forced-colors.test.ts`,
+`packages/ui/src/components/wt-switch.forced-colors.test.ts` and
+`packages/ui/src/components/wt-tabs.forced-colors.test.ts`.
+
 ### Focus delegation
 
 A primitive that wraps exactly one native focusable control (a single `<button>` or `<input>`) sets:
@@ -5104,7 +5141,11 @@ test pins `pre-wrap`, so replacing the shorthand keeps whitespace preservation c
    on the `host` and asserts the field's width follows it
    (`packages/ui-core/src/components/wt-input.test.ts` does). Nothing else checks that a new field
    reads it, or that it uses `fieldStyles`.
-7. Add it to the workbench and to the table above.
+7. If it draws an edge, a focus mark or a state with a box-shadow, a background or a transparent
+   border, add a `@media (forced-colors: active)` block and a
+   `src/components/<name>.forced-colors.test.ts` (see "Forced colours (Windows contrast themes)").
+   Nothing checks that it does.
+8. Add it to the workbench and to the table above.
 
 ## Workbench
 

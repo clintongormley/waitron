@@ -159,4 +159,30 @@ export const fieldStyles = css`
   .hint {
     ${visuallyHiddenStyles}
   }
+  /* A contrast theme deletes box-shadows and repaints the danger colour, so the line is drawn over
+     the box (a border would change its height) and thickened to mark an invalid field. */
+  @media (forced-colors: active) {
+    .field::after {
+      content: "";
+      position: absolute;
+      inset-inline: 0;
+      bottom: 0;
+      border-bottom: var(--wt-field-line-width) solid CanvasText;
+      pointer-events: none;
+    }
+    .field[data-invalid]::after {
+      border-bottom-width: var(--wt-field-line-width-active);
+    }
+    .field:focus-within {
+      outline: var(--wt-field-line-width-active) solid Highlight;
+      outline-offset: calc(-1 * var(--wt-field-line-width-active));
+    }
+    /* Lifted above the focus outline's bottom band, which would otherwise cover it. */
+    .field[data-invalid]:focus-within::after {
+      bottom: var(--wt-field-line-width-active);
+    }
+    .field[data-disabled]::after {
+      border-bottom: var(--wt-field-line-width) dashed GrayText;
+    }
+  }
 `;

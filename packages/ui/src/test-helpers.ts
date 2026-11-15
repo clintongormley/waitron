@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, vi } from "vitest";
+import { commands, page } from "vitest/browser";
 import { applyTokens } from "./tokens/index.js";
 import type { WtDialog } from "./components/wt-dialog.js";
 import type { WtFormActions } from "./components/wt-form-actions.js";
@@ -315,4 +316,52 @@ export function drawnFileName(picker: Element): string | null {
 /** The message a `wt-file-input` shows under itself, or null when there is none. */
 export function fileError(picker: Element): HTMLElement | null {
   return picker.shadowRoot!.querySelector<HTMLElement>("[data-error]");
+}
+
+declare module "vitest/browser" {
+  interface BrowserCommands {
+    emulateForcedColors: (forcedColors: "active" | "none" | null) => Promise<void>;
+  }
+}
+
+/** Sets the forced-colours emulation (a Windows contrast theme) through Playwright, or hands it back
+ * to the browser with `null`. It checks the setting took: the media query answers it, and when
+ * active a red, blue-shadowed box loses both colours. */
+export async function emulateForcedColours(value: "active" | "none" | null): Promise<void> {
+  await commands.emulateForcedColors(value);
+  if (value === null) return;
+  expect(matchMedia("(forced-colors: active)").matches).toBe(value === "active");
+  if (value === "none") return;
+  const control = document.createElement("div");
+  control.style.cssText =
+    "width: 40px; height: 40px; background: rgb(255, 0, 0); box-shadow: inset 0 0 0 10px rgb(0, 0, 255)";
+  document.body.appendChild(control);
+  try {
+    const at = await elementPixels(control);
+    const box = control.getBoundingClientRect();
+    expect(at(box.left + 20, box.top + 20)).not.toEqual([255, 0, 0]);
+    expect(at(box.left + 2, box.top + 2)).not.toEqual([0, 0, 255]);
+  } finally {
+    control.remove();
+  }
+}
+
+/** Reads an element's pixels from a real screenshot, as [r, g, b] at a point in page px. */
+export async function elementPixels(el: Element): Promise<(x: number, y: number) => number[]> {
+  const shot: unknown = await page.screenshot({ element: el, base64: true, save: false });
+  const image = new Image();
+  image.src = `data:image/png;base64,${shot as string}`;
+  await image.decode();
+  const canvas = document.createElement("canvas");
+  canvas.width = image.width;
+  canvas.height = image.height;
+  const context = canvas.getContext("2d")!;
+  context.drawImage(image, 0, 0);
+  const box = el.getBoundingClientRect();
+  const k = image.width / box.width;
+  return (x, y) => [
+    ...context
+      .getImageData(Math.floor((x - box.left) * k), Math.floor((y - box.top) * k), 1, 1)
+      .data.slice(0, 3),
+  ];
 }
