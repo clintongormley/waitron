@@ -13,6 +13,7 @@ import { AppError, isAppError } from "@waitron/shared";
 import { HANDOVER_EVENT } from "./handover-store.js";
 import {
   parseSwitchSignIn,
+  SWITCH_SIGN_IN_STATUS,
   switchCredentials,
   type SwitchSignIn,
 } from "./handover-switch-proof.js";
@@ -37,9 +38,7 @@ export interface HandoverPreparationDeps {
 const STATUS: Record<string, ContentfulStatusCode> = {
   "password.invalid": 401,
   "password.throttled": 429,
-  "passkey.not_registered": 401,
-  "passkey.verification_failed": 401,
-  "passkey.challenge_expired": 400,
+  ...SWITCH_SIGN_IN_STATUS,
   "authorization.not_permitted": 403,
   "handover.request_invalid": 400,
   "handover.operation_unknown": 404,

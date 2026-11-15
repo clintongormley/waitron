@@ -2,6 +2,7 @@ import {
   generateAuthenticationOptions,
   type AuthenticationResponseJSON,
 } from "@simplewebauthn/server";
+import { decodeClientDataJSON } from "@simplewebauthn/server/helpers";
 import { nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
 import { withTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import { verifyEnvelope } from "@waitron/handover";
@@ -21,6 +22,12 @@ import "./errors.js";
 export const SWITCH_PROOF_COOKIE = "waitron_switch_proof";
 export const SWITCH_PROOF_TTL_MS = 15 * 60_000;
 export const SWITCH_CHALLENGE_TTL_MS = 2 * 60_000;
+/** Statuses for the passkey refusals every emergency step can answer. */
+export const SWITCH_SIGN_IN_STATUS = {
+  "passkey.not_registered": 401,
+  "passkey.verification_failed": 401,
+  "passkey.challenge_expired": 400,
+} as const;
 // Anyone may ask for a challenge, so the oldest go first past this many.
 const MAX_SWITCH_CHALLENGES = 32;
 
@@ -163,8 +170,8 @@ export interface SwitchSignIn extends Omit<SwitchProofDeps, "db" | "now"> {
 
 function challengeOf(response: AuthenticationResponseJSON): string | undefined {
   try {
-    const data = JSON.parse(Buffer.from(response.response.clientDataJSON, "base64url").toString());
-    return typeof data?.challenge === "string" ? data.challenge : undefined;
+    const { challenge } = decodeClientDataJSON(response.response.clientDataJSON);
+    return typeof challenge === "string" ? challenge : undefined;
   } catch {
     return undefined;
   }

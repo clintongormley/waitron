@@ -66,6 +66,7 @@ import { handoverSignInAttempt } from "./handover-preparation.js";
 import {
   createSwitchChallenges,
   parseSwitchSignIn,
+  SWITCH_SIGN_IN_STATUS,
   precheckSwitchCredentials,
   switchCredentials,
   type SwitchSignIn,
@@ -145,9 +146,7 @@ export interface EmergencyHandover {
 const STATUS = {
   "password.invalid": 401,
   "password.throttled": 429,
-  "passkey.not_registered": 401,
-  "passkey.verification_failed": 401,
-  "passkey.challenge_expired": 400,
+  ...SWITCH_SIGN_IN_STATUS,
   "totp.required": 401,
   "authorization.not_permitted": 403,
   "handover.request_invalid": 400,
