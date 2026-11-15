@@ -128,7 +128,7 @@ the wire is a GROSS (VAT-inclusive) two-place decimal string; the
 column underneath holds a count of whole cents and the row converts (`stringToCents` /
 `centsToDecimal`, `packages/shared/src/cents.ts`).
 
-The VAT class is never resolved that way — an extra always carries the picked PRODUCT's VAT class,
+The VAT class is never resolved that way — an extra always carries the picked PRODUCT's VAT classes (served here and taken away),
 because it is sold as that product: the product's own, or its parent's where a variant leaves it
 blank, and never the dish's — as the published menu version froze it for that product — and it is
 taxed at that class's rate on the day the invoice is issued.
@@ -209,7 +209,7 @@ the basket resolved, and decides what is stored:
   list's three and the chosen label's three — and no ids at all, so renaming or deleting a list
   afterwards cannot rewrite a saved order.
 - Each extras pick becomes its own CHILD line (`parent_line_id` set) carrying the picked PRODUCT,
-  that product's three frozen names, the price the offer resolved and the PRODUCT's VAT class (its
+  that product's three frozen names, the price the offer resolved and the PRODUCT's VAT classes, served here and taken away (its
   own, or its parent's where a variant leaves it blank — never the dish's), as the published menu
   version froze it for that product, and taxed at that class's rate on the day the invoice is
   issued.

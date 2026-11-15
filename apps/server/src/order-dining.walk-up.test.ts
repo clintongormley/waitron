@@ -11,8 +11,8 @@ import { seedTakeawayProducts } from "./testing/takeaway-menu.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 
 // A walk-up counter sale is filed in the request that prices it, from the gross lines its pricing
-// answered, so those lines must already carry the class of the way the order is sold (A1522, review
-// focus 1): a €1.80 cola is served here at 10% and taken away at 21%.
+// answered, so those lines must already carry the class of the way the order is sold: a
+// €1.80 cola is served here at 10% and taken away at 21%.
 let venue: BillVenue;
 let counter: ZoneOffers;
 let cola: string;

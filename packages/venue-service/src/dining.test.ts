@@ -201,7 +201,7 @@ describe("resolveOrderDining", () => {
     });
   });
 
-  // Review focus 4: a region without the distinction whose department row says takeaway.
+  // A region without the distinction whose department row says takeaway.
   it.each(["takeaway", "till_choice"] as const)(
     "in a region without takeaway VAT, a %s department sells eaten here",
     async (dining) => {

@@ -72,7 +72,7 @@ const SET_UPS: SetUp[] = [
     locked: "sent",
   },
   {
-    // Review focus 6: a round of later-course dishes gets ticket items and no `sent_at`.
+    // A round of later-course dishes gets ticket items and no `sent_at`.
     name: "a ticket item and no sent_at",
     arrange: (tx, { lineId }) =>
       tx.insert(ticketItems).values({ workingOrderLineId: lineId, stationId }),
