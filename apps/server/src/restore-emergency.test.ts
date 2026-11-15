@@ -6,6 +6,13 @@ import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { stagedHourRestore } from "./testing/staged-hour-restore.js";
+import { observeTimeServiceHourClock } from "@waitron/fiscal-verifactu/src/hour-clock-time-service.js";
+import { timeServiceReader } from "./clock-service-reading.js";
+
+vi.mock("./clock-service-reading.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./clock-service-reading.js")>();
+  return { ...actual, timeServiceReader: vi.fn(() => async () => false) };
+});
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 let f: Awaited<ReturnType<typeof stagedHourRestore>> | undefined;
 afterEach(async () => {
@@ -80,4 +87,34 @@ it("rereads the retained selected-hour binding and refuses a changed event befor
   expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toBe("untouched identity");
   expect(f.journal()).toBe(journal);
   expect(refusal).toMatchObject(expectedRefusal);
+});
+async function withRealObserver<T>(run: () => Promise<T>): Promise<T> {
+  const { observeTimeServiceHourClock: real } = await vi.importActual<
+    typeof import("@waitron/fiscal-verifactu/src/hour-clock-time-service.js")
+  >("@waitron/fiscal-verifactu/src/hour-clock-time-service.js");
+  vi.mocked(observeTimeServiceHourClock).mockImplementation(real);
+  try {
+    return await run();
+  } finally {
+    vi.mocked(observeTimeServiceHourClock).mockReset();
+  }
+}
+it("asks the time-service reader its caller hands it, never the host's own", async () => {
+  f = await stagedHourRestore(suite, "archive", "emergency-offline-restore");
+  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TENANT_A.nodeId);
+  const supplied = vi.fn(async () => true);
+  const hostAsked = vi.mocked(timeServiceReader).mock.results.length;
+  await expect(
+    withRealObserver(() => f!.run(undefined, { timeServiceSynchronised: supplied })),
+  ).resolves.toBe(true);
+  expect(supplied).toHaveBeenCalled();
+  expect(vi.mocked(timeServiceReader).mock.results.length).toBe(hostAsked);
+});
+it("asks the box's host service when its caller hands it no reader", async () => {
+  f = await stagedHourRestore(suite, "archive", "emergency-offline-restore");
+  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TENANT_A.nodeId);
+  const host = vi.fn(async () => true);
+  vi.mocked(timeServiceReader).mockImplementationOnce(() => host);
+  await expect(withRealObserver(() => f!.run())).resolves.toBe(true);
+  expect(host).toHaveBeenCalled();
 });

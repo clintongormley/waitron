@@ -581,7 +581,6 @@ async function runHeld(
         operation,
         secret,
         context,
-        timeServiceSynchronised: deps.timeServiceSynchronised,
       });
     } finally {
       await copy.discard();

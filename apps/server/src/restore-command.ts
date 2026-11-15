@@ -410,12 +410,7 @@ function sourceLiveRefusal(err: AppError, subject: string): string | null {
   return null;
 }
 
-/** The series check's refusals for an unconfirmed time (`clockRefusal`, fiscal-verifactu's `hour-clock.ts`). */
-const CLOCK_REFUSALS = new Set<unknown>([
-  "second_clock_missing",
-  "clock_disagreement",
-  "clock_unconfirmed",
-]);
+const CLOCK_REFUSALS = new Set<unknown>(["second_clock_missing", "clock_unconfirmed"]);
 
 /**
  * The words both paths share. Anything outside the known codes is the fixed `restore failed`, never
@@ -426,11 +421,12 @@ function sharedRefusal(err: unknown): string {
   if (!(err instanceof AppError)) return "restore failed";
   if (err.code === "restore.request_waiting")
     return "restore failed: restore.request_waiting — a restore saved from the setup page is still waiting and this command changed nothing; start the server to run that restore. If it cannot finish, use Retry a normal boot or choose Throw this restore away on the HTTPS recovery page, using an administrator password from the selected backup; after discarding it, run this command again";
+  // The series check could not confirm the box's time (`clockRefusal` in fiscal-verifactu's `hour-clock.ts`, and `hour-selection.ts`'s own refusals).
   if (
     err.code === "sif.allocation_invalid" &&
     CLOCK_REFUSALS.has((err.params as { reason?: unknown }).reason)
   )
-    return "The box could not confirm its time, so it made no invoice series. Let the box keep its time over the internet, or restore from the restore page on a phone or laptop on the venue's network.";
+    return "The box could not confirm its time, so it made no invoice series. Let the box keep its time over the internet and run this command again, or open the restore page on a phone or laptop on the venue's network, which says what is wrong with the box's clock.";
   if (err.code === "promotion.break_glass_invalid")
     return "restore failed: promotion.break_glass_invalid — use the selected backup's server key";
   if (err.code === "provisioning.database_in_use") {
