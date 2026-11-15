@@ -8,7 +8,7 @@ import {
 } from "./line-service-state.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
-import type { OrderAttendance } from "./working-order.js";
+import type { LateUnsentMode, OrderAttendance } from "./working-order.js";
 import {
   and,
   asc,
@@ -93,6 +93,7 @@ import {
   fireableLineColumns,
   fireOrderLines,
   insertTabRound,
+  judgeHeldRelease,
   isReleased,
   priceTabRound,
   routingOnce,
@@ -157,6 +158,8 @@ export interface PartyCommandArgs {
 
 export interface PartyFireArgs extends PartyCommandArgs {
   allergy?: AllergyPatch;
+  /** The request's confirmation that stored courses whose period has ended may go. */
+  lateSend?: LateSendConfirmation;
 }
 
 /** Who fires a group: a person, or a kitchen display nobody is signed in on. */
@@ -525,6 +528,7 @@ export async function fireGroup(
         cfg,
         partyId,
         groupId,
+        { ask: args.lateSend },
         firer,
         {},
         routing,
@@ -629,7 +633,15 @@ export async function fireHeldLine(
         .update(workingOrderLines)
         .set({ groupId })
         .where(or(eq(workingOrderLines.id, lineId), eq(workingOrderLines.parentLineId, lineId)));
-      await fireOrderLines(tx, cfg, line.workingOrderId, [lineId], { heldPaper }, routing);
+      await fireOrderLines(
+        tx,
+        cfg,
+        line.workingOrderId,
+        [lineId],
+        { ask: args.lateSend },
+        { heldPaper },
+        routing,
+      );
       const snapshot =
         attendance === undefined
           ? undefined
@@ -1086,6 +1098,7 @@ export async function releaseHeldWorkOf(
         cfg,
         partyId,
         group.id,
+        "mark",
         { personId: operatorId },
         {},
         routing,
@@ -1122,6 +1135,7 @@ async function releaseGroup(
   cfg: OriginConfig,
   partyId: string,
   groupId: string,
+  late: LateUnsentMode,
   firer: Firer,
   detail: Record<string, unknown>,
   routing = routingOnce(tx, new Date()),
@@ -1140,8 +1154,14 @@ async function releaseGroup(
   const fire = { heldPaper: (await heldPaperStations(tx, [groupId])).get(groupId) ?? new Set() };
   // Every bill in this group must use the same station snapshot at the release instant.
   await routing();
+  await judgeHeldRelease(
+    tx,
+    [...byOrder].map(([orderId, lineIds]) => ({ orderId, lineIds })),
+    late,
+    routing,
+  );
   for (const [orderId, lineIds] of byOrder) {
-    await fireOrderLines(tx, cfg, orderId, lineIds, fire, routing);
+    await fireOrderLines(tx, cfg, orderId, lineIds, late, fire, routing);
   }
   const firstFood = (await nextFireKind(tx, partyId)) === "new_order";
   await tx
@@ -2894,6 +2914,7 @@ export async function groupArrivingDishes(
       cfg,
       billId,
       immediate.map((line) => line.id),
+      "mark",
       undefined,
       routing,
     );

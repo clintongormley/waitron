@@ -362,6 +362,7 @@ describe("A773 waiter request: release", () => {
           venue.cfg,
           venue.party.tabId,
           [requested!.workingOrderLineId, held!.workingOrderLineId],
+          { ask: undefined },
           undefined,
           routingOnce(tx, laterAt),
         );
@@ -394,7 +395,9 @@ describe("A773 waiter request: release", () => {
       );
       expect(requested).toMatchObject({ firedAt: null, passControlled: true });
       await clearPartyAllergyForTest(tx, venue.party.partyId);
-      await fireOrderLines(tx, venue.cfg, venue.party.tabId, [requested!.workingOrderLineId]);
+      await fireOrderLines(tx, venue.cfg, venue.party.tabId, [requested!.workingOrderLineId], {
+        ask: undefined,
+      });
       expect(await ticketItemsWithBill(tx).where(eq(ticketItems.id, requested!.id))).toEqual([
         requested,
       ]);

@@ -615,7 +615,8 @@ describe("set lunch course service", () => {
           (line) => line.productId === venue.products.onionRings,
         )!;
         const [beforeSend] = await tx.select().from(workingOrders).where(eq(workingOrders.id, id));
-        if (path === "line") await fireOrderLines(tx, venue.cfg, id, [choice.id]);
+        if (path === "line")
+          await fireOrderLines(tx, venue.cfg, id, [choice.id], { ask: undefined });
         else
           await fireGroup(tx, venue.cfg, venue.party.partyId, choice.groupId!, {
             operatorId: OPERATOR,

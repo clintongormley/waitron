@@ -3751,6 +3751,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
         cfg,
         id,
         (await fireableLines(tx, id)).map((row) => row.id),
+        { ask: undefined },
       );
       const sentAt = await stamp();
       expect(sentAt).toEqual(expect.any(String));
@@ -3760,6 +3761,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
         cfg,
         id,
         (await fireableLines(tx, id)).map((row) => row.id),
+        { ask: undefined },
       );
       expect(await stamp()).toBe(sentAt);
     });
@@ -5023,6 +5025,7 @@ describe("placeOrder fire ticket items", () => {
         cfg,
         id,
         (await fireableLines(tx, id)).map((row) => row.id),
+        { ask: undefined },
       ),
     );
 
@@ -5072,6 +5075,7 @@ describe("placeOrder fire ticket items", () => {
         cfg,
         id,
         (await fireableLines(tx, id)).map((row) => row.id),
+        { ask: undefined },
       ),
     );
 
@@ -9629,6 +9633,7 @@ async function fireProductLine(
     cfg,
     orderId,
     lines.map((row) => row.id),
+    { ask: undefined },
   );
 }
 
@@ -10747,6 +10752,7 @@ describe("line release on an order with no service context", () => {
         cfg,
         id,
         (await fireableLines(tx, id)).map((row) => row.id),
+        { ask: undefined },
       );
       return { id };
     });

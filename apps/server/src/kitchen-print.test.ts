@@ -654,10 +654,10 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
         .from(ticketItems)
         .where(eq(ticketItems.workingOrderLineId, held!.id));
       expect(beforeRelease!.firedAt).toBeNull();
-      await fireOrderLines(tx, cfg, orderId, [held!.id]);
+      await fireOrderLines(tx, cfg, orderId, [held!.id], { ask: undefined });
       const afterRound2 = await printJobsFor(tx);
       // Releasing an already-fired line matches zero rows.
-      await fireOrderLines(tx, cfg, orderId, [held!.id]);
+      await fireOrderLines(tx, cfg, orderId, [held!.id], { ask: undefined });
       const afterRefire = await printJobsFor(tx);
       return { printerId, afterRound1, afterRound2, afterRefire };
     });
@@ -2268,7 +2268,7 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
         .from(ticketItems)
         .where(eq(ticketItems.workingOrderLineId, held!.id));
       expect(beforeRelease!.firedAt).toBeNull();
-      await fireOrderLines(tx, cfg, orderId, [held!.id]);
+      await fireOrderLines(tx, cfg, orderId, [held!.id], { ask: undefined });
       const beforeReprint = await printJobsFor(tx);
 
       await reprintOrderTickets(tx, cfg, orderId);
@@ -2334,7 +2334,7 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
             eq(workingOrderLines.productId, steak),
           ),
         );
-      await fireOrderLines(tx, cfg, orderId, [held!.id]);
+      await fireOrderLines(tx, cfg, orderId, [held!.id], { ask: undefined });
       const released = (await printJobsFor(tx)).filter((job) => !beforeRelease.has(job.id));
       const beforeReprint = new Set((await printJobsFor(tx)).map((job) => job.id));
       await reprintOrderTickets(tx, cfg, orderId);
