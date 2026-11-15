@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { URL, fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
@@ -136,7 +136,10 @@ describe("the shared node bundle command", () => {
       bundle([{ entry: "entry.ts", outfile }], {
         run: () => writeFileSync(`${outfile}.meta.json`, JSON.stringify({ inputs: { [lit]: {} } })),
       });
-      expect(readFileSync(`${outfile}.NOTICES.txt`, "utf8")).toContain("lit 3.3.3");
+      const { version } = JSON.parse(readFileSync(join(dirname(lit), "package.json"), "utf8"));
+      expect(readFileSync(`${outfile}.NOTICES.txt`, "utf8")).toContain(
+        `===== lit ${version} — LICENSE =====`,
+      );
       expect(existsSync(`${outfile}.meta.json`)).toBe(false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
