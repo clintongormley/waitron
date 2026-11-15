@@ -328,7 +328,6 @@ async function seed() {
   ]);
   await suite.db.insert(deviceMadeHereStations).values([
     { deviceId: barTill, stationId: grill },
-    { deviceId: barTill, stationId: bar },
     { deviceId: pass, stationId: grill },
   ]);
   await suite.db.insert(deviceApprovedProfiles).values([
@@ -626,8 +625,9 @@ describe("the device delete impact", () => {
     await inTx((tx) => readDeviceDeleteImpact(tx, s.cfg, s.barTill));
     await signIn(s.barTill);
     await suite.db
-      .insert(deviceMadeHereStations)
-      .values({ deviceId: s.barTill, stationId: s.fryer });
+      .update(deviceMadeHereStations)
+      .set({ stationId: s.fryer })
+      .where(eq(deviceMadeHereStations.deviceId, s.barTill));
     const before = await snapshot();
 
     const impact = await inTx((tx) => deleteDevice(tx, s.cfg, s.barTill));

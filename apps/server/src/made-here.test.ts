@@ -548,30 +548,64 @@ describe("device made-here stations", () => {
       expect(await tx.select({ id: printJobs.id }).from(printJobs)).toHaveLength(before.length);
     });
   });
-  it("replaces and deduplicates a device's list, ordered by station id", async () => {
+  it("replaces one station, refuses several without losing it, and clears to Nowhere", async () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const [profile] = await seedDeviceProfiles(tx, {
-        name: "Till",
-        formFactor: "till",
-        capabilities: [],
-      });
-      const device = {
-        id: (await seedDevice(tx, { profileId: profile!.id, label: "Counter" })).deviceId,
-      };
+      const deviceId = await deviceAt(tx, venue.defaultStationId);
       const bar = await createStation(tx, { name: "Bar" });
-      await setMadeHereStations(tx, device!.id, [bar.id, venue.defaultStationId, bar.id]);
-      expect(await readMadeHereStations(tx, device!.id)).toEqual(
-        new Set([bar.id, venue.defaultStationId]),
-      );
-      expect((await listMadeHereStations(tx)).get(device!.id)).toEqual(
-        [bar.id, venue.defaultStationId].sort(),
-      );
-      await setMadeHereStations(tx, device!.id, [bar.id]);
-      expect(await readMadeHereStations(tx, device!.id)).toEqual(new Set([bar.id]));
+      await expect(
+        setMadeHereStations(tx, deviceId, [bar.id, venue.defaultStationId]),
+      ).rejects.toMatchObject({
+        code: "management.request_invalid",
+        params: { field: "madeHereStationIds" },
+      });
+      expect(await readMadeHereStations(tx, deviceId)).toEqual(new Set([venue.defaultStationId]));
+      await setMadeHereStations(tx, deviceId, [bar.id]);
+      expect(await readMadeHereStations(tx, deviceId)).toEqual(new Set([bar.id]));
+      expect((await listMadeHereStations(tx)).get(deviceId)).toEqual([bar.id]);
+      await setMadeHereStations(tx, deviceId, []);
+      expect(await readMadeHereStations(tx, deviceId)).toEqual(new Set());
+      expect((await listMadeHereStations(tx)).has(deviceId)).toBe(false);
       expect(await readMadeHereStations(tx, undefined)).toEqual(new Set());
     });
   });
+
+  it.each(["phone-portrait", "kds"] as const)(
+    "a saved station on a %s profile does not suppress kitchen output",
+    async (formFactor) => {
+      const venue = await setupVenue(suite.db);
+      await withTransaction(suite.db, async (tx) => {
+        const [profile] = await seedDeviceProfiles(tx, {
+          name: "Portable",
+          formFactor,
+          capabilities: [],
+        });
+        const { deviceId } = await seedDevice(tx, { profileId: profile!.id, label: "Device" });
+        await tx
+          .insert(deviceMadeHereStations)
+          .values({ deviceId, stationId: venue.defaultStationId });
+        const printerId = await stationPrinter(tx, venue.defaultStationId);
+        const orderId = randomUUID();
+        await createOpenOrder(tx, venue.cfg, orderId, [], null);
+        const drink = await rawLine(tx, orderId, venue.coffeeId, 1);
+        await fireLines(tx, { ...venue.cfg, sendingDeviceId: deviceId }, orderId, [drink]);
+        expect(await readMadeHereStations(tx, deviceId)).toEqual(new Set());
+        expect((await listMadeHereStations(tx)).has(deviceId)).toBe(false);
+        const [item] = await tx
+          .select()
+          .from(ticketItems)
+          .where(eq(ticketItems.workingOrderLineId, drink.id));
+        expect(item).toMatchObject({
+          stationId: venue.defaultStationId,
+          madeHere: false,
+          state: "queued",
+        });
+        expect(
+          await tx.select().from(printJobs).where(eq(printJobs.printerId, printerId)),
+        ).toHaveLength(1);
+      });
+    },
+  );
 
   it("refuses switched-off stations with station.not_found", async () => {
     const venue = await setupVenue(suite.db);
@@ -606,9 +640,11 @@ describe("device made-here stations", () => {
         { id: (await seedDevice(tx, { profileId: profile!.id, label: "A" })).deviceId },
         { id: (await seedDevice(tx, { profileId: profile!.id, label: "B" })).deviceId },
       ];
+      const bar = await createStation(tx, { name: "Other bar" });
+      await setMadeHereStations(tx, b!.id, [bar.id]);
       await setMadeHereStations(tx, a!.id, [venue.defaultStationId]);
       expect(await readMadeHereStations(tx, a!.id)).toEqual(new Set([venue.defaultStationId]));
-      expect(await readMadeHereStations(tx, b!.id)).toEqual(new Set());
+      expect(await readMadeHereStations(tx, b!.id)).toEqual(new Set([bar.id]));
     });
   });
 });
