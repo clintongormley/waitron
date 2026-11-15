@@ -202,11 +202,13 @@ setup retries and execution limits remain unchanged.
 When configured, the route command first reads `DISPOSABLE_TESTS_CAPACITY` using the repository secret
 `DISPOSABLE_CAPACITY_READ_TOKEN`. Only that bounded read uses this credential; queue and health
 inventories keep the existing workflow token. A missing or empty secret, a failed read or an
-invalid capacity value retains the snapshot supplied when the run was created. When routing consults capacity, console and summary
+invalid capacity value retains the snapshot supplied when the run was created. When routing consults
+capacity, console and summary
 distinguish `fresh`, `snapshot (no read token)` and `snapshot (fresh read failed)`.
 Create the repository-only token with Variables read access and renew it every 90 days;
 trusted same-repository workflow code can access this credential.
-If the source says `snapshot (fresh read failed)`, check the API error and renew an expired token.
+If the source says `snapshot (fresh read failed)`, inspect the job log and stored capacity value;
+renew an expired token.
 
 | Source | Source words | Use here |
 | --- | --- | --- |
