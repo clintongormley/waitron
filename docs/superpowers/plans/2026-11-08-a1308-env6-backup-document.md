@@ -54,7 +54,8 @@ sending or hashed value is touched.
 > current field list. The archive reader refuses the old `{ settings }` shape as
 > `server.credential_unusable`; the stream reader refuses sealed keys without a stream part with
 > that same code. Backups shows its existing unreadable-settings state until the choices are saved
-> again. No conversion is added.
+> again. The same unusable-credential path can refuse a restore's source check or keep its first
+> start waiting. Before go-live, installations with these records may be reset. No conversion is added.
 
 **No venue reset:** no starting migration changes. A box that saved backup or bucket-copy settings
 before this lands holds sealed payloads in the old shape, which the narrowed purposes refuse

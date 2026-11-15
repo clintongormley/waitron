@@ -1579,11 +1579,11 @@ The owner's four answers: no reserved
   reads was not measured.
 
 - **A stored bucket-copy record is not re-checked for a user name, password, query or fragment in
-  its address (A1391 plan D1; the lane's decision of 2026-11-07, open to the owner).** Every save
-  path but one refuses one (`readBucketConfig`, `packages/stream/src/bucket-config.ts`). The
-  exception, `waitron-credentials set`, checks only that each named field is non-empty text, and
-  the stored record is read field by field (`readStreamSettingsIn`, `apps/server/src/stream-host.ts`),
-  so a record it wrote is sent back by `GET /api/backup/stream` as stored.
+  its address (A1391 plan D1; the lane's decision of 2026-11-07, open to the owner).** Save through
+  Backups, whose PUT checks the address with `readBucketConfig`
+  (`packages/stream/src/bucket-config.ts`). **2026-11-15, env6:** the credentials tool now refuses
+  `backup.stream` changes, retiring the former CLI exception. The address is in the `backup`
+  settings document; only its two access keys stay sealed.
 
 - **Every start deletes a cut-off backup run's leftovers in backup staging, whatever the free space
   (A978, owner 2026-10-21).** A backup run stages a plaintext copy of the whole venue database and

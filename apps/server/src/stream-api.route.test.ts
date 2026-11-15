@@ -7,6 +7,7 @@ import { eq, sql } from "drizzle-orm";
 import {
   readActivityForSubject,
   readSettings,
+  saveSettings,
   saveVenueFields,
   readStreamId,
   nodes,
@@ -713,9 +714,18 @@ describe("stream settings routes", () => {
     expect(key.value).toBe("recovery-key-one-strong");
   });
 
-  it("keeps Change and Turn off available when stored bucket settings lack a field", async () => {
+  it.each(["endpoint", "stream"])("repairs or removes missing %s", async (field) => {
     await withTransaction(suite.db, (tx) => writeStreamSettings(tx, RING, BUCKET, null));
-    await omitStoredStreamField(suite.db, RING, "endpoint");
+    if (field === "endpoint") await omitStoredStreamField(suite.db, RING, "endpoint");
+    else
+      await withTransaction(suite.db, async (tx) => {
+        const saved = await readSettings(tx, BACKUP_SETTINGS);
+        await saveSettings(tx, BACKUP_SETTINGS, {
+          doc: { ...saved.doc, stream: null },
+          expectedRevision: saved.revision,
+          personId: null,
+        });
+      });
     const { app } = harness();
     const cookie = await login(app);
     const broken = await app.request("/api/backup/stream", { headers: { cookie } });
