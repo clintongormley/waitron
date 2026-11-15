@@ -392,7 +392,6 @@ la mesa en **Nuevo pedido** antes de enviarlos. En el mostrador, el envío march
 El paso **¿Postre?** te recuerda visitar la mesa; puedes marchar los postres ya pedidos
 sin marcar ese paso como hecho.
 
-
 Pide los platos en espera desde el pedido de la mesa. Las colas de las estaciones y el pase muestran los pases
 y grupos en espera sin botón Marchar. En las colas de las estaciones, los platos en espera se muestran
 atenuados y no avanzan al tocarlos; en el pase, una tarjeta con todos sus platos en espera está bajo

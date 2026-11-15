@@ -358,7 +358,6 @@ sending them. At the counter, sending fires all the dishes together.
 The **Dessert?** service step reminds you to visit the table; you can fire preordered desserts
 without marking that step Done.
 
-
 Request held food from the table's order screen. Station queues and the pass show held courses and groups
 without a Fire button. On a station queue, held dishes stay dimmed and cannot be advanced by
 tapping them; on the pass, a card whose dishes are all held sits under **Held** at the bottom of
