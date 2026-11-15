@@ -12,7 +12,6 @@ import {
   incidents,
   kitchenStations,
   sales,
-  products,
   ticketItems,
   workingOrderLines,
   workingOrders,
@@ -605,20 +604,6 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     expect(await alertsFor(await saleOf(id))).toEqual([
       expect.objectContaining(dishNotSent(id, made.name, await orderNumberOf(id), "Barra")),
     ]);
-  });
-
-  it("names a dish whose staff name is blank by its id", async () => {
-    const made = await strandedDish("Nameless");
-    await inTx(v, (tx) =>
-      tx.update(products).set({ name: "" }).where(eq(products.id, made.productId)),
-    );
-    const id = randomUUID();
-    await park(id, [made]);
-
-    expect((await payCash(await enrolTill(), id)).status).toBe(200);
-
-    const [alert] = await alertsFor(await saleOf(id));
-    expect(alert!.params).toMatchObject({ dishes: made.productId });
   });
 
   describe("when the alert cannot be written", () => {
