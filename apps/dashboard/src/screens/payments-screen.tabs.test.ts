@@ -61,3 +61,43 @@ describe("Card payments reader tools", () => {
     },
   );
 });
+
+const readerReads = ["listPaymentProviders", "listReaders", "listReaderHolders", "readerStatus"] as const;
+const recoveryReads = [
+  "listStuckPayments",
+  "listStuckBillPayments",
+  "listStuckTenderRefunds",
+  "listStuckBillRefunds",
+  "listAbandonedRefunds",
+  "listHeldPayments",
+] as const;
+
+it.each(["readers", "checks"] as const)(
+  "loads only the initial reads owned by the %s page",
+  async (surface) => {
+    const client = api();
+    const { el } = await mountWidget<PaymentsScreen>("dashboard-payments-screen", {
+      api: client,
+      panels: [],
+      surface,
+    });
+    const allowed = surface === "readers" ? readerReads : recoveryReads;
+    const excluded = surface === "readers" ? recoveryReads : readerReads;
+    await vi.waitFor(() => {
+      for (const name of allowed) expect(client[name]).toHaveBeenCalledTimes(1);
+    });
+    await Promise.all(allowed.map((name) => vi.mocked(client[name]).mock.results[0]!.value));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    for (const name of excluded) expect(client[name]).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("h1")?.textContent?.trim()).toBe(
+      surface === "checks" ? "Check card payments" : "Card payments",
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=readers-section]") !== null).toBe(
+      surface === "readers",
+    );
+    expect(el.shadowRoot!.querySelector("wt-button[aria-expanded]") !== null).toBe(
+      surface === "checks",
+    );
+  },
+);
