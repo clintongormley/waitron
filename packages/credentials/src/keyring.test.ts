@@ -220,6 +220,7 @@ describe("singleLineKeyRingVariables", () => {
         WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: " 03\t",
       },
     ],
+    ["an empty version", { WAITRON_CREDENTIALS_KEY: K1, WAITRON_CREDENTIALS_KEY_VERSION: "" }],
     [
       "a version of spaces only",
       { WAITRON_CREDENTIALS_KEY: K1, WAITRON_CREDENTIALS_KEY_VERSION: " \n" },

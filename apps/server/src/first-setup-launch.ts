@@ -23,7 +23,8 @@ export async function startServerOrFirstSetupResolution(
   env: NodeJS.ProcessEnv,
   // Empty for `bin.ts`, the dev stack's entry: `dev-server.mjs` loads `secrets.env` into the
   // process environment, so passing that here would count the file's own vault key as an
-  // environment key and refuse a spare join.
+  // environment key and refuse a spare join. A vault key the developer's shell exports still
+  // reaches a trading start, which reads `env`, but not setup, which reads `base`.
   base: NodeJS.ProcessEnv = {},
   seams: {
     startServer?: (
