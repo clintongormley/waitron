@@ -148,15 +148,15 @@ interface Lunch {
   flanId: string;
 }
 
+beforeEach(async () => {
+  await seedPerson(suite.db, { id: "manager-ana", displayName: "Test manager-ana" });
+});
+
 /**
  * A provisioned venue whose counter zone sells "Lunch": Lemonade (3.00, with an extras list
  * offering Extra lemon at 0.50), Burger (9.00, answering "Punto") and, in its own section, Flan.
  * Lunch is NOT published; `publish` does that.
  */
-beforeEach(async () => {
-  await seedPerson(suite.db, { id: "manager-ana", displayName: "Test manager-ana" });
-});
-
 async function setupLunch(): Promise<Lunch> {
   const venue = await applyVenue(
     planVenue(
