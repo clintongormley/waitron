@@ -336,7 +336,12 @@ export class ModulesScreen extends LitElement {
       (provider) => provider.providerId === row.id && provider.state === "connected",
     );
     if (!panel && !connected) return nothing;
-    return html`<wt-row-actions label=${this.#name(row)}>
+    return html`<wt-row-actions
+      label=${this.#name(row)}
+      @click=${(event: Event) => {
+        if (event.target === event.currentTarget) this.armedDisconnectId = null;
+      }}
+    >
       ${panel ? html`<wt-button data-test=${`configure-${row.id}`} @click=${(event: Event) => this.#configure(row, event)}>${text("modules.configure")}</wt-button>` : nothing}
       ${
         panel &&
@@ -382,6 +387,8 @@ export class ModulesScreen extends LitElement {
     </wt-row-actions>`;
   }
   override render() {
+    const error =
+      this.disconnectError || this.menuError || this.providersError || this.readersError;
     const editor = this.editor;
     const panel =
       editor?.category === "card-provider"
@@ -420,7 +427,7 @@ export class ModulesScreen extends LitElement {
           @wt-change=${(event: CustomEvent<{ value: string }>) => this.#filters(this.category, event.detail.value)}
         ></wt-combobox>
       </div>
-      ${this.disconnectError || this.menuError || this.providersError || this.readersError ? html`<p class="error" role="alert">${codeMessage(this.disconnectError || this.menuError || this.providersError || this.readersError)} <wt-button data-test="retry-modules" variant="secondary" @click=${() => void this.#load()}>${text("modules.retry")}</wt-button></p>` : nothing}
+      ${error ? html`<p class="error" role="alert">${codeMessage(error)} ${!this.disconnectError ? html`<wt-button data-test="retry-modules" variant="secondary" @click=${() => void this.#load()}>${text("modules.retry")}</wt-button>` : nothing}</p>` : nothing}
       ${rows ? html`<wt-data-table aria-label=${text("nav.modules")} searchable searchLabel=${text("modules.search")} .emptyMessage=${tableNoMatches()} noMatchesMessage=${tableNoMatches()} .rows=${rows} .columns=${this.#columns()} .rowKey=${(row: ModuleRow) => `${row.category}:${row.id}`} .wrapToFit=${true}></wt-data-table>` : html`<p>${text("modules.loading")}</p>`}
       <p><a href=${guideHref("modules.set-up")}>${text("modules.guide")}</a></p>
       ${

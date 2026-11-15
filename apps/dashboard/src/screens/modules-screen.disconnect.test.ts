@@ -61,6 +61,7 @@ const tableRoot = (el: ModulesScreen) => el.shadowRoot!.querySelector("wt-data-t
 const button = (el: ModulesScreen) =>
   tableRoot(el)!.querySelector<HTMLElement>("[data-test=disconnect-acme]")!;
 async function press(el: ModulesScreen) {
+  await vi.waitFor(() => expect(button(el).hasAttribute("disabled")).toBe(false));
   button(el).click();
   await el.updateComplete;
 }
@@ -79,7 +80,7 @@ afterEach(() => {
 
 describe("Disconnect precheck and confirmation", () => {
   it.each(["en", "es-ES"])(
-    "refuses an offline active reader locally beside its button without moving the page (%s)",
+    "refuses an active reader locally beside its button without moving the page (%s)",
     async (locale) => {
       setLocale(locale);
       const api = client([reader]);
@@ -214,6 +215,7 @@ it.each([true, false])(
       ),
     );
     expect(api.disconnectPaymentProvider).toHaveBeenCalledWith("acme");
+    expect(el.shadowRoot!.querySelector("[data-test=retry-modules]")).toBeNull();
     if (!firstFailed) {
       list.mockRejectedValueOnce({ code: "server.internal" });
       api.liveData.refresh();
@@ -256,3 +258,33 @@ it.each(["light", "dark"] as const)(
     await expectNoA11yViolations(menu);
   },
 );
+
+it("cancels a pending confirmation when the menu is closed and reopened", async () => {
+  const api = client([]);
+  const el = await mount(api);
+  const menu = button(el).closest("wt-row-actions")!;
+  await userEvent.click(button(el));
+  expect(button(el).textContent).toBe(t("payments.disconnect_confirm"));
+  await userEvent.keyboard("{Escape}");
+  expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
+  await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+  expect(button(el).textContent).toBe(t("payments.disconnect"));
+  await userEvent.click(button(el));
+  expect(button(el).textContent).toBe(t("payments.disconnect_confirm"));
+  expect(api.disconnectPaymentProvider).not.toHaveBeenCalled();
+});
+
+it("cancels a pending confirmation when Retry reloads a failed read", async () => {
+  const api = client([]);
+  const el = await mount(api);
+  vi.mocked(api.listModules).mockRejectedValueOnce({ code: "connection.failed" });
+  api.liveData.refresh();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=retry-modules]")).not.toBeNull(),
+  );
+  await press(el);
+  expect(button(el).textContent).toBe(t("payments.disconnect_confirm"));
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=retry-modules]")!.click();
+  await vi.waitFor(() => expect(button(el).textContent).toBe(t("payments.disconnect")));
+  expect(api.disconnectPaymentProvider).not.toHaveBeenCalled();
+});

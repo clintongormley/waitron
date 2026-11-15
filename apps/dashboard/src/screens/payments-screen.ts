@@ -825,20 +825,6 @@ export class PaymentsScreen extends LitElement {
     if (version === this.#statusVersion) this.refreshing = false;
   }
 
-  async #mutate(action: () => Promise<unknown>): Promise<void> {
-    if (this.busy) return;
-    this.busy = true;
-    this.#showError(null);
-    try {
-      await action();
-      await this.#load();
-    } catch (error) {
-      this.#showError(codeOf(error));
-    } finally {
-      this.busy = false;
-    }
-  }
-
   async #onAddReader(providerId: string): Promise<void> {
     this.#disposeDiscoveryDrafts();
     this.#readerOperation = undefined;
