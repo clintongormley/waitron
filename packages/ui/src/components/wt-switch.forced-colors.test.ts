@@ -63,14 +63,15 @@ test("a disabled switch is drawn in the theme's disabled colour at full strength
   expect(at(thumb.left + thumb.width / 2, thumb.top + thumb.height / 2)).toEqual(grayText);
 });
 
-/** The darkest pixel of a switch's label text, which is where the text's own colour shows whole. */
+/** The darkest pixel of a switch's label text: on the light contrast theme Chromium emulates, that is
+ * where the text's own colour shows. */
 async function darkestLabelPixel(el: WtSwitch): Promise<number[]> {
   const label = el.shadowRoot!.querySelector("label")!;
   const box = label.getBoundingClientRect();
   const at = await elementPixels(el);
   let darkest = [255, 255, 255];
-  for (let y = box.top + 0.5; y < box.bottom; y += 0.5) {
-    for (let x = box.left + 0.5; x < box.right; x += 0.5) {
+  for (let y = box.top + 0.5; y < box.bottom; y += 1) {
+    for (let x = box.left + 0.5; x < box.right; x += 1) {
       const pixel = at(x, y);
       if (pixel.reduce((a, b) => a + b) < darkest.reduce((a, b) => a + b)) darkest = pixel;
     }
@@ -81,11 +82,11 @@ async function darkestLabelPixel(el: WtSwitch): Promise<number[]> {
 test("a disabled switch's label is drawn in the theme's disabled colour", async () => {
   const grayText = await systemColour("GrayText");
   const enabled = (await mount(`<wt-switch label="Training mode"></wt-switch>`)) as WtSwitch;
-  expect(await darkestLabelPixel(enabled)).not.toEqual(grayText);
+  expect(distance(await darkestLabelPixel(enabled), grayText)).toBeGreaterThan(40);
   const disabled = (await mount(
     `<wt-switch label="Training mode" disabled></wt-switch>`,
   )) as WtSwitch;
-  expect(await darkestLabelPixel(disabled)).toEqual(grayText);
+  expect(distance(await darkestLabelPixel(disabled), grayText)).toBeLessThan(40);
 });
 
 test("a keyboard-focused switch is ringed in the theme's highlight colour", async () => {

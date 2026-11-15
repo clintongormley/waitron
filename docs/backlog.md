@@ -1356,8 +1356,9 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   `wt-data-table` cell callbacks looks feasible; nobody has tried to write it. Left open by product
   categories (#340).
 
-- **Under a Windows contrast theme, most primitives still lose their edges and state marks** (size
-  M). [Detail](backlog/dashboard.md#contrast-theme-styles-for-the-remaining-primitives)
+- **Contrast-theme styles for the remaining primitives** (size M). Under a Windows contrast theme
+  most primitives still lose their edges and state marks.
+  [Detail](backlog/dashboard.md#contrast-theme-styles-for-the-remaining-primitives)
 
 - **Other browser check** (bundle of 4, size S). [Detail](backlog/dashboard.md#bundle-other-browser-check)
 

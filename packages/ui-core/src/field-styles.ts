@@ -177,7 +177,7 @@ export const fieldStyles = css`
       outline: var(--wt-field-line-width-active) solid Highlight;
       outline-offset: calc(-1 * var(--wt-field-line-width-active));
     }
-    /* Above the outline's band, which would otherwise make a focused valid edge as thick. */
+    /* Lifted above the focus outline's bottom band, which would otherwise cover it. */
     .field[data-invalid]:focus-within::after {
       bottom: var(--wt-field-line-width-active);
     }

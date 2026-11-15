@@ -2590,8 +2590,8 @@ leave in the brand colour. Three do so today:
   field's line sits just above the outline's bottom band, so it still reads thicker than a focused
   valid field's;
 - `wt-switch` outlines its track and fills its thumb; ON fills the track in `Highlight` with a
-  `HighlightText` thumb at the far end; a disabled switch's track, thumb and label are drawn in
-  `GrayText` at full strength rather than faded; and a keyboard-focused switch is ringed in
+  `HighlightText` thumb at the far end; a disabled switch, label included, is drawn in `GrayText` at
+  full strength rather than faded, except that an ON switch's thumb stays `HighlightText`; and a keyboard-focused switch is ringed in
   `Highlight`;
 - `wt-tabs` underlines only the selected tab, in `Highlight`.
 
