@@ -272,3 +272,53 @@ function partsRepriced(line: OrderLine, adopted: OrderLine, lineNo: number): Cha
     )
     .map((part) => ({ lineNo, ...part, units }));
 }
+
+export function refreshProductDeclarations(
+  product: TillProduct,
+  liveProducts: readonly TillProduct[],
+): TillProduct {
+  const live = liveProducts.find(
+    (candidate) => (candidate.productId ?? candidate.id) === (product.productId ?? product.id),
+  );
+  if (live === undefined) return product;
+  const own =
+    product.variantId === undefined || product.variantId === live.variantId
+      ? live
+      : live.variants?.find((variant) => variant.id === product.variantId);
+  const declarations = (
+    source: Pick<TillProduct, "allergens" | "diet" | "dietOverride" | "dietaryDeclarations">,
+  ) => ({
+    allergens: source.allergens,
+    diet: source.diet,
+    dietOverride: source.dietOverride,
+    dietaryDeclarations: source.dietaryDeclarations,
+  });
+  const modifiers = <T extends NonNullable<TillProduct["offeredModifiers"]>[number]>(
+    entries: T[] | undefined,
+  ): T[] | undefined =>
+    entries?.map((entry) =>
+      entry.kind !== "extras"
+        ? entry
+        : {
+            ...entry,
+            items: entry.items.map((item) => {
+              const current = (live.modifierAvailability ?? live.offeredModifiers)
+                ?.flatMap((list) => (list.kind === "extras" ? list.items : []))
+                .find((candidate) => candidate.productId === item.productId);
+              return current === undefined
+                ? item
+                : { ...item, addAllergens: current.addAllergens, suitableFor: current.suitableFor };
+            }),
+          },
+    );
+  return {
+    ...product,
+    ...(own === undefined ? {} : declarations(own)),
+    variants: product.variants?.map((variant) => {
+      const current = live.variants?.find((candidate) => candidate.id === variant.id);
+      return current === undefined ? variant : { ...variant, ...declarations(current) };
+    }),
+    offeredModifiers: modifiers(product.offeredModifiers),
+    modifierAvailability: modifiers(product.modifierAvailability),
+  };
+}

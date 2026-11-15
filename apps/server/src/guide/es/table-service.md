@@ -421,6 +421,9 @@ elegir cuántos platos de una fila pasan a otra cuenta, cada uno con sus extras.
 detalles de la fila, cambia todos los platos de la fila y permite aumentar la cantidad.
 Para reducirla, usa **Cancelar…**.
 
+Los alérgenos y las etiquetas dietéticas se actualizan desde el producto mientras mantienes el
+pedido abierto. No necesitas publicar la carta ni guardar el pedido.
+
 Para consultar los alérgenos y las etiquetas dietéticas de un plato enviado, abre sus detalles y
 lee **Registrado al enviar**. Un plato en espera sigue mostrando su declaración actual hasta que
 lo liberas.

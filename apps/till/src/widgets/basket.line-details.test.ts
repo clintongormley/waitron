@@ -384,6 +384,10 @@ it.each([
         ],
       },
     });
+    store.refreshDeclarations([
+      { ...dish, allergens: { sesame: {} }, dietaryDeclarations: ["halal"] },
+    ]);
+    await el.updateComplete;
     expect(el.shadowRoot!.querySelector(".extra-allergens")?.textContent?.trim()).toBe("Eggs");
     el.nutritionLines = el.storedLines;
     el.storedLines = null;
@@ -402,3 +406,26 @@ it.each([
     }
   },
 );
+
+it("refreshes an open variant line's declaration while retaining staged edits", async () => {
+  const { el, line, store } = await opening();
+  line.product = { ...line.product, variantId: "small" };
+  el.openLineDetails(line);
+  await el.updateComplete;
+  const picker = pickerOf(el)!;
+  await picker.updateComplete;
+  picker
+    .shadowRoot!.querySelector<WtTextarea>("wt-textarea")!
+    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Staged note" } }));
+  const dirty = store.dirty;
+  const savedProduct = line.product;
+  line.product = { ...savedProduct, allergens: { sesame: {} }, dietaryDeclarations: ["halal"] };
+  store.emit("changed");
+  await el.updateComplete;
+  await picker.updateComplete;
+  expect(picker.product.allergens).toEqual({ sesame: {} });
+  expect(pickerOf(el)).toBe(picker);
+  expect(picker.shadowRoot!.querySelector<WtTextarea>("wt-textarea")!.value).toBe("Staged note");
+  expect(line.note).toBe("No salt");
+  expect(store.dirty).toBe(dirty);
+});

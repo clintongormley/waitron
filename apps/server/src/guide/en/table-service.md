@@ -397,6 +397,9 @@ its own extras. **Comp** and **Void** work on the row and let you choose how man
 **Change dish**, in the row's details, changes every dish of the row and lets you increase its
 count. To reduce the count, use **Void…**, which opens **Cancel item**.
 
+Allergens and diet labels update from the live product while you keep the order open. You do not
+need to publish the menu or save the order.
+
 To check a sent dish's allergens and diet labels, open its details and read **Recorded when
 sent**. A dish on hold still shows its current declaration until you release it.
 

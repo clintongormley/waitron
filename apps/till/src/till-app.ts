@@ -6530,6 +6530,7 @@ export class TillApp extends LitElement {
         : zoneOffers.defaultMenuId;
     this.counterService = loaded ? zoneOffers.service : null;
     this.counterDepartmentName = loaded ? (zoneOffers.context?.departmentName ?? "") : "";
+    if (loaded) this.#store.refreshDeclarations(this.#counterOffers.products());
     this.#showCounterOffers();
   }
 
@@ -6594,6 +6595,8 @@ export class TillApp extends LitElement {
           ...rebuildReturned(sync.store.lines, byId, versions),
         ]),
       );
+    sync?.store.refreshDeclarations(this.#tableOffers.products());
+    for (const round of this.#markedRounds) round.refreshDeclarations(this.#tableOffers.products());
     this.#markRounds(true);
     this.#markDraft(true);
   }

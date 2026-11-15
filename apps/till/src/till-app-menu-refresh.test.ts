@@ -2857,3 +2857,60 @@ it("hides availability actions without take-orders", async () => {
   await info.updateComplete;
   expect(info.shadowRoot!.querySelector("[data-availability]")).toBeNull();
 });
+
+it.each(["counter", "table", "held"] as const)(
+  "refreshes same-version declarations in the open %s without editing its lines",
+  async (kind) => {
+    const { el } = await mountApp(kind === "table" ? tableStubs() : {});
+    if (kind === "table") await toTable(el);
+    else await toCounter(el);
+    const screen = () => (kind === "table" ? tableScreen(el) : counter(el));
+    const shown = screen().shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!;
+    const store = shown.store;
+    store.addProduct(
+      shown.products.find((product) => product.productId === "Lemonade")!,
+      "1",
+      { note: "Keep cold" },
+    );
+    await flush(el);
+    if (kind === "table") await vi.waitFor(() => expect(api.saveDraft).toHaveBeenCalled());
+    if (kind === "held") {
+      const line = store.lines[0]!;
+      store.loadFrom("held-order", [{ ...line, workingOrderLineId: "held-line" }], "Lunch", 7);
+    }
+    const line = store.lines[0]!;
+    const product = { ...line.product };
+    const last = store.lastAdded;
+    const dirty = store.dirty;
+    const saves = api.saveDraft?.mock.calls.length ?? 0;
+    const updateWorkingOrder = vi.fn();
+    api.updateWorkingOrder = updateWorkingOrder;
+    const changed = menu("v1", [
+      offer("offer-lemonade", "Lemonade", "99.00", {
+        name: "Renamed",
+        allergens: { eggs: {} },
+        dietaryDeclarations: ["halal"],
+        diet: { vegan: "no", vegetarian: "yes", contains: [] },
+      }),
+      burgerOffer(),
+    ]);
+    api.listZoneOffers.mockResolvedValue({ ...changed, liveFields: "changed" });
+    api.menuState.mockResolvedValue({ ...menuState("v1"), liveFields: "changed" });
+    await poll(el);
+    expect(store.lines[0]).toBe(line);
+    expect(line.product).toMatchObject({
+      ...product,
+      allergens: { eggs: {} },
+      dietaryDeclarations: ["halal"],
+      diet: { vegan: "no", vegetarian: "yes", contains: [] },
+    });
+    expect(line.note).toBe("Keep cold");
+    expect(store.lastAdded).toBe(last);
+    expect(store.dirty).toBe(dirty);
+    expect(store.total).toBe("3.00");
+    expect(dialog(el)).toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 30));
+    expect(api.saveDraft?.mock.calls.length ?? 0).toBe(saves);
+    expect(updateWorkingOrder).not.toHaveBeenCalled();
+  },
+);

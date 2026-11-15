@@ -420,3 +420,67 @@ it.each(["tap", "keyboard"])(
     expect(store.lines).toHaveLength(0);
   },
 );
+
+it("refreshes an open choice without replacing its staged selection or prices", async () => {
+  const { el, button, store } = await mount({
+    ...dish,
+    variants: [
+      {
+        ...sellingValuesOf(dish),
+        id: "small",
+        name: "Small",
+        unitPrice: "2.00",
+        unitPriceDifference: "-1.00",
+        available: true,
+      },
+    ],
+  });
+  await userEvent.click(button);
+  await el.updateComplete;
+  const picker = el.shadowRoot!.querySelector("till-modifier-picker")!;
+  await picker.updateComplete;
+  const choice = picker.shadowRoot!.querySelector<HTMLInputElement>(
+    'input[name="product-variant"]',
+  )!;
+  await userEvent.click(choice);
+  el.unfilteredProducts = [
+    {
+      ...el.products[0]!,
+      unitPrice: "99.00",
+      variants: [
+        {
+          ...el.products[0]!.variants![0]!,
+          unitPrice: "98.00",
+          allergens: { sesame: {} },
+          dietaryDeclarations: ["halal"],
+        },
+      ],
+    },
+  ];
+  el.products = [];
+  await el.updateComplete;
+  await picker.updateComplete;
+  expect(el.shadowRoot!.querySelector("till-modifier-picker")).toBe(picker);
+  expect(picker.product.variants![0]!.allergens).toEqual({ sesame: {} });
+  expect(picker.product.variants![0]!.unitPrice).toBe("2.00");
+  expect(choice.checked).toBe(true);
+  expect(store.lines).toHaveLength(0);
+});
+
+it("updates the open information window from the current product declarations", async () => {
+  const { el, button, store } = await mount();
+  button.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  const opened = info(el)!;
+  await (opened as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+  expect(opened.shadowRoot!.textContent).toContain("Milk");
+  el.products = [{ ...dish, allergens: { sesame: {} }, dietaryDeclarations: ["halal"] }];
+  await el.updateComplete;
+  await (opened as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+  expect(info(el)).toBe(opened);
+  expect(opened.shadowRoot!.textContent).toContain("Sesame");
+  expect(opened.shadowRoot!.textContent).not.toContain("Milk");
+  expect(store.lines).toHaveLength(0);
+});

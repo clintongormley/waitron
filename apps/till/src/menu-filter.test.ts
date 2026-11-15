@@ -1,3 +1,4 @@
+import { refreshProductDeclarations } from "./state/menu-refresh.js";
 import { describe, expect, it } from "vitest";
 import {
   defaultMenu,
@@ -416,3 +417,15 @@ it("A738 counts selected allergen groups once and ignores an empty kinds list", 
   ).toBe(4);
   expect(activeFilterCount(EMPTY_MENU_FILTERS)).toBe(0);
 });
+
+it.each(["vegan", "vegetarian", "no-meat", "no-fish"] as const)(
+  "uses refreshed declarations for the %s filter",
+  (filter) => {
+    const old = dietProduct("dish", { vegan: "yes", vegetarian: "yes", contains: [] });
+    expect(filterProductsByDiet([old], filter)).toHaveLength(1);
+    const updated = refreshProductDeclarations(old, [
+      { ...old, diet: { vegan: "no", vegetarian: "no", contains: ["meat", "fish"] } },
+    ]);
+    expect(filterProductsByDiet([updated], filter)).toEqual([]);
+  },
+);
