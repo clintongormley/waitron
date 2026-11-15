@@ -10,7 +10,7 @@ To change the usual timetable, choose **Edit <season>'s standard week** beside t
 
 ## Paint a zone closure {#zone-closures}
 
-Paint the zone’s whole Closed stretch, even past its department’s current closing time.
+Paint the zone’s whole **Closed** stretch, even past its department’s current closing time.
 
 ## Select days together {#select-days}
 

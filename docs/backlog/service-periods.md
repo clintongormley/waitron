@@ -334,7 +334,9 @@ the season painter continues saving through the season-week route._
 - **Zone closures are stored whole and apply only during the department's resolved hours**
   (owner, 2026-11-06; admission answer, 2026-11-15). Hours changes retain the stored stretch.
   Outside department hours, seating, guest and bill moves and transfer acceptance follow the
-  same rules as other zones of a closed department; new orders still need a running menu period.
+  same rules as other zones of a closed department; ended-menu orders still ask for late-send
+  confirmation. The direct read also admits that confirmed send, a consequence whose owner
+  decision is pending in Lane K’s 2026-11-15 01:26 question.
   The watcher quoted the owner's “yes” at 00:41 in Lane K's questions.md, after the measured
   comparison. The demo Terrace's stored closure ends at literal 05:00, including with a 06:00
   business-day start; 05:00–06:00 is outside that stored closure.

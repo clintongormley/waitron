@@ -10,7 +10,7 @@ Para cambiar el horario habitual, elige **Editar la semana estándar de <tempora
 
 ## Pintar el cierre de una zona {#zone-closures}
 
-Pinta todo el tramo de Cierre de la zona, aunque termine después del cierre actual de su departamento.
+Pinta todo el tramo de **Cerrado** de la zona, aunque termine después del cierre actual de su departamento.
 
 ## Selecciona varios días {#select-days}
 
