@@ -4,13 +4,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError, decimal, seriesId as brandSeriesId, deviceOrigin } from "@waitron/shared";
 import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
-import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
+import type { Counterparty, FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
   CORE_MIGRATIONS,
   incidents,
   invoiceSeries,
   saleLines,
   sales,
+  taxpayer,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -136,6 +137,20 @@ function replace(
   return withTransaction(suite.db, (tx) =>
     recordReplacement(tx, backend, replacementInput(correctsSaleId, overrides)),
   );
+}
+
+/** A 12.10 full invoice naming the customer given, from a `full` series. */
+async function sellFull(backend: FiscalBackend, counterparty: Counterparty) {
+  const [fullSeries] = await suite.db
+    .insert(invoiceSeries)
+    .values({ nodeId, code: "F", purpose: "full" })
+    .returning({ id: invoiceSeries.id });
+  await suite.db.update(taxpayer).set({ taxpayerDomicile: "8 Tax Street, 28001 Madrid" });
+  return sell(backend, {
+    seriesId: brandSeriesId(fullSeries!.id),
+    counterparty,
+    recipientAddress: "2 Main Street, 28013 Madrid, Spain",
+  });
 }
 
 async function rectSeriesNext(): Promise<number | undefined> {
@@ -321,6 +336,55 @@ describe("recordReplacement — the replacement sale", () => {
   });
 });
 
+describe("recordReplacement — a full invoice", () => {
+  it.each<[string, Counterparty]>([
+    ["a Spanish tax number", { taxId: "12345678Z", legalName: "Ann Smith", countryCode: "ES" }],
+    [
+      "a foreign passport",
+      {
+        taxId: "Ab-09 /xy",
+        legalName: "Jean Martin",
+        countryCode: "FR",
+        identifierType: "passport",
+        identifierCountryCode: "FR",
+      },
+    ],
+  ])("replaces a full invoice, naming the same customer, for %s", async (_, counterparty) => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sellFull(backend, counterparty);
+    await suite.db.update(taxpayer).set({ taxpayerDomicile: "9 New Street, 28002 Madrid" });
+    const recordCorrectionSpy = vi.spyOn(backend, "recordCorrection");
+
+    const { saleId } = await replace(backend, originalId, { operationDate: "2026-02-27" });
+
+    const customer = {
+      counterpartyTaxId: sales.counterpartyTaxId,
+      counterpartyLegalName: sales.counterpartyLegalName,
+      counterpartyCountryCode: sales.counterpartyCountryCode,
+      counterpartyIdentifierType: sales.counterpartyIdentifierType,
+      counterpartyIdentifierCountryCode: sales.counterpartyIdentifierCountryCode,
+      counterpartyAddress: sales.counterpartyAddress,
+    };
+    const [original] = await suite.db.select(customer).from(sales).where(eq(sales.id, originalId));
+    const [row] = await suite.db
+      .select({
+        ...customer,
+        taxpayerDomicile: sales.taxpayerDomicile,
+        supplyDay: sales.supplyDay,
+      })
+      .from(sales)
+      .where(eq(sales.id, saleId));
+    expect(original!.counterpartyTaxId).not.toBeNull();
+    expect(row).toEqual({
+      ...original,
+      taxpayerDomicile: "9 New Street, 28002 Madrid",
+      supplyDay: "2026-02-27",
+    });
+    expect(recordCorrectionSpy).toHaveBeenCalledOnce();
+    expect(recordCorrectionSpy.mock.calls[0]![1].counterparty).toEqual(counterparty);
+  });
+});
+
 describe("recordReplacement — refusals use no number", () => {
   async function expectRefused(
     backend: FiscalBackend,
@@ -409,26 +473,15 @@ describe("recordReplacement — refusals use no number", () => {
     );
   });
 
-  it("refuses a full invoice", async () => {
+  it("refuses a full invoice when the business has no registered address", async () => {
     const backend = new FakeFiscalBackend(suite.db);
-    const [fullSeries] = await suite.db
-      .insert(invoiceSeries)
-      .values({ nodeId, code: "F", purpose: "full" })
-      .returning({ id: invoiceSeries.id });
-    suite.db.run(
-      sql`update taxpayer set taxpayer_domicile = '8 Tax Street, 28001 Madrid' where id = 1`,
-    );
-    const { saleId } = await sell(backend, {
-      seriesId: brandSeriesId(fullSeries!.id),
-      counterparty: { taxId: "12345678Z", legalName: "Ann Smith", countryCode: "ES" },
-      recipientAddress: "2 Main Street, 28013 Madrid, Spain",
+    const { saleId } = await sellFull(backend, {
+      taxId: "12345678Z",
+      legalName: "Ann Smith",
+      countryCode: "ES",
     });
-    await expectRefused(
-      backend,
-      saleId,
-      {},
-      { code: "sale.correction_unsupported", params: { saleId } },
-    );
+    await suite.db.update(taxpayer).set({ taxpayerDomicile: " " });
+    await expectRefused(backend, saleId, {}, { code: "fiscal.taxpayer_domicile_missing" });
   });
 
   it("refuses a ticket already swapped for a full invoice", async () => {

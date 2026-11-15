@@ -31,3 +31,24 @@ export function requireRecipientAddress(address: string | null | undefined): voi
     throw new AppError("counterparty.invalid", { field: "address" });
   }
 }
+
+/** A sale row's stored recipient, as the `Counterparty` it was recorded with; null when it names
+ * none. */
+export function storedCounterparty(row: {
+  counterpartyTaxId: string | null;
+  counterpartyLegalName: string | null;
+  counterpartyCountryCode: string | null;
+  counterpartyIdentifierType: string | null;
+  counterpartyIdentifierCountryCode: string | null;
+}): Counterparty | null {
+  if (row.counterpartyTaxId === null) return null;
+  return {
+    taxId: row.counterpartyTaxId,
+    legalName: row.counterpartyLegalName!,
+    countryCode: row.counterpartyCountryCode!,
+    ...(row.counterpartyIdentifierType !== null && {
+      identifierType: row.counterpartyIdentifierType as NonNullable<Counterparty["identifierType"]>,
+      identifierCountryCode: row.counterpartyIdentifierCountryCode!,
+    }),
+  };
+}
