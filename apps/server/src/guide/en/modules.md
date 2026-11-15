@@ -2,8 +2,7 @@
 
 ## Set up a card provider {#set-up}
 
-Open **Modules** in System, or choose **Configure card providers** on **Card payments**.
-The Card payments link shows every card provider, including those that still need setup.
+Open **Modules** in System to configure a card provider.
 
 Choose **Configure** in the provider's row menu, enter its credentials and choose **Save**.
 Use **Cancel** to discard your changes. A configured provider can still refuse a payment;

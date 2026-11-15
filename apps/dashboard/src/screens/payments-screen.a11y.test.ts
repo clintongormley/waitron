@@ -227,7 +227,7 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
     },
   );
 
-  it("renders the providers and readers accessibly", async () => {
+  it("renders the readers and Add reader accessibly", async () => {
     const { el, host } = await mountWidget<PaymentsScreen>(
       "dashboard-payments-screen",
       {
@@ -242,16 +242,24 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
     await expectNoA11yViolations(host);
   });
 
-  it.each(["discovery", "edit", "details", "unpair"])(
+  it.each(["provider choice", "discovery", "edit", "details", "unpair"])(
     "renders the %s dialog accessibly",
     async (mode) => {
       const { el, host } = await mountWidget<PaymentsScreen>(
         "dashboard-payments-screen",
         {
           api: stubApi(
-            mode === "unpair"
-              ? { listReaders: vi.fn().mockResolvedValue([{ ...READERS[0]!, active: false }]) }
-              : {},
+            mode === "provider choice"
+              ? {
+                  listPaymentProviders: vi
+                    .fn()
+                    .mockResolvedValue(
+                      PROVIDERS.map((provider) => ({ ...provider, state: "connected" })),
+                    ),
+                }
+              : mode === "unpair"
+                ? { listReaders: vi.fn().mockResolvedValue([{ ...READERS[0]!, active: false }]) }
+                : {},
           ),
           request: vi.fn() as unknown as PaymentsScreen["request"],
           panels: PANELS,
@@ -260,15 +268,19 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
       );
       await flush(el);
       const root =
-        mode === "discovery"
+        mode === "discovery" || mode === "provider choice"
           ? el.shadowRoot!
           : el.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!;
       root
         .querySelector<HTMLElement>(
-          mode === "discovery" ? "[data-test=add-reader-acme]" : `[data-test=${mode}-r-1]`,
+          mode === "discovery" || mode === "provider choice"
+            ? "[data-test=add-reader]"
+            : `[data-test=${mode}-r-1]`,
         )!
         .click();
       await flush(el);
+      if (mode === "provider choice")
+        expect(el.shadowRoot!.querySelector("[data-test=choose-reader-provider]")).not.toBeNull();
       await expectNoA11yViolations(host);
     },
   );

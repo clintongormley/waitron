@@ -744,7 +744,7 @@ describe("Deleting a card reader", () => {
         .mockResolvedValue([{ providerRef: "v-1", name: "Counter", status: "available" }]),
     });
     const el = await mount(api);
-    q(el, "[data-test=add-reader-acme]")!.click();
+    q(el, "[data-test=add-reader]")!.click();
     await flush(el);
     expect(q(el, "[data-test=adopt-v-1]")!.textContent!.trim()).toBe("Add");
   });

@@ -244,44 +244,6 @@ export class PaymentsScreen extends LitElement {
         padding: var(--wt-space-3);
         margin-bottom: var(--wt-space-4);
       }
-      .providers {
-        list-style: none;
-        margin: 0 0 var(--wt-space-6);
-        padding: 0;
-        display: grid;
-        gap: var(--wt-space-3);
-      }
-      .provider {
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        padding: var(--wt-space-4);
-      }
-      .provider-head {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-3);
-        flex-wrap: wrap;
-      }
-      .provider-name {
-        font-weight: var(--wt-font-weight-bold);
-      }
-      .badge {
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-sm);
-        padding: 0 var(--wt-space-2);
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
-      }
-      .badge.connected {
-        color: var(--wt-color-primary-text);
-        border-color: var(--wt-color-primary);
-      }
-      .provider-actions {
-        margin-inline-start: auto;
-        display: flex;
-        gap: var(--wt-space-2);
-      }
       .panel-slot {
         margin-top: var(--wt-space-3);
       }
@@ -399,6 +361,7 @@ export class PaymentsScreen extends LitElement {
     string,
     ReaderStatusView | "error" | "connection.timed_out"
   >();
+  @state() private choosingProvider = false;
   @state() private addingId: string | null = null;
   @state() private discoveringId: string | null = null;
   @state() private available?: AvailableReader[];
@@ -2250,58 +2213,87 @@ export class PaymentsScreen extends LitElement {
     </wt-dialog>`;
   }
 
-  #renderProvider(provider: PaymentProviderRow): TemplateResult {
-    const connected = provider.state === "connected";
-    const simulator = this.#simulator();
-    const badgeLabel = simulator
-      ? t("payments.state.simulator")
-      : connected
-        ? t("payments.state.connected")
-        : t("payments.state.not_connected");
-    const name = this.#providerName(provider.providerId);
-    const panel = this.#panelFor(provider.providerId);
-    return html`<li class="provider" data-test="provider-${provider.providerId}">
-      <div class="provider-head">
-        <span class="provider-name">${name}</span>
-        <span
-          class="badge ${connected && !simulator ? "connected" : ""}"
-          data-test="provider-state-${provider.providerId}"
-          >${badgeLabel}</span
-        >
-        <div class="provider-actions">
-          ${
-            connected
-              ? html`
-                  <wt-button
-                    variant="secondary"
-                    data-test="add-reader-${provider.providerId}"
-                    ?disabled=${this.busy}
-                    @click=${() => void this.#onAddReader(provider.providerId)}
-                    >${t("payments.add_reader")}</wt-button
-                  >
-                `
-              : nothing
-          }
-        </div>
+  #startAddReader(): void {
+    if (this.providers === undefined || this.#listQueries.failing("listPaymentProviders")) return;
+    const connected = this.providers.filter((provider) => provider.state === "connected");
+    if (connected.length === 1) void this.#onAddReader(connected[0]!.providerId);
+    else if (connected.length > 1) this.choosingProvider = true;
+  }
+
+  #renderAddReader(): TemplateResult {
+    const loaded =
+      this.providers !== undefined && !this.#listQueries.failing("listPaymentProviders");
+    const connected = this.providers?.filter((provider) => provider.state === "connected") ?? [];
+    if (loaded && connected.length === 0)
+      return html`<a data-test="configure-providers" href=${CARD_PROVIDERS_PATH}
+        >${tRaw("modules.configure_providers")}</a
+      >`;
+    return html`<wt-button
+      data-test="add-reader"
+      variant=${!loaded || this.busy ? "secondary" : "primary"}
+      ?disabled=${!loaded || this.busy}
+      @click=${() => this.#startAddReader()}
+      >${t("payments.add_reader")}</wt-button
+    >`;
+  }
+
+  #renderProviderChoice(): TemplateResult | typeof nothing {
+    if (!this.choosingProvider) return nothing;
+    return html`<wt-dialog
+      data-test="choose-reader-provider"
+      .open=${true}
+      heading=${t("payments.choose_provider")}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        this.choosingProvider = false;
+      }}
+    >
+      <div class="reader-tools">
+        ${(this.providers ?? [])
+          .filter((provider) => provider.state === "connected")
+          .map(
+            (provider) =>
+              html`<wt-button
+                data-test="add-reader-${provider.providerId}"
+                @click=${() => {
+                  this.choosingProvider = false;
+                  void this.#onAddReader(provider.providerId);
+                }}
+                >${this.#providerName(provider.providerId)}</wt-button
+              >`,
+          )}
       </div>
-      ${
-        panel && this.addingId === provider.providerId
-          ? html`<div class="panel-slot" data-test="add-reader-dialog-${provider.providerId}">
-              ${panel.renderAddReader({
-                request: this.request,
-                onAdded: () => {
-                  this.#pairSucceeded = true;
-                  void this.#load();
-                },
-                onClose: () => {
-                  this.addingId = null;
-                  if (!this.#pairSucceeded) void this.#onAddReader(provider.providerId);
-                },
-              })}
-            </div>`
-          : nothing
-      }
-    </li>`;
+      <p><a href=${CARD_PROVIDERS_PATH}>${tRaw("modules.configure_providers")}</a></p>
+      <wt-form-actions slot="footer"
+        ><wt-button
+          slot="cancel"
+          variant="secondary"
+          @click=${() => {
+            this.choosingProvider = false;
+          }}
+          >${t("action.cancel")}</wt-button
+        ></wt-form-actions
+      >
+    </wt-dialog>`;
+  }
+
+  #renderPairReader(): TemplateResult | typeof nothing {
+    const id = this.addingId;
+    const panel = id === null ? undefined : this.#panelFor(id);
+    if (!panel) return nothing;
+    return html`<div class="panel-slot" data-test="add-reader-dialog-${id}">
+      ${panel.renderAddReader({
+        request: this.request,
+        onAdded: () => {
+          this.#pairSucceeded = true;
+          void this.#load();
+        },
+        onClose: () => {
+          this.addingId = null;
+          if (!this.#pairSucceeded) void this.#onAddReader(id!);
+        },
+      })}
+    </div>`;
   }
 
   #statusKey(reader: ReaderRow): ReaderStatusKey {
@@ -2739,26 +2731,10 @@ export class PaymentsScreen extends LitElement {
           ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
           : nothing
       }
-      <p>
-        <a data-test="configure-providers" href=${CARD_PROVIDERS_PATH}
-          >${tRaw("modules.configure_providers")}</a
-        >
-      </p>
-      <section aria-labelledby="payment-providers-heading">
-        <h2 id="payment-providers-heading">${t("payments.providers_heading")}</h2>
-        ${
-          this.providers === undefined
-            ? nothing
-            : this.providers.length === 0
-              ? html`<p>${t("payments.no_providers")}</p>`
-              : html`<ul class="providers">
-                  ${this.providers.map((provider) => this.#renderProvider(provider))}
-                </ul>`
-        }
-      </section>
       <section data-test="readers-section">
         <h2 id="card-readers-heading">${t("payments.readers_heading")}</h2>
         <div class="reader-tools">
+          ${this.#renderAddReader()}
           <wt-button
             variant="secondary"
             data-test="refresh-readers"
@@ -2799,6 +2775,7 @@ export class PaymentsScreen extends LitElement {
               ></wt-data-table>`
         }
       </section>
+      ${this.#renderProviderChoice()} ${this.#renderPairReader()}
       ${keyed(this.#discoveryVersion, this.#renderDiscovery())}
       ${keyed(this.editor, this.#renderEditor())} ${this.#renderDeleteDialog()}
       ${

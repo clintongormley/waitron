@@ -81,8 +81,12 @@ Para añadir otro agente, sigue los pasos de **Añadir un agente** y comprueba s
 
 ## Lectores de tarjetas {#card-readers}
 
+Para añadir un lector, abre **Pagos con tarjeta** en Hardware y elige **Añadir lector** encima de la tabla.
+Elige el proveedor si se te pide y añade un lector de su lista o vincula uno nuevo.
+Si no hay ningún proveedor conectado, elige **Configurar proveedores de tarjeta** para configurar uno primero.
+
 En **Pagos con tarjeta**, busca el lector en **Lectores de tarjetas** y elige **Eliminar** en su menú. La confirmación indica las asignaciones que se eliminan. Si hay un cobro en curso, deja que termine primero.
 
-Para volver a usar el lector, elige **Añadir lector** en su proveedor. Si se reconoce el registro, verás el nombre y los ajustes de impresión guardados: elige **Añadir** y vuelve a asignarlo a dispositivos y perfiles. En caso contrario, vincúlalo siguiendo los pasos del proveedor.
+Cuando vuelvas a añadir un lector eliminado, si se reconoce el registro, verás el nombre y los ajustes de impresión guardados: elige **Añadir** y vuelve a asignarlo a dispositivos y perfiles. En caso contrario, vincúlalo siguiendo los pasos del proveedor.
 
 Elige **Desvincular de …** para quitar solo su registro en el proveedor y conservarlo en la lista de Waitron. Tendrás que añadirlo o vincularlo de nuevo antes de usarlo.

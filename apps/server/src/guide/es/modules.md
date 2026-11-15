@@ -2,8 +2,7 @@
 
 ## Configurar un proveedor de tarjeta {#set-up}
 
-Abre **Módulos** en Sistema, o elige **Configurar proveedores de tarjeta** en **Pagos con tarjeta**.
-El enlace de Pagos con tarjeta muestra todos los proveedores, incluidos los que aún necesitan configuración.
+Abre **Módulos** en Sistema para configurar un proveedor de tarjetas.
 
 Elige **Configurar** en el menú de la fila del proveedor, introduce sus credenciales y pulsa **Guardar**.
 Usa **Cancelar** para descartar los cambios. Un proveedor configurado puede rechazar un pago;
