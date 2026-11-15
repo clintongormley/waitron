@@ -572,3 +572,34 @@ it.each(["parent", "Back", "sidebar", "Cancel"])(
     expect(leaveCoordinatorFor(el)!.isDirty()).toBe(false);
   },
 );
+
+it("returns a dirty Periods editor to the list when a session refresh removes editing access", async () => {
+  const { el, session, getMe } = await mount({ path: "/manage/periods/period/lunch" });
+  const screen = el.shadowRoot!.querySelector("periods-list")!;
+  await expect.poll(() => screen.shadowRoot!.querySelector("period-dialog")).not.toBeNull();
+  const editor = screen.shadowRoot!.querySelector("period-dialog")!;
+  await editor.updateComplete;
+  editor
+    .shadowRoot!.querySelector<WtInput>("[name=name]")!
+    .dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "Late lunch" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  await editor.updateComplete;
+  expect(leaveCoordinatorFor(el)!.isDirty()).toBe(true);
+  const reads = getMe.mock.calls.length;
+  session.permissions = ["venue.view"];
+  document.dispatchEvent(new Event("visibilitychange"));
+  await expect.poll(() => getMe.mock.calls.length).toBeGreaterThan(reads);
+  const current = () => el.shadowRoot!.querySelector("periods-list")!;
+  await expect.poll(() => current()?.readOnly).toBe(true);
+  await expect.poll(() => location.pathname).toBe("/manage/periods");
+  expect(screen.isConnected).toBe(false);
+  expect(current().shadowRoot!.querySelector("period-dialog")).toBeNull();
+  expect(current().shadowRoot!.querySelector("wt-data-table")!.closest("[hidden]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  expect(leaveCoordinatorFor(el)!.isDirty()).toBe(false);
+});

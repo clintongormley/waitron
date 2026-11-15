@@ -16,6 +16,7 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
     "invalid",
     "colour-invalid",
     "refused",
+    "page-refused",
     "saving",
     "painted-in-links",
     "painted-in-plain",
@@ -25,7 +26,7 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
   ])("%s", async (state) => {
     setLocale("en");
     const el = (await mountThemed("<period-dialog></period-dialog>", theme)) as PeriodDialog;
-    el.page = ["add-from-page", "painted-in-links", "refused"].includes(state);
+    el.page = ["add-from-page", "painted-in-links", "page-refused"].includes(state);
     el.departmentName = "Restaurant";
     el.menus = [
       { id: "lunch", name: "Lunch", active: true, includes: ["Drinks"] },
@@ -121,12 +122,13 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
         )!.error,
       ).toBe("Choose a colour.");
     }
-    if (state === "refused") el.refusal = { code: "menu_period.name_taken" };
+    if (state.endsWith("refused")) el.refusal = { code: "menu_period.name_taken" };
     if (state === "saving") {
       name.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Dinner" } }));
       el.busy = true;
     }
     await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("wt-modal") === null).toBe(el.page);
     await expectNoA11yViolations(host);
   });
 });
