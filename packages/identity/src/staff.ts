@@ -675,7 +675,7 @@ export async function listPersonsPage(
     .orderBy(persons.displayName, persons.id);
   const keys = await keysQuery;
   const compare = createLabelComparator(args.locale);
-  const direction = args.sortDirection === "ascending" ? 1 : -1;
+  const direction = args.sortKey && args.sortDirection === "descending" ? -1 : 1;
   keys.sort((a, b) => a.rank - b.rank || compare(a.text, b.text) * direction);
   const ids = keys.slice(page * 50, (page + 1) * 50).map((row) => row.personId);
   const rows = ids.length === 0 ? [] : await readPersonSummaries(tx, ids);

@@ -166,6 +166,16 @@ it("keeps decimal and Spanish letter ordering, and refuses a caller without peop
   expect(
     (await read(token, { roleIds: [staff], locale: "es-ES" })).rows.map((p) => p.displayName),
   ).toEqual(["Label 0.25", "Label 0.5", "Label n", "Label \u00f1"]);
+  expect(
+    (
+      await read(token, {
+        roleIds: [staff],
+        sortKey: "",
+        sortDirection: "descending",
+        locale: "es-ES",
+      })
+    ).rows.map((p) => p.displayName),
+  ).toEqual(["Label 0.25", "Label 0.5", "Label n", "Label \u00f1"]);
   const denied = await openManagementSession(suite.db, "staff");
   await expect(read(denied.token)).rejects.toMatchObject({ code: "authorization.not_permitted" });
 });

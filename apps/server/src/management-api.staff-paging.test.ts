@@ -35,7 +35,7 @@ async function fixture() {
       headers: { cookie: `waitron_management_session=${token}` },
     });
 }
-it("returns one capped page and preserves a trailing space in the whole-word search", async () => {
+it("returns page metadata and preserves a trailing space in the whole-word search", async () => {
   const send = await fixture();
   const roles = await withTransaction(suite.db, ensureBuiltInRoles);
   const response = await send(

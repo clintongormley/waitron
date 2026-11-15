@@ -2082,7 +2082,9 @@ Both buttons wait while `loading`; the first and last page disable their unavail
 `TableRequestController` from `@waitron/ui` owns a list's request state. Give it an injected
 page-read callback; call `setQuery` for changed search/filter/sort/locale values and `move` for a
 page event. It waits 200 ms after typing, resets changed queries to page zero and ignores equal
-queries. `reload` retains the query/page for an action refresh. It cancels its timer on disconnect.
+queries. `reload` retains the query/page for an action refresh. Set its page to the returned page
+when the server clamps it, or back to the page still shown after a refusal, so Next can retry. It
+cancels its timer on disconnect.
 Keep observation and error recovery in the query layer: the next watch replaces the old one.
 Do not release the old observation during the typing delay, or a read's recovery can lose its
 failure history. Keep existing rows while a request is pending.
@@ -2092,7 +2094,7 @@ sorts matching scalar keys with the shared locale/decimal comparator on the serv
 at most 50 people. Its text keys use translated role/status labels, including empty/no-role values;
 role labels and returned role ids share role-id order. Search uses names, email and telephone in
 that fixed order, independent of the column layout. Equal sort keys keep the incoming SQL
-name/id order. The returned page includes the matching count and whether any person exists, so an
+name/id order; hiding the sorted column returns to display-name ascending order. The returned page includes the matching count and whether any person exists, so an
 empty venue and an empty filtered result retain their different actions.
 A large table, such as bills or orders, must sort in SQL or be measured before adopting this
 in-memory key sort. The shared request controller makes no assumption about the callback's sort.

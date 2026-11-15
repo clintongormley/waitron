@@ -116,6 +116,7 @@ export class StaffScreen extends LitElement {
           if (this.#pages.query === query) this.#pages.page = value.page;
         });
       } catch {
+        if (this.#pages.query === query) this.#pages.page = this.paging.page;
         /* The query controller owns the read message and its recovery. */
       }
     },

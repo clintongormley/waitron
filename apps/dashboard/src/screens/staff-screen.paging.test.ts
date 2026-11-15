@@ -106,3 +106,22 @@ it("ignores a replaced search reply and recovers a read failure after typing", a
   await vi.waitFor(async () => expect(await drawn(el)).toEqual(["Recovered"]));
   expect(el.shadowRoot!.querySelector(".error[role=alert]")).toBeNull();
 });
+
+it("retries the same next page after a refused read", async () => {
+  const { el, api } = await mount();
+  vi.mocked(api.listStaffPage)
+    .mockRejectedValueOnce({ code: "server.internal" })
+    .mockResolvedValueOnce(result(["Next"], 1));
+  const next = () =>
+    page.elementLocator(
+      tableOf(el).shadowRoot!.querySelector<HTMLButtonElement>("[data-next-page]")!,
+    );
+  await userEvent.click(next());
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector(".error[role=alert]")).not.toBeNull());
+  expect(await drawn(el)).toEqual(["Zed", "Ada"]);
+  await userEvent.click(next());
+  await vi.waitFor(async () => expect(await drawn(el)).toEqual(["Next"]));
+  expect(api.listStaffPage).toHaveBeenCalledTimes(3);
+  expect(api.listStaffPage).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1 }));
+  expect(el.shadowRoot!.querySelector(".error[role=alert]")).toBeNull();
+});
