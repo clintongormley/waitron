@@ -67,7 +67,10 @@ export const effectiveProductColumns = {
   vatClass: owned(products.vatClass, parentProducts.vatClass),
   // A variant that sets only its main class is charged that class taken away too, ahead of the
   // parent's takeaway class. Non-null for the reason `owned` gives: the parent's `vat_class` is set.
-  takeawayVatClass: sql<VatClass>`coalesce(${products.takeawayVatClass}, ${products.vatClass}, ${parentProducts.takeawayVatClass}, ${parentProducts.vatClass})`,
+  takeawayVatClass:
+    sql`coalesce(${products.takeawayVatClass}, ${products.vatClass}, ${parentProducts.takeawayVatClass}, ${parentProducts.vatClass})`.mapWith(
+      products.takeawayVatClass,
+    ) as SQL<VatClass>,
   unitPrice: owned(products.unitPrice, parentProducts.unitPrice),
   categoryId: parentsAlways(products.categoryId, parentProducts.categoryId),
   color: parentsAlways(products.color, parentProducts.color),
