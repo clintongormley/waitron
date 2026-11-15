@@ -7,7 +7,6 @@ import {
   draftOf,
   goneKeys,
   mergeSeasonDraft,
-  removeRow,
   rowErrors,
   runsUntil,
   sameDraft,
@@ -60,6 +59,20 @@ describe("draftOf", () => {
   });
 });
 
+const removeRow = (
+  draft: SeasonDraft,
+  key: string,
+  stored: readonly { id?: string }[],
+): SeasonDraft => {
+  const row = draft.rows.find((row) => row.key === key);
+  return {
+    ...draft,
+    rows: draft.rows.filter((row) => row.key !== key),
+    deleted:
+      row?.id && stored.some((s) => s.id === row.id) ? [...draft.deleted, row.id] : draft.deleted,
+  };
+};
+
 describe("sameDraft", () => {
   it("is true for the same rows and false once a field or the deleted list differs", () => {
     const draft = draftOf(year);
@@ -110,25 +123,6 @@ describe("addRow", () => {
 it("never reuses a removed new row's key", () => {
   const draft = addRow(removeRow(addRow(addRow(draftOf(year))), "new-2", year));
   expect(draft.rows.map((r) => r.key)).toEqual(["s4", "s1", "s2", "s3", "new-1", "new-3"]);
-});
-
-describe("removeRow", () => {
-  it("bins a stored row into deleted", () => {
-    const draft = removeRow(draftOf(year), "s2", year);
-    expect(names(draft)).toEqual(["Winter", "Spring", "Autumn"]);
-    expect(draft.deleted).toEqual(["s2"]);
-  });
-
-  it("lets a new row just leave", () => {
-    const draft = removeRow(addRow(draftOf(year)), "new-1", year);
-    expect(draft).toEqual({ ...draftOf(year), next: 2 });
-  });
-
-  it("sends no delete for a row whose id is no longer stored", () => {
-    const draft = removeRow(draftOf(year), "s2", [spring, autumn, winter]);
-    expect(names(draft)).toEqual(["Winter", "Spring", "Autumn"]);
-    expect(draft.deleted).toEqual([]);
-  });
 });
 
 describe("daysIn", () => {
@@ -422,4 +416,20 @@ describe("mergeSeasonDraft", () => {
     expect(merged.draft.rows.at(-1)).toEqual(draft.rows.at(-1));
     expect(merged.draft.rows.map((r) => r.key)).toEqual(["s4", "s1", "s2", "new-1"]);
   });
+});
+
+it("deleting a season names the previous season and new starts inside its old days, round the year", async () => {
+  const { seasonReceivers } = await import("./season-draft.js");
+  const stored = draftOf([
+    { id: "w", name: "Winter", startsOn: "12-01", colour: "blue" },
+    { id: "s", name: "Spring", startsOn: "03-01", colour: "green" },
+    { id: "u", name: "Summer", startsOn: "06-01", colour: "red" },
+  ]).rows;
+  const deleted = stored.find((r) => r.key === "w")!;
+  const remaining = stored.filter((r) => r.key !== "w");
+  expect(seasonReceivers(deleted, stored, remaining)).toEqual(["Summer"]);
+  const extra = { key: "new", name: "January", day: "1", month: "01", colour: "grey" as const };
+  expect(seasonReceivers(deleted, stored, [...remaining, extra])).toEqual(["Summer", "January"]);
+  expect(seasonReceivers(deleted, stored, [extra])).toEqual(["January"]);
+  expect(seasonReceivers(deleted, stored, [])).toEqual([]);
 });

@@ -27,6 +27,7 @@ class SeasonsLeaveApp extends LitElement {
     });
   override render() {
     return html`<seasons-window
+        seasonId="winter"
         .seasons=${seasons}
         .clockRevision=${1}
         .api=${this.api}
@@ -51,8 +52,8 @@ async function mount() {
   await el.updateComplete;
   return el;
 }
-const nameField = (el: SeasonsWindow, index: number) =>
-  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(`[name=season-${index}-name]`)!;
+const nameField = (el: SeasonsWindow, _index: number) =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
 async function change(el: SeasonsWindow, index: number, value: string) {
   nameField(el, index).dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),

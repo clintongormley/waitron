@@ -268,20 +268,11 @@ its id. Left open by A789 slice 3, #2051 (plan D33).
 
 ## A1545. Seasons and Periods: a list page and an edit page each
 
-Owner, 2026-11-15, reviewing the pages A1536 (#3247) made. All in
-`packages/venue-service/src/dashboard/`.
-
-1. **Seasons becomes a list page with an edit page per season.** Today `seasons-screen.ts` edits
-   the whole table in place, with Save and Cancel under it. Instead the page lists the seasons;
-   a row, or Add season, opens that season's own page, which carries "Seasons ›" above its heading
-   (design-system.md, "A sub-page puts its parent's name above its own"). "Runs until" stays on
-   the list.
-2. **The Seasons list gets a `⋯` row menu with Edit and Delete**, as other lists do.
-
-Update the Seasons guide in English and Spanish. Three-letter month names are A1546 item 1.
-The Periods list now has its individual Add/Edit pages, Edit/Delete menus and inherited floor-plan
-styling. Its Calendar painters retain the period pop-ups pending the owner’s answer to the
-watcher’s 2026-11-15 question about “replacing period-dialog.ts”.
+Remaining owner question, raised by the watcher on 2026-11-15 at 14:10: does “replacing
+period-dialog.ts” also mean replacing the Calendar painters’ period pop-ups? They remain in
+place until the owner answers. The two lists, individual Add/Edit pages, row menus and inherited
+floor-plan display are built. The question belongs to the original A1545, owner request
+cb6dce040c.
 
 ## A1546. The Calendar: prep-station hours and the day box
 
@@ -357,6 +348,10 @@ tints and full phone labels, and its fields name their row._
 _2026-11-15, A1545 Periods slice: the list’s rows now open individual edit pages and its pinned
 row menus offer Edit and Delete. The Calendar painters retain their period dialogs pending the
 owner’s answer; the historical A719 dialog decisions below do not describe the list’s editor._
+
+_2026-11-15, A1545 Seasons slice: Seasons now has a list and individual Add/Edit pages, with
+deletion in the list menu. The older A721 table-editing receipts below describe its earlier
+presentation; see the [current contract](../developers/design-system.md#seasons-page)._
 
 _2026-11-14: DEAD-CODE-1 retires the separate menu-week and closed-week HTTP routes;
 the season painter continues saving through the season-week route._

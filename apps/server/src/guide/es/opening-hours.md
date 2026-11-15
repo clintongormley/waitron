@@ -45,7 +45,7 @@ Revisa los festivos después de cambiar la ciudad del local. Si eliges otra zona
 
 ## Edita las temporadas {#seasons}
 
-Abre **Temporadas** en **Operaciones del local** para cambiar sus nombres, colores y fechas de inicio. Cada temporada dura hasta que empieza la siguiente. **Guardar** te mantiene en la página; **Cancelar** descarta los cambios sin guardar.
+Abre **Temporadas** en **Operaciones del local**. Elige una fila para cambiar su nombre, color o fecha de inicio, o **Añadir temporada** para crear una. Cada temporada dura hasta que empieza la siguiente. Usa el menú **⋯** de la fila para editar o eliminar una temporada; revisa qué horarios se perderán antes de confirmar la eliminación.
 
 ## Edita los periodos y consulta sus horarios {#periods}
 

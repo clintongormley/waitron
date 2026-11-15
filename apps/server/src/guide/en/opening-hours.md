@@ -45,7 +45,7 @@ Review public holidays after changing the venue’s city. Choosing another holid
 
 ## Edit seasons {#seasons}
 
-Open **Seasons** under **Venue operations** to change their names, colours and start dates. Each season runs until the next starts. **Save** keeps you on the page; **Cancel** discards your unsaved changes.
+Open **Seasons** under **Venue operations**. Choose a row to change its name, colour or start date, or **Add season** to create one. Each season runs until the next starts. Use the row’s **⋯** menu to edit or delete a season; check which hours will be lost before confirming a deletion.
 
 ## Edit periods and check their hours {#periods}
 

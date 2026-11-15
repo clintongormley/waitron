@@ -23,7 +23,7 @@ async function mount(state: string, theme: "light" | "dark") {
   const el = document.createElement("seasons-window") as SeasonsWindow;
   el.seasons = seasons;
   el.clockRevision = 0;
-  el.readOnly = state === "read-only";
+  el.seasonId = state === "added" ? "" : "spring";
   wrapper.append(el);
   await el.updateComplete;
   if (state === "refused") {
@@ -31,9 +31,8 @@ async function mount(state: string, theme: "light" | "dark") {
       saveSeasons: async () => {
         throw { code: "season.invalid", params: { field: "save.0.name", reason: "taken" } };
       },
-      readSeasonDeleteImpact: async () => ({ departments: [] }),
     };
-    const name = el.shadowRoot!.querySelector<HTMLElement>("[name=season-1-name]")!;
+    const name = el.shadowRoot!.querySelector<HTMLElement>("[name=name]")!;
     name.dispatchEvent(
       new CustomEvent("wt-change", {
         detail: { value: "Early spring" },
@@ -50,37 +49,14 @@ async function mount(state: string, theme: "light" | "dark") {
       .toBe("Another season has this name.");
     await el.updateComplete;
   }
-  if (state === "deleting") {
-    el.api = {
-      saveSeasons: async () => [],
-      readSeasonDeleteImpact: async () => ({ departments: [{ id: "r", name: "Restaurant" }] }),
-    };
-    el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=delete-season]")[3]!
-      .shadowRoot!.querySelector("button")!
-      .click();
-    await expect
-      .poll(() => el.shadowRoot!.querySelector("[data-test=delete-note]")?.textContent ?? "")
-      .toContain("Restaurant");
-    await el.updateComplete;
-  }
-  if (state === "added") {
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-season]")!
-      .shadowRoot!.querySelector("button")!
-      .click();
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(5);
-  }
   return el;
 }
 
 describe.each(["light", "dark"] as const)("Seasons editor (%s)", (theme) => {
-  test.each(["editable", "read-only", "added", "refused", "deleting"])(
-    "%s has no violations",
-    async (state) => {
-      const el = await mount(state, theme);
-      await expectNoA11yViolations(el);
-    },
-  );
+  test.each(["editable", "added", "refused"])("%s has no violations", async (state) => {
+    const el = await mount(state, theme);
+    await expectNoA11yViolations(el);
+  });
 
   test("at 390 has no violations", async () => {
     const old = [window.innerWidth, window.innerHeight] as const;
