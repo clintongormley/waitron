@@ -9,7 +9,6 @@ import {
   staffRoles,
   personStaffRoles,
   deviceProfileAdmissionRoles,
-  menus,
   devices,
   deviceProfiles,
   diningTables,
@@ -560,8 +559,6 @@ async function readSeeded(db: Database, cookies: Record<string, string>) {
     .select({ productId: products.id, menuItemId: menuItems.id })
     .from(menuItems)
     .innerJoin(products, eq(products.id, menuItems.productId))
-    .innerJoin(menus, eq(menus.id, menuItems.menuId))
-    .where(eq(menus.name, MENU_NAME))
     .orderBy(asc(products.name));
   const zoneRows = db.all<{ id: string; departmentId: string }>(
     sql`select z.id as id, z.department_id as departmentId from floor_zones z
