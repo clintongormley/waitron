@@ -256,9 +256,9 @@ Contact the venue to ask.
   });
 
   it("puts the venue and person in literally, replacement patterns included", () => {
-    const text = personalDataReadme({ ...base, venue: "$& Bar", person: "$1 Ana", files: [] });
+    const text = personalDataReadme({ ...base, venue: "$& Bar", person: "$1 Anna", files: [] });
     expect(text).toBe(`Your data held by $& Bar
-Prepared for $1 Ana on 2026-10-05.
+Prepared for $1 Anna on 2026-10-05.
 
 ${ORIGIN}
 

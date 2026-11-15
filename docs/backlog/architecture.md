@@ -657,7 +657,8 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
   The recovery-page personal-data suite uses Martha Lewis and George Hill as staff samples. Its Spanish venue legal-name, location and table-name samples remain.
   The shared boot provision-body and stream-pause fixtures use Administrator for their staff display sample.
   The menu include-folder, menu-patch and menu-schedule route suites use English staff display names.
-  Account-invitation and box-alert-email duty staff samples use Anna.
+  Account-invitation and box-alert-email duty staff samples use Anna; so do the two-role invitation
+  and personal-data README literal-replacement examples.
   Other local and shared staff-name samples still need triage; preserve deliberate name and locale cases.
   Logger personal-name samples use English names, except the deliberate accented `Àngel` cases
   and short-email `ana@bo.es` sample;
