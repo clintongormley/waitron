@@ -7701,7 +7701,29 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     const face = el.shadowRoot!.querySelector<HTMLElement & { api: DashboardApi }>(tag);
     expect(face).not.toBeNull();
     expect(face!.api).toBe(api);
+    if (screen === "cloud")
+      expect((face as HTMLElement & { canManageEmergency: boolean }).canManageEmergency).toBe(
+        false,
+      );
     expect(location.pathname).toMatch(new RegExp(`^/manage/${screen}(/|$)`));
+  });
+
+  it("passes box-management permission to the Cloud screen", async () => {
+    history.replaceState(null, "", "/manage/cloud");
+    const api = faceApi();
+    api.getMe = vi
+      .fn()
+      .mockResolvedValue({
+        ...meResponse,
+        permissions: [...meResponse.permissions, "node.manage"],
+      });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { canManageEmergency: boolean }>(
+        "dashboard-cloud-services-screen",
+      )!.canManageEmergency,
+    ).toBe(true);
   });
 
   it("handles the retired Sections address as an unknown screen", async () => {

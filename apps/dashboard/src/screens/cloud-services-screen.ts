@@ -77,6 +77,9 @@ export class CloudServicesScreen extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
+      .muted {
+        color: var(--wt-color-text-muted);
+      }
       a {
         color: var(--wt-color-primary-text);
         display: inline-flex;
@@ -92,9 +95,10 @@ export class CloudServicesScreen extends LitElement {
   readonly #peopleQueries = new QueryController(
     this,
     () => this.api.liveData,
-    () => {
+    (error) => {
       this.emergencyPeople = undefined;
       this.peopleUnavailable = true;
+      if (codeOf(error) === "authorization.not_permitted") this.canManageEmergency = false;
     },
   );
   @state() private revealedCode: CloudEmergencyCode | undefined;
@@ -117,11 +121,14 @@ export class CloudServicesScreen extends LitElement {
       if (generation === this.#codeGeneration) this.revealedCode = answer;
     } catch (error) {
       if (generation === this.#codeGeneration)
-        this.codeError = codeMessage(
-          codeOf(error),
-          undefined,
-          (error as { params?: { reason?: unknown; seconds?: unknown } }).params,
-        );
+        this.codeError =
+          codeOf(error) === "cloud.unavailable"
+            ? t("cloud.emergency_unavailable")
+            : codeMessage(
+                codeOf(error),
+                undefined,
+                (error as { params?: { reason?: unknown; seconds?: unknown } }).params,
+              );
     } finally {
       if (generation === this.#codeGeneration) this.codeBusy = false;
     }
@@ -368,7 +375,7 @@ export class CloudServicesScreen extends LitElement {
                             .join(", ") || t("cloud.emergency_nobody")
                         }
                       </p>
-                      <p data-test="emergency-needs-authenticator">
+                      <p class="muted" data-test="emergency-needs-authenticator">
                         ${t("cloud.emergency_needs_authenticator")}:
                         ${
                           this.emergencyPeople

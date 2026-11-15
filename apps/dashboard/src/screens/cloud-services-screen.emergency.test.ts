@@ -45,60 +45,82 @@ const facts = (monthly = 10005, closedReason: string | null = null, stale = fals
     effectiveFrom: "2026-11-01",
   },
 });
-async function open(value: unknown, connected = status) {
-  const api = new DashboardApi("", async (url) =>
-    Response.json(
+async function open(value: unknown, connected = status, canManageEmergency = false) {
+  const api = new DashboardApi("", async (url) => {
+    if (String(url).endsWith("/people")) return Response.json([]);
+    if (String(url).endsWith("/code"))
+      return Response.json({ error: { code: "cloud.unavailable", params: {} } }, { status: 503 });
+    return Response.json(
       String(url).endsWith("/emergency")
         ? value
         : String(url).endsWith("/billing")
           ? { billing: { status: "unavailable" }, prices: { status: "unavailable" } }
           : connected,
-    ),
-  );
-  return mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", { api });
+    );
+  });
+  return mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", {
+    api,
+    canManageEmergency,
+  });
 }
 const section = (el: CloudServicesScreen) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=cloud-emergency]");
 
-it("keeps Cloud facts visible when the separate people read fails", async () => {
-  let release!: () => void;
-  const wait = new Promise<void>((r) => {
-    release = r;
-  });
-  const api = new DashboardApi("", async (url) => {
-    const path = String(url);
-    if (path.endsWith("/people")) {
-      await wait;
-      return Response.json(
-        { error: { code: "authorization.not_permitted", params: {} } },
-        { status: 403 },
-      );
-    }
-    return Response.json(
-      path.endsWith("/emergency")
-        ? facts()
-        : path.endsWith("/billing")
-          ? { billing: { status: "unavailable" }, prices: { status: "unavailable" } }
-          : status,
-    );
-  });
-  try {
-    const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", {
-      api,
-      canManageEmergency: true,
+it.each([403, 503])(
+  "keeps Cloud facts visible when the separate people read fails with %i",
+  async (statusCode) => {
+    let release!: () => void;
+    const wait = new Promise<void>((r) => {
+      release = r;
     });
-    await expect
-      .poll(() => section(el)?.querySelector('a[href="https://emergency.example.test/"]'))
-      .toBeInstanceOf(HTMLAnchorElement);
-    release();
-    await expect
-      .poll(() => section(el)?.textContent)
-      .toContain(t("cloud.emergency_people_unavailable"));
-    expect(section(el)!.querySelector('a[href="https://emergency.example.test/"]')).not.toBeNull();
-  } finally {
-    release();
-  }
-});
+    const api = new DashboardApi("", async (url) => {
+      const path = String(url);
+      if (path.endsWith("/people")) {
+        await wait;
+        return Response.json(
+          {
+            error: {
+              code: statusCode === 403 ? "authorization.not_permitted" : "cloud.unavailable",
+              params: {},
+            },
+          },
+          { status: statusCode },
+        );
+      }
+      return Response.json(
+        path.endsWith("/emergency")
+          ? facts()
+          : path.endsWith("/billing")
+            ? { billing: { status: "unavailable" }, prices: { status: "unavailable" } }
+            : status,
+      );
+    });
+    try {
+      const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", {
+        api,
+        canManageEmergency: true,
+      });
+      await expect
+        .poll(() => section(el)?.querySelector('a[href="https://emergency.example.test/"]'))
+        .toBeInstanceOf(HTMLAnchorElement);
+      release();
+      await expect
+        .poll(() => section(el)?.textContent)
+        .toContain(
+          t(
+            statusCode === 403
+              ? "cloud.emergency_permission"
+              : "cloud.emergency_people_unavailable",
+          ),
+        );
+      await expect
+        .poll(() => section(el)!.querySelector('a[href="https://emergency.example.test/"]'))
+        .not.toBeNull();
+    } finally {
+      release();
+    }
+  },
+);
 
 it("fetches a code only on demand, shows its own address/date and clears it on close and leave", async () => {
   let reads = 0;
@@ -142,6 +164,10 @@ it("fetches a code only on demand, shows its own address/date and clears it on c
   expect(
     section(el)!.querySelector("[data-test=emergency-needs-authenticator]")!.textContent,
   ).toContain("Beatrice");
+  expect(
+    getComputedStyle(section(el)!.querySelector("[data-test=emergency-needs-authenticator]")!)
+      .color,
+  ).toBe(getComputedStyle(section(el)!.querySelector("dt")!).color);
   button("show-emergency-code")!.click();
   await expect.poll(() => button("hide-emergency-code")).toBeInstanceOf(HTMLElement);
   expect(section(el)!.textContent).toContain("ABCD-EFGH-JKLM-NPQR-STUV-WXYZ");
@@ -344,4 +370,15 @@ it("clears old registration details while the replacement's read is pending", as
   } finally {
     release();
   }
+});
+
+it("explains when Cloud cannot provide the code yet", async () => {
+  const { el } = await open(facts(), status, true);
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("#show-emergency-code"))
+    .toBeInstanceOf(HTMLElement);
+  el.shadowRoot!.querySelector<HTMLElement>("#show-emergency-code")!.click();
+  await expect
+    .poll(() => section(el)?.querySelector('[role="alert"]')?.textContent)
+    .toContain(t("cloud.emergency_unavailable"));
 });

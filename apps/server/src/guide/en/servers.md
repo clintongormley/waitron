@@ -255,5 +255,4 @@ With permission to manage the box, choose **Show code** to fetch the current cod
 issuance date before using a saved copy. **Hide code** removes it from the card; leaving this
 screen does too. The address beside the revealed code belongs to that code.
 The card also lists people with permission and an authenticator, and people who need to set
-one up in their profile. You need your password and authenticator or recovery code to sign
-in during an emergency. The card does not start the venue.
+one up in their profile. The card does not start the venue.

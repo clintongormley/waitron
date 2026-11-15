@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import * as emergency from "./cloud-emergency.js";
@@ -20,9 +20,23 @@ const expected = {
   cloudOrigin: "https://cloud.test",
   staffOrigin: "https://staff.test",
 };
-it("reads the agreed code as one generation with its own address and issuance date", () => {
-  const value = reply();
-  expect(emergency.readEmergencyCode(value, expected)).toEqual(value);
+it.each([code, "2345-6789-ABCD-EFGH-JKLM-NPQR"])(
+  "reads the agreed code %s with its own address and issuance date",
+  (spelling) => {
+    const value = { ...reply(), code: spelling };
+    expect(emergency.readEmergencyCode(value, expected)).toEqual(value);
+  },
+);
+it.each([-60001, 60001])("refuses a code reply outside the exchange window by %ims", (offset) => {
+  const value = reply(),
+    now = Date.parse(value.asOf);
+  expect(() =>
+    emergency.readEmergencyCode(
+      { ...value, asOf: new Date(now + offset).toISOString() },
+      expected,
+      { sentAt: now, receivedAt: now },
+    ),
+  ).toThrowError(expect.objectContaining({ code: "cloud.unavailable" }));
 });
 it.each([
   { code: code.toLowerCase() },
@@ -99,6 +113,13 @@ it.each([
     { code: "cloud.emergency_code_rate_limited", params: { seconds: 17 } },
   ],
   [429, { error: "rate_limited" }, { "retry-after": "bad" }, { code: "cloud.unavailable" }],
+  [429, { error: "rate_limited" }, { "retry-after": "0" }, { code: "cloud.unavailable" }],
+  [
+    429,
+    { error: "rate_limited", extra: true },
+    { "retry-after": "17" },
+    { code: "cloud.unavailable" },
+  ],
 ] as const)(
   "maps code refusal HTTP %i %j without revoking registration",
   async (status, body, headers, wanted) => {
@@ -123,3 +144,28 @@ it.each([
     }
   },
 );
+
+it("drops a code when its registration is replaced before Cloud answers", async () => {
+  let file = "";
+  const f = await installationFixture(undefined, {
+    emergencyCode: async (_v, saved, _q, res) => {
+      const registration = (
+        saved.view as { registration: { installationId: string; venueId: string } }
+      ).registration;
+      const replacement = JSON.parse(await readFile(file, "utf8"));
+      replacement.view.registration.installationId = "44444444-4444-4444-8444-444444444444";
+      delete replacement.lifecycle;
+      await writeFile(file, JSON.stringify(replacement));
+      res.end(JSON.stringify(reply(registration.installationId, registration.venueId)));
+    },
+  });
+  try {
+    await f.client.refresh();
+    file = join(f.options.stateDir, "cloud/connection.json");
+    await expect(f.client.emergencyCode("https://staff.test")).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
+  } finally {
+    await f.close();
+  }
+});

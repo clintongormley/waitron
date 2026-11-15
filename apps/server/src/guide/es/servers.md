@@ -282,5 +282,4 @@ Con permiso para gestionar el servidor, pulsa **Mostrar código** para consultar
 Comprueba su fecha de emisión antes de usar una copia guardada. **Ocultar código** lo retira de
 la tarjeta, igual que salir de esta pantalla. La dirección junto al código corresponde a ese código.
 La tarjeta también muestra quién tiene permiso y autenticador, y quién necesita configurarlo
-en su perfil. Para identificarte durante una emergencia necesitas tu contraseña y el autenticador
-o un código de recuperación. La tarjeta no inicia el local.
+en su perfil. La tarjeta no inicia el local.

@@ -153,10 +153,16 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
   });
   app.get("/management-api/cloud/emergency/people", (c) =>
     run(c, log, async () => {
-      await authorize(c, true, "node.manage");
       primary();
-      const people = await withTransaction(deps.db, readEmergencyPeople);
-      await authorize(c, true, "node.manage");
+      const people = await withPassiveManagementRead(() =>
+        withTransaction(deps.db, async (tx) => {
+          await authorizeManager(tx, {
+            managementSessionId: requireManagementSession(c),
+            permission: "node.manage",
+          });
+          return readEmergencyPeople(tx);
+        }),
+      );
       primary();
       return c.json(people);
     }),
