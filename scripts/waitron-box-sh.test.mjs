@@ -14,6 +14,7 @@ import {
   writeSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
+import { clearInterval, setInterval } from "node:timers";
 import { setTimeout as sleep } from "node:timers/promises";
 import { delimiter, dirname, join } from "node:path";
 import { performance } from "node:perf_hooks";
