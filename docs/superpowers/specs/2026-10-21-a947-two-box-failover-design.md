@@ -1764,6 +1764,30 @@ adopts W41s-10b's format when it lands rather than inventing one.
 
 > **A1018, 2026-11-02:** 4e, 5a, 5b, 5c and 5d are mapped to A1018's build slices — see the dated A1018 block at the top.
 
+> **Checked in the code, 15 November 2026 (lane A, read at main c1d9a91dcf; nothing new built):**
+>
+> - **4e is built** by A1018 Slices 2, 4, 5 and 6 (#2420, #2442, #2484, #2669). Asked to step
+>   down, the main box starts no new filing batch but still sends one already claimed
+>   (`apps/server/src/handover-stepdown.ts:89-95`, `packages/fiscal-verifactu/src/drain.ts:233`),
+>   lets admitted work finish within the shutdown deadline (`handover-stepdown.ts:202-207`),
+>   restarts restricted, and hands over a final copy with a signed summary that the
+>   spare compares exactly, refusing `handover.copy_mismatch` (`handover-compare.ts`). Only a spare
+>   accepts the offer (`handover-destination-api.ts:129`).
+> - **5a is built** by A1018 Slice 3 (#2436): a box asks the other box before it sells or files,
+>   waits for an answer, and an administrator can carry on (CLAUDE.md §5); a till hands a newer
+>   chart to a box that answers with an older one (`apps/till/src/api/server-router.ts:370`).
+> - **5e is not built, and the one backup service does not run on the spare.** The owner decided
+>   on 4 November that scheduled backups are one service with swappable destinations (local
+>   drive, own S3, Waitron Cloud). That service runs only on the box that files
+>   (`apps/server/src/backup-supervisor.ts:266`, the same role check that turns on filing at
+>   `boot.ts:2425`), and a spare stays in its waiting start (`boot.ts:2222`), which never reaches
+>   the service (`boot.ts:3519`). The service has no rule about a paired spare, so on a two-box
+>   venue the main box keeps sending scheduled backups to every destination. What a spare changes
+>   is the live copy to the owner's bucket: once paired, the main box streams to the spare instead
+>   (`stream-host.ts:329`), and a venue streaming to a bucket is refused when a spare joins
+>   (`mirror-bundle-api.ts:343`, `mirror.bucket_stream_active`). Whether a two-box venue needs a
+>   live copy off site as well as scheduled backups is with the campaign watcher.
+
 Each line is one pull request. **Fiscal** ones wait for the owner to land (lanes land their own
 pull requests except truly fiscal ones, owner 2026-10-21). Every slice adds its step to the stream
 loop test (`apps/server/src/stream-loop.e2e.test.ts`), which grows into the two-box loop.
