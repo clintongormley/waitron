@@ -138,20 +138,16 @@ function harness() {
               date = addDays(date, 1)
             )
               days.push({ date, departments: stationDay(station.id, date) });
-            return [
-              station.id,
-              station.isDefault ? { always: "default", days: [] } : { always: null, days },
-            ];
+            return [station.id, { days }];
           }),
       );
     }
     const stationId = url.pathname.split("/").at(-2)!;
-    if (stationId === "kitchen") return { always: "default", days: [] };
     const days = [];
     const to = url.searchParams.get("to")!;
     for (let date = url.searchParams.get("from")!; date <= to; date = addDays(date, 1))
       days.push({ date, departments: stationDay(stationId, date) });
-    return { always: null, days };
+    return { days };
   }) as DashboardRequest;
   const hold = (kind: Kind) => {
     let release!: () => void;
@@ -222,6 +218,7 @@ describe("A725 Calendar station month, migrated from Times", () => {
           label: "Grill",
           depth: 1,
           icon: "prep-station",
+          iconPosition: "end",
           iconLabel: locale === "en" ? "Prep station" : "Estación de preparación",
         },
         {
@@ -229,6 +226,7 @@ describe("A725 Calendar station month, migrated from Times", () => {
           label: "Kitchen",
           depth: 1,
           icon: "prep-station",
+          iconPosition: "end",
           iconLabel: locale === "en" ? "Prep station" : "Estación de preparación",
         },
         {
@@ -236,6 +234,7 @@ describe("A725 Calendar station month, migrated from Times", () => {
           label: "Pass",
           depth: 1,
           icon: "prep-station",
+          iconPosition: "end",
           iconLabel: locale === "en" ? "Prep station" : "Estación de preparación",
         },
       ]);
@@ -271,9 +270,7 @@ describe("A725 Calendar station month, migrated from Times", () => {
       "Restaurant: Dinner 19:00–01:00",
     );
     // A Sunday the station gets nothing still carries its row.
-    expect(text(cell(el, "2026-12-06")!.querySelector('[data-test="no-orders"]'))).toBe(
-      "No orders",
-    );
+    expect(text(cell(el, "2026-12-06")!.querySelector('[data-test="no-orders"]'))).toBe("Closed");
     expect(cell(el, "2026-12-25")!.hasAttribute("data-closed")).toBe(true);
     expect(text(cell(el, "2026-12-25")!.querySelector('[data-test="name"]'))).toBe(
       "Christmas Day · Closed",
@@ -339,7 +336,7 @@ describe("A725 Calendar station month, migrated from Times", () => {
     expect(percent(allDay!.style.width)).toBeCloseTo((14 / 24) * 100, 3);
   });
 
-  it("keeps an empty track for a department that sends nothing that date, and reads No orders once when none sends", async () => {
+  it("keeps an empty track for a department that sends nothing that date, and reads Closed once when none sends", async () => {
     const { el } = await mount({ stationId: "pass" });
     await drawn(el, "2026-12-06", "bar").not.toBeNull();
     const sunday = cell(el, "2026-12-06")!;
@@ -349,19 +346,19 @@ describe("A725 Calendar station month, migrated from Times", () => {
     expect(segmentsOf(tracks[1]!).map((s) => s.title)).toEqual(["All day (Bar) 10:00–02:00"]);
     expect(sunday.querySelector('[data-test="no-orders"]')).toBeNull();
     expect(text(sunday.querySelector(".day"))).toContain(
-      "Restaurant: No orders, Bar: All day 10:00–02:00",
+      "Restaurant: Closed, Bar: All day 10:00–02:00",
     );
     for (const date of ["2026-12-15", "2026-12-25"] as const) {
       const none = cell(el, date)!;
-      expect([...none.querySelectorAll('[data-test="no-orders"]')].map(text)).toEqual([
-        "No orders",
-      ]);
+      expect([...none.querySelectorAll('[data-test="no-orders"]')].map(text)).toEqual(
+        date === "2026-12-25" ? [] : ["Closed"],
+      );
       expect(none.querySelectorAll(".track")).toHaveLength(0);
     }
     const label = text(cell(el, "2026-12-15")!.querySelector(".day"))!;
     await expect
       .element(cell(el, "2026-12-15")!.querySelector<HTMLElement>(".day")!, { timeout: 1000 })
-      .toHaveAccessibleName(/^(?!.*No orders.*No orders).*No orders$/);
+      .toHaveAccessibleName(/^(?!.*Closed.*Closed).*Closed$/);
     expect(label).not.toContain("Restaurant");
     expect(label).not.toContain("Bar");
   });
@@ -476,18 +473,14 @@ describe("A725 Calendar station month, migrated from Times", () => {
     expect(titles(el, "2026-12-01")).not.toContain("Dinner (Restaurant) 19:00–01:00");
   });
 
-  it("says the default station is always open and draws no month", async () => {
+  it("draws the default station's dated demand in both languages", async () => {
     for (const locale of ["en", "es"] as const) {
       setLocale(locale);
       const { el } = await mount({ stationId: "kitchen" });
-      await expect
-        .poll(() => text(monthRoot(el)?.querySelector('[data-test="always-open"]')))
-        .toBe(
-          locale === "en"
-            ? "Always open: this is the default station"
-            : "Siempre abierta: es la estación predeterminada",
-        );
-      expect(monthRoot(el)!.querySelector("table")).toBeNull();
+      await drawn(el, "2026-12-01", "rest").not.toBeNull();
+      expect(titles(el, "2026-12-01")).toContain("Dinner (Restaurant) 19:00–01:00");
+      expect(cell(el, "2026-12-25")!.querySelector(".segment")).toBeNull();
+      expect(monthRoot(el)!.querySelector('[data-test="always-open"]')).toBeNull();
       el.remove();
     }
   });
@@ -597,20 +590,14 @@ describe.each(["en", "es"] as const)("A725 Calendar station accessibility (%s)",
         await expect.poll(() => alerts(el).length).toBe(1);
         expect(view.shadowRoot!.querySelector("table")).toBeNull();
       } else if (state === "default") {
-        await expect.poll(() => view.station?.state).toBe("always");
-        await view.updateComplete;
-        expect(text(view.shadowRoot!.querySelector('[data-test="always-open"]'))).toBe(
-          locale === "en"
-            ? "Always open: this is the default station"
-            : "Siempre abierta: es la estación predeterminada",
-        );
-        expect(view.shadowRoot!.querySelector("table")).toBeNull();
+        await drawn(el, "2026-12-01", "rest").not.toBeNull();
+        expect(view.shadowRoot!.querySelector("table")).not.toBeNull();
       } else if (state === "no stations") {
         await expect.poll(() => cell(el, "2026-12-01")).not.toBeNull();
         expect(picker(el)!.options.map(({ value }) => value)).toEqual(["all", "rest", "bar"]);
         expect(readsOf(h.calls, "service-times?")).toEqual([]);
       } else if (state === "all stations") {
-        await drawn(el, "2026-12-01", "pass").not.toBeNull();
+        await drawn(el, "2026-12-01", "pass:rest").not.toBeNull();
       } else {
         await drawn(el, "2026-12-01", "rest").not.toBeNull();
         if (state === "several departments") {
@@ -623,7 +610,7 @@ describe.each(["en", "es"] as const)("A725 Calendar station accessibility (%s)",
             cell(el, "2026-12-06")!.querySelector('.track[data-row="rest"] .segment'),
           ).toBeNull();
           expect(text(cell(el, "2026-12-15")!.querySelector('[data-test="no-orders"]'))).toBe(
-            locale === "en" ? "No orders" : "Sin pedidos",
+            locale === "en" ? "Closed" : "Cerrada",
           );
         }
       }
@@ -638,8 +625,8 @@ describe.each(["en", "es"] as const)("A725 Calendar station accessibility (%s)",
           )
           .toHaveAccessibleName(
             locale === "en"
-              ? /^(?!.*No orders.*No orders).*No orders$/
-              : /^(?!.*Sin pedidos.*Sin pedidos).*Sin pedidos$/,
+              ? /^(?!.*Closed.*Closed).*Closed$/
+              : /^(?!.*Cerrada.*Cerrada).*Cerrada$/,
           );
       }
       await expectNoA11yViolations(el);
@@ -674,9 +661,9 @@ it("keeps All above named departments when there are no station groups", async (
   ).toEqual(["All departments", "A bar"]);
 });
 
-it("draws one row per station from one batch read and keeps the default open on closed days", async () => {
+it("draws separate sender rows from one batch and keeps the default bounded on closed days", async () => {
   const { el, calls } = await mount({ show: "stations" });
-  await drawn(el, "2026-12-01", "pass").not.toBeNull();
+  await drawn(el, "2026-12-01", "pass:rest").not.toBeNull();
   expect(readsOf(calls, "service-times?")).toEqual([
     "/management-api/venue-service/stations/service-times?from=2026-11-30&to=2027-01-03",
   ]);
@@ -684,21 +671,28 @@ it("draws one row per station from one batch read and keeps the default open on 
     [...cell(el, "2026-12-01")!.querySelectorAll<HTMLElement>(".track")].map(
       (row) => row.dataset.row,
     ),
-  ).toEqual(["grill", "kitchen", "pass"]);
-  expect(segmentsOf(cell(el, "2026-12-01")!.querySelector('[data-row="pass"]')!)).toHaveLength(2);
+  ).toEqual(["grill", "kitchen:rest", "kitchen:bar", "pass:rest", "pass:bar"]);
+  expect(segmentsOf(cell(el, "2026-12-01")!.querySelector('[data-row="pass:rest"]')!)).toHaveLength(
+    1,
+  );
+  expect(segmentsOf(cell(el, "2026-12-01")!.querySelector('[data-row="pass:bar"]')!)).toHaveLength(
+    1,
+  );
+  expect([...cell(el, "2026-12-01")!.querySelectorAll(".station-heading")].map(text)).toEqual([
+    "Kitchen",
+    "Pass",
+  ]);
   await expect
     .element(cell(el, "2026-12-01")!.querySelector<HTMLElement>(".day")!, { timeout: 1000 })
     .toHaveAccessibleName(/Prep station Grill/);
-  expect(cell(el, "2026-12-25")!.querySelectorAll(".track")).toHaveLength(3);
-  expect(text(cell(el, "2026-12-25")!.querySelector('[data-row="kitchen"]'))).toContain(
-    "Always open",
-  );
-  expect(text(cell(el, "2026-12-25")!.querySelector('[data-row="grill"]'))).toContain("No orders");
+  expect(cell(el, "2026-12-25")!.querySelectorAll(".track")).toHaveLength(5);
+  expect(cell(el, "2026-12-25")!.querySelectorAll(".segment")).toHaveLength(0);
   await expect
     .element(cell(el, "2026-12-25")!.querySelector<HTMLElement>(".day")!, { timeout: 1000 })
-    .toHaveAccessibleName(/Prep station Grill: No orders.*Prep station Kitchen: Always open/);
+    .toHaveAccessibleName(/^(?!.*Closed.*Closed).*Closed/);
   expect(picker(el)!.value).toBe("show:stations");
   expect(picker(el)!.options.map(({ value }) => value)).toEqual([
+    "show:all",
     "all",
     "rest",
     "bar",
@@ -710,13 +704,21 @@ it("draws one row per station from one batch read and keeps the default open on 
   cell(el, "2026-12-01")!.querySelector<HTMLElement>(".day")!.click();
   await expect.poll(() => el.shadowRoot!.querySelector("calendar-day-box")?.shown).toBe(true);
   const box = el.shadowRoot!.querySelector("calendar-day-box")!;
-  expect(box.rows.map(({ name }) => name)).toEqual(["Grill", "Kitchen", "Pass"]);
+  expect(box.rows.map(({ name }) => name)).toEqual([
+    "Grill",
+    "Kitchen",
+    "Restaurant",
+    "Bar",
+    "Pass",
+    "Restaurant",
+    "Bar",
+  ]);
   expect(box.querySelector('[data-test="special-add"]')).toBeNull();
   expect(box.querySelector('[data-test="edit-week"]')).toBeNull();
-  expect(box.querySelector('a[href="/manage/periods"]')).not.toBeNull();
+  expect(box.querySelector('a[href="/manage/periods"]')).toBeNull();
 });
 
-it("keeps batch loading and errors distinct from No orders and recovers on reread", async () => {
+it("keeps batch loading and errors distinct from Closed and recovers on reread", async () => {
   const h = harness();
   h.failing.times = true;
   const { el } = await mount({ show: "stations" }, h);
@@ -739,3 +741,43 @@ it("keeps station row names and empty labels readable on a phone", async () => {
   for (const label of monthRoot(el)!.querySelectorAll<HTMLElement>(".empty-track"))
     expect(label.scrollWidth, label.textContent).toBeLessThanOrEqual(label.clientWidth);
 });
+
+it("Month Show all keeps station period identities beside time-only department rows", async () => {
+  const { el } = await mount({ show: "all" });
+  await drawn(el, "2026-12-01", "pass:rest").not.toBeNull();
+  const day = cell(el, "2026-12-01")!;
+  const department = day.querySelector('[data-row="rest"] .segment')!;
+  expect(department.getAttribute("title")).toBe("08:00–11:00");
+  const station = day.querySelector('[data-row="pass:rest"] .segment')!;
+  expect(station.getAttribute("title")).toBe("Dinner (Restaurant) 19:00–01:00");
+  expect(station.getAttribute("data-colour")).toBe("red");
+});
+
+it("keeps a long grouped station name available in the Month heading", async () => {
+  await page.viewport(390, 900);
+  const h = harness();
+  const long = "Kitchen for the restaurant and takeaway";
+  h.state.stations = STATIONS.map((row) => (row.id === "kitchen" ? { ...row, name: long } : row));
+  const { el } = await mount({ show: "stations" }, h);
+  await drawn(el, "2026-12-01", "kitchen:rest").not.toBeNull();
+  const heading = cell(el, "2026-12-01")!.querySelector<HTMLElement>(".station-heading")!;
+  expect(heading.title).toBe(long);
+  const text = heading.querySelector<HTMLElement>(".row-name")!;
+  expect(text.scrollWidth).toBeGreaterThan(text.clientWidth);
+  expect(text.getBoundingClientRect().right).toBeLessThanOrEqual(
+    heading.getBoundingClientRect().right,
+  );
+});
+
+it.each(["all", "stations"])(
+  "names each grouped station sender in the spoken Month for %s",
+  async (show) => {
+    const { el } = await mount({ show });
+    await drawn(el, "2026-12-01", "pass:rest").not.toBeNull();
+    await expect
+      .element(cell(el, "2026-12-01")!.querySelector<HTMLElement>(".day")!, { timeout: 1000 })
+      .toHaveAccessibleName(
+        /Prep station Kitchen: Restaurant: Dinner 19:00–01:00.*Prep station Kitchen: Bar: All day 10:00–02:00.*Prep station Pass: Restaurant: Dinner 19:00–01:00.*Prep station Pass: Bar: All day 10:00–02:00/,
+      );
+  },
+);

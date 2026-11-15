@@ -877,7 +877,7 @@ describe("Opening hours month", () => {
 
   it("keeps every date of a row the same height", async () => {
     const el = await mountAt(DESKTOP);
-    const [sunday, monday] = ["2026-12-06", "2026-12-07"].map((date) => cell(el, date));
+    const [sunday, monday] = ["2026-12-06", "2026-11-30"].map((date) => cell(el, date));
     expect(sunday!.querySelectorAll(".track")).toHaveLength(
       monday!.querySelectorAll(".track").length,
     );
@@ -895,11 +895,15 @@ describe("Opening hours month", () => {
     expect(contentHeight(sunday!)).toBe(contentHeight(monday!));
   });
 
-  it("on a phone, drops No orders from a closed station date only", async () => {
+  it("on a phone, drops Closed from a closed station date only", async () => {
     const el = await mountAt(PHONE, monthModel(), { station: grill() });
     const shown = (date: LocalDate) => {
       const line = cell(el, date).querySelector<HTMLElement>('[data-test="no-orders"]')!;
-      return getComputedStyle(line).display !== "none" && line.getBoundingClientRect().height > 0;
+      return Boolean(
+        line &&
+        getComputedStyle(line).display !== "none" &&
+        line.getBoundingClientRect().height > 0,
+      );
     };
     expect(shown("2026-12-25")).toBe(false);
     expect(shown("2026-12-15")).toBe(true);
@@ -1131,6 +1135,11 @@ describe("Opening hours month, a station shown", () => {
       const el = await mount(monthModel(), { stations: STATIONS });
       expect(show(el).options.map(({ value, label, depth }) => ({ value, label, depth }))).toEqual([
         {
+          value: "show:all",
+          label: locale === "en" ? "Show all" : "Mostrar todo",
+          depth: undefined,
+        },
+        {
           value: "all",
           label: locale === "en" ? "All departments" : "Todos los departamentos",
           depth: undefined,
@@ -1175,7 +1184,7 @@ describe("Opening hours month, a station shown", () => {
   it("a station draws a row per sending department, its dates still buttons that open the box", async () => {
     const el = await mount(monthModel(), { stations: STATIONS, station: grill() });
     expect(testId(el, "rows")).toBeNull();
-    expect(root(el).querySelector('.station-track wt-icon[name="prep-station"]')).toBeNull();
+    expect(root(el).querySelector('.named-track wt-icon[name="prep-station"]')).toBeNull();
     const monday = cell(el, "2026-12-07");
     const tracks = [...monday.querySelectorAll<HTMLElement>(".track")];
     expect(tracks.map((track) => track.dataset.row)).toEqual(["rest", "bar"]);
@@ -1195,7 +1204,7 @@ describe("Opening hours month, a station shown", () => {
     expect(sunday.querySelectorAll('.track[data-row="rest"] .segment')).toHaveLength(0);
     expect(sunday.querySelector('[data-test="no-orders"]')).toBeNull();
     await named(dayButton(el, "2026-12-06")).toHaveAccessibleName(
-      containing("Restaurant: No orders, Bar: All day 10:00–02:00"),
+      containing("Restaurant: Closed, Bar: All day 10:00–02:00"),
     );
     expect(root(el).querySelectorAll("td[data-date] button.day")).toHaveLength(
       monthModel().days.length,
@@ -1237,10 +1246,10 @@ describe("Opening hours month, a station shown", () => {
     ).toEqual(["All day (Bar) 10:00–02:00"]);
   });
 
-  it("a date no department sends on reads No orders once", async () => {
+  it("a date no department sends on reads Closed once", async () => {
     for (const [locale, words] of [
-      ["en", "No orders"],
-      ["es", "Sin pedidos"],
+      ["en", "Closed"],
+      ["es", "Cerrada"],
     ] as const) {
       setLocale(locale);
       const el = await mount(monthModel(), { stations: STATIONS, station: grill() });
@@ -1268,42 +1277,10 @@ describe("Opening hours month, a station shown", () => {
       expect(
         [...cell(el, day.date).querySelectorAll('[data-test="no-orders"]')].map(text),
         day.date,
-      ).toEqual(["No orders"]);
+      ).toEqual(day.closedAllDay ? [] : ["Closed"]);
   });
 
-  it("the default station reads Always open in place of the dates", async () => {
-    for (const [locale, words] of [
-      ["en", "Always open: this is the default station"],
-      ["es", "Siempre abierta: es la estación predeterminada"],
-    ] as const) {
-      setLocale(locale);
-      const el = await mount(monthModel(), {
-        stations: STATIONS,
-        station: { id: "grill", state: "always" },
-      });
-      expect(root(el).querySelector("table")).toBeNull();
-      expect(text(testId(el, "always-open"))).toBe(words);
-      expect(show(el).value).toBe("station:grill");
-      el.remove();
-    }
-  });
-
-  it("draws Always open muted, as the Week does", async () => {
-    const el = await mount(monthModel(), {
-      stations: STATIONS,
-      station: { id: "grill", state: "always" },
-    });
-    applyTokens(el);
-    const probe = document.createElement("span");
-    probe.style.color = "var(--wt-color-text-muted)";
-    applyTokens(probe);
-    el.after(probe);
-    hosts.push(probe);
-    expect(getComputedStyle(testId(el, "always-open")!).color).toBe(getComputedStyle(probe).color);
-    expect(getComputedStyle(probe).color).not.toBe(getComputedStyle(el).color);
-  });
-
-  it("draws No orders muted, as the Week does", async () => {
+  it("draws Closed muted, as the Week does", async () => {
     const el = await mount(monthModel(), { stations: STATIONS, station: grill() });
     applyTokens(el);
     const probe = document.createElement("span");
@@ -1316,23 +1293,11 @@ describe("Opening hours month, a station shown", () => {
     expect(getComputedStyle(probe).color).not.toBe(getComputedStyle(el).color);
   });
 
-  it("draws No orders on a date closed all day in the closed date's own colour, as its name", async () => {
+  it("uses the all-day name's Closed instead of repeating it below", async () => {
     const el = await mount(monthModel(), { stations: STATIONS, station: grill() });
-    applyTokens(el);
-    const probe = document.createElement("span");
-    probe.style.color = "var(--wt-color-text-muted)";
-    applyTokens(probe);
-    el.after(probe);
-    hosts.push(probe);
     const closed = cell(el, "2026-12-25");
-    const none = closed.querySelector<HTMLElement>('[data-test="no-orders"]')!;
-    const name = closed.querySelector<HTMLElement>('[data-test="name"]')!;
-    expect(text(name)).toBe("Christmas Day · Closed");
-    expect(getComputedStyle(none).color).toBe(getComputedStyle(name).color);
-    expect(getComputedStyle(none).color).toBe(
-      getComputedStyle(closed.querySelector(".day")!).color,
-    );
-    expect(getComputedStyle(none).color).not.toBe(getComputedStyle(probe).color);
+    expect(text(closed.querySelector('[data-test="name"]'))).toBe("Christmas Day · Closed");
+    expect(closed.querySelector('[data-test="no-orders"]')).toBeNull();
   });
 
   it("loading keeps the picker and explanation without dates", async () => {
@@ -1403,4 +1368,33 @@ it("draws merged opening spans with time-only descriptions", async () => {
   await named(dayButton(el, day.date)).toHaveAccessibleName(
     containing("Restaurant: 09:00–00:00, Terrace: 09:00–00:00"),
   );
+});
+
+it.each([390, 1280])("names department rows and offers Show all at %s pixels", async (width) => {
+  await page.viewport(width, 1000);
+  const el = await mount(monthModel(), { stations: STATIONS });
+  expect(show(el).options.map(({ value }) => value)).toContain("show:all");
+  const day = cell(el, "2026-12-01");
+  expect([...day.querySelectorAll('[data-test="row-name"]')].map(text)).toEqual([
+    "Restaurant",
+    "Bar",
+  ]);
+});
+it.each([390, 1280])(
+  "keeps one Closed on an all-day closed station date at %s pixels",
+  async (width) => {
+    await page.viewport(width, 1000);
+    const el = await mount(monthModel(), { stations: STATIONS, station: grill() });
+    const day = cell(el, "2026-12-25");
+    expect(drawn(day).match(/Closed/g)).toHaveLength(1);
+    await named(dayButton(el, "2026-12-25")).toHaveAccessibleName(/^(?!.*Closed.*Closed).*Closed/);
+  },
+);
+it("retains department rows while Show all's station read is loading", async () => {
+  const el = await mount(monthModel(), {
+    stations: STATIONS,
+    show: "all",
+    station: { id: "", state: "loading" },
+  });
+  expect(cell(el, "2026-12-01").querySelectorAll(".segment").length).toBeGreaterThan(0);
 });

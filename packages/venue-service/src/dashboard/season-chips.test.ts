@@ -64,7 +64,7 @@ it("labels each chip from the server's last day and tints it by its season's sto
     "Spring · 1 Mar – 31 May",
     "Summer · 1 Jun – 31 Aug",
     "Late summer · 1 Aug – 31 Aug",
-    "Autumn · 1 Sept – 30 Nov",
+    "Autumn · 1 Sep – 30 Nov",
     "Winter · 1 Dec – 29 Feb",
   ]);
   expect(chips().map((chip) => chip.dataset.tint)).toEqual([
@@ -173,7 +173,7 @@ it("as a key only, draws each chip's name and dates with no button to press", as
   expect(chips().map((chip) => chip.textContent!.trim())).toEqual([
     "Spring · 1 Mar – 31 May",
     "Summer · 1 Jun – 31 Aug",
-    "Autumn · 1 Sept – 30 Nov",
+    "Autumn · 1 Sep – 30 Nov",
     "Winter · 1 Dec – 29 Feb",
   ]);
   expect(chips()[3]!.dataset.tint).toBeTruthy();

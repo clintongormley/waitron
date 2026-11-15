@@ -14,14 +14,22 @@ function dateFormat(options: Intl.DateTimeFormatOptions, language = currentLocal
     timeZone: "UTC",
   });
 }
+const shortMonths = (parts: Intl.DateTimeFormatPart[]) =>
+  parts.map((part) => (part.type === "month" ? { ...part, value: part.value.slice(0, 3) } : part));
 const asUtc = (date: LocalDate) => new Date(`${date}T00:00:00Z`);
 const joined = (parts: Intl.DateTimeFormatPart[]) => parts.map((part) => part.value).join("");
+const shortDate = (date: LocalDate, options: Intl.DateTimeFormatOptions) =>
+  joined(shortMonths(dateFormat(options).formatToParts(asUtc(date))));
 
 /** A date as the dashboard reads it, "Mon, 12 Oct 2026", in the dashboard's language. */
-export function formatDate(date: LocalDate): string {
-  return dateFormat({ weekday: "short", day: "numeric", month: "short", year: "numeric" }).format(
-    asUtc(date),
-  );
+export function formatDate(date: LocalDate, threeLetterMonth = true): string {
+  const parts = dateFormat({
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).formatToParts(asUtc(date));
+  return joined(threeLetterMonth ? shortMonths(parts) : parts);
 }
 
 /** A date's weekday, "M", "Mon" or "Monday", in the dashboard's language. */
@@ -32,15 +40,16 @@ export function formatWeekday(date: LocalDate, style: "narrow" | "short" | "long
 /** A day of the year from its MM-DD, "1 Dec", in the dashboard's language. */
 export function formatMonthDay(monthDay: string): string {
   // A leap year, so a leap year's last day of February, 02-29, reads as itself.
-  return dateFormat({ day: "numeric", month: "short" }).format(asUtc(`2000-${monthDay}`));
+  return shortDate(`2000-${monthDay}`, { day: "numeric", month: "short" });
 }
 
 /** A date's day and short month, "14 Dec", or with its year, "14 Dec 2026", in the dashboard's
  *  language. */
 export function formatShortDate(date: LocalDate, year: boolean): string {
-  return dateFormat(
+  return shortDate(
+    date,
     year ? { day: "numeric", month: "short", year: "numeric" } : { day: "numeric", month: "short" },
-  ).format(asUtc(date));
+  );
 }
 
 /** A month's name from its number, 1 to 12, "December", in `language`, else the dashboard's. */
@@ -49,9 +58,10 @@ export function formatMonthName(
   language?: string,
   style: "long" | "short" = "long",
 ): string {
-  return dateFormat({ month: style }, language).format(
+  const value = dateFormat({ month: style }, language).format(
     asUtc(`2001-${String(month).padStart(2, "0")}-01`),
   );
+  return style === "short" ? value.slice(0, 3) : value;
 }
 
 /** A date's day, month and year, "12 October 2026", in the dashboard's language. */
@@ -72,14 +82,15 @@ export function dateAroundDay(
   date: LocalDate,
   options: Intl.DateTimeFormatOptions & { day: "numeric" },
 ): { before: string; after: string } {
-  const parts = dateFormat(options).formatToParts(asUtc(date));
+  const raw = dateFormat(options).formatToParts(asUtc(date));
+  const parts = options.month === "short" ? shortMonths(raw) : raw;
   const at = parts.findIndex((part) => part.type === "day");
   return { before: joined(parts.slice(0, at)), after: joined(parts.slice(at + 1)) };
 }
 
 /** A day's column heading, "Mon 12 Oct", in the dashboard's language. */
 export function formatDayHeading(date: LocalDate): string {
-  return dateFormat({ weekday: "short", day: "numeric", month: "short" }).format(asUtc(date));
+  return shortDate(date, { weekday: "short", day: "numeric", month: "short" });
 }
 
 /** A phone's day title in parts, "Fri 16" and "Oct", in `language`, else the dashboard's; see
@@ -89,8 +100,10 @@ export function formatDayTitleParts(
   language?: string,
 ): { text: string; day?: true; month?: string }[] {
   return dayTitleFromParts(
-    dateFormat({ weekday: "short", day: "numeric", month: "short" }, language).formatToParts(
-      asUtc(date),
+    shortMonths(
+      dateFormat({ weekday: "short", day: "numeric", month: "short" }, language).formatToParts(
+        asUtc(date),
+      ),
     ),
     date,
   );
@@ -131,7 +144,7 @@ export function formatWeekTitleParts(
     .formatRangeToParts(asUtc(from), asUtc(to))
     .map(({ type, value, source }) => {
       const date = source === "endRange" ? to : from;
-      if (type === "month") return { text: value, month: date.slice(0, 7) };
+      if (type === "month") return { text: value.slice(0, 3), month: date.slice(0, 7) };
       if (type === "year") return { text: value, year: Number(date.slice(0, 4)) };
       return { text: value };
     });

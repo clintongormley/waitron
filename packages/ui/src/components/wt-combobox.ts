@@ -17,8 +17,9 @@ export interface ComboboxOption {
   label: string;
   /** Keep this row in place while sorting the options on either side. */
   fixed?: boolean;
-  /** A registered wt-icon name, drawn before the label. */
+  /** A registered wt-icon name; iconPosition places it after the label when set. */
   icon?: string;
+  iconPosition?: "end";
   /** Spoken identity for an icon that distinguishes otherwise identical labels. */
   iconLabel?: string;
   /** Consecutive options with the same group render under one heading. */
@@ -998,7 +999,9 @@ export class WtCombobox extends LitElement {
             ? html`<span class=${selected ? "check checked" : "check"} aria-hidden="true"></span>`
             : nothing
         }
-        ${option.icon ? this.renderIcon(option) : nothing} ${this.renderOptionText(option)}
+        ${option.iconPosition !== "end" ? this.renderIcon(option) : nothing}
+        ${this.renderOptionText(option)}
+        ${option.iconPosition === "end" ? this.renderIcon(option) : nothing}
         ${
           selected && !this.multiple
             ? html`<wt-icon class="tick" name="check" aria-hidden="true"></wt-icon>`
@@ -1116,7 +1119,7 @@ export class WtCombobox extends LitElement {
               ? html`<span id=${`${this.labelId}-name`} hidden>${triggerName}</span>`
               : nothing
           }
-          ${this.renderIcon(this.chosenOption, `${this.valueId}-icon`)}
+          ${this.chosenOption?.iconPosition !== "end" ? this.renderIcon(this.chosenOption, `${this.valueId}-icon`) : nothing}
           <span
             id=${this.valueId}
             class=${classMap({ value: true, placeholder: !selectedText, muted })}
@@ -1127,19 +1130,22 @@ export class WtCombobox extends LitElement {
               (text) => html`<span class="width-option" aria-hidden="true">${text}</span>`,
             ),
           )}
+          ${this.chosenOption?.iconPosition === "end" ? this.renderIcon(this.chosenOption, `${this.valueId}-icon`) : nothing}
           <wt-icon class="chevron" name="chevron-down"></wt-icon>
         </button>
       </div>
     `;
   }
 
-  /** A combobox takes no name from its content, so the trigger names its own parts: the label, then
-   * the named icon, then the words it shows. */
+  /** A combobox takes no name from its content; its labelled parts follow the visual order. */
   private triggerLabelledBy(labelId: string): string {
+    const iconId =
+      this.chosenOption?.icon && this.chosenOption.iconLabel ? `${this.valueId}-icon` : "";
     return [
       labelId,
-      this.chosenOption?.icon && this.chosenOption.iconLabel ? `${this.valueId}-icon` : "",
-      this.valueId,
+      ...(this.chosenOption?.iconPosition === "end"
+        ? [this.valueId, iconId]
+        : [iconId, this.valueId]),
     ]
       .filter(Boolean)
       .join(" ");
@@ -1184,14 +1190,14 @@ export class WtCombobox extends LitElement {
       @click=${this.onTriggerClick}
       @keydown=${this.onTriggerKeydown}
     >
-      ${this.renderIcon(this.chosenOption, `${this.valueId}-icon`)}<span
+      ${this.chosenOption?.iconPosition !== "end" ? this.renderIcon(this.chosenOption, `${this.valueId}-icon`) : nothing}<span
         id=${this.valueId}
         class="link-text"
         >${name ? html`<span class="link-name">${name}: </span>` : nothing}<span
           class=${selectedText ? "value" : "value placeholder"}
           >${shownText}</span
         >${this.actionLabel ? html` <span class="action">${this.actionLabel}</span>` : nothing}</span
-      >
+      >${this.chosenOption?.iconPosition === "end" ? this.renderIcon(this.chosenOption, `${this.valueId}-icon`) : nothing}
     </button>`;
   }
 

@@ -885,9 +885,7 @@ describe("Opening hours week, a station shown", () => {
       [...track(el, "2026-12-02", "rest").querySelectorAll(".block")].map((b) => text(b)),
     ).toEqual(["Breakfast 08:00–11:00", "Lunch 13:00–15:30", "Dinner 20:00–23:00"]);
     expect(row(el, "2026-12-02", "terrace")).toBeNull();
-    expect(text(row(el, "2026-12-06", "rest").querySelector(".spoken"))).toBe(
-      "Restaurant: No orders",
-    );
+    expect(text(row(el, "2026-12-06", "rest").querySelector(".spoken"))).toBe("Restaurant: Closed");
     expect(track(el, "2026-12-06", "rest").textContent!.trim()).toBe("");
     const sent = events<CalendarDayOpen>(el, "calendar-day-open");
     const name = root(el).querySelector<HTMLElement>(
@@ -897,10 +895,10 @@ describe("Opening hours week, a station shown", () => {
     expect(sent.map(({ date }) => date)).toEqual(["2026-12-02"]);
   });
 
-  it("a day no department sends on reads No orders once", async () => {
+  it("a day no department sends on reads Closed once", async () => {
     for (const [locale, words] of [
-      ["en", "No orders"],
-      ["es", "Sin pedidos"],
+      ["en", "Closed"],
+      ["es", "Cerrada"],
     ] as const) {
       setLocale(locale);
       const el = await mount({ stations: STATIONS, station: grill() });
@@ -918,26 +916,7 @@ describe("Opening hours week, a station shown", () => {
       expect(
         [...day.querySelectorAll('[data-test="no-orders"]')].map(text),
         day.dataset.date,
-      ).toEqual(["No orders"]);
-  });
-
-  it("the default station reads Always open in place of the days, muted", async () => {
-    for (const [locale, words] of [
-      ["en", "Always open: this is the default station"],
-      ["es", "Siempre abierta: es la estación predeterminada"],
-    ] as const) {
-      setLocale(locale);
-      const el = await mount({ stations: STATIONS, station: { id: "grill", state: "always" } });
-      expect(root(el).querySelector("section")).toBeNull();
-      expect(root(el).querySelector(".ruler")).toBeNull();
-      const always = testId(el, "always-open")!;
-      expect(text(always)).toBe(words);
-      expect(getComputedStyle(always).color).toBe(
-        getComputedStyle(probeText(el, "--wt-color-text-muted")).color,
-      );
-      expect(show(el).value).toBe("station:grill");
-      el.remove();
-    }
+      ).toEqual(["Closed"]);
   });
 
   it("loading draws only the head", async () => {
@@ -991,20 +970,18 @@ describe("Opening hours week, a station shown", () => {
 
       el.date = "2026-12-06";
       await el.updateComplete;
-      expect(text(card.querySelector('.row[data-row="rest"] .words'))).toBe("No orders");
+      expect(text(card.querySelector('.row[data-row="rest"] .words'))).toBe("Closed");
 
       el.date = "2026-12-03";
       await el.updateComplete;
-      expect([...card.querySelectorAll('[data-test="no-orders"]')].map(text)).toEqual([
-        "No orders",
-      ]);
+      expect([...card.querySelectorAll('[data-test="no-orders"]')].map(text)).toEqual(["Closed"]);
       expect(card.querySelectorAll(".row")).toHaveLength(0);
     } finally {
       await page.viewport(width, height);
     }
   });
 
-  it("on a phone a station row's No orders is muted, as the whole day's is, and its orders are not", async () => {
+  it("on a phone a station row's Closed is muted, as the whole day's is, and its orders are not", async () => {
     const [width, height] = [window.innerWidth, window.innerHeight];
     await page.viewport(390, 844);
     try {
@@ -1013,7 +990,7 @@ describe("Opening hours week, a station shown", () => {
       const card = testId(el, "day-card")!;
       const words = (key: string) =>
         card.querySelector<HTMLElement>(`.row[data-row="${key}"] .words`)!;
-      expect(text(words("rest"))).toBe("No orders");
+      expect(text(words("rest"))).toBe("Closed");
       expect(text(words("bar"))).toBe("All day 10:00–02:00");
       const muted = getComputedStyle(probeText(el, "--wt-color-text-muted")).color;
       const normal = getComputedStyle(probeText(el, "--wt-color-text")).color;

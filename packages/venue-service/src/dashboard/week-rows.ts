@@ -60,7 +60,8 @@ export interface WeekBlock {
 
 export interface WeekRow {
   station?: boolean;
-  always?: boolean;
+  stationHeading?: string;
+  stationGroup?: string;
   key: string;
   name: string;
   zone: boolean;
@@ -145,8 +146,7 @@ export function weekRows(day: Day, chosen: string, names: MonthNames): WeekRow[]
     });
 }
 
-/** A prep station's day, its `departments` the ones that send it orders: one row per department,
- *  its blocks the times it sends, its words "No orders" when it sends none. */
+/** A prep station's rows retain sending-department identity and period detail. */
 export function weekStationRows(day: Day, names: MonthNames): WeekRow[] {
   const place = placeOnDay(day);
   return day.departments.map((read) => {
@@ -156,20 +156,17 @@ export function weekStationRows(day: Day, names: MonthNames): WeekRow[] {
       key: read.departmentId,
       name,
       ...(names.station(read.departmentId) ? { station: true } : {}),
-      ...(names.always(read.departmentId) ? { always: true } : {}),
+      ...(names.stationHeading(read.departmentId)
+        ? { stationHeading: names.stationHeading(read.departmentId) }
+        : {}),
+      ...(names.stationGroup(read.departmentId) !== undefined
+        ? { stationGroup: names.stationGroup(read.departmentId) }
+        : {}),
       zone: false,
       strong: true,
       blocks,
-      empty: names.always(read.departmentId)
-        ? t("prep.always_open_default")
-        : names.station(read.departmentId)
-          ? t("month.no_orders")
-          : "",
-      words: names.always(read.departmentId)
-        ? t("prep.always_open_default")
-        : blocks.length
-          ? blocks.map((block) => block.text).join(" · ")
-          : t("month.no_orders"),
+      empty: names.station(read.departmentId) ? t("month.no_orders") : "",
+      words: blocks.length ? blocks.map((block) => block.text).join(" · ") : t("month.no_orders"),
     };
   });
 }

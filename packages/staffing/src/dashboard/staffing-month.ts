@@ -16,7 +16,7 @@ import "@waitron/venue-service/dashboard/calendar-day-box";
 import { areaKey } from "../slots.js";
 import type { StaffingArea, StaffingMonth } from "../staffing-types.js";
 import type { StaffingApi } from "./client.js";
-import { dateAroundDay, dateFormat, mondayFirst, utc } from "./format.js";
+import { calendarDate, dateAroundDay, dateFormat, mondayFirst, utc } from "./format.js";
 import { STAFFING_STRINGS, t, tf } from "./strings.js";
 
 type Day = StaffingMonth["days"][number];
@@ -548,7 +548,7 @@ export class StaffingMonthView extends LitElement {
     };
     const monday = month.days[index - (index % 7)]!.date;
     return html`<calendar-day-box
-      .heading=${dateFormat({ weekday: "short", day: "numeric", month: "short", year: "numeric" }).format(utc(day.date))}
+      .heading=${calendarDate(day.date, { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
       .name=${special?.name ?? ""}
       .nameKind=${special ? "special" : ""}
       .line=${line}

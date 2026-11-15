@@ -280,32 +280,7 @@ Owner, 2026-11-15, reviewing the Calendar's Opening hours tab. Mock-ups were sho
 approved; they are not committed. Mostly `packages/venue-service/src/dashboard/`
 (`opening-hours-year.ts`, `-month.ts`, `-week.ts`, `-screen.ts`, `hours-view.ts`, `strings.ts`).
 
-1. **Month names use three letters**: "Sep", not "Sept", everywhere a short month is drawn (season
-   chips, Seasons page, day labels). `hours-view.ts` formats with `month: "short"`, and the
-   browser's British English gives "Sept" (Spanish gives "sept").
-2. **Remove the Seasons and Periods links** after the season chips (`opening-hours-year.ts`), and
-   the Periods link under the prep-station explanation. Both pages are in the sidebar.
-3. **The default station shows the periods that feed it, not "Always open: this is the default
-   station".** It can only receive orders while some period is selling, so when the venue closes
-   at midnight the kitchen gets nothing. Its row shows a bar for each period that can send it work,
-   across every department. Reword the explanation's "The default station is always open", and the
-   same wording in the month view, the week view and the prep stations screen.
-4. **A station fed by more than one department gets a heading row and one thin row per
-   department** in All prep stations and Show all, in the week and month views — the layout the
-   single-station view already uses. Today those views combine a station's senders into one row,
-   so two departments' periods at the same time (Restaurant and bar's Lunch and Deli's lunch, both
-   13:00–16:00, both sent to the Kitchen) compete for one stretch. A station one department feeds
-   keeps its single row with no department name.
-5. **"No orders" becomes "Closed"**, whatever the reason (owner's choice over a "Not used" variant).
-6. **The Show menu draws the prep-station icon after the name**, in the menu and in the closed
-   field, so "All prep stations" lines up with "All departments" instead of looking indented under
-   it.
-7. **The Month offers Show all**, as the Week does. Today the Month treats Show all as All
-   departments (design-system.md, Calendar). The day boxes already grow to fit; a week row becomes
-   as tall as its tallest day.
-8. **The Month names its rows on the department views**, as All prep stations does: a
-   department's zones, or each department under All departments.
-9. **The day box, every view:**
+1. **The day box, every view:**
    - Sections: one per department, its name bold and its zones beneath in normal weight; then a
      "Prep stations" section, its heading bold and the stations in normal weight. Bold no longer
      marks a zone's own hours: a zone that follows its department keeps its hours in grey italics,
@@ -322,7 +297,7 @@ approved; they are not committed. Mostly `packages/venue-service/src/dashboard/`
      closed stretches; it opens beside where you clicked, not at the left edge; it drops the
      repeated explanation and Periods link; and it ends with the same buttons as the other day
      boxes (today it has none). "Open this week" is left out on the week it is already showing.
-10. **Taken in from the former "Calendar marks" bundle** (backlog review, 2026-11-06):
+2. **Taken in from the former "Calendar marks" bundle** (backlog review, 2026-11-06):
     - [A purple season looks like a special day](#a-purple-season-looks-like-a-special-day).
     - The Opening hours Month marks a special day only by its name — left open by A762, #1850 (its
       plan's Decision 11): the Staffing month draws a purple run over a special day's dates, the

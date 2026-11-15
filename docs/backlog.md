@@ -657,11 +657,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   remains: keep the painters’ period pop-ups, or replace them too?
   [Detail](backlog/service-periods.md#a1545-seasons-and-periods-a-list-page-and-an-edit-page-each)
 
-- **A1546. The Calendar: prep-station hours and the day box (owner, 2026-11-15).** The default
-  station shows the periods that feed it, a station two departments feed gets a row for each,
-  "No orders" becomes "Closed", the day box is laid out in sections and opens where you click,
-  the Month gains Show all and row names, and month names use three letters. Takes in the former
-  "Calendar marks" bundle.
+- **A1546. The Calendar: day boxes and special-day marks (owner, 2026-11-15).** The day box
+  needs sections, wrapping and placement where you click; special-day bands and runs need a
+  dashed shape distinct from purple seasons.
   [Detail](backlog/service-periods.md#a1546-the-calendar-prep-station-hours-and-the-day-box)
 
 - **One rule for two managers editing at once** (bundle of 6, 2 important, size M). Holds A1073. [Detail](backlog/service-periods.md#bundle-one-rule-for-two-managers-editing-at-once)

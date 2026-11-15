@@ -106,21 +106,6 @@ describe.each(["light", "dark"] as const)("Opening hours month accessibility (%s
     await expectNoA11yViolations(host);
   });
 
-  test("a station always open", async () => {
-    await mountThemed("<div></div>", theme);
-    const el = document.createElement("opening-hours-month");
-    Object.assign(el, {
-      model: monthModel(),
-      departments: DEPARTMENTS,
-      stations: [{ id: "grill", name: "Grill" }],
-      station: { id: "grill", state: "always" },
-    });
-    host.append(el);
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector('[data-test="always-open"]')).not.toBeNull();
-    await expectNoA11yViolations(host);
-  });
-
   test("a picked run", async () => {
     await mountThemed("<div></div>", theme);
     const el = document.createElement("opening-hours-month");

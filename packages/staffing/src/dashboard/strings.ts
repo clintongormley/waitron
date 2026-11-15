@@ -210,7 +210,7 @@ const en = {
   "staffing.painter.guide_station":
     "Shaded: when {station} gets orders, one lane per department that sends it dishes",
   "staffing.grid.closed": "Closed",
-  "staffing.grid.no_orders": "No orders",
+  "staffing.grid.no_orders": "Closed",
   "staffing.painter.previous_season": "Previous season",
   "staffing.painter.next_season": "Next season",
   "staffing.painter.area": "Department or prep station",
@@ -436,7 +436,7 @@ const es: Record<keyof typeof en, string> = {
   "staffing.painter.guide_station":
     "Sombreado: cuándo recibe pedidos {station}, un carril por cada departamento que le envía platos",
   "staffing.grid.closed": "Cerrado",
-  "staffing.grid.no_orders": "Sin pedidos",
+  "staffing.grid.no_orders": "Cerrada",
   "staffing.painter.previous_season": "Temporada anterior",
   "staffing.painter.next_season": "Temporada siguiente",
   "staffing.painter.area": "Departamento o estación de preparación",

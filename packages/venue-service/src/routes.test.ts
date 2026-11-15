@@ -3308,8 +3308,8 @@ describe.each(["individual", "batch"])("%s station service-times planning route"
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual(
         mode === "batch"
-          ? { [f.stationId]: { always: "default", days: [] } }
-          : { always: "default", days: [] },
+          ? { [f.stationId]: { days: [{ date: "2026-10-12", departments: [] }] } }
+          : { days: [{ date: "2026-10-12", departments: [] }] },
       );
     }
   });
@@ -3401,7 +3401,6 @@ it("the station planning route returns the configured period ranges for a non-de
   );
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({
-    always: null,
     days: [
       {
         date: "2026-10-12",
@@ -3924,7 +3923,6 @@ it("A724: the station planning route returns last orders at its period's own end
   );
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({
-    always: null,
     days: [
       {
         date: "2026-10-12",

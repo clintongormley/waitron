@@ -1,5 +1,10 @@
 # A1539: Calendar prep stations
 
+_2026-11-15, A1546 slice 1 changes the Calendar presentation described below: default-station
+reads now carry dated demand, station comparisons retain separate sending departments, and
+Calendar and Staffing guide columns use Closed. See
+[the current Calendar contract](../../developers/design-system.md#calendar)._
+
 **Finish line:** One PR: compare stations in Month/Week; departments then stations in Week; identify stations and reach Periods. Authority: owner’s request in `docs/backlog.md` A1539; watcher queued it 2026-11-14 19:32 (Lane D questions/queue). Separate Sol-high author; driver checked paths. Claude’s completed 379-second review is incorporated below; the watcher cleared reviewed head e3195b3dc0 on 2026-11-14 at22:56 (Lane D questions.md), inside the owner’s request. Publish after #3234 lands; build after A1537. No owner plan approval claimed.
 
 **Scope:** Read-only, no migration. Build after A1537; reuse its merged-hours/bar-click work. Exclude A1538 chrome and new infrastructure. Preserve existing manager-only station admission and passive reads.

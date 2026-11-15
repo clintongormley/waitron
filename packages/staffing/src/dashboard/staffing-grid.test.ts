@@ -1795,10 +1795,10 @@ test("A724 labels coloured periods in stable department lanes", async () => {
 });
 
 test.each([
-  { locale: "en", closed: "Closed", orders: "No orders" },
+  { locale: "en", closed: "Closed", orders: "Closed" },
   { locale: "es", closed: "Cerrado", orders: STAFFING_STRINGS.es["staffing.grid.no_orders"] },
 ])(
-  "A724 distinguishes closed departments from no orders in $locale",
+  "A724 labels closed departments and station demand in $locale",
   async ({ locale, closed, orders }) => {
     setLocale(locale);
     if (locale === "es") expect(orders).not.toBe(STAFFING_STRINGS.en["staffing.grid.no_orders"]);

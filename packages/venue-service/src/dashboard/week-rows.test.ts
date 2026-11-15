@@ -223,8 +223,16 @@ describe("weekStationRows", () => {
       name: "Bar",
       blocks: [],
       empty: "",
-      words: "No orders",
+      words: "Closed",
     });
+  });
+
+  it("retains grouped rows when their station has an empty stored name", () => {
+    const grouped = monthNames(
+      DEPARTMENTS.map((row) => ({ ...row, station: true, stationGroup: "" })),
+    );
+    for (const row of weekStationRows(grillDay(), grouped))
+      expect(row).toHaveProperty("stationGroup", "");
   });
 
   it("draws no rows when no department sends, and no zones ever", () => {
@@ -237,13 +245,13 @@ describe("weekStationRows", () => {
     expect(weekStationRows(withZone, names).map((r) => r.key)).toEqual(["rest", "bar"]);
   });
 
-  it("reads No orders on a date closed all day too, and in Spanish", () => {
+  it("reads Closed on a date closed all day too, and in Spanish", () => {
     const christmas = monthModel().days.find((d) => d.date === "2026-12-25")!;
     const closed = { ...christmas, departments: [{ departmentId: "rest", zones: [], ranges: [] }] };
-    expect(weekStationRows(closed, names)[0]).toMatchObject({ empty: "", words: "No orders" });
+    expect(weekStationRows(closed, names)[0]).toMatchObject({ empty: "", words: "Closed" });
     setLocale("es");
     try {
-      expect(weekStationRows(grillDay(), names)[1]!.words).toBe("Sin pedidos");
+      expect(weekStationRows(grillDay(), names)[1]!.words).toBe("Cerrada");
     } finally {
       setLocale("en");
     }

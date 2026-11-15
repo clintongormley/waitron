@@ -638,15 +638,14 @@ refuses a `week` query (`packages/venue-service/src/station-service-times.ts`). 
 painter instead passes the selected season's weekdays directly to the shared reader. The special-day
 staffing painter passes the edited special day's own plan, including when another repeating day
 would stand on one of its dates. All requested stations share the schedule and routing reads. Planning
-ignores today's station closures and kept-open extensions. The default station answers
-`always: "default"` and no dates, and the tab shows a sentence in place of the month; a deleted
-station's id is refused (`station.not_found`). The default station's staffing guides show
-scheduled demand from period menus and untimed routes.
+ignores today's station closures and kept-open extensions. Every active station, including the default, answers dated department ranges through the same
+planner; `StationServiceTimes` carries only `days`. A deleted station's id is refused
+(`station.not_found`). The default station's staffing guides also show scheduled demand from
+period menus and untimed routes.
 
 2026-11-15, A1539: All prep stations uses `stationsServiceTimes` to read every active station in
-one planning batch; Week’s Show all adds those station rows after departments. The default station
-keeps an Always open row in these combined views. The individual station read and its default
-sentence remain as above.
+one planning batch; Week’s Show all adds those station rows after departments. _2026-11-15, A1546 slice 1 supersedes the default-station presentation: both individual and
+batch reads now include dated default demand, and Month also offers Show all._
 
 Venue-service migration `0047_retire_station_hours_fallbacks.sql` dropped `hours_week_cells`,
 `hours_week_periods`, `special_date_hours`, `special_date_hours_periods` and `station_fallbacks`.

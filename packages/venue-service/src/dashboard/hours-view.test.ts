@@ -9,6 +9,8 @@ import {
   formatDayTitleParts,
   formatLongDate,
   formatMonthName,
+  formatMonthDay,
+  formatShortDate,
   formatWeekTitleParts,
   formatWeekday,
 } from "./hours-view.js";
@@ -57,14 +59,14 @@ it.each([
 
 it("names a weekday narrow or in full, and follows a change of language", () => {
   expect(formatMonthName(9)).toBe("September");
-  expect(formatMonthName(9, undefined, "short")).toBe("Sept");
+  expect(formatMonthName(9, undefined, "short")).toBe("Sep");
   expect(formatWeekday("2024-01-01", "narrow")).toBe("M");
   expect(formatWeekday("2024-01-01", "long")).toBe("Monday");
   expect(formatDate("2026-10-12")).toBe("Mon, 12 Oct 2026");
   expect(formatLongDate("2026-10-12")).toBe("Monday, 12 October 2026");
   setLocale("es");
   expect(formatMonthName(9)).toBe("septiembre");
-  expect(formatMonthName(9, undefined, "short")).toBe("sept");
+  expect(formatMonthName(9, undefined, "short")).toBe("sep");
   expect(formatWeekday("2024-01-01", "narrow")).toBe("L");
   expect(formatWeekday("2024-01-01", "long")).toBe("lunes");
   expect(formatDate("2026-10-12")).toBe("lun, 12 oct 2026");
@@ -103,7 +105,7 @@ describe("formatWeekTitleParts and formatDayHeading", () => {
 
   it("names a week across two months and two years", () => {
     const parts = formatWeekTitleParts("2026-09-28", "2026-10-04", "en");
-    expect(joined(parts)).toBe("28 Sept – 4 Oct 2026");
+    expect(joined(parts)).toBe("28 Sep – 4 Oct 2026");
     expect(parts.flatMap((p) => p.month ?? [])).toEqual(["2026-09", "2026-10"]);
     const years = formatWeekTitleParts("2026-12-28", "2027-01-03", "es");
     expect(joined(years)).toBe("28 dic 2026 – 3 ene 2027");
@@ -153,4 +155,30 @@ it("keeps the month out of the day's link where it falls between the weekday and
     { text: " " },
     { text: "1", day: true },
   ]);
+});
+
+it.each([
+  ["en", "Sep"],
+  ["es", "sep"],
+])("uses three-letter short months across Calendar dates in %s", (language, month) => {
+  setLocale(language!);
+  expect(formatDate("2026-09-12")).toContain(month);
+  expect(formatMonthDay("09-12")).toBe(`12 ${month}`);
+  expect(formatShortDate("2026-09-12", true)).toBe(`12 ${month} 2026`);
+  expect(formatShortDate("2026-09-12", false)).toBe(`12 ${month}`);
+  expect(dateAroundDay("2026-09-12", { day: "numeric", month: "short" }).after).toBe(` ${month}`);
+  expect(formatDayHeading("2026-09-12")).toContain(month);
+  expect(formatDayTitleParts("2026-09-12").find((part) => part.month)).toEqual({
+    text: month,
+    month: "2026-09",
+  });
+});
+
+it("keeps native short months for dates outside the Calendar", () => {
+  expect(formatDate("2026-09-12", false)).toBe("Sat, 12 Sept 2026");
+  setLocale("es");
+  const weekday = new Intl.DateTimeFormat("es-ES", { weekday: "short", timeZone: "UTC" }).format(
+    new Date("2026-09-12T00:00:00Z"),
+  );
+  expect(formatDate("2026-09-12", false)).toBe(`${weekday}, 12 sept 2026`);
 });
