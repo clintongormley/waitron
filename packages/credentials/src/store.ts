@@ -266,7 +266,7 @@ export interface RotationResult {
  * One venue.db transaction per row, so a failure part-way keeps the rows already re-sealed. An
  * interrupted run leaves a readable vault because reads select their key by the row's own version;
  * re-running finishes it.
- * Re-sealing deliberately uses sealCredentialRowTx to refuse payloads the current purpose rejects.
+ * Rotation uses the sealing helper to recheck payloads without recording a credential change.
  */
 export async function rotateCredentials(
   db: Database,
