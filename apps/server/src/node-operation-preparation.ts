@@ -199,6 +199,7 @@ export function createNodeOperationPreparation(options: {
   ): Promise<T> => {
     const binding = Object.freeze({ ...supplied });
     const heldContext = Object.freeze({ ...context });
+    // Not cloned when the switch signed the person in: a clone would lose that in-memory mark.
     const heldCredentials = isSwitchSignedIn(credentials)
       ? credentials
       : structuredClone(credentials);
@@ -242,6 +243,13 @@ export function createNodeOperationPreparation(options: {
         },
       );
     if (options.credentialKeyRing === undefined) return invalid(binding);
+    const commit: Commit = (body) => withTransaction(options.db, body);
+    if (isSwitchSignedIn(heldCredentials)) {
+      await afterSignIn?.();
+      return withOperationAuthority({ ...binding }, heldCredentials.personId, (authority) =>
+        authenticated(authority, commit),
+      );
+    }
     return withAuthenticatedOperation(
       { db: options.db, credentialKeyRing: options.credentialKeyRing },
       {
@@ -249,7 +257,7 @@ export function createNodeOperationPreparation(options: {
         permission: "node.manage",
       },
       heldCredentials,
-      (authority) => authenticated(authority, (body) => withTransaction(options.db, body)),
+      (authority) => authenticated(authority, commit),
       afterSignIn,
     );
   };

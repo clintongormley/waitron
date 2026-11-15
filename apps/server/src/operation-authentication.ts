@@ -115,10 +115,6 @@ export async function withAuthenticatedOperation<T>(
   /** Runs inside the sign-in's transaction, so a throw leaves no session row behind. */
   afterSignIn?: () => Promise<void>,
 ): Promise<T> {
-  if (isSwitchSignedIn(credentials)) {
-    await afterSignIn?.();
-    return withOperationAuthority({ ...operation.binding }, credentials.personId, run);
-  }
   if (typeof credentials !== "object" || credentials === null || Array.isArray(credentials))
     throw new AppError("password.invalid", {});
   const { personId, password, totp } = credentials as Record<string, unknown>;
