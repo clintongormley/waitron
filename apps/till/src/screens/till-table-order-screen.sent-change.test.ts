@@ -1223,7 +1223,7 @@ it("localises the sent dish, extras and served quantity", async () => {
   expect(q(el, "[data-sent-extra]")!.textContent).toContain("Sauce ×0,5");
   expect(q(el, "[data-sent-line-served]")!.textContent).toContain("0,25");
   expect(q(el, "[data-sent-line-dialog] [data-line-paid]")!.textContent).toBe(
-    t("bill_pay.paid_part").replace("{paid}", "0,25").replace("{quantity}", "0,75"),
+    t("table.line_payment_part").replace("{paid}", "0,25").replace("{quantity}", "0,75"),
   );
 });
 

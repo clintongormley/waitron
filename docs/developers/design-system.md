@@ -6297,6 +6297,11 @@ screen shows for the line, such as an allergy or paid mark. Only a whole portion
 one in a unit with no decimals; a weighed or measured line, and a line no portion is bound to,
 always stand alone.
 
+The table’s dish list marks quantities covered by pending or received item payments with
+"Has a payment" / "Tiene un pago", or "{paid} of {quantity} have a payment" /
+"{paid} de {quantity} tienen un pago" for part of a row. The words do not distinguish money
+received from a card payment still in progress.
+
 On the till, Mark served and Undo served on a grouped row ask how many and act on its first that
 many members; Move station takes every member; Change dish changes every member; Move dishes… picks the row's first members whole
 ([The dish picker](#the-dish-picker)); Comp, discounts and Void act on the row, all of it
@@ -6335,8 +6340,8 @@ is picked.
   timed reads do not repeat and closing the panel does not start, so its mark stays as that read left it
   until the order is next read.
 - **A blocked row** shows its tick greyed with the reason under the dish, tied to the tick by
-  `aria-describedby`: "Paid" for a dish with any quantity paid, and "{amount} is already paid on
-  this bill: move fewer dishes" when one more would leave the bill's total below what it has
+  `aria-describedby`: "Has a payment" / "Tiene un pago" for a dish with any quantity covered by a
+  pending or received payment, and "Payments keep {amount} on this bill: move fewer dishes" when one more would leave the bill's total below what it has
   received or reserved. A row holding picks keeps its tick usable so it can be cleared. The greyed box is drawn by the
   widget, because the browser's own disabled box is too faint on the light page.
 - **The destinations** follow under "Move to": the party's other open bills, a part-paid one included,

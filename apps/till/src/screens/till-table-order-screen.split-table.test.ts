@@ -1326,7 +1326,7 @@ describe("A803 split: the steps before the panel follow the party", () => {
 });
 
 describe("A803 split: a re-read", () => {
-  it("a re-read: a picked dish paid elsewhere drops, and its row says Paid", async () => {
+  it("a re-read: a picked dish paid elsewhere drops, and its row names the payment", async () => {
     const el = await mountScreen();
     await toPanel(el);
     await pickDish(el, "b1", "salad");
@@ -1348,7 +1348,7 @@ describe("A803 split: a re-read", () => {
     const salad = splitPicker(el)!
       .shadowRoot!.querySelector('[data-split-bill="b1"] till-portion-picker')!
       .shadowRoot!.querySelector('[data-pick-row="salad"]')!;
-    expect(salad.textContent).toContain(t("bill_pay.paid"));
+    expect(salad.textContent).toContain(t("table.pick_payment_stays"));
   });
 
   it("a re-read: two of four picked, one paid elsewhere, two are still picked", async () => {

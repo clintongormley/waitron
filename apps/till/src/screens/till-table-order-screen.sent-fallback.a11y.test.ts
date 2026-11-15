@@ -146,9 +146,9 @@ describe.each(["en", "es"] as const)("read-only Sent payment facts in %s", (loca
       expect(fallback.scrollWidth).toBeLessThanOrEqual(fallback.clientWidth);
       const marks = [...fallback.querySelectorAll<HTMLElement>("[data-line-paid]")];
       expect(marks.map((mark) => mark.textContent!.trim())).toEqual([
-        t("bill_pay.paid"),
-        t("bill_pay.paid"),
-        t("bill_pay.paid_part").replace("{paid}", "1").replace("{quantity}", "3"),
+        t("table.pick_payment_stays"),
+        t("table.pick_payment_stays"),
+        t("table.line_payment_part").replace("{paid}", "1").replace("{quantity}", "3"),
       ]);
       for (const mark of marks) {
         expect(mark.checkVisibility()).toBe(true);

@@ -620,10 +620,11 @@ fijan después cuántos, como **2 de 4**, con el importe de los que se mueven. U
 
 Algunas casillas salen en gris, con el motivo debajo del plato:
 
-- **Pagado**: el plato ya está pagado, así que se queda en esta cuenta. Para moverlo, devuelve antes
-  su pago.
-- **Ya se han pagado 40,00 € en esta cuenta: mueve menos platos**: mover este plato, o uno más de la fila, dejaría la
-  cuenta por debajo de lo que ya se ha pagado en ella. Los demás platos sí pueden pasar.
+- **Tiene un pago**: el plato tiene un pago en curso o recibido, así que se queda en esta cuenta.
+  Espera a que termine un pago en curso; devuelve un pago recibido antes de mover su plato.
+- **Los pagos retienen 40,00 € en esta cuenta: mueve menos platos**: elige menos platos para que
+  la cuenta conserve lo necesario para sus pagos, incluidos los que siguen en curso. Los demás
+  platos sí pueden pasar.
 
 En **Mover a**, elige adónde van los platos: otra de las cuentas abiertas de la mesa, o **+ Cuenta
 nueva**. Una cuenta que ya ha recibido un pago simplemente debe más después. **Mover** sigue apagado hasta que marques un plato y elijas adónde va.
@@ -636,7 +637,7 @@ Si una cuenta está a nombre de un cliente para factura completa y mueves todos 
 cuenta que no nombra al mismo cliente, la caja pregunta antes: elige el cliente al que se facturan
 los platos, o **No mover**.
 
-Si alguien paga un plato en otra caja mientras el panel está abierto, su fila pasa a **Pagado**
+Si alguien paga un plato en otra caja mientras el panel está abierto, su fila pasa a **Tiene un pago**
 cuando la caja vuelve a leer la cuenta, y ese plato deja de estar entre los que elegiste. Si tocas
 **Mover** antes, la caja rechaza el cambio con el motivo, por ejemplo **Este artículo ya está
 pagado, así que no se puede cambiar, mover ni cobrar otra vez. Devuelve antes su pago**, y no se
