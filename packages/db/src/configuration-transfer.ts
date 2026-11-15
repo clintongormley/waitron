@@ -1,6 +1,8 @@
 import type { Transaction } from "./client.js";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { kitchenStations } from "./schema/kitchen-stations.js";
+import { deviceProfiles } from "./schema/device-profiles.js";
+import { deviceProfilePrinters } from "./schema/device-profile-printers.js";
 import {
   AppError,
   isBumpMode,
@@ -137,6 +139,17 @@ export const CORE_CONFIGURATION_TRANSFER = {
   ],
   validate: validateCoreConfiguration,
   afterImport: async (tx: Transaction) => {
+    await tx
+      .delete(deviceProfilePrinters)
+      .where(
+        inArray(
+          deviceProfilePrinters.deviceProfileId,
+          tx
+            .select({ id: deviceProfiles.id })
+            .from(deviceProfiles)
+            .where(eq(deviceProfiles.formFactor, "kds")),
+        ),
+      );
     await storeTableShortNameKeys(tx);
     for (const station of await tx
       .select({ id: kitchenStations.id, printerIds: kitchenStations.printerIds })

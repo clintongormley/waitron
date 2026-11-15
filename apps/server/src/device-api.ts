@@ -846,18 +846,25 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
         }
         const label = requireDeviceName(body.name);
         const profileId = requireBodyUuid(body.profileId, "profileId");
-        const chosen: Partial<Record<ProfilePrinterRole, string | null>> = {
-          receipt: requireNullableBodyUuid(body.receiptPrinterId, "receiptPrinterId"),
-          payment_slip: requireNullableBodyUuid(body.paymentSlipPrinterId, "paymentSlipPrinterId"),
-        };
+        const profile = await requireDeviceProfile(tx, profileId);
+        const kitchen = profile.formFactor === "kds";
+        const chosen: Partial<Record<ProfilePrinterRole, string | null>> = kitchen
+          ? {}
+          : {
+              receipt: requireNullableBodyUuid(body.receiptPrinterId, "receiptPrinterId"),
+              payment_slip: requireNullableBodyUuid(
+                body.paymentSlipPrinterId,
+                "paymentSlipPrinterId",
+              ),
+            };
         // Absent leaves the stored drawer and invoice choices alone.
-        if (body.cashDrawerPrinterId !== undefined) {
+        if (!kitchen && body.cashDrawerPrinterId !== undefined) {
           chosen.cash_drawer = requireNullableBodyUuid(
             body.cashDrawerPrinterId,
             "cashDrawerPrinterId",
           );
         }
-        if (body.invoicePrinterId !== undefined) {
+        if (!kitchen && body.invoicePrinterId !== undefined) {
           chosen.invoice = requireNullableBodyUuid(body.invoicePrinterId, "invoicePrinterId");
         }
         // Absent leaves the stored stations alone: a kitchen screen's dialog does not show them.
@@ -877,7 +884,6 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
         await refuseDeletedPrinters(tx, Object.values(chosen));
         const switching = profileId !== device.deviceProfileId;
         if (switching) await assertNoPaymentInProgress(tx, id);
-        await requireDeviceProfile(tx, profileId);
         const held = await updateDeviceSettings(tx, { id, ...device }, { label, profileId });
         // Only a choice that differs from the stored one is applied: a new choice must be switched
         // on, and a device may still hold a listed one since switched off.

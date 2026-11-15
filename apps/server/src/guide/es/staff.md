@@ -166,6 +166,8 @@ fila para editarlo. Usa su menú **⋮** para duplicarlo o eliminarlo.
 Elige **Qué puede hacer** para las acciones y pantallas. Elige una pantalla de cocina y sus estaciones y zonas; todos los dispositivos que usan el perfil la heredan. Abre una pestaña marcada para corregir su campo
 y pulsa **Guardar**.
 
+Para imprimir comandas, elige la impresora en **Estaciones de preparación**.
+
 ## Quién puede iniciar sesión en un dispositivo {#device-profile-sign-in}
 
 Abre **Perfiles de dispositivo** y edita el perfil que usa el dispositivo. En **Quién puede iniciar

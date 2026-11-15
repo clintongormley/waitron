@@ -154,6 +154,51 @@ describe("device-profile store against a real migrated database", () => {
     }
   });
 
+  it("changing an unused profile to kitchen clears omitted printer settings", async () => {
+    await seedTaxpayer(suite.db);
+    const session = await seedSession("manager");
+    const [printer] = await suite.db
+      .insert(printers)
+      .values({ name: "Counter", transport: "network_tcp", host: "10.0.0.1" })
+      .returning();
+    const created = await inTx((tx) =>
+      createDeviceProfile(tx, {
+        managementSessionId: session,
+        name: "Counter",
+        formFactor: "till",
+        capabilities: [],
+        printerLists: {
+          ...NO_DRAWERS_OR_DEFAULTS,
+          receiptPrinterIds: [printer!.id],
+          paymentSlipPrinterIds: [],
+          receiptPrinterDefaultId: printer!.id,
+        },
+      }),
+    );
+    const updated = await inTx((tx) =>
+      updateDeviceProfile(tx, {
+        managementSessionId: session,
+        id: created.id,
+        name: "Kitchen",
+        formFactor: "kds",
+        capabilities: [],
+      }),
+    );
+    expect(updated).toMatchObject({
+      receiptPrinterIds: [],
+      paymentSlipPrinterIds: [],
+      ...NO_DRAWERS_OR_DEFAULTS,
+    });
+    expect(
+      await suite.db
+        .select()
+        .from(deviceProfilePrinters)
+        .where(eq(deviceProfilePrinters.deviceProfileId, created.id)),
+    ).toEqual([]);
+    expect(await inTx((tx) => getDeviceProfileWithPrinters(tx, created.id))).toEqual(updated);
+    expect(await inTx((tx) => listDeviceProfiles(tx))).toContainEqual(updated);
+  });
+
   it("a new profile ticks every visible job role, and a new role is ticked nowhere", async () => {
     await seedTaxpayer(suite.db);
     const session = await seedSession("manager");

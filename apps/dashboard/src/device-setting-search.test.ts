@@ -52,5 +52,13 @@ it("resolves offered rows through passive lists and encodes device addresses", a
   expect((await resolve("name")).map((row) => row.id)).toEqual(["d/+", "kds", "gone", "empty"]);
   expect(await resolve("approvedProfileIds")).toEqual([]);
   for (const read of reads) expect(read).toHaveBeenCalledTimes(4);
+  for (const name of [
+    "receiptPrinterId",
+    "paymentSlipPrinterId",
+    "cashDrawerPrinterId",
+    "invoicePrinterId",
+  ]) {
+    expect((await resolve(name)).map((row) => row.id)).toEqual(["d/+", "gone", "empty"]);
+  }
   vi.restoreAllMocks();
 });

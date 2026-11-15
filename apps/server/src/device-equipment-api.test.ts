@@ -1,4 +1,4 @@
-import { attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { expectWriteRunsWhileHostHeld, heldClockStatus } from "./testing/held-clock-status.js";
 import { clockServiceAnswer } from "./testing/synchronised-box-host.js";
@@ -878,6 +878,48 @@ describe("GET /api/till's readers", () => {
 });
 
 describe("management: a device's equipment", () => {
+  it("a manager switches to a kitchen profile without sending hidden printer fields", async () => {
+    const [profile] = await seedDeviceProfiles(suite.db, {
+      name: "Kitchen",
+      formFactor: "kds",
+      capabilities: [],
+    });
+    await suite.db
+      .update(devices)
+      .set({
+        receiptPrinterId: fp,
+        paymentSlipPrinterId: pp,
+        cashDrawerPrinterId: dr,
+        invoicePrinterId: fp,
+      })
+      .where(eq(devices.id, a));
+    const res = await send(deviceApp, managerCookie, "PATCH", `/management-api/devices/${a}`, {
+      name: "Kitchen display",
+      profileId: profile!.id,
+    });
+    expect(res.status, JSON.stringify(res.json)).toBe(204);
+    const [device] = await suite.db.select().from(devices).where(eq(devices.id, a));
+    expect(device).toMatchObject({
+      deviceProfileId: profile!.id,
+      receiptPrinterId: null,
+      paymentSlipPrinterId: null,
+      cashDrawerPrinterId: null,
+      invoicePrinterId: null,
+      invoicePagePrinterId: null,
+    });
+    const read = await send(deviceApp, managerCookie, "GET", "/management-api/devices");
+    expect(read.status).toBe(200);
+    const row = (read.json as unknown as { id: string; equipment: RoleEquipment[] }[]).find(
+      (d) => d.id === a,
+    )!;
+    expect(row.equipment.filter((role) => role.role !== "card_terminal")).toEqual([
+      { role: "receipt", selection: "default", chosenId: null, resolved: null },
+      { role: "payment_slip", selection: "default", chosenId: null, resolved: null },
+      { role: "cash_drawer", selection: "default", chosenId: null, resolved: null },
+      { role: "invoice", selection: "default", chosenId: null, resolved: null },
+    ]);
+  });
+
   function patch(deviceId: string, changes: Record<string, unknown>) {
     return suite.db
       .select({

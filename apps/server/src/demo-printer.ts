@@ -78,13 +78,6 @@ export async function configureDemoPrinter(
   });
 }
 
-/**
- * Lists the printer last on every live profile's receipt, payment slip and invoice lists and makes
- * it the default of each that has none; while the printer has a cash drawer it does the same on the
- * cash drawer list, so devices on Use default print and open the drawer on it. Gives it to every
- * preparation station. A device's own choice, a profile's own default and a listing the
- * profile already has stay. Safe to repeat.
- */
 export async function routeToDemoPrinter(tx: Transaction, printerId: string): Promise<void> {
   const [printer] = await tx
     .select({ hasCashDrawer: printers.hasCashDrawer })

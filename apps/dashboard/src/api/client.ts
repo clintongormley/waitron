@@ -4194,9 +4194,9 @@ export class DashboardApi {
     input: {
       name: string;
       profileId: string;
-      /** Null puts the role on Use default. */
-      receiptPrinterId: string | null;
-      paymentSlipPrinterId: string | null;
+      /** Required for ordering profiles; kitchen profiles omit printer choices. Null is Use default. */
+      receiptPrinterId?: string | null;
+      paymentSlipPrinterId?: string | null;
       /** Absent leaves the stored drawer choice; null is Use default. */
       cashDrawerPrinterId?: string | null;
       /** A receipt or A4 printer; absent leaves the stored choice, null is Use default. */

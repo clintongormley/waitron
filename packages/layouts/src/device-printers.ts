@@ -1,10 +1,10 @@
 // The registry of `printer.not_found`, which this file throws.
 import "@waitron/printing";
 import "./errors.js";
-import { deviceProfilePrinters, pagePrinters, printers } from "@waitron/db";
+import { deviceProfilePrinters, deviceProfiles, pagePrinters, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, ne } from "drizzle-orm";
 import { settleProfilePrinterDevices } from "./device-equipment.js";
 
 export type PrinterRole = "receipt" | "payment_slip";
@@ -86,13 +86,20 @@ export async function readProfilePrinterLists(
       isDefault: deviceProfilePrinters.isDefault,
     })
     .from(deviceProfilePrinters)
-    .where(eq(deviceProfilePrinters.deviceProfileId, profileId))
+    .innerJoin(deviceProfiles, eq(deviceProfiles.id, deviceProfilePrinters.deviceProfileId))
+    .where(
+      and(
+        eq(deviceProfilePrinters.deviceProfileId, profileId),
+        ne(deviceProfiles.formFactor, "kds"),
+      ),
+    )
     .orderBy(asc(deviceProfilePrinters.position));
   return foldPrinterLists(rows);
 }
 
 /**
- * Replaces every list and default, then clears each of the profile's devices' choices the new lists
+ * A kitchen profile stores no lists or defaults. For other profiles, replaces every list and
+ * default, then clears each of the profile's devices' choices the new lists
  * no longer offer it, acquiring nothing. Refuses, writing nothing, a deleted printer on any list or
  * default, even one already stored there; a default missing from its list; and a printer newly
  * added to the drawer list that has no cash drawer, while one already listed keeps its place
@@ -106,6 +113,11 @@ export async function setProfilePrinterLists(
   profileId: string,
   lists: ProfilePrinterLists,
 ): Promise<void> {
+  const [profile] = await tx
+    .select({ formFactor: deviceProfiles.formFactor })
+    .from(deviceProfiles)
+    .where(eq(deviceProfiles.id, profileId));
+  if (profile?.formFactor === "kds") lists = emptyPrinterLists();
   const pageIds = await refuseUnknownPrinters(tx, lists);
   for (const role of PROFILE_PRINTER_ROLES) {
     const keys = LIST_KEYS[role];
