@@ -182,6 +182,34 @@ describe("createErrorBoundary (the shared error boundary till-api and management
     ]);
   });
 
+  it.each([
+    { errno: "ENOSPC", full: true, wrapped: false, status: 507 },
+    { errno: "ENOSPC", full: true, wrapped: true, status: 507 },
+    { errno: "ENOSPC", full: false, wrapped: false, status: 500 },
+    { errno: "EACCES", full: true, wrapped: false, status: 500 },
+  ])("qualifies $errno with venue space (full: $full, wrapped: $wrapped)", async (row) => {
+    const error = Object.assign(new Error("private filesystem path"), { code: row.errno });
+    const cause = row.wrapped ? new Error("wrapper", { cause: error }) : error;
+    const boundary = createErrorBoundary({}, "write.failed");
+    const app = new Hono();
+    app.get("/write", (c) => {
+      c.set("venueDiskFull", async () => row.full);
+      return boundary(
+        c,
+        () => {},
+        () => Promise.reject(cause),
+      );
+    });
+    const res = await app.request("/write");
+    expect(res.status).toBe(row.status);
+    expect(await res.json()).toEqual({
+      error:
+        row.status === 507
+          ? { code: "storage.disk_full", params: {} }
+          : { code: "server.internal" },
+    });
+  });
+
   describe("a full disk", () => {
     const answer = { error: { code: "storage.disk_full", params: {} } };
 

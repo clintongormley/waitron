@@ -103,6 +103,7 @@ async function collect(
 }
 
 export interface StaffNoticeLog {
+  hasUnavailable(): boolean;
   /** Hand this to a reader as its `log`. */
   readonly log: Logger;
   /** Call before each read starts, and settle what it returns once the read is done. */
@@ -124,6 +125,7 @@ export function createStaffNoticeLog(log: Logger): StaffNoticeLog {
   const failing = new Map<string, number>();
   const duplicates = new Set<string>();
   return {
+    hasUnavailable: () => failing.size > 0,
     log(level, event, fields) {
       if (event === "staff_notice.source_unavailable") {
         const owner = fields?.owner;

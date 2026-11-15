@@ -540,14 +540,6 @@ required checks and the reveal button exist in both `apps/dashboard/src/screens/
 `backup-destination-model.ts` copies the stream package's (`packages/stream/src/names.ts`). Share
 them. Left open by A538-6.
 
-## The refund guide does not say that recording a separate-terminal refund is refused during a full-disk stop.
-
-`apps/server/src/guide/en/table-service.md` `{#separate-terminal}` (and its
-Spanish twin, both new from A803) tells staff to refund on the separate terminal and then record it
-in Waitron; while the stop holds, that recording is refused after the money has gone back. One
-sentence in each language, as the kitchen-service guide already has. Raised by #1950's rebase
-review, 2026-10-22.
-
 ## Till changes do not check which page sent them
 
 OPEN (left open by A1371, #2507). The till's sign-in cookie and the device cookie are `SameSite=Strict`
@@ -1326,14 +1318,6 @@ once released. Belongs with A1016.
   look images for #2250 were taken before its review changed the "not a pack" refusal and added the
   space mark.
 
-## A route whose failure is the system's `ENOSPC` still answers `server.internal`.
-
-- **A route whose failure is the system's `ENOSPC` still answers `server.internal`.** `diskFullIn`
-  (`@waitron/shared`) knows a full disk by code 13 or `storage.disk_full`, never `ENOSPC`; `fullDiskFailure`
-  (`apps/server/src/boot-failure.ts`) names `ENOSPC` a full disk at start, and on the repair page's
-  recover, summary and start-again routes and its inspection read (A1127); every other route still answers
-  `server.internal`, because adding it to `diskFullIn` changes every route's answer.
-
 ## The full-disk bar waits for the owner's answers.
 
 - **The full-disk bar waits for the owner's answers.** Its words; naming a deletion only from an
@@ -1363,17 +1347,13 @@ once released. Belongs with A1016.
 
 ## Bundle: Full disk: the till read that fails, and the words
 
-13 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+Remaining work from the 6 November backlog bundle. The four-cut plan is
+[Full disk: reads and words](../superpowers/plans/2026-11-15-full-disk-words.md).
 
 - **On a full disk, a box whose kept certificates cannot be used shows the connection set-up page,
   with no word of the full disk.**
   Open: should that page also say the disk is full and show the free space?
   [Detail](box.md#on-a-full-disk-a-box-whose-kept-certificates-cannot-be-used-shows-the-connection-set-up-page-with-no-word-of-the-full-disk)
-- **A route whose failure is the system's `ENOSPC` still answers `server.internal`.**
-  [Detail](box.md#a-route-whose-failure-is-the-systems-enospc-still-answers-serverinternal).
-- **The recovery page served at once on a full disk does not notice freed space by itself.** It
-  shows the free space as it is on every load, but only Retry, which restarts the app, tries the
-  start again (A798-B slice 2).
 - **The dashboard shell's other first reads were not checked on a full disk.** Slice 7 made the
   Box status read and the bell's alert reads answer there; the shell's other reads at sign-in were
   not tried. Left open by A798-B slice 7.
@@ -1383,14 +1363,9 @@ once released. Belongs with A1016.
 - **On a full disk, a till read whose route opens a `withTransaction` is refused while a change
   waits.**
   [Detail](box.md#on-a-full-disk-a-till-read-whose-route-opens-a-withtransaction-is-refused-while-a-change-waits)
-- **A failed staff-notice check is seen in the log and as a note on the Box status page; the bell
-  does not show it.** A bell alert would tell the manager when the unsent count cannot be worked
-  out. Left open by A798-B slice 6 (#1977).
 - **The strip draws no tinted background and no coloured words, unlike picture 2.** No token is
   named for the tints and `color-mix()` is refused; tint tokens with their contrast checks would let
   it. Left open by A798-B slice 6 (#1977).
-- **No strip on the clock-in and attendance pages.** `till-app` draws them instead of the shell.
-  Left open by A798-B slice 6 (#1977).
 - **A till nobody has signed in to shows no strip on a full disk, and PIN sign-in is refused
   then.** The sign-in page shows only the refusal's own sentence. Left open by A798-B slice 6
   (#1977).
@@ -1398,9 +1373,6 @@ once released. Belongs with A1016.
   requests are served on a full disk but its last-seen time is not saved, so the dark-screen check
   (`SCREEN_DARK_MS`, `apps/server/src/station-outputs-down.ts`) raises it after three minutes,
   beside the full disk's own alert. Left open by A798-B slice 6 (#1977).
-- **The refund guide does not say that recording a separate-terminal refund is refused during a
-  full-disk stop.** One sentence in each language, as the kitchen-service guide already has.
-  [Detail](box.md#the-refund-guide-does-not-say-that-recording-a-separate-terminal-refund-is-refused-during-a-full-disk-stop)
 - **The full-disk bar waits for the owner's answers.**
   The seven questions are in #2223's description. Left open by A1127 slice 3 (#2223).
   [Detail](box.md#the-full-disk-bar-waits-for-the-owners-answers).

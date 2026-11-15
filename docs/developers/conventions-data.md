@@ -3103,7 +3103,11 @@ answered `ok` there while the same check inside `withTransaction` was refused (M
   equipment read does above. The fiscal outbox is read in a `withWriteLock` turn of its own, and a
   read there that changes a row is refused. Its failure is the outbox's alone: the answer carries
   `outbox: null` and `fiscal-outbox` in `noticesUnavailable`, and the failure is logged once per
-  spell, as a notice source's is.
+  spell, as a notice source's is. The existing failure holders for equipment, Box status and
+  email notice checks also feed the manager's `alert.source_unavailable` bell alert for the box.
+  The bell reads those holders without another notice or outbox query; it clears when all three
+  readers have observed recovery. `apps/server/src/alerts.test.ts` covers the failed check,
+  permission filter and recovery.
 - **Free-space deletion writes nothing to the database.** It deletes files (below), then takes a
   fresh free-space reading so a full-disk stop can lift at once. Dashboard routes are not behind
   the till's full-disk gate (above, "Not gated").
@@ -3264,18 +3268,19 @@ to spare, so the clean-up floor of 256 MiB cannot be the test.
 as a full disk. Freeing space does not fix it, and the next start after space is freed reports it by
 its own code.
 
-`ENOSPC` is deliberately not in `diskFullIn` (`@waitron/shared`): that would change what every
-route answers. `fullDiskFailure` names it a full disk at start, and on the repair page's recover,
-summary and start-again routes and its inspection read (A1127, `diskFullOr` and the inspection's own catch in
-`apps/server/src/setup-first-fiscal-api.ts`);
-every other route behind `createErrorBoundary` whose failure is the system's `ENOSPC` still answers
-`server.internal` (backlog).
+`ENOSPC` stays outside `diskFullIn` (`@waitron/shared`). At start and on the repair page,
+`fullDiskFailure` qualifies it with the venue's free space. In the booted app, middleware supplies
+`createErrorBoundary` with a venue-space check: an `ENOSPC` in the cause chain answers
+`507 storage.disk_full` only while that check reads under 16 MiB free. With room or an unreadable
+venue filesystem, it keeps the ordinary error answer. This leaves a full backup destination
+on another filesystem generic when the venue has room; it does not change SQLite classification
+or start the till's stop by itself.
 
-Guards: the `fullDiskFailure`, `classifyStartFailure` and `startFailureCode` cases in
-`apps/server/src/boot-failure.test.ts`, on stubbed errors and free space; and the refused-open rows
-of `apps/server/src/start-full-disk.e2e.test.ts`, which on HFS+ failed with 14 at 8 KiB left and
-4874 at 16 KiB. No real-disk case drives the `ENOSPC` branch: F14's `ENOSPC` at 8 KiB did not
-repeat there.
+The classification cases in `apps/server/src/boot-failure.test.ts` use stubbed errors and space.
+The route case in `apps/server/src/start-full-disk.e2e.test.ts` fills a small real filesystem,
+refuses a new file at 507, writes it at 200 after freeing space, then refuses another write at 500
+when only the destination is full and the venue has room. Its refused-open rows separately
+exercise engine errors 14 and 4874 on HFS+.
 
 ## A refusal under result code 1811 is identified by its words
 

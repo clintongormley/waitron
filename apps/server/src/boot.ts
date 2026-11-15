@@ -453,6 +453,7 @@ import { clockSyncAlertSource } from "./clock-sync-alert.js";
 import { createStagingTurn } from "./backup-staging-turn.js";
 import { readDiskUsage, type DiskUsage } from "./disk-usage.js";
 import { createSpaceFreer, surveyLeftovers, type LeftoverDeps } from "./free-space-now.js";
+import { FULL_DISK_BYTES } from "./boot-failure.js";
 import { freeBytes, type Statfs } from "./free-bytes.js";
 import { createStaffNoticeLog, readStaffNoticesInTurns } from "./staff-notices.js";
 import { mountBoxRetireApi } from "./box-retire.js";
@@ -1434,6 +1435,8 @@ async function bootServer(
     }
   }
 
+  const equipmentNoticeLog = createStaffNoticeLog(log);
+  const pageNoticeLog = createStaffNoticeLog(log);
   const build = applicationVersion(process.env);
   const health = createHealthState(now());
   const app = healthApp(health, now, { venueDir: config.venueDir });
@@ -1476,6 +1479,13 @@ async function bootServer(
   );
   // Must stay ahead of every route, so a route added later is covered without being named.
   app.use("*", ownPageCheck);
+  app.use("*", async (c, next) => {
+    c.set("venueDiskFull", async () => {
+      const free = await freeBytes(config.venueDir, seams.freeSpaceWatch?.statfs);
+      return free !== null && free < FULL_DISK_BYTES;
+    });
+    await next();
+  });
   app.use("*", async (c, next) => {
     if (c.req.method === "GET" && c.req.header("x-waitron-live") === "1") {
       await withPassiveManagementRead(next);
@@ -3067,6 +3077,7 @@ async function bootServer(
         venueDomain: config.venueDomain,
         disk: diskFull,
         notices: {
+          log: equipmentNoticeLog,
           sources: deviceNoticeSources(
             {
               disk: diskFull,
@@ -3722,7 +3733,11 @@ async function bootServer(
       production: config.environment === "production",
     }),
     backupSource,
-    storageAlertSource({ space: freeSpace, disk: diskFull }),
+    storageAlertSource({
+      space: freeSpace,
+      disk: diskFull,
+      notices: [equipmentNoticeLog, pageNoticeLog, emailNoticeLog],
+    }),
     sealedStateAlertSource(sealedStateStatus),
     firstStartAlertSource(firstStart),
     appendOnlyRestoredAlertSource(appendOnlyRestored),
@@ -3803,8 +3818,6 @@ async function bootServer(
     backupDirs: localBackupDirs,
   };
   const diskUsageCache = createTtlCache<DiskUsage>({ ttlMs: 60_000, now });
-  // Its own, so the page's notice failures are logged once per spell apart from the equipment read's.
-  const pageNoticeLog = createStaffNoticeLog(log);
   const pageNoticeSources = deviceNoticeSources(
     { disk: diskFull, space: freeSpace },
     enabledAtStart,

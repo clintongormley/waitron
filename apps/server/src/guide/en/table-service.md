@@ -335,6 +335,9 @@ If the window says an earlier request got no answer, choose **Send again**.
 
 ## Refund a card payment on a separate terminal {#separate-terminal}
 
+If the till says the server is out of space, wait until a manager clears the stop before refunding
+on the terminal: Waitron cannot record the refund while the stop holds.
+
 For a card payment keyed from a separate terminal, Waitron asks you to refund it on that terminal
 first. Complete the terminal's refund before choosing **Refunded on the terminal**. A supervisor
 or manager then approves recording it in Waitron with their PIN.

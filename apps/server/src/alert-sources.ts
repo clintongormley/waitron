@@ -28,6 +28,7 @@ import {
 } from "@waitron/payments";
 import type { JobView } from "./job-runner.js";
 import type { BackupStatus } from "./backup-status.js";
+import type { StaffNoticeLog } from "./staff-notices.js";
 import type { DiskFullState } from "./disk-full-state.js";
 import type { FreeSpaceState } from "./free-space-watch.js";
 import { type InvoiceDeliveryStatus, readInvoiceDeliveriesFor } from "./invoice-delivery-status.js";
@@ -351,14 +352,28 @@ export function appendOnlyRestoredAlertSource(holder: { restoredAt: string | nul
 export function storageAlertSource(deps: {
   space: Pick<FreeSpaceState, "current">;
   disk: Pick<DiskFullState, "since">;
+  notices?: readonly Pick<StaffNoticeLog, "hasUnavailable">[];
 }): AlertSource {
   return {
     area: "box",
     permission: "system.manage",
     async read(): Promise<readonly OngoingAlert[]> {
+      const unavailable: OngoingAlert[] = deps.notices?.some((log) => log.hasUnavailable())
+        ? [
+            {
+              key: "alert.source_unavailable:box",
+              code: "alert.source_unavailable",
+              params: { area: "box" },
+              severity: "error",
+              since: null,
+              screen: "box-status",
+            },
+          ]
+        : [];
       const stoppedSince = deps.disk.since();
       if (stoppedSince !== null) {
         return [
+          ...unavailable,
           {
             key: "storage.disk_full",
             code: "storage.disk_full",
@@ -370,8 +385,9 @@ export function storageAlertSource(deps: {
         ];
       }
       const { freeBytes, lowSince } = deps.space.current();
-      if (lowSince === null) return [];
+      if (lowSince === null) return unavailable;
       return [
+        ...unavailable,
         {
           key: "storage.space_low",
           code: "storage.space_low",

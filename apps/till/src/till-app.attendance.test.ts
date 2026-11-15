@@ -53,6 +53,34 @@ function inbox(): AttendanceInbox {
 const empty = (): AttendanceInbox => ({ ...inbox(), prompts: [], items: [] });
 
 describe("till attendance sign-in flow", () => {
+  it("keeps the full-disk strip while attendance questions are open", async () => {
+    const f = await clockApp({
+      api: {
+        getDeviceEquipment: vi.fn().mockResolvedValue({
+          roles: [],
+          notices: [
+            {
+              owner: "box",
+              key: "storage.disk_full",
+              code: "storage.disk_full",
+              severity: "error",
+              params: {},
+            },
+          ],
+        }),
+      },
+    });
+    f.api.getAttendanceInbox.mockResolvedValue(inbox());
+    await signIn(f.el);
+    await vi.waitFor(() => expect(questions(f.el)).not.toBeNull());
+    await vi.waitFor(() =>
+      expect(
+        f.el.shadowRoot!.querySelector("till-notice-strip")?.shadowRoot?.textContent,
+      ).toContain("Tell a manager"),
+    );
+    expect(f.el.shadowRoot!.querySelector("till-shell")).toBeNull();
+  });
+
   it("shows questions before Clock in and confirmation appends once before the clock page", async () => {
     const f = await clockApp();
     f.api.getAttendanceInbox.mockResolvedValueOnce(inbox()).mockResolvedValue(empty());
