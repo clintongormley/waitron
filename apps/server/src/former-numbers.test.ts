@@ -49,9 +49,9 @@ useVenueDb({
     v = await setupPartyVenue(db);
     await inTx(v, async (tx) => {
       for (const [key, name, dish] of [
-        ["grill", "Plancha", "Burger"],
-        ["rice", "Arroces", "Paella"],
-        ["bar", "Barra", "Red wine bottle"],
+        ["grill", "Grill", "Burger"],
+        ["rice", "Rice", "Paella"],
+        ["bar", "Bar", "Red wine bottle"],
       ] as const) {
         const { id } = await createStation(tx, { name });
         stations[key] = id;
@@ -206,7 +206,7 @@ describe("the numbers an order's sent dishes were sent under, on the kitchen rea
     expect(await expoOrder(b27)).toMatchObject({ formerNumbers: [n28] });
     expect(await expoOrder(b28)).toBeUndefined();
     expect(await stationGroup("grill", b27)).toMatchObject({ formerNumbers: [n28] });
-    // The Arroces never had a dish from 28: the list is the whole bill's.
+    // The Rice station never had a dish from 28: the list is the whole bill's.
     expect(await stationGroup("rice", b27)).toMatchObject({ formerNumbers: [n28] });
   });
 

@@ -589,8 +589,6 @@ The comment (`packages/db/src/schema/drawer-opens.ts:50-51`) omits a cash refund
   A private person binding (`marta`, shown as Martha) remains in the protected
   `clock-set.route.test.ts`; check the clock-suite boundary before renaming.
   Protected fiscal and receipt helpers still need their boundary audit.
-  Counter-group display text in `today-names.test.ts` and station display samples in
-  `former-numbers.test.ts` stay with A976.
   The published-menu sale fixture uses English private preparation and section names.
   Other split-suite comments, shared helper consumers and file names remain.
   Private drink bindings remain in `sale-till-source.receipt.test.ts`,
@@ -664,6 +662,7 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
   The menu include-folder, menu-patch and menu-schedule route suites use English staff display names.
   Account-invitation and box-alert-email duty staff samples use Anna; so do the two-role invitation
   and personal-data README literal-replacement examples.
+  Local former-number station and today-name counter-group samples use English; accented party names remain.
   Other local and shared staff-name samples still need triage; preserve deliberate name and locale cases.
   Logger personal-name samples use English names, except the deliberate accented `Àngel` cases
   and short-email `ana@bo.es` sample;
