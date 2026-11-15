@@ -110,8 +110,8 @@ const CLASSIFIED: Record<string, Classification> = {
     out: ["id", "person_id", "question_id", "entry_ids"],
   },
   staff_activity: {
-    in: ["business_day", "shift_key", "shift_start_at", "shift_end_at", "first_at", "last_at"],
-    out: ["id", "person_id"],
+    in: ["business_day", "shift_start_at", "shift_end_at", "first_at", "last_at"],
+    out: ["id", "person_id", "shift_key"],
   },
   time_entries: "working-time record",
   workforce_chains: {

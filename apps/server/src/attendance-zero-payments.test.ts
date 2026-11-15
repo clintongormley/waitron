@@ -77,7 +77,7 @@ const request = (id: string = newId()) => ({
   lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
   tender: tender("cash"),
 });
-function evidence(_key: string) {
+function evidence() {
   return { personId: collector.personId, lastAt: "2026-01-05T11:00:00.000Z" };
 }
 async function bill(issued = false) {
@@ -126,7 +126,7 @@ describe("a human zero-owing command remains attendance evidence", () => {
       );
       expect(ticket.total).toBe("0.00");
       expect(ticket.tender).toEqual({ method: "unpaid" });
-      expect(await operations()).toMatchObject([evidence(id)]);
+      expect(await operations()).toMatchObject([evidence()]);
       await noMoney();
       vi.spyOn(v.clock, "now").mockImplementation(() => {
         throw new Error("New clock unavailable");
@@ -139,7 +139,7 @@ describe("a human zero-owing command remains attendance evidence", () => {
           v.operator,
         ),
       ).toEqual(ticket);
-      expect(await operations()).toMatchObject([evidence(id)]);
+      expect(await operations()).toMatchObject([evidence()]);
     },
   );
   it.each(["issued", "placed", "retrieved", "counter"] as const)(
@@ -173,7 +173,7 @@ describe("a human zero-owing command remains attendance evidence", () => {
       expect(result.ticket.total).toBe("0.00");
       expect(result.ticket.tender).toEqual({ method: "unpaid" });
       expect(provider.collectCalls).toEqual([]);
-      expect(await operations()).toMatchObject([evidence(id)]);
+      expect(await operations()).toMatchObject([evidence()]);
       await noMoney();
       vi.spyOn(v.clock, "now").mockImplementation(() => {
         throw new Error("New clock unavailable");
@@ -186,7 +186,7 @@ describe("a human zero-owing command remains attendance evidence", () => {
           v.operator,
         ),
       ).toEqual(result);
-      expect(await operations()).toMatchObject([evidence(id)]);
+      expect(await operations()).toMatchObject([evidence()]);
     },
   );
 });

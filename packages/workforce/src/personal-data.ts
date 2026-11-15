@@ -1,9 +1,9 @@
 import { attendanceMailOutcome } from "./attendance-mail.js";
-import { outgoingMail } from "@waitron/db";
+import { outgoingMail, readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { jsonFile, type ModulePersonalData, type PersonalDataFile } from "@waitron/module";
-import { centsToDecimal } from "@waitron/shared";
+import { centsToDecimal, timeZoneOffsetMinutes } from "@waitron/shared";
 import { asc, eq, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { localWallClock } from "./projection.js";
@@ -156,7 +156,6 @@ export const WORKFORCE_PERSONAL_DATA: ModulePersonalData = {
     const activityRows = await tx
       .select({
         businessDay: staffActivity.businessDay,
-        shiftKey: staffActivity.shiftKey,
         shiftStartAt: staffActivity.shiftStartAt,
         shiftEndAt: staffActivity.shiftEndAt,
         firstAt: staffActivity.firstAt,
@@ -165,6 +164,22 @@ export const WORKFORCE_PERSONAL_DATA: ModulePersonalData = {
       .from(staffActivity)
       .where(eq(staffActivity.personId, personId))
       .orderBy(asc(staffActivity.firstAt), asc(staffActivity.id));
+
+    let activity = activityRows;
+    if (activity.length) {
+      const {
+        doc: { timeZone },
+      } = await readSettings(tx, BUSINESS_DAY_SETTINGS);
+      const localActivityTime = (at: string) =>
+        localWallClock(at, timeZoneOffsetMinutes(timeZone, new Date(at)));
+      activity = activity.map((row) => ({
+        ...row,
+        shiftStartAt: row.shiftStartAt === null ? null : localActivityTime(row.shiftStartAt),
+        shiftEndAt: row.shiftEndAt === null ? null : localActivityTime(row.shiftEndAt),
+        firstAt: localActivityTime(row.firstAt),
+        lastAt: localActivityTime(row.lastAt),
+      }));
+    }
 
     const clockRows = await tx
       .select({
@@ -273,7 +288,7 @@ export const WORKFORCE_PERSONAL_DATA: ModulePersonalData = {
                 createdAt: row.createdAt,
               };
             }),
-            activity: activityRows,
+            activity,
           }),
         );
       if (clockRows.length > 0) files.push(jsonFile("clock-entries.json", { entries: clockRows }));

@@ -334,13 +334,13 @@ exists unused. Shown in A585's picker and warnings. After A586.
 ### First and latest staff activity per planned shift (owner, 2026-11-15)
 
 The owner said “all we need to know is the time of the first user action and the latest user action”
-and “i don't think that we need to save every action immutably”; when the watcher proposed keeping
+and “We definitely do NOT need to record every action immutably”; when the watcher proposed keeping
 those times per planned shift, the owner answered “sounds good” (Lane H `queue.md`, copied from the
 watcher's window at about 21:10–21:17). This overrides A1543's Keep for the two attendance-copy tables.
 
 `staff_activity` keeps first/latest instants per person and captured planned shift, or per gap between
 shifts; without a rota it keeps a person/day pair. Clock-ins, clock-outs and corrections stay in the
-legal record. Payment attempts count when staff start them, including failed attempts; outcome and
+legal record. Under the watcher-cleared plan, payment attempts count when staff start them, including failed attempts; outcome and
 recovery workers add no staff activity. The checker reads these endpoints and legal clock entries,
 not per-action history or source-table discovery. Earlier endpoint detail is deliberately unavailable.
 The implementation and remaining log-retention work are in the

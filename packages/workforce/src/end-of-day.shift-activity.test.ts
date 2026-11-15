@@ -1,7 +1,9 @@
-import { expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { attendanceFixture } from "../test/attendance-fixture.js";
 
 const f = attendanceFixture();
+beforeEach(() => seedBusinessDay(f.suite.db, { timeZone: "UTC", dayCutover: "04:00" }));
 
 it("a forgotten first clock-out uses its overrun, leaving the later planned shift its own question", async () => {
   const open = await f.open();
@@ -89,4 +91,19 @@ it("a later clock-in keeps the earlier automatic finish separate from the dinner
       .map((q) => q.evidenceKeys)
       .sort((a, b) => a.join().localeCompare(b.join())),
   ).toEqual([["order:dinner-overrun"], ["order:lunch-overrun"]]);
+});
+
+it("an overnight legal break end remains activity after the day changeover", async () => {
+  await f.open("2026-01-06T02:00:00Z");
+  await f.run((tx) => f.backend.breakStart(tx, f.event("2026-01-06T04:30:00Z")));
+  await f.run((tx) => f.backend.breakEnd(tx, f.event("2026-01-06T05:00:00Z")));
+  await f.process({
+    planned: [f.plan("night", "2026-01-06T02:00:00Z", "2026-01-06T06:00:00Z")],
+    facts: [f.fact("2026-01-06T03:00:00Z")],
+    now: new Date("2026-01-06T06:00:00Z"),
+  });
+  expect((await f.entries()).at(-1)).toMatchObject({
+    entryKind: "out",
+    eventAt: "2026-01-06T05:00:00.000Z",
+  });
 });

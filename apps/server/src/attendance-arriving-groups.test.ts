@@ -194,7 +194,6 @@ describe("attendance for dishes arriving in a party", () => {
     "%s snapshots the admitted mover at the trusted command instant",
     async (action) => {
       const p = await prepare(action);
-      const before = await state();
       const reading = v.clock.now();
       const clock = vi
         .spyOn(v.clock, "now")
@@ -207,7 +206,6 @@ describe("attendance for dishes arriving in a party", () => {
       clock.mockReturnValue({ ...reading, instant: new Date("2026-01-05T17:00:00Z") });
       expect(await command(api(recordAttendanceFact), action, p)).toMatchObject({ status: 200 });
       const saved = await state();
-      saved.events.filter((e) => !before.events.some((old) => old.id === e.id));
 
       expect(saved.facts).toMatchObject([
         { personId: v.operatorId, lastAt: "2026-01-05T16:40:00.000Z" },

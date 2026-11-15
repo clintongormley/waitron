@@ -229,3 +229,20 @@ describe("accepted rota writes invalidate attendance in their transaction", () =
     expect((await days()).map((row) => row.businessDay)).toEqual(["2026-01-05"]);
   });
 });
+
+it.each([
+  ["2026-01-06T03:00:00Z", ["2026-01-05"]],
+  ["2026-01-06T05:00:00Z", ["2026-01-05", "2026-01-06"]],
+] as const)(
+  "marks the days an overnight shift ending %s can hold activity",
+  async (endsAt, expected) => {
+    const versionId = await version();
+    const response = await send("POST", `roster/${versionId}/shifts`, {
+      ...shiftBody(),
+      startsAt: "2026-01-06T02:00:00Z",
+      endsAt,
+    });
+    expect(response.status).toBe(201);
+    expect((await days()).map((row) => row.businessDay)).toEqual(expected);
+  },
+);

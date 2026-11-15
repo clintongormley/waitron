@@ -73,7 +73,7 @@ const request = (id: string = newId()) => ({
   lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
   tender: tender("cash"),
 });
-function evidence(_key: string) {
+function evidence() {
   return { personId: collector.personId, lastAt: "2026-01-05T11:00:00.000Z" };
 }
 async function bill(issued = false) {
@@ -108,7 +108,7 @@ describe("accepted whole-order payment attendance", () => {
           ? { method: "cash", change: "8.00" }
           : { method: "card", charged: "12.00", tip: "0.00", reference: "hand keyed" },
       );
-      expect(await operations()).toMatchObject([evidence(req.workingOrderId)]);
+      expect(await operations()).toMatchObject([evidence()]);
     },
   );
   it("captures a retrieved open order from the paying worker", async () => {
@@ -122,7 +122,7 @@ describe("accepted whole-order payment attendance", () => {
       collector,
     );
     expect(ticket.total).toBe("12.00");
-    expect(await operations()).toMatchObject([evidence(tabId)]);
+    expect(await operations()).toMatchObject([evidence()]);
   });
   it.each([false, true])(
     "captures placed collection (issued=%s) without crediting the invoice author",
@@ -137,7 +137,7 @@ describe("accepted whole-order payment attendance", () => {
         collector,
       );
       expect(ticket.total).toBe("12.00");
-      expect(await operations()).toMatchObject([evidence(id)]);
+      expect(await operations()).toMatchObject([evidence()]);
       const after = await suite.db.select().from(sales);
       expect(after).toHaveLength(1);
       if (issued) expect(after).toEqual(before);

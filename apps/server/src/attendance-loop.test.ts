@@ -113,9 +113,9 @@ describe("attendance duty pass", () => {
       more: false,
     });
     expect((await snapshot()).questions).toEqual([]);
-    expect((await snapshot()).work).toMatchObject([
-      { deferredShiftIds: [shift!.id], nextDueAt: "2026-01-06T05:00:00.000Z" },
-    ]);
+    expect((await snapshot()).work.filter((row) => row.businessDay === "2026-01-05")).toMatchObject(
+      [{ deferredShiftIds: [shift!.id], nextDueAt: "2026-01-06T05:00:00.000Z" }],
+    );
     const late = new Date("2026-01-06T05:00:00Z");
     expect(await runAttendancePass({ ...deps(), now: () => late })).toEqual({
       processed: true,
@@ -124,7 +124,9 @@ describe("attendance duty pass", () => {
     expect((await snapshot()).questions).toMatchObject([
       { shiftKey: `rota:${shift!.id}`, missingKinds: ["in", "out"] },
     ]);
-    expect((await snapshot()).work).toMatchObject([{ deferredShiftIds: [] }]);
+    expect((await snapshot()).work.filter((row) => row.businessDay === "2026-01-05")).toMatchObject(
+      [{ deferredShiftIds: [] }],
+    );
   });
   it("appends on this node while preserving an older node's open entry and chain", async () => {
     const oldNode = await seedNode(suite.db);

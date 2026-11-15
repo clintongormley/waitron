@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, lt, sql } from "drizzle-orm";
+import { and, asc, eq, gt, gte, lt, or, sql } from "drizzle-orm";
 import { readVenueClock, type Transaction } from "@waitron/db";
 import { AppError, businessDayAt, businessDayBounds, timeZoneOffsetMinutes } from "@waitron/shared";
 import { attendanceDayWork, staffActivity } from "./schema/attendance.js";
@@ -91,14 +91,18 @@ export async function recordStaffActivity(
     })
     .returning({ id: staffActivity.id });
   if (changed.length) {
-    const [saved] = await tx
-      .select()
-      .from(attendanceDayWork)
-      .where(eq(attendanceDayWork.businessDay, businessDay));
-    await enqueueAttendanceDay(
-      tx,
-      saved ?? { businessDay, ...businessDayBounds(clock, businessDay) },
-    );
+    const days = new Set([businessDay]);
+    if (!own && previous) days.add(businessDayAt(clock, new Date(previous.startsAt)));
+    for (const businessDay of days) {
+      const [saved] = await tx
+        .select()
+        .from(attendanceDayWork)
+        .where(eq(attendanceDayWork.businessDay, businessDay));
+      await enqueueAttendanceDay(
+        tx,
+        saved ?? { businessDay, ...businessDayBounds(clock, businessDay) },
+      );
+    }
   }
 }
 
@@ -107,23 +111,75 @@ export async function readStaffActivityFacts(
   day: AttendanceDay,
 ): Promise<AttendanceFact[]> {
   const clock = await readVenueClock(tx);
+  const start = Date.parse(day.startAt),
+    end = Date.parse(day.endAt);
+  const followingEnd = businessDayBounds(clock, businessDayAt(clock, new Date(day.endAt))).endAt;
+  const planned = await tx
+    .select({
+      id: shifts.id,
+      personId: shifts.personId,
+      startsAt: shifts.startsAt,
+      endsAt: shifts.endsAt,
+    })
+    .from(shifts)
+    .innerJoin(rosterVersions, eq(rosterVersions.id, shifts.rosterVersionId))
+    .where(
+      and(
+        eq(rosterVersions.status, "published"),
+        lt(shifts.startsAt, followingEnd.replace(".000Z", "Z")),
+        gt(shifts.endsAt, day.startAt.replace(".000Z", "Z")),
+      ),
+    )
+    .orderBy(asc(shifts.startsAt), asc(shifts.endsAt), asc(shifts.id));
+  const hasOvernight = planned.some(
+    (p) =>
+      Date.parse(p.startsAt) >= start && Date.parse(p.startsAt) < end && Date.parse(p.endsAt) > end,
+  );
+  const rangeEnd = hasOvernight ? followingEnd : day.endAt;
   const rows = await tx
     .select()
     .from(staffActivity)
-    .where(eq(staffActivity.businessDay, day.businessDay));
+    .where(
+      or(
+        eq(staffActivity.businessDay, day.businessDay),
+        and(lt(staffActivity.firstAt, rangeEnd), gte(staffActivity.lastAt, day.startAt)),
+      ),
+    );
   return rows
     .flatMap((row) =>
       [
         { side: "first", at: row.firstAt },
         ...(row.lastAt === row.firstAt ? [] : [{ side: "latest", at: row.lastAt }]),
-      ].map(({ side, at }): AttendanceFact => ({
-        personId: row.personId,
-        source: "order",
-        kind: "order",
-        at,
-        key: `staff:${row.id}:${side}:${at}`,
-        offsetMinutes: timeZoneOffsetMinutes(clock.timeZone, new Date(at)),
-      })),
+      ]
+        .filter(({ at }) => {
+          const time = Date.parse(at);
+          const own = planned.find(
+            (p) =>
+              p.personId === row.personId &&
+              Date.parse(p.startsAt) <= time &&
+              time < Date.parse(p.endsAt),
+          );
+          const previous = planned
+            .filter((p) => p.personId === row.personId && Date.parse(p.endsAt) <= time)
+            .at(-1);
+          const assigned =
+            own ??
+            (previous &&
+            businessDayAt(clock, new Date(previous.startsAt)) !==
+              businessDayAt(clock, new Date(previous.endsAt))
+              ? previous
+              : undefined);
+          const anchor = assigned ? Date.parse(assigned.startsAt) : time;
+          return anchor >= start && anchor < end;
+        })
+        .map(({ side, at }): AttendanceFact => ({
+          personId: row.personId,
+          source: "order",
+          kind: "order",
+          at,
+          key: `staff:${row.id}:${side}:${at}`,
+          offsetMinutes: timeZoneOffsetMinutes(clock.timeZone, new Date(at)),
+        })),
     )
     .sort((a, b) => a.at.localeCompare(b.at) || a.key.localeCompare(b.key));
 }

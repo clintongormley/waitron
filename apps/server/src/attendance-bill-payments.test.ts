@@ -77,7 +77,7 @@ function at(instant: string) {
 const operations = () => suite.db.select().from(staffActivity);
 const provider = () => new SimulatorPaymentProvider(suite.db);
 
-function evidence(_paymentId: string, _outcome: string) {
+function evidence() {
   return { personId: collector.personId, lastAt: "2026-01-05T11:00:00.000Z" };
 }
 
@@ -96,7 +96,7 @@ describe("accepted bill payment attendance", () => {
       );
       expect(result.payment.state).toBe("received");
       expect(result.balance.outstanding).toBe("11.00");
-      expect(await operations()).toMatchObject([{ ...evidence(result.payment.id, "qualifying") }]);
+      expect(await operations()).toMatchObject([{ ...evidence() }]);
     },
   );
 });

@@ -4,8 +4,8 @@ import {
   attendanceMailAttempted,
 } from "./attendance-mail.js";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
-import { AppError, jobOrigin } from "@waitron/shared";
+import { readVenueClock, type Transaction } from "@waitron/db";
+import { AppError, businessDayAt, businessDayBounds, jobOrigin } from "@waitron/shared";
 import type {
   AttendanceDayInput,
   AttendanceDayResult,
@@ -108,6 +108,8 @@ export async function processAttendanceDay(
         instant(a.endsAt) - instant(b.endsAt) ||
         a.id.localeCompare(b.id),
     );
+  const clock = await readVenueClock(tx);
+  const overnightEnd = businessDayBounds(clock, businessDayAt(clock, new Date(endAt))).endAt;
   const facts = input.facts
     .map((f) => ({ ...f, at: recordInstant(f.at, f.offsetMinutes, "attendance") }))
     .filter(
@@ -117,9 +119,42 @@ export async function processAttendanceDay(
           (p) =>
             p.personId === f.personId &&
             instant(f.at) >= instant(p.startsAt) &&
-            instant(f.at) < instant(p.endsAt),
+            instant(f.at) < instant(instant(p.endsAt) > instant(endAt) ? overnightEnd : p.endsAt),
         ),
     );
+  const endpointIdentity = (key: string) =>
+    key.replace(/^(order:staff:[^:]+:(?:first|latest)):.*$/, "$1");
+  const currentEndpoints = new Set(
+    facts.map((f) => `${f.personId}:${endpointIdentity(`${f.source}:${f.key}`)}`),
+  );
+  const gapsToCheck = await tx
+    .select()
+    .from(attendanceQuestions)
+    .where(
+      and(
+        eq(attendanceQuestions.businessDay, day.businessDay),
+        eq(attendanceQuestions.active, true),
+        sql`${attendanceQuestions.resolvedByEntryId} is null`,
+        sql`${attendanceQuestions.shiftKey} like 'activity:%'`,
+        input.personId === undefined ? undefined : eq(attendanceQuestions.personId, input.personId),
+      ),
+    );
+  for (const question of gapsToCheck) {
+    if (
+      question.evidenceKeys.length &&
+      question.evidenceKeys.every(
+        (key) =>
+          key.startsWith("order:staff:") &&
+          !currentEndpoints.has(`${question.personId}:${endpointIdentity(key)}`),
+      )
+    ) {
+      await tx
+        .update(attendanceQuestions)
+        .set({ active: false, inactiveReason: "rota_superseded" })
+        .where(eq(attendanceQuestions.id, question.id));
+      await cancelReminder(tx, question.id);
+    }
+  }
   const subjects = await tx
     .selectDistinct({ personId: timeEntries.personId })
     .from(timeEntries)
@@ -244,7 +279,7 @@ export async function processAttendanceDay(
         next?.entryKind === "out" &&
         next.extension?.authorKind === "automatic" &&
         !answered.has(next.entryId);
-      const dayLimit = plan && instant(plan.endsAt) > instant(endAt) ? plan.endsAt : endAt;
+      const dayLimit = plan && instant(plan.endsAt) > instant(endAt) ? overnightEnd : endAt;
       const laterPlan = plan && ownPlans.find((p) => instant(p.startsAt) > instant(plan.startsAt));
       // Later evidence can extend this day's question, but later days remain separate gaps.
       const clockLimit =
@@ -255,14 +290,16 @@ export async function processAttendanceDay(
         laterPlan && instant(laterPlan.startsAt) < instant(clockLimit)
           ? laterPlan.startsAt
           : clockLimit;
+      const outsideDay = start.eventAt < startAt || start.eventAt >= endAt;
       const intervalFacts = ownFacts.filter(
         (f) =>
           instant(f.at) >= instant(start.eventAt) &&
           (instant(f.at) < instant(limit) ||
-            (next?.entryKind === "out" && !automatic && instant(f.at) === instant(next.eventAt))),
+            (next?.entryKind === "out" &&
+              (!automatic || outsideDay) &&
+              instant(f.at) === instant(next.eventAt))),
       );
-      for (const f of intervalFacts) covered.add(f);
-      if (start.eventAt < startAt || start.eventAt >= endAt) continue;
+      if (!outsideDay || next?.entryKind === "out") for (const f of intervalFacts) covered.add(f);
       const key = `in:${start.entryId}`;
       if (next?.entryKind === "out" && !automatic) {
         const existing = await tx
@@ -293,6 +330,7 @@ export async function processAttendanceDay(
         }
         continue;
       }
+      if (outsideDay) continue;
       const breaks: AttendanceFact[] = live
         .filter(
           (e) =>

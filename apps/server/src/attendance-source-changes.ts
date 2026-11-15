@@ -15,9 +15,12 @@ export async function markAttendanceSourceChanged(
 ): Promise<void> {
   const current =
     source === "shift"
-      ? await tx.select({ startsAt: shifts.startsAt }).from(shifts).where(eq(shifts.id, id))
+      ? await tx
+          .select({ startsAt: shifts.startsAt, endsAt: shifts.endsAt })
+          .from(shifts)
+          .where(eq(shifts.id, id))
       : await tx
-          .select({ startsAt: shifts.startsAt })
+          .select({ startsAt: shifts.startsAt, endsAt: shifts.endsAt })
           .from(rosterVersions)
           .leftJoin(shifts, eq(shifts.rosterVersionId, rosterVersions.id))
           .where(eq(rosterVersions.id, id));
@@ -25,7 +28,10 @@ export async function markAttendanceSourceChanged(
   const clock = await readVenueClock(tx);
   const days = new Set<string>();
   for (const row of current)
-    if (row.startsAt !== null) days.add(businessDayAt(clock, new Date(row.startsAt)));
+    if (row.startsAt !== null && row.endsAt !== null) {
+      days.add(businessDayAt(clock, new Date(row.startsAt)));
+      days.add(businessDayAt(clock, new Date(Date.parse(row.endsAt) - 1)));
+    }
   for (const businessDay of days) {
     const scope = eq(attendanceDayWork.businessDay, businessDay);
     const [saved] = await tx.select().from(attendanceDayWork).where(scope);
