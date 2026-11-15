@@ -4,7 +4,7 @@ Algunos problemas del servidor impiden trabajar al personal, y quien está en el
 el primero en notarlo. Por eso, cuando alguien ha iniciado sesión, cada caja registradora y cada
 terminal de camarero muestran una línea bajo su barra superior si el servidor necesita atención. La
 pantalla de inicio de sesión solo muestra la línea de que los cobros esperan a la hora del servidor.
-Después de iniciar sesión, los avisos también aparecen sobre las páginas de fichaje y de preguntas
+Después de iniciar sesión, los avisos de espacio también aparecen sobre las páginas de fichaje y de preguntas
 de asistencia. La línea dice qué ocurre y qué hacer. Nunca
 tapa tu trabajo y nunca tienes que cerrarla.
 

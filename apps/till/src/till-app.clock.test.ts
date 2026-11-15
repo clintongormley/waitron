@@ -37,6 +37,13 @@ describe("till clocking integration", () => {
               severity: "error",
               params: {},
             },
+            {
+              owner: "drawers",
+              key: "drawer",
+              code: "print_job.drawer_expired",
+              severity: "warning",
+              params: {},
+            },
           ],
         }),
       },
@@ -49,6 +56,11 @@ describe("till clocking integration", () => {
       ).toContain("Tell a manager"),
     );
     expect(f.el.shadowRoot!.querySelector("till-shell")).toBeNull();
+    expect(
+      f.el
+        .shadowRoot!.querySelector("till-notice-strip")!
+        .shadowRoot!.querySelector("[data-notice-more]"),
+    ).toBeNull();
   });
 
   it("the initial clock page's idle deadline is not reset when work data finally loads", async () => {

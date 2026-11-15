@@ -22001,10 +22001,10 @@ export class TillApp extends LitElement {
     });
   }
 
-  #renderNoticeStrip() {
+  #renderNoticeStrip(notices: readonly StaffNotice[] = this.staffNotices) {
     return html`<till-notice-strip
         slot="notices"
-        .notices=${this.staffNotices}
+        .notices=${notices}
         .checkTimeOffered=${this.checkTimeOffered}
         .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
         .drawerBusy=${this.drawerOpening}
@@ -22677,7 +22677,12 @@ export class TillApp extends LitElement {
              matching shell. -->
         ${
           this.frontDoor === undefined && (this.attendancePage || this.clockPage)
-            ? this.#renderNoticeStrip()
+            ? this.#renderNoticeStrip(
+                this.staffNotices.filter(
+                  (notice) =>
+                    notice.code === "storage.disk_full" || notice.code === "storage.space_low",
+                ),
+              )
             : nothing
         }
         ${
