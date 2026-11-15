@@ -1222,8 +1222,8 @@ export class OpeningHoursScreen extends LitElement {
           {
             name: row.name,
             text: row.words,
-            strong: !row.stationChild,
-            station: !row.stationChild && names.station(row.key),
+            strong: !row.stationGroup,
+            station: !row.stationGroup && names.station(row.key),
           },
         ]);
         shown.rows = [...(station.mixed ? shown.rows : []), ...stationRows];

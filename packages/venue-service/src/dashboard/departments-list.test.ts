@@ -226,7 +226,7 @@ describe("department list", () => {
       readiness: [
         {
           code: "special_day.date_shared" as const,
-          date: "2027-03-26",
+          date: "2027-09-26",
           specialDayId: "sd2",
           specialDayName: "Feria",
           otherSpecialDayId: "sd1",
@@ -237,7 +237,7 @@ describe("department list", () => {
     const el = await setup(clash);
     const warning = find(el, '[data-test="date-shared"]')!;
     expect(warning.textContent!.trim()).toBe(
-      "Viernes Santo and Feria both fall on Fri, 26 Mar 2027. Feria applies; change one to choose.",
+      "Viernes Santo and Feria both fall on Sun, 26 Sept 2027. Feria applies; change one to choose.",
     );
     expect(
       warning.compareDocumentPosition(table(el)) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -246,7 +246,7 @@ describe("department list", () => {
     setLocale("es");
     const es = await setup(clash);
     expect(find(es, '[data-test="date-shared"]')!.textContent!.trim()).toBe(
-      "Viernes Santo y Feria caen el vie, 26 mar 2027. Se aplica Feria; cambia uno para elegir.",
+      "Viernes Santo y Feria caen el dom, 26 sept 2027. Se aplica Feria; cambia uno para elegir.",
     );
   });
 

@@ -78,15 +78,15 @@ describe("stationShowModel", () => {
     ]);
     const shown = stationShowModel(monthModel(), read, STATION, PERIODS, "station")!;
     expect(
-      shown.departments.map(({ id, name, stationHeading, stationChild }) => ({
+      shown.departments.map(({ id, name, stationHeading, stationGroup }) => ({
         id,
         name,
         stationHeading,
-        stationChild,
+        stationGroup,
       })),
     ).toEqual([
-      { id: "pass:rest", name: "Restaurant", stationHeading: "Pass", stationChild: true },
-      { id: "pass:bar", name: "Bar", stationHeading: undefined, stationChild: true },
+      { id: "pass:rest", name: "Restaurant", stationHeading: "Pass", stationGroup: "Pass" },
+      { id: "pass:bar", name: "Bar", stationHeading: undefined, stationGroup: "Pass" },
     ]);
     expect(shown.model.days[3]!.departments).toEqual([
       { departmentId: "pass:rest", zones: [], ranges: [DINNER] },

@@ -368,7 +368,7 @@ export class DepartmentsList extends LitElement {
               ${format("venue.readiness.date_shared", {
                 other: issue.otherSpecialDayName,
                 name: issue.specialDayName,
-                date: formatDate(issue.date),
+                date: formatDate(issue.date, false),
               })}
             </p>`
           : nothing,

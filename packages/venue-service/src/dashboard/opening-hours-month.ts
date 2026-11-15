@@ -35,7 +35,7 @@ export interface MonthDepartment {
   name: string;
   station?: boolean;
   stationHeading?: string;
-  stationChild?: boolean;
+  stationGroup?: string;
   zones: readonly { id: string; name: string }[];
   periods: readonly { id: string; name: string; colour: CalendarColour }[];
 }
@@ -63,7 +63,7 @@ function stepMonth(month: string, by: number): string {
 interface Row {
   station?: boolean;
   stationHeading?: string;
-  stationChild?: boolean;
+  stationGroup?: string;
   key: string;
   name: string;
   ranges: readonly (ClosedRange & Placed & { periodId?: string })[];
@@ -367,7 +367,7 @@ export class OpeningHoursMonthView extends LitElement {
         name: name(d.departmentId),
         station: names.station(d.departmentId),
         stationHeading: names.stationHeading(d.departmentId),
-        stationChild: names.stationChild(d.departmentId),
+        stationGroup: names.stationGroup(d.departmentId),
         ranges: placed(d.ranges, this.#orders || names.station(d.departmentId)),
       }));
     const department = day.departments.find((d) => d.departmentId === chosen)!;
@@ -411,7 +411,7 @@ export class OpeningHoursMonthView extends LitElement {
     if (day.closedAllDay) return [];
     if (this.#noOrders(rows)) return [t("month.no_orders")];
     return rows.map((row) => {
-      const label = `${row.stationHeading ? row.stationHeading + ": " : ""}${names.station(row.key) && !row.stationChild ? t("opening.prep_station") + " " : ""}${row.name}`;
+      const label = `${names.station(row.key) ? t("opening.prep_station") + " " : ""}${row.stationGroup ? row.stationGroup + ": " : ""}${row.name}`;
       if ((this.#orders || row.station) && !row.ranges.length)
         return `${label}: ${t("month.no_orders")}`;
       if (!row.ranges.length) return format("month.department_closed", { name: row.name });
@@ -473,9 +473,7 @@ export class OpeningHoursMonthView extends LitElement {
       ${nameLines}
       ${
         none && !day.closedAllDay
-          ? html`<span class="no-orders" ?data-all-day=${day.closedAllDay} data-test="no-orders"
-              >${t("month.no_orders")}</span
-            >`
+          ? html`<span class="no-orders" data-test="no-orders">${t("month.no_orders")}</span>`
           : nothing
       }
       ${(none ? [] : rows).map((row) => {
@@ -498,7 +496,7 @@ export class OpeningHoursMonthView extends LitElement {
         return html`${row.stationHeading ? html`<span class="station-heading" title=${row.stationHeading} aria-hidden="true">${stationIcon()}<span class="row-name">${row.stationHeading}</span></span>` : nothing}
           <span class="named-track" title=${row.name} aria-hidden="true">
             <span class="row-name" data-test="row-name"
-              >${row.station && !row.stationChild ? stationIcon() : nothing}${row.name}</span
+              >${row.station && !row.stationGroup ? stationIcon() : nothing}${row.name}</span
             >
             ${track}
           </span>`;
@@ -606,7 +604,7 @@ export class OpeningHoursMonthView extends LitElement {
       this.show
         ? html`<p class="rows" data-test="rows">
             ${t("month.rows")}
-            ${station.departments.filter((row) => !row.stationChild || row.stationHeading).map((row, index) => html`${index ? " · " : ""}${row.station ? stationIcon() : nothing}${row.stationHeading || row.name}`)}
+            ${station.departments.filter((row) => !row.stationGroup || row.stationHeading).map((row, index) => html`${index ? " · " : ""}${row.station ? stationIcon() : nothing}${row.stationHeading || row.name}`)}
           </p>`
         : nothing
     }

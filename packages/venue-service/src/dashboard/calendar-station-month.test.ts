@@ -768,3 +768,16 @@ it("keeps a long grouped station name available in the Month heading", async () 
     heading.getBoundingClientRect().right,
   );
 });
+
+it.each(["all", "stations"])(
+  "names each grouped station sender in the spoken Month for %s",
+  async (show) => {
+    const { el } = await mount({ show });
+    await drawn(el, "2026-12-01", "pass:rest").not.toBeNull();
+    await expect
+      .element(cell(el, "2026-12-01")!.querySelector<HTMLElement>(".day")!, { timeout: 1000 })
+      .toHaveAccessibleName(
+        /Prep station Kitchen: Restaurant: Dinner 19:00–01:00.*Prep station Kitchen: Bar: All day 10:00–02:00.*Prep station Pass: Restaurant: Dinner 19:00–01:00.*Prep station Pass: Bar: All day 10:00–02:00/,
+      );
+  },
+);

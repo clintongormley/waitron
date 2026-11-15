@@ -88,7 +88,10 @@ export function stationShowModel(
     ? fed.map((id) => ({
         id: key(id),
         ...(grouped
-          ? { stationChild: true, ...(id === fed[0] ? { stationHeading: station.name } : {}) }
+          ? {
+              stationGroup: station.name,
+              ...(id === fed[0] ? { stationHeading: station.name } : {}),
+            }
           : {}),
         name: periods.find((period) => period.departmentId === id)?.departmentName ?? "",
         zones: [],

@@ -1184,7 +1184,7 @@ describe("Opening hours month, a station shown", () => {
   it("a station draws a row per sending department, its dates still buttons that open the box", async () => {
     const el = await mount(monthModel(), { stations: STATIONS, station: grill() });
     expect(testId(el, "rows")).toBeNull();
-    expect(root(el).querySelector('.station-track wt-icon[name="prep-station"]')).toBeNull();
+    expect(root(el).querySelector('.named-track wt-icon[name="prep-station"]')).toBeNull();
     const monday = cell(el, "2026-12-07");
     const tracks = [...monday.querySelectorAll<HTMLElement>(".track")];
     expect(tracks.map((track) => track.dataset.row)).toEqual(["rest", "bar"]);

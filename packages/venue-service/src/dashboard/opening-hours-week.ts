@@ -685,9 +685,9 @@ export class OpeningHoursWeekView extends LitElement {
   #phoneRow(row: WeekRow, day: Day, names: MonthNames, orders: boolean) {
     const span = day.endMinute;
     return html`${row.stationHeading ? html`<h3 class="station-heading">${stationIcon()}${row.stationHeading}</h3>` : nothing}
-      <div class="row" data-row=${row.key} ?data-station-child=${row.stationChild}>
+      <div class="row" data-row=${row.key} ?data-station-child=${row.stationGroup}>
         <span class="row-name ${row.strong ? "strong" : ""}"
-          >${row.station && !row.stationChild ? stationIcon() : nothing}${row.name}</span
+          >${row.station && !row.stationGroup ? stationIcon() : nothing}${row.name}</span
         >
         <span class="words" ?data-no-orders=${orders && !row.blocks.length}>${row.words}</span>
         <div class="track" aria-hidden="true">
@@ -773,12 +773,12 @@ export class OpeningHoursWeekView extends LitElement {
   #row(row: WeekRow, day: Day, names: MonthNames, longest: number) {
     const span = day.endMinute;
     return html`${row.stationHeading ? html`<h4 class="station-heading">${stationIcon()}${row.stationHeading}</h4>` : nothing}
-      <div class="row" data-row=${row.key} ?data-station-child=${row.stationChild}>
+      <div class="row" data-row=${row.key} ?data-station-child=${row.stationGroup}>
         <span class="row-name ${row.zone ? "" : "strong"}" aria-hidden="true"
-          >${row.station && !row.stationChild ? stationIcon() : nothing}${row.name}</span
+          >${row.station && !row.stationGroup ? stationIcon() : nothing}${row.name}</span
         >
         <span class="spoken"
-          >${`${row.station && !row.stationChild ? t("opening.prep_station") + " " : ""}${row.name}: ${row.words}`}</span
+          >${`${row.station && !row.stationGroup ? t("opening.prep_station") + " " : ""}${row.name}: ${row.words}`}</span
         >
         <div class="lane">
           <div

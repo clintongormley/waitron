@@ -5536,7 +5536,7 @@ Opening hours' Year.
   Month, to the same people, and Show all appends station rows after departments; a station's day draws one row per department that sends it dishes, a
   day none of them sends on reads "Closed" once in place of its rows, and a station-only week whose
   times have not arrived draws no days. Show all retains loaded departments while station times load or fail. All prep stations keeps every station row, including
-  Closed rows for the default, without replacing department rows in Show all.
+  Closed rows, without replacing department rows in Show all.
 - **Picking days.** `DayPicker` (`day-picking.ts`) picks exact dates in Year and Month.
   A click picks one day and opens its day box; a drag replaces the selection with its run.
   Shift extends the anchored run, keeping separate picks; Cmd-click on Mac or Ctrl-click elsewhere

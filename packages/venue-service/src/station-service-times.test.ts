@@ -826,6 +826,18 @@ it("reads every active station through one dated planning batch", async () =>
     } finally {
       spy.mockRestore();
     }
+    await clearRoutingCell(db, {
+      row: { kind: "category", categoryId: f.category },
+      zoneId: f.terrace,
+    });
+    expect(await stationsServiceTimes(db, day, day)).toEqual({
+      [f.defaultStation]: planned(f, [
+        f.lunchRange,
+        { periodId: f.afternoon, startsAt: "16:00", endsAt: "18:00" },
+      ]),
+      [f.station]: { days: [{ date: day, departments: [] }] },
+      [f.unused]: { days: [{ date: day, departments: [] }] },
+    });
   }));
 
 it("refuses an all-station request beyond six weeks", async () =>

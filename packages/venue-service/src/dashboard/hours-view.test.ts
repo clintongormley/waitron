@@ -173,3 +173,9 @@ it.each([
     month: "2026-09",
   });
 });
+
+it("keeps native short months for dates outside the Calendar", () => {
+  expect(formatDate("2026-09-12", false)).toBe("Sat, 12 Sept 2026");
+  setLocale("es");
+  expect(formatDate("2026-09-12", false)).toBe("sáb, 12 sept 2026");
+});

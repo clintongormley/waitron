@@ -22,8 +22,14 @@ const shortDate = (date: LocalDate, options: Intl.DateTimeFormatOptions) =>
   joined(shortMonths(dateFormat(options).formatToParts(asUtc(date))));
 
 /** A date as the dashboard reads it, "Mon, 12 Oct 2026", in the dashboard's language. */
-export function formatDate(date: LocalDate): string {
-  return shortDate(date, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+export function formatDate(date: LocalDate, threeLetterMonth = true): string {
+  const parts = dateFormat({
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).formatToParts(asUtc(date));
+  return joined(threeLetterMonth ? shortMonths(parts) : parts);
 }
 
 /** A date's weekday, "M", "Mon" or "Monday", in the dashboard's language. */

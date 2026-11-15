@@ -61,7 +61,7 @@ export interface WeekBlock {
 export interface WeekRow {
   station?: boolean;
   stationHeading?: string;
-  stationChild?: boolean;
+  stationGroup?: string;
   key: string;
   name: string;
   zone: boolean;
@@ -159,7 +159,9 @@ export function weekStationRows(day: Day, names: MonthNames): WeekRow[] {
       ...(names.stationHeading(read.departmentId)
         ? { stationHeading: names.stationHeading(read.departmentId) }
         : {}),
-      ...(names.stationChild(read.departmentId) ? { stationChild: true } : {}),
+      ...(names.stationGroup(read.departmentId)
+        ? { stationGroup: names.stationGroup(read.departmentId) }
+        : {}),
       zone: false,
       strong: true,
       blocks,
