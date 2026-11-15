@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host, mount } from "@waitron/ui/src/test-helpers.js";
 import type { Paint } from "../paint-model.js";
@@ -623,6 +623,51 @@ test("Cancel closes the chooser and copies nothing; reopening starts with nothin
   await openChooser(el, "mon");
   expect(choice(el, "tue").checked).toBe(false);
   expect(chooserButton(el, "Copy").disabled).toBe(true);
+});
+
+test("at 390×844 a block's menu opens above a block low in the window instead of covering it", async () => {
+  const old = [window.innerWidth, window.innerHeight];
+  try {
+    await page.viewport(390, 844);
+    const el = await grid({ mon: [{ periodId: "dinner", startsAt: "22:00", endsAt: "00:00" }] });
+    // Pushes the block down until its foot is a little above the window's.
+    const spacer = document.createElement("div");
+    spacer.style.height = `${innerHeight - 40 - block(el, "mon").getBoundingClientRect().bottom}px`;
+    el.before(spacer);
+    await userEvent.click(block(el, "mon"));
+    await el.updateComplete;
+    expect(menu(el).matches(":popover-open")).toBe(true);
+    const box = menu(el).getBoundingClientRect();
+    const at = block(el, "mon").getBoundingClientRect();
+    expect(box.left).toBeGreaterThanOrEqual(0);
+    expect(box.right).toBeLessThanOrEqual(innerWidth);
+    expect(box.top).toBeGreaterThanOrEqual(0);
+    expect(box.bottom).toBeLessThanOrEqual(at.top + 0.5);
+  } finally {
+    await page.viewport(old[0]!, old[1]!);
+  }
+});
+
+test("at 390×844 the Copy to… chooser opens above a day heading low in the window instead of covering its ⋮", async () => {
+  const old = [window.innerWidth, window.innerHeight];
+  try {
+    await page.viewport(390, 844);
+    const el = await grid(week);
+    // Pushes the headings down until their foot is a little above the window's.
+    const spacer = document.createElement("div");
+    spacer.style.height = `${innerHeight - 40 - columnMenu(el, "mon").getBoundingClientRect().bottom}px`;
+    el.before(spacer);
+    await openChooser(el, "mon");
+    expect(chooser(el).matches(":popover-open")).toBe(true);
+    const box = chooser(el).getBoundingClientRect();
+    const at = columnMenu(el, "mon").getBoundingClientRect();
+    expect(box.left).toBeGreaterThanOrEqual(0);
+    expect(box.right).toBeLessThanOrEqual(innerWidth);
+    expect(box.top).toBeGreaterThanOrEqual(0);
+    expect(box.bottom).toBeLessThanOrEqual(at.top + 0.5);
+  } finally {
+    await page.viewport(old[0]!, old[1]!);
+  }
 });
 
 test("Clear empties the day", async () => {

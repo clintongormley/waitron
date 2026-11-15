@@ -2870,7 +2870,9 @@ department's periods (a pencil edits one, named and titled "Edit <period>"),
 Closed and + New period, which saves the period on its own and chooses it. Dragging down a day
 paints the chosen period in the business day's quarter hours; a drag over a block replaces what it
 covers, touching blocks of one period join, and clicking a block offers another period or Delete.
-Each day's ⋮ offers Copy to…, with a tick per day, and Clear. In a department, Closed erases; a zone
+Each day's ⋮ offers Copy to…, with a tick per day, and Clear. The block's menu and the Copy to…
+chooser open below what they belong to, else above it, else beside it, and cover it only when
+none of those fit. In a department, Closed erases; a zone
 paints Closed only, over its department's week drawn faded, and Delete there gives the time back to
 the department. A zone's Closed stroke, block change and Copy keep the full painted times,
 including stretches beyond its department's hours. A zone's day on which its department is
@@ -2983,7 +2985,8 @@ outline and opens its editor: Staff role (a searchable list) and How many on one
 block's top and bottom edges resize it, by a drag that starts on one. The block stays
 picked until the focus leaves both it and its editor; a click on the editor's blank space stays
 inside it. The editor opens below the block, or above it when it fits there and not below; with room on
-neither side it covers the block. It keeps
+neither side it opens beside the block, on the right when it fits there, else on the left, and
+covers the block only when it fits nowhere else. It keeps
 a change only on Save, which Enter in How many also presses; Cancel, Escape, a click outside, the
 focus leaving, or a drag that paints or resizes throw the change away. Save stays quiet until the
 role or number differs from the block's, and while a block's staff role no longer exists it waits
@@ -5497,7 +5500,8 @@ Opening hours' Year.
 - **Day box.** `calendar-day-box.ts` draws one day in words, filled by its host; it is exported as
   `@waitron/venue-service/dashboard/calendar-day-box` for other screens; Staffing's month opens it
   (above), and so does the Week, from a day's name or bar. One box at a time floats below the date that
-  opened it, or above it when there is no room below, kept on screen; it moves nothing on the page.
+  opened it, else above it, else beside it, covering it only when none of those fit, kept on
+  screen; it moves nothing on the page.
   It follows its date as the page scrolls or the window resizes, and closes once a scroll or a
   resize leaves none of the date inside the window and every box around it that clips its contents.
   In Opening hours it is headed by the date, with the special day's name, or else the public holiday's, beside it;

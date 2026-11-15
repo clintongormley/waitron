@@ -238,7 +238,7 @@ export class PaintGrid extends LitElement {
     if (this.#stroke.takeDraggedClick()) return;
     this.selected = { key, startsAt };
     await this.updateComplete;
-    placePopover(this.menu, trigger, false);
+    placePopover(this.menu, trigger, false, true);
     this.menu.querySelector<HTMLElement>("wt-button:not([disabled])")?.focus();
   }
   #closeMenu(): void {
