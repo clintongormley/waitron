@@ -125,7 +125,13 @@ import {
   readStaffNoticesInTurns,
   type OwnedStaffNoticeSource,
 } from "./staff-notices.js";
-import { provisionBillVenue, seatedWith, tabWith, send } from "./testing/bill-venue.js";
+import {
+  provisionBillVenue,
+  seatedWith,
+  tabWith,
+  send,
+  type BillVenue,
+} from "./testing/bill-venue.js";
 import { defaultLayout } from "./testing/floor-sets.js";
 import { reserveInvoiceDelivery, claimInvoiceDelivery } from "./invoice-delivery.js";
 import { parkOrder } from "./working-order.js";
@@ -139,6 +145,31 @@ import { setupVenue } from "./testing/venue-fixtures.js";
 import { waitingDish } from "./testing/waiting-dish.js";
 import { stationScreensDark, passScreensDark } from "./station-outputs-down.js";
 import { SESSION_COOKIE } from "./till-session.js";
+
+async function orderlessInvoice(venue: BillVenue): Promise<string> {
+  const orderlessId = randomUUID();
+  await withTransaction(venue.db, (tx) =>
+    tx.insert(sales).values({
+      id: orderlessId,
+      source: "device",
+      deviceId: venue.deviceId,
+      seriesId: venue.seriesId,
+      nodeId: venue.cfg.nodeId,
+      invoiceNumber: 900101,
+      issuedAt: "2026-11-15T12:00:00.000Z",
+      issuedOffsetMinutes: 60,
+      total: 1210,
+      vatBreakdown: [{ rate: "21.00", base: "10.00", tax: "2.10" }],
+      locale: "es-ES",
+      invoiceLocales: ["es-ES"],
+      fiscalBackend: "verifactu",
+      fiscalState: "not_applicable",
+      counterpartyTaxId: "B00000000",
+      counterpartyLegalName: "Stored recipient",
+    }),
+  );
+  return orderlessId;
+}
 
 const MiB = 1024 * 1024;
 const FLOOR = 8 * MiB;
@@ -1718,7 +1749,7 @@ describe("a start on a real full disk", () => {
       await store.close();
     }
   });
-  it.each(["floor", "delivery"] as const)(
+  it.for(["floor", "delivery", "transaction"] as const)(
     "due %s work still refuses on a full disk, then reconciles after space returns",
     async (kind, ctx) => {
       const small = needDisk(ctx);
@@ -1744,29 +1775,37 @@ describe("a start on a real full disk", () => {
               .values({ zoneId: venue.zoneId, label: "New layout table" });
           });
         } else {
-          const orderId = await tabWith(venue, "Steak");
-          expect(
-            (
-              await send(
-                venue.app,
-                venue.cookie,
-                "POST",
-                `/api/working-orders/${orderId}/payments`,
-                {
-                  submissionId: randomUUID(),
-                  kind: "contribution",
-                  amount: "25.00",
-                  method: "cash",
-                  tendered: "25.00",
-                  applied: "25.00",
-                  tip: "0.00",
-                },
-              )
-            ).status,
-          ).toBe(200);
-          const [sale] = await db.select({ id: sales.id }).from(sales);
+          let saleId: string;
+          if (kind === "transaction") {
+            saleId = await orderlessInvoice(venue);
+            path = `/api/transactions/${saleId}/deliveries`;
+          } else {
+            const orderId = await tabWith(venue, "Steak");
+            expect(
+              (
+                await send(
+                  venue.app,
+                  venue.cookie,
+                  "POST",
+                  `/api/working-orders/${orderId}/payments`,
+                  {
+                    submissionId: randomUUID(),
+                    kind: "contribution",
+                    amount: "25.00",
+                    method: "cash",
+                    tendered: "25.00",
+                    applied: "25.00",
+                    tip: "0.00",
+                  },
+                )
+              ).status,
+            ).toBe(200);
+            const [sale] = await db.select({ id: sales.id }).from(sales);
+            saleId = sale!.id;
+            path = `/api/sales/${orderId}/deliveries?medium=email`;
+          }
           await withTransaction(db, async (tx) => {
-            const delivery = await reserveInvoiceDelivery(tx, sale!.id, {
+            const delivery = await reserveInvoiceDelivery(tx, saleId, {
               medium: "email",
               requestKey: randomUUID(),
               personId: venue.operatorId,
@@ -1780,7 +1819,6 @@ describe("a start on a real full disk", () => {
               .where(eq(invoiceDeliveries.id, delivery.id));
             expect(await claimInvoiceDelivery(tx, delivery.id, "silent-worker", at)).toBeDefined();
           });
-          path = `/api/sales/${orderId}/deliveries?medium=email`;
         }
         await installChangeFeed(db, CORE_CHANGE_SOURCES);
         const seen: unknown[] = [];
@@ -1864,27 +1902,7 @@ describe("a start on a real full disk", () => {
       await withTransaction(db, (tx) =>
         tx.insert(floorPlanTables).values({ zoneId: venue.zoneId, label: "No saved layout" }),
       );
-      const orderlessId = randomUUID();
-      await withTransaction(db, (tx) =>
-        tx.insert(sales).values({
-          id: orderlessId,
-          source: "device",
-          deviceId: venue.deviceId,
-          seriesId: venue.seriesId,
-          nodeId: venue.cfg.nodeId,
-          invoiceNumber: 900101,
-          issuedAt: "2026-11-15T12:00:00.000Z",
-          issuedOffsetMinutes: 60,
-          total: 1210,
-          vatBreakdown: [{ rate: "21.00", base: "10.00", tax: "2.10" }],
-          locale: "es-ES",
-          invoiceLocales: ["es-ES"],
-          fiscalBackend: "verifactu",
-          fiscalState: "not_applicable",
-          counterpartyTaxId: "B00000000",
-          counterpartyLegalName: "Stored recipient",
-        }),
-      );
+      const orderlessId = await orderlessInvoice(venue);
       const stationId = db.all<{ id: string }>(
         sql`select id from kitchen_stations where active = 1 order by id limit 1`,
       )[0]!.id;

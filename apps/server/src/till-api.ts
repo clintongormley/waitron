@@ -2492,7 +2492,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           printers: () => tillInvoicePrinters(tx, session),
         });
       };
-      // Due reconciliation drains changes; a read-only turn must leave waiting notifications alone.
       const current = await deps.db.withWriteLock(async () => {
         const saleId = await zonedSale(deps.db, session, id);
         if (await invoiceDeliveryClaimsDue(deps.db, new Date())) return null;
@@ -2817,7 +2816,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           (table) => inScope(scope, table.zoneId),
         );
       };
-      // Due reconciliation drains changes; a read-only turn must leave waiting notifications alone.
       const current = await deps.db.withWriteLock(async () => {
         if (await todayReconciliationDue(deps.db, deps.clock.now().instant)) return null;
         return read(deps.db);
@@ -3276,7 +3274,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const partyId = requirePartyParam(c.req.param("id"));
-      // Due reconciliation drains changes; a read-only turn must leave waiting notifications alone.
       const current = await deps.db.withWriteLock(async () => {
         const tx = deps.db;
         await checkZones(tx, session, [{ partyId }]);

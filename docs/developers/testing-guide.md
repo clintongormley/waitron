@@ -4347,3 +4347,11 @@ does not see.
 
 > Guard: `scripts/coverage-thresholds.test.ts`, weaker than its name: looks for one exact string;
 > include paths are not package-anchored.
+
+## A parameterized test needing context uses `it.for`
+
+Use `it.for` when a parameterized case calls `ctx.skip` or another context method.
+`it.each` passes the row’s values instead of adding the test context. In the 15 November 2026
+remaining full-disk read review, the new due-work cases passed with the macOS disk available,
+but typecheck rejected their callback and a refused small-filesystem setup crashed at
+`ctx.skip`. The `it.for` cases skip under that refused setup and pass with the real disk.

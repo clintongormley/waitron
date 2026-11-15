@@ -3106,7 +3106,7 @@ activity on a healthy disk; only after `storage.disk_full` do they repeat their 
 reads now check for due reconciliation inside a no-drain turn. Without due work they return
 from that turn; otherwise they enter their existing draining transaction and reconcile there.
 Floor eligibility shares the saved-layout selection with `ensureToday`; delivery eligibility
-shares the sending-claim lease condition with expiry. Authorization precedes global expiry.
+shares the sending-claim lease condition with expiry. A refused zone read leaves other sales’ claims unchanged.
 The delivery routes keep wall-clock expiry; the floor keeps its supplied clock. The real small-filesystem cases in `start-full-disk.e2e.test.ts` check
 pending rows, overdue stamps, permissions, a populated bill, a paid receipt and an actual logo
 image; they do not qualify every GET route.

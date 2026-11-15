@@ -1364,7 +1364,7 @@ const ROUTES: readonly Row[] = [
   ],
 ];
 
-it("refuses a foreign-zone delivery read before expiring another sale's claim", async () => {
+it("a refused foreign-zone delivery read leaves another sale's claim untouched", async () => {
   const orderId = await counterOrder(v, "Water");
   await pay(v, orderId, "2.00");
   const deliveryId = await inTx(v, async (tx) => {
