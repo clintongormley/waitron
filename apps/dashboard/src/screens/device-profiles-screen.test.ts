@@ -4176,6 +4176,58 @@ describe("a device profile's address", () => {
     el.shadowRoot!.querySelector("[data-test=editor-form]")?.getAttribute("data-editing-id") ??
     null;
 
+  it("ordinary Edit ignores a tab on the list address", async () => {
+    history.replaceState(null, "", "/manage/device-profiles/view/equipment");
+    const el = await mount(stubApi());
+    await profileAction(el, "edit-p1");
+    await vi.waitFor(() => expect(editingId(el)).toBe("p1"));
+    expect(el.shadowRoot!.querySelector("wt-tabs")).toHaveProperty("value", "general");
+    expect(location.pathname).toBe("/manage/device-profiles/profile/p1");
+  });
+  it("a field error writes the tab it opens", async () => {
+    history.replaceState(null, "", "/manage/device-profiles/profile/p1/view/where");
+    const el = await mount(stubApi());
+    change(el, "profile-name", "");
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("wt-tabs")).toHaveProperty("value", "general"),
+    );
+    expect(location.pathname).toBe("/manage/device-profiles/profile/p1/view/general");
+  });
+
+  it("opens an explicit tab and follows same-profile addresses without reloading", async () => {
+    history.replaceState(null, "", "/manage/device-profiles/profile/p1/view/equipment");
+    const api = stubApi();
+    const el = await mount(api);
+    await vi.waitFor(() => expect(editingId(el)).toBe("p1"));
+    expect(el.shadowRoot!.querySelector("wt-tabs")).toHaveProperty("value", "equipment");
+    await selectProfileTab(el, "who");
+    expect(location.pathname).toBe("/manage/device-profiles/profile/p1/view/who");
+    history.replaceState(null, "", "/manage/device-profiles/profile/p1/view/where");
+    dispatchEvent(new PopStateEvent("popstate"));
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("wt-tabs")).toHaveProperty("value", "where"),
+    );
+    expect(api.getDeviceProfile).toHaveBeenCalledTimes(1);
+    const host = el.parentElement!;
+    el.remove();
+    host.append(el);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("wt-tabs")).toHaveProperty("value", "where"),
+    );
+  });
+  it.each(["unknown", "where"])("refuses an invalid or unoffered explicit tab %s", async (tab) => {
+    history.replaceState(null, "", `/manage/device-profiles/profile/p2/view/${tab}`);
+    const el = await mount(stubApi({ getDeviceProfile: vi.fn().mockResolvedValue(profiles[1]) }));
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.textContent).toContain(t("device_profiles.setting_unavailable")),
+    );
+    expect(el.shadowRoot!.querySelector("wt-tabs")).toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-target-cancel]")!.click();
+    await vi.waitFor(() => expect(location.pathname).toBe("/manage/device-profiles"));
+  });
+
   it("names the profile while its editor is open, so a reload opens it again", async () => {
     history.replaceState(null, "", "/manage/device-profiles");
     const api = stubApi();

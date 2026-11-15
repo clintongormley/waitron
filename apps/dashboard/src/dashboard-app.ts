@@ -110,6 +110,7 @@ import "./screens/purchases-screen.js";
 import "./screens/devices-screen.js";
 import "./screens/printers-screen.js";
 import { readerSettingSearchDestinations } from "./reader-setting-search.js";
+import { deviceProfileSettingSearchDestinations } from "./device-profile-setting-search.js";
 import { deviceSettingSearchDestinations } from "./device-setting-search.js";
 import { printerSettingSearchDestinations } from "./printer-setting-search.js";
 import "./screens/floor-plan-editor.js";
@@ -1677,6 +1678,7 @@ export class DashboardApp extends LitElement {
         ...printerSettingSearchDestinations(this.api),
         ...deviceSettingSearchDestinations(this.api),
         ...readerSettingSearchDestinations(this.api),
+        ...deviceProfileSettingSearchDestinations(this.api),
       ];
     for (const c of DASHBOARD_MODULES) {
       if (!enabled.includes(c.module)) continue;
@@ -2655,8 +2657,11 @@ export class DashboardApp extends LitElement {
     return collectSearchDestinations({
       pages,
       declarations: [
-        ...this.#coreSettingDestinations.filter((item) =>
-          pages.some((page) => page.screen === item.screen),
+        ...this.#coreSettingDestinations.filter(
+          (item) =>
+            pages.some((page) => page.screen === item.screen) &&
+            (!item.id.startsWith("dashboard:device-profile:") ||
+              this.#sessionPermissions.includes("venue.configure")),
         ),
         ...DASHBOARD_MODULES.filter((c) => this.#enabledModules.includes(c.module)).flatMap(
           (c) => c.searchDestinations ?? [],

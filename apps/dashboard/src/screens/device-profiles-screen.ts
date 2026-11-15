@@ -338,6 +338,163 @@ const FIELD_TAB: Record<EditorField, EditorTab> = {
   readerDefault: "equipment",
 };
 
+export function profileSettingTab(field: EditorField, formFactor: FormFactor): EditorTab {
+  const tab = FIELD_TAB[field];
+  return tab === "kitchen" && !isSharedDisplay(formFactor) ? "capabilities" : tab;
+}
+export function profileKindListsShown(
+  kind: KitchenScreenKind,
+  formFactor: FormFactor,
+  capabilities: readonly string[],
+  screens: ProfileKitchenScreens,
+): boolean {
+  if (isSharedDisplay(formFactor)) return screens[kind] !== undefined;
+  if (kind === "station") return capabilities.includes("show-station");
+  return (
+    capabilities.includes("show-expo") && (kind === "pass" || screens.pass_monitor !== undefined)
+  );
+}
+export function profileReadersShown(
+  ready: boolean,
+  readers: readonly ReaderRow[],
+  readerIds: readonly string[],
+): boolean {
+  return ready && (readers.length > 0 || readerIds.length > 0);
+}
+type ProfileSetting = {
+  key: string;
+  name: string;
+  labelKey: StringKey;
+  tab: EditorTab;
+  equipment?: boolean;
+  offered: (
+    profile: DeviceProfile,
+    screens: ProfileKitchenScreens,
+    printers: boolean,
+    readers: boolean,
+  ) => boolean;
+};
+const orderingProfile = (profile: DeviceProfile) => !isSharedDisplay(profile.formFactor);
+const profileField = (
+  name: string,
+  labelKey: StringKey,
+  tab: EditorTab,
+  offered: ProfileSetting["offered"] = () => true,
+): ProfileSetting => ({ key: name, name, labelKey, tab, offered });
+export const profileTabLabels = {
+  general: "device_profiles.tab.general",
+  where: "device_profiles.where_heading",
+  who: "device_profiles.who_heading",
+  kitchen: "device_profiles.tab.kitchen",
+  capabilities: "device_profiles.tab.capabilities",
+  equipment: "device_profiles.tab.equipment",
+} as const;
+export const profileSettingFields: readonly ProfileSetting[] = [
+  profileField("name", "device_profiles.name", FIELD_TAB.name),
+  profileField("formFactor", "device_profiles.form_factor", "general"),
+  profileField(
+    "inactivityTimeout",
+    "device_profiles.inactivity_timeout_label",
+    FIELD_TAB.inactivity,
+    orderingProfile,
+  ),
+  profileField(
+    "startingScreen",
+    "device_profiles.starting_screen",
+    FIELD_TAB.startingScreen,
+    orderingProfile,
+  ),
+  profileField("departmentId", "device_profiles.department", FIELD_TAB.department, orderingProfile),
+  profileField(
+    "everyZone",
+    "device_profiles.every_zone",
+    "where",
+    (p) => orderingProfile(p) && p.departmentId !== null,
+  ),
+  profileField(
+    "allowedZoneIds",
+    "device_profiles.zones",
+    FIELD_TAB.zones,
+    (p) => orderingProfile(p) && p.departmentId !== null && p.allowedZoneIds !== null,
+  ),
+  profileField(
+    "startingZoneId",
+    "device_profiles.starting_zone",
+    FIELD_TAB.startingZone,
+    orderingProfile,
+  ),
+  profileField("admittedStaffRoleIds", "device_profiles.roles", FIELD_TAB.roles, orderingProfile),
+  ...CAPABILITY_FLAGS.map((flag): ProfileSetting => ({
+    ...profileField(
+      "capabilities",
+      `device_profiles.capability.${flag}`,
+      "capabilities",
+      (p) => orderingProfile(p) || sharedDisplayMay(flag),
+    ),
+    key: `capability.${flag}`,
+  })),
+  ...(["kitchen", "capabilities"] as const).flatMap((tab): ProfileSetting[] => [
+    profileField(
+      "kitchenScreens",
+      tab === "kitchen"
+        ? "device_profiles.kitchen_screens"
+        : "device_profiles.kitchen_screen.pass_monitor",
+      tab,
+      (p) =>
+        tab === "kitchen"
+          ? !orderingProfile(p)
+          : orderingProfile(p) && p.capabilities.includes("show-expo"),
+    ),
+    ...KITCHEN_SCREEN_KINDS.flatMap((kind) => {
+      const fields = KIND_FIELDS[kind];
+      const offered: ProfileSetting["offered"] = (p, screens) =>
+        profileSettingTab(fields.stations, p.formFactor) === tab &&
+        profileKindListsShown(kind, p.formFactor, p.capabilities, screens);
+      return [
+        ...[
+          [fields.stations, "device_profiles.kitchen_stations", "device_profiles.every_station"],
+          ...(fields.zones === null
+            ? []
+            : [
+                [fields.zones, "device_profiles.kitchen_zones", "device_profiles.every_zone_venue"],
+              ]),
+        ].flatMap(([name, group, every]) => [
+          { ...profileField(name!, group as StringKey, tab, offered), key: name! },
+          { ...profileField(name!, every as StringKey, tab, offered), key: `${name}.every` },
+        ]),
+      ];
+    }),
+    profileField(
+      "showNonPassStations",
+      "device_profiles.show_other_stations",
+      tab,
+      (p, screens) =>
+        profileSettingTab("passScreenStations", p.formFactor) === tab &&
+        (["pass", "pass_monitor"] as const).some((kind) =>
+          profileKindListsShown(kind, p.formFactor, p.capabilities, screens),
+        ),
+    ),
+  ]),
+  ...PRINTER_LISTS.flatMap((list) => [
+    profileField(list.key, list.heading, "equipment", (_p, _s, printers) => printers),
+    profileField(list.defaultKey, list.defaultLabel, "equipment", (_p, _s, printers) => printers),
+  ]).map((f) => ({ ...f, equipment: true })),
+  ...[
+    profileField(
+      "readerIds",
+      "device_profiles.card_readers",
+      "equipment",
+      (p, _s, _printers, readers) => orderingProfile(p) && readers,
+    ),
+    profileField(
+      "defaultReaderId",
+      "device_profiles.reader_default",
+      "equipment",
+      (p, _s, _printers, readers) => orderingProfile(p) && readers,
+    ),
+  ].map((f) => ({ ...f, equipment: true })),
+];
+
 /** Where each field is drawn; a group of switches takes focus on its first switch. */
 const FIELD_TARGET: Record<EditorField, string> = {
   name: "[data-test=profile-name]",
@@ -538,8 +695,7 @@ export class DeviceProfilesScreen extends LitElement {
 
   @state() private mode: "list" | "editor" = "list";
   @state() private editorTab: EditorTab = "general";
-  /** A `profile` in the path names the profile whose editor is open, written and cleared by
-   * replacing, so Back still leaves the screen. */
+  @state() private targetUnavailable = false;
   readonly #url = new UrlStateController(
     this,
     () => {
@@ -560,8 +716,8 @@ export class DeviceProfilesScreen extends LitElement {
    * none, so only the word going away closes an editor. */
   #addressProfile: string | null = null;
 
-  #writeProfileWord(profile: string | null): void {
-    void this.#url.write({ profile }, true);
+  #writeProfileWord(profile: string | null, view = this.#url.read("view")): void {
+    void this.#url.write({ profile, view: profile === null ? null : view }, true);
     if (this.#url.read("dashboard") === "device-profiles")
       this.#addressProfile = this.#url.read("profile");
   }
@@ -574,9 +730,33 @@ export class DeviceProfilesScreen extends LitElement {
     const id = this.#linkedProfile;
     if (id === null) return;
     this.#linkedProfile = null;
-    if (id === this.#openingId || (this.mode === "editor" && id === this.editingId)) return;
-    if (this.profiles.some((profile) => profile.id === id)) void this.#openEditor(id);
+    if (id === this.#openingId) return;
+    if (this.mode === "editor" && id === this.editingId) {
+      this.#selectTargetTab();
+      return;
+    }
+    if (this.profiles.some((profile) => profile.id === id))
+      void this.#openEditor(id, this.#url.read("view"));
     else this.#writeProfileWord(null);
+  }
+
+  #changeEditorTab(tab: EditorTab): void {
+    this.editorTab = tab;
+    if (this.editingId === null) return;
+    const guard = navigationGuardFor(window);
+    if (!guard) {
+      void this.#url.write({ view: tab }, true);
+      return;
+    }
+    const url = new URL(guard.href);
+    url.pathname = `${dashboardPath.basePath}/device-profiles/profile/${encodePathSegment(this.editingId)}/view/${tab}`;
+    guard.rewrite(url);
+  }
+
+  #selectTargetTab(view = this.#url.read("view")): void {
+    const target = view ?? "general";
+    this.targetUnavailable = !this.#editorTabs({}).some((tab) => tab.key === target);
+    if (!this.targetUnavailable) this.editorTab = target as EditorTab;
   }
 
   #closeEditor(writeUrl = true): void {
@@ -966,8 +1146,7 @@ export class DeviceProfilesScreen extends LitElement {
   }
 
   #fieldTab(field: EditorField): EditorTab {
-    const tab = FIELD_TAB[field];
-    return tab === "kitchen" && this.#ordering() ? "capabilities" : tab;
+    return profileSettingTab(field, this.draftFormFactor);
   }
 
   #editorTabs(errors: FieldErrors): TabItem[] {
@@ -995,7 +1174,7 @@ export class DeviceProfilesScreen extends LitElement {
     await this.updateComplete;
     const field = FIELDS.find((name) => errors[name]);
     if (field === undefined) return;
-    this.editorTab = this.#fieldTab(field);
+    this.#changeEditorTab(this.#fieldTab(field));
     await this.updateComplete;
     await this.renderRoot.querySelector("wt-tabs")?.updateComplete;
     const target =
@@ -1098,6 +1277,7 @@ export class DeviceProfilesScreen extends LitElement {
     this.#openingId = null;
     this.editingId = null;
     this.editorTab = "general";
+    this.targetUnavailable = false;
     this.draftName = "";
     this.draftCapabilities = [];
     this.draftFormFactor = FORM_FACTORS[0];
@@ -1205,7 +1385,7 @@ export class DeviceProfilesScreen extends LitElement {
 
   /** Fetches the profile and its kitchen screens fresh, rather than reusing rows a read may not have
    * delivered yet. */
-  async #openEditor(id: string): Promise<void> {
+  async #openEditor(id: string, view: string | null = null): Promise<void> {
     this.#clearErrorOnOpen();
     this.#clearDraft();
     const opened = this.#opened;
@@ -1253,7 +1433,8 @@ export class DeviceProfilesScreen extends LitElement {
         this.#ordering() && profile.departmentId !== null && this.#allowedZones().length === 0;
       this.mode = "editor";
       this.#registerDraft();
-      this.#writeProfileWord(id);
+      this.#selectTargetTab(view);
+      this.#writeProfileWord(id, view);
       void this.#loadReaders(id, this.#opened);
     } catch (error) {
       if (opened === this.#opened) {
@@ -1322,9 +1503,10 @@ export class DeviceProfilesScreen extends LitElement {
 
   /** Drawn once read, and only where the venue has a reader or the profile still lists one. */
   #readersShown(): boolean {
-    return (
-      this.readerState === "ready" &&
-      (this.readers.length > 0 || this.draftReaders.readerIds.length > 0)
+    return profileReadersShown(
+      this.readerState === "ready",
+      this.readers,
+      this.draftReaders.readerIds,
     );
   }
 
@@ -2161,11 +2343,12 @@ export class DeviceProfilesScreen extends LitElement {
   /** Whether the kind's station and zone lists are drawn: on a kitchen display while the kind is
    * offered; on a till or handheld under its Kitchen or Pass switch, the monitor only once on. */
   #kindListsShown(kind: KitchenScreenKind): boolean {
-    if (!this.#ordering()) return this.draftKitchenScreens[kind] !== undefined;
-    const pass = this.draftCapabilities.includes("show-expo");
-    if (kind === "station") return this.draftCapabilities.includes("show-station");
-    if (kind === "pass") return pass;
-    return pass && this.draftKitchenScreens.pass_monitor !== undefined;
+    return profileKindListsShown(
+      kind,
+      this.draftFormFactor,
+      this.draftCapabilities,
+      this.draftKitchenScreens,
+    );
   }
 
   #listChoices(
@@ -2596,7 +2779,7 @@ export class DeviceProfilesScreen extends LitElement {
           .items=${this.#editorTabs(errors)}
           .value=${this.editorTab}
           @wt-tab-change=${(event: CustomEvent<{ value: EditorTab }>) => {
-            this.editorTab = event.detail.value;
+            this.#changeEditorTab(event.detail.value);
           }}
         >
           <section slot="general">
@@ -2675,6 +2858,11 @@ export class DeviceProfilesScreen extends LitElement {
   }
 
   override render(): TemplateResult {
+    if (this.targetUnavailable)
+      return html`<p role="alert">${t("device_profiles.setting_unavailable")}</p>
+        <wt-button data-test="profile-target-cancel" @click=${() => this.#closeEditor()}
+          >${t("action.cancel")}</wt-button
+        >`;
     return this.mode === "editor" ? this.#renderEditor() : this.#renderList();
   }
 }

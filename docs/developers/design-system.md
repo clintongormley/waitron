@@ -4146,6 +4146,15 @@ The chooser includes disabled readers and opens the existing editor without adop
 unpairing a reader. Linked edits follow Back/Forward; a live refresh retains the draft.
 Mounted EN/ES checks compare the named Edit controls and labels with the declarations.
 
+Device-profile settings use the editor's tab as their location. Profile search requires permission
+to configure the venue; printer and card-reader settings also require permission to manage hardware.
+Ordering and shared-display profiles offer their own controls; kitchen bounds appear under
+**What it can do** or **Kitchen screens** respectively. Explicit addresses open that tab; ordinary
+Edit opens General. Tab clicks retain the draft and replace the address. Searching another tab
+uses Keep editing/Discard, including for the same profile, and does not reload that profile after
+accepted navigation. An unavailable explicit tab says it is not offered and gives you Cancel to return to the list.
+Mounted EN/ES checks compare named controls, labels and tabs with declarations in both directions.
+
 When nothing matches, the nav says **No pages
 match.** in a `role="status"` message. Enter opens the first result shown, in the order shown, and does
 nothing when nothing matches or the box is blank.

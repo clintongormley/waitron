@@ -3,6 +3,8 @@
 Use **Users** to keep your team's details and access roles up to date. Access roles decide what
 each person may do; job roles put them on the rota and on the devices that take that job.
 
+To find a setting, type its label in **Search pages** and choose the window to open; if several rows offer it, choose the one you want.
+
 ## Names and contact details {#staff-details}
 
 As a manager, open a person's row menu and choose **Edit** to change their names and telephone.

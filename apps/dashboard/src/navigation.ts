@@ -33,7 +33,7 @@ export const dashboardPath: UrlPathConfig = {
     printers: { view: "view", printer: "printer", editor: "editor", step: "step" },
     devices: { device: "device" },
     payments: { view: "view", reader: "reader" },
-    "device-profiles": { profile: "profile" },
+    "device-profiles": { profile: "profile", view: "view" },
     "floor-plan": { set: "set", zone: "zone" },
   },
   // A Calendar view a module adds names its own address words, which no list here can know.
