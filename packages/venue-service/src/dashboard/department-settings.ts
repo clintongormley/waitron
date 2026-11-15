@@ -35,6 +35,7 @@ import type {
   VenueServiceView,
 } from "./client.js";
 import { t } from "./strings.js";
+import { nativeLinkClick } from "./opening-hours-paths.js";
 import {
   stepsEqual,
   toStepDrafts,
@@ -1109,8 +1110,7 @@ export class DepartmentSettings extends LitElement {
                             data-zone=${zone.id}
                             href=${`/manage/venue-operations/department/${encodeURIComponent(row.id)}/view/zones/zone/${encodeURIComponent(zone.id)}`}
                             @click=${(e: MouseEvent) => {
-                              if (e.button || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey)
-                                return;
+                              if (nativeLinkClick(e)) return;
                               e.preventDefault();
                               this.emit("zone-change", { zoneId: zone.id });
                             }}

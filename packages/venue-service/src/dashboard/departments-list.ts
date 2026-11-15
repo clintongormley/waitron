@@ -15,7 +15,7 @@ import {
 import { DepartmentsZonesDrag } from "./departments-zones-drag.js";
 import { format, formatDate } from "./hours-view.js";
 import { t } from "./strings.js";
-import { periodsPath } from "./opening-hours-paths.js";
+import { nativeLinkClick, periodsPath } from "./opening-hours-paths.js";
 
 export type DepartmentZoneRow =
   ({ kind: "department" } & Department) | ({ kind: "zone" } & ServiceZone);
@@ -329,14 +329,7 @@ export class DepartmentsList extends LitElement {
               data-test=${`open-${row.kind}-name-${row.id}`}
               href=${row.kind === "department" ? `/manage/venue-operations/department/${encodeURIComponent(row.id)}` : `/manage/venue-operations/department/${encodeURIComponent(row.departmentId)}/view/zones/zone/${encodeURIComponent(row.id)}`}
               @click=${(event: MouseEvent) => {
-                if (
-                  event.button ||
-                  event.ctrlKey ||
-                  event.metaKey ||
-                  event.shiftKey ||
-                  event.altKey
-                )
-                  return;
+                if (nativeLinkClick(event)) return;
                 event.preventDefault();
                 this.#open(row);
               }}

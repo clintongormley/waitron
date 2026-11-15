@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "vitest";
+import { beforeEach, afterEach, describe, expect, test } from "vitest";
 import { page } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
@@ -14,13 +14,13 @@ afterEach(() => {
   setLocale("en");
 });
 
-/** Each bin lies inside the table's scroll box and the screen, and is what a tap at its centre hits. */
-function expectBinsOnScreen(table: Element, rows: number) {
+/** Each row menu lies inside the table's scroll box and the screen, and is what a tap at its centre hits. */
+function expectActionsOnScreen(table: Element, rows: number) {
   const scroll = table.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
   expect(scroll.scrollWidth, "the table overflows its box").toBeGreaterThan(scroll.clientWidth);
   expect(scroll.scrollLeft).toBe(0);
   const box = scroll.getBoundingClientRect();
-  const bins = [...table.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=delete-period]")];
+  const bins = [...table.shadowRoot!.querySelectorAll<HTMLElement>("wt-row-actions")];
   expect(bins).toHaveLength(rows);
   for (const [index, bin] of bins.entries()) {
     bin.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -234,7 +234,7 @@ describe.each(["light", "dark"] as const)("Periods (%s)", (theme) => {
   });
 });
 
-describe.each(["en", "es"] as const)("Periods bins in the window (%s)", (locale) => {
+describe.each(["en", "es"] as const)("Periods row menus in the window (%s)", (locale) => {
   test.each([1280, 390])("stay on screen at %s px", async (width) => {
     setLocale(locale);
     await page.viewport(width, 900);
@@ -243,9 +243,9 @@ describe.each(["en", "es"] as const)("Periods bins in the window (%s)", (locale)
       const screen = await mount("list", "light", true);
       const table = screen.shadowRoot!.querySelector("wt-data-table")!;
       await table.updateComplete;
-      const bins = [...table.shadowRoot!.querySelectorAll("[data-test=delete-period]")];
+      const bins = [...table.shadowRoot!.querySelectorAll("wt-row-actions")];
       expect(bins).toHaveLength(4);
-      if (width === 390) expectBinsOnScreen(table, 4);
+      if (width === 390) expectActionsOnScreen(table, 4);
       for (const bin of bins) {
         const at = bin.shadowRoot!.querySelector("button")!.getBoundingClientRect();
         expect(at.width).toBeGreaterThan(0);
@@ -257,3 +257,5 @@ describe.each(["en", "es"] as const)("Periods bins in the window (%s)", (locale)
     }
   });
 });
+
+beforeEach(() => history.replaceState({}, "", "/manage/periods"));

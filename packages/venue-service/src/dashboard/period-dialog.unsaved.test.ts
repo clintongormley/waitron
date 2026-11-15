@@ -211,43 +211,6 @@ async function mountWith(setup: (el: PeriodDialog) => void) {
   return el;
 }
 
-it("Delete… on a changed draft asks first: keep emits nothing and keeps the draft; discard closes and emits once", async () => {
-  const el = await mountWith((el) => {
-    el.departmentName = "Restaurant";
-    el.period = {
-      id: "p1",
-      name: "Lunch",
-      colour: "blue",
-      menuId: "lunch",
-      staffMenuIds: [],
-      floorPlanSetId: null,
-      weekdays: [1],
-      routingUses: [],
-    };
-    el.deletable = true;
-  });
-  const events: { type: string; detail: unknown }[] = [];
-  for (const type of ["period-close", "period-delete"])
-    el.addEventListener(type, (e) => events.push({ type, detail: (e as CustomEvent).detail }));
-  const button = () =>
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=delete-period]")!;
-  await change(el, "Dinner");
-  button().click();
-  await choose("keep");
-  await el.updateComplete;
-  expect(events).toEqual([]);
-  expect(el.open).toBe(true);
-  expect(name(el).value).toBe("Dinner");
-  button().click();
-  await choose("discard");
-  await expect.poll(() => events.length).toBe(2);
-  expect(events).toEqual([
-    { type: "period-close", detail: null },
-    { type: "period-delete", detail: { periodId: "p1" } },
-  ]);
-  expect(el.open).toBe(false);
-});
-
 it("changing only the department of a new period makes it dirty, and choosing it back makes it clean", async () => {
   const el = await mountWith((el) => {
     el.departments = [

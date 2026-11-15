@@ -860,11 +860,12 @@ it("a model in which the period is gone closes its delete dialog", async () => {
   await expect.poll(() => table(el)!.rows.length).toBe(2);
 });
 
-it("blocks opening a period dialog while a delete dialog is open, and the other way round", async () => {
+it("blocks opening a period page while a delete dialog is open, and the other way round", async () => {
   const el = await mount(fake({ data: () => model([lunch(), dinner()]) }));
   const add = el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-period]")!;
   rowButton(el, "edit-period", "p1").click();
   await el.updateComplete;
+  await expect.poll(() => periodDialog(el)).not.toBeNull();
   const editor = periodDialog(el)!;
   expect(editor).not.toBeNull();
   rowButton(el, "delete-period", "p2").click();
@@ -872,8 +873,7 @@ it("blocks opening a period dialog while a delete dialog is open, and the other 
   expect(periodDialog(el)).toBe(editor);
   expect(deleteDialog(el)).toBeNull();
   editor.dispatchEvent(new CustomEvent("period-close", { bubbles: true, composed: true }));
-  await el.updateComplete;
-  expect(periodDialog(el)).toBeNull();
+  await expect.poll(() => periodDialog(el)).toBeNull();
 
   const deletion = await removePeriod(el, "p1");
   add.click();
@@ -946,56 +946,18 @@ it("Cancel and native Escape close a deletion without a draft or a write", async
   expect(writes).toBe(0);
 });
 
-it("Delete… in the period dialog, after its own question, opens the delete dialog for that period", async () => {
-  const { screen, question } = await inLeaveApp();
-  const openEdit = async () => {
-    rowButton(screen, "edit-period", "p1").click();
-    await screen.updateComplete;
-    const dialog = periodDialog(screen)!;
-    expect(dialog, "period dialog opens").not.toBeNull();
-    await dialog.updateComplete;
-    expect(dialog.deletable).toBe(true);
-    return dialog;
-  };
-  const deleteButton = (dialog: PeriodDialog) =>
-    dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-period]")!;
-
-  const clean = await openEdit();
-  deleteButton(clean).click();
-  await expect.poll(() => deleteDialog(screen)?.period?.id).toBe("p1");
-  expect(periodDialog(screen)).toBeNull();
-  expect(question().open).toBe(false);
-  const first = deleteDialog(screen)!;
-  await impactShown(first);
-  const closed = new Promise((done) => first.addEventListener("period-delete-close", done));
-  cancel(first).click();
-  await closed;
-  await screen.updateComplete;
-  expect(deleteDialog(screen)).toBeNull();
-
-  const changed = await openEdit();
-  changed
-    .shadowRoot!.querySelector("[name=name]")!
-    .dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "Brunch" }, bubbles: true, composed: true }),
-    );
-  await changed.updateComplete;
-  deleteButton(changed).click();
-  await expect.poll(() => question().open).toBe(true);
-  await question().updateComplete;
-  question().shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
-  await expect.poll(() => question().open).toBe(false);
-  await screen.updateComplete;
-  expect(deleteDialog(screen)).toBeNull();
-  expect(periodDialog(screen)).toBe(changed);
-  expect(changed.open).toBe(true);
-
-  deleteButton(changed).click();
-  await expect.poll(() => question().open).toBe(true);
-  await question().updateComplete;
-  question().shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
-  await expect.poll(() => deleteDialog(screen)?.period?.id).toBe("p1");
-  expect(periodDialog(screen)).toBeNull();
+it("the period page leaves deletion in its list menu", async () => {
+  const { screen } = await inLeaveApp();
+  rowButton(screen, "edit-period", "p1").click();
+  await expect.poll(() => periodDialog(screen)).not.toBeNull();
+  const editor = periodDialog(screen)!;
+  await editor.updateComplete;
+  expect(editor.shadowRoot!.querySelector("[data-test=delete-period]")).toBeNull();
+  await editor.requestClose();
+  await expect.poll(() => periodDialog(screen)).toBeNull();
+  const deletion = await removePeriod(screen);
+  await impactShown(deletion);
+  expect(deletion.period?.id).toBe("p1");
 });
 
 it("keeps the delete dialog on a phone, with its native Confirm visible", async () => {
@@ -1013,3 +975,5 @@ it("keeps the delete dialog on a phone, with its native Confirm visible", async 
     await page.viewport(initial.width, initial.height);
   }
 });
+
+beforeEach(() => history.replaceState({}, "", "/manage/periods"));

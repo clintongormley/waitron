@@ -1,16 +1,22 @@
 import type { CalendarColour } from "@waitron/shared";
-import { LitElement, css, html, nothing, unsafeCSS } from "lit";
+import { LitElement, css, html, nothing, unsafeCSS, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
-import { baseStyles, pageTitleStyles, type DataTableColumn } from "@waitron/ui";
+import { baseStyles, pageTitleStyles, UrlStateController, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
+import "@waitron/ui/src/components/wt-row-actions.js";
 import type { PeriodFloorPlans } from "../floor-plan-set-types.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { PaintedIn } from "../period-delete.js";
 import { format } from "./hours-view.js";
-import { periodsPath, seasonPainterPath, specialDayPainterPath } from "./opening-hours-paths.js";
+import {
+  nativeLinkClick,
+  periodsPath,
+  seasonPainterPath,
+  specialDayPainterPath,
+} from "./opening-hours-paths.js";
 import type { OpeningHoursApi, PeriodDeleteImpact } from "./opening-hours-client.js";
 import type { PeriodDeleteDialog } from "./period-delete-dialog.js";
 import { PeriodEditing } from "./period-editing.js";
@@ -72,6 +78,17 @@ export class PeriodsList extends LitElement {
       }
       h1 {
         margin: 0;
+        overflow-wrap: anywhere;
+      }
+      .toolbar > div {
+        min-width: 0;
+        max-width: 100%;
+      }
+      nav {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-1);
+        color: var(--wt-color-primary-text);
       }
       wt-data-table::part(swatch) {
         display: inline-block;
@@ -117,6 +134,10 @@ export class PeriodsList extends LitElement {
       ${chipTints}
       wt-data-table::part(default-mark) {
         color: var(--wt-color-text-muted);
+        font-style: italic;
+      }
+      .parent {
+        color: var(--wt-color-primary-text);
       }
     `,
   ];
@@ -132,17 +153,59 @@ export class PeriodsList extends LitElement {
     model: () => this.model!,
     chose: () => {},
     chooseDepartment: true,
+    page: true,
+    onClose: () => this.navigate(null, true),
     paintedIn: (periodId) => this.painted?.get(periodId),
     paintedInLinks: true,
     readOnly: () => this.readOnly,
     draftParent: () => this.draftParent,
-    onDelete: (_department, period) => this.askDelete(period),
     keepFloorPlans: true,
   });
+  @state() private address: string | null = null;
+  private readonly url = new UrlStateController(this, () => this.restoreAddress(), {
+    basePath: "/manage",
+    primary: "dashboard",
+    children: { periods: { view: "view", period: "period" } },
+  });
+  private navigate(id: string | null, replace = false) {
+    void Promise.resolve(
+      this.url.write(
+        {
+          dashboard: "periods",
+          view: id === "new" ? "new" : null,
+          period: id === "new" ? null : id,
+        },
+        replace,
+      ),
+    ).then(() => this.restoreAddress());
+  }
+  private restoreAddress() {
+    if (this.url.read("dashboard") !== "periods") return;
+    const id = this.url.read("period") ?? (this.url.read("view") === "new" ? "new" : null);
+    if (!this.model) return;
+    if (id === this.address && (id === null || this.periods.editing) && !(this.readOnly && id))
+      return;
+    this.periods.dismiss();
+    this.address = id;
+    if (id === null) return;
+    const department = this.model.departments.find(
+      (d) => d.active && d.periods.some((p) => p.id === id),
+    );
+    const period = department?.periods.find((p) => p.id === id);
+    if (this.readOnly || (id !== "new" && !period)) {
+      this.address = null;
+      this.url.write({ period: null, view: null }, true);
+      return;
+    }
+    this.periods.open(department ?? null, period);
+  }
   @state() private deleting?: Deletion;
   private detach?: () => void;
   private paintedDetach?: () => void;
 
+  protected override willUpdate(changed: PropertyValues<this>) {
+    if (changed.has("readOnly") && this.readOnly) this.restoreAddress();
+  }
   override connectedCallback() {
     super.connectedCallback();
     this.detach = this.api.watchOpeningHours(
@@ -150,6 +213,7 @@ export class PeriodsList extends LitElement {
         this.model = model;
         this.readError = "";
         this.followDeletion();
+        this.restoreAddress();
       },
       () => {
         this.readError = t("period.load_error");
@@ -249,26 +313,30 @@ export class PeriodsList extends LitElement {
     const chosen = sets.find(({ id, isDefault }) => !isDefault && id === row.floorPlanSetId);
     if (chosen) return chosen.name;
     const fallback = sets.find(({ isDefault }) => isDefault);
-    if (!fallback) return nothing;
-    return html`<span part="set-name">${fallback.name}</span>
-      <span part="default-mark">${t("period.default_mark")}</span>`;
+    if (!fallback) return "—";
+    return html`<span part="default-mark">${fallback.name}</span>`;
   }
-  private bin(row: PeriodRow) {
+  private actions(row: PeriodRow) {
     if (row.kind !== "period") return nothing;
-    return html`<wt-button
-      variant="ghost"
-      data-test="delete-period"
-      aria-label=${format("period.delete_named", { name: row.name })}
-      @click=${() => this.askDelete(row)}
-      ><wt-icon name="bin"></wt-icon
-    ></wt-button>`;
+    return html`<wt-row-actions label=${`${row.name}: ${t("menu.actions")}`} align="end">
+      <wt-button data-test="edit-period" @click=${() => this.edit(row)}
+        >${t("venue.edit")}</wt-button
+      >
+      <wt-button
+        variant="danger"
+        data-test="delete-period"
+        aria-label=${format("period.delete_named", { name: row.name })}
+        @click=${() => this.askDelete(row)}
+        >${t("prep.delete")}</wt-button
+      >
+    </wt-row-actions>`;
   }
 
   private edit(row: PeriodRow) {
     if (row.kind !== "period" || this.deleting) return;
     const department = this.model?.departments.find(({ id }) => id === row.departmentId);
     const period = department?.periods.find(({ id }) => id === row.id);
-    if (period) this.periods.open(department!, period);
+    if (period) this.navigate(period.id);
   }
 
   override render() {
@@ -333,19 +401,39 @@ export class PeriodsList extends LitElement {
               key: "actions",
               label: t("menu.actions"),
               pinned: "end",
-              cell: (row: PeriodRow) => this.bin(row),
+              cell: (row: PeriodRow) => this.actions(row),
             } satisfies DataTableColumn<PeriodRow>,
           ]),
     ];
     return html`<div class="toolbar">
-        <h1>${t("period.title")}</h1>
+        <div>
+          ${
+            this.address
+              ? html`<nav aria-label=${t("period.title")}>
+                  <a
+                    class="parent"
+                    href=${periodsPath}
+                    @click=${(event: MouseEvent) => {
+                      if (nativeLinkClick(event)) return;
+                      event.preventDefault();
+                      void this.shadowRoot!.querySelector("period-dialog")!.requestClose();
+                    }}
+                    >${t("period.title")}</a
+                  ><span aria-hidden="true"> ›</span>
+                </nav>`
+              : nothing
+          }
+          <h1>
+            ${this.address ? (this.address === "new" ? t("period.add") : model?.departments.flatMap((d) => d.periods).find((p) => p.id === this.address)?.name) : t("period.title")}
+          </h1>
+        </div>
         ${
-          this.readOnly
+          this.readOnly || this.address
             ? nothing
             : html`<wt-button
                 data-test="add-period"
                 ?disabled=${!model}
-                @click=${() => this.model && !this.deleting && this.periods.open(null)}
+                @click=${() => this.model && !this.deleting && this.navigate("new")}
                 >${t("period.add_button")}</wt-button
               >`
         }
@@ -353,25 +441,27 @@ export class PeriodsList extends LitElement {
       ${this.readError ? html`<p role="alert" data-test="read-error">${this.readError}</p>` : nothing}
       ${this.paintedInError ? html`<p role="alert" data-test="painted-in-error">${this.paintedInError}</p>` : nothing}
       ${this.periods.floorPlansFailed ? html`<p role="alert" data-test="floor-plans-error">${t("floor_plans.load_error")}</p>` : nothing}
-      ${
-        !model
-          ? nothing
-          : rows.length === 0
-            ? html`<p data-test="no-departments">${t("menu.no_departments")}</p>`
-            : html`<wt-data-table
-                wrap-to-fit
-                aria-label=${t("period.title")}
-                .columns=${columns}
-                .rows=${rows}
-                .rowKey=${(row: PeriodRow) => `${row.kind}:${row.id}`}
-                .rowParent=${(row: PeriodRow) => (row.kind === "period" ? `department:${row.departmentId}` : null)}
-                .rowCollapsible=${() => false}
-                .rowCellParts=${(row: PeriodRow) => (row.kind === "department" ? "department-cell" : "")}
-                .rowClick=${this.readOnly ? undefined : (row: PeriodRow) => this.edit(row)}
-                .rowClickLabel=${(row: PeriodRow) => format("painter.edit_period", { name: row.name })}
-                .rowActivation=${(row: PeriodRow) => (row.kind === "period" ? "click" : "none")}
-              ></wt-data-table>`
-      }
+      <div ?hidden=${this.address !== null}>
+        ${
+          !model
+            ? nothing
+            : rows.length === 0
+              ? html`<p data-test="no-departments">${t("menu.no_departments")}</p>`
+              : html`<wt-data-table
+                  wrap-to-fit
+                  aria-label=${t("period.title")}
+                  .columns=${columns}
+                  .rows=${rows}
+                  .rowKey=${(row: PeriodRow) => `${row.kind}:${row.id}`}
+                  .rowParent=${(row: PeriodRow) => (row.kind === "period" ? `department:${row.departmentId}` : null)}
+                  .rowCollapsible=${() => false}
+                  .rowCellParts=${(row: PeriodRow) => (row.kind === "department" ? "department-cell" : "")}
+                  .rowClick=${this.readOnly ? undefined : (row: PeriodRow) => this.edit(row)}
+                  .rowClickLabel=${(row: PeriodRow) => format("painter.edit_period", { name: row.name })}
+                  .rowActivation=${(row: PeriodRow) => (row.kind === "period" ? "click" : "none")}
+                ></wt-data-table>`
+        }
+      </div>
       ${model && !this.readOnly ? this.periods.render() : nothing}
       ${model && !this.readOnly ? this.renderDeletion() : nothing}`;
   }

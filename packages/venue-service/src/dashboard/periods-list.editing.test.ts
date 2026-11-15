@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
 import { page, userEvent } from "vitest/browser";
 import { LiveData, setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
@@ -12,19 +12,22 @@ import type { PeriodRow, PeriodsList } from "./periods-list.js";
 import "./periods-list.js";
 
 const hosts: HTMLElement[] = [];
-beforeEach(() => setLocale("en"));
+beforeEach(() => {
+  setLocale("en");
+  history.replaceState({}, "", "/manage/periods");
+});
 afterEach(() => {
   for (const host of hosts.splice(0)) host.remove();
   setLocale("en");
 });
 
-/** Each bin lies inside the table's scroll box and the screen, and is what a tap at its centre hits. */
-function expectBinsOnScreen(table: Element, rows: number) {
+/** Each row menu lies inside the table's scroll box and the screen, and is what a tap at its centre hits. */
+function expectActionsOnScreen(table: Element, rows: number) {
   const scroll = table.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
   expect(scroll.scrollWidth, "the table overflows its box").toBeGreaterThan(scroll.clientWidth);
   expect(scroll.scrollLeft).toBe(0);
   const box = scroll.getBoundingClientRect();
-  const bins = [...table.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=delete-period]")];
+  const bins = [...table.shadowRoot!.querySelectorAll<HTMLElement>("wt-row-actions")];
   expect(bins).toHaveLength(rows);
   for (const [index, bin] of bins.entries()) {
     const at = bin.shadowRoot!.querySelector("button")!.getBoundingClientRect();
@@ -143,9 +146,15 @@ async function edit(el: PeriodsList, existing?: string) {
   if (existing) editButton(el, existing).click();
   else el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-period]")!.click();
   await el.updateComplete;
+  await expect.poll(() => dialogOf(el)).not.toBeNull();
   const dialog = dialogOf(el);
-  expect(dialog, "period dialog opens").not.toBeNull();
+  expect(dialog, "period editor opens").not.toBeNull();
   await dialog!.updateComplete;
+  expect(dialog!.shadowRoot!.querySelector("wt-modal"), "list opens an individual page").toBeNull();
+  expect(el.shadowRoot!.querySelector("nav[aria-label] a.parent")).not.toBeNull();
+  expect(location.pathname).toBe(
+    existing ? `/manage/periods/period/${existing}` : "/manage/periods/view/new",
+  );
   return dialog!;
 }
 async function change(dialog: PeriodDialog, name: string, value: string) {
@@ -173,7 +182,7 @@ const checkedColour = (dialog: PeriodDialog) => {
 const isHoursRead = (path: string, method: string) =>
   method === "GET" && path.endsWith("/opening-hours");
 
-it("creates the changed draft and closes it before refreshing the list", async () => {
+it("creates the changed draft, returns to the list and shows its refreshed data", async () => {
   const writes: unknown[] = [];
   let reads = 0;
   const data = model();
@@ -409,18 +418,18 @@ it("saves a changed period through the visible native button", async () => {
   await expect.poll(() => dialogOf(el)).toBeNull();
 });
 
-it("on a phone a row tap opens its dialog and its bin is on screen", async () => {
+it("on a phone a row tap opens its page and its row menu stays on screen", async () => {
   const initial = { width: window.innerWidth, height: window.innerHeight };
   try {
     await page.viewport(390, 844);
     expect(window.innerWidth).toBe(390);
     const el = await mount();
     const grid = table(el)!;
-    const bin = grid.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-      'tr[data-row-key="period:p1"] [data-test=delete-period]',
+    const bin = grid.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+      'tr[data-row-key="period:p1"] wt-row-actions',
     )!;
     await bin.updateComplete;
-    expectBinsOnScreen(grid, 1);
+    expectActionsOnScreen(grid, 1);
     const at = bin.shadowRoot!.querySelector("button")!.getBoundingClientRect();
     expect(at.width).toBeGreaterThan(0);
     expect(at.left).toBeGreaterThanOrEqual(0);
@@ -436,25 +445,18 @@ it("on a phone a row tap opens its dialog and its bin is on screen", async () =>
   }
 });
 
-it("blocks opening a second dialog from another row and from departed controls", async () => {
+it("switches between period page addresses and retires the previous editor", async () => {
   const data = model();
   data.departments[0]!.periods = [lunch(), { ...lunch(), id: "p2", name: "Dinner", colour: "red" }];
   const el = await mount((async () => structuredClone(data)) as DashboardRequest);
-  const add = el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-period]")!;
-  const dialog = await edit(el, "p1");
-  add.click();
-  editButton(el, "p2").click();
+  const old = await edit(el, "p1");
+  history.replaceState({}, "", "/manage/periods/period/p2");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await expect.poll(() => dialogOf(el)?.period?.id).toBe("p2");
+  expect(old.isConnected).toBe(false);
+  old.dispatchEvent(new CustomEvent("period-close", { bubbles: true, composed: true }));
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelectorAll("period-dialog")).toHaveLength(1);
-  expect(dialogOf(el)).toBe(dialog);
-  expect(dialog.period?.id).toBe("p1");
-  dialog.dispatchEvent(new CustomEvent("period-close", { bubbles: true, composed: true }));
-  await el.updateComplete;
-  expect(dialogOf(el)).toBeNull();
-  el.remove();
-  add.click();
-  await el.updateComplete;
-  expect(dialogOf(el)).toBeNull();
+  expect(dialogOf(el)?.period?.id).toBe("p2");
 });
 
 it.each([
@@ -611,7 +613,7 @@ it("+ Add period on a venue with two departments asks for the department and cre
     { id: "restaurant", name: "Restaurant", colourUsers: [{ name: "Lunch", colour: "green" }] },
     { id: "bar", name: "Bar", colourUsers: [{ name: "All day", colour: "red" }] },
   ]);
-  expect(dialog.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Add period");
+  expect(el.shadowRoot!.querySelector("h1")!.textContent!.trim()).toBe("Add period");
   expect(saveButton(dialog).textContent!.trim()).toBe("Save");
   emit(dialog, "period-save", {
     periodId: null,
@@ -855,6 +857,7 @@ it.each(["department", "inactive department", "period"])(
           },
     );
     expect(dialogOf(screen)).toBeNull();
+    await expect.poll(() => location.pathname).toBe("/manage/periods");
     expect(dialog.isConnected).toBe(false);
     expect(app.leave.coordinator.isDirty()).toBe(false);
     emit(dialog, "period-save", { periodId: "p1", input: { name: "Stale" } });
@@ -873,24 +876,17 @@ it("a live change to another department preserves the retained dirty period dial
   expect(app.leave.coordinator.isDirty()).toBe(true);
 });
 
-it("voluntary period close waits for the native close event after discarding its draft", async () => {
+it("Cancel asks before discarding the period page draft and returns to the list", async () => {
   const { app, screen, staged } = await live();
   const dialog = await staged();
-  const modal = dialog.shadowRoot!.querySelector("wt-modal")!;
-  await modal.updateComplete;
-  const closed = new Promise<void>((done) =>
-    modal.addEventListener("wt-close", () => done(), { once: true }),
-  );
-  const result = modal.requestClose("escape");
+  dialog.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
   await app.updateComplete;
   const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
   await expect.poll(() => question.open).toBe(true);
   await question.updateComplete;
   question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
-  expect(await result).toBe(true);
-  await closed;
-  await screen.updateComplete;
-  expect(dialogOf(screen)).toBeNull();
+  await expect.poll(() => dialogOf(screen)).toBeNull();
+  expect(location.pathname).toBe("/manage/periods");
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
 
@@ -964,4 +960,79 @@ it("a list redraw hands a dialog asking for the department the same department l
   await el.updateComplete;
   expect(dialog.departments).toBe(departments);
   expect(dialog.colourUsers).toBe(users);
+});
+
+it.each(["new", "p1", "missing"])(
+  "opens a direct period page or cleans an unknown address (%s)",
+  async (id) => {
+    history.replaceState(
+      {},
+      "",
+      id === "new" ? "/manage/periods/view/new?keep=yes" : `/manage/periods/period/${id}?keep=yes`,
+    );
+    const el = await mount();
+    if (id === "missing") {
+      await expect.poll(() => location.pathname).toBe("/manage/periods");
+      expect(dialogOf(el)).toBeNull();
+    } else {
+      await expect.poll(() => dialogOf(el)).not.toBeNull();
+      expect(dialogOf(el)!.period?.id ?? "new").toBe(id);
+    }
+    expect(location.search).toBe("?keep=yes");
+  },
+);
+it("a viewer's direct period edit address returns to the list", async () => {
+  history.replaceState({}, "", "/manage/periods/period/p1");
+  const el = await mount(undefined, true);
+  await expect.poll(() => location.pathname).toBe("/manage/periods");
+  expect(dialogOf(el)).toBeNull();
+});
+
+it("returns an open period page to its list when access becomes view-only", async () => {
+  const el = await mount();
+  await edit(el, "p1");
+  el.readOnly = true;
+  await el.updateComplete;
+  await expect.poll(() => location.pathname).toBe("/manage/periods");
+  expect(dialogOf(el)).toBeNull();
+  expect(el.shadowRoot!.querySelector("a.parent")).toBeNull();
+  expect(table(el)!.closest("[hidden]")).toBeNull();
+});
+it.each(["Save", "Cancel"])(
+  "%s replaces the editor address instead of making Back reopen it",
+  async (action) => {
+    const el = await mount();
+    const editor = await edit(el, "p1");
+    const replace = vi.spyOn(history, "replaceState");
+    const push = vi.spyOn(history, "pushState");
+    try {
+      if (action === "Save") {
+        await change(editor, "name", "Late lunch");
+        submit(editor);
+      } else await editor.requestClose();
+      await expect.poll(() => dialogOf(el)).toBeNull();
+      expect(location.pathname).toBe("/manage/periods");
+      expect(replace).toHaveBeenCalledTimes(1);
+      expect(push).not.toHaveBeenCalled();
+    } finally {
+      replace.mockRestore();
+      push.mockRestore();
+    }
+  },
+);
+
+it("wraps a long single-word period heading within a phone's page", async () => {
+  const old = [window.innerWidth, window.innerHeight] as const;
+  try {
+    await page.viewport(390, 844);
+    const data = model();
+    data.departments[0]!.periods[0]!.name = "EveningServiceWithWelcomeDrinksAndThreeCourseDinner";
+    const el = await mount((async () => data) as DashboardRequest);
+    await edit(el, "p1");
+    const heading = el.shadowRoot!.querySelector("h1")!;
+    expect(heading.scrollWidth).toBeLessThanOrEqual(heading.clientWidth);
+    expect(heading.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth);
+  } finally {
+    await page.viewport(...old);
+  }
 });

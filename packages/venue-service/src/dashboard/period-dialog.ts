@@ -106,6 +106,7 @@ export class PeriodDialog extends LitElement {
     `,
   ];
   @property({ type: Boolean }) open = false;
+  @property({ type: Boolean }) page = false;
   @property({ type: Boolean }) busy = false;
   @property() departmentName = "";
   /** The submit button's text; Save when empty. */
@@ -122,7 +123,6 @@ export class PeriodDialog extends LitElement {
   @property({ attribute: false }) seasons: readonly { id: string; colour: string }[] = [];
   @property() departmentId = "";
   @property({ type: Boolean }) paintedInLinks = false;
-  @property({ type: Boolean }) deletable = false;
   /** Given when adding without a fixed department, so the dialog asks for one. */
   @property({ attribute: false }) departments?: readonly Department[];
   /** The departments that offer a Floor plan field, with their sets; absent draws none. */
@@ -354,22 +354,13 @@ export class PeriodDialog extends LitElement {
     const outcome = await this.leave.request({ scopes: [this.scope.id], reason, proceed() {} });
     return this.isConnected && generation === this.generation && outcome === "proceeded";
   };
-  private async requestDelete(periodId: string) {
-    const generation = this.generation;
-    if (this.scope && this.leave) {
-      const outcome = await this.leave.request({
-        scopes: [this.scope.id],
-        reason: "navigation",
-        proceed() {},
-      });
-      if (outcome !== "proceeded") return;
+  async requestClose(): Promise<boolean> {
+    if (!this.page) {
+      return this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
     }
-    if (!this.isConnected || !this.open || this.busy || generation !== this.generation) return;
-    this.open = false;
+    if (!(await this.beforeClose("navigation"))) return false;
     this.dispatchEvent(new CustomEvent("period-close", { bubbles: true, composed: true }));
-    this.dispatchEvent(
-      new CustomEvent("period-delete", { detail: { periodId }, bubbles: true, composed: true }),
-    );
+    return true;
   }
   private paintedInSection() {
     const painted = this.paintedIn;
@@ -461,6 +452,121 @@ export class PeriodDialog extends LitElement {
     const generation = this.generation;
     const current = () =>
       generation === this.generation && this.isConnected && this.open && !this.busy;
+    const form = html`
+      <div class="form">
+        ${
+          this.choosesDepartment
+            ? html`<wt-combobox
+                name="departmentId"
+                label=${t("menu.department")}
+                required
+                .value=${this.draft.departmentId}
+                .options=${this.departments!.map((department) => ({ value: department.id, label: department.name }))}
+                .error=${this.error("departmentId")}
+                ?disabled=${this.busy}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                  event.stopPropagation();
+                  if (current()) this.changed("departmentId", event.detail.value);
+                }}
+              ></wt-combobox>`
+            : nothing
+        }
+        <wt-input
+          name="name"
+          label=${t("menu.period_name")}
+          required
+          .value=${this.draft.name}
+          .error=${this.error("name")}
+          ?disabled=${this.busy}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            if (current()) this.changed("name", event.detail.value);
+          }}
+        ></wt-input>
+        <wt-colour-chooser
+          name="colour"
+          label=${t("hours.colour")}
+          required
+          .value=${this.draft.colour}
+          .choices=${this.colourChoices(this.shownColourUsers)}
+          .usedByLabel=${this.usedByLabel}
+          .error=${this.error("colour")}
+          ?disabled=${this.busy}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            if (current()) this.changed("colour", event.detail.value);
+          }}
+        ></wt-colour-chooser>
+        <wt-combobox
+          name="menuId"
+          label=${t("period.customer_menu")}
+          required
+          .value=${this.draft.menuId}
+          .options=${this.menuOptions()}
+          .error=${this.error("menuId")}
+          ?disabled=${this.busy}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            if (current()) this.changed("menuId", event.detail.value);
+          }}
+        ></wt-combobox>
+        ${
+          includes.length
+            ? html`<p data-test="menu-includes">
+                ${format("period.includes", { menus: includes.join(", ") })}
+              </p>`
+            : nothing
+        }
+        <wt-combobox
+          name="staffMenuIds"
+          label=${t("opening.staff_menus")}
+          multiple
+          .values=${this.draft.staffMenuIds}
+          .options=${this.menuOptions(this.draft.menuId)}
+          .error=${this.error("staffMenuIds")}
+          ?disabled=${this.busy}
+          @wt-change=${(event: CustomEvent<{ values: string[] }>) => {
+            event.stopPropagation();
+            if (current()) this.changed("staffMenuIds", [...event.detail.values]);
+          }}
+        ></wt-combobox>
+        ${this.floorPlanField(current)} ${this.paintedInSection()}
+      </div>
+      <wt-form-actions
+        slot=${this.page ? nothing : "footer"}
+        .error=${bottomMessage(bottom, marked ? t("menu.fix_fields") : "")}
+      >
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          ?disabled=${this.busy}
+          @click=${() => {
+            if (current()) void this.requestClose();
+          }}
+          >${t("menu.cancel")}</wt-button
+        >
+
+        <wt-button
+          data-test="save-period"
+          variant=${s.variant}
+          ?disabled=${s.unchanged || this.busy || (this.feedback.attempted && Object.keys(this.ownErrors).length > 0)}
+          ?loading=${this.busy}
+          @click=${() => {
+            if (current()) this.save();
+          }}
+          >${this.submitLabel || t("menu.save")}</wt-button
+        >
+      </wt-form-actions>
+    `;
+    if (this.page)
+      return keyed(
+        generation,
+        html`<div
+          @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector("[data-test=save-period]"))}
+        >
+          ${form}
+        </div>`,
+      );
     return keyed(
       generation,
       html`<wt-modal
@@ -480,125 +586,7 @@ export class PeriodDialog extends LitElement {
             submitOnEnter(event, this.shadowRoot!.querySelector("[data-test=save-period]"));
         }}
       >
-        <div class="form">
-          ${
-            this.choosesDepartment
-              ? html`<wt-combobox
-                  name="departmentId"
-                  label=${t("menu.department")}
-                  required
-                  .value=${this.draft.departmentId}
-                  .options=${this.departments!.map((department) => ({ value: department.id, label: department.name }))}
-                  .error=${this.error("departmentId")}
-                  ?disabled=${this.busy}
-                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                    event.stopPropagation();
-                    if (current()) this.changed("departmentId", event.detail.value);
-                  }}
-                ></wt-combobox>`
-              : nothing
-          }
-          <wt-input
-            name="name"
-            label=${t("menu.period_name")}
-            required
-            .value=${this.draft.name}
-            .error=${this.error("name")}
-            ?disabled=${this.busy}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              if (current()) this.changed("name", event.detail.value);
-            }}
-          ></wt-input>
-          <wt-colour-chooser
-            name="colour"
-            label=${t("hours.colour")}
-            required
-            .value=${this.draft.colour}
-            .choices=${this.colourChoices(this.shownColourUsers)}
-            .usedByLabel=${this.usedByLabel}
-            .error=${this.error("colour")}
-            ?disabled=${this.busy}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              if (current()) this.changed("colour", event.detail.value);
-            }}
-          ></wt-colour-chooser>
-          <wt-combobox
-            name="menuId"
-            label=${t("period.customer_menu")}
-            required
-            .value=${this.draft.menuId}
-            .options=${this.menuOptions()}
-            .error=${this.error("menuId")}
-            ?disabled=${this.busy}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              if (current()) this.changed("menuId", event.detail.value);
-            }}
-          ></wt-combobox>
-          ${
-            includes.length
-              ? html`<p data-test="menu-includes">
-                  ${format("period.includes", { menus: includes.join(", ") })}
-                </p>`
-              : nothing
-          }
-          <wt-combobox
-            name="staffMenuIds"
-            label=${t("opening.staff_menus")}
-            multiple
-            .values=${this.draft.staffMenuIds}
-            .options=${this.menuOptions(this.draft.menuId)}
-            .error=${this.error("staffMenuIds")}
-            ?disabled=${this.busy}
-            @wt-change=${(event: CustomEvent<{ values: string[] }>) => {
-              event.stopPropagation();
-              if (current()) this.changed("staffMenuIds", [...event.detail.values]);
-            }}
-          ></wt-combobox>
-          ${this.floorPlanField(current)} ${this.paintedInSection()}
-        </div>
-        <wt-form-actions
-          slot="footer"
-          .error=${bottomMessage(bottom, marked ? t("menu.fix_fields") : "")}
-        >
-          <wt-button
-            slot="cancel"
-            variant="secondary"
-            ?disabled=${this.busy}
-            @click=${() => {
-              if (current())
-                void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
-            }}
-            >${t("menu.cancel")}</wt-button
-          >
-          ${
-            this.period && this.deletable
-              ? html`<wt-button
-                  slot="cancel"
-                  data-test="delete-period"
-                  variant="danger"
-                  ?disabled=${this.busy}
-                  @click=${() => {
-                    if (current()) void this.requestDelete(this.period!.id);
-                  }}
-                  >${t("period.delete_ellipsis")}</wt-button
-                >`
-              : nothing
-          }
-
-          <wt-button
-            data-test="save-period"
-            variant=${s.variant}
-            ?disabled=${s.unchanged || this.busy || (this.feedback.attempted && Object.keys(this.ownErrors).length > 0)}
-            ?loading=${this.busy}
-            @click=${() => {
-              if (current()) this.save();
-            }}
-            >${this.submitLabel || t("menu.save")}</wt-button
-          >
-        </wt-form-actions>
+        ${form}
       </wt-modal>`,
     );
   }

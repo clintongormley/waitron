@@ -57,3 +57,6 @@ export function hoursPath(month?: string | null): string {
 
 export const seasonsPath = "/manage/seasons";
 export const periodsPath = "/manage/periods";
+
+export const nativeLinkClick = (event: MouseEvent): boolean =>
+  event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey;

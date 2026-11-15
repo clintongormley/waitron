@@ -185,6 +185,9 @@ neither.
 2026-10-17, A725: Prep stations' Times tab is retired. Its month, station-change, read-recovery
 and reconnect checks now exercise the Calendar in `calendar-station-month.test.ts`; the Calendar
 continues to use the watches described in A722-3 above.
+2026-11-15, A1545: Periods has its own list and individual Add/Edit pages. Its opening-hours,
+Painted-in and floor-plan watches remain on the list host while an editor is open; the Calendar
+painters retain their period dialogs. See the [current page contract](design-system.md#periods-page).
 2026-10-17, A719: the Periods page is retired. Its list is `periods-list` (`periods-list.ts`) in the
 Calendar's Periods window, and reads and re-reads as the A506-11 line above says. When a refreshed
 model no longer lists a period that a department still in it listed before, both painters take

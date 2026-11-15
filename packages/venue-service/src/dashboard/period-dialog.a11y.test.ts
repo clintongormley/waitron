@@ -16,16 +16,17 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
     "invalid",
     "colour-invalid",
     "refused",
+    "page-refused",
     "saving",
     "painted-in-links",
     "painted-in-plain",
     "not-painted",
     "add-from-page",
-    "deletable",
     "floor-plan",
   ])("%s", async (state) => {
     setLocale("en");
     const el = (await mountThemed("<period-dialog></period-dialog>", theme)) as PeriodDialog;
+    el.page = ["add-from-page", "painted-in-links", "page-refused"].includes(state);
     el.departmentName = "Restaurant";
     el.menus = [
       { id: "lunch", name: "Lunch", active: true, includes: ["Drinks"] },
@@ -66,7 +67,6 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
               specialDays: [{ id: "sd1", name: "Company dinners" }],
             };
     }
-    if (state === "deletable") el.deletable = true;
     if (state === "floor-plan") {
       el.departmentId = "restaurant";
       el.floorPlans = [
@@ -90,10 +90,6 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
       expect(el.shadowRoot!.querySelectorAll("[data-test=painted-in] .chip")).toHaveLength(5);
     if (state === "not-painted")
       expect(el.shadowRoot!.querySelector("[data-test=not-painted]")).not.toBeNull();
-    if (state === "deletable")
-      expect(
-        el.shadowRoot!.querySelector("[data-test=delete-period]")!.closest("wt-form-actions"),
-      ).not.toBeNull();
     if (state === "add-from-page")
       expect(el.shadowRoot!.querySelector("[name=departmentId]")).not.toBeNull();
     if (state === "floor-plan")
@@ -126,12 +122,13 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
         )!.error,
       ).toBe("Choose a colour.");
     }
-    if (state === "refused") el.refusal = { code: "menu_period.name_taken" };
+    if (state.endsWith("refused")) el.refusal = { code: "menu_period.name_taken" };
     if (state === "saving") {
       name.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Dinner" } }));
       el.busy = true;
     }
     await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("wt-modal") === null).toBe(el.page);
     await expectNoA11yViolations(host);
   });
 });

@@ -16,7 +16,7 @@ type Period = Department["periods"][number];
 type SaveDetail = { periodId: string | null; input: MenuPeriodInput; departmentId?: string };
 
 /**
- * One period dialog at a time, saved on its own: a painter's "✎ Edit" and "+ New period", or the
+ * One period editor at a time, saved on its own: a painter's "✎ Edit" and "+ New period", or the
  * Periods page's Add and Edit. A period just created is chosen, through `chose`, before the model
  * lists it.
  */
@@ -43,15 +43,15 @@ export class PeriodEditing implements ReactiveController {
       api: () => OpeningHoursApi;
       model: () => OpeningHoursModel;
       chose: (periodId: string) => void;
-      /** `open(null)` asks for the department in the dialog. */
+      /** `open(null)` asks for the department in the editor. */
       chooseDepartment?: boolean;
+      page?: boolean;
+      onClose?: () => void;
       /** Where the period is painted, from the host's own Painted-in watch; without it, opening a
        *  period reads Painted in once. */
       paintedIn?: (periodId: string) => PaintedIn | undefined;
       paintedInLinks?: boolean;
       readOnly?: () => boolean;
-      /** Offers Delete… in the dialog; called once the dialog has closed itself to hand over. */
-      onDelete?: (department: Department, period: Period) => void;
       draftParent?: () => object | undefined;
       /** Keeps reading the floor plan sets after a dialog closes, once the host has called
        *  `watchFloorPlans`; otherwise they are read only while a dialog is open. */
@@ -117,6 +117,7 @@ export class PeriodEditing implements ReactiveController {
         this.editor = undefined;
         if (!this.options.keepFloorPlans) this.#unwatchFloorPlans();
         this.busy = false;
+        this.options.onClose?.();
       }
     }
     const created = this.created;
@@ -218,10 +219,16 @@ export class PeriodEditing implements ReactiveController {
     this.busy = busy;
     this.host.requestUpdate();
   }
+  dismiss() {
+    this.editor = undefined;
+    this.busy = false;
+    this.host.requestUpdate();
+  }
   private close() {
     this.editor = undefined;
     if (!this.options.keepFloorPlans) this.#unwatchFloorPlans();
     this.host.requestUpdate();
+    this.options.onClose?.();
   }
 
   private paintedIn(editor: NonNullable<PeriodEditing["editor"]>): PaintedIn | undefined {
@@ -265,6 +272,7 @@ export class PeriodEditing implements ReactiveController {
       editor,
       html`<period-dialog
         .open=${true}
+        .page=${this.options.page ?? false}
         .period=${editor.period}
         .paintedIn=${this.paintedIn(editor)}
         .paintedInLinks=${this.options.paintedInLinks ?? false}
@@ -276,28 +284,12 @@ export class PeriodEditing implements ReactiveController {
         .menus=${model.menus}
         .floorPlans=${this.#floorPlans?.departments}
         .busy=${this.busy}
-        .deletable=${this.options.onDelete !== undefined}
         .draftParent=${this.options.draftParent?.()}
         .submitLabel=${fromPainter ? t("painter.add_and_paint") : ""}
         @period-save=${(event: CustomEvent<SaveDetail>) => void this.save(event)}
         @period-close=${(event: Event) => {
           event.stopPropagation();
           if (this.editor === editor && !this.busy) this.close();
-        }}
-        @period-delete=${(event: CustomEvent<{ periodId: string }>) => {
-          event.stopPropagation();
-          const period = editor.period;
-          if (
-            (this.editor !== undefined && this.editor !== editor) ||
-            this.busy ||
-            !department ||
-            event.currentTarget !== this.host.renderRoot.querySelector("period-dialog") ||
-            !period ||
-            period.id !== event.detail.periodId
-          )
-            return;
-          if (this.editor === editor) this.close();
-          this.options.onDelete?.(department, period);
         }}
       ></period-dialog>`,
     );

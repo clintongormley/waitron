@@ -648,9 +648,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   hours and closures kept in Waitron update the venue's Google Business Profile, so Google Maps never
   shows a closed venue as open. Needs a design. Not started.
 
-- **A1545. Seasons and Periods: a list page and an edit page each (owner, 2026-11-15).** Seasons
-  drops its edit-in-place table with Save and Cancel, Periods drops its pop-up dialog, both get the
-  row menu, and the Periods Floor plan column is tidied. Follows A1536 (#3247).
+- **A1545. Seasons: a list page and an edit page each (owner, 2026-11-15).** Remaining: replace
+  Seasons’ edit-in-place table with a list, per-season Add/Edit pages and Edit/Delete row menus.
+  Periods has its own pages, row menus and inherited floor-plan display. The Calendar painters’
+  period pop-ups await the owner’s answer to the watcher’s 2026-11-15 question.
   [Detail](backlog/service-periods.md#a1545-seasons-and-periods-a-list-page-and-an-edit-page-each)
 
 - **A1546. The Calendar: prep-station hours and the day box (owner, 2026-11-15).** The default

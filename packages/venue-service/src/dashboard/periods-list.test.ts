@@ -326,7 +326,7 @@ it.each(["en", "es"])("heading and + Add period share the top row (%s)", async (
   await loaded(el);
   const heading = el.shadowRoot!.querySelector("h1")!;
   expect(heading, "Periods has a page heading").not.toBeNull();
-  expect(heading.textContent).toBe(locale === "en" ? "Periods" : "Periodos");
+  expect(heading.textContent!.trim()).toBe(locale === "en" ? "Periods" : "Periodos");
   expect(el.shadowRoot!.querySelector("h2")).toBeNull();
   const h = heading.getBoundingClientRect();
   const add = el.shadowRoot!.querySelector("[data-test=add-period]")!.getBoundingClientRect();
@@ -338,7 +338,7 @@ it.each(["en", "es"])("heading and + Add period share the top row (%s)", async (
 
 const dialogOf = (el: PeriodsList) => el.shadowRoot!.querySelector<PeriodDialog>("period-dialog");
 
-it("a period row opens its dialog; a department row opens nothing; the pinned actions column holds a bin per period", async () => {
+it("a period row opens its page; a department row opens nothing; the pinned actions column holds an Edit/Delete menu per period", async () => {
   const read = answering();
   const el = await mount((async (path: string, ...rest: unknown[]) =>
     path.endsWith("/delete-impact")
@@ -373,19 +373,24 @@ it("a period row opens its dialog; a department row opens nothing; the pinned ac
     const bins = cell(grid, key!, "actions")!.querySelectorAll("[data-test=delete-period]");
     expect(bins, key).toHaveLength(1);
     expect(bins[0]!.getAttribute("aria-label")).toBe(`Delete ${name}`);
-    expect(bins[0]!.querySelector("wt-icon[name=bin]"), key).not.toBeNull();
+    expect(
+      cell(grid, key!, "actions")!.querySelector("[data-test=edit-period]")!.textContent!.trim(),
+    ).toBe("Edit");
   }
-  expect(grid.shadowRoot!.querySelector("wt-row-actions")).toBeNull();
+  expect(grid.shadowRoot!.querySelectorAll("wt-row-actions")).toHaveLength(3);
   expect(el.shadowRoot!.querySelector("wt-row-actions")).toBeNull();
   const bin = cell(grid, "period:p1", "actions")!.querySelector<HTMLElementTagNameMap["wt-button"]>(
     "[data-test=delete-period]",
   )!;
+  const menu = cell(grid, "period:p1", "actions")!.querySelector("wt-row-actions")!;
+  await menu.updateComplete;
+  await userEvent.click(menu.shadowRoot!.querySelector("button")!);
   await userEvent.click(bin.shadowRoot!.querySelector("button")!);
   await expect
     .poll(() => el.shadowRoot!.querySelector("period-delete-dialog")?.period?.id)
     .toBe("p1");
   expect(dialogOf(el)).toBeNull();
-  expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Periods");
+  expect(el.shadowRoot!.querySelector("h1")!.textContent!.trim()).toBe("Periods");
   expect(el.shadowRoot!.querySelector("[data-test=add-period]")!.textContent!.trim()).toBe(
     "+ Add period",
   );
@@ -523,7 +528,7 @@ it("Spanish: Periodos, Carta de clientes, Pintado en, Sin pintar en ningún siti
   setLocale("es");
   const el = await mount();
   const grid = await loaded(el);
-  expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Periodos");
+  expect(el.shadowRoot!.querySelector("h1")!.textContent!.trim()).toBe("Periodos");
   expect(el.shadowRoot!.querySelector("[data-test=add-period]")!.textContent!.trim()).toBe(
     "+ Añadir periodo",
   );
@@ -662,18 +667,17 @@ it("a Floor plan column after Staff-only menus shows the set, or the default's n
   expect(cell(grid, "period:p1", "floorPlan")!.textContent!.trim()).toBe("Dinner");
   expect(cell(grid, "period:p1", "floorPlan")!.querySelector("[part~=default-mark]")).toBeNull();
   const fallback = cell(grid, "period:p2", "floorPlan")!;
-  expect(fallback.textContent!.replace(/\s+/g, " ").trim()).toBe("House (default)");
+  expect(fallback.textContent!.replace(/\s+/g, " ").trim()).toBe("House");
   const mark = fallback.querySelector<HTMLElement>("[part~=default-mark]")!;
-  expect(mark.textContent!.trim()).toBe("(default)");
+  expect(mark.textContent!.trim()).toBe("House");
+  expect(getComputedStyle(mark).fontStyle).toBe("italic");
   const probe = document.createElement("span");
   probe.style.color = "var(--wt-color-text-muted)";
   el.shadowRoot!.append(probe);
   expect(getComputedStyle(mark).color).toBe(getComputedStyle(probe).color);
-  expect(getComputedStyle(mark).color).not.toBe(
-    getComputedStyle(fallback.querySelector("[part~=set-name]")!).color,
-  );
+
   probe.remove();
-  expect(cell(grid, "period:p3", "floorPlan")!.textContent!.trim()).toBe("");
+  expect(cell(grid, "period:p3", "floorPlan")!.textContent!.trim()).toBe("—");
   expect(cell(grid, "department:restaurant", "floorPlan")!.textContent!.trim()).toBe("");
   setLocale("es");
   el.requestUpdate();
@@ -681,7 +685,7 @@ it("a Floor plan column after Staff-only menus shows the set, or the default's n
   await grid.updateComplete;
   expect(grid.columns.find((c) => c.key === "floorPlan")!.label).toBe("Plano de sala");
   expect(cell(grid, "period:p2", "floorPlan")!.textContent!.replace(/\s+/g, " ").trim()).toBe(
-    "House (predeterminado)",
+    "House",
   );
 });
 
@@ -755,6 +759,8 @@ it("a period naming the department's default set reads as the default, (default)
   await expect.poll(() => grid.columns.map((c) => c.key)).toContain("floorPlan");
   await grid.updateComplete;
   const shown = cell(grid, "period:p1", "floorPlan")!;
-  expect(shown.textContent!.replace(/\s+/g, " ").trim()).toBe("House (default)");
-  expect(shown.querySelector("[part~=default-mark]")!.textContent!.trim()).toBe("(default)");
+  expect(shown.textContent!.replace(/\s+/g, " ").trim()).toBe("House");
+  expect(shown.querySelector("[part~=default-mark]")!.textContent!.trim()).toBe("House");
 });
+
+beforeEach(() => history.replaceState({}, "", "/manage/periods"));

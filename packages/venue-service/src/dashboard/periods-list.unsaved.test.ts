@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { beforeEach, afterEach, describe, expect, it } from "vitest";
 import { LitElement, html } from "lit";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens, LeaveController } from "@waitron/ui";
@@ -85,6 +85,7 @@ async function mount(draftParent?: object) {
     .shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="period:p1"] button.row-activate')!
     .click();
   await screen.updateComplete;
+  await expect.poll(() => screen.shadowRoot!.querySelector("period-dialog")).not.toBeNull();
   const editor = screen.shadowRoot!.querySelector<PeriodDialog>("period-dialog")!;
   expect(editor, "period dialog opens").not.toBeNull();
   await editor.updateComplete;
@@ -122,14 +123,13 @@ describe.each(["en", "es"])("Periods discard (%s)", (locale) => {
     expect(unload()).toBe(false);
     await change(editor);
     expect(unload()).toBe(true);
-    const modal = editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!;
-    const keep = modal.requestClose("escape");
+    const keep = editor.requestClose();
     await choose("keep");
     expect(await keep).toBe(false);
     expect(
       editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.value,
     ).toBe("Dinner");
-    const discard = modal.requestClose("escape");
+    const discard = editor.requestClose();
     await choose("discard");
     expect(await discard).toBe(true);
     await expect.poll(() => screen.shadowRoot!.querySelector("period-dialog")).toBeNull();
@@ -149,9 +149,7 @@ describe.each(["en", "es"])("Periods discard (%s)", (locale) => {
       await editor.updateComplete;
       if (when === "after") await change(editor);
       expect(unload()).toBe(true);
-      const close = editor
-        .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!
-        .requestClose("escape");
+      const close = editor.requestClose();
       await choose("keep");
       expect(await close).toBe(false);
       expect(screen.shadowRoot!.querySelector("period-dialog")).toBe(editor);
@@ -199,3 +197,5 @@ it("the period dialog's draft is asked about only under the list's draft parent"
     await app.leave.coordinator.request({ scopes: [root], reason: "navigation", proceed() {} }),
   ).toBe("proceeded");
 });
+
+beforeEach(() => history.replaceState({}, "", "/manage/periods"));
