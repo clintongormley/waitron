@@ -58,13 +58,12 @@ useVenueDb({
       return stationId;
     });
     await inTx(v, async (tx) => {
-      const { id: barStation } = await createStation(tx, { name: "Barra" });
       await setRoutingCell(
         tx,
         { row: { kind: "product", productId: v.productId("Red wine bottle") }, zoneId: null },
-        { kind: "station", stationId: barStation },
+        { kind: "station", stationId: cheeseStation },
       );
-      await setMadeHereStations(tx, v.cfg.origin.deviceId, [barStation, cheeseStation]);
+      await setMadeHereStations(tx, v.cfg.origin.deviceId, [cheeseStation]);
     });
     madeHereCfg = { ...v.cfg, sendingDeviceId: v.cfg.origin.deviceId };
     offers = await inTx(v, (tx) => offerProducts(tx, v.cfg, { zone: "tables" }));

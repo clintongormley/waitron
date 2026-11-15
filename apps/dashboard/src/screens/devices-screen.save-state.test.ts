@@ -379,10 +379,7 @@ describe("the Edit dialog's Save", () => {
     expect(value(el, "edit-slip-printer")).toBe("pr2");
     expect(value(el, "edit-cash-drawer")).toBe("pr4");
     expect(value(el, "edit-invoice-printer")).toBe("pr2");
-    expect(checked(el, "edit-made-here")).toEqual([
-      ["s1", false],
-      ["s2", true],
-    ]);
+    expect(value(el, "edit-made-here")).toBe("s2");
     expect(checked(el, "edit-approved-profiles")).toEqual([
       ["pc", true],
       ["pd", false],
@@ -432,6 +429,7 @@ describe("the Edit dialog's Save", () => {
     ["the invoice printer", "edit-invoice-printer", "", "pr2"],
     ["the invoice printer, on an A4 printer", "edit-invoice-printer", "pg1", "pr2"],
     ["the card reader", "edit-reader", "r1", "r2"],
+    ["the device station", "edit-made-here", "s1", "s2"],
   ])("%s wakes Save, and choosing it back quiets it", async (_, test, other, original) => {
     const { el } = await openEdit();
     await choose(el, test, other);
@@ -440,16 +438,16 @@ describe("the Edit dialog's Save", () => {
     expect(await state(el, "edit-save")).toEqual(quiet);
   });
 
-  it.each([
-    ["a made-here station", '[data-test=edit-made-here] input[value="s1"]'],
-    ["an approved profile", '[data-test=edit-approved-profiles] input[value="pc"]'],
-  ])("ticking %s wakes Save, and unticking it quiets it", async (_, selector) => {
-    const { el } = await openEdit();
-    await tick(el, selector);
-    expect(await state(el, "edit-save")).toEqual(ready);
-    await tick(el, selector);
-    expect(await state(el, "edit-save")).toEqual(quiet);
-  });
+  it.each([["an approved profile", '[data-test=edit-approved-profiles] input[value="pc"]']])(
+    "ticking %s wakes Save, and unticking it quiets it",
+    async (_, selector) => {
+      const { el } = await openEdit();
+      await tick(el, selector);
+      expect(await state(el, "edit-save")).toEqual(ready);
+      await tick(el, selector);
+      expect(await state(el, "edit-save")).toEqual(quiet);
+    },
+  );
 
   it("another profile wakes Save", async () => {
     const { el } = await openEdit();

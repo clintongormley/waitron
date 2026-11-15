@@ -280,14 +280,11 @@ it("a saved invoice printer choice closes the dialog with nothing left to warn a
   ]);
   expect(unload()).toBe(false);
 });
-it("device made-here selection compares membership and includes invalid name input", async () => {
+it("a device station edit becomes clean when reverted, and an invalid name stays dirty", async () => {
   const { screen } = await mount();
-  const box = q(screen, 'input[value="s2"]') as HTMLInputElement;
-  box.checked = true;
-  box.dispatchEvent(new Event("change"));
+  change(screen, "made-here", "s2");
   expect(unload()).toBe(true);
-  box.checked = false;
-  box.dispatchEvent(new Event("change"));
+  change(screen, "made-here", "s1");
   expect(unload()).toBe(false);
   change(screen, "name", "");
   expect(unload()).toBe(true);
