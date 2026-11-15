@@ -6603,7 +6603,6 @@ Your export carries an options list's preference as `option_labels.is_default` a
 The list no longer carries `default_label_id`. A format-33 export is refused as outdated by the
 pre-option-default-flag case in `apps/server/src/configuration-import.test.ts`.
 
-
 ### Products without menu ownership and configuration format 35 (2026-11-15, A1308 mn5)
 
 Your export no longer carries `products.menu_id`; menus offer products through `menu_items`.

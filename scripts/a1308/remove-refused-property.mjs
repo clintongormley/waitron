@@ -61,7 +61,8 @@ export function run({ root, property, outputFile }) {
   for (const position of refusals(readFileSync(outputFile, "utf8"), property)) {
     const file = resolve(root, position.file);
     const positions = byFile.get(file) ?? [];
-    positions.push(position);
+    if (!positions.some(({ line, column }) => line === position.line && column === position.column))
+      positions.push(position);
     byFile.set(file, positions);
   }
   let removed = 0;
@@ -72,10 +73,13 @@ export function run({ root, property, outputFile }) {
   return { removed };
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const args = process.argv.slice(2);
+export function main(args, root) {
   if (args[0] !== "--property" || !args[1] || !args[2] || args.length !== 3) {
     throw new Error("Usage: remove-refused-property.mjs --property <name> <tsc-output-file>");
   }
-  console.log(run({ root: process.cwd(), property: args[1], outputFile: args[2] }));
+  return run({ root, property: args[1], outputFile: resolve(root, args[2]) });
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  console.log(main(process.argv.slice(2), process.cwd()));
 }

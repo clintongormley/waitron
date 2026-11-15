@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath, URL } from "node:url";
 import { afterEach, expect, it } from "vitest";
-import { refusals, removeAt, run } from "./remove-refused-property.mjs";
+import { main, refusals, removeAt, run } from "./remove-refused-property.mjs";
 
 const roots = [];
 afterEach(() => {
@@ -86,13 +86,15 @@ it("refuses a position that does not name the property", () => {
   ).toThrow(/1:19/);
 });
 
-it("writes only refused properties and is idempotent with an empty error list", () => {
+it("counts each refused property once and is idempotent with an empty error list", () => {
   const root = mkdtempSync(join(tmpdir(), "wt-refused-property-"));
   roots.push(root);
   writeFileSync(join(root, "a.ts"), "const x = { menuId, name: 'Tea' };");
   writeFileSync(
     join(root, "errors.txt"),
-    "a.ts(1,13): error TS2353: Object literal may only specify known properties, and 'menuId' does not exist in type 'Input'.",
+    "a.ts(1,13): error TS2353: Object literal may only specify known properties, and 'menuId' does not exist in type 'Input'.\n".repeat(
+      2,
+    ),
   );
   expect(run({ root, property: "menuId", outputFile: join(root, "errors.txt") })).toEqual({
     removed: 1,
@@ -134,6 +136,9 @@ it("runs from the checked package's directory and refuses an incomplete command"
     join(root, "errors.txt"),
     "a.ts(1,13): error TS2353: Object literal may only specify known properties, and 'menuId' does not exist in type 'Input'.",
   );
+  expect(main(["--property", "menuId", "errors.txt"], root)).toEqual({ removed: 1 });
+  expect(() => main([], root)).toThrow(/Usage:/);
+  writeFileSync(join(root, "a.ts"), "const x = { menuId };");
   execFileSync(process.execPath, [script, "--property", "menuId", "errors.txt"], { cwd: root });
   expect(readFileSync(join(root, "a.ts"), "utf8")).toBe("const x = { };");
   expect(() => execFileSync(process.execPath, [script], { cwd: root, stdio: "pipe" })).toThrow();

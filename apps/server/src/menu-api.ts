@@ -497,14 +497,9 @@ function parseProductModifiers(value: unknown): ProductModifierRef[] | undefined
   });
 }
 
-/**
- * Refuse a product body still carrying a retired field: `modifierIds` or `optionGroupIds`, which the
- * ordered `modifiers` list replaced, or `soldAlone`, which `ordering` replaced. Ignoring one would
- * answer success without saving what it asked for. No first-party client sends any of them; this
- * catches a client that predates the change, such as a dashboard tab left open across the deploy.
- */
+// Ignoring a retired field would answer success without saving what the caller asked for.
 function refuseRetiredFields(body: Record<string, unknown>): void {
-  for (const retired of ["modifierIds", "optionGroupIds", "soldAlone"])
+  for (const retired of ["modifierIds", "optionGroupIds", "soldAlone", "menuId"])
     if (body[retired] !== undefined)
       throw new AppError("management.request_invalid", { field: retired });
 }

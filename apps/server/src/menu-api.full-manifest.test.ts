@@ -286,14 +286,8 @@ async function createCategory(app: Hono, cookie: string, name: string): Promise<
   return ((await res.json()) as { id: string }).id;
 }
 
-async function createProduct(
-  app: Hono,
-  cookie: string,
-  menuId: string,
-  name: string,
-): Promise<string> {
+async function createProduct(app: Hono, cookie: string, name: string): Promise<string> {
   const res = await send(app, "POST", "/management-api/products", cookie, {
-    menuId,
     categoryId: null,
     name,
     pricingUnit: "each",
@@ -323,7 +317,6 @@ describe("Menu API — option groups, gates, by-id FKs", () => {
     );
     await expect403(
       await send(app, "POST", "/management-api/products", staffCookie, {
-        menuId: "00000000-0000-0000-0000-000000000000",
         categoryId: null,
         name: "Refused",
         pricingUnit: "each",
@@ -382,10 +375,6 @@ it("accepts an ordered modifiers list in the product contract and reads it back"
   const venue = await setupVenue();
   const app = mountApp();
   const cookie = venue.managerCookie;
-  const menuResponse = await send(app, "POST", "/management-api/menus", cookie, {
-    name: "Menu",
-  });
-  const menu = (await menuResponse.json()) as { id: string };
   const listIds = await withTransaction(suite.db, async (tx) => {
     const ids: string[] = [];
     for (const label of ["First", "Second"]) {
@@ -400,7 +389,6 @@ it("accepts an ordered modifiers list in the product contract and reads it back"
   });
   const modifiers = listIds.map((id) => ({ kind: "options", id }));
   const create = await send(app, "POST", "/management-api/products", cookie, {
-    menuId: menu.id,
     categoryId: null,
     name: "Dish",
     pricingUnit: "each",
@@ -434,7 +422,7 @@ describe("sections and the reporting and routing they do not touch", () => {
     const app = mountApp();
     const menuId = await createMenu(app, v.managerCookie, "Routed menu");
     const categoryId = await createCategory(app, v.managerCookie, "Beverages");
-    const productId = await createProduct(app, v.managerCookie, menuId, "Water");
+    const productId = await createProduct(app, v.managerCookie, "Water");
     expect(
       (
         await send(app, "POST", "/management-api/folders/move", v.managerCookie, {
