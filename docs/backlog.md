@@ -552,10 +552,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **After A760 moves the bundle format: An import checks rows as a save does** (bundle of 4, size S). Holds A1074. [Detail](backlog/menu.md#bundle-after-a760-moves-the-bundle-format-an-import-checks-rows-as-a-save-does)
 
-- **A person who may not read routing sees the "Kitchen routing unavailable" line above the
-  Products list, which tells them to try again later**, because a refused read counts as a failed
-  one, and trying again changes nothing for them. Left open by W86 (#1203) and A655.
-
 - **Translate all followups** (bundle of 9, size M). [Detail](backlog/menu.md#bundle-translate-all-followups)
 
 - **Translate all: shared collect-page test vectors.** Nothing compares the fake Cloud's paging
