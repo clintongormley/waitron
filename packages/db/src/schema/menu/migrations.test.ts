@@ -97,7 +97,6 @@ describe("menu releases", () => {
     const id = await menu();
     const error = await captureError(() => version(id, 1, "nobody"));
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
-    await seedPerson(db, { id: "publisher", displayName: "Test publisher" });
     const v = await version(id, 1);
     expect(
       (await db.execute(sql`select created_by from menu_versions where id = ${v}`)).rows,
@@ -106,12 +105,10 @@ describe("menu releases", () => {
 
   it("refuses a release cancelled by nobody and accepts a real canceller", async () => {
     const id = await menu();
-    await seedPerson(db, { id: "publisher", displayName: "Test publisher" });
     const v = await version(id, 1);
     const at = "2026-11-15T09:00:00.000Z";
     const error = await captureError(() => release(v, id, "cancelled", at, "nobody"));
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
-    await seedPerson(db, { id: "canceller", displayName: "Test canceller" });
     await release(v, id, "cancelled", at, "canceller");
     expect(
       (await db.execute(sql`select cancelled_by from menu_releases where version_id = ${v}`)).rows,
@@ -120,8 +117,6 @@ describe("menu releases", () => {
 
   it("refuses deleting a publisher or canceller and permits deleting an unused person", async () => {
     const id = await menu();
-    await seedPerson(db, { id: "publisher", displayName: "Test publisher" });
-    await seedPerson(db, { id: "canceller", displayName: "Test canceller" });
     await seedPerson(db, { id: "unused", displayName: "Test unused" });
     await release(await version(id, 1), id, "cancelled", "2026-11-15T09:00:00.000Z", "canceller");
     for (const person of ["publisher", "canceller"]) {

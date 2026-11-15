@@ -141,7 +141,7 @@ describe("seedDemoRestaurant", () => {
     },
   );
 
-  it("publishes every demo menu as the provisioned administrator", async () => {
+  it("attributes demo publications to the provisioned administrator", async () => {
     const venue = await provisionVenue();
     await seedDemoRestaurant(suite.db, {
       venue,
