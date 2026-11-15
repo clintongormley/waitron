@@ -253,8 +253,8 @@ export const ALERT_MESSAGES: Readonly<
     },
   },
   "clock.unusable": {
-    en: "The box's clock reads {clockAt:minute}, before 28 October 2024, so no sale can be recorded for the tax agency. With the internet the box puts it right by itself; otherwise an administrator can usually set it on the Box status page.",
-    es: "El servidor marca {clockAt:minute}, antes del 28 de octubre de 2024, así que no se puede registrar ninguna venta en Hacienda. Con internet, el servidor corrige la hora solo; si no, un administrador normalmente puede ponerla en hora en Estado del servidor.",
+    en: "The box's clock reads {clockAt:minute}, before 28 October 2024, so no sale can be recorded for the tax agency. If the box keeps its time from the internet, it puts it right by itself once online; if not, an administrator can usually set it on the Box status page.",
+    es: "El servidor marca {clockAt:minute}, antes del 28 de octubre de 2024, así que no se puede registrar ninguna venta en Hacienda. Si el servidor toma la hora de internet, la corrige solo en cuanto tiene conexión; si no, un administrador normalmente puede ponerla en hora en Estado del servidor.",
   },
   "clock.peer_disagrees": {
     en: "A connected device's clock and this box's clock differ by {differenceMs:duration}. Check the date and time on this box and the connected devices.",

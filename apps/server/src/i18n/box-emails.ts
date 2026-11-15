@@ -22,11 +22,11 @@ export const BOX_EMAIL_WORDS = {
   "clock.unusable": {
     en: {
       subject: "{venue}: sales can't be recorded because the box's clock is wrong",
-      text: "The box at {venue} has its clock set before 28 October 2024, so no sale can be recorded for the tax agency until the clock is right. With the internet the box puts it right by itself. Otherwise an administrator can usually set it from their own phone or computer on the Box status page (in the dashboard, System → Box status); if the box started with its clock wrong, any staff member can do it from a till with “Check the time”.",
+      text: "The box at {venue} has its clock set before 28 October 2024, so no sale can be recorded for the tax agency until the clock is right. If the box keeps its time from the internet, it puts it right by itself once it is online. If it does not, an administrator can usually set it from their own phone or computer on the Box status page (in the dashboard, System → Box status); if the box started with its clock wrong, any staff member can do it from a till with “Check the time”.",
     },
     es: {
       subject: "{venue}: no se pueden registrar ventas porque la hora del servidor es incorrecta",
-      text: "El servidor de {venue} tiene la hora puesta antes del 28 de octubre de 2024, así que no se puede registrar ninguna venta en Hacienda hasta que la hora sea correcta. Con internet, el servidor la corrige solo. Si no, un administrador normalmente puede ponerla en hora desde su propio móvil u ordenador en Estado del servidor (en el panel de gestión, Sistema → Estado del servidor); si el servidor arrancó con la hora mal, cualquier empleado puede hacerlo desde una caja con «Comprobar la hora».",
+      text: "El servidor de {venue} tiene la hora puesta antes del 28 de octubre de 2024, así que no se puede registrar ninguna venta en Hacienda hasta que la hora sea correcta. Si el servidor toma la hora de internet, la corrige solo en cuanto tiene conexión. Si no, un administrador normalmente puede ponerla en hora desde su propio móvil u ordenador en Estado del servidor (en el panel de gestión, Sistema → Estado del servidor); si el servidor arrancó con la hora mal, cualquier empleado puede hacerlo desde una caja con «Comprobar la hora».",
     },
   },
 } as const satisfies Record<string, Record<"en" | "es", { subject: string; text: string }>>;
