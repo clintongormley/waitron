@@ -6495,21 +6495,19 @@ describe("a presented counter bill from Find a bill, on a device with no counter
       ...device,
       ...(open === "show-station" || open === "show-expo"
         ? {
-            getDeviceIdentity: vi
-              .fn()
-              .mockResolvedValue({
-                deviceId: "d1",
-                name: "Device",
-                formFactor: name === "a handheld" ? "phone-portrait" : "till",
-                kitchenScreens: [
-                  {
-                    kind: open === "show-station" ? "station" : "pass",
-                    available: true,
-                    stations: [],
-                    zones: null,
-                  },
-                ],
-              }),
+            getDeviceIdentity: vi.fn().mockResolvedValue({
+              deviceId: "d1",
+              name: "Device",
+              formFactor: name === "a handheld" ? "phone-portrait" : "till",
+              kitchenScreens: [
+                {
+                  kind: open === "show-station" ? "station" : "pass",
+                  available: true,
+                  stations: [],
+                  zones: null,
+                },
+              ],
+            }),
           }
         : {}),
     });
