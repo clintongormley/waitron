@@ -1,5 +1,7 @@
 # R5-TICKET-SERIES: number ticket correctives in the ticket series — implementation plan
 
+> **Not built (2026-11-15).** The owner reversed this at ~12:02: ticket correctives stay in the corrective series, and the question goes to the adviser ([meeting sheet](../../compliance/2026-11-19-adviser-meeting.md), question 4).
+
 > **For agentic workers:** `superpowers:subagent-driven-development`, each task dispatched as
 > `subagent_type: "implementer"`, test-first (write the named check, watch it fail for the stated
 > reason, then the smallest change). Fiscal: full review path; the owner lands the PR.
