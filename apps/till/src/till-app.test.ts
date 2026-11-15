@@ -935,6 +935,69 @@ describe("till-app", () => {
     expect(recordSale).not.toHaveBeenCalled();
   });
 
+  it("a counter routing question that replaces another starts with none of the first question's picks or removals", async () => {
+    const row = {
+      name: "Café",
+      quantity: "1",
+      stationId: "bar",
+      stationName: "Bar",
+      why: "closed" as const,
+    };
+    const askSaleDeadEnds = vi.fn(async () => ({
+      sends: true,
+      deadEnds: [
+        { ...row, key: "0" },
+        { ...row, key: "1" },
+      ],
+      stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+    }));
+    const { el } = await mountApp({ askSaleDeadEnds });
+    const c = await toCounter(el);
+    c.store.addProduct(coffee, "1");
+    c.store.addProduct(coffee, "1");
+    await flush(el);
+    expect(c.store.lines).toHaveLength(2);
+    const first = vi.fn();
+    const second = vi.fn();
+    emit(tenderPay(el), "check-before-tender", { resolve: first });
+    await flush(el);
+    const before = el.shadowRoot!.querySelector("till-dead-ends-dialog")!;
+    const beforeSection = before.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!;
+    beforeSection.dispatchEvent(
+      new CustomEvent("make-at", { detail: { key: "0", stationId: "kitchen" } }),
+    );
+    beforeSection.dispatchEvent(new CustomEvent("remove", { detail: { key: "1" } }));
+    await before.updateComplete;
+    expect(before.shadowRoot!.querySelector<HTMLButtonElement>("[data-continue]")!.disabled).toBe(
+      false,
+    );
+
+    emit(tenderPay(el), "check-before-tender", { resolve: second });
+    await flush(el);
+    expect(first).toHaveBeenCalledExactlyOnceWith(false);
+    const dialog = el.shadowRoot!.querySelector("till-dead-ends-dialog")!;
+    await dialog.updateComplete;
+    const section =
+      dialog.shadowRoot!.querySelector<TillDeadEndsSection>("till-dead-ends-section")!;
+    expect(section.answer.deadEnds.map((deadEnd) => deadEnd.key)).toEqual(["0", "1"]);
+    expect(section.choices.size).toBe(0);
+    expect(dialog.shadowRoot!.querySelector<HTMLButtonElement>("[data-continue]")!.disabled).toBe(
+      true,
+    );
+
+    expect(second).not.toHaveBeenCalled();
+    expect(c.store.lines).toHaveLength(2);
+    expect(c.store.lines.map((line) => line.makeAt)).toEqual([undefined, undefined]);
+
+    await userEvent.keyboard("{Escape}");
+    await flush(el);
+    const unsaved = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await unsaved.updateComplete;
+    expect(unsaved.open).toBe(false);
+    await expect.poll(() => second.mock.calls).toEqual([[false]]);
+    expect(el.shadowRoot!.querySelector("till-dead-ends-dialog")).toBeNull();
+  });
+
   it("holds the Counter payment window until its routing question is answered", async () => {
     let answer: (value: DeadEndAnswer) => void = () => undefined;
     const askSaleDeadEnds = vi.fn(

@@ -823,10 +823,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A bill another till moved, merged or part-paid** (bundle of 2, 1 important, size M). Holds A1267, A1288. [Detail](backlog/till.md#bundle-a-bill-another-till-moved-merged-or-part-paid)
 
-- **A1269. A dead-end question that replaces another keeps the first one's picks (found in A803
-  slice 3's LOOK fix review 3; predates it, `c8487cba5`).** Clear both when the question changes.
-  [Detail](backlog/till.md#a1269-a-dead-end-question-that-replaces-another-keeps-the-first-ones-picks)
-
 - **A1416. A started or served dish whose option was renamed blocks every save of its order until
   it is cancelled (left open by A1382).** Run on main for a started dish, and in R3-fixes for a
   served one; not small, since it needs a decision on what a

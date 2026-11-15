@@ -3707,7 +3707,7 @@ of page colour round every badge in `wt-help-tooltip`, which changes every badge
 ticket/receipt grouping, has landed. What it leaves open is A1191, A1193–A1195, A1197, A1198, A1201 and A1217 under
 _Modules, data and code health_. Slice 2, named bills that keep their number at the table, has
 landed; it leaves open A1235 and A1237. Slice 3, one bill switcher with + New bill, one ⋮ menu and no
-main bill, has landed (#2360); it leaves open A1261, A1265–A1267 and A1269. Slice
+main bill, has landed (#2360); it leaves open A1261 and A1265–A1267. Slice
 4a, one dish picker behind the ⋮'s **Move dishes…** in place of Split by item and Transfer items,
 has landed (#2372); it leaves open A1287–A1294 and A1300. Slice 4b, waiting dishes that leave with their own copy of the course, has landed (#2454). Slice 4c, Split a table through the same picker with any whole bills and single
 dishes in one panel, has landed; it leaves open A1347–A1350, A1352, A1358–A1360, A1362 and A1365. Remaining: pre-bills through A446, which
@@ -3779,16 +3779,6 @@ Decide where those lines go.
 
 2026-11-11: R4 retires the separate no-bill case: a still-seated party receives a fresh empty bill
 when its last bill leaves. The remaining case above is unchanged by R4.
-
-## A1269. A dead-end question that replaces another keeps the first one's picks
-
-**A1269. A dead-end question that replaces another keeps the first one's picks (found in A803
-slice 3's LOOK fix review 3; predates it, `c8487cba5`).** `till-dead-ends-dialog`
-(`apps/till/src/widgets/dead-ends-dialog.ts`) keeps the picked stations (`choices`) and removed
-lines (`removed`) as its own state, and the same element is reused when `#openDeadEnds`
-(`apps/till/src/till-app.ts`) replaces a waiting question. So what the waiter picked or removed
-on the first question is shown on the second and sent with it, to `setMakeAt` and to the
-counter's `removeLine`. By reading, not run. Clear both when the question changes.
 
 ## A1287. With no party, the ⋮'s Merge bills does nothing
 
