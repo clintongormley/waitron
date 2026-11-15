@@ -132,12 +132,19 @@ export async function seedDemoRestaurant(
       .where(and(eq(floorZones.name, demoPlainText(terrace.name, dataSet, locale))));
     if (zone === undefined) throw new Error("seedDemoRestaurant: no Terrace zone");
     const clock = await readVenueClock(tx);
+    const ranges =
+      clock.dayCutover < "05:00" || clock.dayCutover > "23:00"
+        ? [
+            { startsAt: "23:00", endsAt: clock.dayCutover },
+            { startsAt: clock.dayCutover, endsAt: "05:00" },
+          ]
+        : [{ startsAt: "23:00", endsAt: "05:00" }];
     await replaceZoneClosedWeek(
       tx,
       zone.id,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
-        ranges: [{ startsAt: "23:00", endsAt: "05:00" }],
+        ranges,
       })),
       await readBusinessDayScheduleRevision(tx),
     );

@@ -58,7 +58,7 @@ describe("seedDemoRestaurant", () => {
     vi.useRealTimers();
   });
 
-  it.each(["06:00", "05:00"])(
+  it.each(["06:00", "05:00", "04:00"])(
     "stores only Terrace's 23:00–05:00 closure after its sales, retaining it for late special service with a %s changeover",
     async (cutover) => {
       const venue = await provisionVenue();
@@ -69,7 +69,7 @@ describe("seedDemoRestaurant", () => {
           from zone_day_ranges r join zone_days c on c.id = r.day_id
           join seasons se on se.id = c.season_id and se.starts_on = '12-01'
           join floor_zones z on z.id = c.zone_id
-          order by z.name, c.weekday`);
+          order by z.name, c.weekday, r.starts_at`);
       const realSeedSales = salesSeed.seedSales;
       let closuresAfterSales: unknown;
       let saleCount = 0;
@@ -90,12 +90,15 @@ describe("seedDemoRestaurant", () => {
         expect(saleCount).toBeGreaterThan(0);
         expect(closuresAfterSales).toEqual([]);
         expect((await readClosures()).rows).toEqual(
-          [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-            zone: "Terrace",
-            weekday,
-            starts_at: "23:00:00",
-            ends_at: "05:00:00",
-          })),
+          [0, 1, 2, 3, 4, 5, 6].flatMap((weekday) =>
+            (cutover === "04:00"
+              ? [
+                  { starts_at: "04:00:00", ends_at: "05:00:00" },
+                  { starts_at: "23:00:00", ends_at: "04:00:00" },
+                ]
+              : [{ starts_at: "23:00:00", ends_at: "05:00:00" }]
+            ).map((range) => ({ zone: "Terrace", weekday, ...range })),
+          ),
         );
         const zones = await suite.db.select().from(floorZones);
         const terrace = zones.find((zone) => zone.name === "Terrace")!;
