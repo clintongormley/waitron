@@ -339,6 +339,16 @@ describe("purchase-form", () => {
 
   // ── Empty / non-decimal amounts, caught client-side so the operator is told which one is wrong ──
 
+  it("turns off autocorrect, the capital first letter and spellcheck on the supplier's tax number", async () => {
+    const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
+    const field = el.shadowRoot!.querySelector<PurchaseForm>("[data-test=supplier-tax-id]")!;
+    await field.updateComplete;
+    const input = field.shadowRoot!.querySelector("input")!;
+    expect(
+      ["autocapitalize", "autocorrect", "spellcheck"].map((name) => input.getAttribute(name)),
+    ).toEqual(["none", "off", "false"]);
+  });
+
   it("blocks confirm on the default single BLANK VAT line, marking each of its amounts, before any round trip", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
     await fillHeaderOnly(el); // header valid; the auto-present first line is left blank

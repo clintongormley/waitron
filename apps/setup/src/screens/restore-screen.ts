@@ -278,6 +278,9 @@ export class SetupRestoreScreen extends LitElement {
         class="field"
         label=${t("restore.recovery_key")}
         name="recovery-key"
+        autocapitalize="none"
+        autocorrect="off"
+        spellcheck="false"
         hint=${t("restore.recovery_key_hint")}
         type=${this.recoveryKeyVisible ? "text" : "password"}
         autocomplete="off"

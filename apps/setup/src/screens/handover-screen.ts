@@ -906,6 +906,9 @@ export class SetupHandoverScreen extends LitElement {
     ) =>
       html`<wt-input
         name=${`handover-${name}`}
+        autocapitalize="none"
+        autocorrect="off"
+        spellcheck="false"
         label=${t(key)}
         type=${name === "password" ? "password" : name === "email" ? "email" : "text"}
         autocomplete=${name === "code" ? "one-time-code" : name === "email" ? "username" : "current-password"}

@@ -597,6 +597,19 @@ describe("backup-screen", () => {
     expect(q(el, "[data-test=apply]")!.hasAttribute("disabled")).toBe(false);
   });
 
+  it("turns off autocorrect, the capital first letter and spellcheck on a pasted key", async () => {
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api: stubApi() });
+    await flush(el);
+    q(el, "[data-test=advanced-toggle]")!.click();
+    await el.updateComplete;
+    const field = q(el, "[data-test=paste-key]") as BackupScreen;
+    await field.updateComplete;
+    const input = field.shadowRoot!.querySelector("input")!;
+    expect(
+      ["autocapitalize", "autocorrect", "spellcheck"].map((name) => input.getAttribute(name)),
+    ).toEqual(["none", "off", "false"]);
+  });
+
   it("advanced toggle reveals a paste-your-own-key field", async () => {
     const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api: stubApi() });
     await flush(el);

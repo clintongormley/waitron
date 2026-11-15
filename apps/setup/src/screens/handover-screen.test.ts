@@ -83,6 +83,30 @@ it("does not expose clock selection until the final copy is actually placed", as
   }
 });
 
+it("turns off autocorrect, the capital first letter and spellcheck on the sign-in code", async () => {
+  const { mountWidget, cleanupWidgets } = await import("../widgets/test-helpers.js");
+  const { el } = await mountWidget<SetupHandoverScreen>("setup-handover-screen", {
+    api: new SetupApi(
+      "",
+      vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ body: status }))),
+    ),
+    operationId: "move one",
+  });
+  try {
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector('[name="handover-code"]')).not.toBeNull(),
+    );
+    const field = el.shadowRoot!.querySelector<SetupHandoverScreen>('[name="handover-code"]')!;
+    await field.updateComplete;
+    const input = field.shadowRoot!.querySelector("input")!;
+    expect(
+      ["autocapitalize", "autocorrect", "spellcheck"].map((name) => input.getAttribute(name)),
+    ).toEqual(["none", "off", "false"]);
+  } finally {
+    cleanupWidgets();
+  }
+});
+
 it("cancels a pending read on disconnect and ignores its late answer on reopening", async () => {
   const { mountWidget, cleanupWidgets } = await import("../widgets/test-helpers.js");
   let release!: (value: Response) => void;

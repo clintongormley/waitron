@@ -99,6 +99,15 @@ describe("SetupRestoreScreen", () => {
     expect(el.shadowRoot!.querySelectorAll("[required]")).toHaveLength(4);
   });
 
+  it("turns off autocorrect, the capital first letter and spellcheck on a shown recovery key", async () => {
+    const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
+    expect(
+      ["autocapitalize", "autocorrect", "spellcheck"].map((name) =>
+        keyControl(el).getAttribute(name),
+      ),
+    ).toEqual(["none", "off", "false"]);
+  });
+
   it("emits the artifact, recovery key, environment and acknowledgement", async () => {
     const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
     const artifact = new File(["encrypted"], "waitron.backup");
