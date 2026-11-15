@@ -216,7 +216,7 @@ describe("a new order's way of selling", () => {
 
   it("gives a bill split off a takeaway bill the same way", async () => {
     await departmentsSell("till_choice");
-    const tabId = await tabWith(venue, "Croquettes", "Tarta");
+    const tabId = await tabWith(venue, "Croquettes", "Octopus");
     await inTx(venue, (tx) =>
       tx.update(workingOrders).set({ dining: "takeaway" }).where(eq(workingOrders.id, tabId)),
     );

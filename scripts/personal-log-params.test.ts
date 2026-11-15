@@ -47,9 +47,9 @@ const REVIEWED_TYPES: ReadonlyMap<string, string> = new Map([
     "CorrectionAdmission",
     "a regime's answer to whether an invoice may be corrected: a filing state, a reason, an invoice number and date; no person",
   ],
-  ["Dining", "an enum of how an order is eaten: eat_in or takeaway"],
   ["DestinationCleanup", "an enum of clean-up requests: abort_upload or delete_object"],
   ["DestinationOperation", "an enum of archive file store requests"],
+  ["Dining", "an enum of how an order is eaten: eat_in or takeaway"],
   ["EquipmentField", "an enum of a device's equipment field names"],
   ["Extract", "TypeScript's own; holds what its arguments name, which the guard reads"],
   [
