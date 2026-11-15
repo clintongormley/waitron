@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
+import { onModalChange, underModal } from "../modal-layer.js";
 import "./wt-icon.js";
 
 export type WtToastTone = "info" | "error";
@@ -8,7 +9,8 @@ export type WtToastTone = "info" | "error";
 /**
  * A brief notice. Both live regions are always in the document, so a screen reader announces the
  * message when it appears. Positioning belongs to the consumer. The consuming app registers the
- * `close` icon.
+ * `close` icon. While a modal window it is not inside is open, an open toast waits unseen, and its
+ * countdown with it: that window makes everything outside it impossible to press.
  */
 @customElement("wt-toast")
 export class WtToast extends LitElement {
@@ -63,6 +65,16 @@ export class WtToast extends LitElement {
 
   #timer: ReturnType<typeof setTimeout> | undefined;
   #hovered = false;
+  #held = false;
+  #stopWatchingModals: (() => void) | undefined;
+
+  readonly #onModalChange = (): void => {
+    const held = underModal(this);
+    if (held === this.#held) return;
+    this.#held = held;
+    this.requestUpdate();
+    this.#schedule();
+  };
 
   /** Opens the toast and restarts its countdown, even when it is already open with the same
    * message: a repeated notice changes no property, so nothing else would restart it. */
@@ -79,6 +91,8 @@ export class WtToast extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.#stopWatchingModals = onModalChange(this.#onModalChange);
+    this.#held = underModal(this);
     this.#schedule();
   }
 
@@ -86,15 +100,17 @@ export class WtToast extends LitElement {
     // Leaving the page takes it from under the pointer without a mouseleave.
     this.#hovered = false;
     clearTimeout(this.#timer);
+    this.#stopWatchingModals?.();
     super.disconnectedCallback();
   }
 
   /** The one place a countdown starts: never off the page, where an update already queued still
-   * runs, nor while the pointer or keyboard focus is on it. */
+   * runs, nor while it is held under a modal window, nor while the pointer or keyboard focus is on
+   * it. */
   #schedule(): void {
     clearTimeout(this.#timer);
     this.#timer = undefined;
-    if (!this.isConnected || !this.open || this.duration <= 0) return;
+    if (!this.isConnected || !this.open || this.#held || this.duration <= 0) return;
     if (this.#hovered || this.matches(":focus-within")) return;
     this.#timer = setTimeout(() => this.#close(), this.duration);
   }
@@ -134,7 +150,8 @@ export class WtToast extends LitElement {
   }
 
   override render() {
-    const toast = this.open
+    const shown = this.open && !this.#held;
+    const toast = shown
       ? html`<div
           class="toast"
           part="toast"

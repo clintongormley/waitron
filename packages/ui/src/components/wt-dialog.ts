@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import { uniqueId } from "../interactive.js";
+import { modalClosed, modalOpened } from "../modal-layer.js";
 import type { LeaveReason } from "@waitron/ui-core/unsaved-changes";
 import {
   type FormErrorEvent,
@@ -196,9 +197,11 @@ export class WtDialog extends LitElement {
     if (WtDialog.openDialogs.size === 0)
       document.addEventListener("keydown", WtDialog.onDocumentKeydown);
     WtDialog.openDialogs.add(dialog);
+    modalOpened(dialog, dialog.openedAt);
   }
 
   private static untrack(dialog: WtDialog): void {
+    modalClosed(dialog);
     if (WtDialog.openDialogs.delete(dialog) && WtDialog.openDialogs.size === 0)
       document.removeEventListener("keydown", WtDialog.onDocumentKeydown);
   }
