@@ -844,6 +844,17 @@ describe("stream-settings-panel: once set up", () => {
         fillRequired(el);
         await press(el, "save");
         expect(text(el, "[role=alert]")).toContain(t("backup.apply"));
+        const action = q(el, "[data-test=recovery-key-action]");
+        expect(action).not.toBeNull();
+        expect(action!.textContent!.trim()).toBe(t("backup.apply"));
+        const heard = vi.fn();
+        document.body.addEventListener("recovery-key-needed", heard);
+        try {
+          action!.click();
+          expect(heard).toHaveBeenCalledOnce();
+        } finally {
+          document.body.removeEventListener("recovery-key-needed", heard);
+        }
       } finally {
         setLocale(before);
       }
@@ -866,6 +877,7 @@ describe("stream-settings-panel: once set up", () => {
         expect(alert).toBe(t("stream.error.recovery_key_too_short_unknown"));
         expect(alert).not.toContain(t("backup.apply"));
         expect(alert).not.toMatch(/environment|entorno/i);
+        expect(q(el, "[data-test=recovery-key-action]")).toBeNull();
       } finally {
         setLocale(before);
       }
@@ -886,6 +898,9 @@ describe("stream-settings-panel: once set up", () => {
         const alert = text(el, "[role=alert]");
         expect(alert).toContain(t("backup.rotate.title"));
         expect(alert).not.toContain(t("backup.apply"));
+        expect(q(el, "[data-test=recovery-key-action]")?.textContent!.trim()).toBe(
+          t("backup.rotate.title"),
+        );
       } finally {
         setLocale(before);
       }

@@ -1055,6 +1055,32 @@ describe("backup admin routes", () => {
     expect(await rk.json()).toMatchObject({ error: { code: "backup.recovery_key_too_short" } });
   }, 60_000);
 
+  it("reveals the loaded usable key when the file was replaced by a short key", async () => {
+    const stateDir = await makeStateDir();
+    await writeFile(join(stateDir, "backup.env"), `WAITRON_BACKUP_RECOVERY_KEY=${KEY_1}\n`);
+    const sc: Scenario = {
+      stateDir,
+      base: {},
+      role: "primary",
+      readRecord: async () => ({
+        revision: "loaded-key",
+        enabled: false,
+        destinations: [{ kind: "local-fs", id: "primary", dir: "/unused/backups" }],
+        schedule: DAILY_AT_0330,
+        retention: RETENTION,
+        destinationTimeoutMs: 900_000,
+      }),
+    };
+    const sup = makeSupervisor(sc);
+    await sup.reload();
+    await writeFile(join(stateDir, "backup.env"), "WAITRON_BACKUP_RECOVERY_KEY=short\n");
+    const app = buildApp(sup, stateDir, sc.base);
+    const cookie = await login(app);
+    const response = await app.request("/api/backup/recovery-key", { headers: { cookie } });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ key: KEY_1 });
+  }, 60_000);
+
   it("rotate replaces a too-short key held with no destination", async () => {
     const stateDir = await makeStateDir();
     await writeFile(join(stateDir, "backup.env"), "WAITRON_BACKUP_RECOVERY_KEY=short\n");

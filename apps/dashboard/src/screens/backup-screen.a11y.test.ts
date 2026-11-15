@@ -150,6 +150,28 @@ const q = (el: BackupScreen, sel: string) => el.shadowRoot!.querySelector<HTMLEl
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (theme) => {
+  it.each(["mint", "permission"])("renders the %s recovery action accessibly", async (problem) => {
+    const overrides: Partial<DashboardApi> =
+      problem === "mint"
+        ? { mintBackupKey: vi.fn().mockRejectedValue({ code: "connection.failed" }) }
+        : {
+            getBackupStatus: vi.fn().mockRejectedValue({
+              code: "authorization.not_permitted",
+              params: { permission: "system.manage" },
+            }),
+          };
+    const { el, host } = await mountWidget<BackupScreen>(
+      "dashboard-backup-screen",
+      { api: stubApi(OFF, overrides) },
+      theme,
+    );
+    await flush(el);
+    expect(
+      q(el, problem === "mint" ? "[data-test=retry-key]" : "[data-test=backup-admin-sign-in]"),
+    ).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("renders only usable archive destination choices accessibly", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",

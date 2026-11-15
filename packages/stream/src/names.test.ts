@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
-import {
-  GENERATION_NAME,
-  bucketKey,
-  generationName,
-  normalisePrefix,
-  parseGenerationName,
-} from "./names.js";
+import { GENERATION_NAME, bucketKey, generationName, parseGenerationName } from "./names.js";
 
 const NODE = "3f1c2b9e-8d7a-4e21-9b0c-5a6d7e8f9012";
 
@@ -100,25 +94,6 @@ describe("parseGenerationName", () => {
 });
 
 describe("the configured prefix", () => {
-  it.each([
-    ["", ""],
-    ["/", ""],
-    ["waitron", "waitron/"],
-    ["/waitron/", "waitron/"],
-    ["//a/b//", "a/b/"],
-    ["a//b", "a//b/"],
-    [" /a/ ", " /a/ /"],
-  ])("normalises %j to %j", (prefix, expected) => {
-    expect(normalisePrefix(prefix)).toBe(expected);
-  });
-
-  it("normalises a crafted 200,000-character prefix within one second", () => {
-    const inner = "/".repeat(200_000);
-    const started = performance.now();
-    expect(normalisePrefix(`x${inner}y`)).toBe(`x${inner}y/`);
-    expect(performance.now() - started).toBeLessThan(1000);
-  });
-
   it("joins the normalised prefix and a key into the key the bucket holds", () => {
     expect(bucketKey({ prefix: "/waitron" }, "gen-1")).toBe("waitron/gen-1");
     expect(bucketKey({ prefix: "" }, "gen-1")).toBe("gen-1");

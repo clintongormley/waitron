@@ -342,19 +342,19 @@ describe("resolveArchiveChoice", () => {
   });
 
   it.each([
-    [null, "destination"],
-    [[], "destination"],
-    ["local-fs", "destination"],
-    [{ kind: "google-drive" }, "destination"],
+    [null, "destinations"],
+    [[], "destinations"],
+    ["local-fs", "destinations"],
+    [{ kind: "google-drive" }, "destinations"],
     [{ kind: "local-fs", dir: 5 }, "dir"],
     [{ kind: "local-fs", dir: ["/a"] }, "dir"],
-    [{ kind: "local-fs", dir: "/a", extra: 1 }, "destination"],
-    [{ kind: "stream-bucket", prefix: "x" }, "destination"],
+    [{ kind: "local-fs", dir: "/a", extra: 1 }, "destinations"],
+    [{ kind: "stream-bucket", prefix: "x" }, "destinations"],
     [{ ...custom, region: 1 }, "region"],
     [{ ...custom, bucket: null }, "bucket"],
     [{ ...custom, accessKeyId: ["AKIA"] }, "accessKeyId"],
     [{ ...custom, secretAccessKey: 12 }, "secretAccessKey"],
-    [{ ...custom, unexpected: "x" }, "destination"],
+    [{ ...custom, unexpected: "x" }, "destinations"],
   ])("refuses %j naming %s", (body, field) => {
     expect(refusal(() => resolveArchiveChoice(body, ctx))).toEqual({
       code: "backup.request_invalid",
