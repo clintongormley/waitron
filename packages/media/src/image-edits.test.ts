@@ -10,7 +10,7 @@ import {
   mediaImages,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTaxpayer, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenueSettings, seedBusinessDay, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { departmentReceipts, departments } from "@waitron/venue-service";
 import type { ReceiptLogoRasters } from "@waitron/shared";
 import { DEFAULT_FRAMING } from "./framing.js";
@@ -402,10 +402,7 @@ async function attachLogo(filename: string, active: boolean) {
       active,
     })
     .returning();
-  await suite.db.insert(departmentReceipts).values({
-    departmentId: department!.id,
-    receipt: { logo: filename, phone: "123", footerMessage: { en: "Bye" } },
-  });
+  await seedDepartmentReceipt(suite.db, department!.id, { logo: filename, phone: "123", footerMessage: { en: "Bye" } });
   return department!.id;
 }
 

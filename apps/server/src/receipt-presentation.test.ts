@@ -3,8 +3,8 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, invoiceSeries, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { departments, departmentReceipts, saleReceiptHeaders } from "@waitron/venue-service";
+import { seedNode, seedVenue, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
+import { departments, saleReceiptHeaders } from "@waitron/venue-service";
 import { readReceiptPresentation } from "./receipt-presentation.js";
 import { uploadImage, saveImage, readPresentations } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
@@ -55,10 +55,7 @@ async function fixture(header: "department" | "null" | "absent" = "department") 
     });
 
   const authored = async (receipt: Record<string, unknown>) => {
-    await suite.db
-      .insert(departmentReceipts)
-      .values({ departmentId: department!.id, receipt })
-      .onConflictDoUpdate({ target: departmentReceipts.departmentId, set: { receipt } });
+    await seedDepartmentReceipt(suite.db, department!.id, receipt);
   };
   const read = (language = "es-ES") =>
     withTransaction(suite.db, (tx) => readReceiptPresentation(tx, sale!.id, language));

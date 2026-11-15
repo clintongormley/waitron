@@ -33,7 +33,7 @@ import {
   zoneDays,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedDeviceProfiles, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles, seedVenue, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import {
   readServiceDeleteSettings,
   clearServiceDeleteSettings,
@@ -277,9 +277,7 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
       { sourceDepartmentId: f.beta, destinationDepartmentId: f.department },
       { sourceDepartmentId: f.alpha, destinationDepartmentId: f.beta },
     ]);
-    await tx
-      .insert(departmentReceipts)
-      .values({ departmentId: f.department, receipt: { email: "receipt@example.com" } });
+    await seedDepartmentReceipt(tx, f.department, { email: "receipt@example.com" });
     const tables = {
       cells: routingCells,
       children: routingCellPeriods,

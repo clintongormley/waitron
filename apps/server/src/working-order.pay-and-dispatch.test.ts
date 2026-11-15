@@ -8,13 +8,13 @@ import {
   updateHeldOrder,
   placeOrder,
 } from "./testing/order-writer-fixture.js";
-import { departments, departmentReceipts } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedDeviceProfiles, seedNode } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles, seedNode, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import {
   assignMenuToVenue,
   createMenu,
@@ -211,10 +211,7 @@ async function setupVenue(): Promise<SeededVenue> {
 
   const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   const [department] = await suite.db.select().from(departments);
-  await suite.db.insert(departmentReceipts).values({
-    departmentId: department!.id,
-    receipt: { operationDescription: "Venta en establecimiento" },
-  });
+  await seedDepartmentReceipt(suite.db, department!.id, { operationDescription: "Venta en establecimiento" });
   const available = await withTransaction(suite.db, async (tx) => {
     const cat = await createMenu(tx, { name: "Delicatessen" });
     const drinks = await createCategory(tx, { name: "Drinks" });

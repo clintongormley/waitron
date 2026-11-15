@@ -11,13 +11,7 @@ import { canUseDeviceProfile } from "@waitron/identity";
 import { STARTER_JOB_ROLE_NAMES } from "@waitron/provisioning";
 import { seedPersons, builtInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { listPagePrinters, registerPagePrinter } from "./page-printers.js";
-import {
-  seedBusinessDay,
-  seedDeviceProfiles,
-  seedZone,
-  seedActivityActor,
-  attachStationPrinterForTest,
-} from "@waitron/db/testing/seed.js";
+import { seedBusinessDay, seedDeviceProfiles, seedZone, seedActivityActor, attachStationPrinterForTest, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { deleteCourse } from "./course-delete.js";
 import { deleteStation } from "./station-delete.js";
@@ -294,10 +288,7 @@ it("transfers two photo identities sharing replacement bytes with framing, names
       })
     ).image;
     const department = await createDepartment(tx, { name: "Photo receipt" });
-    await tx.insert(departmentReceipts).values({
-      departmentId: department.id,
-      receipt: { logo: a.filename, phone: "+34 600 111 222" },
-    });
+    await seedDepartmentReceipt(tx, department.id, { logo: a.filename, phone: "+34 600 111 222" });
     for (const [index, image] of [a, b].entries())
       await saveImage(
         tx,
@@ -6744,13 +6735,10 @@ it("transfers department receipt maps and pictures with remapped ids and no venu
     const empty = await createDepartment(tx, { name: "Empty receipt" });
     const imported = await createDepartment(tx, { name: "Bad optional receipt" });
     await writeDepartmentReceipt(tx, own.id, authored, pictures);
-    await tx.insert(departmentReceipts).values({
-      departmentId: imported.id,
-      receipt: {
+    await seedDepartmentReceipt(tx, imported.id, {
         email: "good@example.com",
         headerSubtitle: { "es-ES": "x".repeat(100_000), "ca-ES": "Good" },
-      },
-    });
+      });
     return [own.id, empty.id, imported.id];
   });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
@@ -7225,10 +7213,7 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
       name: "Shared zone name",
       departmentId: old.id,
     });
-    await tx.insert(departmentReceipts).values({
-      departmentId: old.id,
-      receipt: { headerSubtitle: { "es-ES": "Retained subtitle" } },
-    });
+    await seedDepartmentReceipt(tx, old.id, { headerSubtitle: { "es-ES": "Retained subtitle" } });
     await createTable(tx, cfg, { label: "Old table", zoneId: zone.id });
     await deleteDepartment(
       tx,
@@ -7244,9 +7229,7 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
       name: "Shared zone name",
       departmentId: live.id,
     });
-    await tx
-      .insert(departmentReceipts)
-      .values({ departmentId: live.id, receipt: { headerSubtitle: { "es-ES": "Live subtitle" } } });
+    await seedDepartmentReceipt(tx, live.id, { headerSubtitle: { "es-ES": "Live subtitle" } });
     await createTable(tx, cfg, { label: "Live table", zoneId: liveZone.id });
     await saveLayout(
       tx,

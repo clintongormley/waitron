@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import {
   createDepartment,
   deleteDepartment,
@@ -99,9 +99,7 @@ it.each(["{", "null", "[]", "123", '{"logo":null}', '{"logo":[]}', '{"logo":{}}'
         { image: photo, names: { en: "Logo" } },
         { fallbackLanguage: "en" },
       );
-      await tx
-        .insert(departmentReceipts)
-        .values({ departmentId: good!.id, receipt: { logo: image.filename } });
+      await seedDepartmentReceipt(tx, good!.id, { logo: image.filename });
       await tx.execute(
         sql`insert into department_receipts (department_id, receipt, updated_at) values (${broken!.id}, ${bad}, '2026-10-10T00:00:00Z')`,
       );
@@ -128,9 +126,7 @@ it("protects a deleted department's retained receipt logo after its name is reus
       { image: photo, names: { en: "Retained logo" } },
       { fallbackLanguage: "en" },
     );
-    await tx
-      .insert(departmentReceipts)
-      .values({ departmentId: old.id, receipt: { logo: image.filename } });
+    await seedDepartmentReceipt(tx, old.id, { logo: image.filename });
     await deleteDepartment(
       tx,
       {

@@ -4,14 +4,9 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { invoiceSeries, sales, workingOrders, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedVenue, seedWorkingOrder, seedZone } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue, seedWorkingOrder, seedZone, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { nodeId as brandNodeId } from "@waitron/shared";
-import {
-  departments,
-  orderServiceContexts,
-  saleReceiptHeaders,
-  departmentReceipts,
-} from "@waitron/venue-service";
+import { departments, orderServiceContexts, saleReceiptHeaders } from "@waitron/venue-service";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { checkedInvoiceChoiceDelivery } from "./invoice-choice-delivery.js";
 import type { InvoicePrinter } from "./receipt-print.js";
@@ -87,10 +82,7 @@ async function fixture(nullHeader = false) {
   };
 }
 async function authored(departmentId: string, receipt: Record<string, unknown>) {
-  await suite.db
-    .insert(departmentReceipts)
-    .values({ departmentId, receipt })
-    .onConflictDoUpdate({ target: departmentReceipts.departmentId, set: { receipt } });
+  await seedDepartmentReceipt(suite.db, departmentId, receipt);
 }
 
 const context = { personId: "operator", emailAvailable: true };

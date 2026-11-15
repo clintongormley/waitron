@@ -1,4 +1,4 @@
-import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -34,7 +34,7 @@ import { reserveInvoiceDelivery } from "./invoice-delivery.js";
 import { enqueueOriginalReceipt } from "./receipt-print.js";
 import { readSettledTicket } from "./till-sale.js";
 
-import { departmentReceipts, departments } from "@waitron/venue-service";
+import { departments } from "@waitron/venue-service";
 import { mountOrdersApi } from "./orders-api.js";
 
 const EMAIL = "cliente@example.test";
@@ -79,10 +79,7 @@ useVenueDb({
       officeId = office!.id;
       const receipt = { operationDescription: "Restaurante", email: "facturas@example.test" };
       for (const { id } of await tx.select({ id: departments.id }).from(departments)) {
-        await tx
-          .insert(departmentReceipts)
-          .values({ departmentId: id, receipt })
-          .onConflictDoUpdate({ target: departmentReceipts.departmentId, set: { receipt } });
+        await seedDepartmentReceipt(tx, id, receipt);
       }
     });
     mountOrdersApi(

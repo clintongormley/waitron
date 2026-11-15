@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { eq } from "drizzle-orm";
 import { departments, departmentReceipts } from "@waitron/venue-service";
@@ -44,9 +44,7 @@ beforeAll(async () => {
   venue = await setupVenue(suite.db);
   const [department] = await suite.db.select().from(departments);
   departmentId = department!.id;
-  await suite.db
-    .insert(departmentReceipts)
-    .values({ departmentId, receipt: { operationDescription: "Venta en establecimiento" } });
+  await seedDepartmentReceipt(suite.db, departmentId, { operationDescription: "Venta en establecimiento" });
   offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
 });
 function app() {

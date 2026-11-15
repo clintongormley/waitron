@@ -1,4 +1,4 @@
-import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -212,10 +212,7 @@ async function venue(): Promise<Venue> {
       .returning({ id: pagePrinters.id });
     const receipt = { email: "facturas@example.test" };
     for (const { id } of await tx.select({ id: departments.id }).from(departments)) {
-      await tx
-        .insert(departmentReceipts)
-        .values({ departmentId: id, receipt })
-        .onConflictDoUpdate({ target: departmentReceipts.departmentId, set: { receipt } });
+      await seedDepartmentReceipt(tx, id, receipt);
     }
     return {
       menuItemId: offers.offerFor(available.find((p) => p.pricingUnit === "each")!.id),

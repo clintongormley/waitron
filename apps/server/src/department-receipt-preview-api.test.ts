@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -30,13 +30,7 @@ beforeEach(async () => {
     defaultContentLanguage: "es",
     contentLanguages: ["es", "ca", "en"],
   });
-  await suite.db
-    .insert(departmentReceipts)
-    .values({ departmentId, receipt: { footerMessage: { "eu-ES": "Hidden Basque" } } })
-    .onConflictDoUpdate({
-      target: departmentReceipts.departmentId,
-      set: { receipt: { footerMessage: { "eu-ES": "Hidden Basque" } } },
-    });
+  await seedDepartmentReceipt(suite.db, departmentId, { footerMessage: { "eu-ES": "Hidden Basque" } });
 });
 function ask(input: unknown, cookie = venue.managerCookie) {
   const app = new Hono();

@@ -1,3 +1,4 @@
+import { seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
@@ -19,13 +20,7 @@ beforeEach(async () => {
   const [row] = await suite.db.select().from(departments);
   id = row!.id;
   await suite.db.update(departments).set(policy).where(eq(departments.id, id));
-  await suite.db
-    .insert(departmentReceipts)
-    .values({ departmentId: id, receipt: { operationDescription: "Meals" } })
-    .onConflictDoUpdate({
-      target: departmentReceipts.departmentId,
-      set: { receipt: { operationDescription: "Meals" } },
-    });
+  await seedDepartmentReceipt(suite.db, id, { operationDescription: "Meals" });
 });
 function app() {
   const instance = new Hono();

@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { CORE_MIGRATIONS, products, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenue, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import {
   activateDueMenuPublications,
   addMember,
@@ -92,9 +92,7 @@ it("changes presentation without rewriting product, variant, section, folder, re
           active,
         })
         .returning();
-      await tx
-        .insert(departmentReceipts)
-        .values({ departmentId: department!.id, receipt: { logo: image.filename } });
+      await seedDepartmentReceipt(tx, department!.id, { logo: image.filename });
     }
     return image;
   });

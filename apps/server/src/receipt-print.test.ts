@@ -1,4 +1,4 @@
-import { seedDeviceProfiles, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedVenueSettings, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { writeContentLanguages } from "@waitron/menu";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { deletePrinter } from "./printer-delete.js";
@@ -276,13 +276,7 @@ async function storeDepartmentReceipt(
   logoRasters: ReceiptLogoRasters | null = null,
 ) {
   const receipt = { operationDescription: "On-premises sale", ...decoration };
-  await suite.db
-    .insert(departmentReceipts)
-    .values({ departmentId, receipt, logoRasters })
-    .onConflictDoUpdate({
-      target: departmentReceipts.departmentId,
-      set: { receipt, logoRasters },
-    });
+  await seedDepartmentReceipt(suite.db, departmentId, receipt, logoRasters);
 }
 
 /**
@@ -2560,13 +2554,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
       const authored = { operationDescription: "On-premises sale", ...decoration };
       const rows = await tx.select({ id: departments.id }).from(departments);
       for (const row of rows)
-        await tx
-          .insert(departmentReceipts)
-          .values({ departmentId: row.id, receipt: authored, logoRasters: logoRasters ?? null })
-          .onConflictDoUpdate({
-            target: departmentReceipts.departmentId,
-            set: { receipt: authored, logoRasters: logoRasters ?? null },
-          });
+        await seedDepartmentReceipt(tx, row.id, authored, logoRasters ?? null);
     });
   }
 

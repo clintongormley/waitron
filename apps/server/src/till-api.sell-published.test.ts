@@ -1,4 +1,4 @@
-import { seedDeviceProfiles, seedZone } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedZone, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import type { TradingContext } from "./trading-context.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -65,13 +65,7 @@ import { mountTillApi } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import {
-  configureZone,
-  createDepartment,
-  departmentReceipts,
-  departments,
-  workingLineContexts,
-} from "@waitron/venue-service";
+import { configureZone, createDepartment, departments, workingLineContexts } from "@waitron/venue-service";
 import { createTable } from "./testing/live-table.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
@@ -190,10 +184,7 @@ async function setupLunch(): Promise<Lunch> {
   };
   const seeded = await withTransaction(suite.db, async (tx) => {
     for (const department of await tx.select({ id: departments.id }).from(departments))
-      await tx.insert(departmentReceipts).values({
-        departmentId: department.id,
-        receipt: { operationDescription: "Venta en establecimiento" },
-      });
+      await seedDepartmentReceipt(tx, department.id, { operationDescription: "Venta en establecimiento" });
 
     const lunch = await createMenu(tx, { name: "Lunch" });
     const category = await createCategory(tx, { name: "Carta" });

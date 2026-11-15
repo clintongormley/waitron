@@ -1,3 +1,4 @@
+import { seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import {
@@ -168,10 +169,7 @@ it("deleted department reprints its original receipt configuration and frozen he
       tradingName: "Replacement brand",
     });
     await createServiceZone(tx, { name: "counter", departmentId: reused.id });
-    await tx.insert(departmentReceipts).values({
-      departmentId: reused.id,
-      receipt: { headerSubtitle: { "es-ES": "Replacement subtitle" } },
-    });
+    await seedDepartmentReceipt(tx, reused.id, { headerSubtitle: { "es-ES": "Replacement subtitle" } });
   });
   await run((tx) => enqueueReceiptReprint(tx, venue.cfg, ticket, sale!.id));
   const afterPrint = (await run((tx) => tx.select().from(printJobs)))[1]!;

@@ -1,4 +1,4 @@
-import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
@@ -25,7 +25,7 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { routingCells, departments, departmentReceipts } from "@waitron/venue-service";
+import { routingCells, departments } from "@waitron/venue-service";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
@@ -129,10 +129,7 @@ async function setupVenue(): Promise<{
 
   const cfg = tillConfigFromVenue(venue);
   const [department] = await suite.db.select().from(departments);
-  await suite.db.insert(departmentReceipts).values({
-    departmentId: department!.id,
-    receipt: { operationDescription: "Venta en establecimiento" },
-  });
+  await seedDepartmentReceipt(suite.db, department!.id, { operationDescription: "Venta en establecimiento" });
   const { product, operatorId } = await withTransaction(suite.db, async (tx) => {
     const cat = await createMenu(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: "Bebidas" });

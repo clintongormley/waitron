@@ -1,3 +1,4 @@
+import { seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -49,10 +50,7 @@ beforeEach(async () => {
 
 async function authored(description?: string) {
   const receipt = description === undefined ? {} : { operationDescription: description };
-  await venue.db
-    .insert(departmentReceipts)
-    .values({ departmentId, receipt })
-    .onConflictDoUpdate({ target: departmentReceipts.departmentId, set: { receipt } });
+  await seedDepartmentReceipt(venue.db, departmentId, receipt);
 }
 function records(orderId: string) {
   return venue.db.all<{ description: string }>(sql`
@@ -174,9 +172,7 @@ it("a zone moved before capture selects the same current department for descript
       name: `Terrace ${randomUUID()}`,
       orderStart: "table",
     });
-    await tx
-      .insert(departmentReceipts)
-      .values({ departmentId: department.id, receipt: { operationDescription: "Terrace drinks" } });
+    await seedDepartmentReceipt(tx, department.id, { operationDescription: "Terrace drinks" });
     await configureZone(tx, { zoneId: venue.zoneId, departmentId: department.id });
     return department.id;
   });
@@ -254,9 +250,7 @@ it("unpaid issuance files the department description and correction uses its ret
       name: `Terrace ${randomUUID()}`,
       orderStart: "table",
     });
-    await tx
-      .insert(departmentReceipts)
-      .values({ departmentId: next.id, receipt: { operationDescription: "Terrace drinks" } });
+    await seedDepartmentReceipt(tx, next.id, { operationDescription: "Terrace drinks" });
     await configureZone(tx, { zoneId: venue.zoneId, departmentId: next.id });
   });
   const session = await withTransaction(venue.db, (tx) =>

@@ -3,7 +3,7 @@ import {
   seedPersons,
   setBuiltInRoleForTest,
 } from "@waitron/identity/test/person-rows.js";
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { createStaffApp } from "./cloud-remote.js";
 import {
   departments,
@@ -2752,9 +2752,7 @@ describe("optional receipt source failures within one transaction", () => {
       await setupVenue();
       const id = await departmentFixture();
 
-      await suite.db
-        .insert(departmentReceipts)
-        .values({ departmentId: id, receipt: { headerSubtitle: { "es-ES": "Sala" } } });
+      await seedDepartmentReceipt(suite.db, id, { headerSubtitle: { "es-ES": "Sala" } });
       const { VENUE_SERVICE } = await import("./modules.js");
       const events: unknown[] = [];
       const select = vi.spyOn(suite.db, "select");

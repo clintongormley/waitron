@@ -1,5 +1,5 @@
 import type { TradingContext } from "./trading-context.js";
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateHeldOrder, updateOrderLine } from "./testing/order-writer-fixture.js";
@@ -138,10 +138,7 @@ function nextNif(): string {
 
 async function readyDepartment(): Promise<void> {
   const [department] = await suite.db.select({ id: departments.id }).from(departments);
-  await suite.db.insert(departmentReceipts).values({
-    departmentId: department!.id,
-    receipt: { operationDescription: "Venta en establecimiento" },
-  });
+  await seedDepartmentReceipt(suite.db, department!.id, { operationDescription: "Venta en establecimiento" });
 }
 
 function tillConfigFromVenue(venue: VenueResult): TradingContext {

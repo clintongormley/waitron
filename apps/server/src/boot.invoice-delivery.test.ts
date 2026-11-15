@@ -21,14 +21,8 @@ import {
 import { setNodeMode, setSingletonRole, writeMirrorLink } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
-import { departmentReceipts, departments } from "@waitron/venue-service";
-import {
-  seedDevice,
-  seedNode,
-  seedTaxpayer,
-  seedVenue,
-  seedWorkingOrder,
-} from "@waitron/db/testing/seed.js";
+import { departments } from "@waitron/venue-service";
+import { seedDevice, seedNode, seedTaxpayer, seedVenue, seedWorkingOrder, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { loadKeyRing } from "@waitron/credentials";
 import {
@@ -797,9 +791,7 @@ describe("invoice-choice email context at trading boot", () => {
           active: true,
         })
         .returning();
-      await suite.db
-        .insert(departmentReceipts)
-        .values({ departmentId: department!.id, receipt: { email: "dining@example.test" } });
+      await seedDepartmentReceipt(suite.db, department!.id, { email: "dining@example.test" });
       if (configured)
         await withTransaction(suite.db, (tx) =>
           saveSmtpForTest(tx, loadKeyRing(env), {

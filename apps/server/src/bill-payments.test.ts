@@ -38,7 +38,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import { registroSif, registrosFacturacion, VerifactuBackend } from "@waitron/fiscal-verifactu";
-import { ensureFixtureJobRole, seedNode } from "@waitron/db/testing/seed.js";
+import { ensureFixtureJobRole, seedNode, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
 import {
@@ -200,9 +200,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
   });
   const rows = await db.select().from(departments);
   for (const department of rows)
-    await db
-      .insert(departmentReceipts)
-      .values({ departmentId: department.id, receipt: { operationDescription: "Restaurant" } });
+    await seedDepartmentReceipt(db, department.id, { operationDescription: "Restaurant" });
   const operator = {
     personId: OPERATOR,
     sessionId: await openTillSession(db, { deviceId: cfg.origin.deviceId, personId: OPERATOR }),
@@ -379,13 +377,7 @@ async function withDepartmentContact(
     await inTx(async (tx) => {
       const rows = await tx.select({ id: departments.id }).from(departments);
       for (const { id } of rows) {
-        await tx
-          .insert(departmentReceipts)
-          .values({ departmentId: id, receipt: written })
-          .onConflictDoUpdate({
-            target: departmentReceipts.departmentId,
-            set: { receipt: written },
-          });
+        await seedDepartmentReceipt(tx, id, written);
       }
     });
     await body();
@@ -2558,13 +2550,9 @@ describe("the invoice at full payment", () => {
               .where(eq(orderServiceContexts.workingOrderId, billId));
             await tx.delete(departmentReceipts);
             if (contacts.own)
-              await tx
-                .insert(departmentReceipts)
-                .values({ departmentId: own!.id, receipt: { email: "terrace@example.test" } });
+              await seedDepartmentReceipt(tx, own!.id, { email: "terrace@example.test" });
             if (contacts.fallback)
-              await tx
-                .insert(departmentReceipts)
-                .values({ departmentId: fallback!.id, receipt: { email: "default@example.test" } });
+              await seedDepartmentReceipt(tx, fallback!.id, { email: "default@example.test" });
           });
           if (stages) {
             expect(await stageEmail(billId)).toBe(1);

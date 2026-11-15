@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
@@ -852,9 +852,7 @@ describe("the receipt preview's top block", () => {
       heightDots: 2,
       data: Buffer.from([1, 2, 3, 4]).toString("base64"),
     };
-    await suite.db
-      .insert(departmentReceipts)
-      .values({ departmentId, receipt: { logo }, logoRasters: { "58mm": raster, "80mm": raster } });
+    await seedDepartmentReceipt(suite.db, departmentId, { logo }, { "58mm": raster, "80mm": raster });
     expect(sizes(await rendered({ logo }))).toEqual([[16, 2]]);
   });
 
@@ -1134,11 +1132,7 @@ describe("the receipt preview's top block", () => {
         heightDots: 2,
         data: Buffer.from([1, 2, 3, 4]).toString("base64"),
       };
-      await suite.db.insert(departmentReceipts).values({
-        departmentId,
-        receipt: { logo },
-        logoRasters: { "58mm": raster, "80mm": raster },
-      });
+      await seedDepartmentReceipt(suite.db, departmentId, { logo }, { "58mm": raster, "80mm": raster });
       expect(sizes(await rendered({ logo }))).toEqual([[16, 2]]);
       const { result, answers } = await hidingReceiptsDuringPrintedRead(() => rendered({ logo }));
       expect(answers).toEqual([{ receipt: {}, logo: null, unreadable: true }]);
@@ -1147,7 +1141,7 @@ describe("the receipt preview's top block", () => {
 
     it("a draft naming its saved logo reports a failed printed read", async () => {
       const logo = await libraryImage(48);
-      await suite.db.insert(departmentReceipts).values({ departmentId, receipt: { logo } });
+      await seedDepartmentReceipt(suite.db, departmentId, { logo });
       const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
       try {
         await hidingReceiptsDuringPrintedRead(() => rendered({ logo }));

@@ -1,5 +1,5 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { seedDeviceProfiles, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedVenueSettings, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
@@ -50,12 +50,7 @@ import {
   reportInvoiceDelivery,
   reserveInvoiceDelivery,
 } from "./invoice-delivery.js";
-import {
-  departmentReceipts,
-  saleReceiptHeaders,
-  departments,
-  routingCells,
-} from "@waitron/venue-service";
+import { saleReceiptHeaders, departments, routingCells } from "@waitron/venue-service";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
@@ -247,13 +242,7 @@ async function setupVenue(): Promise<{
     });
     const { products: available } = await listAvailableProducts(tx);
     for (const department of await tx.select({ id: departments.id }).from(departments))
-      await tx
-        .insert(departmentReceipts)
-        .values({
-          departmentId: department.id,
-          receipt: { operationDescription: "Venta en establecimiento" },
-        })
-        .onConflictDoNothing({ target: departmentReceipts.departmentId });
+      await seedDepartmentReceipt(tx, department.id, { operationDescription: "Venta en establecimiento" });
     return {
       each: {
         ...available.find((p) => p.pricingUnit === "each")!,
@@ -1300,13 +1289,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
       .from(saleReceiptHeaders)
       .innerJoin(sales, eq(sales.id, saleReceiptHeaders.saleId))
       .where(eq(sales.workingOrderId, orderId));
-    await suite.db
-      .insert(departmentReceipts)
-      .values({ departmentId: header!.departmentId!, receipt: { printAddress: true } })
-      .onConflictDoUpdate({
-        target: departmentReceipts.departmentId,
-        set: { receipt: { printAddress: true } },
-      });
+    await seedDepartmentReceipt(suite.db, header!.departmentId!, { printAddress: true });
     const reprint = () =>
       app.request(`/api/sales/${orderId}/reprint`, { method: "POST", headers: { cookie } });
     expect((await reprint()).status).toBe(200);
@@ -2607,24 +2590,10 @@ it("duplicates use the filed issuer identity while optional trim follows the cur
     .from(saleReceiptHeaders)
     .innerJoin(sales, eq(sales.id, saleReceiptHeaders.saleId))
     .where(eq(sales.workingOrderId, id));
-  await suite.db
-    .insert(departmentReceipts)
-    .values({
-      departmentId: header!.departmentId!,
-      receipt: {
+  await seedDepartmentReceipt(suite.db, header!.departmentId!, {
         headerSubtitle: { "es-ES": "Current welcome" },
         footerMessage: { "es-ES": "Current farewell" },
-      },
-    })
-    .onConflictDoUpdate({
-      target: departmentReceipts.departmentId,
-      set: {
-        receipt: {
-          headerSubtitle: { "es-ES": "Current welcome" },
-          footerMessage: { "es-ES": "Current farewell" },
-        },
-      },
-    });
+      });
 
   const res = await app.request(`/api/sales/${id}/reprint`, {
     method: "POST",

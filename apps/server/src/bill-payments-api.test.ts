@@ -19,7 +19,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { ensureFixtureJobRole, seedDeviceProfiles, seedNode } from "@waitron/db/testing/seed.js";
+import { ensureFixtureJobRole, seedDeviceProfiles, seedNode, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import {
   billPaymentLines,
   billPaymentRefunds,
@@ -1730,10 +1730,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
         tradingName: "New dining room",
         orderStart: "table",
       });
-      await tx.insert(departmentReceipts).values({
-        departmentId: department.id,
-        receipt: { operationDescription: "Restaurante" },
-      });
+      await seedDepartmentReceipt(tx, department.id, { operationDescription: "Restaurante" });
       const zone = await createServiceZone(tx, {
         name: `Zone ${randomUUID()}`,
         departmentId: department.id,
@@ -2362,10 +2359,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
         await inTx(async (tx) => {
           const rows = await tx.select({ id: departments.id }).from(departments);
           for (const { id } of rows) {
-            await tx
-              .insert(departmentReceipts)
-              .values({ departmentId: id, receipt })
-              .onConflictDoUpdate({ target: departmentReceipts.departmentId, set: { receipt } });
+            await seedDepartmentReceipt(tx, id, receipt);
           }
         });
         await body();

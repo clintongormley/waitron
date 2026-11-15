@@ -101,7 +101,7 @@ import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
-import { ensureFixtureJobRole, seedNode, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { ensureFixtureJobRole, seedNode, seedVenueSettings, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import {
   seedSessionDevice,
   openTillSession,
@@ -217,10 +217,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
   const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   const rows = await suite.db.select().from(departments);
   for (const department of rows)
-    await suite.db.insert(departmentReceipts).values({
-      departmentId: department.id,
-      receipt: { operationDescription: "Venta en establecimiento" },
-    });
+    await seedDepartmentReceipt(suite.db, department.id, { operationDescription: "Venta en establecimiento" });
   const { available, offers } = await withTransaction(suite.db, async (tx) => {
     const [admin] = await tx
       .select({ id: persons.id })

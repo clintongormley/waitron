@@ -1,5 +1,5 @@
 import { readVenueSettings } from "@waitron/db";
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -134,9 +134,7 @@ describe("POST receipt draft preview", () => {
     expect(await snapshot()).toEqual(before);
   });
   it("refuses null department drafts without reading stored department or global decoration", async () => {
-    await suite.db
-      .insert(departmentReceipts)
-      .values({ departmentId, receipt: { headerSubtitle: { "es-ES": "Stored department" } } });
+    await seedDepartmentReceipt(suite.db, departmentId, { headerSubtitle: { "es-ES": "Stored department" } });
 
     const response = await ask({
       departmentId: null,
@@ -235,11 +233,7 @@ describe("POST receipt draft preview", () => {
       data: Buffer.from([1, 2, 3, 4]).toString("base64"),
     };
 
-    await suite.db.insert(departmentReceipts).values({
-      departmentId,
-      receipt: { logo: stored.filename },
-      logoRasters: { "58mm": own, "80mm": own },
-    });
+    await seedDepartmentReceipt(suite.db, departmentId, { logo: stored.filename }, { "58mm": own, "80mm": own });
 
     const ownPreview = await drawn({
       ...draft(),

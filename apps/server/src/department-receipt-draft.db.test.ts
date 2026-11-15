@@ -1,5 +1,5 @@
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -40,13 +40,10 @@ async function fixture(role: "manager" | "staff" = "manager") {
     .values({ name: randomUUID(), tradingName: "Deli" })
     .returning();
   await suite.db.update(departments).set(policy).where(eq(departments.id, department!.id));
-  await suite.db.insert(departmentReceipts).values({
-    departmentId: department!.id,
-    receipt: {
+  await seedDepartmentReceipt(suite.db, department!.id, {
       operationDescription: "Meals",
       footerMessage: { "eu-ES": "Eskerrik asko", "es-ES": "Antes" },
-    },
-  });
+    });
   const [person] = await seedPersons(suite.db, { displayName: randomUUID(), role });
   const session = await withTransaction(suite.db, (tx) =>
     startManagementSession(tx, { personId: person!.id }),

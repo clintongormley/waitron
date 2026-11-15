@@ -1,5 +1,5 @@
 import { ensureOperator } from "./testing/cancel-line.js";
-import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -102,10 +102,7 @@ async function target() {
       name: randomUUID(),
       orderStart: "table",
     });
-    await tx.insert(departmentReceipts).values({
-      departmentId: department.id,
-      receipt: { operationDescription: "Restaurante" },
-    });
+    await seedDepartmentReceipt(tx, department.id, { operationDescription: "Restaurante" });
     const zone = await createServiceZone(tx, {
       name: randomUUID(),
       departmentId: department.id,
