@@ -2197,6 +2197,7 @@ export class DevicesScreen extends LitElement {
     const epoch = this.#editEpoch;
     return html`<wt-combobox
       data-test="edit-made-here"
+      show-empty-option
       name="madeHereStationIds"
       .label=${t("devices.made_here")}
       .hint=${t("devices.made_here_hint")}

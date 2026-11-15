@@ -1307,8 +1307,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
     Printers, Card reader and Made here. Keep Approved profiles under Name and profile: the owner allowed nine fields on 15 November 05:25.
 
 
-
-
 - **A1089: account-access recovery needs an authenticated decision when no offered sign-in works.**
   The passkey refusal offers retry, password entry and an emailed password reset. These do not
   reactivate a disabled account or replace unavailable email delivery. Design a recovery choice

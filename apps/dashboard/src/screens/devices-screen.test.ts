@@ -1651,6 +1651,9 @@ describe("the Edit dialog", () => {
     const api = editApi();
     const el = await openEdit(api);
     await chooseOption(q(el, "[data-test=edit-made-here]")!, "");
+    expect(
+      q(el, "[data-test=edit-made-here]")!.shadowRoot!.querySelector(".value")!.textContent!.trim(),
+    ).toBe(t("devices.nowhere"));
     await save(el);
     await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
     expect(vi.mocked(api.updateDevice).mock.calls[0]![1].madeHereStationIds).toEqual([]);

@@ -18,9 +18,9 @@ Para repartir un cobro del mostrador entre varias personas, sigue [Repartir una 
 
 Después del último pago, sigue [Elegir documentos después de cobrar](table-service.md#settlement-document) para imprimir o enviar un recibo por correo, o continuar atendiendo sin entregarlo.
 
-## Elige la estación de un terminal fijo {#device-station}
+## Elige la estación de una caja registradora {#device-station}
 
-En **Dispositivos**, edita un terminal fijo y elige **Este dispositivo está en**: una estación de
+En **Dispositivos**, edita un dispositivo **Caja registradora** y elige **Este dispositivo está en**: una estación de
 preparación o **Ningún sitio** para enviar su trabajo a cocina como siempre. Los artículos que
 envíes desde este terminal para su estación se preparan aquí, sin comanda ni entrada en las
 pantallas de cocina. Configura cada terminal por separado, aunque compartan perfil.

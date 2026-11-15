@@ -10,6 +10,7 @@ import {
 import {
   deviceMadeHereStations,
   devices,
+  deviceProfiles,
   kitchenStations,
   orderDrafts,
   orderDraftLines,
@@ -102,7 +103,8 @@ async function stationDeleteRules(tx: Transaction, id: string) {
     .select({ id: devices.id, name: devices.label, active: devices.active })
     .from(deviceMadeHereStations)
     .innerJoin(devices, eq(devices.id, deviceMadeHereStations.deviceId))
-    .where(eq(deviceMadeHereStations.stationId, id));
+    .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
+    .where(and(eq(deviceMadeHereStations.stationId, id), eq(deviceProfiles.formFactor, "till")));
   const refusals: DeleteImpact["refusals"] = [];
   if (station.isDefault)
     refusals.push({ code: "station.is_default", params: { stationId: id }, targets: [target] });
