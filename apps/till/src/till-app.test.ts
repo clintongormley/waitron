@@ -16503,6 +16503,37 @@ describe("the main-server strip", () => {
     expect(lockStrip(el)!.spareAnswering).toBe(false);
   });
 
+  it("a till removed during the final probe does not navigate", async () => {
+    const { el, router, fetchImpl } = await mount();
+    const navigate = vi.fn();
+    el.navigate = navigate;
+    await silentFor(el, router, 20_000);
+    const failProbe = holdNextFetch(fetchImpl);
+    press(lockStrip(el)!);
+    el.remove();
+    failProbe();
+    await settle(el);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("a till whose router is replaced during the final probe does not navigate", async () => {
+    const { el, router, fetchImpl } = await mount();
+    const navigate = vi.fn();
+    el.navigate = navigate;
+    await silentFor(el, router, 20_000);
+    const failProbe = holdNextFetch(fetchImpl);
+    press(lockStrip(el)!);
+    el.router = new ServerRouter({
+      origin: ORIGIN,
+      fetchImpl: venueFetch(),
+      storage: memoryStorage(),
+    });
+    await settle(el);
+    failProbe();
+    await settle(el);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
   it("a till that reaches no server shows no switch", async () => {
     answering.spare = false;
     const { el, router } = await mount();

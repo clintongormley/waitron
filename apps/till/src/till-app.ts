@@ -2558,6 +2558,8 @@ export class TillApp extends LitElement {
 
   @state() private mainServerRefused = false;
   #mainSilentTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Moves on when the till leaves the page or its router, voiding a switch still probing. */
+  #switchGeneration = 0;
 
   /** Present once the main server has been silent for `MAIN_SILENT_MS` at a venue with a spare. */
   #mainServerStrip(): { spareAnswering: boolean } | undefined {
@@ -2586,7 +2588,10 @@ export class TillApp extends LitElement {
   async #onSwitchToSpare(): Promise<void> {
     const router = this.router;
     if (router === undefined) return;
-    if (await router.probeMain()) {
+    const generation = this.#switchGeneration;
+    const mainAnswered = await router.probeMain();
+    if (generation !== this.#switchGeneration) return;
+    if (mainAnswered) {
       this.mainServerRefused = true;
       return;
     }
@@ -2606,6 +2611,7 @@ export class TillApp extends LitElement {
   }
 
   #detach(): void {
+    this.#switchGeneration++;
     clearTimeout(this.#mainSilentTimer);
     this.#mainSilentTimer = undefined;
     this.#subscribedRouter?.removeEventListener("server-changed", this.#onServerChanged);
