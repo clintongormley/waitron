@@ -67,7 +67,7 @@ useVenueDb({
     v = await setupPartyVenue(db);
     ids = await inTx(v, async (tx) => {
       const [burgerRow] = await tx
-        .select({ menuId: products.menuId, categoryId: products.categoryId })
+        .select({ categoryId: products.categoryId })
         .from(products)
         .where(eq(products.id, v.productId("Burger")));
       const product = (name: string, pricingUnit: "each" | "weight", unitPrice: string) =>

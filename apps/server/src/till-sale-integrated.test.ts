@@ -117,7 +117,6 @@ describe("saved-zone payment transactions", () => {
     zoneVenue = await provisionBillVenue(db);
     await withTransaction(db, async (tx) => {
       const category = await createCategory(tx, { name: "Clock test dishes" });
-      const menuId = tx.all<{ id: string }>(sql`select id from menus limit 1`)[0]!.id;
       const products = [];
       for (const [name, price] of [
         ["Night dish", "2.50"],

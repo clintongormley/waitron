@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, menus, products, settings, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, products, settings, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import * as menuModule from "./index.js";
@@ -55,7 +55,6 @@ describe("the venue's new-product defaults", () => {
     "saves and reloads %s without changing an existing product",
     async (defaultProductVatClass) => {
       await seedTaxpayer(suite.db);
-      const [menu] = await suite.db.insert(menus).values({ name: "Lunch" }).returning();
       const [product] = await suite.db
         .insert(products)
         .values({

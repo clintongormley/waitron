@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import {
-  menus,
   persons,
   settings,
   readVenueSettings,
@@ -61,10 +60,6 @@ describe("site content languages", () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
-      const menu = await createMenu(tx, {
-        name: "Bar",
-        names: { en: "CLIENT Bar", fr: "CLIENT Bar FR" },
-      });
       const unit = await createUnit(
         tx,
         {
@@ -120,10 +115,6 @@ describe("site content languages", () => {
     await seedTaxpayer(suite.db);
     const { productId, kept } = await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
-      const menu = await createMenu(tx, {
-        name: "Bar",
-        names: { en: "CLIENT Bar", fr: "CLIENT Bar FR" },
-      });
       const product = await createProduct(tx, {
         categoryId: null,
         name: "Coffee",
@@ -495,7 +486,6 @@ describe("site content languages", () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
-      const [menu] = await tx.insert(menus).values({ name: "Lunch" }).returning({ id: menus.id });
       await tx.insert(products).values({
         name: "Bread",
         customerName: { en: "Bread", "fr-FR": "Pain" },
@@ -548,7 +538,6 @@ describe("site content languages", () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
-      const [menu] = await tx.insert(menus).values({ name: "Lunch" }).returning({ id: menus.id });
       await tx.insert(products).values({
         name: "Bread",
         customerName: { en: "Bread" },

@@ -743,7 +743,7 @@ describe("venue service routing", () => {
           serviceMode: "table_tab",
         },
       ]);
-      const menu = await createMenu(tx, { name: "Drinks" });
+      await createMenu(tx, { name: "Drinks" });
       const category = await createCategory(tx, { name: "Cocktails" });
       const negroni = await createProduct(tx, {
         categoryId: category.id,
@@ -1139,7 +1139,6 @@ async function insertStation(tx: Transaction, name: string): Promise<string> {
 
 async function productWithCategory(
   tx: Transaction,
-  menuId: string,
   name: string,
   withCategory = true,
 ): Promise<{ id: string; categoryId: string }> {
@@ -1172,8 +1171,8 @@ describe("routing outcomes and menu readiness", () => {
     await scoped(async (tx) => {
       const kitchen = await insertStation(tx, "Kitchen");
       const bar = await insertStation(tx, "Bar");
-      const menu = await createMenu(tx, { name: "Drinks" });
-      const cocktail = await productWithCategory(tx, menu.id, "Cocktail");
+      await createMenu(tx, { name: "Drinks" });
+      const cocktail = await productWithCategory(tx, "Cocktail");
       await setRoutingCell(
         tx,
         { row: { kind: "category", categoryId: cocktail.categoryId }, zoneId: null },
@@ -1205,7 +1204,7 @@ describe("routing outcomes and menu readiness", () => {
       const closedGrill = await insertStation(tx, "Closed grill");
       const parent = await createCategory(tx, { name: "Food" });
       const child = await createCategory(tx, { name: "Grilled", parentId: parent.id });
-      const menu = await createMenu(tx, { name: "Menu" });
+      await createMenu(tx, { name: "Menu" });
       const steak = await createProduct(tx, {
         categoryId: child.id,
         name: "Steak",

@@ -608,7 +608,6 @@ describe("table + tab routes", () => {
 
   it("PUT accepts a later included choice on the same lunch line", async () => {
     const choice = await withTransaction(suite.db, async (tx) => {
-      const menu = await createMenu(tx, { name: "Lunch choices" });
       const extra = await createProduct(tx, {
         categoryId: null,
         name: "Included coffee",

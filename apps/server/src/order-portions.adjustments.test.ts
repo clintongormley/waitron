@@ -590,7 +590,7 @@ const pricesOf = async (billId: string) =>
 async function threeWithAnOliveAt(price: string): Promise<Bill & { dish: string }> {
   return inTx(venue, async (tx) => {
     const [pizza] = await tx
-      .select({ menuId: products.menuId, categoryId: products.categoryId })
+      .select({ categoryId: products.categoryId })
       .from(products)
       .where(eq(products.name, "Pizza"));
     const dish = `Pizza ${randomUUID()}`;
@@ -3326,7 +3326,7 @@ describe("A803 portions: the extras of a row of identical portions", () => {
   async function focacciaWithTwoLists() {
     return inTx(venue, async (tx) => {
       const [pizza] = await tx
-        .select({ menuId: products.menuId, categoryId: products.categoryId })
+        .select({ categoryId: products.categoryId })
         .from(products)
         .where(eq(products.name, "Pizza"));
       const focaccia = await createProduct(tx, {

@@ -173,7 +173,7 @@ it("counts base and child routing rows once and clears only their union", async 
 it("clears owned daily dates and incoming destinations without reopening their owners", async () => {
   await run(async (tx) => {
     const f = await fixture(tx);
-    const [menu] = await tx.insert(menus).values({ name: "Daily menu" }).returning();
+    await tx.insert(menus).values({ name: "Daily menu" }).returning();
     const product = await createProduct(tx, {
       name: "Daily product",
       categoryId: null,

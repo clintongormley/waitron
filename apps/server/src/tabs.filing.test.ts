@@ -14,7 +14,7 @@ import {
   createProduct,
   listAvailableProducts,
 } from "@waitron/menu";
-import { menus, ticketItems, workingOrderLines } from "@waitron/db";
+import { ticketItems, workingOrderLines } from "@waitron/db";
 import type { AvailableProduct } from "@waitron/menu";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -490,10 +490,6 @@ describe("a sent line is payable after archival; an archived unsent one is not",
     const { cfg, tables } = await setupVenue();
     const deps = { db: suite.db, backend, clock };
     const { burgerId, beerId, offers, courseId } = await withTransaction(suite.db, async (tx) => {
-      const [carta] = await tx
-        .select({ id: menus.id })
-        .from(menus)
-        .where(eq(menus.name, "Delicatessen"));
       const burger = await createProduct(tx, {
         categoryId: null,
         name: "Burger staff",

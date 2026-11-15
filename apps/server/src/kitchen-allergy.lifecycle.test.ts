@@ -2,7 +2,7 @@ import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
-import { kitchenStations, products, printJobs, workingOrderLines } from "@waitron/db";
+import { kitchenStations, printJobs, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
@@ -311,10 +311,6 @@ describe("A669 lifecycle", () => {
   );
   it("a partial split copies routed extras and the parent assignment, with the same financial total", async () => {
     const extra = await inTx(v, async (tx) => {
-      const [parent] = await tx
-        .select()
-        .from(products)
-        .where(eq(products.id, v.productId("Burger")));
       const { defaultLanguage } = await readContentLanguages(tx, v.cfg.locale);
       const side = await createProduct(tx, {
         categoryId: null,

@@ -81,7 +81,6 @@ useVenueDb({
       const [category] = db.all<{ id: string }>(
         sql`select id from categories where name = 'Platos'`,
       );
-      const [menu] = db.all<{ id: string }>(sql`select id from menus limit 1`);
       const ids = new Map<string, string>();
       for (const [name, price] of [
         ["Rib steak", "12.10"],

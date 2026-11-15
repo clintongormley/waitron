@@ -472,13 +472,6 @@ async function requireMenuIdBody(c: Context): Promise<string> {
   return requireUuidParam(body.menuId, "MenuId");
 }
 
-/** A read filtered by an absent menu would answer an empty list rather than name it. */
-async function assertMenuVisible(tx: Transaction, menuId: string): Promise<void> {
-  if (!(await menuExists(tx, menuId))) {
-    throw new AppError("menu.not_found", { menuId });
-  }
-}
-
 function screenDietOverride(value: unknown): void {
   if (value !== undefined && value !== null && !isPlainObject(value)) {
     throw new AppError("management.request_invalid", { field: "dietOverride" });
@@ -1380,29 +1373,15 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
       return c.json({ menus: await gated(c, session, (tx) => menusHolding(tx, ids)) });
     }),
   );
-  app.get("/management-api/menus/:id/products", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
-      const rows = await gated(c, sessionId, async (tx) => {
-        await assertMenuVisible(tx, menuId);
-        return listProducts(tx, menuId);
-      });
-      return c.json(rows);
-    }),
-  );
-
-  app.post("/management-api/menus/:id/product-editor", (c) =>
+  app.post("/management-api/products/editor", (c) =>
     runBodyCategory(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
       const body = await readJsonBody<Record<string, unknown>>(c);
       const routing = screenRouting(body);
       const saved = await gated(c, sessionId, async (tx) => {
         const product = await saveProductEditor(
           tx,
           null,
-          menuId,
           body,
           deps.venueLocale ?? FALLBACK_LOCALE,
         );
@@ -1444,7 +1423,6 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
           const product = await saveProductEditor(
             tx,
             productId,
-            "00000000-0000-0000-0000-000000000000",
             body,
             deps.venueLocale ?? FALLBACK_LOCALE,
           );
@@ -1459,7 +1437,6 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
       const sessionId = requireManagementSession(c);
       // `allergens` is left to `createProduct`, which throws the authoritative `allergen.*` codes.
       const body = await readJsonBody<{
-        menuId?: unknown;
         categoryId?: unknown;
         name?: unknown;
         customerName?: unknown;
@@ -1480,9 +1457,6 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
         modifierIds?: unknown;
         optionGroupIds?: unknown;
       }>(c);
-      if (typeof body.menuId !== "string") {
-        throw new AppError("management.request_invalid", { field: "menuId" });
-      }
       if (typeof body.categoryId !== "string" && body.categoryId !== null) {
         throw new AppError("management.request_invalid", { field: "categoryId" });
       }
@@ -1523,7 +1497,6 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
       refuseRetiredFields(body);
       const modifiers = parseProductModifiers(body.modifiers);
       const input = {
-        menuId: body.menuId,
         categoryId: body.categoryId,
         name: body.name.trim(),
         customerName,

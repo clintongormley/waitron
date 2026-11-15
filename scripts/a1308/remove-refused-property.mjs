@@ -6,10 +6,10 @@ import ts from "typescript";
 
 export function refusals(output, property) {
   const found = [];
-  for (const line of stripVTControlCharacters(output).split("\n")) {
+  for (const line of stripVTControlCharacters(output).split(/\n(?=\S)/)) {
     const match =
-      line.match(/^(.*?)\((\d+),(\d+)\): error TS2353: (.*)$/) ??
-      line.match(/^(.*?):(\d+):(\d+) - error TS2353: (.*)$/);
+      line.match(/^(.*?)\((\d+),(\d+)\): error TS(?:2353|2769): ([\s\S]*)$/) ??
+      line.match(/^(.*?):(\d+):(\d+) - error TS(?:2353|2769): ([\s\S]*)$/);
     if (
       match?.[4].includes(
         `Object literal may only specify known properties, and '${property}' does not exist in type`,

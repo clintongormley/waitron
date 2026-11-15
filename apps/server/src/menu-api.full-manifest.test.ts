@@ -424,7 +424,7 @@ it("accepts an ordered modifiers list in the product contract and reads it back"
       })
     ).status,
   ).toBe(200);
-  const list = await send(app, "GET", `/management-api/menus/${menu.id}/products`, cookie);
+  const list = await send(app, "GET", `/management-api/products`, cookie);
   expect(await list.json()).toMatchObject([{ id: product.id, modifiers: ordered }]);
 });
 

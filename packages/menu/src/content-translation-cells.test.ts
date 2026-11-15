@@ -30,7 +30,7 @@ const context = { fallbackLanguage: "es", required: ["es"] };
 
 async function fixture(tx: Transaction) {
   await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en", "ca"] });
-  const menu = await createMenu(tx, { name: "STAFF Menu", names: {} });
+  await createMenu(tx, { name: "STAFF Menu", names: {} });
   const product = await createProduct(tx, {
     categoryId: null,
     name: "STAFF Bread",

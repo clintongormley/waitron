@@ -91,7 +91,6 @@ async function inVenue<T>(
 
 async function product(
   tx: Transaction,
-  lunch: Lunch,
   name: string,
   customerName: Record<string, string> | null,
   categoryId: string | null = null,
@@ -111,7 +110,6 @@ async function product(
 /** Written directly: the variant editor refuses a customer-facing name with no default-language text. */
 async function variant(
   tx: Transaction,
-  lunch: Lunch,
   parentId: string,
   name: string,
   customerName: Record<string, string> | null,
@@ -201,10 +199,10 @@ describe("suggestion refs", () => {
 describe("what counts as still there", () => {
   it("lists the live items with no customer-facing name at all, in the dialog's order, and nothing else", async () => {
     await inVenue(THREE, async (tx, lunch) => {
-      const pa = await product(tx, lunch, "Pa", null);
-      const oli = await product(tx, lunch, "Oli", {});
-      const vi = await product(tx, lunch, "Vi", { ca: "CLIENT-CA Vi" });
-      const copa = await variant(tx, lunch, vi, "Copa", null);
+      const pa = await product(tx, "Pa", null);
+      const oli = await product(tx, "Oli", {});
+      const vi = await product(tx, "Vi", { ca: "CLIENT-CA Vi" });
+      const copa = await variant(tx, vi, "Copa", null);
       const punt = await optionList(tx, "Punt", null);
       const poc = await optionLabel(tx, punt, "Poc", {});
       const sauces = await extraList(tx, "Salses", null);
@@ -219,10 +217,10 @@ describe("what counts as still there", () => {
       const barRoot = await rootOf(tx, bar.id);
       await tx.update(sections).set({ names: {} }).where(eq(sections.id, barRoot));
       const plats = await section(tx, lunch.menuId, "Plats", {});
-      const coca = await product(tx, lunch, "Coca", null);
+      const coca = await product(tx, "Coca", null);
       await deactivateProduct(tx, coca);
-      const vermut = await product(tx, lunch, "Vermut", { ca: "CLIENT-CA Vermut" });
-      await variant(tx, lunch, vermut, "Vermut gran", null);
+      const vermut = await product(tx, "Vermut", { ca: "CLIENT-CA Vermut" });
+      await variant(tx, vermut, "Vermut gran", null);
       await tx.update(products).set({ active: false }).where(eq(products.id, vermut));
       const spice = await optionList(tx, "Picant", { ca: "CLIENT-CA Picant" });
       await optionLabel(tx, spice, "Molt", null);
@@ -251,11 +249,11 @@ describe("what counts as still there", () => {
 
   it("treats only a present, eligible item whose own row and owner are active as live", async () => {
     await inVenue(THREE, async (tx, lunch) => {
-      const pa = await product(tx, lunch, "Pa", null);
-      const coca = await product(tx, lunch, "Coca", null);
+      const pa = await product(tx, "Pa", null);
+      const coca = await product(tx, "Coca", null);
       await deactivateProduct(tx, coca);
-      const vermut = await product(tx, lunch, "Vermut", null);
-      const gran = await variant(tx, lunch, vermut, "Vermut gran", null);
+      const vermut = await product(tx, "Vermut", null);
+      const gran = await variant(tx, vermut, "Vermut gran", null);
       await tx.update(products).set({ active: false }).where(eq(products.id, vermut));
       const drinks = await createMenu(tx, {
         name: "STAFF Drinks",
@@ -315,31 +313,31 @@ describe("the gaps a run starts from", () => {
 
   it("holds every live item blank in at least one enabled language, with the languages it is blank in", async () => {
     await inVenue(THREE, async (tx, lunch) => {
-      const noEn = await product(tx, lunch, "Pa", { ca: "CLIENT-CA Pa", es: "CLIENT-ES Pan" });
-      const noDefault = await product(tx, lunch, "Oli", {
+      const noEn = await product(tx, "Pa", { ca: "CLIENT-CA Pa", es: "CLIENT-ES Pan" });
+      const noDefault = await product(tx, "Oli", {
         es: "CLIENT-ES Aceite",
         en: "CLIENT-EN Oil",
       });
-      const spaces = await product(tx, lunch, "Sal", {
+      const spaces = await product(tx, "Sal", {
         ca: "CLIENT-CA Sal",
         es: "  ",
         en: "CLIENT-EN Salt",
       });
-      const honey = await product(tx, lunch, "Mel", {
+      const honey = await product(tx, "Mel", {
         ca: "CLIENT-CA Mel",
         es: "\t",
         en: "CLIENT-EN Honey",
       });
-      await product(tx, lunch, "Vi", {
+      await product(tx, "Vi", {
         ca: "CLIENT-CA Vi",
         es: "CLIENT-ES Vino",
         en: "CLIENT-EN Wine",
       });
-      const nameless = await product(tx, lunch, "Coca", null);
-      const empty = await product(tx, lunch, "Formatge", {});
-      const gone = await product(tx, lunch, "Vermut", null);
+      const nameless = await product(tx, "Coca", null);
+      const empty = await product(tx, "Formatge", {});
+      const gone = await product(tx, "Vermut", null);
       await deactivateProduct(tx, gone);
-      const glass = await variant(tx, lunch, noEn, "Pa gran", { en: "CLIENT-EN Big bread" });
+      const glass = await variant(tx, noEn, "Pa gran", { en: "CLIENT-EN Big bread" });
       const doneness = await optionList(tx, "Punt", null);
       const rare = await optionLabel(tx, doneness, "Poc", { ca: "CLIENT-CA Poc" });
       const sauces = await extraList(tx, "Salses", null);
@@ -406,9 +404,9 @@ describe("the gaps a run starts from", () => {
   });
 
   it("treats tabs and newlines as missing text when collecting suggestions", async () => {
-    await inVenue(THREE, async (tx, lunch) => {
-      const pa = await product(tx, lunch, "Pa", { ca: "CLIENT-CA Pa", es: "\t" });
-      const oli = await product(tx, lunch, "Oli", { ca: "\n", es: "CLIENT-ES Aceite" });
+    await inVenue(THREE, async (tx) => {
+      const pa = await product(tx, "Pa", { ca: "CLIENT-CA Pa", es: "\t" });
+      const oli = await product(tx, "Oli", { ca: "\n", es: "CLIENT-ES Aceite" });
       expect(await missingByRef(tx)).toEqual({
         [`product:${pa}`]: ["es", "en"],
         [`product:${oli}`]: ["ca", "en"],
@@ -428,9 +426,9 @@ describe("the gaps a run starts from", () => {
   });
 
   it("collects from, prunes against and builds a job from the gaps it is handed, leaving them as they were", async () => {
-    await inVenue(THREE, async (tx, lunch) => {
-      const pa = await product(tx, lunch, "Pa", { ca: "CLIENT-CA Pa" });
-      const oli = await product(tx, lunch, "Oli", { ca: "CLIENT-CA Oli" });
+    await inVenue(THREE, async (tx) => {
+      const pa = await product(tx, "Pa", { ca: "CLIENT-CA Pa" });
+      const oli = await product(tx, "Oli", { ca: "CLIENT-CA Oli" });
       const gaps = await readSuggestionGaps(tx, context);
       await tx
         .update(products)
@@ -464,11 +462,11 @@ describe("the gaps a run starts from", () => {
   });
 
   it("holds a one-language venue's names with no text at all, and its names blank in that language", async () => {
-    await inVenue(ONE, async (tx, lunch) => {
-      const nameless = await product(tx, lunch, "Coca", null);
-      const empty = await product(tx, lunch, "Formatge", {});
-      const blank = await product(tx, lunch, "Pa", { ca: " ", es: "CLIENT-ES Pan" });
-      await product(tx, lunch, "Vi", { ca: "CLIENT-CA Vi" });
+    await inVenue(ONE, async (tx) => {
+      const nameless = await product(tx, "Coca", null);
+      const empty = await product(tx, "Formatge", {});
+      const blank = await product(tx, "Pa", { ca: " ", es: "CLIENT-ES Pan" });
+      await product(tx, "Vi", { ca: "CLIENT-CA Vi" });
       expect(await missingByRef(tx)).toEqual({
         [`product:${nameless}`]: ["ca"],
         [`product:${empty}`]: ["ca"],
@@ -482,8 +480,8 @@ describe("collecting what is missing", () => {
   it("collects every missing name across the nine kinds with its family, its category and its staff name", async () => {
     await inVenue(THREE, async (tx, lunch) => {
       const beers = await createCategory(tx, { name: "TAP BEERS" });
-      const cana = await product(tx, lunch, "Caña", { ca: "CLIENT-CA Canya" }, beers.id);
-      const pinta = await variant(tx, lunch, cana, "Pinta", { en: "CLIENT-EN Pint" });
+      const cana = await product(tx, "Caña", { ca: "CLIENT-CA Canya" }, beers.id);
+      const pinta = await variant(tx, cana, "Pinta", { en: "CLIENT-EN Pint" });
       const punto = await optionList(tx, "Punto", { ca: "CLIENT-CA Punt", es: "CLIENT-ES Punto" });
       const poco = await optionLabel(tx, punto, "Poco", { ca: "CLIENT-CA Poc" });
       const sides = await extraList(tx, "Guarnición", { ca: "CLIENT-CA Guarnició" });
@@ -606,8 +604,8 @@ describe("collecting what is missing", () => {
   });
 
   it("asks for every enabled language, the default included, for a name with no customer-facing text", async () => {
-    await inVenue(THREE, async (tx, lunch) => {
-      const pa = await product(tx, lunch, "Pa", null);
+    await inVenue(THREE, async (tx) => {
+      const pa = await product(tx, "Pa", null);
       expect(await collectSuggestionItems(tx, context, new Set())).toEqual([
         {
           ref: `product:${pa}`,
@@ -624,10 +622,10 @@ describe("collecting what is missing", () => {
 
   it("a one-language venue gets its empty names in that language", async () => {
     await inVenue(ONE, async (tx, lunch) => {
-      const blank = await product(tx, lunch, "Pa", null);
-      const empty = await product(tx, lunch, "Oli", {});
-      const named = await product(tx, lunch, "Vi", { ca: "CLIENT-CA Vi" });
-      const glass = await variant(tx, lunch, named, "Copa", null);
+      const blank = await product(tx, "Pa", null);
+      const empty = await product(tx, "Oli", {});
+      const named = await product(tx, "Vi", { ca: "CLIENT-CA Vi" });
+      const glass = await variant(tx, named, "Copa", null);
       const doneness = await optionList(tx, "Punt", null);
       const rare = await optionLabel(tx, doneness, "Poc", {});
       const sauces = await extraList(tx, "Salses", null);
@@ -665,8 +663,8 @@ describe("collecting what is missing", () => {
   });
 
   it("a name blank in every language is asked for in every language", async () => {
-    await inVenue(THREE, async (tx, lunch) => {
-      const pa = await product(tx, lunch, "Pa", { ca: " ", es: "" });
+    await inVenue(THREE, async (tx) => {
+      const pa = await product(tx, "Pa", { ca: " ", es: "" });
       const [item] = await collectSuggestionItems(tx, context, new Set());
       expect(item).toMatchObject({
         ref: `product:${pa}`,
@@ -697,8 +695,8 @@ describe("collecting what is missing", () => {
   });
 
   it("never asks for a language the item already has, and sends only enabled languages as existing", async () => {
-    await inVenue(THREE, async (tx, lunch) => {
-      const pa = await product(tx, lunch, "Pa", { ca: "CLIENT-CA Pa", fr: "CLIENT-FR Pain" });
+    await inVenue(THREE, async (tx) => {
+      const pa = await product(tx, "Pa", { ca: "CLIENT-CA Pa", fr: "CLIENT-FR Pain" });
       expect(await collectSuggestionItems(tx, context, new Set())).toEqual([
         expect.objectContaining({
           ref: `product:${pa}`,
@@ -710,12 +708,12 @@ describe("collecting what is missing", () => {
   });
 
   it("leaves out a language with a waiting suggestion and an item with a waiting placeholder, and reads the gaps before either", async () => {
-    await inVenue(THREE, async (tx, lunch) => {
-      const half = await product(tx, lunch, "Pa", { ca: "CLIENT-CA Pa" });
-      const placeholder = await product(tx, lunch, "Oli", { ca: "CLIENT-CA Oli" });
-      const fixed = await product(tx, lunch, "Vi", { ca: "CLIENT-CA Vi" });
-      const covered = await product(tx, lunch, "Sal", { ca: "CLIENT-CA Sal" });
-      const complete = await product(tx, lunch, "Mel", {
+    await inVenue(THREE, async (tx) => {
+      const half = await product(tx, "Pa", { ca: "CLIENT-CA Pa" });
+      const placeholder = await product(tx, "Oli", { ca: "CLIENT-CA Oli" });
+      const fixed = await product(tx, "Vi", { ca: "CLIENT-CA Vi" });
+      const covered = await product(tx, "Sal", { ca: "CLIENT-CA Sal" });
+      const complete = await product(tx, "Mel", {
         ca: "CLIENT-CA Mel",
         es: "CLIENT-ES Miel",
         en: "CLIENT-EN Honey",
@@ -764,8 +762,8 @@ describe("collecting what is missing", () => {
   });
 
   it("sends no blank name as existing when a waiting suggestion covers its language", async () => {
-    await inVenue(THREE, async (tx, lunch) => {
-      const pa = await product(tx, lunch, "Pa", { ca: "CLIENT-CA Pa" });
+    await inVenue(THREE, async (tx) => {
+      const pa = await product(tx, "Pa", { ca: "CLIENT-CA Pa" });
       await tx
         .update(products)
         .set({ customerName: { ca: "CLIENT-CA Pa", es: "   " } })
@@ -808,9 +806,9 @@ describe("collecting what is missing", () => {
   });
 
   it("leaves out every excluded ref", async () => {
-    await inVenue(THREE, async (tx, lunch) => {
-      const pa = await product(tx, lunch, "Pa", null);
-      const oli = await product(tx, lunch, "Oli", null);
+    await inVenue(THREE, async (tx) => {
+      const pa = await product(tx, "Pa", null);
+      const oli = await product(tx, "Oli", null);
       const items = await collectSuggestionItems(tx, context, new Set([`product:${pa}`]));
       expect(items.map((item) => item.ref)).toEqual([`product:${oli}`]);
     });
@@ -822,13 +820,13 @@ describe("collecting what is missing", () => {
   ])(
     "leaves out a deleted product and every variant of a deleted product in %s",
     async (_, config) => {
-      await inVenue(config, async (tx, lunch) => {
-        const live = await product(tx, lunch, "Pa", null);
-        const gone = await product(tx, lunch, "Coca", null);
-        await variant(tx, lunch, gone, "Coca petita", null);
+      await inVenue(config, async (tx) => {
+        const live = await product(tx, "Pa", null);
+        const gone = await product(tx, "Coca", null);
+        await variant(tx, gone, "Coca petita", null);
         await deactivateProduct(tx, gone);
-        const closed = await product(tx, lunch, "Vermut", { ca: "CLIENT-CA Vermut" });
-        await variant(tx, lunch, closed, "Vermut gran", null);
+        const closed = await product(tx, "Vermut", { ca: "CLIENT-CA Vermut" });
+        await variant(tx, closed, "Vermut gran", null);
         // The variant row stays active: only its product's flag says the family is gone.
         await tx.update(products).set({ active: false }).where(eq(products.id, closed));
         expect(
@@ -839,21 +837,21 @@ describe("collecting what is missing", () => {
   );
 
   it("leaves out an item Cloud would refuse, and a name or a category it would refuse, without refusing the rest", async () => {
-    await inVenue(THREE, async (tx, lunch) => {
-      const blankStaff = await product(tx, lunch, "Blank", { ca: "CLIENT-CA Blanc" });
+    await inVenue(THREE, async (tx) => {
+      const blankStaff = await product(tx, "Blank", { ca: "CLIENT-CA Blanc" });
       await rename(tx, blankStaff, "   ");
-      const longStaff = await product(tx, lunch, "Long", { ca: "CLIENT-CA Llarg" });
+      const longStaff = await product(tx, "Long", { ca: "CLIENT-CA Llarg" });
       await rename(tx, longStaff, "S".repeat(TEXT_LIMIT + 1));
-      const edge = await product(tx, lunch, "Edge", { ca: "CLIENT-CA Vora" });
+      const edge = await product(tx, "Edge", { ca: "CLIENT-CA Vora" });
       await rename(tx, edge, "S".repeat(TEXT_LIMIT));
-      const longName = await product(tx, lunch, "Pa", {
+      const longName = await product(tx, "Pa", {
         ca: "C".repeat(TEXT_LIMIT + 1),
         es: "CLIENT-ES Pan",
       });
       const blankCategory = await createCategory(tx, { name: "Blank" });
       await tx.update(categories).set({ name: "   " }).where(eq(categories.id, blankCategory.id));
-      const unnamed = await product(tx, lunch, "Oli", { ca: "CLIENT-CA Oli" }, blankCategory.id);
-      const unnamedVariant = await variant(tx, lunch, unnamed, "Oli petit", {
+      const unnamed = await product(tx, "Oli", { ca: "CLIENT-CA Oli" }, blankCategory.id);
+      const unnamedVariant = await variant(tx, unnamed, "Oli petit", {
         ca: "CLIENT-CA Oli petit",
       });
       const longCategory = await createCategory(tx, { name: "Long" });
@@ -861,8 +859,8 @@ describe("collecting what is missing", () => {
         .update(categories)
         .set({ name: "C".repeat(TEXT_LIMIT + 1) })
         .where(eq(categories.id, longCategory.id));
-      const shut = await product(tx, lunch, "Vi", { ca: "CLIENT-CA Vi" }, longCategory.id);
-      await variant(tx, lunch, shut, "Vi negre", { ca: "CLIENT-CA Vi negre" });
+      const shut = await product(tx, "Vi", { ca: "CLIENT-CA Vi" }, longCategory.id);
+      await variant(tx, shut, "Vi negre", { ca: "CLIENT-CA Vi negre" });
 
       const items = await collectSuggestionItems(tx, context, new Set());
       expect(items.map((item) => item.ref)).toEqual(

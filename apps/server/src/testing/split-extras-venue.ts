@@ -293,7 +293,6 @@ type NamedExtraItem = ExtraItem & { customerName: string; kitchenName: string };
 export function addExtras(
   tx: Transaction,
   cfg: TradingContext,
-  menuId: string,
   dishId: string,
   items: NamedExtraItem[],
 ): Promise<{ listId: string; productIds: string[] }>;
@@ -301,7 +300,6 @@ export function addExtras(
 export function addExtras(
   tx: Transaction,
   cfg: TradingContext,
-  menuId: string,
   dishId: string,
   items: ExtraItem[],
   options: { staffNameOnly: true },
@@ -309,7 +307,6 @@ export function addExtras(
 export async function addExtras(
   tx: Transaction,
   cfg: TradingContext,
-  menuId: string,
   dishId: string,
   items: ExtraItem[],
   options?: { staffNameOnly: true },

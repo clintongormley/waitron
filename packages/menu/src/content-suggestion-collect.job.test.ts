@@ -79,7 +79,6 @@ const all = (name: string) => ({
 
 async function product(
   tx: Transaction,
-  lunch: Lunch,
   name: string,
   customerName: Record<string, string> | null,
   categoryId: string | null = null,
@@ -99,7 +98,6 @@ async function product(
 /** Written directly: the variant editor refuses a customer-facing name with no default-language text. */
 async function variant(
   tx: Transaction,
-  lunch: Lunch,
   parentId: string,
   name: string,
   customerName: Record<string, string> | null,
@@ -249,12 +247,12 @@ describe("the house style", () => {
   });
 
   it("takes one example from each group in turn, each group in id order, and the limit cuts the list", async () => {
-    await inVenue(async (tx, lunch) => {
+    await inVenue(async (tx) => {
       const a = await createCategory(tx, { name: "CAT A" });
       const b = await createCategory(tx, { name: "CAT B" });
-      const firstA = await product(tx, lunch, "A1", { ca: "CLIENT-CA A1" }, a.id);
-      const secondA = await product(tx, lunch, "A2", { ca: "CLIENT-CA A2" }, a.id);
-      await product(tx, lunch, "B1", { ca: "CLIENT-CA B1" }, b.id);
+      const firstA = await product(tx, "A1", { ca: "CLIENT-CA A1" }, a.id);
+      const secondA = await product(tx, "A2", { ca: "CLIENT-CA A2" }, a.id);
+      await product(tx, "B1", { ca: "CLIENT-CA B1" }, b.id);
       const [earlier, later] =
         firstA < secondA ? ["STAFF A1", "STAFF A2"] : ["STAFF A2", "STAFF A1"];
 
@@ -268,11 +266,11 @@ describe("the house style", () => {
   });
 
   it("fills the limit from one group alone", async () => {
-    await inVenue(async (tx, lunch) => {
+    await inVenue(async (tx) => {
       const ids = [
-        await product(tx, lunch, "Pa", { fr: "CLIENT-FR Pain" }),
-        await product(tx, lunch, "Vi", { fr: "CLIENT-FR Vin" }),
-        await product(tx, lunch, "Sal", { fr: "CLIENT-FR Sel" }),
+        await product(tx, "Pa", { fr: "CLIENT-FR Pain" }),
+        await product(tx, "Vi", { fr: "CLIENT-FR Vin" }),
+        await product(tx, "Sal", { fr: "CLIENT-FR Sel" }),
       ];
       const [first, second] = (await tx.select().from(products))
         .filter((row) => ids.includes(row.id))
@@ -285,9 +283,9 @@ describe("the house style", () => {
   });
 
   it("counts only an example it keeps toward a group's share of the limit", async () => {
-    await inVenue(async (tx, lunch) => {
-      const a = await product(tx, lunch, "A", { fr: "CLIENT-FR A" });
-      const b = await product(tx, lunch, "B", { fr: "CLIENT-FR B" });
+    await inVenue(async (tx) => {
+      const a = await product(tx, "A", { fr: "CLIENT-FR A" });
+      const b = await product(tx, "B", { fr: "CLIENT-FR B" });
       const [earlier, kept] = a < b ? [a, "B"] : [b, "A"];
       // Too long by JavaScript's length, which TEXT_LIMIT counts, though SQLite counts 251 characters.
       await tx
@@ -334,25 +332,25 @@ describe("the house style", () => {
   });
 
   it("leaves out a name Cloud would refuse, a language the venue does not use, and anything gone", async () => {
-    await inVenue(async (tx, lunch) => {
-      const blankStaff = await product(tx, lunch, "Blank", { ca: "CLIENT-CA Blanc" });
+    await inVenue(async (tx) => {
+      const blankStaff = await product(tx, "Blank", { ca: "CLIENT-CA Blanc" });
       await rename(tx, blankStaff, "   ");
-      const longStaff = await product(tx, lunch, "Long", { ca: "CLIENT-CA Llarg" });
+      const longStaff = await product(tx, "Long", { ca: "CLIENT-CA Llarg" });
       await rename(tx, longStaff, "S".repeat(TEXT_LIMIT + 1));
-      await product(tx, lunch, "Pa", {
+      await product(tx, "Pa", {
         ca: "C".repeat(TEXT_LIMIT + 1),
         es: "CLIENT-ES Pan",
         fr: "CLIENT-FR Pain",
       });
-      await product(tx, lunch, "Oli", { ca: "  " });
-      await product(tx, lunch, "Sal", null);
-      const coca = await product(tx, lunch, "Coca", { ca: "CLIENT-CA Coca" });
+      await product(tx, "Oli", { ca: "  " });
+      await product(tx, "Sal", null);
+      const coca = await product(tx, "Coca", { ca: "CLIENT-CA Coca" });
       await deactivateProduct(tx, coca);
-      const vermut = await product(tx, lunch, "Vermut", { ca: "CLIENT-CA Vermut" });
-      await variant(tx, lunch, vermut, "Vermut gran", { ca: "CLIENT-CA Vermut gran" });
+      const vermut = await product(tx, "Vermut", { ca: "CLIENT-CA Vermut" });
+      await variant(tx, vermut, "Vermut gran", { ca: "CLIENT-CA Vermut gran" });
       await tx.update(products).set({ active: false }).where(eq(products.id, vermut));
-      const vi = await product(tx, lunch, "Vi", { ca: "CLIENT-CA Vi" });
-      await variant(tx, lunch, vi, "Copa", { ca: "CLIENT-CA Copa" });
+      const vi = await product(tx, "Vi", { ca: "CLIENT-CA Vi" });
+      await variant(tx, vi, "Copa", { ca: "CLIENT-CA Copa" });
       const spice = await optionList(tx, "Picant", { ca: "CLIENT-CA Picant" });
       await optionLabel(tx, spice, "Molt", { ca: "CLIENT-CA Molt" });
       await tx.update(optionLists).set({ active: false }).where(eq(optionLists.id, spice));
@@ -390,8 +388,8 @@ describe("the house style", () => {
 
 describe("the job body", () => {
   it("carries the venue's country and languages, and the keys the contract names and no others", async () => {
-    await inVenue(async (tx, lunch) => {
-      const pa = await product(tx, lunch, "Pa", { ca: "CLIENT-CA Pa" });
+    await inVenue(async (tx) => {
+      const pa = await product(tx, "Pa", { ca: "CLIENT-CA Pa" });
       const draft = await buildSuggestionJob(tx, context, new Set());
       const job = parsed(draft);
       expect(Object.keys(job)).toEqual(["version", "country", "languages", "items", "houseStyle"]);
@@ -443,12 +441,12 @@ describe("the job body", () => {
   it("sends a complete family head as context, once, with nothing missing, before its first member", async () => {
     await inVenue(async (tx, lunch) => {
       const beers = await createCategory(tx, { name: "TAP BEERS" });
-      const cana = await product(tx, lunch, "Caña", all("Caña"), beers.id);
-      const pinta = await variant(tx, lunch, cana, "Pinta", {
+      const cana = await product(tx, "Caña", all("Caña"), beers.id);
+      const pinta = await variant(tx, cana, "Pinta", {
         ca: "CLIENT-CA Pinta",
         en: "CLIENT-EN Pint",
       });
-      const quinto = await variant(tx, lunch, cana, "Quinto", {
+      const quinto = await variant(tx, cana, "Quinto", {
         ca: "CLIENT-CA Quint",
         en: "CLIENT-EN Fifth",
       });
@@ -513,12 +511,12 @@ describe("the job body", () => {
   });
 
   it("sends an excluded head again as context, and a head with its own gaps once, as an item", async () => {
-    await inVenue(async (tx, lunch) => {
-      const cana = await product(tx, lunch, "Caña", {
+    await inVenue(async (tx) => {
+      const cana = await product(tx, "Caña", {
         ca: "CLIENT-CA Canya",
         en: "CLIENT-EN Half pint",
       });
-      const pinta = await variant(tx, lunch, cana, "Pinta", {
+      const pinta = await variant(tx, cana, "Pinta", {
         ca: "CLIENT-CA Pinta",
         en: "CLIENT-EN Pint",
       });
@@ -557,12 +555,12 @@ describe("the job body", () => {
   });
 
   it("sends a head whose own gaps all have waiting suggestions as context, before its first member", async () => {
-    await inVenue(async (tx, lunch) => {
-      const cana = await product(tx, lunch, "Caña", {
+    await inVenue(async (tx) => {
+      const cana = await product(tx, "Caña", {
         ca: "CLIENT-CA Canya",
         en: "CLIENT-EN Half pint",
       });
-      const pinta = await variant(tx, lunch, cana, "Pinta", {
+      const pinta = await variant(tx, cana, "Pinta", {
         ca: "CLIENT-CA Pinta",
         en: "CLIENT-EN Pint",
       });
@@ -601,10 +599,10 @@ describe("the job body", () => {
   });
 
   it("sends a member without its head when Cloud would refuse the head", async () => {
-    await inVenue(async (tx, lunch) => {
-      const cana = await product(tx, lunch, "Caña", all("Caña"));
+    await inVenue(async (tx) => {
+      const cana = await product(tx, "Caña", all("Caña"));
       await rename(tx, cana, "S".repeat(TEXT_LIMIT + 1));
-      const pinta = await variant(tx, lunch, cana, "Pinta", {
+      const pinta = await variant(tx, cana, "Pinta", {
         ca: "CLIENT-CA Pinta",
         en: "CLIENT-EN Pint",
       });
@@ -635,12 +633,12 @@ describe("the job's limits", () => {
 
   it("counts a context head among the job's 1,000 items, and sends it again beside a member a later job carries", async () => {
     await inVenue(async (tx, lunch) => {
-      const glass = await product(tx, lunch, "Copa", all("Copa"));
+      const glass = await product(tx, "Copa", all("Copa"));
       await manyVariants(tx, lunch, glass, JOB_ITEM_LIMIT - 1, (index) => ({
         name: `STAFF Copa ${index}`,
         customerName: { ca: `CLIENT-CA Copa ${index}`, en: `CLIENT-EN Glass ${index}` },
       }));
-      const bread = await product(tx, lunch, "Pa", { ca: "CLIENT-CA Pa", en: "CLIENT-EN Bread" });
+      const bread = await product(tx, "Pa", { ca: "CLIENT-CA Pa", en: "CLIENT-EN Bread" });
 
       const first = await buildSuggestionJob(tx, context, new Set());
       expect(
@@ -666,8 +664,8 @@ describe("the job's limits", () => {
         name: `STAFF Item ${index}`,
         customerName: { ca: `CLIENT-CA Item ${index}`, en: `CLIENT-EN Item ${index}` },
       }));
-      const glass = await product(tx, lunch, "Copa", all("Copa"));
-      await variant(tx, lunch, glass, "Copa gran", {
+      const glass = await product(tx, "Copa", all("Copa"));
+      await variant(tx, glass, "Copa gran", {
         ca: "CLIENT-CA Copa gran",
         en: "CLIENT-EN Large glass",
       });
@@ -707,8 +705,8 @@ describe("the job's limits", () => {
   });
 
   it("builds a job with no item when the first item and its head pass 1 MiB, and a run start still sends it", async () => {
-    await inVenue(async (tx, lunch) => {
-      const { variantId } = await addOversizedFamily(tx, lunch.menuId);
+    await inVenue(async (tx) => {
+      const { variantId } = await addOversizedFamily(tx);
       const items = await collectSuggestionItems(tx, context, new Set());
       expect(items[0]!.ref).toBe(`variant:${variantId}`);
       const draft = await buildSuggestionJob(tx, context, new Set());
@@ -735,7 +733,7 @@ describe("the job's limits", () => {
         name: `STAFF Item ${index}`,
         customerName: { ca: wide, es: wide, en: wide },
       }));
-      await product(tx, lunch, "Pa", { ca: "CLIENT-CA Pa" });
+      await product(tx, "Pa", { ca: "CLIENT-CA Pa" });
       const full = await readHouseStyle(tx, THREE.languages);
       const job = parsed(await buildSuggestionJob(tx, context, new Set()));
       const kept = job.houseStyle.length;

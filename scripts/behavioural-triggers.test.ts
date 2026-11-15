@@ -1561,8 +1561,8 @@ describe("device_profile_form_factor_locked", () => {
 function product(id, parentId = null) {
   const parent = parentId === null ? "null" : `'${parentId}'`;
   return (
-    `insert into products (id, menu_id, parent_id, name, created_at, updated_at) ` +
-    `values ('${id}', 'cat', ${parent}, '${id}', '${STAMP}', '${STAMP}')`
+    `insert into products (id, parent_id, name, created_at, updated_at) ` +
+    `values ('${id}', ${parent}, '${id}', '${STAMP}', '${STAMP}')`
   );
 }
 
@@ -1708,8 +1708,8 @@ describe("products_id_fixed_update", () => {
 /** A top-level product row carrying `ordering`, spelled into the statement as given. */
 function productOrdered(id, ordering) {
   return (
-    `insert into products (id, menu_id, name, ordering, created_at, updated_at) ` +
-    `values ('${id}', 'cat', '${id}', '${ordering}', '${STAMP}', '${STAMP}')`
+    `insert into products (id, name, ordering, created_at, updated_at) ` +
+    `values ('${id}', '${id}', '${ordering}', '${STAMP}', '${STAMP}')`
   );
 }
 

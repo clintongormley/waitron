@@ -143,7 +143,7 @@ async function setupVenue(options: {
       const deliCounterZone = await zone("Deli counter", deli);
       const menus = {} as Record<MenuName, string>;
       for (const name of MENUS) menus[name] = (await createMenu(tx, { name })).id;
-      const product = (menuId: string, name: string, unitPrice: string) =>
+      const product = (name: string, unitPrice: string) =>
         createProduct(tx, {
           categoryId: null,
           name,
@@ -151,19 +151,16 @@ async function setupVenue(options: {
           unitPrice,
           vatClass: "general",
         });
-      const toast = await product(menus["Breakfast menu"], "Toast", "3.00");
+      const toast = await product("Toast", "3.00");
       const offer = async (menu: MenuName, productId: string, grossPrice?: string) =>
         (await addProductToMenu(tx, { menuId: menus[menu], productId, grossPrice })).id;
       const toastOffers = {
         breakfast: await offer("Breakfast menu", toast.id, "2.50"),
         midday: await offer("Midday menu", toast.id, "4.00"),
       };
-      await offer("Coffee menu", (await product(menus["Coffee menu"], "Flat white", "1.60")).id);
-      await offer("Drinks menu", (await product(menus["Drinks menu"], "Water", "2.00")).id);
-      const sandwich = await offer(
-        "Deli takeaway",
-        (await product(menus["Deli takeaway"], "Sandwich", "6.50")).id,
-      );
+      await offer("Coffee menu", (await product("Flat white", "1.60")).id);
+      await offer("Drinks menu", (await product("Water", "2.00")).id);
+      const sandwich = await offer("Deli takeaway", (await product("Sandwich", "6.50")).id);
       const versions = {} as Record<MenuName, string>;
       for (const name of MENUS) versions[name] = await publishWorkingMenu(tx, menus[name]);
       await offerMenuThroughZone(tx, deliCounterZone, menus["Deli takeaway"], {

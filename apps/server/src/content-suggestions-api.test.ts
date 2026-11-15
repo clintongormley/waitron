@@ -10,7 +10,6 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import {
   contentSuggestionJobs,
   contentSuggestions,
-  createMenu,
   createProduct,
   readActiveSuggestionJob,
   startSuggestionRun,
@@ -109,10 +108,6 @@ async function read(http: Hono): Promise<ContentSuggestionRead> {
 /** One complete menu and one product missing English; returns the product's id. */
 async function bread(): Promise<string> {
   return inTx(async (tx) => {
-    const menu = await createMenu(tx, {
-      name: "STAFF Lunch",
-      names: { es: "CLIENT-es Almuerzo", en: "CLIENT-en Lunch" },
-    });
     const product = await createProduct(tx, {
       categoryId: null,
       unitId: null,

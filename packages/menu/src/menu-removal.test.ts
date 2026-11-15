@@ -220,7 +220,7 @@ describe("a product made Inactive comes off every menu", () => {
     const r = await removalFixture();
     await app(async (tx) => {
       const value = await readProductEditor(tx, r.omelette);
-      await saveProductEditor(tx, r.omelette, r.tapas, { ...value, active: false }, "en");
+      await saveProductEditor(tx, r.omelette, { ...value, active: false }, "en");
     });
     await expectOffEveryMenu(r, r.omelette);
     await expectStillOnEveryMenu(r, r.croquette);
@@ -330,7 +330,7 @@ describe("takeOffMenus", () => {
 });
 
 describe("an Inactive product cannot be added to a menu list", () => {
-  async function inactive(r: Removal): Promise<string> {
+  async function inactive(): Promise<string> {
     return app(async (tx) => {
       const { id } = await createProduct(tx, {
         categoryId: null,
@@ -347,7 +347,7 @@ describe("an Inactive product cannot be added to a menu list", () => {
 
   it("by addProducts", async () => {
     const r = await removalFixture();
-    const gazpacho = await inactive(r);
+    const gazpacho = await inactive();
     expect(await codeOf(() => app((tx) => addProducts(tx, r.cold, [gazpacho])))).toBe(
       "menu_section.membership_invalid",
     );
@@ -356,7 +356,7 @@ describe("an Inactive product cannot be added to a menu list", () => {
 
   it("by addMember", async () => {
     const r = await removalFixture();
-    const gazpacho = await inactive(r);
+    const gazpacho = await inactive();
     expect(await codeOf(() => app((tx) => addMember(tx, r.cold, product(gazpacho))))).toBe(
       "menu_section.membership_invalid",
     );
@@ -365,7 +365,7 @@ describe("an Inactive product cannot be added to a menu list", () => {
 
   it("by replaceMember", async () => {
     const r = await removalFixture();
-    const gazpacho = await inactive(r);
+    const gazpacho = await inactive();
     const [held] = await fx.db
       .select({ id: sectionMembers.id })
       .from(sectionMembers)
@@ -378,7 +378,7 @@ describe("an Inactive product cannot be added to a menu list", () => {
 
   it("and one a list holds anyway, written past the refusing writers, is left out of the menu's offers and prices", async () => {
     const r = await removalFixture();
-    const gazpacho = await inactive(r);
+    const gazpacho = await inactive();
     await fx.db
       .insert(sectionMembers)
       .values({ sectionId: r.cold, position: 2, productId: gazpacho });
@@ -443,7 +443,7 @@ describe("a variant made Inactive loses its price on every menu", () => {
       (r) =>
         app(async (tx) => {
           const value = await readProductEditor(tx, r.omeletteHalf);
-          await saveProductEditor(tx, r.omeletteHalf, r.tapas, { ...value, active: false }, "en");
+          await saveProductEditor(tx, r.omeletteHalf, { ...value, active: false }, "en");
         }),
     ],
     [
@@ -454,7 +454,7 @@ describe("a variant made Inactive loses its price on every menu", () => {
           const variants = value.variants.map((variant) =>
             variant.id === r.omeletteHalf ? { ...variant, active: false } : variant,
           );
-          await saveProductEditor(tx, r.omelette, r.tapas, { ...value, variants }, "en");
+          await saveProductEditor(tx, r.omelette, { ...value, variants }, "en");
         }),
     ],
     [
@@ -557,7 +557,7 @@ describe("saving a product or variant that was Inactive already", () => {
       const editorSave = (id: string) =>
         app(async (tx) => {
           const value = await readProductEditor(tx, id);
-          await saveProductEditor(tx, id, r.tapas, { ...value, active: false }, "en");
+          await saveProductEditor(tx, id, { ...value, active: false }, "en");
         });
       const keepOnlyWhole = () =>
         app(async (tx) => {

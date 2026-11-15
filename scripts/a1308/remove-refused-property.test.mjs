@@ -30,6 +30,15 @@ it("parses both output forms, selecting only the named property refusal", () => 
   ]);
 });
 
+it("reads the property's nested refusal in an insert overload diagnostic", () => {
+  expect(
+    refusals(
+      "src/a.ts(2,3): error TS2769: No overload matches this call.\n  The last overload gave the following error.\n    Object literal may only specify known properties, and 'menuId' does not exist in type 'Insert[]'.",
+      "menuId",
+    ),
+  ).toEqual([{ file: "src/a.ts", line: 2, column: 3 }]);
+});
+
 it("removes a property on its own line", () => {
   expect(
     removeAt(

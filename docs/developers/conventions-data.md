@@ -6597,9 +6597,18 @@ export is refused as outdated. The pre-product-unit-column case in
 
 ### Option defaults and configuration format 34 (2026-11-15, A1308 mn9)
 
+> Historical format: superseded by the format-35 note below.
+
 Your export carries an options list's preference as `option_labels.is_default` and uses format 34.
 The list no longer carries `default_label_id`. A format-33 export is refused as outdated by the
 pre-option-default-flag case in `apps/server/src/configuration-import.test.ts`.
+
+
+### Products without menu ownership and configuration format 35 (2026-11-15, A1308 mn5)
+
+Your export no longer carries `products.menu_id`; menus offer products through `menu_items`.
+It uses format 35 and refuses a format-34 export as outdated. The pre-menu-free-product case in
+`apps/server/src/configuration-import.test.ts` checks that refusal.
 
 ## Root receipts moved on 2026-11-15
 

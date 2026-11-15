@@ -292,7 +292,7 @@ for (const succeeds of [true, false]) {
     expect(app.leave.coordinator.isDirty()).toBe(true);
     editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
     await vi.waitFor(() => expect(api.createProductEditor).toHaveBeenCalledOnce());
-    expect(vi.mocked(api.createProductEditor).mock.calls[0]![1]).toMatchObject({
+    expect(vi.mocked(api.createProductEditor).mock.calls[0]![0]).toMatchObject({
       name: "Saved product",
       unitPrice: "0.00",
     });

@@ -35,7 +35,6 @@ export const ref = (productId: string): string => `product:${productId}`;
 
 export async function addProduct(
   tx: Transaction,
-  menuId: string,
   label: string,
   customerName: Record<string, string> | null,
 ): Promise<string> {
@@ -76,13 +75,13 @@ export async function seedSuggestionVenue(
       name: "STAFF Carta",
       names: { ca: "CLIENT-CA Carta", es: "CLIENT-ES Carta", en: "CLIENT-EN Menu" },
     });
-    const bread = await addProduct(tx, menu.id, "Bread", breadCustomerName);
-    const wine = await addProduct(tx, menu.id, "Wine", null);
-    const cheese = await addProduct(tx, menu.id, "Cheese", {
+    const bread = await addProduct(tx, "Bread", breadCustomerName);
+    const wine = await addProduct(tx, "Wine", null);
+    const cheese = await addProduct(tx, "Cheese", {
       ca: "CLIENT-CA Formatge",
       es: "CLIENT-ES Queso",
     });
-    const water = await addProduct(tx, menu.id, "Water", {
+    const water = await addProduct(tx, "Water", {
       ca: "CLIENT-CA Aigua",
       es: "CLIENT-ES Agua",
       en: "CLIENT-EN Water",
@@ -168,7 +167,6 @@ export async function suggestionRows(tx: Transaction) {
  */
 export async function addOversizedFamily(
   tx: Transaction,
-  menuId: string,
 ): Promise<{ productId: string; variantId: string }> {
   const others = contentLanguageChoices("en")
     .map((choice) => choice.code)
@@ -176,7 +174,7 @@ export async function addOversizedFamily(
   const languages = ["ca", "es", "en", ...others].slice(0, 200);
   await writeContentLanguages(tx, { defaultLanguage: "ca", languages });
   const named = Object.fromEntries(languages.map((code) => [code, "\u0001".repeat(500)]));
-  const productId = await addProduct(tx, menuId, "Wide", named);
+  const productId = await addProduct(tx, "Wide", named);
   const [variant] = await tx
     .insert(products)
     .values({

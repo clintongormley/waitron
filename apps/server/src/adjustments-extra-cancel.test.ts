@@ -58,7 +58,7 @@ useVenueDb({
     venue = await provisionAdjustmentVenue(db);
     await inTx(venue, async (tx) => {
       const [burger] = await tx
-        .select({ menuId: products.menuId, categoryId: products.categoryId })
+        .select({ categoryId: products.categoryId })
         .from(products)
         .where(eq(products.name, "Burger"));
       const product = (name: string, customer: string, kitchen: string, price: string) =>
@@ -585,7 +585,7 @@ describe("cancelling an extra of a held dish (B11g)", () => {
         printerId: printer.id,
       });
       const [burger] = await tx
-        .select({ menuId: products.menuId, categoryId: products.categoryId })
+        .select({ categoryId: products.categoryId })
         .from(products)
         .where(eq(products.name, "Burger"));
       const ids: string[] = [];

@@ -64,7 +64,6 @@ export async function plantStoredSiblingCategory(
  * that already share a staff name. */
 export async function plantStoredProduct(
   tx: Transaction,
-  menuId: string,
   name: string,
   parentId: string | null = null,
 ): Promise<string> {

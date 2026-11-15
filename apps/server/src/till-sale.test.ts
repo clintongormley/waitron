@@ -1530,10 +1530,6 @@ describe("ordering extras and options — parent + child lines", () => {
     const v = await setupModifierVenue();
     const workingOrderId = randomUUID();
     const seeded = await withTransaction(suite.db, async (tx) => {
-      const [bacon] = await tx
-        .select({ menuId: products.menuId })
-        .from(products)
-        .where(eq(products.id, v.baconId));
       const [variant] = await tx
         .insert(products)
         .values({

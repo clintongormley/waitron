@@ -421,10 +421,7 @@ for (const locale of ["en", "es"] as const) {
       provisioned: await canonicalMadridSemantics(provisioned),
       seeded: await canonicalMadridSemantics(seeded),
     };
-    const historicalSeeded = madridWithRenamedColumns(
-      madridWithRenamedTables(canonical.seeded, { menus: "catalogues" }),
-      { products: { menu_id: "catalogue_id" } },
-    );
+    const historicalSeeded = madridWithRenamedTables(canonical.seeded, { menus: "catalogues" });
     const root = DEMO_BASELINE_FIXTURE_ROOTS[CASA_DELGADO_ES.id];
     expect(root).toBeInstanceOf(URL);
     const fixtureName = `madrid-before-move.${locale}.json`;
@@ -1557,7 +1554,7 @@ for (const locale of ["en", "es"] as const) {
           Object.entries(closureRows).sort(([a], [b]) => a.localeCompare(b)),
         );
         const { semantics, added } = madridWithAddedRows(
-          expected.seeded,
+          madridWithDroppedColumns(expected.seeded, { products: ["catalogue_id"] }),
           historicalSeeded,
           ADDED_CATEGORIES[locale],
         );
@@ -1565,9 +1562,7 @@ for (const locale of ["en", "es"] as const) {
         for (const [name, count] of Object.entries(added)) phases.seeded![name]! += count;
       }
       expected[phase] = madridWithRenamedTables(expected[phase], { catalogues: "menus" });
-      expected[phase] = madridWithRenamedColumns(expected[phase], {
-        products: { catalogue_id: "menu_id" },
-      });
+      expected[phase] = madridWithDroppedColumns(expected[phase], { products: ["catalogue_id"] });
       phases[phase]!.menus = phases[phase]!.catalogues!;
       delete phases[phase]!.catalogues;
       phases[phase] = Object.fromEntries(

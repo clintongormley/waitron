@@ -10,7 +10,7 @@ import {
   setMainReportingCategory,
 } from "./categories.js";
 import { deleteCategory } from "./product-items.js";
-import { createMenu, createProduct } from "./operations.js";
+import { createProduct } from "./operations.js";
 import { setProductVariants } from "./variants.js";
 import { plantStoredCategory, racePair, seedLegacySellingUnits } from "../test/fixtures.js";
 
@@ -47,7 +47,6 @@ it.each(["attach", "delete"] as const)(
   async (winner) => {
     const { a } = await fixture();
     const product = await app(async (tx) => {
-      const menu = await createMenu(tx, { name: "M" });
       return createProduct(tx, {
         categoryId: null,
         name: "P",
@@ -121,7 +120,6 @@ const unpricedVariant = (name: string) => ({
 });
 const seedProduct = (name = "P") =>
   app(async (tx) => {
-    const menu = await createMenu(tx, { name: `Menu for ${name}` });
     return (
       await createProduct(tx, {
         categoryId: null,

@@ -138,7 +138,7 @@ async function fixture(tx: Transaction, suffix = "") {
   const bread = await product(`Bread${suffix}`, null);
   const [variant] = await tx
     .insert(products)
-    .values({  parentId: mojito, name: "Large", categoryId: null })
+    .values({ parentId: mojito, name: "Large", categoryId: null })
     .returning();
   return {
     cfg,
@@ -161,10 +161,6 @@ const scoped = (fn: (tx: Transaction) => Promise<void>) => withTransaction(db, f
 const noCategoryRow = { kind: "no_category" as const };
 /** A variant of the uncategorised bread that stores a category of its own (Food). */
 async function breadVariant(tx: Transaction, f: { bread: string; food: string }) {
-  const [bread] = await tx
-    .select({ menuId: products.menuId })
-    .from(products)
-    .where(eq(products.id, f.bread));
   const [half] = await tx
     .insert(products)
     .values({
@@ -1218,7 +1214,7 @@ describe("routing previews", () => {
         .insert(floorZones)
         .values({ ...f.cfg, departmentId: f.department, name: "Inside" })
         .returning();
-      const menu = await createMenu(tx, { name: "Drinks menu" });
+      await createMenu(tx, { name: "Drinks menu" });
       const lager = await createProduct(tx, {
         name: "Lager",
         categoryId: f.beer,
@@ -1840,10 +1836,7 @@ describe("routing previews", () => {
           })
         ).id;
       const variant = async (parentId: string, name: string, categoryId: string | null) => {
-        const [row] = await tx
-          .insert(products)
-          .values({  parentId, name, categoryId })
-          .returning();
+        const [row] = await tx.insert(products).values({ parentId, name, categoryId }).returning();
         return row!.id;
       };
       const steak = await product("Steak", grills);
@@ -2130,7 +2123,7 @@ async function extrasFixture(tx: Transaction) {
   const extras = (await createCategory(tx, { name: "Extras" })).id;
   const sides = (await createCategory(tx, { name: "Sides", parentId: extras })).id;
   const toppings = (await createCategory(tx, { name: "Toppings", parentId: extras })).id;
-  const menu = await createMenu(tx, { name: "Extras menu" });
+  await createMenu(tx, { name: "Extras menu" });
   const product = async (name: string, categoryId: string) =>
     (
       await createProduct(tx, {
@@ -2145,7 +2138,7 @@ async function extrasFixture(tx: Transaction) {
   const cheese = await product("Cheese", toppings);
   const [variant] = await tx
     .insert(products)
-    .values({  parentId: chips, name: "Large chips", categoryId: null })
+    .values({ parentId: chips, name: "Large chips", categoryId: null })
     .returning();
   await setCategoryCell(tx, sides, { kind: "station", stationId: fryer!.id });
   return {

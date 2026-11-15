@@ -69,7 +69,7 @@ describe("menu — menu, taxonomy and priced items", () => {
   it("rejects a bad vat_class on its own CHECK", async () => {
     const [menu] = await db.insert(menus).values({ name: "Deli" }).returning({ id: menus.id });
     const insertProduct = (vatClass: string): ReturnType<typeof sql> =>
-      sql`insert into products (id, menu_id, name, unit_price, vat_class, created_at, updated_at) values (${randomUUID()}, ${menu.id}, 'Fixture', 100, ${vatClass}, ${AT}, ${AT})`;
+      sql`insert into products (id, name, unit_price, vat_class, created_at, updated_at) values (${randomUUID()}, 'Fixture', 100, ${vatClass}, ${AT}, ${AT})`;
     const vatError = await captureError(() => db.execute(insertProduct("bogus")));
     expect(isRefusal(vatError, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(vatError)).toBe("CHECK constraint failed: products_vat_class_ck");

@@ -222,7 +222,7 @@ async function tellStory(venue: AdjustmentVenue): Promise<Story> {
       .where(eq(persons.id, venue.managerId));
     const [added] = await seedPersons(tx, { displayName: "Anna Smith", role: "staff" });
     const [olives] = await tx
-      .select({ menuId: products.menuId, categoryId: products.categoryId })
+      .select({ categoryId: products.categoryId })
       .from(products)
       .where(eq(products.id, venue.olivesId));
     const ids = new Map<string, string>();

@@ -3,7 +3,7 @@ import { captureError, withTransaction, type Transaction } from "@waitron/db";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import type { SaleLineClassification } from "@waitron/shared";
 import { plantStoredCategory, seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
-import { createMenu, createProduct } from "./operations.js";
+import { createProduct } from "./operations.js";
 import { createCategory } from "./categories.js";
 import { setProductVariants } from "./variants.js";
 import {
@@ -28,7 +28,6 @@ async function fixture() {
   await seedTaxpayer(fx.db);
   await seedLegacySellingUnits(fx.db);
   return app(async (tx) => {
-    const menu = await createMenu(tx, { name: "Bar" });
     const drinks = await createCategory(tx, { name: "Drinks" });
     const alcoholic = await createCategory(tx, {
       name: "Alcoholic drinks",

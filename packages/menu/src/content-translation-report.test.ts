@@ -48,7 +48,6 @@ async function venue(tx: Transaction, config: ContentLanguages = SPANISH_DEFAULT
  * name belongs fails. */
 async function bread(
   tx: Transaction,
-  menuId: string,
   customerName: Record<string, string> | null = { es: "CLIENT-ES Pan con tomate" },
 ) {
   return createProduct(tx, {
@@ -91,8 +90,7 @@ describe("the missing-translations report", () => {
   it("lists a product with a Spanish customer name under Catalan and English, by its staff name, and not under Spanish", async () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const menu = await venue(tx);
-      const product = await bread(tx, menu.id);
+      const product = await bread(tx);
       const gaps = await report(tx);
       const listed = { kind: "product", id: product.id, name: "STAFF Pan", reason: "partial" };
       expect(gaps("ca")).toEqual([listed]);
@@ -104,8 +102,7 @@ describe("the missing-translations report", () => {
   it("drops the product from Catalan alone once a Catalan name is saved", async () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const menu = await venue(tx);
-      const product = await bread(tx, menu.id);
+      const product = await bread(tx);
       await tx
         .update(products)
         .set({ customerName: { es: "CLIENT-ES Pan con tomate", ca: "CLIENT-CA Pa amb tomàquet" } })
@@ -119,8 +116,7 @@ describe("the missing-translations report", () => {
   it("lists something with no customer-facing name under every enabled language", async () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const menu = await venue(tx);
-      const product = await bread(tx, menu.id, null);
+      const product = await bread(tx, null);
       const listed = { kind: "product", id: product.id, name: "STAFF Pan", reason: "absent" };
       const spanish = await report(tx);
       expect(spanish("ca")).toEqual([listed]);
@@ -136,9 +132,8 @@ describe("the missing-translations report", () => {
   it("lists a customer name with no text in the default language under the default", async () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const menu = await venue(tx);
       // No save path writes this, so it is written directly, as a receipt would then print nothing.
-      const product = await bread(tx, menu.id, { ca: "CLIENT-CA Pa amb tomàquet" });
+      const product = await bread(tx, { ca: "CLIENT-CA Pa amb tomàquet" });
       const gaps = await report(tx);
       expect(gaps("es")).toEqual([
         { kind: "product", id: product.id, name: "STAFF Pan", reason: "partial" },
@@ -151,7 +146,7 @@ describe("the missing-translations report", () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const menu = await venue(tx);
-      const parent = await bread(tx, menu.id, null);
+      const parent = await bread(tx, null);
       const variant = (name: string) => ({
         name,
         customerName: { es: `CLIENT-ES ${name}` },
@@ -404,12 +399,11 @@ describe("the missing-translations report", () => {
   it("orders two things with the same staff name by id", async () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const menu = await venue(tx);
       // Two Active products share a staff name only as data written before the unique-name rule,
       // so the first is renamed aside past the product paths while the second is made.
-      const first = (await bread(tx, menu.id)).id;
+      const first = (await bread(tx)).id;
       await tx.update(products).set({ name: "aside" }).where(eq(products.id, first));
-      const second = (await bread(tx, menu.id)).id;
+      const second = (await bread(tx)).id;
       await tx.update(products).set({ name: "STAFF Pan" }).where(eq(products.id, first));
       const ids = [first, second];
       expect((await report(tx))("ca").map((gap) => gap.id)).toEqual([...ids].sort());
@@ -431,8 +425,7 @@ describe("the missing-translations report", () => {
   it("keeps the shared gap read aligned with the report for an absent name", async () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const menu = await venue(tx);
-      const product = await bread(tx, menu.id, null);
+      const product = await bread(tx, null);
       expect((await report(tx))("ca").map((gap) => gap.id)).toEqual([product.id]);
       expect(await listContentTranslationGaps(tx, "ca")).toEqual([
         { kind: "product", id: product.id },
@@ -444,8 +437,7 @@ describe("the missing-translations report", () => {
     it("a deleted product in both the report and the default-change check", async () => {
       await seedTaxpayer(suite.db);
       await withTransaction(suite.db, async (tx) => {
-        const menu = await venue(tx);
-        const product = await bread(tx, menu.id);
+        const product = await bread(tx);
         expect((await report(tx))("ca")).toHaveLength(1);
         await deactivateProduct(tx, product.id);
         expect((await report(tx))("ca")).toEqual([]);
@@ -458,8 +450,7 @@ describe("the missing-translations report", () => {
     it("the variants of a deleted product", async () => {
       await seedTaxpayer(suite.db);
       await withTransaction(suite.db, async (tx) => {
-        const menu = await venue(tx);
-        const product = await bread(tx, menu.id);
+        const product = await bread(tx);
         await setProductVariants(
           tx,
           product.id,
@@ -487,8 +478,7 @@ describe("the missing-translations report", () => {
     it("an active variant retained under an archived product", async () => {
       await seedTaxpayer(suite.db);
       await withTransaction(suite.db, async (tx) => {
-        const menu = await venue(tx);
-        const product = await bread(tx, menu.id, null);
+        const product = await bread(tx, null);
         const [variant] = await setProductVariants(
           tx,
           product.id,

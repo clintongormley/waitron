@@ -15,7 +15,7 @@ import {
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
-import { createMenu, createCategory, createProduct } from "@waitron/menu";
+import { createCategory, createProduct } from "@waitron/menu";
 import {
   hashPin,
   hashSessionToken,
@@ -168,7 +168,6 @@ const suite = useVenueDb({
     inactivePrinter = await printer({ name: "Old", active: false });
 
     await withTransaction(db, async (tx) => {
-      const menu = await createMenu(tx, { name: "Bar" });
       const drinks = await createCategory(tx, { name: "Beverages" });
       const softs = await createCategory(tx, { name: "Soft drinks", parentId: drinks.id });
       const loopA = await createCategory(tx, { name: "Loop A" });

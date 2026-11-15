@@ -173,7 +173,7 @@ async function existingWrite(
 ) {
   if (kind === "product" || kind === "variant") {
     const value = await readProductEditor(tx, ids[kind]);
-    return saveProductEditor(tx, ids[kind], ids.menuId, { ...value, customerName: names }, "en");
+    return saveProductEditor(tx, ids[kind], { ...value, customerName: names }, "en");
   }
   if (kind === "option_list" || kind === "option_label") {
     const { id, ...value } = await getOptionList(tx, ids.option_list);

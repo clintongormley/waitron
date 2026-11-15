@@ -14,7 +14,6 @@ import {
   ticketItems,
   workingOrderLines,
   workingOrders,
-  products,
   lineServiceCancellations,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -374,10 +373,6 @@ describe("A669 notices", () => {
     "%s routes allergy corrections to exactly the exposed dish/extra stations",
     async (release) => {
       const extra = await inTx(v, async (tx) => {
-        const [parent] = await tx
-          .select()
-          .from(products)
-          .where(eq(products.id, v.productId("Burger")));
         const { defaultLanguage } = await readContentLanguages(tx, v.cfg.locale);
         const side = await createProduct(tx, {
           categoryId: null,

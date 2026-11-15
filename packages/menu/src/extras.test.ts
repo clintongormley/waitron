@@ -54,7 +54,6 @@ const unitPrices = { sourdough: "2.50", focaccia: "4.00", rye: "3.25" };
 beforeEach(async () => {
   await seedTaxpayer(fx.db);
   await run(async (tx) => {
-    const menu = await createMenu(tx, { name: "Deli" });
     for (const [key, unitPrice] of Object.entries(unitPrices)) {
       const product = await createProduct(tx, {
         categoryId: null,
@@ -116,7 +115,6 @@ describe("extra list CRUD", () => {
         },
         "en",
       );
-      const menu = await createMenu(tx, { name: "Weighted extras" });
       const product = await createProduct(tx, {
         categoryId: null,
         name: "Cheese",
@@ -149,7 +147,6 @@ describe("extra list CRUD", () => {
         },
         "en",
       );
-      const menu = await createMenu(tx, { name: "Weighted extras" });
       const product = await createProduct(tx, {
         categoryId: null,
         name: "Cheese",
@@ -183,7 +180,6 @@ describe("extra list CRUD", () => {
         "en",
       );
       await tx.execute(sql`update units set hardware_unit = 'g' where id = ${unit.id}`);
-      const menu = await createMenu(tx, { name: "Weighted extras" });
       const product = await createProduct(tx, {
         categoryId: null,
         name: "Cheese",
@@ -220,7 +216,6 @@ describe("extra list CRUD", () => {
         "en",
       );
       await tx.execute(sql`update units set seed_key = ${seedKey} where id = ${unit.id}`);
-      const menu = await createMenu(tx, { name: "Poured extras" });
       const product = await createProduct(tx, {
         categoryId: null,
         name: "Olive oil",
@@ -258,7 +253,6 @@ describe("extra list CRUD", () => {
         "en",
       );
       await tx.execute(sql`update units set seed_key = 'each' where id = ${unit.id}`);
-      const menu = await createMenu(tx, { name: "Counted extras" });
       const product = await createProduct(tx, {
         categoryId: null,
         name: "Olive",
@@ -299,7 +293,6 @@ describe("extra list CRUD", () => {
         "en",
       );
       await tx.execute(sql`update units set seed_key = 'ml' where id = ${unit.id}`);
-      const menu = await createMenu(tx, { name: "Poured extras" });
       const product = await createProduct(tx, {
         categoryId: null,
         name: "Olive oil",
@@ -411,7 +404,6 @@ describe("extra list CRUD", () => {
         },
         "en",
       );
-      const menu = await createMenu(tx, { name: "Weighted extras" });
       const product = await createProduct(tx, {
         categoryId: null,
         name: "Cheese",
@@ -676,7 +668,6 @@ describe("extra list CRUD", () => {
         },
         "en",
       );
-      const menu = await createMenu(tx, { name: "Weighted extras" });
       const product = await createProduct(tx, {
         categoryId: null,
         name: "Cheese",
@@ -708,7 +699,6 @@ describe("extra list CRUD", () => {
         },
         "en",
       );
-      const menu = await createMenu(tx, { name: "Weighted extras" });
       const product = await createProduct(tx, {
         categoryId: null,
         name: "Cheese",
@@ -1019,7 +1009,6 @@ describe("extra list CRUD", () => {
   it("names every product that carries the list, by the product's staff name", async () => {
     const created = await run((tx) => createExtraList(tx, breadList(), "en"));
     const dishes = await run(async (tx) => {
-      const menu = await createMenu(tx, { name: "Counter" });
       const made: string[] = [];
       // Two dishes with DIFFERENT names, so a join that reaches the wrong product row shows up
       // here rather than passing. A third carries nothing, so a read that simply listed every

@@ -55,7 +55,7 @@ it.each(["products", "available", "offers"] as const)(
       await addProductToMenu(tx, { menuId: menu.id, productId: each.id, grossPrice: "1.00" });
       const rows =
         surface === "products"
-          ? await listProducts(tx, menu.id)
+          ? await listProducts(tx)
           : surface === "available"
             ? (await listAvailableProducts(tx)).products
             : await listMenuOffers(tx, [menu.id]);

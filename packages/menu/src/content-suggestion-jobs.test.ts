@@ -4,7 +4,6 @@ import { eq, inArray } from "drizzle-orm";
 import { contentSuggestionJobs, contentSuggestions, products } from "@waitron/db";
 import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { writeContentLanguages } from "./content-languages.js";
-import { createMenu } from "./operations.js";
 import {
   markSuggestionRunOpened,
   readActiveSuggestionJob,
@@ -93,11 +92,7 @@ it("counts a variant but not its complete product, which travels only as context
   await seedVenueSettings(suite.db);
   const { water, small } = await app(async (tx) => {
     await writeContentLanguages(tx, { defaultLanguage: "ca", languages: ["ca", "es", "en"] });
-    const menu = await createMenu(tx, {
-      name: "STAFF Carta",
-      names: { ca: "CLIENT-CA Carta", es: "CLIENT-ES Carta", en: "CLIENT-EN Menu" },
-    });
-    const water = await addProduct(tx, menu.id, "Water", {
+    const water = await addProduct(tx, "Water", {
       ca: "CLIENT-CA Aigua",
       es: "CLIENT-ES Agua",
       en: "CLIENT-EN Water",

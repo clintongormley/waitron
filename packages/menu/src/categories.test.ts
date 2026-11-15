@@ -42,7 +42,7 @@ async function fixture() {
 }
 describe("category authoring", () => {
   it("keeps the name, and gives a product a main category with no membership", async () => {
-    const { app, food, drinks, product, menu } = await fixture();
+    const { app, food, drinks, product } = await fixture();
     expect(food).toEqual({
       id: food.id,
       name: "Food",
@@ -54,7 +54,7 @@ describe("category authoring", () => {
     });
     // Moving it is a plain replacement: nothing is kept in the category it left.
     await app((tx) => setMainReportingCategory(tx, product.id, drinks.id));
-    const [listed] = await app((tx) => listProducts(tx, menu.id));
+    const [listed] = await app((tx) => listProducts(tx));
     expect(listed).toMatchObject({
       id: product.id,
       categoryId: drinks.id,
@@ -87,7 +87,7 @@ describe("category authoring", () => {
     expect(await app((tx) => setMainReportingCategory(tx, product.id, null))).toEqual({
       primaryCategoryId: null,
     });
-    expect((await app((tx) => listProducts(tx, menu.id)))[0]!.categoryId).toBeNull();
+    expect((await app((tx) => listProducts(tx)))[0]!.categoryId).toBeNull();
     // Sorted by id: two rows written in one millisecond tie on `created_at`, and the random id then
     // decides their order (operations.test.ts, "settles a created_at tie").
     expect(byId(await app((tx) => listCategories(tx)))).toEqual(byId([food, drinks]));
@@ -219,7 +219,7 @@ describe("category authoring", () => {
 
 it("updateProduct's categoryId sets the main category, with no membership coupling", async () => {
   const { updateProduct } = await import("./operations.js");
-  const { app, food, drinks, product, menu } = await fixture();
+  const { app, food, drinks, product } = await fixture();
   const second = await app((tx) =>
     createProduct(tx, {
       categoryId: drinks.id,

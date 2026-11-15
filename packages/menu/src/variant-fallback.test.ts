@@ -185,7 +185,7 @@ beforeEach(async () => {
 
 describe("listProducts lists the parent alone, its variants nested under it", () => {
   it("reads the parent itself unchanged", async () => {
-    const all = await run((tx) => listProducts(tx, f.menuId));
+    const all = await run((tx) => listProducts(tx));
     expect(all.find((p) => p.id === f.parentId)).toMatchObject({
       name: "Wine by the glass",
       customerName: { en: "House wine" },
@@ -198,7 +198,7 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
   });
 
   it("nests each variant by its own names and stored price, never listing it on its own", async () => {
-    const all = await run((tx) => listProducts(tx, f.menuId));
+    const all = await run((tx) => listProducts(tx));
     expect(all.map((p) => p.id)).toEqual([f.parentId]);
     expect(all[0]!.variants).toEqual([
       {
@@ -246,7 +246,7 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
 
   it("lists an Inactive variant too, in variant order, with its effective values", async () => {
     await fx.db.update(products).set({ active: false }).where(eq(products.id, f.wine125));
-    const [parent] = await run((tx) => listProducts(tx, f.menuId));
+    const [parent] = await run((tx) => listProducts(tx));
     expect(
       parent!.variants.map(({ id, active, effective }) => ({ id, active, effective })),
     ).toEqual([
@@ -278,7 +278,7 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
   });
 
   it("names the product's course, and each variant's own course and the course it is fired in", async () => {
-    const [parent] = await run((tx) => listProducts(tx, f.menuId));
+    const [parent] = await run((tx) => listProducts(tx));
     expect(parent!.courseId).toBe(f.courseId);
     expect(
       parent!.variants.map(({ id, courseId, effective }) => ({
@@ -302,7 +302,7 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
             return Reflect.get(target, key, receiver) as unknown;
           },
         });
-        return listProducts(counting, f.menuId);
+        return listProducts(counting);
       });
       return count;
     };
@@ -316,12 +316,10 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
           unitPrice: "3.00",
           vatClass: "general",
         });
-        await tx
-          .insert(products)
-          .values({  parentId: parent.id, name: `${name} pint` });
+        await tx.insert(products).values({ parentId: parent.id, name: `${name} pint` });
       }
     });
-    const listed = await run((tx) => listProducts(tx, f.menuId));
+    const listed = await run((tx) => listProducts(tx));
     expect(Object.fromEntries(listed.map(({ name, variants }) => [name, variants.length]))).toEqual(
       { "Wine by the glass": 2, Cider: 1, Beer: 1 },
     );
@@ -423,7 +421,7 @@ describe("a variant's unit is always its product's", () => {
       });
       const [variant] = await tx
         .insert(products)
-        .values({  parentId: parent.id, name: "Cider pint" })
+        .values({ parentId: parent.id, name: "Cider pint" })
         .returning({ id: products.id });
       await plantStoredUnit(tx, variant!.id, f.largeGlass);
       await addProductToMenu(tx, { menuId: f.menuId, productId: parent.id, grossPrice: null });
@@ -623,10 +621,10 @@ describe("createProduct", () => {
 });
 
 describe("what the products table refuses", () => {
-  it("refuses a variant in a different menu from its parent", async () => {
+  it("refuses a variant whose parent does not exist", async () => {
     await expect(
       fx.db.insert(products).values({
-        parentId: f.parentId,
+        parentId: crypto.randomUUID(),
         name: "Stray variant",
       }),
     ).rejects.toMatchObject({
@@ -635,10 +633,9 @@ describe("what the products table refuses", () => {
     });
   });
 
-  // The accepting control for the case above: the same insert in the parent's menu.
-  it("accepts a variant in its parent's menu", async () => {
+  it("accepts a variant under an existing parent without a menu", async () => {
     await expect(
-      fx.db.insert(products).values({  parentId: f.parentId, name: "250 ml" }),
+      fx.db.insert(products).values({ parentId: f.parentId, name: "250 ml" }),
     ).resolves.toBeDefined();
   });
 
@@ -689,7 +686,7 @@ describe("dietary declarations on a variant", () => {
   it("stores the column default when the field is omitted, and reads it as the variant's own", async () => {
     const [row] = await fx.db
       .insert(products)
-      .values({  parentId: f.parentId, name: "250 ml" })
+      .values({ parentId: f.parentId, name: "250 ml" })
       .returning({ id: products.id, dietaryDeclarations: products.dietaryDeclarations });
     expect(row!.dietaryDeclarations).toEqual([]);
     expect(await effectiveDeclarations(row!.id)).toEqual([]);

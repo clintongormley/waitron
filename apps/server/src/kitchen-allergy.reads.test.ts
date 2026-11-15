@@ -2,7 +2,7 @@ import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { kitchenStations, workingOrderLines, products } from "@waitron/db";
+import { kitchenStations, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -121,10 +121,6 @@ const monitorBoard = (scope: PassScope) =>
 /** A Side product offered as an extra on the Burger and routed to its own station. */
 const routedExtra = () =>
   inTx(v, async (tx) => {
-    const [parent] = await tx
-      .select()
-      .from(products)
-      .where(eq(products.id, v.productId("Burger")));
     const { defaultLanguage } = await readContentLanguages(tx, v.cfg.locale);
     const side = await createProduct(tx, {
       categoryId: null,

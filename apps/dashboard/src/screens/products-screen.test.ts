@@ -257,9 +257,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     updateOptionList: vi.fn().mockResolvedValue(optionLists[0]),
     listStations: vi.fn().mockResolvedValue([]),
     listCourses: vi.fn().mockResolvedValue([]),
-    listProducts: vi
-      .fn()
-      .mockImplementation((id: string) => Promise.resolve(id === "cat-a" ? products : [])),
+    listProducts: vi.fn().mockResolvedValue(products),
     getFolderRouting: vi.fn().mockResolvedValue({
       stationTimes: [],
       todayEnds: null,
@@ -351,8 +349,7 @@ describe("menu-screen", () => {
     await flush(el);
     expect(api.listUnits).toHaveBeenCalledOnce();
     expect(api.listCategories).toHaveBeenCalledOnce();
-    expect(api.listProducts).toHaveBeenCalledWith("cat-a");
-    expect(api.listProducts).toHaveBeenCalledWith("cat-b");
+    expect(api.listProducts).toHaveBeenCalledExactlyOnceWith();
     expect(api.getFolderRouting).toHaveBeenCalledOnce();
     expect(list(el).routing).toMatchObject({ cells: [], defaultStationId: null });
     expect(list(el).products).toEqual(products);
@@ -783,9 +780,7 @@ describe("menu-screen", () => {
     it("forgets the last dialog's count while the next product's is still being read", async () => {
       const both = [...products, { ...products[0]!, id: "p2", name: "ES potatoes" }];
       const api = stubApi({
-        listProducts: vi
-          .fn()
-          .mockImplementation((id: string) => Promise.resolve(id === "cat-a" ? both : [])),
+        listProducts: vi.fn().mockResolvedValue(both),
         countProductMenus: vi
           .fn()
           .mockResolvedValueOnce(4)
@@ -806,8 +801,8 @@ describe("menu-screen", () => {
     const archived = { ...(await api.getProductEditor(productId)), active: false };
     vi.mocked(api.getProductEditor).mockReset().mockResolvedValue(archived);
     const original = vi.mocked(api.listProducts).getMockImplementation()!;
-    vi.mocked(api.listProducts).mockImplementation(async (id: string) =>
-      (await original(id)).map((product) => ({
+    vi.mocked(api.listProducts).mockImplementation(async () =>
+      (await original()).map((product) => ({
         ...product,
         active: product.id === productId ? false : product.active,
         variants: product.variants.map((variant) => ({
@@ -864,10 +859,11 @@ describe("menu-screen", () => {
     emit(editor(el), "wt-submit", { value: value as ProductEditorInput });
     emit(editor(el), "wt-submit", { value: value as ProductEditorInput });
     expect(api.createProductEditor).toHaveBeenCalledOnce();
+    expect(vi.mocked(api.createProductEditor).mock.calls[0]).toHaveLength(1);
     release();
     await flush(el);
     expect(editor(el).open).toBe(false);
-    expect(api.listProducts).toHaveBeenCalledTimes(4);
+    expect(api.listProducts).toHaveBeenCalledTimes(2);
   });
 
   it("draws the title alone in the header", async () => {
@@ -2801,9 +2797,7 @@ describe("menu-screen", () => {
     };
     const variantApi = () =>
       stubApi({
-        listProducts: vi
-          .fn()
-          .mockImplementation((id: string) => Promise.resolve(id === "cat-a" ? withVariant : [])),
+        listProducts: vi.fn().mockResolvedValue(withVariant),
         getProductEditor: vi
           .fn()
           .mockImplementation((id: string) => Promise.resolve(id === "v1" ? variantValue : value)),
@@ -3489,10 +3483,11 @@ describe("menu-screen sticky headings", () => {
     return { el, host };
   }
 
-  it("keeps the no-menu prompt its own height", async () => {
+  it("offers Add product when no menu exists", async () => {
     const { el } = await mountBounded({}, stubApi({ listMenus: vi.fn().mockResolvedValue([]) }));
-    const prompt = el.shadowRoot!.querySelector<HTMLElement>("[data-test=no-menu]")!;
-    expect(prompt.getBoundingClientRect().height).toBeLessThan(100);
+    expect(list(el)).not.toBeNull();
+    expect(list(el).canAddProduct).toBe(true);
+    expect(el.shadowRoot!.querySelector("[data-test=no-menu]")).toBeNull();
   });
 });
 
@@ -3623,11 +3618,7 @@ it("paints All products' square, an uncategorised product and a new product's in
       getMenuSettings: vi
         .fn()
         .mockResolvedValue({ defaultProductVatClass: "general", defaultColor: "#b12525" }),
-      listProducts: vi
-        .fn()
-        .mockImplementation((id: string) =>
-          Promise.resolve(id === "cat-a" ? [...products, loose] : []),
-        ),
+      listProducts: vi.fn().mockResolvedValue([...products, loose]),
     }),
     { liveData },
   );

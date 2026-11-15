@@ -2358,8 +2358,6 @@ describe("zone-offer menu routes", () => {
           dietOverride: null,
           dietaryDeclarations: [],
           courseId: null,
-          menuId: waterProduct.menuId,
-          menuName: "Daily menu",
           // `offeredModifiers` is the extras-and-options walk the till draws from
           // (`readOfferedModifiers`), empty here because these seeded products attach nothing.
           offeredModifiers: [],
@@ -2380,8 +2378,6 @@ describe("zone-offer menu routes", () => {
           dietOverride: null,
           dietaryDeclarations: [],
           courseId: null,
-          menuId: beerProduct.menuId,
-          menuName: "Happy Hour",
           offeredModifiers: [],
         },
       ],
