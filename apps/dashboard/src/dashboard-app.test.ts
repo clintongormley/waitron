@@ -7711,12 +7711,10 @@ describe("dashboard-app: remaining faces and shell controls", () => {
   it("passes box-management permission to the Cloud screen", async () => {
     history.replaceState(null, "", "/manage/cloud");
     const api = faceApi();
-    api.getMe = vi
-      .fn()
-      .mockResolvedValue({
-        ...meResponse,
-        permissions: [...meResponse.permissions, "node.manage"],
-      });
+    api.getMe = vi.fn().mockResolvedValue({
+      ...meResponse,
+      permissions: [...meResponse.permissions, "node.manage"],
+    });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
     await flush(el);
     expect(
