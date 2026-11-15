@@ -49,6 +49,13 @@ name a stylesheet reads must be declared in the token layer. `scripts/style-toke
 checks only that some file under `apps/` or `packages/` declares it, not where, by reading text;
 its header lists what it cannot see.
 
+## Browser support
+
+A browser feature that is Baseline widely available (the status the modern-web guidance gives each
+feature) may be used freely; a newer one only together with a fallback, so the screen still works on
+an older iPad. The owner chose this on 2026-11-15, picking "Widely available + fallbacks" for the
+modern-web guidance review.
+
 ## Setting up a theme root
 
 ```ts
