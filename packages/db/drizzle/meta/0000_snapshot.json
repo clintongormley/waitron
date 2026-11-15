@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "7cdb789a-5ace-4434-883e-1e5a5c1e5a86",
+  "id": "1cfbc387-23e7-4a90-8b5f-ba1083734756",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -14900,6 +14900,13 @@
         },
         "transfer_desk_profile_id": {
           "name": "transfer_desk_profile_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "operation_description": {
+          "name": "operation_description",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
