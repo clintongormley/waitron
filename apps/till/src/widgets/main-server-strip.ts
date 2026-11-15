@@ -30,13 +30,7 @@ export class TillMainServerStrip extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
       .words {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
         flex: 1 1 auto;
-      }
-      .refused {
-        font-weight: var(--wt-font-weight-normal);
       }
     `,
   ];
@@ -48,14 +42,15 @@ export class TillMainServerStrip extends LitElement {
   override render() {
     const switchable = this.spareAnswering && this.showSwitch;
     return html`<div class="strip" role="alert" data-main-server-strip>
-      <div class="words">
-        <span>${t(this.spareAnswering ? "server.main_silent" : "server.none_answering")}</span>
-        ${
+      <span class="words"
+        >${t(
           switchable && this.refused
-            ? html`<span class="refused">${t("server.main_still_answering")}</span>`
-            : nothing
-        }
-      </div>
+            ? "server.main_still_answering"
+            : this.spareAnswering
+              ? "server.main_silent"
+              : "server.none_answering",
+        )}</span
+      >
       ${
         switchable
           ? html`<wt-button

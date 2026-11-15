@@ -56,6 +56,8 @@ it("says the main server still answers once refused", async () => {
     refused: true,
   });
   expect(el.shadowRoot!.textContent).toContain(t("server.main_still_answering"));
+  expect(el.shadowRoot!.textContent).not.toContain(t("server.main_silent"));
+  expect(button(el)).not.toBeNull();
 });
 
 it("says no server answers, with no button, while the spare is silent too", async () => {

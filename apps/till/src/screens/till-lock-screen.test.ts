@@ -833,12 +833,16 @@ describe("till-lock-screen", () => {
     });
     await flush(el);
     expect(el.shadowRoot!.querySelector("till-main-server-strip")).toBeNull();
-    el.mainServer = { spareAnswering: true, refused: false };
+    el.mainServerSilent = true;
+    el.spareAnswering = true;
+    el.mainServerRefused = true;
     await el.updateComplete;
-    const strip = el.shadowRoot!.querySelector<HTMLElement & { showSwitch: boolean }>(
-      "till-main-server-strip",
-    )!;
+    const strip = el.shadowRoot!.querySelector<
+      HTMLElement & { showSwitch: boolean; spareAnswering: boolean; refused: boolean }
+    >("till-main-server-strip")!;
     expect(strip.showSwitch).toBe(true);
+    expect(strip.spareAnswering).toBe(true);
+    expect(strip.refused).toBe(true);
     const line = el.shadowRoot!.querySelector("[data-server-status]")!.textContent!;
     expect(line).toContain("box.deli.test");
     expect(line).not.toContain(t("server.waiting_promotion"));

@@ -21251,11 +21251,6 @@ export class TillApp extends LitElement {
       : nothing;
   }
 
-  #lockMainServer(): { spareAnswering: boolean; refused: boolean } | undefined {
-    const strip = this.#mainServerStrip();
-    return strip === undefined ? undefined : { ...strip, refused: this.mainServerRefused };
-  }
-
   #inShell(): boolean {
     return this.formFactor !== undefined && this.#shellActive();
   }
@@ -22949,7 +22944,9 @@ export class TillApp extends LitElement {
                           .serverStatuses=${this.router?.statuses() ?? []}
                           .serverCurrent=${this.router?.current ?? ""}
                           .serverWaiting=${this.router?.waiting ?? false}
-                          .mainServer=${this.#lockMainServer()}
+                          .mainServerSilent=${this.#mainServerStrip() !== undefined}
+                          .spareAnswering=${this.#mainServerStrip()?.spareAnswering ?? false}
+                          .mainServerRefused=${this.mainServerRefused}
                           @switch-to-spare=${() => void this.#onSwitchToSpare()}
                           .clockNotice=${this.pinClockNotice}
                           @check-again=${() => void this.router?.probeNow()}

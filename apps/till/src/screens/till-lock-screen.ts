@@ -190,7 +190,9 @@ export class TillLockScreen extends LitElement {
   @property({ type: Boolean }) serverWaiting = false;
 
   /** Set while the till app shows the main-server strip, which takes the waiting line's place. */
-  @property({ attribute: false }) mainServer?: { spareAnswering: boolean; refused: boolean };
+  @property({ type: Boolean }) mainServerSilent = false;
+  @property({ type: Boolean }) spareAnswering = false;
+  @property({ type: Boolean }) mainServerRefused = false;
 
   @property({ attribute: false }) clockNotice?: StaffNotice;
 
@@ -429,12 +431,11 @@ export class TillLockScreen extends LitElement {
   }
 
   #renderMainServer() {
-    const strip = this.mainServer;
-    if (strip === undefined) return nothing;
+    if (!this.mainServerSilent) return nothing;
     return html`<till-main-server-strip
-      .spareAnswering=${strip.spareAnswering}
+      .spareAnswering=${this.spareAnswering}
       .showSwitch=${true}
-      .refused=${strip.refused}
+      .refused=${this.mainServerRefused}
     ></till-main-server-strip>`;
   }
 
@@ -450,7 +451,7 @@ export class TillLockScreen extends LitElement {
     return html`
       <p class="servers status" role="status" data-server-status>
         ${known.map(row).join(" · ")}${
-          this.serverWaiting && this.mainServer === undefined
+          this.serverWaiting && !this.mainServerSilent
             ? html` — ${t("server.waiting_promotion")}`
             : nothing
         }
