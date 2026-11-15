@@ -184,6 +184,7 @@ describe("formatInvoiceNumber", () => {
 describe("recordSale — the sale's origin", () => {
   it("requires an operation description in the record input", () => {
     const { operationDescription: _description, ...missing } = input();
+    void _description;
     // @ts-expect-error A record's description belongs to its caller.
     const _invalid: RecordSaleInput = missing;
     expectTypeOf(_invalid).toEqualTypeOf<RecordSaleInput>();

@@ -75,17 +75,10 @@ async function fixture(): Promise<Fixture> {
     const venue = (name: string) => ({
       name: `${name} ${randomUUID()}`,
       invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
       dayCutover: "06:00:00",
     });
-    const {
-      name: venueName,
-      invoiceLocales,
-      operationDescription,
-      timeZone,
-      dayCutover,
-    } = venue("Venue");
+    const { name: venueName, invoiceLocales, timeZone, dayCutover } = venue("Venue");
     await seedVenueSettings(tx, { name: venueName, invoiceLocales });
     await seedBusinessDay(tx, { timeZone, dayCutover });
     const department = (name: string, isDefault = false) => ({
