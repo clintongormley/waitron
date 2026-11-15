@@ -22001,6 +22001,27 @@ export class TillApp extends LitElement {
     });
   }
 
+  #renderNoticeStrip(notices: readonly StaffNotice[] = this.staffNotices) {
+    return html`<till-notice-strip
+        slot="notices"
+        .notices=${notices}
+        .checkTimeOffered=${this.checkTimeOffered}
+        .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
+        .drawerBusy=${this.drawerOpening}
+        @till-open-drawer=${() => void this.#onOpenDrawer()}
+        @till-check-time=${() => (this.boxTimeOpen = true)}
+      ></till-notice-strip
+      >${
+        this.boxTimeOpen
+          ? html`<till-box-time-dialog
+              .api=${this.api}
+              @box-time-close=${() => (this.boxTimeOpen = false)}
+              @box-time-done=${() => void this.#readEquipment()}
+            ></till-box-time-dialog>`
+          : nothing
+      }`;
+  }
+
   override render() {
     const shellFormFactor = this.#inShell() ? this.formFactor : undefined;
     const lateSendWindow = this.lateSendWindow;
@@ -22655,6 +22676,16 @@ export class TillApp extends LitElement {
              when the chooser's list failed), whose enrolled event (wired above) re-boots into the
              matching shell. -->
         ${
+          this.frontDoor === undefined && (this.attendancePage || this.clockPage)
+            ? this.#renderNoticeStrip(
+                this.staffNotices.filter(
+                  (notice) =>
+                    notice.code === "storage.disk_full" || notice.code === "storage.space_low",
+                ),
+              )
+            : nothing
+        }
+        ${
           this.frontDoor === "chooser"
             ? html`<till-device-chooser
                 .api=${this.api}
@@ -22783,28 +22814,7 @@ export class TillApp extends LitElement {
                             this.#requestLeave(() => this.#onTabSelect(e.detail.screen));
                           }}
                         >
-                          ${
-                            this.deviceMode
-                              ? nothing
-                              : html`<till-notice-strip
-                                    slot="notices"
-                                    .notices=${this.staffNotices}
-                                    .checkTimeOffered=${this.checkTimeOffered}
-                                    .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
-                                    .drawerBusy=${this.drawerOpening}
-                                    @till-open-drawer=${() => void this.#onOpenDrawer()}
-                                    @till-check-time=${() => (this.boxTimeOpen = true)}
-                                  ></till-notice-strip
-                                  >${
-                                    this.boxTimeOpen
-                                      ? html`<till-box-time-dialog
-                                          .api=${this.api}
-                                          @box-time-close=${() => (this.boxTimeOpen = false)}
-                                          @box-time-done=${() => void this.#readEquipment()}
-                                        ></till-box-time-dialog>`
-                                      : nothing
-                                  }`
-                          }
+                          ${this.deviceMode ? nothing : this.#renderNoticeStrip()}
                           ${
                             this.transferSnapshot === undefined
                               ? nothing

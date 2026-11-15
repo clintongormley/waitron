@@ -28,6 +28,7 @@ import {
 } from "@waitron/payments";
 import type { JobView } from "./job-runner.js";
 import type { BackupStatus } from "./backup-status.js";
+import type { StaffNoticesRead } from "./staff-notices.js";
 import type { DiskFullState } from "./disk-full-state.js";
 import type { FreeSpaceState } from "./free-space-watch.js";
 import { type InvoiceDeliveryStatus, readInvoiceDeliveriesFor } from "./invoice-delivery-status.js";
@@ -344,10 +345,19 @@ export function appendOnlyRestoredAlertSource(holder: { restoredAt: string | nul
   };
 }
 
-/**
- * The box's disk: `storage.disk_full` while the full-disk stop is noted, else `storage.space_low`
- * while the free-space warning is on. Never both: the warning says everything still works.
- */
+/** The registry supplies the generic unavailable-check alert when this read throws. */
+export function staffNoticeAlertSource(read: () => Promise<StaffNoticesRead>): AlertSource {
+  return {
+    area: "box",
+    permission: "system.manage",
+    readOutsideTransaction: true,
+    async read() {
+      if ((await read()).unavailable.length > 0) throw new Error("staff notice check unavailable");
+      return [];
+    },
+  };
+}
+
 export function storageAlertSource(deps: {
   space: Pick<FreeSpaceState, "current">;
   disk: Pick<DiskFullState, "since">;

@@ -62,6 +62,8 @@ import {
 import { PERSON_HEADER, jobOrigin, nodeId as brandNodeId } from "@waitron/shared";
 import { openVenueStore } from "@waitron/store";
 import { WorkforceBackend } from "@waitron/workforce";
+import { createErrorBoundary } from "@waitron/server-kit";
+import { FULL_DISK_BYTES, venueDiskFullMiddleware } from "./boot-failure.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { loadKeyRing } from "@waitron/credentials";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
@@ -247,6 +249,45 @@ function pageOver(port: number, ca: Buffer): Promise<{ status?: number; body: st
     }).on("error", reject);
   });
 }
+
+describe("a route's system ENOSPC on a real full disk", () => {
+  it("names a full venue, serves the retry with space, and keeps a full other destination generic", async (ctx) => {
+    const small = needDisk(ctx);
+    const destination = join(small.folder("errno-write"), "saved");
+    const appFor = (venue: string) => {
+      const app = new Hono();
+      const run = createErrorBoundary({}, "write.failed");
+      app.use("*", venueDiskFullMiddleware(venue));
+      app.post("/write", (c) =>
+        run(
+          c,
+          () => {},
+          async () => {
+            writeFileSync(destination, Buffer.alloc(MiB));
+            return c.json({ saved: true });
+          },
+        ),
+      );
+      return app;
+    };
+    const venue = appFor(small.folder("errno-venue"));
+    small.fill();
+    const refused = await venue.request("/write", { method: "POST" });
+    expect(refused.status).toBe(507);
+    expect(await refused.json()).toEqual({ error: { code: "storage.disk_full", params: {} } });
+    small.unfill();
+    const retry = await venue.request("/write", { method: "POST" });
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toEqual({ saved: true });
+    expect(readFileSync(destination)).toHaveLength(MiB);
+    rmSync(destination);
+    expect(await freeBytes(tmpdir())).toBeGreaterThan(FULL_DISK_BYTES);
+    small.fill();
+    const other = await appFor(tmpdir()).request("/write", { method: "POST" });
+    expect(other.status).toBe(500);
+    expect(await other.json()).toEqual({ error: { code: "server.internal" } });
+  });
+});
 
 describe("the Box status read and free-space deletion on a real full disk", () => {
   const MIB = 1024 * 1024;

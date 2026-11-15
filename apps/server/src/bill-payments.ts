@@ -33,6 +33,7 @@ import {
   decimal,
   decimalToCents,
   diskFullIn,
+  firstCodeInCauseChain,
   isAppError,
   MONEY_SCALE,
   multiplyDecimal,
@@ -1429,7 +1430,8 @@ export function clockUnconfirmedRefusal(error: unknown): boolean {
 
 function notRecordedReason(error: unknown): NotRecordedReason | null {
   if (error instanceof IssuanceRefusedError || isUniqueViolation(error)) return "issuance_refused";
-  if (diskFullIn(error)) return "disk_full";
+  if (diskFullIn(error) || firstCodeInCauseChain(error, (code) => code === "ENOSPC") !== null)
+    return "disk_full";
   if (error instanceof AppError && error.code === "clock.unusable") return "clock_unusable";
   if (clockUnconfirmedRefusal(error)) return "clock_unconfirmed";
   return null;

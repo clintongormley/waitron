@@ -1,6 +1,7 @@
 import { firstCodeInCauseChain, diskFullIn, isAppError, sqliteFailureOf } from "@waitron/shared";
 import "./errors.js";
-import type { Statfs } from "./free-bytes.js";
+import { freeBytes, type Statfs } from "./free-bytes.js";
+import type { MiddlewareHandler } from "hono";
 import { lowestFreeBytes } from "./start-space.js";
 
 /**
@@ -83,4 +84,14 @@ export async function startFailureCode(
   statfs?: Statfs,
 ): Promise<string> {
   return classifyStartFailure(error, await lowestFreeBytes(dirs, statfs));
+}
+
+export function venueDiskFullMiddleware(dir: string, statfs?: Statfs): MiddlewareHandler {
+  return async (c, next) => {
+    c.set("venueDiskFull", async () => {
+      const free = await freeBytes(dir, statfs);
+      return free !== null && free < FULL_DISK_BYTES;
+    });
+    await next();
+  };
 }

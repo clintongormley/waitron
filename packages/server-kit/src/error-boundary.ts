@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { diskFullIn, isAppError } from "@waitron/shared";
+import { diskFullIn, firstCodeInCauseChain, isAppError } from "@waitron/shared";
 import { codeOf } from "./error-code.js";
 import type { Logger } from "./logger.js";
 
@@ -9,11 +9,12 @@ import type { Logger } from "./logger.js";
 declare module "hono" {
   interface ContextVariableMap {
     requestId: string;
+    venueDiskFull?: () => Promise<boolean>;
   }
 }
 
 /**
- *  - A full disk in the cause chain (`diskFullIn`) → `{ error: { code: "storage.disk_full",
+ *  - A full disk in the cause chain (`diskFullIn`), or ENOSPC with a full venue disk → `{ error: { code: "storage.disk_full",
  *    params } }` at the status `status` assigns it, or 507, logged at `error`; `params` is the
  *    thrown `AppError("storage.disk_full")`'s own, and `{}` for any other full disk.
  *  - Any other `AppError` → `{ error: { code, params } }` at the status `status` assigns the code,
@@ -32,7 +33,10 @@ export function createErrorBoundary(
     } catch (cause) {
       // A log field only, never added to the response.
       const requestId = c.get("requestId");
-      if (diskFullIn(cause)) {
+      const venueFull =
+        firstCodeInCauseChain(cause, (code) => code === "ENOSPC") !== null &&
+        (await c.get("venueDiskFull")?.());
+      if (diskFullIn(cause) || venueFull) {
         log("error", "storage.disk_full", { requestId });
         const params = isAppError(cause) && cause.code === "storage.disk_full" ? cause.params : {};
         return c.json(

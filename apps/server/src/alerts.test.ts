@@ -19,7 +19,10 @@ import {
   createAlertRegistry,
   readHandledAlerts,
   readOpenAlerts,
+  readOutsideTransactionAlerts,
 } from "./alerts.js";
+import { staffNoticeAlertSource } from "./alert-sources.js";
+import { readStaffNoticesInTurns } from "./staff-notices.js";
 import { ALL_ALERT_CLAIMS } from "./modules.js";
 import "./errors.js";
 
@@ -601,5 +604,44 @@ describe("readHandledAlerts", () => {
     expect(handled.map((a) => [a.code, a.handledAt, a.handledBy])).toEqual([
       ["payment.refund_unresolved", handledAt, null],
     ]);
+  });
+});
+
+describe("staff notice checks in the manager's bell", () => {
+  it("shows a failed check only to system managers and checks again on the next read", async () => {
+    let failing = true;
+    const read = vi.fn(async () => {
+      if (failing) throw new Error("outbox read unavailable");
+      return [];
+    });
+    const r = createAlertRegistry({
+      claims: ALL_ALERT_CLAIMS,
+      sources: [
+        staffNoticeAlertSource(() =>
+          readStaffNoticesInTurns(db, [{ owner: "fiscal-outbox", source: { read } }], {
+            reading: { instant: NOW, offsetMinutes: 0 },
+            log: noopLog,
+          }),
+        ),
+      ],
+    });
+    const deps = { registry: r, now: NOW, log: noopLog };
+    const manager = await readOutsideTransactionAlerts(db, deps, new Set(["system.manage"]));
+    expect(manager).toEqual([
+      {
+        key: "alert.source_unavailable:box",
+        kind: "ongoing",
+        code: "alert.source_unavailable",
+        params: { area: "box" },
+        severity: "error",
+        since: NOW.toISOString(),
+        area: "box",
+      },
+    ]);
+    expect(await readOutsideTransactionAlerts(db, deps, new Set(["hardware.manage"]))).toEqual([]);
+    expect(read).toHaveBeenCalledTimes(1);
+    failing = false;
+    expect(await readOutsideTransactionAlerts(db, deps, new Set(["system.manage"]))).toEqual([]);
+    expect(read).toHaveBeenCalledTimes(2);
   });
 });

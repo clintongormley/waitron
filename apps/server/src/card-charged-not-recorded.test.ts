@@ -198,32 +198,35 @@ const chargedNotRecorded = (workingOrderId: string) => ({
 });
 
 describe("POST /api/pay when the sale fails for a full disk after the card was charged", () => {
-  it("says a card was charged when its sale then fails for a full disk", async () => {
-    const { log, charged } = capturingLog();
-    const spy = vi.spyOn(venue.backend, "recordSale").mockRejectedValueOnce(diskFull());
-    const id = randomUUID();
-    const before = collects();
+  it.each([diskFull(), Object.assign(new Error("no room to record"), { code: "ENOSPC" })])(
+    "says a card was charged when its sale then fails for a full disk (%s)",
+    async (error) => {
+      const { log, charged } = capturingLog();
+      const spy = vi.spyOn(venue.backend, "recordSale").mockRejectedValueOnce(error);
+      const id = randomUUID();
+      const before = collects();
 
-    const answer = await walkUpPay(id, log);
+      const answer = await walkUpPay(id, log);
 
-    expect(answer.status).toBe(507);
-    expect(answer.json).toEqual(chargedNotRecorded(id));
-    expect(collects()).toBe(before + 1);
-    expect(capturedPayments(id)).toBe(1);
-    expect(count("sales", "working_order_id", id)).toBe(0);
-    expect(charged()).toEqual([
-      { level: "error", event: "sale.charged_not_recorded", fields: { workingOrderId: id } },
-    ]);
+      expect(answer.status).toBe(507);
+      expect(answer.json).toEqual(chargedNotRecorded(id));
+      expect(collects()).toBe(before + 1);
+      expect(capturedPayments(id)).toBe(1);
+      expect(count("sales", "working_order_id", id)).toBe(0);
+      expect(charged()).toEqual([
+        { level: "error", event: "sale.charged_not_recorded", fields: { workingOrderId: id } },
+      ]);
 
-    spy.mockRestore();
-    const again = await payAgain(id);
+      spy.mockRestore();
+      const again = await payAgain(id);
 
-    expect(again.status).toBe(200);
-    expect(again.json.outcome).toBe("captured");
-    expect(collects()).toBe(before + 1);
-    expect(count("sales", "working_order_id", id)).toBe(1);
-    expect(fiscalRecordCount(venue, id)).toBe(1);
-  });
+      expect(again.status).toBe(200);
+      expect(again.json.outcome).toBe("captured");
+      expect(collects()).toBe(before + 1);
+      expect(count("sales", "working_order_id", id)).toBe(1);
+      expect(fiscalRecordCount(venue, id)).toBe(1);
+    },
+  );
 
   it("says so when a placed order's settlement fails after the charge", async () => {
     const { log, charged } = capturingLog();

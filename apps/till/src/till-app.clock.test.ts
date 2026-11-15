@@ -24,6 +24,45 @@ afterEach(() => {
 });
 
 describe("till clocking integration", () => {
+  it("keeps the full-disk strip on the clock-in page", async () => {
+    const f = await clockApp({
+      api: {
+        getDeviceEquipment: vi.fn().mockResolvedValue({
+          roles: [],
+          notices: [
+            {
+              owner: "box",
+              key: "storage.disk_full",
+              code: "storage.disk_full",
+              severity: "error",
+              params: {},
+            },
+            {
+              owner: "drawers",
+              key: "drawer",
+              code: "print_job.drawer_expired",
+              severity: "warning",
+              params: {},
+            },
+          ],
+        }),
+      },
+    });
+    await signIn(f.el);
+    await vi.waitFor(() => expect(clockPage(f.el)).not.toBeNull());
+    await vi.waitFor(() =>
+      expect(
+        f.el.shadowRoot!.querySelector("till-notice-strip")?.shadowRoot?.textContent,
+      ).toContain("Tell a manager"),
+    );
+    expect(f.el.shadowRoot!.querySelector("till-shell")).toBeNull();
+    expect(
+      f.el
+        .shadowRoot!.querySelector("till-notice-strip")!
+        .shadowRoot!.querySelector("[data-notice-more]"),
+    ).toBeNull();
+  });
+
   it("the initial clock page's idle deadline is not reset when work data finally loads", async () => {
     let now = 0;
     let next = 0;

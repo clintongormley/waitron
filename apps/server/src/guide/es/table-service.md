@@ -353,6 +353,9 @@ Si la ventana dice que una petición anterior no recibió respuesta, elige **Env
 
 ## Devolver una tarjeta en un datáfono aparte {#separate-terminal}
 
+Si el TPV indica que el servidor no tiene espacio en disco, espera a que un encargado resuelva el bloqueo
+antes de devolver el dinero en el datáfono: Waitron no puede registrar la devolución mientras dure.
+
 Para un pago con tarjeta registrado desde un datáfono aparte, Waitron te pide que lo devuelvas
 primero en ese datáfono. Completa la devolución allí antes de elegir **Devuelto en el datáfono**.
 Después, un supervisor o encargado aprueba su registro en Waitron con su PIN.

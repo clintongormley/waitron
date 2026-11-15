@@ -27,7 +27,9 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Alert } from "@waitron/module";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
 import { createBackupRoomHooks } from "./backup-deletion-alert.js";
-import type { StartedServer } from "./boot.js";
+import type { StartedServer, StartServerSeams } from "./boot.js";
+import { createErrorBoundary } from "@waitron/server-kit";
+import { ALL_MODULES } from "./modules.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { boxEmailMessage, type startBoxEmailDuty } from "./box-alert-email.js";
 import type { DiskFullState } from "./disk-full-state.js";
@@ -184,6 +186,7 @@ async function bootServer(
   venue: Awaited<ReturnType<typeof setupVenue>>,
   email?: { intent: "demo" | "prepare" | "live"; development: boolean },
   setupNote?: unknown[],
+  seams: StartServerSeams = {},
 ): Promise<void> {
   const [port] = await freePorts(1);
   booted.scratch = await mkdtemp(join(tmpdir(), "waitron-boot-box-emails-"));
@@ -217,7 +220,7 @@ async function bootServer(
     ...(email === undefined ? {} : { WAITRON_ONBOARDING_INTENT: email.intent }),
   };
   if (email?.intent === "live") await stampDeployment(suite.db, "production");
-  booted.server = await startServer(env, env);
+  booted.server = await startServer(env, env, seams);
   await vi.waitFor(async () => {
     expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
   });
@@ -241,7 +244,52 @@ async function venueName(): Promise<string> {
   return (await readVenue(suite.db)).name;
 }
 
-describe("the running server's managers' email check", () => {
+describe("the running server's notice and email checks", () => {
+  it("boot wires venue-space errors and retries failed notice checks through the bell", async () => {
+    const venue = await setupVenue(suite.db);
+    const booted: Booted = {};
+    const source = ALL_MODULES.flatMap((module) => module.staffNotices ?? [])[0]!;
+    let fail = true;
+    const read = vi.spyOn(source, "read").mockImplementation(async () => {
+      if (fail) throw new Error("notice check failed");
+      return [];
+    });
+    try {
+      await bootServer(booted, venue, undefined, undefined, {
+        freeSpaceWatch: { statfs: async () => ({ bavail: 0, frsize: 4096 }) },
+        observeApp(app) {
+          const run = createErrorBoundary({}, "probe.failed");
+          app.use("/api/space-probe", async (c, next) => {
+            await next();
+            c.res = await run(
+              c,
+              () => {},
+              () => Promise.reject(Object.assign(new Error("full"), { code: "ENOSPC" })),
+            );
+          });
+        },
+      });
+      const refused = await fetch(`http://127.0.0.1:${httpPort()}/api/space-probe`);
+      expect(refused.status).toBe(507);
+      expect(await refused.json()).toEqual({ error: { code: "storage.disk_full", params: {} } });
+      const alerts = async () => {
+        const response = await fetch(`http://127.0.0.1:${httpPort()}/management-api/alerts`, {
+          headers: { cookie: venue.managerCookie },
+        });
+        expect(response.status).toBe(200);
+        return ((await response.json()) as { alerts: Alert[] }).alerts.filter(
+          (alert) => alert.code === "alert.source_unavailable" && alert.area === "box",
+        );
+      };
+      expect(await alerts()).toHaveLength(1);
+      fail = false;
+      expect(await alerts()).toEqual([]);
+    } finally {
+      read.mockRestore();
+      await shutDown(booted);
+    }
+  });
+
   it.each([
     ["demo", false, false, "local_capture"],
     ["demo", false, true, "local_capture"],
