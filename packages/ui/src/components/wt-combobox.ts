@@ -1136,13 +1136,15 @@ export class WtCombobox extends LitElement {
     `;
   }
 
-  /** A combobox takes no name from its content, so the trigger names its own parts: the label, then
-   * the named icon, then the words it shows. */
+  /** A combobox takes no name from its content; its labelled parts follow the visual order. */
   private triggerLabelledBy(labelId: string): string {
+    const iconId =
+      this.chosenOption?.icon && this.chosenOption.iconLabel ? `${this.valueId}-icon` : "";
     return [
       labelId,
-      this.chosenOption?.icon && this.chosenOption.iconLabel ? `${this.valueId}-icon` : "",
-      this.valueId,
+      ...(this.chosenOption?.iconPosition === "end"
+        ? [this.valueId, iconId]
+        : [iconId, this.valueId]),
     ]
       .filter(Boolean)
       .join(" ");
