@@ -76,6 +76,9 @@ it("marks the carried password refusal, clears it on edit and permits a retry", 
   });
   await userEvent.click(join);
   await expect.poll(() => password.error).toContain("password");
+  await expect
+    .poll(() => password.shadowRoot!.activeElement)
+    .toBe(password.shadowRoot!.querySelector("input"));
   expect(joinBoxNetwork).not.toHaveBeenCalled();
   await type(password, "short");
   await userEvent.click(join);
