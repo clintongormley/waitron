@@ -1,5 +1,6 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { asc, eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { menuVersions, products, withTransaction, type Transaction } from "@waitron/db";
 import { useMenuDb } from "../test/fixtures.js";
 import { menusFixture } from "../test/menus-fixture.js";
@@ -13,6 +14,10 @@ import { writeContentLanguages } from "./content-languages.js";
 import { newCustomerPresentation } from "@waitron/shared";
 
 const fx = useMenuDb();
+beforeEach(async () => {
+  await seedPerson(fx.db, { id: "person-1", displayName: "Test person-1" });
+});
+
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 async function sourceFixture(variant: boolean) {

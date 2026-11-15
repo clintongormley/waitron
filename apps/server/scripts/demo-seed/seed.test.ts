@@ -141,6 +141,22 @@ describe("seedDemoRestaurant", () => {
     },
   );
 
+  it("attributes demo publications to the provisioned administrator", async () => {
+    const venue = await provisionVenue();
+    await seedDemoRestaurant(suite.db, {
+      venue,
+      locale: LOCALE,
+      salesDays: 0,
+      departmentTradingNames: DEPARTMENT_TRADING_NAMES,
+      dataSet: CASA_DELGADO_ES,
+    });
+    const { rows } = await suite.db.execute<{ publisher: string }>(sql`
+      select p.email as publisher from menu_versions v
+      join persons p on p.id = v.created_by`);
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((row) => row.publisher === "owner@example.test")).toBe(true);
+  });
+
   it("seeds department service periods instead of a second opening-hours grid", async () => {
     const venue = await provisionVenue();
     await seedDemoRestaurant(suite.db, {

@@ -1,4 +1,9 @@
-import { seedDeviceProfiles, seedZone, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
+import {
+  seedPerson,
+  seedDeviceProfiles,
+  seedZone,
+  seedDepartmentReceipt,
+} from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import type { TradingContext } from "./trading-context.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -8,7 +13,7 @@ import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, sql, type SQL } from "drizzle-orm";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   products,
   saleLines,
@@ -142,6 +147,10 @@ interface Lunch {
   dessertsId: string;
   flanId: string;
 }
+
+beforeEach(async () => {
+  await seedPerson(suite.db, { id: "manager-ana", displayName: "Test manager-ana" });
+});
 
 /**
  * A provisioned venue whose counter zone sells "Lunch": Lemonade (3.00, with an extras list

@@ -31,6 +31,7 @@ import {
 } from "@waitron/menu";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  seedPerson,
   seedTaxpayer,
   seedBusinessDay,
   seedVenueSettings,
@@ -55,6 +56,16 @@ import { samplePreparedImage } from "./testing/sample-image.js";
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
 });
+beforeEach(async () => {
+  await seedPerson(suite.db, { id: "person-1", displayName: "Test person-1" });
+  await seedPerson(suite.db, { id: "manager-ana", displayName: "Test manager-ana" });
+  await seedPerson(suite.db, { id: "manager-luis", displayName: "Test manager-luis" });
+  await seedPerson(suite.db, {
+    id: "person-default-switch",
+    displayName: "Test person-default-switch",
+  });
+});
+
 /** A photo ready to store. A different width is a different photo (`testing/sample-image.ts`). */
 const prepare = (width: number): Promise<PreparedImage> => samplePreparedImage({ width });
 const photo = await prepare(8);

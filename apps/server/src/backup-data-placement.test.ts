@@ -1,4 +1,4 @@
-import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedPerson, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import * as fs from "node:fs/promises";
@@ -88,6 +88,7 @@ const suite = useVenueDb({
     await db
       .insert(menus)
       .values({ id: "40000000-0000-4000-8000-000000000004", name: "Captured menu" });
+    await seedPerson(db, { id: "operator-one", displayName: "Placement operator" });
     await db.run(sql`insert into menu_versions (id, menu_id, number, document, content_hash, created_at, created_by)
       values ('version-one', '40000000-0000-4000-8000-000000000004', 1, '{"original":true}', 'captured-hash', ${capturedAt}, 'operator-one')`);
     await db.run(sql`insert into content_suggestion_jobs

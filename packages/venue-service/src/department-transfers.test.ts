@@ -1423,6 +1423,7 @@ describe("departmental tab transfers", () => {
     /** A line recorded from a published menu whose product is a set lunch. */
     async function addSetLunch(v: Pending): Promise<void> {
       await withTransaction(suite.db, async (tx) => {
+        await seedPerson(tx, { id: "person-1" });
         const [unit] = await tx
           .insert(units)
           .values({

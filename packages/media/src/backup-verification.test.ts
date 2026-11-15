@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -50,6 +51,7 @@ const stamp = new Date("2026-10-20T08:00:00.000Z");
 const passed = { status: "passed", checks: [{ code: "data", status: "passed" }] };
 beforeEach(async () => {
   for (const suite of [original, restored]) {
+    await seedPerson(suite.db, { id: id, displayName: `Test ${id}` });
     await suite.db
       .insert(mediaImages)
       .values({ id, filename, names: { en: "Bread" }, createdAt: stamp, updatedAt: stamp });

@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { storedMenuParts } from "../test/menu-parts.js";
 import { triggerRaised } from "@waitron/db";
 import {
@@ -72,6 +73,10 @@ import { NO_ICE } from "../test/menus-fixture.js";
 import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
 
 const fx = useMenuDb();
+beforeEach(async () => {
+  await seedPerson(fx.db, { id: "person-1", displayName: "Test person-1" });
+});
+
 beforeEach(() =>
   seedLibraryImages(fx.db, "drinks.jpg", "large.jpg", "lemon.jpg", "lemonade.jpg", "new-soup.jpg"),
 );

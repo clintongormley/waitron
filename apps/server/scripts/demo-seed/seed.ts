@@ -1,3 +1,4 @@
+import { listAdminHolders } from "@waitron/identity";
 import { readIssueZone } from "@waitron/fiscal";
 import { readBusinessDayScheduleRevision } from "@waitron/venue-service";
 // Sales are seeded after the main transaction commits, because each sale opens its own transaction
@@ -94,10 +95,12 @@ export async function seedDemoRestaurant(
     await seedStaff(tx, { dataSet, locale });
     await seedAdjustmentReasons(tx, { locale, dataSet, languages });
     await seedMedia(tx, { productsByImage, mediaDataSet: dataSet.mediaDataSet });
+    const [administrator] = await listAdminHolders(tx);
+    if (administrator === undefined) throw new Error("seedDemoRestaurant: no administrator");
     // Publish after modifiers and media so each version freezes their seeded values.
     for (const menuId of Object.values(menuIds)) {
       const { document } = await buildMenuDocument(tx, menuId);
-      await publishMenu(tx, menuId, menuDocumentHash(document), "demo-seed");
+      await publishMenu(tx, menuId, menuDocumentHash(document), administrator.id);
     }
     return {
       products: (await listAvailableProducts(tx)).products,

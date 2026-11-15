@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it, beforeEach } from "vitest";
 import {
@@ -25,6 +26,10 @@ import { setMenuVariantPrice, setProductVariants } from "./variants.js";
 import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
 
 const fx = useMenuDb();
+beforeEach(async () => {
+  await seedPerson(fx.db, { id: "person-1", displayName: "Test person-1" });
+});
+
 beforeEach(() => seedLibraryImages(fx.db, "large.jpg"));
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 

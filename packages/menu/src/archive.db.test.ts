@@ -1,5 +1,5 @@
 import { seedPerson } from "@waitron/db/testing/seed.js";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   readActivityForSubject,
   activityLog,
@@ -37,6 +37,10 @@ import { deactivateMenu, deactivateProduct, updateProduct } from "./operations.j
 import { createCategory, setMainReportingCategory } from "./categories.js";
 
 const fx = useMenuDb();
+beforeEach(async () => {
+  await seedPerson(fx.db, { id: "person-1", displayName: "Test person-1" });
+});
+
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 const T0 = new Date("2026-10-08T10:00:00.000Z");
 const later = new Date("2026-10-09T10:00:00.000Z");

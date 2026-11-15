@@ -31,6 +31,8 @@ const PACKAGES_DIR = join(REPO_ROOT, "packages");
 
 /** `[child table, child columns, parent table]`, one row per foreign key. */
 const EXPECTED_FOREIGN_KEYS = [
+  ["menu_versions", ["created_by"], "persons"],
+  ["menu_releases", ["cancelled_by"], "persons"],
   ["parties", ["opened_by"], "persons"],
   ["parties", ["closed_by"], "persons"],
   ["parties", ["allergy_answered_by"], "persons"],

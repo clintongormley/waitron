@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, primaryKey, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { persons } from "../identity/persons.js";
 import { menus } from "../menus.js";
 import { count, enumCheck, enumType, id, json, label, newId, table, ts } from "../columns.js";
 import type { MenuDocument } from "@waitron/shared";
@@ -17,7 +18,6 @@ export const menuVersions = table(
     document: json<MenuDocument>("document").notNull(),
     contentHash: label("content_hash").notNull(),
     createdAt: ts("created_at").notNull(),
-    // The management session's person id, as plain text. No key yet.
     createdBy: id("created_by").notNull(),
   },
   (t) => [
@@ -26,6 +26,11 @@ export const menuVersions = table(
       foreignColumns: [menus.id],
       name: "menu_versions_menu_fk",
     }),
+    foreignKey({
+      columns: [t.createdBy],
+      foreignColumns: [persons.id],
+      name: "menu_versions_created_by_fk",
+    }).onDelete("restrict"),
     uniqueIndex("menu_versions_menu_number_uq").on(t.menuId, t.number),
     // A release names a version of its own menu.
     unique("menu_versions_id_menu_key").on(t.id, t.menuId),
@@ -73,6 +78,11 @@ export const menuReleases = table(
       foreignColumns: [menuVersions.id, menuVersions.menuId],
       name: "menu_releases_version_fk",
     }),
+    foreignKey({
+      columns: [t.cancelledBy],
+      foreignColumns: [persons.id],
+      name: "menu_releases_cancelled_by_fk",
+    }).onDelete("restrict"),
     check("menu_releases_state_ck", enumCheck(t.state)),
     check(
       "menu_releases_settled_ck",

@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import * as cloudWorkerModule from "./cloud-worker.js";
 import * as cloudSnapshotModule from "./cloud-snapshot-loop.js";
 import * as cloudClientModule from "./cloud-client.js";
@@ -2851,6 +2852,7 @@ describe("startServer, against a migrated venue directory", () => {
         const root = (await readMenuStructure(tx, menu.id)).rootSectionId;
         await addMember(tx, root, { kind: "product", productId: soup.id });
         const first = await previewMenu(tx, menu.id);
+        await seedPerson(tx, { id: "manager-ana", displayName: "Test manager Ana" });
         await publishMenu(tx, menu.id, first.hash, "manager-ana", { at: queuedAt });
         const ids: string[] = [];
         for (const [unitPrice, activatesAt] of [

@@ -1,6 +1,6 @@
 import { storedMenuParts } from "../test/menu-parts.js";
 import { asc, eq, inArray, getTableColumns } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   menus,
   menuItems,
@@ -12,7 +12,7 @@ import {
   withTransaction,
   type Transaction,
 } from "@waitron/db";
-import { seedTaxpayer } from "@waitron/db/testing/seed.js";
+import { seedPerson, seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
 import { SECTION_NAME } from "./sections.js";
 import { duplicateMenu } from "./menu-copy.js";
@@ -27,6 +27,10 @@ import type { TileRef } from "@waitron/shared";
 import { setMenuVariants, setProductVariants } from "./variants.js";
 
 const fx = useMenuDb();
+beforeEach(async () => {
+  await seedPerson(fx.db, { id: "person-1", displayName: "Test person-1" });
+});
+
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 interface Fixture {

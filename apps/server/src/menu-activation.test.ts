@@ -1,5 +1,6 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   installChangeFeed,
@@ -26,6 +27,10 @@ import { menuActivationJob } from "./menu-activation.js";
 import { createJobRunner } from "./job-runner.js";
 
 const fx = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+beforeEach(async () => {
+  await seedPerson(fx.db, { id: "manager-ana", displayName: "Test manager-ana" });
+});
+
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 const MAX_WAIT_MS = 20 * 86_400_000;

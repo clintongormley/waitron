@@ -1,6 +1,7 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { menuItems, menuItemVariantOverrides, products, sectionMembers } from "@waitron/db";
 import { and, eq, inArray } from "drizzle-orm";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { captureError, withTransaction, type Transaction } from "@waitron/db";
 import { useMenuDb } from "../test/fixtures.js";
 import { menusFixture, offerOf, product, section } from "../test/menus-fixture.js";
@@ -26,6 +27,10 @@ import { addMember, addProducts, createSectionIn, replaceMember } from "./sectio
 import { listProductVariants, setMenuVariantPrice, setProductVariants } from "./variants.js";
 
 const fx = useMenuDb();
+beforeEach(async () => {
+  await seedPerson(fx.db, { id: "person-1", displayName: "Test person-1" });
+});
+
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 async function codeOf(fn: () => Promise<unknown>): Promise<unknown> {

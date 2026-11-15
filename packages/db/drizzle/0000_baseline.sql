@@ -2060,6 +2060,7 @@ CREATE TABLE `menu_releases` (
 	`cancelled_by` text,
 	FOREIGN KEY (`menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`version_id`,`menu_id`) REFERENCES `menu_versions`(`id`,`menu_id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`cancelled_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "menu_releases_state_ck" CHECK("menu_releases"."state" in ('queued', 'live', 'superseded', 'cancelled')),
 	CONSTRAINT "menu_releases_settled_ck" CHECK(("menu_releases"."state" = 'cancelled') = ("menu_releases"."cancelled_at" is not null) and ("menu_releases"."cancelled_at" is null) = ("menu_releases"."cancelled_by" is null))
 );
@@ -2083,6 +2084,7 @@ CREATE TABLE `menu_versions` (
 	`created_at` text NOT NULL,
 	`created_by` text NOT NULL,
 	FOREIGN KEY (`menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`created_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "menu_versions_number_ck" CHECK("menu_versions"."number" >= 1)
 );
 --> statement-breakpoint

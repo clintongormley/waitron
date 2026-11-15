@@ -473,7 +473,8 @@ for (const locale of ["en", "es"] as const) {
     historicalVersions.columns = expected.seeded.tables.menu_versions!.columns;
     for (const row of Object.values(historicalVersions.rows)) {
       row.published_at = row.created_at;
-      row.published_by = row.created_by;
+      expect(row.created_by).toBe('@persons:["owner@example.test"]');
+      row.published_by = "demo-seed";
       delete row.created_at;
       delete row.created_by;
     }
@@ -1891,6 +1892,20 @@ for (const locale of ["en", "es"] as const) {
       delete phases[phase]!.category_details;
       expected[phase] = madridWithSectionColumns(expected[phase]);
       expected[phase] = madridWithMenuReleases(expected[phase]);
+      for (const [tableName, column] of [
+        ["menu_versions", "created_by"],
+        ["menu_releases", "cancelled_by"],
+      ] as const) {
+        const table = expected[phase].tables[tableName]!;
+        table.foreignKeys = [
+          personKey(column, 0),
+          ...table.foreignKeys.map((key) => ({ ...key, id: key.id + 1 })),
+        ];
+      }
+      for (const row of Object.values(expected[phase].tables.menu_versions!.rows)) {
+        expect(row.created_by).toBe("demo-seed");
+        row.created_by = '@persons:["owner@example.test"]';
+      }
       phases[phase]!.menu_releases =
         phases[phase]!.menu_publications! + phases[phase]!.menu_scheduled_publications!;
       delete phases[phase]!.menu_publications;

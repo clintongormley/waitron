@@ -1,10 +1,15 @@
 import { columnsFromOverrides } from "@waitron/menu";
 import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { CORE_MIGRATIONS, products, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTaxpayer, seedVenue, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
+import {
+  seedPerson,
+  seedTaxpayer,
+  seedVenue,
+  seedDepartmentReceipt,
+} from "@waitron/db/testing/seed.js";
 import {
   activateDueMenuPublications,
   addMember,
@@ -30,6 +35,10 @@ import { samplePreparedImage } from "./testing/sample-image.js";
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
 });
+beforeEach(async () => {
+  await seedPerson(suite.db, { id: "manager", displayName: "Test manager" });
+});
+
 const original = await samplePreparedImage({ width: 27 });
 const replacement = await samplePreparedImage({ width: 51 });
 

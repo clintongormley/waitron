@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { columnsFromOverrides, overridesFromRow } from "@waitron/menu";
 import { STARTER_STEP_NAMES } from "@waitron/venue-service";
 import { departmentCourses } from "@waitron/db";
@@ -1935,6 +1936,7 @@ it.each([3, 2])(
       });
       const { rootSectionId } = await readMenuStructure(tx, menu.id);
       await addMember(tx, rootSectionId, { kind: "product", productId: lemonade.id });
+      await seedPerson(tx, { id: "source-admin", displayName: "Test source-admin" });
       await publishMenu(tx, menu.id, (await previewMenu(tx, menu.id)).hash, "source-admin");
       if (format === 2) {
         const [row] = await tx.select().from(menuVersions).where(eq(menuVersions.menuId, menu.id));

@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { seedPerson } from "@waitron/db/testing/seed.js";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   menuReleases,
   menuVersionImages,
@@ -15,6 +16,10 @@ import { listProductVariants, setProductVariants } from "./variants.js";
 import { addMember } from "./sections.js";
 
 const fx = useMenuDb();
+beforeEach(async () => {
+  await seedPerson(fx.db, { id: "person-1", displayName: "Test person-1" });
+});
+
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 const unknown = (id: string, name: string, parentName: string | null = null) => ({
   id,

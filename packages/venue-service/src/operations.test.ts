@@ -2,7 +2,7 @@ import { taxpayer } from "@waitron/db";
 import { deleteDepartment } from "./service-delete.js";
 import * as settingsOperations from "./operations.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   HOME_DISPLAY_DEFAULTS,
   addShortcut,
@@ -53,7 +53,12 @@ import { randomUUID } from "node:crypto";
 import type { Database, Transaction } from "@waitron/db";
 import type { ZoneMenu, ZoneMenuState } from "@waitron/module";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedVenue, seedZone as seedZoneRow } from "@waitron/db/testing/seed.js";
+import {
+  seedPerson,
+  seedNode,
+  seedVenue,
+  seedZone as seedZoneRow,
+} from "@waitron/db/testing/seed.js";
 import { AppError } from "@waitron/shared";
 
 import { resolveMakers, setRoutingCell } from "./routing-store.js";
@@ -102,6 +107,9 @@ import { offerMenuThroughZone } from "./testing/zone-menus.js";
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
   timeoutMs: 60_000,
+});
+beforeEach(async () => {
+  await seedPerson(suite.db, { id: "person-1", displayName: "Test person-1" });
 });
 
 describe("order flow from sale policies", () => {

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "1cfbc387-23e7-4a90-8b5f-ba1083734756",
+  "id": "c766a32f-8d84-4f37-b286-ad48a84f7d1a",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -13706,6 +13706,19 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "menu_releases_cancelled_by_fk": {
+          "name": "menu_releases_cancelled_by_fk",
+          "tableFrom": "menu_releases",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "cancelled_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -13858,6 +13871,19 @@
             "id"
           ],
           "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "menu_versions_created_by_fk": {
+          "name": "menu_versions_created_by_fk",
+          "tableFrom": "menu_versions",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },
