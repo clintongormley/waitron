@@ -173,9 +173,11 @@ async function mount(
   await vi.waitFor(() =>
     expect(
       el.shadowRoot!.querySelector(
-        options.path === "/manage/seasons"
+        options.path?.startsWith("/manage/seasons")
           ? "dashboard-seasons-screen"
-          : "dashboard-opening-hours-screen",
+          : options.path?.startsWith("/manage/periods")
+            ? "periods-list"
+            : "dashboard-opening-hours-screen",
       ),
     ).not.toBeNull(),
   );
@@ -512,3 +514,52 @@ it("the Voids and comps page follows its permission rather than every enabled mo
   await search(el, "venue details");
   expect(result(el, "settings:venue-details")).not.toBeNull();
 });
+
+it.each(["parent", "Back", "sidebar"])(
+  "the real shell protects a Periods page draft on %s",
+  async (way) => {
+    const { el } = await mount({ path: "/manage/periods" });
+    const screen = el.shadowRoot!.querySelector("periods-list")!;
+    await expect.poll(() => screen.shadowRoot!.querySelector("wt-data-table")).not.toBeNull();
+    const table = screen.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    await userEvent.click(table.shadowRoot!.querySelector<HTMLElement>("button.row-activate")!);
+    await expect.poll(() => location.pathname).toBe("/manage/periods/period/lunch");
+    const editor = screen.shadowRoot!.querySelector("period-dialog")!;
+    await editor.updateComplete;
+    const input = editor.shadowRoot!.querySelector<WtInput>("[name=name]")!;
+    input.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "Late lunch" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await editor.updateComplete;
+    const leave = async () => {
+      if (way === "Back") history.back();
+      else if (way === "parent")
+        await userEvent.click(screen.shadowRoot!.querySelector<HTMLElement>("a.parent")!);
+      else
+        await userEvent.click(
+          el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-seasons]")!,
+        );
+    };
+    await leave();
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await expect.poll(() => question.open).toBe(true);
+    await userEvent.click(question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!);
+    await expect.poll(() => question.open).toBe(false);
+    expect(location.pathname).toBe("/manage/periods/period/lunch");
+    expect(input.value).toBe("Late lunch");
+    await leave();
+    await expect.poll(() => question.open).toBe(true);
+    await userEvent.click(
+      question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!,
+    );
+    await expect
+      .poll(() => location.pathname)
+      .toBe(way === "sidebar" ? "/manage/seasons" : "/manage/periods");
+    expect(leaveCoordinatorFor(el)!.isDirty()).toBe(false);
+  },
+);

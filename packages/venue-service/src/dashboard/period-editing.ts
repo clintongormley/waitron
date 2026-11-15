@@ -16,7 +16,7 @@ type Period = Department["periods"][number];
 type SaveDetail = { periodId: string | null; input: MenuPeriodInput; departmentId?: string };
 
 /**
- * One period dialog at a time, saved on its own: a painter's "✎ Edit" and "+ New period", or the
+ * One period editor at a time, saved on its own: a painter's "✎ Edit" and "+ New period", or the
  * Periods page's Add and Edit. A period just created is chosen, through `chose`, before the model
  * lists it.
  */
@@ -45,6 +45,8 @@ export class PeriodEditing implements ReactiveController {
       chose: (periodId: string) => void;
       /** `open(null)` asks for the department in the dialog. */
       chooseDepartment?: boolean;
+      page?: boolean;
+      onClose?: () => void;
       /** Where the period is painted, from the host's own Painted-in watch; without it, opening a
        *  period reads Painted in once. */
       paintedIn?: (periodId: string) => PaintedIn | undefined;
@@ -117,6 +119,7 @@ export class PeriodEditing implements ReactiveController {
         this.editor = undefined;
         if (!this.options.keepFloorPlans) this.#unwatchFloorPlans();
         this.busy = false;
+        this.options.onClose?.();
       }
     }
     const created = this.created;
@@ -218,10 +221,16 @@ export class PeriodEditing implements ReactiveController {
     this.busy = busy;
     this.host.requestUpdate();
   }
+  dismiss() {
+    this.editor = undefined;
+    this.busy = false;
+    this.host.requestUpdate();
+  }
   private close() {
     this.editor = undefined;
     if (!this.options.keepFloorPlans) this.#unwatchFloorPlans();
     this.host.requestUpdate();
+    this.options.onClose?.();
   }
 
   private paintedIn(editor: NonNullable<PeriodEditing["editor"]>): PaintedIn | undefined {
@@ -265,6 +274,7 @@ export class PeriodEditing implements ReactiveController {
       editor,
       html`<period-dialog
         .open=${true}
+        .page=${this.options.page ?? false}
         .period=${editor.period}
         .paintedIn=${this.paintedIn(editor)}
         .paintedInLinks=${this.options.paintedInLinks ?? false}

@@ -41,4 +41,6 @@ Open **Seasons** under **Venue operations** to change their names, colours and s
 
 ## Check where a period is used {#periods}
 
-Open **Periods** under **Venue operations**, beside **Calendar**. In **Painted in**, choose a season or special day to check its timetable.
+Open **Periods** under **Venue operations**, beside **Calendar**. Choose a row or **Add period** to open its own editor. **Save** returns you to the list; **Periods ›** and **Cancel** also return there, asking before discarding changes. Use the row’s **⋯** menu to edit or delete it.
+
+In **Painted in**, choose a season or special day to check its timetable. A floor plan in grey italics follows the department’s default; **—** means the department has no floor plans.

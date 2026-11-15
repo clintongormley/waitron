@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "vitest";
+import { beforeEach, afterEach, describe, expect, test } from "vitest";
 import { page } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
@@ -20,7 +20,7 @@ function expectBinsOnScreen(table: Element, rows: number) {
   expect(scroll.scrollWidth, "the table overflows its box").toBeGreaterThan(scroll.clientWidth);
   expect(scroll.scrollLeft).toBe(0);
   const box = scroll.getBoundingClientRect();
-  const bins = [...table.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=delete-period]")];
+  const bins = [...table.shadowRoot!.querySelectorAll<HTMLElement>("wt-row-actions")];
   expect(bins).toHaveLength(rows);
   for (const [index, bin] of bins.entries()) {
     bin.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -243,7 +243,7 @@ describe.each(["en", "es"] as const)("Periods bins in the window (%s)", (locale)
       const screen = await mount("list", "light", true);
       const table = screen.shadowRoot!.querySelector("wt-data-table")!;
       await table.updateComplete;
-      const bins = [...table.shadowRoot!.querySelectorAll("[data-test=delete-period]")];
+      const bins = [...table.shadowRoot!.querySelectorAll("wt-row-actions")];
       expect(bins).toHaveLength(4);
       if (width === 390) expectBinsOnScreen(table, 4);
       for (const bin of bins) {
@@ -257,3 +257,5 @@ describe.each(["en", "es"] as const)("Periods bins in the window (%s)", (locale)
     }
   });
 });
+
+beforeEach(() => history.replaceState({}, "", "/manage/periods"));

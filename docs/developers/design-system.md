@@ -6880,44 +6880,25 @@ at `/manage/periods`. It opens from the menu, page search, the Year's Periods li
 Departments warning's Set up periods link. It renders `periods-list` directly, without a
 Calendar window or Close action. Painters retain their inline period pencils and + New period.
 
-Its body, `periods-list` (`periods-list.ts`), starts with a toolbar: an `h1` "Periods"
-with "+ Add period" beside it. Below it, it
-lists every active department as a heading row followed by its periods. A department row is drawn
-bold on the `--wt-color-bg` band across every cell, through the `rowCellParts` it gives the table,
-and one with no periods says "No periods". Its columns are Period (the colour swatch and name; a
-period painted nowhere keeps its filled swatch and plain name), Customer menu, Staff-only menus
-("—" when none), Floor plan, Painted in, and a bin pinned to the end. The Floor plan column shows
-only while some department has an active zone with tables
-(`readPeriodFloorPlans`, `packages/venue-service/src/floor-plan-set-store.ts`): a period that names
-another set shows that set's name, a period of a department with no zone holding tables shows
-nothing, and any other period shows its department's default set's name followed by a muted
-"(default)". Painted in shows a chip per season,
-opening that season's painter on the period's department, and a chip per special day, opening its
-painter, or "Not painted anywhere". A plain chip click, including one in the period editor,
-opens its painter with the fixed internal `?back=/manage/periods`; closing the painter returns to the Periods page.
-Modified clicks keep their normal browser behavior. The chips wrap onto further lines within one and a quarter
-times `--wt-cell-name-max-width`, each chip on one line, and the table is `wrapToFit`, so its
-headings and text wrap where they must. Guard: the M1 cases in `periods-list.test.ts`, which check
-that the table and every cell fit on the page at 1280 px, in English and Spanish,
-each again in Verdana — with no department offering a floor plan, so without the Floor plan column;
-no case checks that the table fits with that column. A period row
-opens the period dialog (the table's `rowClick`, its activator named "Edit {name}"); a department
-row opens nothing. The bin, named "Delete {name}", opens the delete dialog. Someone with only
-`venue.view` sees the list with no "+ Add period", no bin column, and rows that do not open.
+The list has an h1 and Add period, department heading rows and period rows, with the columns
+Period, Customer menu, Staff-only menus, Floor plan, Painted in and pinned Actions. A row or
+Edit in its `wt-row-actions` opens `/manage/periods/period/<id>`; Add opens
+`/manage/periods/view/new`. A viewer has no Add, Actions or editable rows. Floor plan appears
+only while a department offers one: an explicit alternative is normal text, the default’s name
+is muted italic without a suffix, and a period of a department without plans shows “—”.
+Painted in keeps season and special-day chips, their tints and native modified clicks, and links
+to the painter with `?back=/manage/periods`.
 
-"+ Add period" and a period row open the period dialog. Adding from the page, it starts with a required
-Department field. It holds Name, Colour (a `wt-colour-chooser` whose tiles name the department's
-other periods that use each colour, with no names before a department is chosen; until a colour
-is picked, a new period takes its department's first colour none of them uses), Customer menu with the menus it includes,
-Staff-only menus, Floor plan when the department offers one (as the
-column does), and, for a stored period, Painted in. Floor plan is a `wt-combobox` with no search
-whose first option, drawn `muted`, is the department's default set, "{set} (default)", followed by
-its other sets; choosing another department empties it. The dialog's
-bottom row is `[Cancel] [Delete…] … [Save]`, Delete… keeping its danger look in the `cancel` slot
-after Cancel (Forms, above). Delete… asks first when the dialog has unsaved changes, then closes it
-and opens the delete dialog. Opened from a painter, the dialog's Painted in chips are plain text
-and it has no Delete…. On the page, its draft scope participates in the dashboard's normal navigation question.
-Escape in the dialog closes only the dialog.
+The editor has “Periods ›” above its h1. `PeriodEditing` uses `period-dialog`’s page presentation
+without a modal, sharing its fields, validation, submitted baseline and draft scope with the
+painters’ existing dialog presentation. It asks for Department when adding, then Name, Colour,
+Customer menu, Staff-only menus and Floor plan where offered. The default option in that chooser
+still says “(default)”. An edited period shows Painted in. The page’s footer is Cancel and Save;
+Delete stays in the list menu. Save returns to the list before refreshing it. Cancel, parent,
+sidebar and browser navigation ask before discarding changed input. Invalid and viewer-only edit
+addresses return to the list after loading; a period removed from live data closes its editor.
+The Calendar painters retain their period pop-ups pending the owner’s answer to the watcher’s
+2026-11-15 A1545 question. Their pencils, New period and Add-and-paint retain the painted draft.
 
 The delete dialog (`period-delete-dialog.ts`) asks "Delete {name}?" and reads what the delete
 changes: how many seasons and repeating or still-to-come special days paint the period, and the

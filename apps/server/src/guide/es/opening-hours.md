@@ -41,4 +41,6 @@ Abre **Temporadas** en **Operaciones del local** para cambiar sus nombres, color
 
 ## Consulta dónde se usa un periodo {#periods}
 
-Abre **Periodos** en **Operaciones del local**, junto a **Calendario**. En **Pintado en**, elige una temporada o un día especial para consultar su horario.
+Abre **Periodos** en **Operaciones del local**, junto a **Calendario**. Elige una fila o **Añadir periodo** para abrir su página de edición. **Guardar** vuelve a la lista; **Periodos ›** y **Cancelar** también vuelven allí, preguntando antes de descartar cambios. Usa el menú **⋯** de la fila para editarlo o eliminarlo.
+
+En **Pintado en**, elige una temporada o un día especial para consultar su horario. Un plano de sala en gris y cursiva sigue el predeterminado del departamento; **—** indica que el departamento no tiene planos.

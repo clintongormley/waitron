@@ -276,21 +276,12 @@ Owner, 2026-11-15, reviewing the pages A1536 (#3247) made. All in
    a row, or Add season, opens that season's own page, which carries "Seasons ›" above its heading
    (design-system.md, "A sub-page puts its parent's name above its own"). "Runs until" stays on
    the list.
-2. **Periods becomes a list page with an edit page per period**, replacing `period-dialog.ts`, so
-   the two pages beside Calendar work the same way. The Painted in column stays: its chips go
-   straight to that season's hours, which the owner wants kept.
-3. **Both lists get the row menu.** The Periods Actions column draws only a bin
-   (`periods-list.ts`, `bin`), so nothing on screen says a row can be edited. Use the `⋯` row menu
-   with Edit and Delete, as other lists do; Seasons gets the same once it is a list.
-4. **A default floor plan is shown as its name in grey italics, without "(default)"** — the way an
-   inherited value is shown elsewhere. A floor plan chosen for the period stays in normal text.
-5. **A department with no floor plans shows "—"** in the Floor plan column. Today Deli's cell is
-   blank (`floorPlanCell` returns nothing when the department has no sets), while other empty cells
-   on the page show "—".
+2. **The Seasons list gets a `⋯` row menu with Edit and Delete**, as other lists do.
 
-The guide's pages for Seasons and Periods (EN and ES) follow. The three-letter month names on the
-Seasons page ("Sept") are A1546 item 1. Lane D's form-plumbing sweep (D-form-plumbing) lists the
-Period and Seasons forms; whichever lands second takes the other's change into account.
+Update the Seasons guide in English and Spanish. Three-letter month names are A1546 item 1.
+The Periods list now has its individual Add/Edit pages, Edit/Delete menus and inherited floor-plan
+styling. Its Calendar painters retain the period pop-ups pending the owner’s answer to the
+watcher’s 2026-11-15 question about “replacing period-dialog.ts”.
 
 ## A1546. The Calendar: prep-station hours and the day box
 
