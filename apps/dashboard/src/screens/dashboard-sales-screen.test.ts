@@ -1176,7 +1176,7 @@ it("places handover status before the sales and cash-up reports without loading 
   const fullRead = vi.fn().mockRejectedValue(new Error("A report must not load inventory receipt"));
   const returnedRead = vi
     .fn()
-    .mockResolvedValue({ records: [], nextOffset: null, timeZone: "Europe/Madrid" });
+    .mockResolvedValue({ rows: [], total: 0, page: 0, pageSize: 50, timeZone: "Europe/Madrid" });
   const api = Object.assign(stubApi(), {
     getHandoverWarning: vi
       .fn()

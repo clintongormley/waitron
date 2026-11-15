@@ -39,8 +39,10 @@ it.each([true, false])(
       getSalesOverview: () => new Promise(() => {}),
       listHandoverIntervals: list,
       listReturnedInvoices: async () => ({
-        records: [],
-        nextOffset: null,
+        rows: [],
+        total: 0,
+        page: 0,
+        pageSize: 50,
         timeZone: "Europe/Madrid",
       }),
     } as unknown as DashboardApi;

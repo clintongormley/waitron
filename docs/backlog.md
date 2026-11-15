@@ -1289,9 +1289,9 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 - **Every login failure is one answer (C95, #930, owner decision 2026-09-30)**
   [Detail](backlog/dashboard.md#every-login-failure-is-one-answer-c95-930-owner-decision-2026-09-30)
 
-- **Move remaining dashboard tables onto shared database-backed requests.** Users and Orders now have 50-row
-  server pages with whole-dataset search/sort and passive refresh. The handover screen's table of returned
-  invoices is next.
+- **Move remaining dashboard tables onto shared database-backed requests.** Users, Orders and returned invoices now have
+  50-row server pages with whole-dataset search/sort and passive refresh. Find a bill retains its
+  existing request state until its own adoption.
   [Detail and decision](backlog/dashboard.md#shared-database-backed-table-paging-search-and-sorting)
 
 - **Tell people by email when their account's security changes** (owner, 2026-09-12): password changed,

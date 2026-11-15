@@ -30,7 +30,7 @@ beforeEach(async () => {
       else staffCookie = `${MANAGEMENT_COOKIE}=${session.token}`;
     }
   });
-  reader.mockReset().mockResolvedValue([]);
+  reader.mockReset().mockResolvedValue({ rows: [], total: 0, page: 0, pageSize: 50 });
   app = new Hono();
   mountReportApi(
     app,
@@ -38,47 +38,60 @@ beforeEach(async () => {
     () => {},
   );
 });
-it("pages 100 records and keeps the read out of caches", async () => {
-  const rows = Array.from({ length: 101 }, (_, i) => ({ recordId: String(i) }));
-  reader.mockResolvedValue(rows);
-  const response = await app.request(path + "?offset=200", { headers: { cookie } });
+it("returns the backend's corrected page with totals and keeps it out of caches", async () => {
+  const result = { rows: [{ recordId: "returned" }], page: 2, total: 101, pageSize: 50 };
+  reader.mockResolvedValue(result);
+  const response = await app.request(
+    path + "?page=20&search=A%2F42%20&sortKey=receivedAt&sortDirection=ascending",
+    { headers: { cookie } },
+  );
   expect(response.status).toBe(200);
   expect(response.headers.get("cache-control")).toBe("no-store");
-  expect(await response.json()).toEqual({
-    records: rows.slice(0, 100),
-    nextOffset: 300,
-    timeZone: "Europe/Madrid",
+  expect(await response.json()).toEqual({ ...result, timeZone: "Europe/Madrid" });
+  expect(reader.mock.calls[0]![1]).toEqual({
+    page: 20,
+    search: "A/42 ",
+    sortKey: "receivedAt",
+    sortDirection: "ascending",
   });
-  expect(reader.mock.calls[0]![1]).toEqual({ offset: 200, limit: 101 });
 });
 it("defaults to the first page and ends an empty or unsupported list", async () => {
   let response = await app.request(path, { headers: { cookie } });
-  expect(await response.json()).toEqual({
-    records: [],
-    nextOffset: null,
-    timeZone: "Europe/Madrid",
+  const empty = { rows: [], total: 0, page: 0, pageSize: 50, timeZone: "Europe/Madrid" };
+  expect(await response.json()).toEqual(empty);
+  expect(reader.mock.calls[0]![1]).toEqual({
+    page: 0,
+    search: "",
+    sortKey: "",
+    sortDirection: "descending",
   });
-  expect(reader.mock.calls[0]![1]).toEqual({ offset: 0, limit: 101 });
   const unsupported = new Hono();
   mountReportApi(unsupported, { db: suite.db, cfg: { nodeId }, venueLocale: "en-GB" }, () => {});
   response = await unsupported.request(path, { headers: { cookie } });
-  expect(await response.json()).toEqual({
-    records: [],
-    nextOffset: null,
-    timeZone: "Europe/Madrid",
-  });
+  expect(await response.json()).toEqual(empty);
 });
-it.each(["", "-1", "1.5", "NaN", "1e2", "9007199254740992"])(
-  "refuses malformed offsets (%s)",
-  async (offset) => {
-    const response = await app.request(path + "?offset=" + offset, { headers: { cookie } });
-    expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "offset" } },
-    });
-    expect(reader).not.toHaveBeenCalled();
-  },
-);
+it.each([
+  ["page", ""],
+  ["page", "-1"],
+  ["page", "1.5"],
+  ["page", "NaN"],
+  ["page", "1e2"],
+  ["page", "9007199254740992"],
+  ["page", "180143985094820"],
+  ["sortKey", "source"],
+  ["sortDirection", ""],
+  ["sortDirection", "sideways"],
+  ["offset", "0"],
+  ["limit", "50"],
+  ["pageSize", "50"],
+])("refuses invalid %s=%s before reading", async (field, value) => {
+  const response = await app.request(path + "?" + field + "=" + value, { headers: { cookie } });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({
+    error: { code: "management.request_invalid", params: { field } },
+  });
+  expect(reader).not.toHaveBeenCalled();
+});
 it.each(["none", "staff"])(
   "requires report.view before reading fiscal records (%s)",
   async (actor) => {

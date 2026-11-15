@@ -156,8 +156,14 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
   );
   expect(
     (
-      await withTransaction(current.db, (tx) => returnedInvoices(tx, { offset: 0, limit: 101 }))
-    ).map((row) => ({ id: row.recordId, invoice: row.invoiceNumber, receivedAt: row.receivedAt })),
+      await withTransaction(current.db, (tx) =>
+        returnedInvoices(tx, { search: "", page: 0, sortKey: "", sortDirection: "descending" }),
+      )
+    ).rows.map((row) => ({
+      id: row.recordId,
+      invoice: row.invoiceNumber,
+      receivedAt: row.receivedAt,
+    })),
   ).toEqual([{ id: originals.records[0]!.id, invoice: "Source/1", receivedAt: now.toISOString() }]);
   expect(wakes).toBe(1);
   await old.db.insert(tenders).values({

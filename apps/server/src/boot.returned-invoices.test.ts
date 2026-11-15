@@ -82,7 +82,7 @@ it("serves a real returned invoice through the booted fiscal backend and report 
     );
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
-      records: [
+      rows: [
         {
           recordId: batch.records[0]!.id,
           invoiceNumber: "A/1",
@@ -90,7 +90,9 @@ it("serves a real returned invoice through the booted fiscal backend and report 
           receivedAt: receivedAt.toISOString(),
         },
       ],
-      nextOffset: null,
+      page: 0,
+      pageSize: 50,
+      total: 1,
     });
   } finally {
     await server?.close();

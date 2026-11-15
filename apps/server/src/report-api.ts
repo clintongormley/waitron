@@ -250,16 +250,30 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
-        const raw = c.req.query("offset") ?? "0";
-        const offset = Number(raw);
-        if (!/^\d+$/.test(raw) || !Number.isSafeInteger(offset))
-          throw new AppError("management.request_invalid", { field: "offset" });
-        const rows = (await deps.returnedInvoices?.(tx, { offset, limit: 101 })) ?? [];
-        return {
-          records: rows.slice(0, 100),
-          nextOffset: rows.length > 100 ? offset + 100 : null,
-          timeZone: (await resolveVenueClock(tx, deps.cfg.nodeId)).timeZone,
-        };
+        for (const field of ["offset", "limit", "pageSize"]) {
+          if (c.req.query(field) !== undefined)
+            throw new AppError("management.request_invalid", { field });
+        }
+        const raw = c.req.query("page") ?? "0";
+        const page = Number(raw);
+        if (!/^\d+$/.test(raw) || !Number.isSafeInteger(page) || !Number.isSafeInteger(page * 50))
+          throw new AppError("management.request_invalid", { field: "page" });
+        const sortKey = requireEnum(c.req.query("sortKey") ?? "", "sortKey", [
+          "",
+          "receivedAt",
+        ] as const);
+        const sortDirection = requireEnum(
+          c.req.query("sortDirection") ?? "descending",
+          "sortDirection",
+          ["ascending", "descending"] as const,
+        );
+        const result = (await deps.returnedInvoices?.(tx, {
+          search: c.req.query("search") ?? "",
+          page,
+          sortKey,
+          sortDirection,
+        })) ?? { rows: [], total: 0, page: 0, pageSize: 50 };
+        return { ...result, timeZone: (await resolveVenueClock(tx, deps.cfg.nodeId)).timeZone };
       });
       c.header("Cache-Control", "no-store");
       return c.json(result);

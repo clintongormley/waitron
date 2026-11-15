@@ -40,8 +40,10 @@ describe.each(["light", "dark"] as const)("handover intervals (%s)", (theme) => 
         api: {
           listHandoverIntervals: list,
           listReturnedInvoices: async () => ({
-            records: [],
-            nextOffset: null,
+            rows: [],
+            total: 0,
+            page: 0,
+            pageSize: 50,
             timeZone: "Europe/Madrid",
           }),
         } as unknown as DashboardApi,
@@ -120,9 +122,21 @@ describe.each(["light", "dark"] as const)("returned invoices (%s)", (theme) => {
               resolve = r;
             }),
         )
-        .mockResolvedValueOnce({ records, nextOffset: null, timeZone: "Europe/Madrid" })
+        .mockResolvedValueOnce({
+          rows: records,
+          total: records.length,
+          page: 0,
+          pageSize: 50,
+          timeZone: "Europe/Madrid",
+        })
         .mockRejectedValueOnce({ code: "report.failed" })
-        .mockResolvedValue({ records: [], nextOffset: null, timeZone: "Europe/Madrid" });
+        .mockResolvedValue({
+          rows: [],
+          total: 0,
+          page: 0,
+          pageSize: 50,
+          timeZone: "Europe/Madrid",
+        });
       const { el, host } = await mountWidget<HandoverIntervalsScreen>(
         "dashboard-handover-intervals-screen",
         {
@@ -136,7 +150,7 @@ describe.each(["light", "dark"] as const)("returned invoices (%s)", (theme) => {
       const table = () => el.shadowRoot!.querySelectorAll("wt-data-table")[1]!;
       expect(table().loading).toBe(true);
       await expectNoA11yViolations(host);
-      resolve({ records: [], nextOffset: null, timeZone: "Europe/Madrid" });
+      resolve({ rows: [], total: 0, page: 0, pageSize: 50, timeZone: "Europe/Madrid" });
       await vi.waitFor(() => expect(table().loading).toBe(false));
       expect(table().emptyMessage).toBe(words["returned_invoices.empty"]);
       await expectNoA11yViolations(host);

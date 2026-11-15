@@ -232,8 +232,8 @@ Debajo de los intervalos, **Facturas devueltas** muestra cada factura recibida p
 con el servidor de origen, la instalación que la generó, la fecha de expedición original y los
 importes registrados. Las filas de facturas muestran un tipo legible junto a su código original.
 Las correcciones y anulaciones aparecen por separado. **No consta** indica que ese importe no
-figura en el registro. Usa **Siguiente** y **Anterior** para seguir leyendo; **Actualizar facturas**
-vuelve a la primera página.
+figura en el registro. Usa el buscador para encontrar facturas devueltas, ordénalas por **Primera recepción** y usa los botones de página
+para seguir leyendo; **Actualizar facturas** vuelve a la primera página.
 
 El seguimiento empieza con esta función. No se añaden las facturas que ya estaban en una copia,
 por lo que una lista vacía no es un historial completo de devoluciones anteriores. La lista no
