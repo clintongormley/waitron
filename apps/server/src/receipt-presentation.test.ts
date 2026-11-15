@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, invoiceSeries, sales, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, invoiceSeries, mediaImages, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { departments, saleReceiptHeaders } from "@waitron/venue-service";
@@ -66,6 +66,7 @@ describe("department-only on-screen receipt", () => {
   it("keeps optional receipt facts when the logo presentation read fails and reports that read", async () => {
     const f = await fixture();
     const logo = `${"d".repeat(64)}.png`;
+    await suite.db.insert(mediaImages).values({ filename: logo, names: {} });
     await f.authored({ logo, phone: "910111111" });
     const read = vi
       .spyOn(media, "readPresentations")
