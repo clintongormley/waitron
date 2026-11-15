@@ -239,7 +239,13 @@ export interface RecoveryBackupPreview {
 }
 
 export interface ConfigurationPreview {
-  venue: Omit<VenueDraft, "admin"> & { operationDescription: string };
+  venue: Omit<VenueDraft, "admin" | "addressLine1" | "postalCode" | "city" | "province"> & {
+    operationDescription: string;
+    addressLine1: string | null;
+    postalCode: string | null;
+    city: string | null;
+    province: string | null;
+  };
   counts: Record<string, number>;
   reconnect: string[];
 }
