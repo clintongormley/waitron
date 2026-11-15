@@ -871,7 +871,7 @@ describe("Opening hours week, a station shown", () => {
 
   it("a station draws a row per sending department, its day names still open the box", async () => {
     const el = await mount({ stations: STATIONS, station: grill() });
-    expect(root(el).querySelector('.row-name wt-icon[name="prep-station"]')).not.toBeNull();
+    expect(root(el).querySelector('.row-name wt-icon[name="prep-station"]')).toBeNull();
     expect(root(el).querySelectorAll("section")).toHaveLength(7);
     const wednesday = section(el, "2026-12-02");
     expect([...wednesday.querySelectorAll<HTMLElement>(".row")].map((r) => r.dataset.row)).toEqual([

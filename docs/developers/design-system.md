@@ -5429,8 +5429,9 @@ Opening hours' Year.
   A date none sends on reads No orders once; the default station shows Always open in place of
   dates. All prep stations draws one row per station, in name order, combining its senders’ ranges;
   each row has a station icon, and an empty station row reads No orders. The default station’s row
-  reads Always open even on a closed date. A pending read draws no dates; a failed station read
-  shows an alert, never No orders. A failed station-list read leaves department choices available.
+  reads Always open even on a closed date. A pending station-only read draws no dates; a failed station read
+  shows an alert, never No orders. Show all keeps loaded department rows while its station batch
+  is pending or refused. A failed station-list read leaves department choices available.
   The explanation remains beneath Show while stations are offered: planned hours follow painted
   periods, their menus, routing and sending zones’ closures; it links to `/manage/periods`.
   Station dates open the day box but cannot select a run for an hours edit.
@@ -5465,8 +5466,8 @@ Opening hours' Year.
   at least 48 px and more than twice as far across as down; a second finger or pen on the card ends it,
   and no swipe starts again until every one of them has lifted. Show lists prep stations as in the
   Month, to the same people, and Show all appends station rows after departments; a station's day draws one row per department that sends it dishes, a
-  day none of them sends on reads "No orders" once in place of its rows, and a week whose station
-  times have not arrived draws no days. All prep stations keeps every station row, including No
+  day none of them sends on reads "No orders" once in place of its rows, and a station-only week whose
+  times have not arrived draws no days. Show all retains loaded departments while station times load or fail. All prep stations keeps every station row, including No
   orders and the default’s Always open row, without replacing department rows in Show all.
 - **Picking days.** `DayPicker` (`day-picking.ts`) picks exact dates in Year and Month.
   A click picks one day and opens its day box; a drag replaces the selection with its run.

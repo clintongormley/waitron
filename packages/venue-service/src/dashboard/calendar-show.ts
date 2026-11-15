@@ -4,6 +4,7 @@ import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import type { MonthNames } from "./opening-hours-day.js";
 import type { ShowStation } from "./station-show.js";
 import { t } from "./strings.js";
+import { periodsPath } from "./opening-hours-paths.js";
 
 const ALL = "all";
 const STATION = "station:";
@@ -13,7 +14,7 @@ export const stationIcon = () =>
   html`<wt-icon name="prep-station" role="img" aria-label=${t("opening.prep_station")}></wt-icon>`;
 export const stationExplanation = () =>
   html`<p data-test="station-explanation">
-    ${t("opening.station_hours")} <a href="/manage/periods">${t("period.title")}</a>
+    ${t("opening.station_hours")} <a href=${periodsPath}>${t("period.title")}</a>
   </p>`;
 
 export function showPicker(options: {

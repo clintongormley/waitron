@@ -560,7 +560,7 @@ export class OpeningHoursWeekView extends LitElement {
    *  open for the default station, else `drawn`'s days of its read. */
   #body(drawn: Drawn, draw: (body: Body) => unknown) {
     const station = this.station;
-    if (!station) {
+    if (!station || (station.state === "loading" && this.show === "all")) {
       const { days, chosen, names } = drawn;
       return draw({ days, names, rows: (day) => weekRows(day, chosen, names), orders: false });
     }
@@ -682,7 +682,7 @@ export class OpeningHoursWeekView extends LitElement {
     const span = day.endMinute;
     return html`<div class="row" data-row=${row.key}>
       <span class="row-name ${row.strong ? "strong" : ""}"
-        >${row.station || this.station?.id ? stationIcon() : nothing}${row.name}</span
+        >${row.station ? stationIcon() : nothing}${row.name}</span
       >
       <span class="words" ?data-no-orders=${orders && !row.blocks.length && !row.always}
         >${row.words}</span
@@ -772,7 +772,7 @@ export class OpeningHoursWeekView extends LitElement {
     const span = day.endMinute;
     return html`<div class="row" data-row=${row.key}>
       <span class="row-name ${row.zone ? "" : "strong"}" aria-hidden="true"
-        >${row.station || this.station?.id ? stationIcon() : nothing}${row.name}</span
+        >${row.station ? stationIcon() : nothing}${row.name}</span
       >
       <span class="spoken"
         >${`${row.station ? t("opening.prep_station") + " " : ""}${row.name}: ${row.words}`}</span

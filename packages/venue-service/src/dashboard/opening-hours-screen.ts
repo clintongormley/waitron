@@ -685,7 +685,10 @@ export class OpeningHoursScreen extends LitElement {
         this.stationReadError = "";
       };
       const failed = () => {
-        if (current()) this.stationReadError = t("prep.times.load_error");
+        if (current())
+          this.stationReadError = t(
+            group ? "opening.stations_load_error" : "prep.times.load_error",
+          );
       };
       const recovered = () => {
         if (current()) this.stationReadError = "";

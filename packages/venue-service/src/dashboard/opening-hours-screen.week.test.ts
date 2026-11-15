@@ -93,16 +93,19 @@ function stationTimes(stationId: string, from: string, to: string) {
   for (let date = from; date <= to; date = addDays(date, 1))
     days.push({
       date,
-      departments: [
-        {
-          departmentId: "rest",
-          ranges: [{ periodId: "lunch", startsAt: "13:00", endsAt: "15:30" }],
-        },
-        {
-          departmentId: "bar",
-          ranges: [{ periodId: "allday", startsAt: "10:00", endsAt: "02:00" }],
-        },
-      ],
+      departments:
+        date === "2026-12-25"
+          ? []
+          : [
+              {
+                departmentId: "rest",
+                ranges: [{ periodId: "lunch", startsAt: "13:00", endsAt: "15:30" }],
+              },
+              {
+                departmentId: "bar",
+                ranges: [{ periodId: "allday", startsAt: "10:00", endsAt: "02:00" }],
+              },
+            ],
     });
   return { always: null, days };
 }
@@ -1195,4 +1198,50 @@ it("choosing a group, station or department keeps only that choice in the addres
     .poll(() => location.pathname)
     .toBe("/manage/opening-hours/view/week/station/s1/week/2026-12-09");
   await expect.poll(() => week(el)!.station?.id).toBe("s1");
+});
+
+it("keeps loaded departments visible when Show all's station times fail, then adds recovered stations", async () => {
+  const answers: Answers = { timesFail: REFUSED };
+  const { el } = await mount(
+    "/manage/opening-hours/view/week/show/all/week/2026-12-09",
+    undefined,
+    false,
+    answers,
+  );
+  await expect
+    .poll(() =>
+      el.shadowRoot!.querySelector('[data-test="station-read-error"]')?.textContent?.trim(),
+    )
+    .toBe("Prep-station times could not be loaded. They will be tried again.");
+  const rows = () =>
+    [
+      ...week(el)!.shadowRoot!.querySelectorAll<HTMLElement>(
+        'section[data-date="2026-12-09"] .row',
+      ),
+    ].map((row) => row.dataset.row);
+  expect(rows()).toEqual(["rest", "bar"]);
+  expect(week(el)!.shadowRoot!.querySelector('[data-test="no-orders"]')).toBeNull();
+  answers.timesFail = undefined;
+  el.api.rereadWatches();
+  await expect.poll(rows).toEqual(["rest", "bar", "s2", "s1"]);
+  expect(el.shadowRoot!.querySelector('[data-test="station-read-error"]')).toBeNull();
+});
+
+it("keeps departments distinct from station orders on a closed phone day, and keeps every grouped station row", async () => {
+  const { el } = await mount("/manage/opening-hours/view/week/show/all/week/2026-12-25");
+  await expect.poll(() => week(el)!.station?.state).toBe("ready");
+  await toPhone(el);
+  const card = () => week(el)!.shadowRoot!.querySelector('[data-test="day-card"]')!;
+  const row = (id: string) => card().querySelector<HTMLElement>(`.row[data-row="${id}"]`)!;
+  const words = (id: string) => row(id).querySelector<HTMLElement>(".words")!;
+  expect(words("rest").textContent).toBe("Closed");
+  expect(getComputedStyle(words("rest")).color).toBe(
+    getComputedStyle(row("rest").querySelector(".row-name")!).color,
+  );
+  chooseShown(el, "show:stations");
+  await expect
+    .poll(() => [...card().querySelectorAll<HTMLElement>(".row")].map((item) => item.dataset.row))
+    .toEqual(["s2", "s1"]);
+  expect(words("s2").textContent).toBe("Always open: this is the default station");
+  expect(words("s1").textContent).toBe("No orders");
 });

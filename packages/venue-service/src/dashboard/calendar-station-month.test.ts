@@ -694,6 +694,9 @@ it("draws one row per station from one batch read and keeps the default open on 
     "Always open",
   );
   expect(text(cell(el, "2026-12-25")!.querySelector('[data-row="grill"]'))).toContain("No orders");
+  await expect
+    .element(cell(el, "2026-12-25")!.querySelector<HTMLElement>(".day")!, { timeout: 1000 })
+    .toHaveAccessibleName(/Prep station Grill: No orders.*Prep station Kitchen: Always open/);
   expect(picker(el)!.value).toBe("show:stations");
   expect(picker(el)!.options.map(({ value }) => value)).toEqual([
     "all",

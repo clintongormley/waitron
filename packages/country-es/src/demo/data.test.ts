@@ -369,3 +369,17 @@ describe("Casa Delgado VAT classes", () => {
       ).toEqual(expected);
   });
 });
+
+it("keeps demo prep-station names distinct from zones in every demo language", () => {
+  const set = CASA_DELGADO_ES;
+  const zones = [
+    ...set.floor.zones.map((zone) => zone.name),
+    set.floor.upstairsBarZone,
+    set.floor.deliCounterZone,
+  ];
+  for (const locale of set.contentLanguages) {
+    const zoneNames = zones.map((name) => name[locale]);
+    for (const station of Object.values(set.stations))
+      expect(zoneNames, `${locale}: ${station[locale]}`).not.toContain(station[locale]);
+  }
+});

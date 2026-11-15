@@ -177,10 +177,12 @@ const en = {
   "opening.show": "Show",
   "opening.all_departments": "All departments",
   "opening.show_all": "Show all",
+  "opening.stations_load_error":
+    "Prep-station times could not be loaded. They will be tried again.",
   "opening.all_stations": "All prep stations",
   "opening.prep_station": "Prep station",
   "opening.station_hours":
-    "Station hours follow painted periods, their menus, routing and sending zones’ closures. The default station is always open. To change these hours, edit periods and their menus.",
+    "A prep station is open while a period sends it orders. Change its hours through the periods, their menus, routing or zone closing times. The default station is always open.",
   "opening.zone_placeholder": "{name}: closed times",
   "opening.closed_invalid": "These closed times overlap or are not in 15-minute steps.",
   "opening.check_day": "Check this day's time ranges and periods.",
@@ -1110,10 +1112,12 @@ const es: Record<keyof typeof en, string> = {
   "opening.show": "Mostrar",
   "opening.all_departments": "Todos los departamentos",
   "opening.show_all": "Mostrar todo",
+  "opening.stations_load_error":
+    "No se han podido cargar los horarios de las estaciones. Se volverá a intentar.",
   "opening.all_stations": "Todas las estaciones de preparación",
   "opening.prep_station": "Estación de preparación",
   "opening.station_hours":
-    "Los horarios de las estaciones siguen los periodos pintados, sus menús, las rutas y los cierres de las zonas que envían. La estación predeterminada siempre está abierta. Para cambiarlos, edita los periodos y sus menús.",
+    "Una estación de preparación está abierta mientras un periodo le envía pedidos. Cambia sus horarios mediante los periodos, sus menús, las rutas o los cierres de las zonas. La estación predeterminada siempre está abierta.",
   "opening.zone_placeholder": "{name}: horarios de cierre",
   "opening.closed_invalid": "Estas horas de cierre se solapan o no van de 15 en 15 minutos.",
   "opening.check_day": "Revisa las franjas horarias y los periodos de este día.",

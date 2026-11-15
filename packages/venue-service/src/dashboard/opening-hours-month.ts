@@ -268,7 +268,7 @@ export class OpeningHoursMonthView extends LitElement {
         overflow-wrap: anywhere;
         height: auto;
         background: transparent;
-        font-size: var(--wt-font-size-xs);
+        font-size: var(--wt-font-size-sm);
       }
       .segment {
         position: absolute;
@@ -366,7 +366,7 @@ export class OpeningHoursMonthView extends LitElement {
       return day.departments.map((d) => ({
         key: d.departmentId,
         name: name(d.departmentId),
-        station: names.station(d.departmentId) || Boolean(this.station?.id),
+        station: names.station(d.departmentId),
         always: names.always(d.departmentId),
         ranges: placed(d.ranges),
       }));
