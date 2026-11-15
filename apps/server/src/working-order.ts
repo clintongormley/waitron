@@ -603,8 +603,8 @@ const FROZEN_EXTRAS = Symbol("frozenExtras");
 
 /**
  * Return insertable snapshots and their gross lines together, so a caller filing
- * the same basket rates those rather than pricing it twice. The stored gross unit price, class and
- * classification are what the line files.
+ * the same basket rates those rather than pricing it twice. The stored gross unit price and
+ * classification are what the line files, at its class for the order's way of selling.
  */
 export async function priceOrderLines(
   tx: Transaction,

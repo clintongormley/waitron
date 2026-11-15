@@ -16,6 +16,7 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 let venue: BillVenue;
 let counter: ZoneOffers;
 let cola: string;
+let menu: Awaited<ReturnType<typeof seedTakeawayProducts>>;
 
 useVenueDb({
   resetPerTest: false,
@@ -24,7 +25,8 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     await withTransaction(db, async (tx) => {
-      cola = (await seedTakeawayProducts(tx)).cola;
+      menu = await seedTakeawayProducts(tx);
+      cola = menu.cola;
       counter = await offerProducts(tx, venue.cfg);
     });
   },
@@ -47,6 +49,17 @@ function filedLine(workingOrderId: string): { vatRate: number; base: string }[] 
           where s.working_order_id = ${workingOrderId}`,
     )
     .map((row) => ({ vatRate: row.vat_rate, base: (row.line_total / 100).toFixed(2) }));
+}
+
+function filedRates(workingOrderId: string): number[] {
+  return venue.db
+    .all<{ vat_rate: number }>(
+      sql`select sl.vat_rate from sale_lines sl
+          join sales s on s.id = sl.sale_id
+          where s.working_order_id = ${workingOrderId}
+          order by sl.line_no`,
+    )
+    .map((row) => row.vat_rate);
 }
 
 const colaLine = () => [{ menuItemId: counter.offerFor(cola), quantity: "1" }];
@@ -81,4 +94,45 @@ describe("a walk-up cola filed in one request", () => {
     expect(paid.status).toBe(200);
     expect(filedLine(id)).toEqual([EXPECTED[dining]]);
   });
+
+  // The burger is `general` both ways; its lemon soda extra is `reduced` here and `zero` taken away.
+  const burgerWithSoda = () => [
+    {
+      menuItemId: counter.offerFor(menu.burger),
+      quantity: "1",
+      extras: [{ listId: menu.burgerExtras, picks: [{ productId: menu.lemonSoda, quantity: 1 }] }],
+    },
+  ];
+  const EXTRA_RATES: Record<Dining, number[]> = { takeaway: [2100, 0], eat_in: [2100, 1000] };
+
+  it.each(["takeaway", "eat_in"] as const)(
+    "files a cash sale's extra %s at the extra's own class",
+    async (dining) => {
+      const workingOrderId = randomUUID();
+      const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+        workingOrderId,
+        lines: burgerWithSoda(),
+        zoneId: counter.zoneId,
+        tender: { method: "cash", amount: "12.00" },
+        dining,
+      });
+      expect(sold.status).toBe(200);
+      expect(filedRates(workingOrderId)).toEqual(EXTRA_RATES[dining]);
+    },
+  );
+
+  it.each(["takeaway", "eat_in"] as const)(
+    "files a card sale's extra %s at the extra's own class",
+    async (dining) => {
+      const id = randomUUID();
+      const paid = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+        id,
+        lines: burgerWithSoda(),
+        zoneId: counter.zoneId,
+        dining,
+      });
+      expect(paid.status).toBe(200);
+      expect(filedRates(id)).toEqual(EXTRA_RATES[dining]);
+    },
+  );
 });
