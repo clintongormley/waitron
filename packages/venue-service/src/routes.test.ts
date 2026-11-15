@@ -810,7 +810,7 @@ describe("whole service settings saves", () => {
         minutes: 10,
       },
     ]);
-    expect(model.courses).toEqual([{ id: mains, name: "Mains" }]);
+    expect(model.courses).toEqual([{ id: mains, name: "Mains", heldUntilFired: true }]);
   });
 
   it("leaves the steps as they were when the save does not name them", async () => {

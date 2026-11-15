@@ -143,7 +143,7 @@ afterEach(() => {
 
 describe("till-floor-screen: a table's due service step", () => {
   it("draws the card as a box with a cover button named like the map, and the chip with Done", async () => {
-    const table = seated({ signals: [dueStepSignal("Dessert?")] });
+    const table = seated({ signals: [dueStepSignal("Dessert?", inMinutes(0))] });
     const el = await mount([table]);
     const card = cardOf(el);
     expect(card.tagName).toBe("DIV");
@@ -160,7 +160,7 @@ describe("till-floor-screen: a table's due service step", () => {
   it("names a renamed table's cover by today's name and its saved name, as a plain card reads", async () => {
     const table = seated({
       today: { ...today(), placement: null, name: "Window" },
-      signals: [dueStepSignal("Dessert?")],
+      signals: [dueStepSignal("Dessert?", inMinutes(0))],
     });
     const el = await mount([table]);
     const cover = cardOf(el).querySelector<HTMLButtonElement>("button.card-open")!;
@@ -168,7 +168,7 @@ describe("till-floor-screen: a table's due service step", () => {
   });
 
   it("opens the table from a click on the box and on the cover", async () => {
-    const el = await mount([seated({ signals: [dueStepSignal("Dessert?")] })]);
+    const el = await mount([seated({ signals: [dueStepSignal("Dessert?", inMinutes(0))] })]);
     const opened = record(el, "open-table");
     cardOf(el).click();
     await userEvent.click(cardOf(el).querySelector<HTMLButtonElement>("button.card-open")!);
@@ -179,12 +179,12 @@ describe("till-floor-screen: a table's due service step", () => {
   });
 
   it("sends service-step-done with the ids from Done, and does not open the table", async () => {
-    const el = await mount([seated({ signals: [dueStepSignal("Dessert?")] })]);
+    const el = await mount([seated({ signals: [dueStepSignal("Dessert?", inMinutes(0))] })]);
     const opened = record(el, "open-table");
     const done = record(el, "service-step-done");
     await userEvent.click(doneOf(el)!);
     expect(done).toEqual([
-      { partyId: "p9", stepId: "step-Dessert?", dueAt: "2000-01-01T00:00:00.000Z", tableId: "t9" },
+      { partyId: "p9", stepId: "step-Dessert?", dueAt: "2026-10-22T20:00:00.000Z", tableId: "t9" },
     ]);
     expect(opened).toEqual([]);
   });
@@ -195,7 +195,7 @@ describe("till-floor-screen: a table's due service step", () => {
         readyToServe: 2,
         nextReservation: { time: "21:30" },
         signals: [
-          dueStepSignal("Dessert?"),
+          dueStepSignal("Dessert?", inMinutes(0)),
           {
             kind: "ready",
             byStation: [
@@ -223,7 +223,11 @@ describe("till-floor-screen: a table's due service step", () => {
   it("keeps a long step name and a whole Done inside a narrow card", async () => {
     setLocale("es");
     const el = await mount([
-      seated({ signals: [dueStepSignal("Preguntar por los postres y los cafés de toda la mesa")] }),
+      seated({
+        signals: [
+          dueStepSignal("Preguntar por los postres y los cafés de toda la mesa", inMinutes(0)),
+        ],
+      }),
     ]);
     el.style.width = "150px";
     el.style.display = "block";
@@ -244,9 +248,9 @@ describe("till-floor-screen: a table's due service step", () => {
 
   describe("at a till's width", () => {
     const fourCards = () => [
-      seated({ id: "t1", label: "T1", signals: [dueStepSignal("Set up")] }),
-      seated({ id: "t2", label: "T2", signals: [dueStepSignal("Take order")] }),
-      seated({ id: "t3", label: "T3", signals: [dueStepSignal("Dessert?")] }),
+      seated({ id: "t1", label: "T1", signals: [dueStepSignal("Set up", inMinutes(0))] }),
+      seated({ id: "t2", label: "T2", signals: [dueStepSignal("Take order", inMinutes(0))] }),
+      seated({ id: "t3", label: "T3", signals: [dueStepSignal("Dessert?", inMinutes(0))] }),
       seated({ id: "t4", label: "T4" }),
     ];
     afterEach(async () => {
@@ -291,10 +295,15 @@ describe("till-floor-screen: a table's due service step", () => {
       await page.viewport(390, 720);
       const el = await mount([
         ...fourCards(),
-        seated({ id: "t5", label: "T5", signals: [dueStepSignal("Bring the dessert menu")] }),
+        seated({
+          id: "t5",
+          label: "T5",
+          signals: [dueStepSignal("Bring the dessert menu", inMinutes(-5))],
+        }),
       ]);
       const longName = stepChipOf(el, "t5")!.querySelector<HTMLElement>(".step-name")!;
       expect(lineTops(longName)).toBeGreaterThanOrEqual(2);
+      expect(stepChipOf(el, "t5")!.querySelector(".step-wait")!.textContent).toBe("Waiting 5 min");
       for (const id of ["t1", "t2", "t3", "t5"]) {
         expect(cardOf(el, id).getBoundingClientRect().width).toBeGreaterThan(180);
         const name = stepChipOf(el, id)!.querySelector<HTMLElement>(".step-name")!;
@@ -308,7 +317,7 @@ describe("till-floor-screen: a table's due service step", () => {
   });
 
   it("keeps the plain chip on a button card when the device cannot mark steps", async () => {
-    const el = await mount([seated({ signals: [dueStepSignal("Dessert?")] })], {
+    const el = await mount([seated({ signals: [dueStepSignal("Dessert?", inMinutes(0))] })], {
       canMarkSteps: false,
     });
     expect(cardOf(el).tagName).toBe("BUTTON");
@@ -322,7 +331,10 @@ describe("till-floor-screen: a table's due service step", () => {
     const el = await mount(
       [
         seated({ id: "t1", label: "T1", party: null, signals: [], today: today() }),
-        seated({ today: { ...today(), placement: null }, signals: [dueStepSignal("Dessert?")] }),
+        seated({
+          today: { ...today(), placement: null },
+          signals: [dueStepSignal("Dessert?", inMinutes(0))],
+        }),
       ],
       { map: true },
     );
@@ -340,10 +352,13 @@ describe("till-floor-screen: a table's due service step", () => {
   it.each([true, false])(
     "hands the table's details canMarkSteps %s, as the cards have it",
     async (canMarkSteps) => {
-      const el = await mount([seated({ today: today(), signals: [dueStepSignal("Dessert?")] })], {
-        canMarkSteps,
-        map: true,
-      });
+      const el = await mount(
+        [seated({ today: today(), signals: [dueStepSignal("Dessert?", inMinutes(0))] })],
+        {
+          canMarkSteps,
+          map: true,
+        },
+      );
       el.shadowRoot!.querySelector("wt-floor-map")!.dispatchEvent(
         new CustomEvent("wt-table-details", {
           detail: { tableId: "t9" },
@@ -363,6 +378,33 @@ describe("till-floor-screen: a table's due service step", () => {
     expect(cardOf(el).querySelector(".card-open")).toBeNull();
   });
 
+  it.each(["ready", "bill"] as const)(
+    "keeps the late step's card outline beneath %s",
+    async (kind) => {
+      const signals = [
+        dueStepSignal("Take order", inMinutes(-5)),
+        ...(kind === "bill"
+          ? [{ kind: "bill_requested" as const, requestedAt: inMinutes(0) }]
+          : []),
+      ];
+      const el = await mount([seated({ signals, readyToServe: kind === "ready" ? 2 : 0 })]);
+      expect(cardOf(el).querySelector('[data-ring="waiting"]')).not.toBeNull();
+      expect(stepChipOf(el)!.textContent).toContain("Waiting 5 min");
+    },
+  );
+
+  it("keeps elapsed minutes fully visible inside the map table", async () => {
+    const el = await mount(
+      [seated({ today: today(), signals: [dueStepSignal("Take order", inMinutes(-5))] })],
+      { map: true },
+    );
+    const map = el.shadowRoot!.querySelector<WtFloorMap>("wt-floor-map")!;
+    await expect.poll(() => map.shadowRoot!.querySelector(".cue-text")).not.toBeNull();
+    const cue = map.shadowRoot!.querySelector<HTMLElement>(".cue-text")!;
+    expect(cue.scrollWidth).toBeLessThanOrEqual(cue.clientWidth);
+    expect(map.tables[0]!.description).toBe("Seated, Take order · Waiting 5 min");
+  });
+
   describe("on the screen's own clock", () => {
     beforeEach(() => {
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
@@ -371,6 +413,41 @@ describe("till-floor-screen: a table's due service step", () => {
     afterEach(() => {
       vi.useRealTimers();
     });
+
+    it.each([false, true])(
+      "redraws a late step and its elapsed wait without a floor read (map=%s)",
+      async (map) => {
+        const el = await mount(
+          [
+            seated({
+              today: map ? today() : null,
+              signals: [dueStepSignal("Take order", inMinutes(0))],
+            }),
+          ],
+          { clock: "real", map },
+        );
+        const reads = record(el, "floor-refresh");
+        await vi.advanceTimersByTimeAsync(299_999);
+        await el.updateComplete;
+        if (!map) expect(cardOf(el).querySelector('[data-ring="waiting"]')).toBeNull();
+        await vi.advanceTimersByTimeAsync(1);
+        await el.updateComplete;
+        if (map) {
+          const row = el
+            .shadowRoot!.querySelector<WtFloorMap>("wt-floor-map")!
+            .tables.find((row) => row.id === "t9")!;
+          expect(row.outline).toBe("waiting");
+          expect(row.cue?.text).toBe("5′");
+        } else {
+          expect(cardOf(el).querySelector('[data-ring="waiting"]')).not.toBeNull();
+          expect(stepChipOf(el)!.textContent).toContain("Waiting 5 min");
+        }
+        await vi.advanceTimersByTimeAsync(60_000);
+        await el.updateComplete;
+        if (!map) expect(stepChipOf(el)!.textContent).toContain("Waiting 6 min");
+        expect(reads).toEqual([]);
+      },
+    );
 
     it("draws a step not yet due when its minute comes, with no new floor read", async () => {
       const el = await mount([seated({ signals: [dueStepSignal("Dessert?", inMinutes(5))] })], {

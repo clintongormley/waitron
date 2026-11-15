@@ -1,3 +1,4 @@
+import type { ServiceStepDue } from "@waitron/shared";
 import type {
   FloorCueIcon,
   FloorMapCue,
@@ -11,7 +12,7 @@ import type { StringKey } from "../i18n/strings.js";
 import { heldChip } from "../widgets/signal-chips.js";
 import { needsMovingToday } from "./floor-today.js";
 import { minutesToFire, reminderDueAt } from "./release-reminder.js";
-import { currentStep } from "./service-steps.js";
+import { currentStep, stepWaitMinutes } from "./service-steps.js";
 import { PRECEDENCE, tableStates, type TableStateKind } from "./table-precedence.js";
 
 /** `delivery` and `moving` are drawn on the map only; the list card does not rank them. */
@@ -128,12 +129,19 @@ function soonestHeld(members: readonly TableState[], now: number) {
   return soonest!;
 }
 
-/** The name of the step falling due latest among the members' current steps. */
-function latestStep(members: readonly TableState[], now: number): string {
+function latestStep(members: readonly TableState[], now: number): ServiceStepDue {
   const steps = members.flatMap((member) => currentStep(member.signals, now) ?? []);
   return steps.reduce((latest, step) =>
     Date.parse(step.dueAt) > Date.parse(latest.dueAt) ? step : latest,
-  ).name;
+  );
+}
+
+function stepWords(members: readonly TableState[], now: number): string {
+  const step = latestStep(members, now);
+  const waiting = stepWaitMinutes(step, now);
+  return waiting === null
+    ? step.name
+    : `${step.name} · ${t("floor.step_wait").replace("{m}", String(waiting))}`;
 }
 
 function soonestBooking(members: readonly TableState[]): string {
@@ -166,7 +174,7 @@ export function kindWords(kind: MapKind, members: readonly TableState[], now: nu
     case "ready":
       return readyText(largestReady(members));
     case "step":
-      return latestStep(members, now);
+      return stepWords(members, now);
     case "delivery":
       return `${totalDeliveries(members)} ${t("floor.pending_delivery")}`;
     case "held": {
@@ -189,8 +197,14 @@ export function kindCue(
   switch (kind) {
     case "ready":
       return { icon: "floor-ready", text: String(largestReady(members)) };
-    case "step":
-      return { icon: "floor-step", text: latestStep(members, now) };
+    case "step": {
+      const step = latestStep(members, now);
+      const waiting = stepWaitMinutes(step, now);
+      return {
+        icon: "floor-step",
+        text: waiting === null ? step.name : t("floor.cue_minutes").replace("{m}", String(waiting)),
+      };
+    }
     case "delivery":
       return { icon: "floor-step", text: kindWords(kind, members, now) };
     case "held": {
@@ -221,10 +235,22 @@ function fillOf(kinds: readonly MapKind[], members: readonly TableState[]): Floo
   return "plain";
 }
 
-function outlineOf(kinds: readonly MapKind[]): FloorMapOutline | null {
+function outlineOf(
+  kinds: readonly MapKind[],
+  members: readonly TableState[],
+  now: number,
+): FloorMapOutline | null {
   const has = (kind: MapKind) => kinds.includes(kind);
   if (has("overdue")) return "overdue";
   if (has("waiting") && !has("forgotten") && !has("fire")) return "waiting";
+  if (
+    has("step") &&
+    !has("forgotten") &&
+    !has("unavailable") &&
+    !has("fire") &&
+    stepWaitMinutes(latestStep(members, now), now) !== null
+  )
+    return "waiting";
   if (has("clearing") || has("moving")) return "clearing";
   return null;
 }
@@ -243,7 +269,7 @@ export function mapLook(members: readonly TableState[], now: number): MapLook {
   const top = kinds[0];
   return {
     fill: fillOf(kinds, members),
-    outline: outlineOf(kinds),
+    outline: outlineOf(kinds, members, now),
     pulse: PULSES.find((pulse) => kinds.includes(pulse)) ?? null,
     cue: top === undefined ? null : kindCue(top, members, now),
     top,
@@ -268,7 +294,9 @@ export function pinLook(rows: readonly TableState[], now: number): PinLook {
   const text =
     top === "held"
       ? heldChip(soonestHeld(rows, now).member.signals, Number.POSITIVE_INFINITY, now)!.text
-      : kindWords(top, rows, now);
+      : top === "step"
+        ? latestStep(rows, now).name
+        : kindWords(top, rows, now);
   return { fill, icon: cue?.icon ?? null, text };
 }
 
@@ -294,7 +322,8 @@ export function reminderClock(tables: readonly TableState[], now: number): strin
       if (dueAt !== Number.POSITIVE_INFINITY)
         parts.push(`${table.id}:${dueAt <= now ? "due" : minutesToFire(dueAt, now)}`);
       const step = currentStep(table.signals, now);
-      if (step !== null) parts.push(`${table.id}:step:${step.stepId}`);
+      if (step !== null)
+        parts.push(`${table.id}:step:${step.stepId}:${stepWaitMinutes(step, now) ?? ""}`);
       return parts;
     })
     .join(",");

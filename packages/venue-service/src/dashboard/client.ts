@@ -101,7 +101,7 @@ export interface VenueServiceModel {
    * `venue.configure`: the sender, or a manager's PIN. */
   lateSendManagerDepartmentIds: string[];
   serviceSteps: ServiceStep[];
-  courses: { id: string; name: string }[];
+  courses: { id: string; name: string; heldUntilFired: boolean }[];
 }
 export interface VenueServiceChoices {
   floorZones: FloorZone[];

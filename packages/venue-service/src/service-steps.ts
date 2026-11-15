@@ -45,9 +45,15 @@ export async function listServiceSteps(tx: Transaction): Promise<ServiceStep[]> 
     .orderBy(asc(serviceSteps.departmentId), asc(serviceSteps.position), asc(serviceSteps.id));
 }
 
-export async function listStepCourses(tx: Transaction): Promise<{ id: string; name: string }[]> {
+export async function listStepCourses(
+  tx: Transaction,
+): Promise<{ id: string; name: string; heldUntilFired: boolean }[]> {
   return tx
-    .select({ id: kitchenCourses.id, name: kitchenCourses.name })
+    .select({
+      id: kitchenCourses.id,
+      name: kitchenCourses.name,
+      heldUntilFired: kitchenCourses.heldUntilFired,
+    })
     .from(kitchenCourses)
     .where(eq(kitchenCourses.active, true))
     .orderBy(asc(kitchenCourses.displayOrder), asc(kitchenCourses.name));

@@ -257,7 +257,7 @@ export class TillTableDetailsSheet extends LitElement {
         step === null
           ? nothing
           : html`<div class="step">
-              ${stepChip(step, { onDone: () => this.#stepDone(table, party!.id, step) })}
+              ${stepChip(step, { onDone: () => this.#stepDone(table, party!.id, step), now })}
             </div>`
       }
       ${chips.length === 0 ? nothing : html`<div class="chips">${renderFloorChips(chips)}</div>`}

@@ -62,8 +62,21 @@ describe("signalChips", () => {
 
   it("draws the overdue wait with the timer, and a service step with the bell", () => {
     expect(signalChips([{ kind: "long_wait", band: "overdue" }])[0]?.icon).toBe("floor-timer");
-    expect(signalChips([dueStepSignal("Dessert?")], { now })).toEqual([
+    expect(signalChips([dueStepSignal("Dessert?", new Date(now).toISOString())], { now })).toEqual([
       { key: "service-step", text: "Dessert?", tone: "primary-filled", icon: "floor-step" },
+    ]);
+  });
+
+  it("says how long a step has waited when the device cannot mark it Done", () => {
+    expect(
+      signalChips([dueStepSignal("Dessert?", new Date(now - 300_000).toISOString())], { now }),
+    ).toEqual([
+      {
+        key: "service-step",
+        text: "Dessert? · Waiting 5 min",
+        tone: "primary-filled",
+        icon: "floor-step",
+      },
     ]);
   });
 

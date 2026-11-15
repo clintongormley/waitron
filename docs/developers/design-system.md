@@ -999,9 +999,9 @@ set. The consuming app registers the `chevron-down` icon.
 On the till's floor screen, the map box follows the cropped zone's aspect ratio, capped in height
 so the surrounding controls and Unplaced tray have room; the cap stays at least six tap heights
 on short windows, where the page can scroll (owner, 2026-10-10, A472). Bill requested
-chips share the map's purple tokens. On the list card and the unplaced table's token, a table holding dishes shows a quiet chip with a pause icon, “Held 2”, which counts down, “Held 2 · fire in 4 min”, once its reminder has a time; when that time comes the filled amber “Time to fire” chip, with a play icon, takes its place. On the map, when that is its most urgent state, the same table is drawn in the calm fill with the pause icon and its minutes left (“4′”), or “Held 2” before the reminder has a time. A due service step shows on the list card as one joined chip: a filled primary segment with the bell and the step's name, and a Done button at least `--wt-tap-min` square (`stepChip`, `apps/till/src/widgets/step-chip.ts`); on a card too narrow for both side by side, Done goes full width under the name. A card with that chip is a box holding a cover button over the whole card and the Done button above it, because a button cannot hold a button. The unplaced token, and a device whose profile lacks `take-orders`, show the plain filled chip instead. On the map a step is drawn as a seated table in blue with the bell and the step's name, cut to fit. A table's states are ranked in A757 §4's order (`tableStates`, `apps/till/src/state/table-precedence.ts`); the map, the tab of a zone not on screen, the zone strip's edge marks and the order screen's status pin follow that order too (`apps/till/src/state/floor-look.ts`), and the table details sheet's chips are sorted into it by `byPrecedence` (`apps/till/src/state/table-precedence.ts`, called from `apps/till/src/widgets/table-details-sheet.ts`). On the list card the most urgent state that draws an outline decides it — Forgotten red, pulsing fast; Overdue red and Time to fire amber, pulsing slowly, all thick; Waiting a thin steady amber, kept under a state that draws none; no other state draws one — and every mark is listed in that order, “N to serve” last. Under reduced motion nothing moves and Forgotten's left edge turns wide and red. A seated table that needs nothing, or only waits on a held course, has a soft left edge, `--wt-color-table-calm-edge`; the first also says “✓ Nothing needed”. Reserved is pale amber on the card and the token. The unplaced token rings by its own timing band and due reminder only. `@waitron/ui`'s `floor-chips.ts` registers the `floor-*` icons the chips, the badges, the map's cues and the zone tabs draw. The order screen's status pin shows the party's map fill as its swatch, then
+chips share the map's purple tokens. On the list card and the unplaced table's token, a table holding dishes shows a quiet chip with a pause icon, “Held 2”, which counts down, “Held 2 · fire in 4 min”, once its reminder has a time; when that time comes the filled amber “Time to fire” chip, with a play icon, takes its place. On the map, when that is its most urgent state, the same table is drawn in the calm fill with the pause icon and its minutes left (“4′”), or “Held 2” before the reminder has a time. A due service step shows on the list card as one joined chip: a filled primary segment with the bell and the step's name, adding its elapsed wait after five minutes, and a Done button at least `--wt-tap-min` square (`stepChip`, `apps/till/src/widgets/step-chip.ts`); on a card too narrow for both side by side, Done goes full width under the name. A card with that chip is a box holding a cover button over the whole card and the Done button above it, because a button cannot hold a button. The unplaced token, and a device whose profile lacks `take-orders`, show the plain filled chip instead. On the map a step is drawn as a seated table in blue with the bell and the step's name, cut to fit; after five minutes its cue gives elapsed minutes (`5′`), while its spoken description keeps the name and wait. A table's states are ranked in A757 §4's order (`tableStates`, `apps/till/src/state/table-precedence.ts`); the map, the tab of a zone not on screen, the zone strip's edge marks and the order screen's status pin follow that order too (`apps/till/src/state/floor-look.ts`), and the table details sheet's chips are sorted into it by `byPrecedence` (`apps/till/src/state/table-precedence.ts`, called from `apps/till/src/widgets/table-details-sheet.ts`). On the list card the most urgent state that draws an outline decides it — Forgotten red, pulsing fast; Overdue red and Time to fire amber, pulsing slowly, all thick; Waiting a thin steady amber, kept under a state that draws none; late steps share Waiting’s outline below Ready or Bill requested, yielding to Forgotten, Overdue, Unavailable and Time to fire — and every mark is listed in that order, “N to serve” last. Under reduced motion nothing moves and Forgotten's left edge turns wide and red. A seated table that needs nothing, or only waits on a held course, has a soft left edge, `--wt-color-table-calm-edge`; the first also says “✓ Nothing needed”. Reserved is pale amber on the card and the token. The unplaced token rings by its own timing band and due reminder only. `@waitron/ui`'s `floor-chips.ts` registers the `floor-*` icons the chips, the badges, the map's cues and the zone tabs draw. The order screen's status pin shows the party's map fill as its swatch, then
 its most urgent state's icon and words (“Bill requested”, “2 ready”, “Nothing needed”); it says a
-held course without its countdown, and it does not pulse. A single-table details
+held course without its countdown and a step by its name without an elapsed clock, and it does not pulse. A single-table details
 heading says "Table 9" / "Mesa 9", or the table's name for today with "Saved as {saved name}" /
 "Guardada como …" beneath it; a named group's heading is its name, with the tapped table's saved name beneath it; a list-view card shows today's name with the saved name small after
 it; Guests has no placeholder. Rename, after Change seats on the details sheet, opens the Rename
@@ -4119,7 +4119,7 @@ unreadable parent or a denied child gate removes its destinations. Click and Ent
 complete address through the draft-change question. Keep editing retains the search and drawer;
 accepted navigation clears them. Enter opens an inner destination only when no page matches.
 
-Settings inside department Details, Service, Transfers and Receipts add their tab to the location, for
+Settings inside department Details, Service, Tables, Transfers and Receipts add their tab to the location, for
 example **Remind to fire the next course after — in Departments and zones / Service**. One available
 department opens directly; several open a compact chooser, including the current department.
 Open stays quiet and disabled until you choose. Cancel keeps your search. A failed read offers
@@ -5871,8 +5871,8 @@ Keep passwords, PINs, pairing codes and unsaved form contents out of the URL.
 
 Module management tabs use `/manage/<section>/view/<key>`. Departments always opens its list
 at `/manage/venue-operations`. A department opens at
-`/manage/venue-operations/department/<id>` in its edit dialog; its Service, Receipts and Transfers tabs add
-`/view/service`, `/view/receipt` and `/view/transfers`, and a zone editor adds
+`/manage/venue-operations/department/<id>` in its edit dialog; its Service, Tables, Receipts and Transfers tabs add
+`/view/service`, `/view/tables`, `/view/receipt` and `/view/transfers`, and a zone editor adds
 `/view/zones/zone/<id>`. The list stays beneath these dialogs. Closing one returns to the list; a removed subject closes its editor.
 Old top-level tab addresses are replaced with the list URL. Venue settings
 (`/manage/venue-settings`) starts with `venue-details`, followed by `kitchen`; a tab
@@ -6724,28 +6724,29 @@ Edit department is tabbed. Details holds name, trading name and, when the instal
 files one and the Receipts tab is offered (`venue.configure`), the invoice operation description. Details' Save writes the description through the
 receipt request the Receipts tab uses, with the saved receipt and not the Receipts tab's draft,
 after the department's settings; if that request is refused, the field shows the refusal and stays
-unsaved while the settings stand. Service holds three sections, each
-under its own heading: “Orders and payment”, with the service settings and the zones that differ,
-“Courses and stations”, with the reminder to fire the next course and the switch for a manager's
-PIN to send after a period ends, and “Table states”, with
-the Needs clearing switch and the department's service steps (a list with drag handles, a row menu
-with Delete, and Add step). Receipts, between Service and Transfers, holds the department's receipt
+unsaved while the settings stand. Service holds “Orders and payment”, with the service settings
+and the zones that differ, and “Courses and stations”, with the shared reminder and the manager's
+PIN switch for sending after a period ends. Tables follows Service: grey fixed moments for seating,
+bill requested and leaving, blue service-step rows with their existing start selectors, drag handles,
+Delete and Add step, and amber read-only course rows in course order with their current send/hold
+and reminder values. Needs clearing follows Party leaves. Receipts, between Tables and Transfers,
+holds the department's receipt
 editor, and is offered only to someone with `venue.configure`. Transfers holds the allowed
 destinations and the receiving desk profile, and is offered only while two or more departments are
 active. The dialog is wide whenever it offers Receipts, and standard otherwise, so changing tab
 never changes its width. Its fixed heading and sticky tabs stay above the scrolling content.
-Details, Service and Transfers share one draft and one Save; Receipts has its own draft.
+Details, Service, Tables and Transfers share one draft and one Save; Receipts has its own draft.
 The selected editor renders its Cancel/Save row directly into the modal footer, with its message
 above the buttons. Changing tab keeps both drafts. A Save closes the dialog only when the other draft
 is clean, and closing asks one question covering both. Changing tab never asks about unsaved
 changes, because the screen's `navigationScopes` (`venue-departments-shell.ts`) lets an address
 change between the open department's offered tabs through. The address keeps the open tab (`view` is
-`service`, `receipt` or `transfers`; Details has none); the list's “Set up the tax-agency
+`service`, `tables`, `receipt` or `transfers`; Details has none); the list's “Set up the tax-agency
 description” opens Details and focuses the description field once it appears, unless a tab
 change, a click or edit on Details, or another department comes first; the image library's
 receipt-logo link opens Receipts; and an address naming an unknown view, or a tab not offered, opens Details and replaces the address without adding a history
 entry. A refusal naming a field, or an invalid Save, of the shared draft shows the first of Details,
-Service and Transfers holding a marked field; a mark appearing in the receipt editor, such as a
+Service, Tables and Transfers holding a marked field; a mark appearing in the receipt editor, such as a
 refusal naming a field, while another tab shows brings back Receipts (`department-receipt-invalid`).
 A tab shown this way replaces the address, the field takes focus, and every tab holding a marked
 field is marked. A strip too wide for the dialog scrolls sideways inside it. Edit zone holds its

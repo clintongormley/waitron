@@ -1110,6 +1110,7 @@ export const en = {
   "floor.unsent_owner_one": "{name} has an unsent order: 1 item",
   "floor.unsent_mark": "Unsent",
   "floor.step_done": "Done",
+  "floor.step_wait": "Waiting {m} min",
   "floor.step_done_label": "Done: {step}",
   // Spatial floor plan. The view toggles name the view they switch TO.
   "floor.view_map": "Map",
@@ -3176,6 +3177,7 @@ export const es: Record<StringKey, string> = {
   "floor.unsent_owner_one": "{name} tiene un pedido sin enviar: 1 artículo",
   "floor.unsent_mark": "Sin enviar",
   "floor.step_done": "Hecho",
+  "floor.step_wait": "Espera de {m} min",
   "floor.step_done_label": "Hecho: {step}",
   "floor.view_map": "Mapa",
   "floor.view_list": "Lista",

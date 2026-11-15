@@ -9,11 +9,16 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 
 class StepChipHost extends LitElement {
   static override styles = stepChipStyles;
-  static override properties = { step: { attribute: false }, onDone: { attribute: false } };
+  static override properties = {
+    step: { attribute: false },
+    onDone: { attribute: false },
+    now: { attribute: false },
+  };
   declare step: ServiceStepDue;
   declare onDone: () => void;
+  declare now?: number;
   override render() {
-    return html`${stepChip(this.step, { onDone: this.onDone })}`;
+    return html`${stepChip(this.step, { onDone: this.onDone, now: this.now })}`;
   }
 }
 customElements.define("step-chip-test-host", StepChipHost);
@@ -24,8 +29,12 @@ const dessert: ServiceStepDue = {
   dueAt: "2026-10-22T21:42:00.000Z",
 };
 
-async function mount(step: ServiceStepDue = dessert, onDone: () => void = () => {}) {
-  const { el, host } = await mountWidget<StepChipHost>("step-chip-test-host", { step, onDone });
+async function mount(step: ServiceStepDue = dessert, onDone: () => void = () => {}, now?: number) {
+  const { el, host } = await mountWidget<StepChipHost>("step-chip-test-host", {
+    step,
+    onDone,
+    now,
+  });
   const root = el.shadowRoot!;
   return {
     el,
@@ -43,6 +52,18 @@ afterEach(() => {
 });
 
 describe("stepChip", () => {
+  it("adds the elapsed wait after five minutes while keeping Done named for the step", async () => {
+    const { el, chip, done } = await mount(dessert, () => {}, Date.parse(dessert.dueAt) + 299_999);
+    expect(chip.querySelector(".step-wait")).toBeNull();
+    el.now! += 1;
+    await el.updateComplete;
+    expect(chip.querySelector(".step-wait")!.textContent!.trim()).toBe("Waiting 5 min");
+    expect(done.getAttribute("aria-label")).toBe("Done: Dessert?");
+    el.now! += 60_000;
+    await el.updateComplete;
+    expect(chip.querySelector(".step-wait")!.textContent!.trim()).toBe("Waiting 6 min");
+  });
+
   it("draws the step's bell and name, then Done, keyed by the step", async () => {
     const { chip, name, done } = await mount();
     expect(chip.dataset.chip).toBe("service-step");

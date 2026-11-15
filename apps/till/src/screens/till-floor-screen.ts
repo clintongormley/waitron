@@ -131,7 +131,7 @@ import {
 } from "../state/table-signals.js";
 import { chipState, heldChip, signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 import { stepChip, stepChipStyles } from "../widgets/step-chip.js";
-import { currentStep, nextStepDueAt } from "../state/service-steps.js";
+import { currentStep, nextStepChangeAt } from "../state/service-steps.js";
 import {
   byPrecedence,
   lateBand,
@@ -1138,7 +1138,7 @@ export class TillFloorScreen extends LitElement {
     if (this.now !== undefined || !this.isConnected) return;
     let next = Number.POSITIVE_INFINITY;
     for (const table of this.tables) {
-      next = Math.min(next, nextStepDueAt(table.signals, this.#drawnAt));
+      next = Math.min(next, nextStepChangeAt(table.signals, this.#drawnAt));
       const dueAt = reminderDueAt(table.party?.reminder);
       if (dueAt <= this.#drawnAt || dueAt === Number.POSITIVE_INFINITY) continue;
       const at = table.signals.some((signal) => signal.kind === "held")
@@ -2791,7 +2791,9 @@ export class TillFloorScreen extends LitElement {
     if (needsMovingToday(table)) return this.#waitingCard(table, "move");
     const states = tableStates(table, this.#drawnAt);
     const top = states[0];
-    const ring = states.map((kind) => RING_OF[kind]).find((r) => r !== undefined) ?? null;
+    const ring =
+      states.map((kind) => RING_OF[kind]).find((r) => r !== undefined) ??
+      (mapLook([table], this.#drawnAt).outline === "waiting" ? "waiting" : null);
     const moving = !this.#prefersReducedMotion();
     const edge = top === "forgotten" && !moving ? " edge-forgotten" : "";
     const calm = top === "held" || top === "nothing-needed" ? " calm" : "";
@@ -2899,7 +2901,7 @@ export class TillFloorScreen extends LitElement {
       if (step !== null && chip.key === "service-step") {
         marks.push({
           kind,
-          mark: stepChip(step, { onDone: () => this.#onStepDone(table, step) }),
+          mark: stepChip(step, { onDone: () => this.#onStepDone(table, step), now: this.#drawnAt }),
         });
       } else marks.push({ kind, mark: renderFloorChips([chip])[0]! });
     }

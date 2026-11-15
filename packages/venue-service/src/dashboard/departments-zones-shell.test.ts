@@ -220,12 +220,26 @@ it("a tab change whose address write does not land puts the form back on the add
     guard.dispose();
   }
 });
-it("/manage/venue-operations/department/d1/view/service opens the dialog on Service", async () => {
-  const shell = await mount("/manage/venue-operations/department/d1/view/service");
+it.each(["service", "tables"] as const)(
+  "the department's %s address opens the matching tab",
+  async (tab) => {
+    const path = `/manage/venue-operations/department/d1/view/${tab}`;
+    const shell = await mount(path);
+    const form = await departmentSettings(shell);
+    expect(form.tab).toBe(tab);
+    expect(location.pathname).toBe(path);
+  },
+);
+it("choosing Tables records its address and keeps the tab open", async () => {
+  const shell = await mount("/manage/venue-operations/department/d1");
   const form = await departmentSettings(shell);
-  expect(form.tab).toBe("service");
-  expect(location.pathname).toBe("/manage/venue-operations/department/d1/view/service");
+  await selectDepartmentTab(form, "tables");
+  await expect
+    .poll(() => location.pathname)
+    .toBe("/manage/venue-operations/department/d1/view/tables");
+  expect(form.tab).toBe("tables");
 });
+
 it("an address naming Transfers with one department opens Details and replaces the address", async () => {
   const replace = vi.spyOn(history, "replaceState");
   const push = vi.spyOn(history, "pushState");

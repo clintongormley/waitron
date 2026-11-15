@@ -42,12 +42,13 @@ import {
   type ServiceStepDraft,
 } from "./service-step-draft.js";
 
-export type DepartmentTab = "details" | "service" | "receipt" | "transfers";
+export type DepartmentTab = "details" | "service" | "tables" | "receipt" | "transfers";
 export function offeredDepartmentTabs(model?: VenueServiceView, receipts = false): DepartmentTab[] {
   const transfers = (model?.departments.filter((d) => d.active).length ?? 0) >= 2;
   return [
     "details",
     "service",
+    "tables",
     ...(receipts ? (["receipt"] as const) : []),
     ...(transfers ? (["transfers"] as const) : []),
   ];
@@ -81,10 +82,10 @@ const fieldTab: Record<Field, DepartmentTab> = {
   orderStart: "service",
   paidWhen: "service",
   collectionNumber: "service",
-  needsClearing: "service",
+  needsClearing: "tables",
   lateSendNeedsManager: "service",
   releaseReminderMinutes: "service",
-  serviceSteps: "service",
+  serviceSteps: "tables",
   transfers: "transfers",
   receivingProfileId: "transfers",
   destinationDepartmentIds: "transfers",
@@ -183,6 +184,26 @@ export class DepartmentSettings extends LitElement {
       a:focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
+      }
+      .meal-fixed,
+      .meal-course {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2);
+        padding: var(--wt-space-3);
+        border-inline-start: var(--wt-space-1) solid var(--wt-color-text-muted);
+        background: var(--wt-color-surface-sunken);
+      }
+      .meal-course {
+        border-color: var(--wt-color-warning);
+        background: var(--wt-color-surface);
+      }
+      .meal-course wt-icon {
+        color: var(--wt-color-warning);
+      }
+      .meal-fixed wt-icon {
+        color: var(--wt-color-text-muted);
       }
       fieldset {
         margin: 0;
@@ -1081,8 +1102,52 @@ export class DepartmentSettings extends LitElement {
               ${errors.lateSendNeedsManager ? html`<p class="error" data-field-error="lateSendNeedsManager">${errors.lateSendNeedsManager}</p>` : nothing}
             </div>
           </section>
+        </div>
+        <div class="panel" slot="tables" @keydown=${this.submitOnEnter}>
           <section aria-label=${t("venue.table_states")}>
             <h3>${t("venue.table_states")}</h3>
+            <p class="meal-fixed" data-moment="seated">
+              <wt-icon name="table-rect"></wt-icon>${t("venue.meal_seated")}
+            </p>
+            <department-service-steps
+              .steps=${draft.serviceSteps}
+              .courses=${this.model!.courses}
+              .errors=${this.shownStepErrors}
+              .listError=${errors.serviceSteps ?? ""}
+              ?disabled=${disabled}
+              @steps-change=${(e: CustomEvent<{ steps: ServiceStepDraft[] }>) => {
+                e.stopPropagation();
+                this.stepsChanged(e.detail.steps);
+              }}
+            ></department-service-steps>
+            ${this.model!.courses.map(
+              (course) =>
+                html`<div class="meal-course" data-course=${course.id}>
+                  <wt-icon name="section-service"></wt-icon><strong>${course.name}</strong>
+                  <span>${t(course.heldUntilFired ? "venue.meal_hold" : "venue.meal_fire")}</span>
+                  ${
+                    course.heldUntilFired
+                      ? html`<span
+                          >${t("venue.meal_reminder")}:
+                          ${
+                            draft.releaseReminderMinutes === null
+                              ? t("venue.release_reminder.off")
+                              : draft.releaseReminderMinutes === 0
+                                ? t("venue.release_reminder.at_once")
+                                : `${draft.releaseReminderMinutes} ${t("venue.service_step_min")}`
+                          }</span
+                        >`
+                      : nothing
+                  }
+                </div>`,
+            )}
+            ${this.model!.courses.some((course) => course.heldUntilFired) ? html`<p class="hint" data-test="course-reminder-hint">${t("venue.release_reminder_hint")}</p>` : nothing}
+            <p class="meal-fixed" data-moment="bill">
+              <wt-icon name="floor-bill"></wt-icon>${t("venue.meal_bill")}
+            </p>
+            <p class="meal-fixed" data-moment="leaves">
+              <wt-icon name="person"></wt-icon>${t("venue.meal_leaves")}
+            </p>
             <div>
               <wt-switch
                 name="needsClearing"
@@ -1099,17 +1164,6 @@ export class DepartmentSettings extends LitElement {
               <p class="hint" aria-hidden="true">${t("venue.needs_clearing_hint")}</p>
               ${errors.needsClearing ? html`<p class="error" data-field-error="needsClearing">${errors.needsClearing}</p>` : nothing}
             </div>
-            <department-service-steps
-              .steps=${draft.serviceSteps}
-              .courses=${this.model!.courses}
-              .errors=${this.shownStepErrors}
-              .listError=${errors.serviceSteps ?? ""}
-              ?disabled=${disabled}
-              @steps-change=${(e: CustomEvent<{ steps: ServiceStepDraft[] }>) => {
-                e.stopPropagation();
-                this.stepsChanged(e.detail.steps);
-              }}
-            ></department-service-steps>
           </section>
         </div>
         ${

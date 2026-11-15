@@ -61,7 +61,7 @@ it.each(["en", "es"] as const)(
         await collect(element, tab);
       }
     };
-    for (const tab of ["details", "service", "transfers"] as const) {
+    for (const tab of ["details", "service", "tables", "transfers"] as const) {
       await selectDepartmentTab(form, tab);
       await collect(form.shadowRoot!.querySelector(`[slot=${tab}]`)!, tab);
     }

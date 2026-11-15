@@ -4,7 +4,7 @@ import type { TableSignal } from "@waitron/shared";
 import { countText, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { minutesToFire } from "../state/release-reminder.js";
-import { currentStep } from "../state/service-steps.js";
+import { currentStep, stepWaitMinutes } from "../state/service-steps.js";
 import type { TableStateKind } from "../state/table-precedence.js";
 
 type WaitBand = Extract<TableSignal, { kind: "long_wait" }>["band"];
@@ -29,11 +29,15 @@ export function signalChips(
   return signals.flatMap((signal): FloorChip[] => {
     switch (signal.kind) {
       case "service_step": {
-        const step = now === undefined ? null : currentStep([signal], now);
+        if (now === undefined) return [];
+        const step = currentStep([signal], now);
         if (step === null) return [];
-        return [
-          { key: "service-step", text: step.name, tone: "primary-filled", icon: "floor-step" },
-        ];
+        const waiting = stepWaitMinutes(step, now);
+        const text =
+          waiting === null
+            ? step.name
+            : `${step.name} · ${t("floor.step_wait").replace("{m}", String(waiting))}`;
+        return [{ key: "service-step", text, tone: "primary-filled", icon: "floor-step" }];
       }
       case "ready":
         return signal.byStation.map(({ stationName, count }) => ({

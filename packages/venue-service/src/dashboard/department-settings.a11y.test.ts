@@ -195,7 +195,7 @@ describe.each(["light", "dark"] as const)("department-settings %s", (theme) => {
         panel.checkVisibility(),
       );
     if (state === "needs-clearing-on") {
-      await selectDepartmentTab(el, "service");
+      await selectDepartmentTab(el, "tables");
       expect(
         shownPanel()!.querySelector<HTMLElement & { checked: boolean }>(
           "wt-switch[name=needsClearing]",
@@ -358,13 +358,17 @@ describe.each(["light", "dark"] as const)("Settings transfers bounds (%s)", (the
   });
 });
 describe.each(["light", "dark"] as const)("department-settings tabs (%s)", (theme) => {
-  it.each(["details", "service", "transfers"] as const)("the %s tab", async (tab) => {
+  it.each(["details", "service", "tables", "transfers"] as const)("the %s tab", async (tab) => {
     setLocale("en");
     const el = (await mountThemed(
       "<department-settings></department-settings>",
       theme,
     )) as HTMLElementTagNameMap["department-settings"];
     el.model = structuredClone(model);
+    el.model.courses = [
+      { id: "first", name: "Starters", heldUntilFired: false },
+      { id: "next", name: "Mains", heldUntilFired: true },
+    ];
     el.departmentId = "d1";
     el.api = new VenueServiceApi((async (path) =>
       path.endsWith("/profiles")
@@ -380,6 +384,7 @@ describe.each(["light", "dark"] as const)("department-settings tabs (%s)", (them
       .not.toBeNull();
     await selectDepartmentTab(el, tab);
     expect(el.tab).toBe(tab);
+    if (tab === "tables") expect(el.shadowRoot!.querySelectorAll("[data-course]")).toHaveLength(2);
     await expectNoA11yViolations(host);
   });
 });
@@ -391,7 +396,7 @@ describe.each(["light", "dark"] as const)("department-settings service steps (%s
       theme,
     )) as HTMLElementTagNameMap["department-settings"];
     const view = structuredClone(model);
-    view.courses = [{ id: "c1", name: "Mains" }];
+    view.courses = [{ id: "c1", name: "Mains", heldUntilFired: true }];
     view.serviceSteps = [
       { id: "s1", departmentId: "d1", name: "Set up", start: "seated", courseId: null, minutes: 0 },
       {
@@ -416,7 +421,7 @@ describe.each(["light", "dark"] as const)("department-settings service steps (%s
     await expect
       .poll(() => el.shadowRoot!.querySelector("[name=receivingProfileId]"))
       .not.toBeNull();
-    await selectDepartmentTab(el, "service");
+    await selectDepartmentTab(el, "tables");
     const list = el.shadowRoot!.querySelector("department-service-steps")!;
     await list.updateComplete;
     expect(list.shadowRoot!.querySelectorAll("tbody tr").length).toBe(2);

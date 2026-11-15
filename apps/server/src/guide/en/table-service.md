@@ -350,12 +350,18 @@ already have succeeded.
 A service step reminds you to go back to a table at the right moment, such as **Take order** a
 couple of minutes after **Set up** is done, or **Anything else?** once every dish has been served.
 Each step starts at a moment like that and falls due a set number of minutes later. Your venue sets
-them up under **Service steps** on the department's **Service** tab in the dashboard.
+them up under **Service steps** on the department's **Tables** tab in the dashboard. There you can
+read the meal from seating to leaving, with its fixed moments, steps and courses. Course rows show
+the current send or hold choice and reminder; change the course choice on **Courses** and the
+shared reminder on the department's **Service** tab.
 
 When a step is due, the table's card shows its name, with a **Done** button if you may take orders.
-On the map, unless something more urgent is showing, the table turns blue with a bell and the step's
-name, and the table's details list the step, with **Done** if you may take orders. A table shows one
+On the map, unless something more urgent is showing, the table turns blue with a bell. Open its
+details to read the step and use **Done** if you may take orders. A table shows one
 step at a time: the one that fell due last.
+
+A step waiting five minutes gets an amber outline unless a stronger warning takes priority. Open
+the table’s details for the step and its wait; **5′** beside the map’s bell means five minutes.
 
 Tap **Done** when you have been to the table and the guests want nothing. It clears the step on show
 and any earlier step it was hiding. Often you don't need to tap it, because these clear a step too:
