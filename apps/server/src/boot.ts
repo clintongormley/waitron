@@ -217,6 +217,7 @@ import {
   jobFailingAlertSource,
   stationOutputAlertSource,
   storageAlertSource,
+  staffNoticeAlertSource,
 } from "./alert-sources.js";
 import type { BackupStatus } from "./backup-status.js";
 import { createTtlCache } from "./ttl-cache.js";
@@ -453,7 +454,7 @@ import { clockSyncAlertSource } from "./clock-sync-alert.js";
 import { createStagingTurn } from "./backup-staging-turn.js";
 import { readDiskUsage, type DiskUsage } from "./disk-usage.js";
 import { createSpaceFreer, surveyLeftovers, type LeftoverDeps } from "./free-space-now.js";
-import { FULL_DISK_BYTES } from "./boot-failure.js";
+import { venueDiskFullMiddleware } from "./boot-failure.js";
 import { freeBytes, type Statfs } from "./free-bytes.js";
 import { createStaffNoticeLog, readStaffNoticesInTurns } from "./staff-notices.js";
 import { mountBoxRetireApi } from "./box-retire.js";
@@ -1022,7 +1023,6 @@ export interface StartServerSeams {
   appendOnlyWatch?: { intervalMs?: number };
   /** The spare file's size; defaults to SPARE_SPACE_BYTES. */
   spareBytes?: number;
-  /** For the free-space watch and the spare's room check only. */
   freeSpaceWatch?: { intervalMs?: number; statfs?: Statfs };
   testClock?: ModuleOperationHost["testClock"];
   /** Replaces `requestFromBox`, the check for what a request from the box only withholds. */
@@ -1435,8 +1435,6 @@ async function bootServer(
     }
   }
 
-  const equipmentNoticeLog = createStaffNoticeLog(log);
-  const pageNoticeLog = createStaffNoticeLog(log);
   const build = applicationVersion(process.env);
   const health = createHealthState(now());
   const app = healthApp(health, now, { venueDir: config.venueDir });
@@ -1479,13 +1477,7 @@ async function bootServer(
   );
   // Must stay ahead of every route, so a route added later is covered without being named.
   app.use("*", ownPageCheck);
-  app.use("*", async (c, next) => {
-    c.set("venueDiskFull", async () => {
-      const free = await freeBytes(config.venueDir, seams.freeSpaceWatch?.statfs);
-      return free !== null && free < FULL_DISK_BYTES;
-    });
-    await next();
-  });
+  app.use("*", venueDiskFullMiddleware(config.venueDir, seams.freeSpaceWatch?.statfs));
   app.use("*", async (c, next) => {
     if (c.req.method === "GET" && c.req.header("x-waitron-live") === "1") {
       await withPassiveManagementRead(next);
@@ -3077,7 +3069,6 @@ async function bootServer(
         venueDomain: config.venueDomain,
         disk: diskFull,
         notices: {
-          log: equipmentNoticeLog,
           sources: deviceNoticeSources(
             {
               disk: diskFull,
@@ -3627,24 +3618,25 @@ async function bootServer(
   );
   const emailNoticeLog = createStaffNoticeLog(log);
   const emailNoticeSources = enabledStaffNoticeSources(enabledAtStart);
+  const readModuleNotices = async () => {
+    const reading = emailNoticeLog.begin();
+    const read = await readStaffNoticesInTurns(
+      db,
+      emailNoticeSources.map(({ owner, source }) => ({
+        owner,
+        source: { read: (ctx) => source.read({ ...ctx, filing: { enabled: filesRecords() } }) },
+      })),
+      { reading: tillClock.now(), log: emailNoticeLog.log },
+    );
+    reading.settle(read.unavailable);
+    return read;
+  };
   const boxEmails = startBoxEmailDuty({
     db,
     now,
     disk: diskFull,
     space: freeSpace,
-    moduleNotices: async () => {
-      const reading = emailNoticeLog.begin();
-      const read = await readStaffNoticesInTurns(
-        db,
-        emailNoticeSources.map(({ owner, source }) => ({
-          owner,
-          source: { read: (ctx) => source.read({ ...ctx, filing: { enabled: filesRecords() } }) },
-        })),
-        { reading: tillClock.now(), log: emailNoticeLog.log },
-      );
-      reading.settle(read.unavailable);
-      return read;
-    },
+    moduleNotices: readModuleNotices,
     emailedIncidents: () => readOpenEmailedIncidents(db),
     backupStopped: () => backupOutcomes.runStopped,
     context: () =>
@@ -3733,11 +3725,8 @@ async function bootServer(
       production: config.environment === "production",
     }),
     backupSource,
-    storageAlertSource({
-      space: freeSpace,
-      disk: diskFull,
-      notices: [equipmentNoticeLog, pageNoticeLog, emailNoticeLog],
-    }),
+    storageAlertSource({ space: freeSpace, disk: diskFull }),
+    staffNoticeAlertSource(readModuleNotices),
     sealedStateAlertSource(sealedStateStatus),
     firstStartAlertSource(firstStart),
     appendOnlyRestoredAlertSource(appendOnlyRestored),
@@ -3818,6 +3807,7 @@ async function bootServer(
     backupDirs: localBackupDirs,
   };
   const diskUsageCache = createTtlCache<DiskUsage>({ ttlMs: 60_000, now });
+  const pageNoticeLog = createStaffNoticeLog(log);
   const pageNoticeSources = deviceNoticeSources(
     { disk: diskFull, space: freeSpace },
     enabledAtStart,

@@ -28,7 +28,7 @@ import {
 } from "@waitron/payments";
 import type { JobView } from "./job-runner.js";
 import type { BackupStatus } from "./backup-status.js";
-import type { StaffNoticeLog } from "./staff-notices.js";
+import type { StaffNoticesRead } from "./staff-notices.js";
 import type { DiskFullState } from "./disk-full-state.js";
 import type { FreeSpaceState } from "./free-space-watch.js";
 import { type InvoiceDeliveryStatus, readInvoiceDeliveriesFor } from "./invoice-delivery-status.js";
@@ -349,31 +349,29 @@ export function appendOnlyRestoredAlertSource(holder: { restoredAt: string | nul
  * The box's disk: `storage.disk_full` while the full-disk stop is noted, else `storage.space_low`
  * while the free-space warning is on. Never both: the warning says everything still works.
  */
+export function staffNoticeAlertSource(read: () => Promise<StaffNoticesRead>): AlertSource {
+  return {
+    area: "box",
+    permission: "system.manage",
+    readOutsideTransaction: true,
+    async read() {
+      if ((await read()).unavailable.length > 0) throw new Error("staff notice check unavailable");
+      return [];
+    },
+  };
+}
+
 export function storageAlertSource(deps: {
   space: Pick<FreeSpaceState, "current">;
   disk: Pick<DiskFullState, "since">;
-  notices?: readonly Pick<StaffNoticeLog, "hasUnavailable">[];
 }): AlertSource {
   return {
     area: "box",
     permission: "system.manage",
     async read(): Promise<readonly OngoingAlert[]> {
-      const unavailable: OngoingAlert[] = deps.notices?.some((log) => log.hasUnavailable())
-        ? [
-            {
-              key: "alert.source_unavailable:box",
-              code: "alert.source_unavailable",
-              params: { area: "box" },
-              severity: "error",
-              since: null,
-              screen: "box-status",
-            },
-          ]
-        : [];
       const stoppedSince = deps.disk.since();
       if (stoppedSince !== null) {
         return [
-          ...unavailable,
           {
             key: "storage.disk_full",
             code: "storage.disk_full",
@@ -385,9 +383,8 @@ export function storageAlertSource(deps: {
         ];
       }
       const { freeBytes, lowSince } = deps.space.current();
-      if (lowSince === null) return unavailable;
+      if (lowSince === null) return [];
       return [
-        ...unavailable,
         {
           key: "storage.space_low",
           code: "storage.space_low",

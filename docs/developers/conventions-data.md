@@ -3103,11 +3103,11 @@ answered `ok` there while the same check inside `withTransaction` was refused (M
   equipment read does above. The fiscal outbox is read in a `withWriteLock` turn of its own, and a
   read there that changes a row is refused. Its failure is the outbox's alone: the answer carries
   `outbox: null` and `fiscal-outbox` in `noticesUnavailable`, and the failure is logged once per
-  spell, as a notice source's is. The existing failure holders for equipment, Box status and
-  email notice checks also feed the manager's `alert.source_unavailable` bell alert for the box.
-  The bell reads those holders without another notice or outbox query; it clears when all three
-  readers have observed recovery. `apps/server/src/alerts.test.ts` covers the failed check,
-  permission filter and recovery.
+  spell, as a notice source's is. The manager's bell checks module notices through the same
+  per-source write-lock turns, outside its own alert transaction. A failed check produces the
+  existing `alert.source_unavailable` alert for the box; the next bell read checks again.
+  This adds one module-notice pass per bell read. `apps/server/src/alerts.test.ts` covers failure,
+  permissions and recovery; `boot.box-emails.test.ts` checks the actual boot wiring.
 - **Free-space deletion writes nothing to the database.** It deletes files (below), then takes a
   fresh free-space reading so a full-disk stop can lift at once. Dashboard routes are not behind
   the till's full-disk gate (above, "Not gated").
@@ -3277,7 +3277,8 @@ on another filesystem generic when the venue has room; it does not change SQLite
 or start the till's stop by itself.
 
 The classification cases in `apps/server/src/boot-failure.test.ts` use stubbed errors and space.
-The route case in `apps/server/src/start-full-disk.e2e.test.ts` fills a small real filesystem,
+The route case in `apps/server/src/start-full-disk.e2e.test.ts` uses the same middleware as boot
+and fills a small real filesystem,
 refuses a new file at 507, writes it at 200 after freeing space, then refuses another write at 500
 when only the destination is full and the venue has room. Its refused-open rows separately
 exercise engine errors 14 and 4874 on HFS+.

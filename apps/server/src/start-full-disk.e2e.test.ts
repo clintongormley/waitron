@@ -63,7 +63,7 @@ import { PERSON_HEADER, jobOrigin, nodeId as brandNodeId } from "@waitron/shared
 import { openVenueStore } from "@waitron/store";
 import { WorkforceBackend } from "@waitron/workforce";
 import { createErrorBoundary } from "@waitron/server-kit";
-import { FULL_DISK_BYTES } from "./boot-failure.js";
+import { FULL_DISK_BYTES, venueDiskFullMiddleware } from "./boot-failure.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { loadKeyRing } from "@waitron/credentials";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
@@ -257,13 +257,7 @@ describe("a route's system ENOSPC on a real full disk", () => {
     const appFor = (venue: string) => {
       const app = new Hono();
       const run = createErrorBoundary({}, "write.failed");
-      app.use("*", async (c, next) => {
-        c.set("venueDiskFull", async () => {
-          const free = await freeBytes(venue);
-          return free !== null && free < FULL_DISK_BYTES;
-        });
-        await next();
-      });
+      app.use("*", venueDiskFullMiddleware(venue));
       app.post("/write", (c) =>
         run(
           c,

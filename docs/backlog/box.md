@@ -1462,6 +1462,12 @@ except the last, added 2026-11-14.
 
 ## Decisions and deliberate limits
 
+- **After freeing space on the full-disk recovery page, choose Retry.** The page does not retry
+  startup automatically. The watcher retained this limit at 01:48 on 15 November 2026 when
+  clearing the [full-disk plan](../superpowers/plans/2026-11-15-full-disk-words.md), and confirmed
+  recording it at 02:18. It is the watcher's decision, not owner approval. The same-folder reboot
+  after freeing space is exercised by `apps/server/src/start-full-disk.e2e.test.ts`.
+
 ### The bucket client's limits (A44, #676)
 
 Recorded as limits by the campaign watcher on 2026-11-11 (A1508), open to the owner.

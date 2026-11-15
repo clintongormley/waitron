@@ -19,11 +19,10 @@ import {
   createAlertRegistry,
   readHandledAlerts,
   readOpenAlerts,
+  readOutsideTransactionAlerts,
 } from "./alerts.js";
-import { storageAlertSource } from "./alert-sources.js";
-import { createStaffNoticeLog, readStaffNoticesInTurns } from "./staff-notices.js";
-import { createDiskFullState } from "./disk-full-state.js";
-import { createFreeSpaceState } from "./free-space-watch.js";
+import { staffNoticeAlertSource } from "./alert-sources.js";
+import { readStaffNoticesInTurns } from "./staff-notices.js";
 import { ALL_ALERT_CLAIMS } from "./modules.js";
 import "./errors.js";
 
@@ -609,30 +608,25 @@ describe("readHandledAlerts", () => {
 });
 
 describe("staff notice checks in the manager's bell", () => {
-  it("shows a failed check only to system managers, without checking again, until recovery", async () => {
-    const notices = createStaffNoticeLog(noopLog);
+  it("shows a failed check only to system managers and checks again on the next read", async () => {
+    let failing = true;
     const read = vi.fn(async () => {
-      throw new Error("outbox read unavailable");
+      if (failing) throw new Error("outbox read unavailable");
+      return [];
     });
-    const sources = [{ owner: "fiscal-outbox", source: { read } }];
     const r = createAlertRegistry({
       claims: ALL_ALERT_CLAIMS,
       sources: [
-        storageAlertSource({
-          space: createFreeSpaceState({ log: noopLog }),
-          disk: createDiskFullState({ dir: "/unused", now: () => NOW, log: noopLog }),
-          notices: [notices],
-        }),
+        staffNoticeAlertSource(() =>
+          readStaffNoticesInTurns(db, [{ owner: "fiscal-outbox", source: { read } }], {
+            reading: { instant: NOW, offsetMinutes: 0 },
+            log: noopLog,
+          }),
+        ),
       ],
     });
-    const check = notices.begin();
-    const result = await readStaffNoticesInTurns(db, sources, {
-      reading: { instant: NOW, offsetMinutes: 0 },
-      log: notices.log,
-    });
-    check.settle(result.unavailable);
     const deps = { registry: r, now: NOW, log: noopLog };
-    const manager = await asApp((tx) => readOpenAlerts(tx, deps, new Set(["system.manage"])));
+    const manager = await readOutsideTransactionAlerts(db, deps, new Set(["system.manage"]));
     expect(manager).toEqual([
       {
         key: "alert.source_unavailable:box",
@@ -640,14 +634,14 @@ describe("staff notice checks in the manager's bell", () => {
         code: "alert.source_unavailable",
         params: { area: "box" },
         severity: "error",
-        since: null,
+        since: NOW.toISOString(),
         area: "box",
-        screen: "box-status",
       },
     ]);
-    expect(await asApp((tx) => readOpenAlerts(tx, deps, new Set(["hardware.manage"])))).toEqual([]);
+    expect(await readOutsideTransactionAlerts(db, deps, new Set(["hardware.manage"]))).toEqual([]);
     expect(read).toHaveBeenCalledTimes(1);
-    notices.begin().settle([]);
-    expect(await asApp((tx) => readOpenAlerts(tx, deps, new Set(["system.manage"])))).toEqual([]);
+    failing = false;
+    expect(await readOutsideTransactionAlerts(db, deps, new Set(["system.manage"]))).toEqual([]);
+    expect(read).toHaveBeenCalledTimes(2);
   });
 });

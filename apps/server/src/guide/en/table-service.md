@@ -335,7 +335,7 @@ If the window says an earlier request got no answer, choose **Send again**.
 
 ## Refund a card payment on a separate terminal {#separate-terminal}
 
-If the till says the server is out of space, wait until a manager clears the stop before refunding
+If the till says the server is out of disk space, wait until a manager clears the stop before refunding
 on the terminal: Waitron cannot record the refund while the stop holds.
 
 For a card payment keyed from a separate terminal, Waitron asks you to refund it on that terminal

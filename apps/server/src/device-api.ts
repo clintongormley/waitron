@@ -112,7 +112,6 @@ import {
   createStaffNoticeLog,
   readStaffNoticesInTurns,
   type OwnedStaffNoticeSource,
-  type StaffNoticeLog,
 } from "./staff-notices.js";
 
 export interface DeviceApiDeps {
@@ -145,7 +144,6 @@ export interface DeviceApiDeps {
   disk?: DiskFullState;
   /** What the equipment read tells staff about the box. Absent, it answers no notices. */
   notices?: {
-    log?: StaffNoticeLog;
     sources: readonly OwnedStaffNoticeSource[];
     /** Sources that depend on which device asks; read after `sources`. */
     deviceSources?: (deviceId: string) => readonly OwnedStaffNoticeSource[];
@@ -256,7 +254,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
   const app = new Hono();
   // Built ONCE here, so it is one bucket for the whole mounted API.
   const enrolLimiter = deps.enrolRateLimiter ?? createEnrolRateLimiter();
-  const noticeLog = deps.notices?.log ?? createStaffNoticeLog(log);
+  const noticeLog = createStaffNoticeLog(log);
   const wall = deps.clock?.wall ?? (() => Date.now());
   const monotonic = deps.clock?.monotonic ?? (() => performance.now());
 
