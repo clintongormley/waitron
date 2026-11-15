@@ -787,7 +787,7 @@ describe("product archive history", () => {
   );
 });
 
-it("records each product once when a bulk folder deletion also selects one of its products", async () => {
+it("records each product once when a bulk folder deletion also selects its products", async () => {
   await menusFixture(fx.db);
   const ids = Array.from(
     { length: 1000 },
@@ -796,20 +796,17 @@ it("records each product once when a bulk folder deletion also selects one of it
   const folder = await app((tx) => createCategory(tx, { name: "Bulk archive" }));
   await app(async (tx) => {
     for (let offset = 0; offset < ids.length; offset += 100)
-      await tx
-        .insert(products)
-        .values(
-          ids
-            .slice(offset, offset + 100)
-            .map((id, index) => ({
-              id,
-              name: `Archived dish ${offset + index}`,
-              categoryId: folder.id,
-              unitPrice: 100,
-              vatClass: "general",
-            })),
-        );
-    await deleteProductItems(tx, { productIds: [ids.at(-1)!], categoryIds: [folder.id] }, "delete");
+      await tx.insert(products).values(
+        ids.slice(offset, offset + 100).map((id, index) => ({
+          id,
+          name: `Archived dish ${offset + index}`,
+          categoryId: folder.id,
+          unitPrice: 100,
+          vatClass: "general",
+        })),
+      );
+    // Selecting the full set twice exposes repeats regardless of the folder query's row order.
+    await deleteProductItems(tx, { productIds: ids, categoryIds: [folder.id] }, "delete");
   });
   expect(await readActivityForSubject(fx.db, { kind: "product", id: ids.at(-1)! })).toHaveLength(1);
   const events = await fx.db
