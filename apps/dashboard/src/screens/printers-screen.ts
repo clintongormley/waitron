@@ -3726,8 +3726,12 @@ export class PrintersScreen extends LitElement {
       rows.push({
         label: t("printers.used_by_stations"),
         value: commaList(
-          stations.map(({ stationName }) =>
-            link("prep-stations", "/manage/prep-stations/view/stations", stationName),
+          stations.map(({ stationId, stationName }) =>
+            link(
+              "prep-stations",
+              `/manage/prep-stations/view/stations/station/${encodeURIComponent(stationId)}`,
+              stationName,
+            ),
           ),
         ),
         dataTest: "printer-used-by-stations",

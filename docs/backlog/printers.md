@@ -274,12 +274,6 @@ checked on the box).
   read falls back to today's rule. Also open: whether kitchen tickets, payment slips and reports
   need an A4 page, or A4 printers stay out for them.
 
-## A Used by link to a prep station opens the Stations tab, not the station
-
-- **A Used by link to a prep station opens the Stations tab, not the station (left open by A405).**
-  The prep stations screen writes its `station` address word back to null
-  (`packages/venue-service/src/dashboard/prep-stations-screen.ts:199`).
-
 ## Find a bill's pay offers no guests field
 
 - **Find a bill's pay offers no guests field (left open by A663 Part 3b).** A bill collected from

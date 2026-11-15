@@ -5153,6 +5153,77 @@ describe("dashboard URL navigation", () => {
     ).toEqual(["stations", "routing"]);
   });
 
+  it("a followed link naming a station opens that station's editor and keeps it in the address", async () => {
+    history.replaceState(null, "", "/manage/printers");
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getMe: vi.fn().mockResolvedValue({
+          personId: "p1",
+          roleIds: ["manager"],
+          locale: "en-GB",
+          venueLocale: "en-GB",
+          sessionDefault: "en-GB",
+          permissions: ["venue.configure", "venue.view", "hardware.manage"],
+          modules: ["venue-service"],
+          venueName: "Venue",
+        }),
+      }),
+      request: async (path, method, body, options) =>
+        path === "/management-api/venue-service/routing"
+          ? ({
+              stationTimes: [],
+              todayEnds: null,
+              clockReadable: true,
+              zones: [],
+              periods: [],
+              categories: [],
+              products: [],
+              cells: [],
+              defaultStationId: "grill",
+              stations: [{ id: "grill", name: "Grill", active: true, colour: "red" }],
+              canMakeDefault: false,
+            } as never)
+          : path === "/management-api/stations"
+            ? ([
+                {
+                  id: "grill",
+                  name: "Grill",
+                  active: true,
+                  colour: "red",
+                  isDefault: true,
+                  warmAfterMinutes: 5,
+                  overdueAfterMinutes: 10,
+                  forgottenAfterMinutes: 15,
+                  readyWarningAfterMinutes: 3,
+                  showsRestOfOrder: false,
+                  printMovedSlips: true,
+                  ticketGrouping: "combined",
+                  printHeldWork: false,
+                  waitsForPass: false,
+                  bumpMode: "line",
+                  changesAfterSending: "held-or-waiting",
+                  whenClosedSendsTo: null,
+                },
+              ] as never)
+            : stubRequest(path, method, body, options),
+    });
+    await flush(el);
+    void navigationGuardFor(window)!.write(
+      new URL("/manage/prep-stations/view/stations/station/grill", location.href),
+    );
+    await expect
+      .poll(
+        () =>
+          el
+            .shadowRoot!.querySelector("dashboard-prep-stations-screen")
+            ?.shadowRoot!.querySelector<HTMLElement & { station?: { id: string } }>(
+              "prep-station-editor",
+            )?.station?.id,
+      )
+      .toBe("grill");
+    expect(location.pathname).toBe("/manage/prep-stations/view/stations/station/grill");
+  });
+
   it("an old tester link opens the Routing tab", async () => {
     history.replaceState(null, "", "/manage/prep-stations/view/routing/test/lager?dev=1#saved");
     const push = vi.spyOn(history, "pushState");
