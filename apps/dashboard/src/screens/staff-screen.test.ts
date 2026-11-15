@@ -8,7 +8,7 @@ import { chooseOption, chooseOptions, formMessageOf } from "@waitron/ui/src/test
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { roleName, rolesByName, statusName } from "../i18n/domain.js";
-import type { DashboardApi, PersonPage, PersonSummary } from "../api/client.js";
+import { DashboardApi, type PersonPage, type PersonSummary } from "../api/client.js";
 import type { StaffList } from "../widgets/staff-list.js";
 import type { PersonForm } from "../widgets/person-form.js";
 import type { PersonEdit } from "../widgets/person-edit.js";
@@ -962,7 +962,7 @@ describe("staff-screen — row edit", () => {
       telephone: "+44 21",
       email: "ada@example.com",
       status: "active" as const,
-      locale: null,
+      locale: "es-ES",
     };
     editForm(el).dispatchEvent(
       new CustomEvent("save-person", { detail: details, bubbles: true, composed: true }),
@@ -971,6 +971,50 @@ describe("staff-screen — row edit", () => {
 
     expect(api.savePerson).toHaveBeenCalledWith("p1", details);
     expect(api.listStaff).toHaveBeenCalledTimes(2);
+  });
+
+  it("omits an unchanged language that the person chose during onboarding", async () => {
+    let savedLocale: string | null = null;
+    const writes: Record<string, unknown>[] = [];
+    const api = new DashboardApi("", async (path, init) => {
+      if (init?.method === "PUT") {
+        writes.push(JSON.parse(String(init.body)));
+        return new Response(null, { status: 204 });
+      }
+      const value = String(path).includes("/staff/page")
+        ? {
+            rows: [{ ...people[0]!, telephone: null, locale: savedLocale }],
+            page: 0,
+            pageSize: 50,
+            total: 1,
+            anyPeople: true,
+          }
+        : String(path).endsWith("/locales")
+          ? {
+              locales: [
+                { code: "en-GB", label: "English" },
+                { code: "es-ES", label: "Español" },
+              ],
+              venueDefault: "en-GB",
+              loginDefault: "en-GB",
+              venueName: "Venue",
+            }
+          : accessRoleChoices;
+      return new Response(JSON.stringify(value), {
+        headers: { "content-type": "application/json" },
+      });
+    });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      api,
+      canAdminister: true,
+    });
+    await vi.waitFor(() => expect(list(el).people).toHaveLength(1));
+    await openEdit(el, "p1");
+    savedLocale = "es-ES";
+    await saveThroughEdit(el);
+    await vi.waitFor(() => expect(editForm(el).open).toBe(false));
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).not.toHaveProperty("locale");
   });
 
   it("resends an invitation and reports delivery after closing the edit dialog", async () => {

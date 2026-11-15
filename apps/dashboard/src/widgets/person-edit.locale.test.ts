@@ -1,11 +1,12 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { useLocale } from "../testing/locale-setup.js";
-import type { DashboardApi, PersonEditDetails, PersonSummary } from "../api/client.js";
+import { DashboardApi, type PersonEditDetails, type PersonSummary } from "../api/client.js";
 import { PersonEdit } from "./person-edit.js";
 import { codeMessage } from "../i18n/codes.js";
+import { t } from "../i18n/t.js";
 useLocale("en-GB");
 afterEach(cleanupWidgets);
 const person: PersonSummary = {
@@ -131,6 +132,8 @@ it("puts a locale refusal at the chooser and focuses its real control", async ()
   await el.updateComplete;
   await vi.waitFor(() => expect(picker(el).error).toBe(codeMessage("locale.unsupported")));
   await vi.waitFor(() => expect(picker(el).shadowRoot!.activeElement?.tagName).toBe("BUTTON"));
+  const actions = el.shadowRoot!.querySelector('wt-form-actions[slot="footer"]')!;
+  expect((await formMessageOf(actions))?.textContent?.trim()).toBe(t("form.fix_fields"));
 });
 it("ignores an earlier editor's locale metadata after reopening for another person", async () => {
   let finish!: (value: typeof metadata) => void;
@@ -166,4 +169,19 @@ it("opens a saved preference ahead of the venue default and quiets a reverted ch
   await chooseOption(picker(el), "es-ES");
   await el.updateComplete;
   expect(save(el).disabled).toBe(true);
+});
+
+it("reads language metadata passively through the real API client", async () => {
+  const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
+    async () => new Response(JSON.stringify(metadata)),
+  );
+  const api = new DashboardApi("", fetchImpl);
+  const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
+    person,
+    open: true,
+    api,
+  });
+  await ready(el);
+  expect(fetchImpl).toHaveBeenCalledTimes(1);
+  expect(new Headers(fetchImpl.mock.calls[0]![1].headers).get("x-waitron-live")).toBe("1");
 });

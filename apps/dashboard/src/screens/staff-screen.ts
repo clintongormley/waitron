@@ -396,7 +396,11 @@ export class StaffScreen extends LitElement {
   #onSavePerson(event: CustomEvent<PersonEditDetails>): void {
     event.stopPropagation();
     this.#editWith(async (id) => {
-      await this.api.savePerson(id, event.detail);
+      const locale =
+        event.detail.locale === (this.editingPerson?.locale ?? null)
+          ? undefined
+          : event.detail.locale;
+      await this.api.savePerson(id, { ...event.detail, locale });
       if (this.editingPerson?.personId === id) {
         this.editingPerson = { ...this.editingPerson, ...event.detail };
         this.shadowRoot!.querySelector("dashboard-person-edit")!.closeSaved(event.detail);

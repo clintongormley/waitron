@@ -3084,7 +3084,10 @@ export class DashboardApi {
     return this.#request<InvitationResult>(`/management-api/staff/${id}/invitation`, "POST");
   }
 
-  savePerson(id: string, details: PersonEditDetails): Promise<void> {
+  savePerson(
+    id: string,
+    details: Omit<PersonEditDetails, "locale"> & { locale?: string | null },
+  ): Promise<void> {
     return this.#request<void>(`/management-api/staff/${id}`, "PUT", details);
   }
 
