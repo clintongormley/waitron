@@ -681,7 +681,7 @@ describe("translation cell batch boundaries", () => {
           ),
         ),
       ).rejects.toMatchObject({
-        code: ["role", "root ownership", "child activity"].includes(change)
+        code: ["role", "child activity"].includes(change)
           ? "content.translation_unavailable"
           : "content.translation_stale",
         params: selected,

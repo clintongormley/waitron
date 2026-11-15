@@ -954,7 +954,7 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
 
   Department sale rules, receipt trading-name choices and receiving profiles live on the department row.
   Menus hold their own display settings and categories their own parent and colour. Root and Home
-  sections are identified by role, with one of each per menu; the menu archive function leaves an activity entry.
+  sections are identified by role, with at most one of each per menu; the menu archive function leaves an activity entry.
 
   Privacy contact details live in venue settings; legal-name changes and credential saves and
   removals leave activity entries.
