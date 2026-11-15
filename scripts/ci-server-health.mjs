@@ -123,7 +123,8 @@ export async function serverHealth(options, unavailable) {
       if (owned(run, repositoryId)) runs.set(run.id, run);
     }
   }
-  const stuck = [];
+  const stuck = [],
+    deferredPlanners = [];
   let running = 0,
     progressing = false,
     recent = false;
@@ -132,6 +133,10 @@ export async function serverHealth(options, unavailable) {
     const excluded =
       options.plannersOnly &&
       (run.run_attempt !== 1 || Object.hasOwn(options.hostedAttempts ?? {}, run.id));
+    if (excluded && !options.plannerSkipReason) {
+      deferredPlanners.push(run);
+      continue;
+    }
     let jobs;
     try {
       jobs = await readInventory(
@@ -156,9 +161,6 @@ export async function serverHealth(options, unavailable) {
         let reason;
         if (options.plannerSkipReason) {
           if (old(job, now)) reason = options.plannerSkipReason;
-        } else if (excluded) {
-          if (old(job, now))
-            reason = run.run_attempt !== 1 ? "retry run" : "run marked for hosted recovery";
         } else if (
           !job.labels.includes(
             `${options.prefix || "dt"}-${repositoryId}-${run.id}-${run.run_attempt}-changes-1`,
@@ -204,7 +206,12 @@ export async function serverHealth(options, unavailable) {
     );
     if (waiting.length) stuck.push(options.plannersOnly ? { ...run, plannerJobs: waiting } : run);
   }
-  return { stuck: !options.plannersOnly && (running || progressing) ? [] : stuck, running, recent };
+  return {
+    stuck: !options.plannersOnly && (running || progressing) ? [] : stuck,
+    running,
+    recent,
+    ...(options.plannersOnly ? { deferredPlanners } : {}),
+  };
 }
 
 function validCapacity(capacity) {
@@ -485,6 +492,28 @@ export async function recoverServer(options) {
       }
     }
     if (!plannersOnly) break;
+  }
+  for (const run of state.deferredPlanners ?? []) {
+    try {
+      const jobs = (await runJobs(options, run)).filter(
+        (job) =>
+          job.name === "changes" &&
+          job.status === "queued" &&
+          !job.runner_id &&
+          job.labels.includes("self-hosted") &&
+          old(job, options.now ?? Date.now()),
+      );
+      const reason = run.run_attempt !== 1 ? "retry run" : "run marked for hosted recovery";
+      plannerSkip(options, run, jobs, reason);
+      if (!jobs.length && run.run_attempt !== 1)
+        options.report?.(
+          `Planner rescue skipped: run=${run.id} attempt=${run.run_attempt}; retry run has no old queued unassigned server planning job.`,
+        );
+    } catch (error) {
+      options.report?.(
+        `Planner diagnostics unavailable: run=${run.id} attempt=${run.run_attempt}; ${error.message}`,
+      );
+    }
   }
   return { retried, ...(preserved.length ? { preserved } : {}) };
 }

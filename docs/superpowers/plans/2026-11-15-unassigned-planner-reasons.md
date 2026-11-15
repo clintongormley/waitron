@@ -70,3 +70,8 @@ bundle; keep the historical diagnosis and qualification work open.
 +12/-3 current documentation lines, plus this plan. No new recovery policy,
 transport, credential, storage, workflow, timer or dependency. Other commands
 retain their current reads and output. No fiscal, UI or Cloud changes.
+
+The watcher cleared the review correction on 2026-11-15 at 12:21: eligible rescues
+precede excluded-run diagnostic job reads, using the existing run inventory once;
+log a retry even when it has no old unassigned server planner. At 12:27 the watcher
+cleared the size growth with duplicate excluded-read failure checks merged.

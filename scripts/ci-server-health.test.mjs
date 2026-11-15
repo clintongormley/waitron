@@ -1645,32 +1645,25 @@ describe("scheduled PR planner recovery", () => {
       expect(f.calls.filter(([, options]) => options.method)).toEqual([]);
     },
   );
-  it.each(["full", "marked", "retry"])(
-    "keeps the %s skip when a diagnostic job read throws",
-    async (kind) => {
-      const f = planner(),
-        reports = [],
-        request = f.options.request;
-      if (kind === "full") f.options.capacity = { observedAt: now, slots: 6, serverRunning: 6 };
-      if (kind === "marked") f.options.hostedAttempts = { 12: 2 };
-      if (kind === "retry") f.run.run_attempt = 2;
-      f.options.request = (path, options) => {
-        if (path.includes("/jobs?")) throw new Error("diagnostic refused");
-        return request(path, options);
-      };
-      await health.healthCommand("recover-planners", f.options, {
-        report: (line) => reports.push(line),
-      });
-      expect(reports).toContain(
-        "Planner diagnostics unavailable: run=12 attempt=" +
-          (kind === "retry" ? 2 : 1) +
-          "; diagnostic refused",
-      );
-      expect(reports.at(-1)).toBe("No stalled server run needed recovery.");
-      expect(reports.some((line) => /Recovering|Preserved/.test(line))).toBe(false);
-      expect(f.calls.filter(([, options]) => options.method)).toEqual([]);
-    },
-  );
+  it("keeps the full-server skip when a diagnostic job read throws", async () => {
+    const f = planner(),
+      reports = [],
+      request = f.options.request;
+    f.options.capacity = { observedAt: now, slots: 6, serverRunning: 6 };
+    f.options.request = (path, options) => {
+      if (path.includes("/jobs?")) throw new Error("diagnostic refused");
+      return request(path, options);
+    };
+    await health.healthCommand("recover-planners", f.options, {
+      report: (line) => reports.push(line),
+    });
+    expect(reports).toEqual([
+      "Planner rescue skipped: server is full in a fresh capacity snapshot.",
+      "Planner diagnostics unavailable: run=12 attempt=1; diagnostic refused",
+      "No stalled server run needed recovery.",
+    ]);
+    expect(f.calls.filter(([, options]) => options.method)).toEqual([]);
+  });
   it.each(["marked", "retry"])(
     "continues recovery after a %s diagnostic read fails",
     async (kind) => {
@@ -1690,9 +1683,9 @@ describe("scheduled PR planner recovery", () => {
         { report: (line) => reports.push(line) },
       );
       expect(reports).toEqual([
-        `Planner diagnostics unavailable: run=12 attempt=${kind === "retry" ? 2 : 1}; diagnostic refused`,
         "Recovering PR run 13; cancellation/retry pending. If this pass stops, intervention is needed.",
         "Retried PR run 13 on GitHub.",
+        `Planner diagnostics unavailable: run=12 attempt=${kind === "retry" ? 2 : 1}; diagnostic refused`,
         "SERVER STUCK: cancelled and retried runs 13 after five minutes without assigned work.",
       ]);
       expect(reports.some((line) => /Preserved|Recovering PR run 12/.test(line))).toBe(false);
@@ -1721,6 +1714,39 @@ describe("scheduled PR planner recovery", () => {
       "Planner diagnostics unavailable: list refused",
       "No stalled server run needed recovery.",
     ]);
+  });
+  it.each(["marked", "retry"])("rescues before reading %s diagnostics", async (kind) => {
+    const { f, request } = pair(),
+      reports = [],
+      writes = [];
+    if (kind === "retry") {
+      f.run.run_attempt = f.job.run_attempt = 2;
+      Object.assign(f.job, {
+        status: "completed",
+        conclusion: "success",
+        runner_id: 8,
+        labels: ["ubuntu-latest"],
+      });
+    }
+    const read = (path, options) => {
+      if (path.includes("/runs/12/") && path.includes("/jobs?"))
+        expect(writes).toContain("/repos/fixture/waitron/actions/runs/13/rerun");
+      if (options?.method) writes.push(path);
+      return request(path, options);
+    };
+    await health.healthCommand(
+      "recover-planners",
+      { ...f.options, hostedAttempts: kind === "marked" ? { 12: 2 } : {}, request: read },
+      { report: (line) => reports.push(line) },
+    );
+    expect(reports.indexOf("Retried PR run 13 on GitHub.")).toBeLessThan(
+      reports.findIndex((line) => line.includes("run=12")),
+    );
+    expect(reports).toContain(
+      kind === "retry"
+        ? "Planner rescue skipped: run=12 attempt=2; retry run has no old queued unassigned server planning job."
+        : "Planner rescue skipped: run=12 attempt=1 job=123; run marked for hosted recovery.",
+    );
   });
   it.each(["incomplete", "refused"])(
     "retains the ordinary planner failure for a %s job read",
