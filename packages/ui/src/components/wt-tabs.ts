@@ -108,6 +108,15 @@ export class WtTabs extends LitElement {
         border-bottom-color: var(--wt-color-primary);
         font-weight: var(--wt-font-weight-bold);
       }
+      /* A contrast theme paints a transparent border in the text colour, underlining every tab. */
+      @media (forced-colors: active) {
+        button {
+          border-bottom-color: Canvas;
+        }
+        button[aria-selected="true"] {
+          border-bottom-color: Highlight;
+        }
+      }
       button.marked {
         color: var(--wt-color-primary-text);
       }

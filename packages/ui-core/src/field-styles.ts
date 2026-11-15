@@ -159,4 +159,21 @@ export const fieldStyles = css`
   .hint {
     ${visuallyHiddenStyles}
   }
+  /* A contrast theme deletes box-shadows, so the line and the focus mark become a border and an
+     outline. */
+  @media (forced-colors: active) {
+    .field {
+      border-bottom: var(--wt-field-line-width) solid CanvasText;
+    }
+    .field:focus-within {
+      outline: var(--wt-field-line-width-active) solid Highlight;
+      outline-offset: calc(-1 * var(--wt-field-line-width-active));
+    }
+    .field[data-disabled] {
+      border-bottom: var(--wt-field-line-width) dashed GrayText;
+    }
+    .field[data-disabled]::after {
+      content: none;
+    }
+  }
 `;

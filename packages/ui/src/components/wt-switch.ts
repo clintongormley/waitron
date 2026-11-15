@@ -100,6 +100,33 @@ export class WtSwitch extends LitElement {
         outline-offset: var(--wt-focus-offset);
       }
 
+      /* A contrast theme repaints backgrounds as the page colour, which would hide both parts. */
+      @media (forced-colors: active) {
+        :host {
+          --ink: CanvasText;
+        }
+        :host([checked]) {
+          --ink: Highlight;
+        }
+        :host([disabled]) {
+          --ink: GrayText;
+        }
+        .track,
+        .thumb {
+          forced-color-adjust: none;
+          border: var(--wt-field-line-width-active) solid var(--ink);
+          background: Canvas;
+          box-shadow: none;
+        }
+        .thumb,
+        :host([checked]) .track {
+          background: var(--ink);
+        }
+        :host([checked]) .thumb {
+          background: HighlightText;
+        }
+      }
+
       label {
         cursor: inherit;
       }
