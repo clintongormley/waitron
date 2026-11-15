@@ -141,7 +141,15 @@ function stubApi(
       deviceId: "dev-1",
       formFactor: "till",
       name: "Till",
-      kitchenScreens: [],
+      kitchenScreens: [
+        {
+          kind: "station",
+          available: true,
+          stations: stations.map(({ id, name }) => ({ id, name, available: true })),
+          zones: null,
+          showNonPassStations: true,
+        },
+      ],
     }),
     getStationQueue: vi
       .fn()
@@ -226,6 +234,24 @@ afterEach(cleanupWidgets);
 describe("till-station-screen", () => {
   it("registers as a custom element", () => {
     expect(customElements.get("till-station-screen")).toBe(TillStationScreen);
+  });
+
+  it("an unconfigured profile shows no station picker or queue", async () => {
+    const api = stubApi({
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({
+          deviceId: "dev-1",
+          formFactor: "till",
+          name: "Till",
+          kitchenScreens: [],
+        }),
+    });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    expect(el.shadowRoot!.querySelectorAll("[data-station]")).toHaveLength(0);
+    expect(el.shadowRoot!.textContent).toContain(t("station.no_stations"));
+    expect(api.getStationQueue).not.toHaveBeenCalled();
   });
 
   it("on connect fetches the stations and the default station's queue, threading it to the widget", async () => {
@@ -1625,7 +1651,7 @@ describe("till-station-screen device mode with several stations (A366 decision 7
     expect(el.shadowRoot!.querySelector("[data-merge-toggle]")).toBeNull();
     const guidance = el.shadowRoot!.querySelector<HTMLElement>("[data-choose-again]")!;
     expect(guidance.textContent!.trim()).toBe(
-      "Choose this device's screens again in the dashboard, under Devices.",
+      "Set this device's screen, stations and zones in the dashboard, under Device profiles.",
     );
     const last = [...el.shadowRoot!.querySelectorAll("[data-station-unavailable]")].at(-1)!;
     expect(last.compareDocumentPosition(guidance) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -1636,7 +1662,7 @@ describe("till-station-screen device mode with several stations (A366 decision 7
     try {
       const { el } = await mountDevice({ stations: [gone("st-deli", "Deli")] });
       expect(el.shadowRoot!.querySelector("[data-choose-again]")!.textContent!.trim()).toBe(
-        "Vuelve a elegir las pantallas de este dispositivo en el panel, en Dispositivos.",
+        "Configura la pantalla, las estaciones y las zonas de este dispositivo en el panel, en Perfiles de dispositivo.",
       );
     } finally {
       setLocale("en-GB");
@@ -2196,7 +2222,7 @@ describe("till-station-screen follows its device's station screen choice (A366 d
     );
   });
 
-  it("with no station screen choice shows every station, the default first", async () => {
+  it("with only a Pass profile shows no Station picker", async () => {
     const { el, api } = await mountOperator(() =>
       Promise.resolve(
         identity([
@@ -2210,8 +2236,8 @@ describe("till-station-screen follows its device's station screen choice (A366 d
         ]),
       ),
     );
-    expect(picks(el)).toEqual(["st-c", "st-g", "st-f"]);
-    expect(api.getStationQueue).toHaveBeenCalledWith("st-c");
+    expect(picks(el)).toEqual([]);
+    expect(api.getStationQueue).not.toHaveBeenCalled();
   });
 
   it("a choice a narrowing emptied shows only its line: no picker, no queue and no fallback", async () => {
@@ -2269,12 +2295,12 @@ describe("till-station-screen follows its device's station screen choice (A366 d
     it.each([
       [
         "en-GB",
-        "Choose this device's screens again in the dashboard, under Devices.",
+        "Set this device's screen, stations and zones in the dashboard, under Device profiles.",
         "This device's profile can offer it again in the dashboard, under Device profiles.",
       ],
       [
         "es-ES",
-        "Vuelve a elegir las pantallas de este dispositivo en el panel, en Dispositivos.",
+        "Configura la pantalla, las estaciones y las zonas de este dispositivo en el panel, en Perfiles de dispositivo.",
         "El perfil de este dispositivo puede volver a ofrecerla en el panel, en Perfiles de dispositivo.",
       ],
     ])("in %s", async (locale, chooseAgain, offerAgain) => {
@@ -2325,8 +2351,8 @@ describe("till-station-screen follows its device's station screen choice (A366 d
           .mockRejectedValueOnce(Object.assign(new Error("down"), { code: "server.internal" }))
           .mockResolvedValue(chosen),
       );
-      expect(picks(el)).toEqual(["st-c", "st-g", "st-f"]);
-      expect(queueWidget(el)!.stationId).toBe("st-c");
+      expect(picks(el)).toEqual([]);
+      expect(queueWidget(el)).toBeNull();
       await vi.advanceTimersByTimeAsync(15_000);
       await el.updateComplete;
       expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
@@ -2346,7 +2372,11 @@ describe("till-station-screen follows its device's station screen choice (A366 d
       const { el, api } = await mountOperator(
         vi
           .fn()
-          .mockRejectedValueOnce(Object.assign(new Error("down"), { code: "server.internal" }))
+          .mockResolvedValueOnce(
+            identity([
+              stationScreen(venueStations.map(({ id, name }) => ({ id, name, available: true }))),
+            ]),
+          )
           .mockResolvedValue(
             identity([
               stationScreen([
@@ -2374,7 +2404,11 @@ describe("till-station-screen follows its device's station screen choice (A366 d
       const { el, api } = await mountOperator(
         vi
           .fn()
-          .mockRejectedValueOnce(Object.assign(new Error("down"), { code: "server.internal" }))
+          .mockResolvedValueOnce(
+            identity([
+              stationScreen(venueStations.map(({ id, name }) => ({ id, name, available: true }))),
+            ]),
+          )
           .mockResolvedValue(
             identity([stationScreen([{ id: "st-f", name: "Fryer", available: false }])]),
           ),
@@ -2525,12 +2559,12 @@ describe("till-station-screen follows its device's station screen choice (A366 d
       }));
   });
 
-  it("a failed identity read shows every station, as before a choice existed", async () => {
+  it("a failed initial identity read shows no stations", async () => {
     const { el, api } = await mountOperator(() =>
       Promise.reject(Object.assign(new Error("down"), { code: "server.internal" })),
     );
-    expect(picks(el)).toEqual(["st-c", "st-g", "st-f"]);
-    expect(api.getStationQueue).toHaveBeenCalledWith("st-c");
+    expect(picks(el)).toEqual([]);
+    expect(api.getStationQueue).not.toHaveBeenCalled();
   });
 
   it("an address naming a station outside the choice opens the first chosen one", async () => {
@@ -4000,7 +4034,15 @@ describe("till-station-screen out-of-date banner", () => {
           deviceId: "dev-1",
           formFactor: "till",
           name: "Till",
-          kitchenScreens: [],
+          kitchenScreens: [
+            {
+              kind: "station",
+              available: true,
+              stations: stations.map(({ id, name }) => ({ id, name, available: true })),
+              zones: null,
+              showNonPassStations: true,
+            },
+          ],
         })
         .mockImplementation(
           (options?: { signal?: AbortSignal }) =>
@@ -4476,6 +4518,21 @@ describe("operator station-today controls", () => {
         new Response(JSON.stringify(body), {
           status,
           headers: { "content-type": "application/json" },
+        });
+      if (path === "/api/device/me")
+        return json({
+          deviceId: "dev-1",
+          formFactor: "till",
+          name: "Till",
+          kitchenScreens: [
+            {
+              kind: "station",
+              available: true,
+              stations: rows.map(({ id, name }) => ({ id, name, available: true })),
+              zones: null,
+              showNonPassStations: true,
+            },
+          ],
         });
       if (path === "/api/stations") {
         reads.push(path);

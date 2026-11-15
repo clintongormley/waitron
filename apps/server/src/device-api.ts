@@ -1026,7 +1026,7 @@ async function stationScreenSlots(
   screen: ResolvedKitchenScreen,
 ): Promise<{ slots: ScreenSlot[]; queues: Map<string, StationQueueGroup[]> }> {
   const worked = (slot: ScreenSlot) => slot.available || slot.switchedOff;
-  if (!(screen.everyStation && screen.profileEveryStation)) {
+  if (!screen.everyStation) {
     const queues = await listStationQueues(
       tx,
       screen.stations.filter(worked).map((slot) => slot.id),
@@ -1058,7 +1058,7 @@ async function worksStation(
 ): Promise<boolean> {
   const slot = screen.stations.find((candidate) => candidate.id === stationId);
   if (slot !== undefined) return slot.available || slot.switchedOff;
-  if (!(screen.everyStation && screen.profileEveryStation)) return false;
+  if (!screen.everyStation) return false;
   const [station] = await tx
     .select({ active: kitchenStations.active })
     .from(kitchenStations)

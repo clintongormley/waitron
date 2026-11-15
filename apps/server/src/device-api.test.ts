@@ -1531,7 +1531,6 @@ describe("Device API — the device-guarded routes", () => {
         available: true,
         everyStation: false,
         everyZone: true,
-        profileEveryStation: false,
         showNonPassStations: true,
         stations: [
           {
@@ -3824,7 +3823,6 @@ describe("a device's approved profiles and switching its active one", () => {
           available: true,
           everyStation: false,
           everyZone: true,
-          profileEveryStation: false,
           showNonPassStations: true,
           stations: [
             {

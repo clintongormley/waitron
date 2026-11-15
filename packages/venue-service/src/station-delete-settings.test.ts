@@ -383,7 +383,7 @@ it.each(["set", "destinations", "open", "close", "service", "read settings", "cl
   },
 );
 
-it("refuses dropping an emptied profile bound instead of making a till unrestricted", async () => {
+it("dropping an emptied profile screen removes it instead of making a till unrestricted", async () => {
   const f = await run(async (tx) => {
     const f = await fixture(tx);
     const pid = await profile(tx, "Emptied", "till");
@@ -393,10 +393,11 @@ it("refuses dropping an emptied profile bound instead of making a till unrestric
     await module.clearStationDeleteSettings(tx, f.gone);
     return { ...f, pid };
   });
-  await expect(run((tx) => setProfileKitchenScreens(tx, f.pid, {}))).rejects.toMatchObject({
-    code: "device_profile.access_invalid",
-    params: { field: "stationScreenStations", reason: "empty" },
-  });
+  await expect(run((tx) => setProfileKitchenScreens(tx, f.pid, {}))).resolves.toBeUndefined();
+  expect(
+    (await run((tx) => readProfileKitchenScreens(tx))).find((row) => row.profileId === f.pid)
+      ?.screens,
+  ).toEqual({});
   await expect(
     run((tx) =>
       setProfileKitchenScreens(tx, f.pid, { station: { stationIds: [], zoneIds: null } }),

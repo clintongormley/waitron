@@ -55,7 +55,17 @@ async function mount(deviceMode: boolean, overrides: Record<string, unknown> = {
   setLocale("en");
   const api = {
     listStations: vi.fn(async () => [station]),
-    getDeviceIdentity: vi.fn(async () => ({ kitchenScreens: [] })),
+    getDeviceIdentity: vi.fn(async () => ({
+      kitchenScreens: [
+        {
+          kind: "station",
+          available: true,
+          stations: [{ ...station, available: true }],
+          zones: null,
+          showNonPassStations: true,
+        },
+      ],
+    })),
     getStationQueue: vi.fn(async () => snapshot()),
     getDeviceStationScreen: vi.fn(async () => deviceSnapshot()),
     acknowledgeKitchenNotice: vi.fn(async () => {}),

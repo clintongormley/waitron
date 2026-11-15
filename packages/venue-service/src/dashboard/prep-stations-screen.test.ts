@@ -2712,7 +2712,6 @@ const stationScreen = (
   available: true,
   everyStation: false,
   everyZone: true,
-  profileEveryStation: true,
   showNonPassStations: true,
   stations,
   zones: null,

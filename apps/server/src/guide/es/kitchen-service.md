@@ -306,10 +306,9 @@ pedidos de mostrador y los platos sin curso. Los platos en espera o esperando al
 como están. **Marchar** y **Listo** requieren **Lleva el pase** en el perfil del dispositivo.
 En un terminal, una tarjeta que no está en espera ofrece además **Reimprimir** por cada una de sus cuentas.
 
-Una pantalla de pase (solo lectura) muestra el mismo tablero para mirarlo, sin **Marchar**, botones de listo ni
-**Reimprimir**. Un terminal cuyo dispositivo no tiene vista de pase ni pantalla de pase (solo lectura) abre
-**Pase** con todas las estaciones y zonas de servicio, sin **Marchar**: solo marcha una pantalla
-de pase.
+Una pantalla de pase (solo lectura) muestra el mismo tablero para mirarlo, sin **Marchar**, botones de
+listo ni **Reimprimir**. Elige **Pase** o **Pantalla de pase (solo lectura)** en el perfil del
+dispositivo antes de abrir **Pase** en él.
 
 Toca la cabecera de una columna para plegarla en una franja estrecha que conserva su nombre y su
 número; tócala otra vez para abrirla. **Columnas**, al final de la fila encima de las columnas, lista

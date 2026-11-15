@@ -275,9 +275,9 @@ without a course. Dishes still held or waiting for the pass stay as they are. **
 need **Runs the pass** on the device's profile.
 On a till, a card that is not held also offers **Reprint** for each of its bills.
 
-A pass display (view only) shows the same board for watching, with no **Fire**, Ready or **Reprint** buttons. A
-till whose device has no pass view or pass display (view only) opens **Pass** on every station and service
-zone, without **Fire**: only a pass view fires.
+A pass display (view only) shows the same board for watching, with no **Fire**, Ready or **Reprint**
+buttons. Choose **Pass** or **Pass display (view only)** in the device's profile before opening
+**Pass** on that device.
 
 Tap a column's heading to collapse it to a narrow strip that keeps its name and count; tap it again
 to open it. **Columns**, at the end of the row above the columns, lists **Overview**, **Held + To

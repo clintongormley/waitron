@@ -161,13 +161,6 @@ async function replaceProfileKitchenScreens(
   kept: MutableScreens,
 ): Promise<void> {
   await liveFormFactor(tx, profileId);
-  for (const kind of KITCHEN_SCREEN_KINDS) {
-    if (stored[kind]?.stationIds?.length === 0 && screens[kind] === undefined)
-      refuse(LIST_FIELDS[kind].stations, "empty");
-    const zoneField = LIST_FIELDS[kind].zones;
-    if (zoneField !== null && stored[kind]?.zoneIds?.length === 0 && screens[kind] === undefined)
-      refuse(zoneField, "empty");
-  }
   const kinds = KITCHEN_SCREEN_KINDS.filter((kind) => screens[kind] !== undefined);
   if (kinds.length > 1) refuse("kitchenScreens", "one_only");
   const checked: { kind: KitchenScreenKind; scope: ProfileKitchenScreen }[] = [];
@@ -267,11 +260,6 @@ async function insertLists(
   }
 }
 
-/**
- * Adds the screen's stations and zones to the profile's row of its kind, creating the row when
- * there is none. An "every" list stays "every", and "every" given for an explicit list makes it
- * "every"; nothing is removed and no device is narrowed. Unchecked: test set-up only.
- */
 export async function addProfileKitchenScreen(
   tx: Transaction,
   profileId: string,
@@ -394,7 +382,6 @@ async function resolveDevices(
             available: true,
             everyStation: scope.stationIds === null,
             everyZone: scope.zoneIds === null,
-            profileEveryStation: scope.stationIds === null,
             stations: slotsOf(places.stations, scope.stationIds),
             zones:
               kind === "station" || scope.zoneIds === null

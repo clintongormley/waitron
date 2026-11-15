@@ -1019,7 +1019,6 @@ it.each([
                   available: true,
                   everyStation: true,
                   everyZone: true,
-                  profileEveryStation: true,
                   stations: [{ id: "bar", name: "Bar", available: true }],
                   zones: null,
                   showNonPassStations: true,

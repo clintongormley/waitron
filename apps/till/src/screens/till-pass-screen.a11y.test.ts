@@ -256,7 +256,7 @@ describe.each(["light", "dark"] as const)("till-pass-screen a11y (%s theme)", (t
       getDeviceIdentity: vi.fn().mockResolvedValue({ kitchenScreens: [] }),
       getExpoBoard: vi.fn().mockResolvedValue({ board: populated() }),
     } as unknown as TillApi;
-    const { el, host } = await mount({ api, runsPass: true });
+    const { el, host } = await mount({ api, embedded: true, runsPass: true });
     expect(inBoard(el).querySelector(".age-forgotten")).not.toBeNull();
     expect(inBoard(el).querySelector(".lever")).not.toBeNull();
     expectDishDetails(inBoard(el));
@@ -283,7 +283,7 @@ describe.each(["light", "dark"] as const)("till-pass-screen a11y (%s theme)", (t
       getDeviceIdentity: vi.fn().mockResolvedValue({ kitchenScreens: [] }),
       getExpoBoard: vi.fn().mockResolvedValue({ board }),
     } as unknown as TillApi;
-    const { el, host } = await mount({ api, runsPass: true });
+    const { el, host } = await mount({ api, embedded: true, runsPass: true });
     expect(inBoard(el).querySelector(".ticket-head .number")!.textContent).toContain("28, 30");
     await expectNoA11yViolations(host);
   });
@@ -294,7 +294,7 @@ describe.each(["light", "dark"] as const)("till-pass-screen a11y (%s theme)", (t
       getExpoBoard: vi.fn().mockResolvedValue({ board: party() }),
       bumpGroupReady: vi.fn().mockRejectedValue({ code: "party.out_of_date" }),
     } as unknown as TillApi;
-    const { el, host } = await mount({ api, runsPass: true });
+    const { el, host } = await mount({ api, embedded: true, runsPass: true });
     await userEvent.click(inBoard(el).querySelector<HTMLElement>('[data-group-ready="g-2"]')!);
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-table-changed]")).not.toBeNull();
@@ -347,7 +347,7 @@ describe.each(["light", "dark"] as const)("till-pass-screen a11y (%s theme)", (t
       getDeviceIdentity: vi.fn().mockResolvedValue({ kitchenScreens: [] }),
       getExpoBoard: vi.fn().mockResolvedValue({ board: passBoard() }),
     } as unknown as TillApi;
-    const { el, host } = await mount({ api });
+    const { el, host } = await mount({ api, embedded: true });
     expect(el.shadowRoot!.querySelector("[data-empty]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });

@@ -601,7 +601,6 @@ export interface ResolvedKitchenScreen {
   readonly everyStation: boolean;
   /** As `everyStation`, for zones; a station screen's is true, since it never filters by zone. */
   readonly everyZone: boolean;
-  readonly profileEveryStation: boolean;
   readonly stations: readonly ScreenSlot[];
   /** null: no zone filter; otherwise zone order. */
   readonly zones: readonly ScreenSlot[] | null;
@@ -993,8 +992,6 @@ export interface VenueServiceContribution {
   ): Promise<void>;
   /** Copies a live source's kitchen screens, retaining its explicit empty zone bounds. */
   copyProfileKitchenScreens(tx: Transaction, sourceId: string, targetId: string): Promise<void>;
-  /** Adds the screen's stations and zones to the profile's row of its kind, creating the row when
-   *  there is none; never removes anything and never narrows a device. Unchecked: for test set-up. */
   addProfileKitchenScreen(
     tx: Transaction,
     profileId: string,

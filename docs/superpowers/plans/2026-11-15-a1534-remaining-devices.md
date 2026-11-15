@@ -31,3 +31,16 @@ within 3,000 lines, generated files counted separately; retired choices and thei
 against that additions limit. These are watcher clearances, not owner approval of a design. The
 three-working-hour stop starts at 07:37, excluding waits. The owner's 05:25 answer, "Allow nine",
 keeps Approved profiles in the device editor.
+
+At 09:06 the watcher superseded the earlier approximate 7,000-physical-line estimate: additions
+stay within 3,000 (generated files counted separately), while removals of the retired choices and
+their tests are not capped. Before the single push, the PR must list every removed test by file,
+with counts and the retired behavior, and an audit must find any retained assertion that needs
+moving to a surviving owner. The three-working-hour limit remains from 07:37, excluding waits.
+This is the watcher's clearance, not an owner approval.
+
+At 09:29 the watcher cleared intersecting the existing screen capabilities with the profile's
+configured kind: Stations only for Station, Pass only for Pass or Pass display, and neither when
+unconfigured or its capability is off. The existing identity response supplies the kind; the
+menu poll refreshes it. No new table or wire protocol. This resolves the first run-it review's
+navigation finding inside the original one-screen request; it is not owner approval of a design.

@@ -37,6 +37,7 @@ async function mount(mode: Mode, board: PassBoard, theme: "light" | "dark" = "li
       deviceName: "Kitchen pass",
       deviceMode: mode === "pass",
       monitor: mode === "monitor",
+      embedded: mode === "all",
       ...(mode === "all" ? {} : { initialBoard: read }),
     },
     theme,

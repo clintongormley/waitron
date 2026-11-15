@@ -39,7 +39,7 @@ describe("whole-order instructions on pass boards", () => {
       getExpoBoard: vi.fn(async () => ({ board: board("instruction".repeat(180)) })),
       getDeviceIdentity: vi.fn(async () => ({ kitchenScreens: [] })),
     } as unknown as TillApi;
-    const { el } = await mountWidget<TillPassScreen>("till-pass-screen", { api });
+    const { el } = await mountWidget<TillPassScreen>("till-pass-screen", { api, embedded: true });
     await vi.waitFor(() => expect(boardRoot(el).textContent).toContain("Burger"));
     const heading = boardRoot(el).querySelector<HTMLElement>("[data-kitchen-note]")!;
     const bounds = heading.getBoundingClientRect();
@@ -75,6 +75,7 @@ describe("whole-order instructions on pass boards", () => {
         api,
         deviceMode: mode === "pass",
         monitor: mode === "monitor",
+        embedded: mode === "expo",
         ...(mode === "expo" ? {} : { initialBoard: read() }),
       });
       await vi.waitFor(() => expect(boardRoot(el).textContent).toContain("Burger"));

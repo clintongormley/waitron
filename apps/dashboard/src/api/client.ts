@@ -944,8 +944,6 @@ export interface ResolvedKitchenScreen {
   everyStation: boolean;
   /** As `everyStation`, for zones; a station screen's is true. */
   everyZone: boolean;
-  /** The profile's station list for this kind is "every", or it has no row for it. */
-  profileEveryStation: boolean;
   /** Display order, the device's own list or else what its profile allows it. */
   stations: ScreenSlot[];
   /** null: no zone filter. */

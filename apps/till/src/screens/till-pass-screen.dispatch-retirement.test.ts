@@ -122,6 +122,7 @@ async function mount(mode: Mode, board: PassBoard) {
   const { el } = await mountWidget<TillPassScreen>("till-pass-screen", {
     api: api as unknown as TillApi,
     runsPass: true,
+    embedded: mode === "all",
     deviceId: "dev-1",
     serverOrigin: "https://box.local",
     now: PASS_NOW,

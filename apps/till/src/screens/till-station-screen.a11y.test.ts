@@ -154,7 +154,15 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       deviceId: "dev-1",
       formFactor: "till",
       name: "Till",
-      kitchenScreens: [],
+      kitchenScreens: [
+        {
+          kind: "station",
+          available: true,
+          stations: stations.map(({ id, name }) => ({ id, name, available: true })),
+          zones: null,
+          showNonPassStations: true,
+        },
+      ],
     }),
     getStationQueue: vi.fn().mockResolvedValue({ items: groups, notices: [] }),
     advanceTicketItem: vi.fn().mockResolvedValue(undefined),

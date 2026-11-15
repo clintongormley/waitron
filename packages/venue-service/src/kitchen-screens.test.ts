@@ -1,5 +1,5 @@
 import { eq, inArray, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   deviceProfileKitchenScreens,
@@ -576,6 +576,42 @@ describe("inherited scope reads", () => {
 });
 
 describe("deleted zone bounds", () => {
+  it.each([
+    ["station", "pass"],
+    ["station", null],
+    ["pass", "station"],
+    ["pass", null],
+  ] as const)("allows replacing an emptied %s screen with %s", async (previous, next) => {
+    const venue = await seedVenueWithStations();
+    await set(venue.kds, {
+      [previous]: {
+        stationIds: [venue.grill],
+        zoneIds: previous === "station" ? null : [venue.dining],
+      },
+    });
+    if (previous === "station")
+      await db
+        .delete(deviceProfileKitchenScreenStations)
+        .where(eq(deviceProfileKitchenScreenStations.deviceProfileId, venue.kds));
+    else
+      await db
+        .delete(deviceProfileKitchenScreenZones)
+        .where(eq(deviceProfileKitchenScreenZones.deviceProfileId, venue.kds));
+    const replacement = next === null ? {} : { [next]: { stationIds: null, zoneIds: null } };
+    await expect(set(venue.kds, replacement)).resolves.toBeUndefined();
+    expect(await screensOf(venue.kds)).toEqual(
+      next === null
+        ? {}
+        : {
+            [next]: {
+              stationIds: null,
+              zoneIds: null,
+              ...(next === "pass" ? { showNonPassStations: true } : {}),
+            },
+          },
+    );
+  });
+
   it("retained empty zone bound survives unrelated profile save without widening", async () => {
     const venue = await seedVenueWithStations();
     await set(venue.kds, { pass: { stationIds: [venue.grill], zoneIds: [venue.dining] } });
@@ -594,7 +630,8 @@ describe("deleted zone bounds", () => {
       .from(deviceProfileKitchenScreens)
       .where(eq(deviceProfileKitchenScreens.deviceProfileId, venue.kds));
     expect(parent).toMatchObject({ everyZone: false, everyStation: false });
-    await expect(outcome(set(venue.kds, {}))).resolves.toEqual(refused("passScreenZones", "empty"));
+    await expect(set(venue.kds, {})).resolves.toBeUndefined();
+    await expect(screensOf(venue.kds)).resolves.toEqual({});
   });
   it("an empty inherited zone bound stays empty and refuses every order zone", async () => {
     const venue = await seedVenueWithStations();
@@ -675,4 +712,38 @@ describe("A773 profile display policy", () => {
       expect((await screensOf(venue.kds))![kind]).toHaveProperty("showNonPassStations", true);
     },
   );
+});
+
+describe("profile-scoped screen reads", () => {
+  it("reads only the requested profiles once for device, coverage and action reads", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue.kds, { station: every });
+    await set(venue.till, { pass: every });
+    await seedDevice(venue.kds, "Line");
+    const till = await seedDevice(venue.till, "Pass");
+    for (const read of [
+      (tx: Transaction) => assertPassScreenZone(tx, till, venue.dining),
+      (tx: Transaction) => readStationScreens(tx),
+      (tx: Transaction) => readDeviceKitchenScreens(tx, till),
+    ])
+      await scoped(async (tx) => {
+        const session = (
+          tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
+        ).session;
+        const prepared = vi.spyOn(session, "prepareQuery");
+        try {
+          await read(tx);
+          const queries = prepared.mock.calls.map(([query]) => query as unknown as { sql: string });
+          const profiles = queries.filter((query) =>
+            query.sql.includes('from "device_profile_kitchen_screens"'),
+          );
+          expect(profiles).toHaveLength(1);
+          expect(profiles[0]!.sql).toContain(
+            '"device_profile_kitchen_screens"."device_profile_id" in',
+          );
+        } finally {
+          prepared.mockRestore();
+        }
+      });
+  });
 });

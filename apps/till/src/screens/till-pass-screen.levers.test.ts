@@ -545,6 +545,7 @@ describe("A773 pass screen: levers", () => {
 });
 
 describe("A773 pass screen: levers on a till's All stations", () => {
+  const mountTill = (api: FakeApi) => mount({ api, embedded: true });
   const heldCard = passCard({
     key: "held:h-1",
     kind: "held",
@@ -678,6 +679,7 @@ describe("A773 pass screen: levers on a till's All stations", () => {
 });
 
 describe("A773 pass screen: a party's group cards on a till's All stations", () => {
+  const mountTill = (api: FakeApi) => mount({ api, embedded: true });
   const groupNamed = (n: string) => t("table.group_n").replace("{n}", n);
   const allApi = (board: PassBoard, overrides: Record<string, unknown> = {}) =>
     fakeApi({

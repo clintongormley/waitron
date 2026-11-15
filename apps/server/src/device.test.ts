@@ -187,7 +187,6 @@ describe("accepting a device inherits its profile's screen", () => {
             available: true,
             everyStation: false,
             everyZone: true,
-            profileEveryStation: false,
             stations: [{ id: stationId, name: "Kitchen", available: true, switchedOff: false }],
             zones: null,
             showNonPassStations: false,

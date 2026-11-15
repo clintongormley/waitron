@@ -607,10 +607,10 @@ it("tells a kitchen display why its pass lever was refused, in both languages", 
     "Este pedido es de una zona que esta vista de pase no muestra.",
   );
   expect(codeMessage("kitchen_screen.not_allowed", "en")).toBe(
-    "This device no longer shows that screen. Choose its screens again in the dashboard, under Devices.",
+    "This device no longer shows that screen. Choose its profile's screen in the dashboard, under Device profiles.",
   );
   expect(codeMessage("kitchen_screen.not_allowed", "es")).toBe(
-    "Este dispositivo ya no muestra esa pantalla. Vuelve a elegir sus pantallas en el panel, en Dispositivos.",
+    "Este dispositivo ya no muestra esa pantalla. Elige la pantalla de su perfil en el panel, en Perfiles de dispositivo.",
   );
 });
 

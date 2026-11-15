@@ -60,6 +60,7 @@ describe("A669 kitchen blocks LOOK", () => {
                   deviceName: "Kitchen pass",
                   deviceMode: surface === "pass",
                   monitor: surface === "monitor",
+                  embedded: surface === "all",
                   ...(surface === "pass" || surface === "monitor" ? { initialBoard: board() } : {}),
                 },
                 theme,

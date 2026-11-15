@@ -184,7 +184,6 @@ const onOffStation: DeviceRow = {
       available: true,
       everyStation: false,
       everyZone: true,
-      profileEveryStation: false,
       stations: [
         { id: "s1", name: "Kitchen", available: true, switchedOff: false },
         { id: "s-off", name: "Old", available: false, switchedOff: true },
@@ -210,7 +209,6 @@ const screenTaken: DeviceRow = {
       available: false,
       everyStation: false,
       everyZone: false,
-      profileEveryStation: false,
       stations: [],
       zones: null,
       showNonPassStations: true,

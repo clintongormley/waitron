@@ -240,7 +240,7 @@ export class TillStationScreen extends LitElement {
   #choiceRead = false;
   #choiceRequest = 0;
   #appliedChoice = 0;
-  #chosenIds: ReadonlySet<string> | null = null;
+  #chosenIds: ReadonlySet<string> = new Set();
   /** Every station, chosen or not, so a closed station names where its dishes go. */
   @state() private allStations: Station[] = [];
   @state() private activeStationId?: string;
@@ -510,15 +510,13 @@ export class TillStationScreen extends LitElement {
       if (screen !== null || !this.#choiceRead) {
         this.#choiceRead = screen !== null;
         const slots = screen?.stations ?? [];
-        this.#chosenIds = screen
-          ? new Set(slots.filter((slot) => slot.available).map((slot) => slot.id))
-          : null;
+        this.#chosenIds = new Set(slots.filter((slot) => slot.available).map((slot) => slot.id));
         this.lostStations = slots.filter((slot) => !slot.available);
         this.stationScreenGone = screen?.available === false;
       }
       const chosen = this.#chosenIds;
       this.allStations = listed;
-      this.stations = chosen === null ? listed : listed.filter((station) => chosen.has(station.id));
+      this.stations = listed.filter((station) => chosen.has(station.id));
       this.#stationsLoaded = true;
     } catch {
       if (request > this.#appliedChoice) this.stale = true;

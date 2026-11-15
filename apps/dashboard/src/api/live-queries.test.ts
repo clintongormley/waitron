@@ -366,7 +366,6 @@ it.each([
       "device_approved_profiles",
       "device_profiles",
       "device_card_readers",
-      "device_kitchen_screens",
     ],
   ],
   // `cardReaderDeleteRules` (apps/server/src/card-reader-delete.ts): the reader, its payments in
@@ -402,7 +401,7 @@ it.each([
   // `GET /management-api/devices` (apps/server/src/device-api.ts): each device with its profile,
   // equipment and kitchen screens, which `readDevicesKitchenScreens`
   // (packages/venue-service/src/kitchen-screens.ts) resolves against the profile's lists, the
-  // stations and zones, and what narrowings took. No watchers: a device no longer holds one.
+  // stations and zones.
   [
     "listDevices",
     [],
@@ -420,10 +419,6 @@ it.each([
       "printers",
       "page_printers",
       "card_readers",
-      "device_kitchen_screens",
-      "device_kitchen_screen_stations",
-      "device_kitchen_screen_zones",
-      "device_kitchen_screen_removals",
       "device_profile_kitchen_screens",
       "device_profile_kitchen_screen_stations",
       "device_profile_kitchen_screen_zones",
@@ -1027,10 +1022,6 @@ const stationDeleteReads = [
   "device_made_here_stations",
   "devices",
   "device_profiles",
-  "device_kitchen_screens",
-  "device_kitchen_screen_stations",
-  "device_kitchen_screen_zones",
-  "device_kitchen_screen_removals",
   "device_profile_kitchen_screens",
   "device_profile_kitchen_screen_stations",
   "device_profile_kitchen_screen_zones",
@@ -1125,10 +1116,6 @@ it.each(["Zone", "Department"] as const)(
       "devices",
       "device_profile_service_access",
       "device_profile_zones",
-      "device_kitchen_screens",
-      "device_kitchen_screen_stations",
-      "device_kitchen_screen_zones",
-      "device_kitchen_screen_removals",
       "device_profile_kitchen_screens",
       "device_profile_kitchen_screen_stations",
       "device_profile_kitchen_screen_zones",

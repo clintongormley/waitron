@@ -756,11 +756,11 @@ export const en = {
   "kitchen_screen.pass": "Pass",
   "kitchen_screen.pass_monitor": "Pass display (view only)",
   "kitchen_screen.none":
-    "This screen has nothing to show yet. Choose a screen for this device in the dashboard, under Devices.",
+    "This screen has nothing to show yet. Choose a screen in its profile in the dashboard, under Device profiles.",
   "kitchen_screen.unavailable": "This screen is no longer available: {screen}",
   "kitchen_screen.switched": "Now showing: {screen}",
   "kitchen_screen.choose_again":
-    "Choose this device's screens again in the dashboard, under Devices.",
+    "Set this device's screen, stations and zones in the dashboard, under Device profiles.",
   "kitchen_screen.offer_again_in_dashboard":
     "This device's profile can offer it again in the dashboard, under Device profiles.",
   "station.open": "Stations",
@@ -2840,11 +2840,11 @@ export const es: Record<StringKey, string> = {
   "kitchen_screen.pass": "Pase",
   "kitchen_screen.pass_monitor": "Pantalla de pase (solo lectura)",
   "kitchen_screen.none":
-    "Esta pantalla aún no tiene nada que mostrar. Elige una pantalla para este dispositivo en el panel, en Dispositivos.",
+    "Esta pantalla aún no tiene nada que mostrar. Elige una pantalla en su perfil en el panel, en Perfiles de dispositivo.",
   "kitchen_screen.unavailable": "Esta pantalla ya no está disponible: {screen}",
   "kitchen_screen.switched": "Ahora muestra: {screen}",
   "kitchen_screen.choose_again":
-    "Vuelve a elegir las pantallas de este dispositivo en el panel, en Dispositivos.",
+    "Configura la pantalla, las estaciones y las zonas de este dispositivo en el panel, en Perfiles de dispositivo.",
   "kitchen_screen.offer_again_in_dashboard":
     "El perfil de este dispositivo puede volver a ofrecerla en el panel, en Perfiles de dispositivo.",
   "station.open": "Estaciones",

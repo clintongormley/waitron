@@ -289,7 +289,7 @@ describe("A773 pass screen: Fire", () => {
 
   for (const [where, props] of [
     ["a pass monitor", { monitor: true, initialBoard: deviceBoard() }],
-    ["a till's All stations", {}],
+    ["an embedded All stations board", { embedded: true }],
   ] as const) {
     it(`never releases from ${where}`, async () => {
       const api = fakeApi({ getDeviceIdentity: vi.fn().mockResolvedValue(identity(null)) });
@@ -399,9 +399,9 @@ describe("A773 pass screen: Fire", () => {
     }
     expect(switched).not.toHaveBeenCalled();
     expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
-    expect(api.getExpoBoard).toHaveBeenCalledOnce();
-    expect(boardOf(el)!.mode).toBe("all_stations");
-    expect(tableChanged(el)!.textContent!.trim()).toBe(t("station.table_changed"));
+    expect(api.getExpoBoard).not.toHaveBeenCalled();
+    expect(boardOf(el)).toBeNull();
+    expect(el.shadowRoot!.textContent).toContain(t("kitchen_screen.none"));
     expect(leverError(el)).toBeNull();
     expect(el.shadowRoot!.textContent).not.toContain(codeMessage("device.unauthorized"));
   });
@@ -566,12 +566,12 @@ describe("A773 pass screen: Fire", () => {
       const el = await mountTill(api);
       await pressFire(el);
       await refresh(el);
-      expect(boardOf(el)!.mode).toBe("all_stations");
-      expect(api.getExpoBoard).toHaveBeenCalledOnce();
+      expect(boardOf(el)).toBeNull();
+      expect(api.getExpoBoard).not.toHaveBeenCalled();
       answer.reject(refused("device.forbidden_action", 403));
       await flush(el);
       expect(leverError(el)).toBeNull();
-      expect(api.getExpoBoard).toHaveBeenCalledOnce();
+      expect(api.getExpoBoard).not.toHaveBeenCalled();
       expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
     }));
 });

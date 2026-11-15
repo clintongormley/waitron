@@ -83,7 +83,7 @@ async function settings(tx: Transaction, id: string) {
       screens.some(
         (screen) =>
           screen.available &&
-          !(screen.everyStation && screen.profileEveryStation) &&
+          !screen.everyStation &&
           screen.stations.some((slot) => slot.id === id && slot.available),
       )
     )

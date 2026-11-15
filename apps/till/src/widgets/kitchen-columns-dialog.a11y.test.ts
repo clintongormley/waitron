@@ -38,7 +38,7 @@ describe.each(["light", "dark"] as const)("the Columns window a11y (%s theme)", 
   );
 
   it.each(["en", "es"] as const)(
-    "%s: the pass's Columns window, with the other-stations section and a refusal shown, has no violations",
+    "%s: the pass's Columns window keeps its layout controls without device policy choices",
     async (language) => {
       setLocale(language);
       const { el, host } = await mountWidget<TillKitchenColumnsDialog>(
@@ -48,16 +48,12 @@ describe.each(["light", "dark"] as const)("the Columns window a11y (%s theme)", 
           names: passColumnNames(),
           boardName: "Pass 1",
           opener: null,
-          otherStations: { value: false, sending: false, errorCode: "storage.disk_full" },
         },
         theme,
       );
       await el.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
-      const section = el.shadowRoot!.querySelector<
-        HTMLElement & { updateComplete: Promise<unknown> }
-      >("[data-other-stations]");
-      expect(section).not.toBeNull();
-      await section!.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-other-stations]")).toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-column-show="toFire"]')).not.toBeNull();
       await expectNoA11yViolations(host);
     },
   );

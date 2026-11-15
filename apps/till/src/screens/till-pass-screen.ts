@@ -180,7 +180,7 @@ export class TillPassScreen extends LitElement {
   @state() private board: PassBoard = emptyBoard();
   @state() private selected: BoardId | null = null;
   @state() private passGone = false;
-  @state() private goneScreen: "pass" | "pass_monitor" = "pass";
+  @state() private goneScreen: "pass" | "pass_monitor" | null = null;
   @state() private lostLines: string[] = [];
   @state() private nothingLeft = false;
   @state() private columnsWindow: ColumnsWindow | null = null;
@@ -257,8 +257,9 @@ export class TillPassScreen extends LitElement {
     this.#appliedChoice = request;
     if (read || !this.#choiceRead) {
       this.#choiceRead = read;
-      this.passGone = pass?.available === false;
-      this.goneScreen = pass?.kind === "pass_monitor" ? "pass_monitor" : "pass";
+      this.passGone = pass === undefined || pass.available === false;
+      this.goneScreen =
+        pass === undefined ? null : pass.kind === "pass_monitor" ? "pass_monitor" : "pass";
       const next = this.passGone
         ? null
         : pass === undefined
@@ -553,7 +554,13 @@ export class TillPassScreen extends LitElement {
 
   #unavailable(slot?: "status"): TemplateResult[] {
     const lines = this.passGone
-      ? [kitchenScreenNoticeText({ kind: "unavailable", screen: this.goneScreen })]
+      ? [
+          kitchenScreenNoticeText(
+            this.goneScreen === null
+              ? { kind: "none" }
+              : { kind: "unavailable", screen: this.goneScreen },
+          ),
+        ]
       : this.lostLines;
     return lines.map(
       (line) =>
@@ -577,7 +584,9 @@ export class TillPassScreen extends LitElement {
         ${
           boardId === null || !this.#shows()
             ? html`${this.#lead()}${this.#unavailable()}${
-                this.#shows() ? nothing : emptiedScreenGuidance(this.passGone)
+                this.#shows() || (this.passGone && this.goneScreen === null)
+                  ? nothing
+                  : emptiedScreenGuidance(this.passGone)
               }`
             : this.#board(boardId)
         }
