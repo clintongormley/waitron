@@ -523,6 +523,8 @@ los nombres y las descripciones; los nombres que falten usan el idioma predeterm
 el nombre interno. Publica los cambios antes de revisarlos aquí. Esta vista previa no comparte
 la carta con los clientes.
 
+Toca un símbolo de alérgeno o de aptitud dietética para leer su explicación debajo. Toca el mismo símbolo de nuevo para cerrarla.
+
 ## Comparte la carta predeterminada en este servidor {#guest-sharing}
 
 En **Vista previa para clientes**, elige **Compartir carta** para compartir la versión publicada

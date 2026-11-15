@@ -496,6 +496,8 @@ prices, sizes, extras and declarations. Choose a guest language to check the nam
 missing names use your default language, then the internal name. Publish your changes before
 checking them here. This preview does not share the menu with guests.
 
+Tap an allergen or dietary symbol to read its explanation below it. Tap the same symbol again to close it.
+
 ## Share the default menu on this box {#guest-sharing}
 
 In **Guest menu preview**, choose **Turn sharing on** to share the default menu’s published

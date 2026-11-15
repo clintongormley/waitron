@@ -71,9 +71,7 @@ it("renders escaped guest content and section links in the chosen language", asy
   expect.soft(extras[1]).toContain("0,05 kg");
   expect.soft(await page.locator("article .declarations small").count()).toBe(0);
   expect.soft(await page.locator("footer svg").count()).toBe(3);
-  expect
-    .soft(await page.getByRole("button", { name: words.vegetarian, exact: true }).count())
-    .toBe(1);
+  expect.soft(await page.getByLabel(words.vegetarian!, { exact: true }).count()).toBe(1);
   const href = await page.locator("nav a").getAttribute("href");
   expect(await page.locator(href!).textContent()).toContain("Starters");
   expect(
@@ -82,20 +80,48 @@ it("renders escaped guest content and section links in the chosen language", asy
     ),
   ).toBe(true);
 });
-it("opens explanations only on activation, with keyboard and Escape dismissal", async () => {
+it("carries native explanations without popover-only controls or scripts", async () => {
   const page = await browser!.newPage();
   onTestFinished(() => page.close());
   await page.setContent(renderGuestMenuPage(menu, "The Restaurant", "en"));
-  const button = page.locator("button[popovertarget]").first();
-  await button.focus();
-  expect(await page.locator(":popover-open").count()).toBe(0);
-  await button.press("Enter");
-  expect(await page.locator(":popover-open").count()).toBe(1);
-  await button.press("Escape");
-  expect(await page.locator(":popover-open").count()).toBe(0);
-  await button.press("Space");
-  expect(await page.locator(":popover-open").count()).toBe(1);
+  expect(
+    await page.locator("[popover], [popovertarget], [popovertargetaction], script").count(),
+  ).toBe(0);
+  expect(await page.locator("details > summary:first-child").count()).toBe(3);
+  expect(
+    await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute("content"),
+  ).toBe(
+    "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
+  );
 });
+
+it.each(["en", "es"])(
+  "opens %s explanations without script and closes from the same summary",
+  async (language) => {
+    const page = await browser!.newPage({ javaScriptEnabled: false });
+    onTestFinished(() => page.close());
+    await page.setContent(renderGuestMenuPage({ ...menu, language }, "The Restaurant", "en"));
+    const words = guestMenuWords(language, "en").text;
+    const name = `${words.gluten} (${words.wheat})`;
+    const summary = page.getByLabel(name, { exact: true });
+    expect(await page.locator("details > summary").count()).toBe(3);
+    const explanation = page.locator("details > div").first();
+    expect(await explanation.textContent()).toBe(name);
+    expect(await explanation.isVisible()).toBe(false);
+    await summary.focus();
+    expect(await page.locator("details[open]").count()).toBe(0);
+    await summary.press("Enter");
+    expect(await explanation.isVisible()).toBe(true);
+    await summary.press("Enter");
+    expect(await explanation.isVisible()).toBe(false);
+    await summary.press("Space");
+    expect(await explanation.isVisible()).toBe(true);
+    await summary.click();
+    expect(await explanation.isVisible()).toBe(false);
+    await summary.click();
+    expect(await explanation.isVisible()).toBe(true);
+  },
+);
 
 it("labels guest language links in their own languages", async () => {
   const p = await browser!.newPage();
@@ -159,7 +185,7 @@ it.each(["bistro", "lunch-wine"] as const)(
     expect(await p.locator("body").evaluate((el) => getComputedStyle(el).fontFamily)).toContain(
       "Georgia",
     );
-    expect(await p.locator("button, [popover], nav").count()).toBe(0);
+    expect(await p.locator("button, [popover], details, summary, nav").count()).toBe(0);
     expect(await p.locator("article").first().textContent()).toContain("€3.00–€6.00");
     expect(await p.locator("article .declarations").first().textContent()).toContain("Wheat");
     expect(await p.locator("footer").textContent()).toContain("Cereals containing gluten");
