@@ -1,6 +1,6 @@
 # A1350: reserved-payment labels
 
-Status: source-checked by the Lane F driver; awaiting Claude plan review and watcher clearance before build. No design approval is claimed.
+Status: Claude reviewed the first draft (135 seconds, approve with corrections); driver corrections below await the single reread and watcher clearance before build. No design approval is claimed.
 Execution: Lane F driver works inline, test first; one PR. Whoever lands second against Lane E's A1308 payment slices rebases and rechecks the affected picker paths.
 
 ## Request and smallest useful result
@@ -17,34 +17,35 @@ Source read, not runtime verification: `apps/server/src/bill-payments.ts:386` in
 
 - Modify `apps/till/src/widgets/portion-picker.ts`: only change the `paid` reason's translation key to `table.pick_payment_stays`; leave rendering, events, counts and accessibility links intact.
 - Modify `apps/till/src/i18n/strings.ts`: add that key in EN/ES and replace the picker-only `table.move_dishes_floor` words, keeping `{amount}` and its existing formatting.
-- Proposed English: “This dish has a payment: it stays on this bill” and “Keep {amount} on this bill: move fewer dishes”. These apply to pending, received and mixed balances alike.
-- Proposed Spanish: «Este plato tiene un pago: se queda en esta cuenta» and «Deja {amount} en esta cuenta: mueve menos platos». Clearance question for the watcher: settle these exact EN/ES words and obtain the existing new-Spanish approval (`docs/backlog/till.md`, A803). Record whose wording decision it is; do not infer owner approval from plan review or clearance.
+- Proposed English: “Has a payment” and “Payments keep {amount} on this bill: move fewer dishes”. These apply to pending, received and mixed balances alike.
+- Proposed Spanish: «Tiene un pago» and «Los pagos retienen {amount} en esta cuenta: mueve menos platos». Clearance question for the watcher: settle these exact EN/ES words and obtain the existing new-Spanish approval (`docs/backlog/till.md`, A803). Keep the owner’s “move fewer dishes” suffix (`docs/backlog/till.md:3827`). Record whose wording decision it is; do not infer owner approval from plan review or clearance.
 
-No backend, API fields, new money classifications, schema, dependencies, payment mechanisms, provider calls, fiscal changes or unrelated UI cleanup. No new test helpers unless existing support needs a small extension.
+No backend, API fields, new money classifications, schema, dependencies, payment mechanisms, provider calls, fiscal changes or unrelated UI cleanup. The main table dish-list Paid badges are outside this ask (`till-table-order-screen.ts:5416`); record that remaining issue in one PR-thread line under RUNNER’s loose-ends rule, without a new backlog item. No new test helpers unless existing support needs a small extension.
 
 ## One implementation task, with focused test ownership
 
 - [ ] Before code or tests, read the TDD skill and browser-test conventions. After clearance, add the regression assertions below before changing production words.
-- [ ] In `apps/till/src/widgets/portion-picker.test.ts`, reuse `picker`, `rowsOf`, `balance` and real selection functions. Supply pending item `paidLines` with received zero and reserved positive; assert the literal cleared reason, disabled tick, visible `aria-describedby` target and no emitted picks on a forced click.
-- [ ] In that file, render a pending contribution (reserved positive, no `paidLines`) that blocks a row at the floor. Assert literal cleared EN/ES words and formatted amount. Retain received-only coverage; add mixed received/reserved coverage proving the displayed minimum is their sum and the same count limit still holds. Restore locale after each case.
+- [ ] In `apps/till/src/widgets/portion-picker.test.ts`, reuse `picker`, `rowsOf`, `balance` and real selection functions; extend `balance()` with a defaulted reserved parameter. Supply pending item `paidLines` with received zero and reserved positive; assert the literal cleared reason, disabled tick, visible `aria-describedby` target and no emitted picks on a forced click.
+- [ ] In that file, render a pending contribution (reserved positive, no `paidLines`) that blocks a row at the floor. Assert literal cleared EN/ES words and formatted amount. Retain received-only coverage; add mixed received/reserved coverage proving the displayed minimum is their sum without duplicating the state suite’s count-limit proof. Restore locale after each case.
 - [ ] In `apps/till/src/widgets/split-picker.test.ts`, reuse the reserved-only integration case and `source` options. Cover a pending item row through the real child picker; keep the received-only header, mixed header, whole-bill ticks and blocked-row assertions. Pin neutral row words rather than merely comparing with a dictionary value that could still say Paid.
 - [ ] In `apps/till/src/screens/till-table-order-screen.split-table.test.ts`, change only the old reason expectation and test title in the re-read case; preserve its assertion that the newly protected dish drops from picks while the other dish remains.
 - [ ] Run the affected picker cases with `pnpm --filter @waitron/till exec vitest run src/widgets/portion-picker.test.ts src/widgets/split-picker.test.ts`; observe expected red because pending rows still say Paid/already paid, not a missing key or fixture failure. Record the failures before implementation.
 - [ ] Make the two production-file changes above, then rerun those suites to green, reading the test counts.
 
-Preserve all behavioural assertions. Only wording expectations named above change; list each changed check in the eventual PR's **Changed test checks**. Leave unrelated Paid labels and tests intact.
+Preserve all behavioural assertions. In `portion-picker.test.ts`, change the old wording/title checks at base lines 248, 261, 281, 288, 299, 306, 326 (retain the aria-description equality at 329), and 625; in `split-picker.test.ts`, change 235 and 260; in the screen re-read case, change 1329 and 1351. Require literal cleared EN copy, plus literal ES in locale cases; do not substitute a different dictionary-only comparison. Only these wording expectations change; list each changed check in the eventual PR's **Changed test checks**. Leave unrelated Paid labels and tests intact.
 Protection ownership stays in unchanged `apps/till/src/state/portion-selection.test.ts`, especially “the kept money is what was received plus what is reserved”, item blocking and count limits. No backend tests when backend code is unchanged.
 
 ## Verification, guides and completion
 
 - [ ] Run `pnpm --filter @waitron/till exec vitest run src/state/portion-selection.test.ts src/widgets/portion-picker.a11y.test.ts src/widgets/split-picker.a11y.test.ts` and require passing test counts.
 - [ ] Run `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.split-table.test.ts src/screens/till-table-order-screen.move-dishes.test.ts` for both consumers, plus `pnpm --filter @waitron/till typecheck`.
-- [ ] Inspect Move dishes and Split a table in EN/ES, light/dark, phone/desktop, using pending-item, pending-contribution and mixed examples. Check wrapping and readable reasons beside disabled controls. Use the managed worktree stack; keep captures local and uncommitted.
-- [ ] Update `apps/server/src/guide/en/table-service.md` and `apps/server/src/guide/es/table-service.md`: replace old Paid/floor explanations and the re-read label in `#move-dishes`; explain the shared rule briefly in `#split-table`, retaining heading ids. Do not instruct refunding a payment still in progress.
+- [ ] Inspect Move dishes and Split a table in EN/ES, light/dark, phone/desktop, using pending-item, pending-contribution and mixed examples. Include A1290’s 1280×900 and 390×844 layouts so the changed reasons do not worsen wrapping/action access; A1290’s existing panel-layout fix stays outside this item. Check wrapping and readable reasons beside disabled controls. Use the managed worktree stack; keep captures local and uncommitted.
+- [ ] Update `apps/server/src/guide/en/table-service.md` and `apps/server/src/guide/es/table-service.md`: replace old Paid/floor explanations and the re-read label in `#move-dishes`; link to the same reason explanation with one short clause in `#split-table`, retaining heading ids. Do not instruct refunding a payment still in progress.
+- [ ] Update `docs/developers/design-system.md:6337–6340`, which quotes both old reasons, to the cleared copy and describe pending/received protection accurately.
 - [ ] Run `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts` and `pnpm exec vitest run scripts/guide-links.test.ts`; these check guide structure/links, not backend payments.
 - [ ] On completion, remove only A1350 from `docs/backlog/till.md` and `docs/backlog.md`, including its membership in both A803 open-item summaries. Preserve all other open items and decisions.
 - [ ] Driver finishes through `finish-branch`: required Claude review, normal pre-push hook and current-head scoped CI. No whole-workspace local test run solely for finishing.
 
 Estimated production diff: 5–15 additions / 2–5 removals across two files.
 Estimated test diff: 35–65 additions / 5–15 removals across three files; existing protection/accessibility suites reused unchanged.
-Estimated guides/backlog diff: 10–20 additions / 20–35 removals across four files, separate from production/tests. This plan is the only change in the drafting pass.
+Estimated guides/backlog diff: 10–20 additions / 20–35 removals across five files, separate from production/tests. This plan is the only change in the drafting pass.
