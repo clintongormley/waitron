@@ -79,6 +79,7 @@ export class WtDialog extends LitElement {
         display: flex;
         flex-direction: column;
         overflow: hidden;
+        overscroll-behavior: contain;
       }
 
       /* A body with nothing focusable gives opening focus to the box itself, which is not a control.
@@ -91,8 +92,12 @@ export class WtDialog extends LitElement {
         outline: none;
       }
 
+      /* A wheel or swipe over the backdrop scrolls the page behind unless the backdrop is a scroll
+         container, which overflow: visible is not. */
       dialog::backdrop {
         background: var(--wt-color-scrim);
+        overflow: hidden;
+        overscroll-behavior: contain;
       }
 
       /* Flex shrinking is shared out by factor times base size, so this factor makes a long body give
