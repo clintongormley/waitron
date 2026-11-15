@@ -1582,7 +1582,7 @@ describe("who may approve a cancel and credit (GET /api/cancel-credit-authorizer
   it("lists the active holders of sale.rectify, and no one else, by id and name only", async () => {
     const [suspended] = await inTx(venue, (tx) =>
       seedPersons(tx, {
-        displayName: "Suspendida",
+        displayName: "Suspended manager",
         pinHash: hashPin("5555"),
         role: "manager",
         status: "suspended",
