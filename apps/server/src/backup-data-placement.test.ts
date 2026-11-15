@@ -89,7 +89,7 @@ const suite = useVenueDb({
     await db
       .insert(menus)
       .values({ id: "40000000-0000-4000-8000-000000000004", name: "Captured menu" });
-    await db.run(sql`insert into menu_versions (id, menu_id, number, document, content_hash, published_at, published_by)
+    await db.run(sql`insert into menu_versions (id, menu_id, number, document, content_hash, created_at, created_by)
       values ('version-one', '40000000-0000-4000-8000-000000000004', 1, '{"original":true}', 'captured-hash', ${capturedAt}, 'operator-one')`);
     await db.run(sql`insert into content_suggestion_jobs
       (id, run_id, position, state, refusal, fits, failure, cloud_job_id, body, sent, run_total, total, done, failed, dropped, failed_refs, released, created_at, finished_at, opened_at)
@@ -290,7 +290,7 @@ it("migrates the populated menu predecessor and preserves every original column 
     expect(db.prepare("select count(*) as n from __drizzle_migrations_db").get()).toEqual({
       n: expectedSchemaVersion(modules[0]!.migrations!, f.migrationsRoot),
     });
-    expect(() => db.exec("update menu_versions set published_at = null")).toThrow(/append.only/i);
+    expect(() => db.exec("update menu_versions set created_at = null")).toThrow(/append.only/i);
   } finally {
     db.close();
   }
