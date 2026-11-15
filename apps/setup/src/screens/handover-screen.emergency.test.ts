@@ -1891,5 +1891,6 @@ it("a passkey take the held copy refused, then sent to the held copy, keeps the 
   );
   expect(proof.cookie).toBe(false);
   expect(actions(el)).toContain(t("handover.emergency.followed_not_admitted"));
+  expect(actions(el)).toContain(t("handover.emergency.held_passkey_refused"));
   expect(actions(el)).not.toContain(t("handover.emergency.passkey_failed"));
 });

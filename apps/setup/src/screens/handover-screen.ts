@@ -658,8 +658,12 @@ export class SetupHandoverScreen extends LitElement {
         return;
       }
       this.heldWaiting = false;
-      // Without a proof cookie this read cannot sign in, so the take's explanation stands.
-      if (this.usePasskey && PROOF_REFUSALS.has(String((cause as { code: unknown }).code))) return;
+      // A refusal of the passkey path's sign-in leaves the take's explanation in place.
+      if (this.usePasskey && PROOF_REFUSALS.has(String((cause as { code: unknown }).code))) {
+        if (this.heldCopy === undefined)
+          this.actionError = `${this.actionError} ${t("handover.emergency.held_passkey_refused")}`;
+        return;
+      }
       this.actionError = this.#emergencyError(cause);
     }
   }
