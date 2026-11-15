@@ -1,4 +1,5 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError, decimal, seriesId as brandSeriesId, deviceOrigin } from "@waitron/shared";
@@ -483,6 +484,37 @@ describe("recordReplacement — refusals use no number", () => {
     await suite.db.update(taxpayer).set({ taxpayerDomicile: " " });
     await expectRefused(backend, saleId, {}, { code: "fiscal.taxpayer_domicile_missing" });
   });
+
+  it.each(["counterpartyLegalName", "counterpartyCountryCode", "counterpartyAddress"] as const)(
+    "refuses a full invoice whose stored customer lacks %s",
+    async (column) => {
+      const backend = new FakeFiscalBackend(suite.db);
+      const { saleId: recorded } = await sellFull(backend, {
+        taxId: "12345678Z",
+        legalName: "Ann Smith",
+        countryCode: "ES",
+      });
+      const [row] = await suite.db.select().from(sales).where(eq(sales.id, recorded));
+      // `sales` is append-only, so the incomplete row is a copy of the recorded one.
+      const [copy] = await suite.db
+        .insert(sales)
+        .values({
+          ...row!,
+          id: randomUUID(),
+          invoiceNumber: row!.invoiceNumber + 1,
+          [column]: null,
+        })
+        .returning({ id: sales.id });
+      const saleId = copy!.id as SaleId;
+      const recordCorrectionSpy = vi.spyOn(backend, "recordCorrection");
+      await expect(replace(backend, saleId)).rejects.toThrow(
+        "A sale names a customer's tax number without their name, country or address",
+      );
+      expect(await rectSeriesNext()).toBe(1);
+      expect(await countCorrectives(saleId)).toBe(0);
+      expect(recordCorrectionSpy).not.toHaveBeenCalled();
+    },
+  );
 
   it("refuses a ticket already swapped for a full invoice", async () => {
     const backend = new FakeFiscalBackend(suite.db);

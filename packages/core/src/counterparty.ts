@@ -33,20 +33,24 @@ export function requireRecipientAddress(address: string | null | undefined): voi
 }
 
 /** A sale row's stored recipient, as the `Counterparty` it was recorded with; null when it names
- * none. */
+ * none. Throws when the row names a tax number without the customer's name, country or address. */
 export function storedCounterparty(row: {
   counterpartyTaxId: string | null;
   counterpartyLegalName: string | null;
   counterpartyCountryCode: string | null;
   counterpartyIdentifierType: string | null;
   counterpartyIdentifierCountryCode: string | null;
+  counterpartyAddress: string | null;
 }): Counterparty | null {
   if (row.counterpartyTaxId === null) return null;
-  // The database does not require a name and country beside a tax number; the writers store them.
+  const { counterpartyLegalName: legalName, counterpartyCountryCode: countryCode } = row;
+  if (legalName === null || countryCode === null || row.counterpartyAddress === null) {
+    throw new Error("A sale names a customer's tax number without their name, country or address");
+  }
   return {
     taxId: row.counterpartyTaxId,
-    legalName: row.counterpartyLegalName!,
-    countryCode: row.counterpartyCountryCode!,
+    legalName,
+    countryCode,
     ...(row.counterpartyIdentifierType !== null && {
       identifierType: row.counterpartyIdentifierType as NonNullable<Counterparty["identifierType"]>,
       identifierCountryCode: row.counterpartyIdentifierCountryCode!,
