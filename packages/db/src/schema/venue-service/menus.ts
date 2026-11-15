@@ -24,6 +24,8 @@ export const menuPeriods = table(
      * menu_periods.floor_plan_set_id.
      */
     floorPlanSetId: id("floor_plan_set_id").references(() => floorPlanSets.id),
+    // JSON has no menu key: writeMenuPeriod checks active choices and duplicates;
+    // validateMenuTimetables checks imported IDs and duplicates. Menus are only deactivated.
     staffMenuIds: json<string[]>("staff_menu_ids").notNull().default([]),
   },
   (t) => [

@@ -114,7 +114,6 @@ export async function requirePeriod(tx: Transaction, periodId: string) {
       name: menuPeriods.name,
       menuId: menuPeriods.menuId,
       floorPlanSetId: menuPeriods.floorPlanSetId,
-      staffMenuIds: menuPeriods.staffMenuIds,
     })
     .from(menuPeriods)
     .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))

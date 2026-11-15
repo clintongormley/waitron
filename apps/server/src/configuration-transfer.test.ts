@@ -6533,7 +6533,7 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
     ];
     for (const menu of staff) {
       await tx.insert(menus).values(menu);
-      await createMenuShell(tx, menu.id, menu.name);
+      await createMenuShell(tx, menu.id);
     }
     const period = await saveMenuPeriod(tx, department.id, {
       name: "Night transfer",

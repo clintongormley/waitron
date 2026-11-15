@@ -125,7 +125,7 @@ it("lists a zone's staff menus in the period's order, active ones only", async (
     ];
     for (const [i, id] of staffIds.entries()) {
       await tx.insert(menus).values({ id, name: `Staff ${i}` });
-      await createMenuShell(tx, id, `Staff ${i}`);
+      await createMenuShell(tx, id);
     }
     for (const id of [customer.id, ...staffIds]) {
       const { document } = await buildMenuDocument(tx, id);
