@@ -354,31 +354,26 @@ it("opens the Seasons page on a passive watch with viewer and manager controls",
   render(handle.render(true), container);
   const screen = container.querySelector("dashboard-seasons-screen")!;
   await vi.waitFor(() =>
-    expect(screen.shadowRoot?.querySelector("h1")?.textContent).toBe("Seasons"),
+    expect(screen.shadowRoot?.querySelector("h1")?.textContent?.trim()).toBe("Seasons"),
   );
   await vi.waitFor(() =>
     expect(screen.shadowRoot!.querySelector("[data-test=read-error]")).not.toBeNull(),
   );
   failed = false;
   screen.api.rereadWatches();
-  const editor = () => screen.shadowRoot!.querySelector("seasons-window")!;
-  await vi.waitFor(() => expect(editor()).not.toBeNull());
-  await editor().updateComplete;
-  expect(editor().shadowRoot!.querySelector("[data-test=add-season]")).toBeNull();
+  const table = () => screen.shadowRoot!.querySelector("wt-data-table")!;
+  await vi.waitFor(() => expect(table()).not.toBeNull());
+  await table().updateComplete;
+  expect(screen.shadowRoot!.querySelector("[data-test=add-season]")).toBeNull();
+  expect(table().columns.some((column) => column.key === "actions")).toBe(false);
   render(handle.render(false), container);
   await vi.waitFor(() =>
-    expect(editor().shadowRoot!.querySelector("[data-test=add-season]")).not.toBeNull(),
+    expect(screen.shadowRoot!.querySelector("[data-test=add-season]")).not.toBeNull(),
   );
   model.seasons[0]!.name = "Renamed winter";
-  editor().dispatchEvent(new CustomEvent("seasons-saved", { bubbles: true, composed: true }));
+  screen.api.rereadWatches();
   await vi.waitFor(() =>
-    expect(
-      [
-        ...editor().shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-input"]>(
-          'wt-input[name$="-name"]',
-        ),
-      ].map((input) => input.value),
-    ).toContain("Renamed winter"),
+    expect((table().rows as { name: string }[]).map((row) => row.name)).toContain("Renamed winter"),
   );
   expect(screen.shadowRoot!.querySelector("[data-test=read-error]")).toBeNull();
   const [path, init] = (fetchImpl.mock.calls as unknown as [string, RequestInit][])[0]!;

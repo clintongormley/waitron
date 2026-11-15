@@ -27,6 +27,7 @@ class SeasonsLeaveApp extends LitElement {
     });
   override render() {
     return html`<seasons-window
+        seasonId="winter"
         .seasons=${seasons}
         .clockRevision=${1}
         .api=${this.api}
@@ -51,10 +52,10 @@ async function mount() {
   await el.updateComplete;
   return el;
 }
-const nameField = (el: SeasonsWindow, index: number) =>
-  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(`[name=season-${index}-name]`)!;
-async function change(el: SeasonsWindow, index: number, value: string) {
-  nameField(el, index).dispatchEvent(
+const nameField = (el: SeasonsWindow) =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
+async function change(el: SeasonsWindow, value: string) {
+  nameField(el).dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
   );
   await el.updateComplete;
@@ -80,24 +81,24 @@ async function choose(decision: "keep" | "discard") {
 it("asks before leaving a changed page, and Keep keeps the rows", async () => {
   const el = await mount();
   expect(unload()).toBe(false);
-  await change(el, 0, "Deep winter");
+  await change(el, "Deep winter");
   expect(unload()).toBe(true);
   const close = app.leavePage();
   await choose("keep");
   expect(await close).toBe("kept");
-  expect(nameField(el, 0).value).toBe("Deep winter");
+  expect(nameField(el).value).toBe("Deep winter");
   const discard = app.leavePage();
   await choose("discard");
   expect(await discard).toBe("proceeded");
   await el.updateComplete;
-  expect(nameField(el, 0).value).toBe("Winter");
+  expect(nameField(el).value).toBe("Winter");
   expect(unload()).toBe(false);
 });
 
 it("restoring the saved values lets navigation proceed without asking", async () => {
   const el = await mount();
-  await change(el, 0, "Cold");
-  await change(el, 0, "Winter");
+  await change(el, "Cold");
+  await change(el, "Winter");
   expect([save(el).disabled, save(el).variant]).toEqual([true, "secondary"]);
   expect(unload()).toBe(false);
   expect(await app.leavePage()).toBe("proceeded");
@@ -106,7 +107,7 @@ it("restoring the saved values lets navigation proceed without asking", async ()
 
 it("a draft parented to the page root is asked about only for that root", async () => {
   const el = await mount();
-  await change(el, 0, "Cold");
+  await change(el, "Cold");
   const coordinator = app.leave.coordinator;
   expect(coordinator.isDirty([app.windowRoot])).toBe(true);
   expect(coordinator.isDirty([{}])).toBe(false);
@@ -114,5 +115,5 @@ it("a draft parented to the page root is asked about only for that root", async 
     "proceeded",
   );
   expect(question().open).toBe(false);
-  expect(nameField(el, 0).value).toBe("Cold");
+  expect(nameField(el).value).toBe("Cold");
 });

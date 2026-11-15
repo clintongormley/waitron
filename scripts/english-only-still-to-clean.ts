@@ -1127,7 +1127,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "packages/venue-service/src/dashboard/season-chips.test.ts",
   "packages/venue-service/src/dashboard/season-painter.save.test.ts",
   "packages/venue-service/src/dashboard/season-painter.test.ts",
-  "packages/venue-service/src/dashboard/seasons-window.test.ts",
   "packages/venue-service/src/dashboard/service-delete-copy.test.ts",
   "packages/venue-service/src/dashboard/service-edit-dialog.legacy.test.ts",
   "packages/venue-service/src/dashboard/service-settings-fields.test.ts",

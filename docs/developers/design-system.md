@@ -6951,68 +6951,35 @@ files.
 
 Seasons is a module-contributed page at `/manage/seasons`, under Venue operations beside Calendar
 and Periods. The menu, page search and the Year's Seasons link open it. `seasons-screen.ts` follows
-passive opening-hours reads and renders the `seasons-window.ts` editor as body content with an h1,
-without a modal, window URL or Close action.
+passive opening-hours reads and renders a list or the selected `seasons-window.ts` form with an h1.
 
-The body is a table in a scrolling region named "Seasons", with the columns Colour, Season, Starts
-on, Runs until and a bin. The bin column stays at the region's trailing edge while the others scroll
-sideways under it, as a `wt-data-table` column with `pinned: "end"` does. At phone width, scroll the table to see the date columns while the bin stays pinned. Rows run from the season in force on 1 January, then by start (`draftOf`,
-`season-draft.ts`); they do not re-sort while editing, and the list comes back sorted after a Save.
-Each row edits its colour (a `wt-colour-chooser` with `hide-label`, whose tiles name the other named rows
-that use each colour; two seasons may share one), painted with the same pale season tints as the Calendar, its name, and its start as a Day and a Month
-combobox side by side, stacked within the same cell when the scrolling region is narrower than 480 px. The closed Month shows its short name; its list offers full month names. The Day offers the chosen month's days, February always 28, and choosing a
-shorter month brings a later day down to its last. The Season and Starts on headings each carry a
-required asterisk, and the fields under them draw none. Runs until is worked out from the rows that
-have a whole start and is not typed. Under the table, at the start, "Add season" adds an empty row at
-the end in the first calendar colour no row uses (the first colour when every one is used), followed by the hint "A season runs until the next
-one starts. The list re-sorts by start date when you save."
+The page lists seasons in January-first order (`draftOf`), with a tinted name swatch, Starts on,
+Runs until and pinned `wt-row-actions` offering Edit and Delete. Each swatch names its colour
+for assistive technology and on hover. The only season’s Delete is
+disabled. Viewers see no editing actions. Add opens `/manage/seasons/view/new`; a row or Edit
+opens `/manage/seasons/season/<id>`, with “Seasons ›” above its h1. The selected-season form
+(`seasons-window.ts`) shows Name, Colour, Day and Month, visibly required. It retains the full
+season draft for duplicate checks, date clamping, colour choices and live merges, but sends only
+the selected entry through the existing batch API. A missing edited season stays marked and
+unsaveable. Unknown or viewer-only edit addresses return to the list after loading.
 
-The bin, named "Delete {name}" or, on a row with no name, "Delete this new season", removes the row
-from the draft; the last remaining row's bin is disabled, and Cancel is the only undo. Focus then
-goes to the bin of the row that took the removed row's place, else the bin of the row above, else
-"Add season". Binning a
-stored season reads what deleting it loses (`GET …/seasons/:seasonId/delete-impact`; a newer read's
-answer wins) and adds a note under the table, in a live region: "Saving deletes {name}; its days
-join {previous}.", where {previous} lists, as a list in the window's language, every remaining row
-that will hold some of its stored days: the row holding its start day, then each row starting after
-it and before the next stored season's start (a season binned in the same Save still counts), in
-start order round the year. A row with no name, or no whole start,
-is left out, and the note reads "Saving deletes {name}." when no row is left. Once the read answers,
-the note adds "The hours of {departments} in it are lost.", "No department has hours in it." or,
-when the read fails, "Which departments lose hours could not be read."
+Save returns to the list and refreshes it; a failed refresh is a list load error. Cancel and the parent link ask before discarding,
+as do the sidebar and browser history through the dashboard’s navigation guard. The form uses
+`FormFeedback`, `draftScopeFor`, `saveActionState` and `wt-form-actions`; own validation disables
+Save after an attempt, while request refusals permit retry. The draft keeps its clean clock
+revision while edited. Field refusals map the one submitted entry; clock and waiting-change
+refusals keep their existing wording.
 
-The footer is `[Cancel] … [Save]`. Save stays quiet and disabled until the draft changes, and Enter
-in a season's name presses it. When Save is pressed, a missing name or start, or a name or start two rows
-share, is marked beside its row with "Correct the highlighted fields to continue." at the bottom,
-and Save stays disabled until they are fixed. One Save sends `PUT …/seasons` holding only the new
-rows, the stored rows that changed and the binned seasons, with the clock revision the draft was
-last clean at. While it is being sent Save shows busy and the editing controls and Cancel are disabled.
-When it succeeds, the page stays open and rereads opening hours; the editor retains a newer
-live list over the Save answer. A refusal that
-names a saved entry's field (`season.invalid`, field `save.<i>.<field>`) is shown under that field
-of the row the request named, wherever that row now sits, with the bottom message; binning that row
-takes both away, and a field refusal naming an entry the request did not hold says "The change could
-not be saved." A refusal that names no field is worded beside Save: the business-day start changed,
-a clash with a waiting business-day start, named in one sentence by its first clashing range
-(`clockChangeConflictText`, `clock-change-conflict.ts`; the "says a changed business-day start, a clash with a waiting one and the last season at the bottom" cases in
-`seasons-window.test.ts`), or the last season. A Save refused with
-`season.not_found` for a season the person changed marks that row "This season no longer exists.",
-and Save stays disabled until the row is binned; binning it sends no delete.
+Delete opens a confirmation naming the season, the season receiving its days (`seasonReceivers`)
+and the departments losing hours, read through `readSeasonDeleteImpact`. Loading and failed reads
+say so; a failed read still permits deletion. Confirmation sends only that id and the clock
+revision captured on opening. A clock-change refusal refreshes the confirmation’s revision,
+receiving season and loss read, and asks for confirmation again; other refusals permit retry.
+Cancel and reopen also capture a fresh revision. A missing-season refusal uses the existing wording and rereads
+the list. After a confirmed deletion, focus goes to Add season. Delete is a confirmation without a draft scope.
 
-The window follows live data (`mergeSeasonDraft`, `season-draft.ts`). While the draft is unchanged,
-its rows follow a newer list and it takes the clock revision again. While it is changed, each stored
-season keeps the fields the person changed and takes the rest from the newer list; a season new to
-the list is appended; a season gone from it is dropped when untouched or binned, and kept with "This
-season no longer exists." under its name when touched; new rows are left alone. A list that arrives
-while a Save is being sent is kept over the Save's answer. Cancel restores the latest saved baseline
-in place. Sidebar navigation and Back use the dashboard leave question; Keep retains the draft,
-and Discard restores it before leaving.
-
-A viewer sees each row's colour swatch with its colour name, its name, its start and Runs until
-as text, with no editing controls or draft scope. Fields name their row's season; unnamed rows
-use New season with their row number. A refused Save for an already deleted binned season names
-it beside Save and retains the remaining edits. Cases: `seasons-window.test.ts`,
-`seasons-window.unsaved.test.ts`, `seasons-window.a11y.test.ts`, `index.test.ts` and
+Tests live in `seasons-screen*.test.ts`, `seasons-window*.test.ts`, `season-draft.test.ts`
+and the real shell’s
 `dashboard-app.search-modules.test.ts`.
 
 ### Permanent department and zone Delete

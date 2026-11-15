@@ -87,22 +87,6 @@ export function addRow(draft: SeasonDraft): SeasonDraft {
   return { ...draft, rows: [...draft.rows, row], next: draft.next + 1 };
 }
 
-/** The draft without the row; a stored season still in `stored` is binned to be deleted. */
-export function removeRow(
-  draft: SeasonDraft,
-  key: string,
-  stored: readonly { id?: string }[],
-): SeasonDraft {
-  const removed = draft.rows.find((row) => row.key === key);
-  const rows = draft.rows.filter((row) => row.key !== key);
-  const id = removed?.id;
-  const deleted =
-    id !== undefined && stored.some((season) => season.id === id)
-      ? [...draft.deleted, id]
-      : draft.deleted;
-  return { ...draft, rows, deleted };
-}
-
 /** The `MM-DD` the row's season runs until among the rows with a whole start, or null. */
 export function runsUntil(rows: readonly SeasonRow[], key: string): string | null {
   const row = rows.find((candidate) => candidate.key === key);
@@ -235,4 +219,13 @@ export function mergeSeasonDraft(
 export function goneKeys(draft: SeasonDraft, baseline: SeasonDraft): string[] {
   const held = new Set(baseline.rows.map((row) => row.key));
   return draft.rows.flatMap((row) => (row.id !== undefined && !held.has(row.key) ? [row.key] : []));
+}
+
+export function seasonReceivers(season: SeasonRow, stored: readonly SeasonRow[]): string[] {
+  const remaining = stored
+    .filter((row) => row.key !== season.key)
+    .sort((a, b) => startOf(a)!.localeCompare(startOf(b)!));
+  const previous =
+    remaining.filter((row) => startOf(row)! < startOf(season)!).at(-1) ?? remaining.at(-1);
+  return previous ? [previous.name] : [];
 }

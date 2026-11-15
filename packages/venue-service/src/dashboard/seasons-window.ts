@@ -1,6 +1,5 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { repeat } from "lit/directives/repeat.js";
 import {
   baseStyles,
   draftScopeFor,
@@ -8,7 +7,6 @@ import {
   bottomMessage,
   saveActionState,
   submitOnEnter,
-  visuallyHiddenStyles,
   type DraftScope,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-input.js";
@@ -17,22 +15,19 @@ import "@waitron/ui/src/components/wt-colour-chooser.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { listOf } from "./painter-labels.js";
 import type { CalendarColour } from "../hours-types.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { MONTHS } from "./calendar-grid.js";
 import { rememberedColourChoices, type ColourUser } from "./calendar-colours.js";
-import { format, formatMonthDay, formatMonthName } from "./hours-view.js";
-import type { OpeningHoursApi, SeasonDeleteImpact } from "./opening-hours-client.js";
+import { format, formatMonthName } from "./hours-view.js";
+import type { OpeningHoursApi } from "./opening-hours-client.js";
 import {
   addRow,
   daysIn,
   draftOf,
   goneKeys,
   mergeSeasonDraft,
-  removeRow,
   rowErrors,
-  runsUntil,
   sameDraft,
   seasonChange,
   type SeasonDraft,
@@ -77,148 +72,48 @@ export class SeasonsWindow extends LitElement {
       :host {
         display: block;
         min-width: 0;
-        background: var(--wt-color-bg);
       }
-      .table-wrap {
-        overflow-x: auto;
-        container-type: inline-size;
-      }
-      .table-wrap:focus-visible {
-        outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
-      }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-      }
-      th,
-      td {
-        padding: var(--wt-space-2) var(--wt-space-1);
-        text-align: start;
-        vertical-align: middle;
-        border-bottom: 1px solid var(--wt-color-border);
-      }
-      th {
-        white-space: nowrap;
-        font-weight: var(--wt-font-weight-medium);
-      }
-      .required {
-        color: var(--wt-color-danger);
-        margin-inline-start: var(--wt-space-1);
+      .form {
+        display: grid;
+        gap: var(--wt-space-4);
       }
       .start {
         display: flex;
+        flex-wrap: wrap;
         gap: var(--wt-space-2);
+      }
+      .start wt-combobox {
+        min-inline-size: calc(3 * var(--wt-tap-min));
       }
       .error {
-        margin: var(--wt-space-1) 0 0;
         color: var(--wt-color-danger);
-        font-size: var(--wt-font-size-sm);
-      }
-      .name wt-input {
-        min-width: calc(var(--wt-space-6) * 2.75);
-      }
-      /* stable-width sizes it to its widest day; this floor stops a squeezed table shrinking it below. */
-      .start wt-combobox[name$="-day"] {
-        min-width: max-content;
-      }
-      .start wt-combobox[name$="-month"] {
-        min-width: calc(var(--wt-space-6) * 4.5);
-      }
-      @container (width < 480px) {
-        th:nth-child(3) {
-          white-space: normal;
-        }
-        th:nth-child(2),
-        .name {
-          padding-inline-start: 0;
-        }
-        .starts {
-          padding-inline: 0;
-        }
-        .start {
-          flex-direction: column;
-          align-items: flex-start;
-        }
-        .start wt-combobox[name$="-month"] {
-          min-width: max-content;
-        }
-      }
-      .until,
-      .text {
-        white-space: nowrap;
-      }
-      /* Opaque, so the columns scrolling under it at a phone's width do not show through. */
-      .bin {
-        position: sticky;
-        inset-inline-end: 0;
-        z-index: 1;
-        width: 1%;
-        text-align: end;
-        background: var(--wt-color-bg);
-      }
-      .colour-text {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-        white-space: nowrap;
-      }
-      .swatch {
-        display: inline-block;
-        inline-size: var(--wt-space-4);
-        block-size: var(--wt-space-4);
-        border-radius: var(--wt-radius-sm);
-        background: var(--season-tint);
-        border: 1px solid var(--season-tint-line);
-      }
-      .below {
-        display: grid;
-        justify-items: start;
-        gap: var(--wt-space-2);
-        margin-block-start: var(--wt-space-3);
-      }
-      .notes {
-        display: grid;
-        gap: var(--wt-space-1);
-      }
-      .notes p {
         margin: 0;
-      }
-      .notes p:first-child {
-        margin-block-start: var(--wt-space-3);
-      }
-      .hint {
-        margin: 0;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-      .visually-hidden {
-        ${visuallyHiddenStyles}
       }
     `,
   ];
   @property({ attribute: false }) seasons: OpeningHoursModel["seasons"] = [];
   @property({ type: Number }) clockRevision = 0;
-  @property({ type: Boolean }) readOnly = false;
+  @property() seasonId = "";
   @property({ attribute: false }) draftParent?: object;
-  @property({ attribute: false }) api?: Pick<
-    OpeningHoursApi,
-    "saveSeasons" | "readSeasonDeleteImpact"
-  >;
+  @property({ attribute: false }) api?: Pick<OpeningHoursApi, "saveSeasons">;
   /** Replaced whole on every change, so a restore can swap it while keeping the live `next`. */
   @state() private draft?: SeasonDraft;
   private baseline?: SeasonDraft;
   private readonly feedback = new FormFeedback(this);
   /** A refusal with the row keys of the request it answered, in the order of its `save` entries. */
-  @state() private refusal?: { refusal: Refusal; keys: readonly string[]; missingName?: string };
-  /** Each binned season's delete impact, by id; `token` is the newest read's, and only it may answer. */
-  @state() private impacts = new Map<
-    string,
-    { token: object; impact?: SeasonDeleteImpact | "failed" }
-  >();
+  @state() private refusal?: { refusal: Refusal; keys: readonly string[] };
   /** The opening a Save in flight was sent from. */
   @state() private saving?: object;
   private scope?: DraftScope<SeasonDraft>;
+  private blank?: SeasonRow;
+  private get targetKey() {
+    return this.seasonId || this.blank?.key;
+  }
+  private get scopeBaseline(): SeasonDraft {
+    return this.blank
+      ? { ...this.baseline!, rows: [...this.baseline!.rows, this.blank] }
+      : this.baseline!;
+  }
   /** Replaced on every connect and disconnect, so an answer sent from an earlier opening is ignored. */
   private generation = {};
   /** The clock revision the draft was last clean at. */
@@ -241,11 +136,12 @@ export class SeasonsWindow extends LitElement {
   protected override willUpdate(changed: PropertyValues<this>) {
     if (!this.draft) {
       this.baseline = draftOf(this.seasons);
-      this.draft = this.baseline;
+      this.draft = this.seasonId ? this.baseline : addRow(this.baseline);
+      this.blank = this.seasonId ? undefined : this.draft.rows.at(-1);
     } else if (changed.has("seasons")) {
       this.follow(this.seasons);
     }
-    if (this.isConnected && !this.readOnly && !this.scope) {
+    if (this.isConnected && !this.scope) {
       const { scope } = draftScopeFor<SeasonDraft>(this, {
         id: {},
         parent: this.draftParent,
@@ -259,7 +155,7 @@ export class SeasonsWindow extends LitElement {
           this.refusal = undefined;
         },
       });
-      scope.commit(this.baseline!);
+      scope.commit(this.scopeBaseline);
       this.scope = scope;
       if (!scope.isDirty()) this.revision = this.clockRevision;
     } else if ((changed.has("clockRevision") || changed.has("seasons")) && !this.scope?.isDirty()) {
@@ -270,9 +166,14 @@ export class SeasonsWindow extends LitElement {
   private follow(latest: OpeningHoursModel["seasons"]) {
     const draft = this.draft!;
     const merged = mergeSeasonDraft(draft, this.baseline!, latest);
-    this.draft = { ...merged.draft, next: Math.max(draft.next, merged.draft.next) };
+    const selected = draft.rows.find((row) => row.key === this.targetKey);
+    const rows =
+      selected && !merged.draft.rows.some((row) => row.key === selected.key)
+        ? [...merged.draft.rows, selected]
+        : merged.draft.rows;
+    this.draft = { ...merged.draft, rows, next: Math.max(draft.next, merged.draft.next) };
     this.baseline = merged.baseline;
-    this.scope?.commit(this.baseline);
+    this.scope?.commit(this.scopeBaseline);
   }
   private get busy(): boolean {
     return this.saving !== undefined && this.saving === this.generation;
@@ -309,94 +210,16 @@ export class SeasonsWindow extends LitElement {
   private gone(): Set<string> {
     return new Set(goneKeys(this.draft!, this.baseline!));
   }
-  private bin(key: string) {
-    const index = this.rows.findIndex((row) => row.key === key);
-    const draft = removeRow(this.draft!, key, this.baseline!.rows);
-    const id = draft.deleted.find((each) => !this.draft!.deleted.includes(each));
-    this.setDraft(draft);
-    if (id !== undefined) void this.readImpact(id);
-    void this.focusAfterBin(index);
-  }
-  private async focusAfterBin(index: number) {
-    await this.updateComplete;
-    const bins = [
-      ...this.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-button"]>(
-        "[data-test=delete-season]",
-      ),
-    ].filter((bin) => !bin.disabled);
-    const target =
-      bins[index] ??
-      bins[index - 1] ??
-      this.shadowRoot!.querySelector<HTMLElement>("[data-test=add-season]");
-    target?.focus();
-  }
-  private async readImpact(id: string) {
-    const api = this.api;
-    if (!api) return;
-    const token = {};
-    this.impacts = new Map(this.impacts).set(id, { token });
-    let impact: SeasonDeleteImpact | "failed";
-    try {
-      impact = await api.readSeasonDeleteImpact(id);
-    } catch {
-      impact = "failed";
-    }
-    if (this.impacts.get(id)?.token !== token) return;
-    this.impacts = new Map(this.impacts).set(id, { token, impact });
-  }
-  /**
-   * The named rows that will hold some of a binned season's stored days, from its start to the next
-   * stored start (binned ones included): the row holding its start, then each row starting inside
-   * that range, in start order round the year.
-   */
-  private receivers(season: SeasonRow): string[] {
-    const start = startOf(season);
-    // Prefixed so plain string order runs round the year from the binned season's start.
-    const from = (row: SeasonRow) => (startOf(row) >= start ? "0" : "1") + startOf(row);
-    const end = this.baseline!.rows.reduce(
-      (soonest, row) => (row.key !== season.key && from(row) < soonest ? from(row) : soonest),
-      "2",
-    );
-    const proposed = this.rows
-      .filter((row) => row.day && row.month)
-      .map((row) => ({ at: from(row), row }))
-      .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
-    const holding = proposed[0]?.at === `0${start}` ? proposed[0] : proposed.at(-1);
-    const inside = proposed.filter((each) => each.at > `0${start}` && each.at < end);
-    const rows = new Set([holding, ...inside].flatMap((each) => (each ? [each.row] : [])));
-    return [...rows].flatMap((row) => row.name.trim() || []);
-  }
-  private deleteNotes() {
-    const notes = this.draft!.deleted.map((id) => {
-      // A merge keeps only binned ids the new list still holds, and the baseline holds that list.
-      const season = this.baseline!.rows.find((row) => row.key === id)!;
-      const found = this.impacts.get(id)?.impact;
-      const loses =
-        found === undefined
-          ? ""
-          : found === "failed"
-            ? t("season.delete_loses_unknown")
-            : found.departments.length
-              ? format("season.delete_loses", {
-                  departments: listOf(found.departments.map((department) => department.name)),
-                })
-              : t("season.delete_loses_none");
-      const receivers = this.receivers(season);
-      const deletes = receivers.length
-        ? format("season.delete_pending", { name: season.name, previous: listOf(receivers) })
-        : format("season.delete_pending_alone", { name: season.name });
-      return html`<p data-test="delete-note">${deletes} ${loses}</p>`;
-    });
-    return html`<div class="notes" role="status">${notes}</div>`;
-  }
   private ownErrors(): Map<string, SeasonRowErrors> {
-    return this.feedback.attempted ? rowErrors(this.rows) : new Map();
+    return this.feedback.attempted
+      ? new Map([...rowErrors(this.rows)].filter(([key]) => key === this.targetKey))
+      : new Map();
   }
   private async save() {
-    if (this.readOnly || this.busy || !this.api || saveActionState(this.scope).unchanged) return;
+    if (this.busy || !this.api || saveActionState(this.scope).unchanged) return;
     this.feedback.press();
     this.refusal = undefined;
-    if (rowErrors(this.rows).size) {
+    if (rowErrors(this.rows).has(this.targetKey!)) {
       void this.feedback.focus(this.shadowRoot!);
       return;
     }
@@ -412,6 +235,7 @@ export class SeasonsWindow extends LitElement {
       // list delivered while the Save was in flight is kept over the answer.
       this.baseline = draftOf(this.seasons === listed ? saved : this.seasons);
       this.draft = { ...this.baseline, next: Math.max(this.draft!.next, submitted.next) };
+      this.blank = undefined;
       this.scope?.commit(this.baseline);
       this.dispatchEvent(
         new CustomEvent<{ seasons: OpeningHoursModel["seasons"] }>("seasons-saved", {
@@ -425,11 +249,8 @@ export class SeasonsWindow extends LitElement {
       const refusal = refusalOf(error);
       const goneId = refusal.code === "season.not_found" ? refusal.params?.seasonId : undefined;
       const gone = this.baseline!.rows.find((row) => row.key === goneId);
-      if (gone) {
-        const binned = this.draft!.deleted.includes(gone.key);
-        this.follow(this.baseline!.rows.filter((row) => row.key !== goneId).map(seasonOf));
-        if (binned) this.refusal = { refusal, keys, missingName: gone.name };
-      } else this.refusal = { refusal, keys };
+      if (gone) this.follow(this.baseline!.rows.filter((row) => row.key !== goneId).map(seasonOf));
+      this.refusal = { refusal, keys };
     } finally {
       if (this.saving === generation) this.saving = undefined;
     }
@@ -484,16 +305,9 @@ export class SeasonsWindow extends LitElement {
   }
   private readonly usedByLabel = (colour: string, names: string) =>
     format("hours.colour_used_by", { colour, names });
-  private discard() {
+  requestClose(): void {
     if (this.busy) return;
-    this.setDraft({ ...this.baseline!, next: Math.max(this.draft!.next, this.baseline!.next) });
-    this.feedback.reset();
-    this.refusal = undefined;
-    this.revision = this.clockRevision;
-  }
-  private until(key: string): string {
-    const until = runsUntil(this.rows, key);
-    return until === null ? "" : formatMonthDay(until);
+    this.dispatchEvent(new CustomEvent("season-cancel", { bubbles: true, composed: true }));
   }
   private dayOptions(month: string) {
     return Array.from({ length: month ? daysIn(month) : 31 }, (_, index) => ({
@@ -508,7 +322,7 @@ export class SeasonsWindow extends LitElement {
       valueLabel: formatMonthName(Number(month), undefined, "short"),
     }));
 
-  private editableRow(row: SeasonRow, index: number, marks: Marks) {
+  private editableRow(row: SeasonRow, marks: Marks) {
     const busy = this.busy;
     const errors = this.errorsOf(row, marks);
     const startError = errors.startsOn ?? "";
@@ -519,162 +333,77 @@ export class SeasonsWindow extends LitElement {
         event.stopPropagation();
         this.change(row.key, field, event.detail.value);
       };
-    const name = row.name.trim();
-    const rowName = name || format("season.new_row", { number: String(index + 1) });
-    const label = (field: string) => format("season.row_field", { field, name: rowName });
-    return html`<tr data-row=${row.key}>
-      <td>
-        <wt-colour-chooser
-          name=${`season-${index}-colour`}
-          label=${label(t("hours.colour"))}
-          hide-label
-          .value=${row.colour}
-          .choices=${this.choicesFor(row.key)}
-          .usedByLabel=${this.usedByLabel}
-          .error=${errors.colour ?? ""}
-          ?disabled=${busy}
-          @wt-change=${on("colour")}
-        ></wt-colour-chooser>
-      </td>
-      <td class="name">
-        <wt-input
-          name=${`season-${index}-name`}
-          label=${label(t("prep.name"))}
-          required
-          hide-label
-          .value=${row.name}
-          .error=${errors.name ?? ""}
-          ?disabled=${busy}
-          @wt-change=${on("name")}
-        ></wt-input>
-      </td>
-      <td class="starts">
-        <div
-          class="start"
-          role="group"
-          aria-label=${t("season.starts")}
-          aria-describedby=${startError ? startErrorId : nothing}
-        >
+    return html`<div class="form" data-row=${row.key}>
+      <wt-input
+        name="name"
+        label=${t("prep.name")}
+        required
+        .value=${row.name}
+        .error=${errors.name ?? ""}
+        ?disabled=${busy}
+        @wt-change=${on("name")}
+      ></wt-input>
+      <wt-colour-chooser
+        name="colour"
+        label=${t("hours.colour")}
+        required
+        .value=${row.colour}
+        .choices=${this.choicesFor(row.key)}
+        .usedByLabel=${this.usedByLabel}
+        .error=${errors.colour ?? ""}
+        ?disabled=${busy}
+        @wt-change=${on("colour")}
+      ></wt-colour-chooser>
+      <div
+        role="group"
+        aria-label=${t("season.starts")}
+        aria-describedby=${startError ? startErrorId : nothing}
+      >
+        <div class="start">
           <wt-combobox
-            ?preserve-order=${true /* Preserve day chronology. */}
-            name=${`season-${index}-day`}
-            label=${label(t("season.day"))}
-            required
-            hide-label
-            search="never"
+            preserve-order
             stable-width
+            name="day"
+            label=${t("season.day")}
+            required
+            search="never"
             .value=${row.day}
             .options=${this.dayOptions(row.month)}
-            ?invalid=${startError !== ""}
+            ?invalid=${!!startError}
             ?disabled=${busy}
             @wt-change=${on("day")}
           ></wt-combobox>
           <wt-combobox
-            ?preserve-order=${true /* Preserve month chronology. */}
+            preserve-order
             stable-width
-            name=${`season-${index}-month`}
-            label=${label(t("season.month"))}
+            name="month"
+            label=${t("season.month")}
             required
-            hide-label
             search="never"
             .value=${row.month}
             .options=${this.monthOptions()}
-            ?invalid=${startError !== ""}
+            ?invalid=${!!startError}
             ?disabled=${busy}
             @wt-change=${on("month")}
           ></wt-combobox>
         </div>
-        ${
-          startError
-            ? html`<p class="error" id=${startErrorId} data-error="startsOn">${startError}</p>`
-            : nothing
-        }
-      </td>
-      <td class="until" data-test="runs-until">${this.until(row.key)}</td>
-      <td class="bin">
-        <wt-button
-          variant="ghost"
-          data-test="delete-season"
-          aria-label=${name ? format("season.delete_named", { name }) : t("season.delete_new")}
-          ?disabled=${busy || this.rows.length === 1}
-          @click=${() => this.bin(row.key)}
-          ><wt-icon name="bin"></wt-icon
-        ></wt-button>
-      </td>
-    </tr>`;
-  }
-  private readOnlyRow(row: SeasonRow) {
-    return html`<tr data-row=${row.key}>
-      <td>
-        <span class="colour-text"
-          ><span class="swatch" data-tint=${row.colour}></span
-          >${t(`hours.colour.${row.colour}`)}</span
-        >
-      </td>
-      <td>${row.name}</td>
-      <td class="text">${formatMonthDay(startOf(row))}</td>
-      <td class="until" data-test="runs-until">${this.until(row.key)}</td>
-    </tr>`;
-  }
-  private table(marks: Marks) {
-    const editable = !this.readOnly;
-    return html`<div
-      class="table-wrap"
-      tabindex="0"
-      role="region"
-      aria-label=${t("season.seasons")}
-    >
-      <table>
-        <thead>
-          <tr>
-            <th scope="col">${t("hours.colour")}</th>
-            <th scope="col">
-              ${t("season.column_name")}${
-                editable ? html`<span class="required" aria-hidden="true">*</span>` : nothing
-              }
-            </th>
-            <th scope="col">
-              ${t("season.starts")}${
-                editable ? html`<span class="required" aria-hidden="true">*</span>` : nothing
-              }
-            </th>
-            <th scope="col">${t("season.runs_until")}</th>
-            ${
-              editable
-                ? html`<th scope="col" class="bin">
-                    <span class="visually-hidden">${t("prep.delete")}</span>
-                  </th>`
-                : nothing
-            }
-          </tr>
-        </thead>
-        <tbody>
-          ${repeat(
-            this.rows,
-            (row) => row.key,
-            (row, index) =>
-              editable ? this.editableRow(row, index, marks) : this.readOnlyRow(row),
-          )}
-        </tbody>
-      </table>
+        ${startError ? html`<p class="error" id=${startErrorId} data-error="startsOn">${startError}</p>` : nothing}
+      </div>
     </div>`;
   }
   private footer({ own, refused, gone }: Marks) {
-    if (this.readOnly) return nothing;
     const action = saveActionState(this.scope);
     const busy = this.busy;
     const marked =
       own.size > 0 || gone.size > 0 || this.rows.some((row) => row.key === refused?.key);
-    const refusal = this.refusal?.missingName
-      ? format("season.deleted_before_save", { name: this.refusal.missingName })
-      : !this.refusal
-        ? ""
-        : seasonRefusalField(this.refusal.refusal)
-          ? refused
-            ? ""
-            : t("prep.save_error")
-          : (clockChangeConflictText(this.refusal.refusal) ??
-            seasonRefusalText(this.refusal.refusal));
+    const refusal = !this.refusal
+      ? ""
+      : seasonRefusalField(this.refusal.refusal)
+        ? refused
+          ? ""
+          : t("prep.save_error")
+        : (clockChangeConflictText(this.refusal.refusal) ??
+          seasonRefusalText(this.refusal.refusal));
     return html`<wt-form-actions
       .error=${bottomMessage(refusal, marked ? t("prep.fix_fields") : "")}
     >
@@ -683,7 +412,7 @@ export class SeasonsWindow extends LitElement {
         variant="secondary"
         data-test="cancel-seasons"
         ?disabled=${busy}
-        @click=${() => this.discard()}
+        @click=${() => void this.requestClose()}
         >${t("prep.cancel")}</wt-button
       >
       <wt-button
@@ -697,31 +426,12 @@ export class SeasonsWindow extends LitElement {
     </wt-form-actions>`;
   }
   override render() {
-    const marks: Marks = this.readOnly
-      ? { own: new Map(), gone: new Set() }
-      : { own: this.ownErrors(), refused: this.refused(), gone: this.gone() };
+    const marks: Marks = { own: this.ownErrors(), refused: this.refused(), gone: this.gone() };
+    const row = this.rows.find((row) => row.key === this.targetKey);
     return html`<div
-      @keydown=${(event: KeyboardEvent) =>
-        submitOnEnter(event, this.shadowRoot!.querySelector("[data-test=save-seasons]"))}
+      @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector("[data-test=save-seasons]"))}
     >
-      ${this.table(marks)} ${this.readOnly ? nothing : this.deleteNotes()}
-      ${
-        this.readOnly
-          ? nothing
-          : html`<div class="below">
-              <wt-button
-                variant="secondary"
-                data-test="add-season"
-                ?disabled=${this.busy}
-                @click=${() => {
-                  this.setDraft(addRow(this.draft!));
-                }}
-                >${t("season.add")}</wt-button
-              >
-              <p class="hint" data-test="window-hint">${t("season.window_hint")}</p>
-            </div>`
-      }
-      ${this.footer(marks)}
+      ${row ? this.editableRow(row, marks) : nothing}${this.footer(marks)}
     </div>`;
   }
 }

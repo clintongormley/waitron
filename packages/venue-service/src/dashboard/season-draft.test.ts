@@ -7,11 +7,11 @@ import {
   draftOf,
   goneKeys,
   mergeSeasonDraft,
-  removeRow,
   rowErrors,
   runsUntil,
   sameDraft,
   seasonChange,
+  seasonReceivers,
   type SeasonDraft,
   type SeasonRow,
 } from "./season-draft.js";
@@ -108,27 +108,9 @@ describe("addRow", () => {
 });
 
 it("never reuses a removed new row's key", () => {
-  const draft = addRow(removeRow(addRow(addRow(draftOf(year))), "new-2", year));
+  const added = addRow(addRow(draftOf(year)));
+  const draft = addRow({ ...added, rows: added.rows.filter((r) => r.key !== "new-2") });
   expect(draft.rows.map((r) => r.key)).toEqual(["s4", "s1", "s2", "s3", "new-1", "new-3"]);
-});
-
-describe("removeRow", () => {
-  it("bins a stored row into deleted", () => {
-    const draft = removeRow(draftOf(year), "s2", year);
-    expect(names(draft)).toEqual(["Winter", "Spring", "Autumn"]);
-    expect(draft.deleted).toEqual(["s2"]);
-  });
-
-  it("lets a new row just leave", () => {
-    const draft = removeRow(addRow(draftOf(year)), "new-1", year);
-    expect(draft).toEqual({ ...draftOf(year), next: 2 });
-  });
-
-  it("sends no delete for a row whose id is no longer stored", () => {
-    const draft = removeRow(draftOf(year), "s2", [spring, autumn, winter]);
-    expect(names(draft)).toEqual(["Winter", "Spring", "Autumn"]);
-    expect(draft.deleted).toEqual([]);
-  });
 });
 
 describe("daysIn", () => {
@@ -256,7 +238,7 @@ describe("seasonChange", () => {
     let draft = addRow(baseline);
     draft = withRow(draft, "new-1", { name: "Easter", day: "1", month: "04" });
     draft = withRow(draft, "s4", { name: "Invierno" });
-    draft = removeRow(draft, "s2", year);
+    draft = { ...draft, rows: draft.rows.filter((r) => r.key !== "s2"), deleted: ["s2"] };
     const { change, keys } = seasonChange(draft, baseline);
     expect(change).toEqual({
       save: [
@@ -378,11 +360,8 @@ describe("mergeSeasonDraft", () => {
   });
 
   it("keeps the new-key counter, so a later row never takes an earlier key", () => {
-    const draft = removeRow(
-      addRow(addRow(withRow(baseline, "s1", { name: "Mine" }))),
-      "new-2",
-      year,
-    );
+    const added = addRow(addRow(withRow(baseline, "s1", { name: "Mine" })));
+    const draft = { ...added, rows: added.rows.filter((r) => r.key !== "new-2") };
     const merged = mergeSeasonDraft(draft, baseline, [...year]);
     expect(addRow(merged.draft).rows.at(-1)?.key).toBe("new-3");
     const clean = mergeSeasonDraft({ ...baseline, next: 5 }, baseline, [...year]);
@@ -395,14 +374,18 @@ describe("mergeSeasonDraft", () => {
     const merged = mergeSeasonDraft(draft, baseline, latest);
     expect(merged.gone).toEqual(["s2", "s3"]);
     expect(goneKeys(merged.draft, merged.baseline)).toEqual(merged.gone);
-    const binned = removeRow(merged.draft, "s2", latest);
+    const binned = { ...merged.draft, rows: merged.draft.rows.filter((r) => r.key !== "s2") };
     expect(goneKeys(binned, merged.baseline)).toEqual(["s3"]);
     expect(binned.deleted).toEqual([]);
     expect(goneKeys(baseline, baseline)).toEqual([]);
   });
 
   it("forgets the delete of a binned season deleted elsewhere", () => {
-    const draft = withRow(removeRow(baseline, "s2", year), "s1", { name: "Mine" });
+    const draft = withRow(
+      { ...baseline, rows: baseline.rows.filter((r) => r.key !== "s2"), deleted: ["s2"] },
+      "s1",
+      { name: "Mine" },
+    );
     const merged = mergeSeasonDraft(draft, baseline, [spring, autumn, winter]);
     expect(merged.draft.deleted).toEqual([]);
     expect(merged.draft.rows.map((r) => r.key)).toEqual(["s4", "s1", "s3"]);
@@ -410,7 +393,11 @@ describe("mergeSeasonDraft", () => {
   });
 
   it("keeps a binned season that still exists binned, not appended", () => {
-    const draft = removeRow(baseline, "s2", year);
+    const draft = {
+      ...baseline,
+      rows: baseline.rows.filter((r) => r.key !== "s2"),
+      deleted: ["s2"],
+    };
     const merged = mergeSeasonDraft(draft, baseline, [...year]);
     expect(merged.draft.deleted).toEqual(["s2"]);
     expect(merged.draft.rows.map((r) => r.key)).toEqual(["s4", "s1", "s3"]);
@@ -422,4 +409,24 @@ describe("mergeSeasonDraft", () => {
     expect(merged.draft.rows.at(-1)).toEqual(draft.rows.at(-1));
     expect(merged.draft.rows.map((r) => r.key)).toEqual(["s4", "s1", "s2", "new-1"]);
   });
+});
+
+it("deleting a season names the previous season, wrapping around the year", () => {
+  const stored = draftOf([
+    { id: "w", name: "Winter", startsOn: "12-01", colour: "blue" },
+    { id: "s", name: "Spring", startsOn: "03-01", colour: "green" },
+    { id: "u", name: "Summer", startsOn: "06-01", colour: "red" },
+  ]).rows;
+  expect(
+    seasonReceivers(
+      stored.find((r) => r.key === "w")!,
+      stored,
+    ),
+  ).toEqual(["Summer"]);
+  expect(
+    seasonReceivers(
+      stored.find((r) => r.key === "s")!,
+      stored,
+    ),
+  ).toEqual(["Winter"]);
 });

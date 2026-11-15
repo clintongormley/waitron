@@ -196,19 +196,10 @@ const result = (el: DashboardApp, id: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-search-destination="${id}"]`);
 const calendar = (el: DashboardApp) =>
   el.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
-/** The editor's row names, editable or read-only. */
 const seasonRows = (screen: HTMLElement) =>
-  [
-    ...(screen
-      .shadowRoot!.querySelector("seasons-window")
-      ?.shadowRoot?.querySelectorAll("tbody tr") ?? []),
-  ]
-    .map(
-      (row) =>
-        row.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input")?.value ??
-        row.textContent!.trim(),
-    )
-    .join(" ");
+  (screen.shadowRoot!.querySelector("wt-data-table")?.rows as { name: string }[] | undefined)
+    ?.map((row) => row.name)
+    .join(" ") ?? "";
 it("opens the shipped Staffing, Rota for everyone and Routes tab from search", async () => {
   const { el } = await mount();
   await search(el, "staffing");
@@ -323,52 +314,67 @@ it.each(["light", "dark"] as const)(
   },
 );
 
-it.each(["sidebar", "Back"])("the real shell protects the Seasons draft on %s", async (way) => {
-  const { el } = await mount();
-  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-seasons]")!);
-  await vi.waitFor(() => expect(location.pathname).toBe("/manage/seasons"));
-  const editor = () =>
-    el
-      .shadowRoot!.querySelector("dashboard-seasons-screen")
-      ?.shadowRoot?.querySelector("seasons-window");
-  await vi.waitFor(() => expect(editor()).toBeTruthy());
-  const input = () => editor()!.shadowRoot!.querySelector<WtInput>("wt-input")!;
-  input().dispatchEvent(
-    new CustomEvent("wt-change", {
-      detail: { value: "Late spring" },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  await editor()!.updateComplete;
-  expect(leaveCoordinatorFor(el)!.isDirty()).toBe(true);
-  const leave = async () => {
-    if (way === "Back") history.back();
-    else
-      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-periods]")!);
-  };
-  await leave();
-  const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
-  await vi.waitFor(() => expect(question.open).toBe(true));
-  await userEvent.click(question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!);
-  await vi.waitFor(() => expect(question.open).toBe(false));
-  expect(location.pathname).toBe("/manage/seasons");
-  expect(input().value).toBe("Late spring");
-  await leave();
-  await vi.waitFor(() => expect(question.open).toBe(true));
-  await userEvent.click(question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!);
-  await vi.waitFor(() =>
-    expect(location.pathname).toBe(
-      way === "Back" ? "/manage/opening-hours/view/year" : "/manage/periods",
-    ),
-  );
-  expect(
-    el.shadowRoot!.querySelector(
-      way === "Back" ? "dashboard-opening-hours-screen" : "periods-list",
-    ),
-  ).not.toBeNull();
-  expect(leaveCoordinatorFor(el)!.isDirty()).toBe(false);
-});
+it.each(["sidebar", "Back", "parent", "Cancel"])(
+  "the real shell protects the Seasons draft on %s",
+  async (way) => {
+    const { el } = await mount();
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-seasons]")!);
+    await vi.waitFor(() => expect(location.pathname).toBe("/manage/seasons"));
+    const seasonList = el.shadowRoot!.querySelector("dashboard-seasons-screen")!;
+    await expect.poll(() => seasonList.shadowRoot!.querySelector("wt-data-table")).not.toBeNull();
+    const table = seasonList.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    await userEvent.click(table.shadowRoot!.querySelector<HTMLElement>("button.row-activate")!);
+    await expect.poll(() => location.pathname).toBe("/manage/seasons/season/spring");
+    const editor = () =>
+      el
+        .shadowRoot!.querySelector("dashboard-seasons-screen")
+        ?.shadowRoot?.querySelector("seasons-window");
+    await vi.waitFor(() => expect(editor()).toBeTruthy());
+    const input = () => editor()!.shadowRoot!.querySelector<WtInput>("wt-input")!;
+    input().dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "Late spring" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await editor()!.updateComplete;
+    expect(leaveCoordinatorFor(el)!.isDirty()).toBe(true);
+    const leave = async () => {
+      if (way === "Back") history.back();
+      else if (way === "Cancel")
+        await userEvent.click(
+          editor()!.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-seasons]")!,
+        );
+      else if (way === "parent")
+        await userEvent.click(seasonList.shadowRoot!.querySelector<HTMLElement>("a.parent")!);
+      else
+        await userEvent.click(
+          el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-periods]")!,
+        );
+    };
+    await leave();
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await vi.waitFor(() => expect(question.open).toBe(true));
+    await userEvent.click(question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!);
+    await vi.waitFor(() => expect(question.open).toBe(false));
+    expect(location.pathname).toBe("/manage/seasons/season/spring");
+    expect(input().value).toBe("Late spring");
+    await leave();
+    await vi.waitFor(() => expect(question.open).toBe(true));
+    await userEvent.click(
+      question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!,
+    );
+    await vi.waitFor(() =>
+      expect(location.pathname).toBe(way === "sidebar" ? "/manage/periods" : "/manage/seasons"),
+    );
+    expect(
+      el.shadowRoot!.querySelector(way === "sidebar" ? "periods-list" : "dashboard-seasons-screen"),
+    ).not.toBeNull();
+    expect(leaveCoordinatorFor(el)!.isDirty()).toBe(false);
+  },
+);
 it("Painted in opens its painter through the shell and Close returns to Periods", async () => {
   const { el } = await mount();
   await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-periods]")!);
