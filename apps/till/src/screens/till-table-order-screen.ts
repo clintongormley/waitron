@@ -1433,7 +1433,8 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) tables: TableState[] = [];
   /** The floor's zones, whose service mode decides whether a free table there may take guests. */
   @property({ attribute: false }) zones: FloorZone[] = [];
-  /** The area Move this bill's counter destination puts the bill in; empty when the till has none. */
+  /** The area Move this bill's counter destination puts the bill in; empty when the till has none
+   * or has not read it. */
   @property() counterZoneId = "";
   /** The party seated at this table, or null for a tab that belongs to none. */
   @property({ attribute: false }) party: TableParty | null = null;
@@ -6969,7 +6970,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /** Move guests', Join a table's and Move this bill's list: every table it may name, with its
-   * condition, and for a bill the counter first. */
+   * condition, and for a bill the counter first when the bill may enter the counter's area. */
   #tablePicker(): TemplateResult {
     const toCounter =
       this.actionVerb === "move-bill" && this.#mayEnterZone(this.counterZoneId || null);

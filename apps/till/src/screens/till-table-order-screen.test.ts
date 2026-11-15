@@ -4365,7 +4365,7 @@ describe("till-table-order-screen", () => {
           await toMenu(el);
           click(el, '[data-action="move-bill"]');
           await el.updateComplete;
-          expect(targetIds(el)).toContain("counter");
+          expect(targetIds(el)).toEqual(["counter", "t6", "t7", "t8", "t9"]);
         });
 
         it("keeps the counter for a presented bill when its area is closed", async () => {
@@ -4379,7 +4379,7 @@ describe("till-table-order-screen", () => {
           await toMenu(el);
           click(el, '[data-action="move-bill"]');
           await el.updateComplete;
-          expect(targetIds(el)).toContain("counter");
+          expect(targetIds(el)).toEqual(["counter", "t6", "t7", "t8", "t9"]);
         });
 
         it("says no other tables when the counter's area is closed and no table is left", async () => {
