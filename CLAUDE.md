@@ -166,7 +166,7 @@ hook, or how tests are scheduled. What named guards miss:
   reaches the command alone, never its children; a script that relies on `-k` to stop a process tree
   looks for `gnutimeout` first.** Cost: root-guards failed on 26.04 runners. Guards: the "prefers
   gnutimeout" and "kills an attempt that ignores the polite stop" cases in `scripts/ci-setup-pnpm.test.mjs`, weaker than the
-  rule; `scripts/ci-main-recovery.test.mjs` also checks ci-diff-paths'
+  rule. `scripts/ci-main-recovery.test.mjs` also checks ci-diff-paths'
   GNU preference and deadline arguments.
   [Receipt](docs/developers/ci-and-gates.md#every-pnpm-setup-is-bounded).
 - **Every `actions/setup-node` has two bounded attempts; only a failed first attempt runs the retry,
@@ -231,8 +231,6 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 called weaker than its name, the topic file lists what it does not see.
 
 ### Screens, forms and the dashboard — [conventions-ui.md](docs/developers/conventions-ui.md#root-detail-moved-on-2026-10-26)
-
-[Receipts moved on 2026-11-15](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-15).
 
 - **A refusal explains what happened and what each choice does; offer any needed administrator or
   owner sign-in there, and a safe Stop for destructive choices. Never send the person to somebody
@@ -329,7 +327,7 @@ called weaker than its name, the topic file lists what it does not see.
   after the same hashing work, as one sentence with no field marked. Only missing/malformed
   input marks a field; the real cause is a log-only `reason`. Owner-approved exception: `passkey.not_registered`.
   An email sign-in through a queue keyed by person id takes its id from `personIdForLoginEmail`,
-  stable per address.
+  stable per address, or attempts sent at once finish sooner for an unknown address.
   Guards: identity login and route suites, weaker than the set looks.
   [Detail](docs/developers/conventions-ui.md#a-logins-refusal-never-says-whether-the-account-exists).
 - **A device's profile and the signed-in person must both allow a till action; profile zones bound
@@ -508,7 +506,7 @@ called weaker than its name, the topic file lists what it does not see.
   Guards: `packages/store/src/disk-full.test.ts` and
   `write-queue.test.ts`, weaker than their names. No guard enforces
   the test catch rule.
-  [Receipt](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-15)
+  [Receipt](docs/developers/conventions-data.md#a-statement-this-engine-refuses-backs-out-itself-not-the-transaction-around-it--except-a-full-disk-which-sometimes-ends-the-whole-transaction).
 - **Identify result-code 1811 refusals by their words, never `isRefusal` alone (two stated exceptions in bill-request.ts and dish-not-sent-alert.ts, where payment must settle).**
   Use `restrictRefused`/`triggerRaised` in `packages/db/src/constraint-target.ts`. Nothing guards it.
 - **A full disk is not one error code; code 14 also names a missing folder.**
@@ -566,7 +564,7 @@ called weaker than its name, the topic file lists what it does not see.
 - **Nothing is scoped by a taxpayer column: the taxpayer is the one row of `taxpayer` (id = 1,
   `taxpayer_singleton_ck`), and a query that wants it reads that row.** Guard:
   `scripts/no-tenant-column.test.ts`, weaker than its name.
-  [Receipt](docs/developers/conventions-data.md#nothing-is-scoped-by-a-taxpayer-column)
+  [Receipt](docs/developers/conventions-data.md#nothing-is-scoped-by-a-taxpayer-column).
 - **Declare table/column types through `packages/db/src/schema/columns.ts`, never direct engine
   builders.** Exception: `text` in `packages/fiscal-verifactu/src/schema/registros.ts`. Guard:
   `scripts/column-vocabulary.test.ts`, weaker than its name: reads imports and forbids only listed builders.
@@ -894,7 +892,7 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
 [stream tests](docs/developers/testing-guide.md#root-detail-moved-on-2026-10-26),
 [data, 2026-11-11](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-11),
 [data, 2026-11-14](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-14) and
-[receipts moved on 2026-11-15](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-15).
+[data, 2026-11-15](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-15).
 
 - **Printing never opens the drawer. Cash and hand-keyed card enqueue separate audited `drawer`
   jobs; documents contain no drawer commands and connected-card payments open nothing.** Taking cash
@@ -947,7 +945,7 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
 - **`registros_facturacion` is immutable: never work around its append-only update/delete triggers.**
   Triggers are the whole enforcement and cannot prevent `DROP TABLE`. Boot restores missing triggers
   on existing tables; boot and the trading watch refuse changed/missing triggers. `append-only-watch`
-  is weaker than its name. [Receipt](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-15)
+  is weaker than its name. [Receipt](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-15).
 - **Every start of a box that files records writes no fiscal record and moves no money until its
   time is confirmed: by the box's internet time service being synchronised, by two enrolled devices
   at different addresses reading within 5 seconds of it, or by a person confirming or correcting the
@@ -982,7 +980,7 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   work; pause both refund recovery loops while waiting. Recheck card-refund send/outcome in their
   dating transaction after provider waits, against the same check. Still store money already
   moved. Guards: `packages/fiscal-verifactu/src/chain.earlier-time.test.ts` and
-  `apps/server/src/clock-unconfirmed-gate.test.ts`, weaker than the rule. **The box's
+  `apps/server/src/clock-unconfirmed-gate.test.ts`, weaker than the rule ([limits](docs/developers/conventions-data.md#who-may-confirm-or-set-the-clock)). **The box's
   internet time service keeps its clock; Waitron sets it only through the host service, from a till's
   time (a staff member's while the start waits for its time, or during a stop until the internet
   confirms that start or during start-up; a Box administration holder's while the start waits or
@@ -1036,9 +1034,7 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
 ## 6. Workflow
 
 The commands, the dev stack and the receipts are in
-[workflow-guide.md](docs/developers/workflow-guide.md#root-detail-moved-on-2026-10-26) and
-[receipts moved on 2026-11-15](docs/developers/workflow-guide.md#root-receipts-moved-on-2026-11-15).
-**Model selection is not a waitron rule** —
+[workflow-guide.md](docs/developers/workflow-guide.md#root-detail-moved-on-2026-10-26). **Model selection is not a waitron rule** —
 it lives in the global `~/.claude/CLAUDE.md` and is shared by every repo. When CODEX drives, the roles reverse: Codex implements and Claude reviews — so establish who is driving
 before treating an implementation as a rule violation.
 

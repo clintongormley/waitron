@@ -697,13 +697,3 @@ rule of that date, not text from `1d03a7c`.
   `docs/handoffs/` are gitignored — never open a PR for one. Historical docs record what was true when
   written: add a dated pointer rather than rewriting them. The legal track is separate, in
   `docs/compliance/action-plan.md`.
-
-## Root receipts moved on 2026-11-15
-
-These excerpts are from `CLAUDE.md` at `53688274b5`; they are not new measurements. Each heading
-names the root entry the excerpt was cut from; the entry keeps its rule, guard and pointer.
-
-### The first port slot (5190/5191/8080) is the owner's alone
-
-> Guards: `wa-wt.test.sh` in `~/workspace/tools`, weaker than its name (stand-in `pnpm` and
-> `docker`, run by hand)

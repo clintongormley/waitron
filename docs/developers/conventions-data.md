@@ -6597,8 +6597,9 @@ pre-option-default-flag case in `apps/server/src/configuration-import.test.ts`.
 
 ## Root receipts moved on 2026-11-15
 
-These excerpts are from `CLAUDE.md` at `53688274b5`; they are not new measurements. Each heading
-names the root entry the excerpt was cut from; the entry keeps its rule, guard and pointer.
+These excerpts are from `CLAUDE.md` at `53688274b5e2e108edef449938c508ec99541935`; they are not new
+measurements. Each heading names the root entry the excerpt was cut from; the entry keeps its rule,
+guard and pointer.
 
 ### A production start on a bundle built without a release version refuses `server.unreleased_build`; a start from source is not refused
 
@@ -6618,13 +6619,3 @@ names the root entry the excerpt was cut from; the entry keeps its rule, guard a
 > resetting the clock", and 2026-11-11 14:34: "or AEAT refuses an invoice because of time"; no
 > hold, 2026-11-10 15:31: "We fix the clock we start sending correct invoices … No waiting";
 > devices, A1420 D9, the watcher's, 2026-11-10 17:28, not the owner's)
-
-### From go-live, a migration that rebuilds a table first drops every trigger on another table whose body reads it
-
-> Guard: `scripts/migration-upgrade.test.ts`, weaker than the rule: a reading trigger dropped and
-> never created again passes it.
-
-### A refused statement normally backs out itself, not its transaction; full-disk and explicit ROLLBACK/FAIL variants are exceptions
-
-> Guards: `packages/store/src/disk-full.test.ts` and `write-queue.test.ts`, weaker than their
-> names: page limits, not a real disk; at-commit cases are stand-ins.
