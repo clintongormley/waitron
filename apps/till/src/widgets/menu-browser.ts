@@ -493,10 +493,7 @@ export class TillMenuBrowser extends LitElement {
 
   #currentInfoOffer(product: TillProduct): TillProduct | undefined {
     const key = product.menuItemId ?? product.id;
-    return [
-      ...(this.unfilteredProducts ?? this.products),
-      ...(this.unfilteredServedProducts ?? this.servedProducts),
-    ].find(
+    return [...this.products, ...this.servedProducts].find(
       (candidate) =>
         (candidate.menuItemId ?? candidate.id) === key &&
         candidate.ordering !== "not_sold_separately",

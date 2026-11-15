@@ -1008,3 +1008,25 @@ describe("refreshProductDeclarations", () => {
     expect(refreshProductDeclarations(before, [])).toBe(before);
   });
 });
+
+it.each([false, true])(
+  "refreshes extras from the matching offer regardless of offer order (%s)",
+  (reverse) => {
+    const before = menuOfferToTillProduct(burger, "v1");
+    const other = { ...before, menuItemId: "other", offeredModifiers: [] };
+    const current = menuOfferToTillProduct(
+      {
+        ...burger,
+        offeredModifiers: [
+          extrasList("list-extras", [
+            { ...extraItem("cheese", "1.00"), addAllergens: { milk: {} } },
+          ]),
+        ],
+      },
+      "v1",
+    );
+    const next = refreshProductDeclarations(before, reverse ? [current, other] : [other, current]);
+    const list = next.offeredModifiers![0]!;
+    expect(list.kind === "extras" && list.items[0]!.addAllergens).toEqual({ milk: {} });
+  },
+);

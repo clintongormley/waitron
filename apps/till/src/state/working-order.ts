@@ -807,10 +807,19 @@ export class WorkingOrderStore {
     this.emit("changed");
   }
 
-  refreshDeclarations(products: readonly TillProduct[]): void {
-    for (const line of this.#lines)
-      line.product = refreshProductDeclarations(line.product, products);
-    this.emit("changed");
+  refreshDeclarations(
+    products: readonly TillProduct[],
+    keep: ReadonlySet<string> = new Set(),
+  ): void {
+    let changed = false;
+    for (const line of this.#lines) {
+      if (line.workingOrderLineId !== undefined && keep.has(line.workingOrderLineId)) continue;
+      const product = refreshProductDeclarations(line.product, products);
+      if (product === line.product) continue;
+      line.product = product;
+      changed = true;
+    }
+    if (changed) this.emit("changed");
   }
 
   /** One entry per line. Display only, so the lines stay as clean as they were. Without `notify`, a

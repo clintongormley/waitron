@@ -6530,7 +6530,18 @@ export class TillApp extends LitElement {
         : zoneOffers.defaultMenuId;
     this.counterService = loaded ? zoneOffers.service : null;
     this.counterDepartmentName = loaded ? (zoneOffers.context?.departmentName ?? "") : "";
-    if (loaded) this.#store.refreshDeclarations(this.#counterOffers.products());
+    if (loaded) {
+      const known = this.counterLines?.orderId === this.#store.id ? this.counterLines.lines : null;
+      const keep = new Set(
+        this.#store.lines.flatMap((line) => {
+          const id = line.workingOrderLineId;
+          return id === undefined || known?.some((row) => row.id === id && row.sentAt === null)
+            ? []
+            : [id];
+        }),
+      );
+      this.#store.refreshDeclarations(this.#counterOffers.products(), keep);
+    }
     this.#showCounterOffers();
   }
 
@@ -6596,7 +6607,7 @@ export class TillApp extends LitElement {
         ]),
       );
     sync?.store.refreshDeclarations(this.#tableOffers.products());
-    for (const round of this.#markedRounds) round.refreshDeclarations(this.#tableOffers.products());
+    this.#partylessDraft.refreshDeclarations(this.#tableOffers.products());
     this.#markRounds(true);
     this.#markDraft(true);
   }
@@ -6752,7 +6763,10 @@ export class TillApp extends LitElement {
         this.#reconcileDraft();
       } else
         void this.#reloadTableOffers(zoneId).then((read) => {
-          if (read) this.#reconcileDraft(false);
+          if (read) {
+            this.#reconcileDraft(false);
+            void this.#loadTabLines();
+          }
         });
     }
   }

@@ -277,9 +277,14 @@ export function refreshProductDeclarations(
   product: TillProduct,
   liveProducts: readonly TillProduct[],
 ): TillProduct {
-  const live = liveProducts.find(
-    (candidate) => (candidate.productId ?? candidate.id) === (product.productId ?? product.id),
-  );
+  const live =
+    liveProducts.find(
+      (candidate) =>
+        candidate.menuItemId !== undefined && candidate.menuItemId === product.menuItemId,
+    ) ??
+    liveProducts.find(
+      (candidate) => (candidate.productId ?? candidate.id) === (product.productId ?? product.id),
+    );
   if (live === undefined) return product;
   const own =
     product.variantId === undefined || product.variantId === live.variantId
@@ -311,7 +316,7 @@ export function refreshProductDeclarations(
             }),
           },
     );
-  return {
+  const next = {
     ...product,
     ...(own === undefined ? {} : declarations(own)),
     variants: product.variants?.map((variant) => {
@@ -321,4 +326,5 @@ export function refreshProductDeclarations(
     offeredModifiers: modifiers(product.offeredModifiers),
     modifierAvailability: modifiers(product.modifierAvailability),
   };
+  return JSON.stringify(next) === JSON.stringify(product) ? product : next;
 }
