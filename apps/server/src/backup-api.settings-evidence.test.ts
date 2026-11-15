@@ -4,7 +4,7 @@ import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 // the `unknown` row: no read this suite can produce fails without a code, so that case swaps in a
 // record read that throws a plain error.
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { createCipheriv, randomBytes } from "node:crypto";
+import { createHash, createCipheriv, randomBytes } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -12,13 +12,12 @@ import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { readSettings, settings, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
 import {
   deleteCredential,
   loadKeyRing,
-  putCredential,
   readCredentialMeta,
   venueCredentials,
   type KeyRing,
@@ -30,7 +29,6 @@ import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/te
 import {
   ARCHIVE_PURPOSE,
   archiveNamespace,
-  archiveRecord,
   readArchiveSettingsWithMeta,
   writeArchiveSettings,
   type ArchiveSettings,
@@ -43,6 +41,7 @@ import { BackupSupervisor, keyFingerprint } from "./backup-supervisor.js";
 import { createTurns } from "./backup-turns.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
+import { BACKUP_SETTINGS } from "./backup-settings-document.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 const PASSWORD = "correct horse";
@@ -239,16 +238,11 @@ const recordNow = () => readArchiveSettingsWithMeta(suite.db, RING).then((r) => 
 const storeKey = (sc: Scenario, key: string) =>
   writeFile(join(sc.stateDir, "backup.env"), `WAITRON_BACKUP_RECOVERY_KEY=${key}\n`);
 
-/** Seals `plaintext` as the whole record under RING's key, as no writer here would: `putCredential`
- * refuses a payload that is not the purpose's fields. */
 async function storeRaw(plaintext: string): Promise<void> {
-  await withTransaction(suite.db, (tx) =>
-    putCredential(tx, RING, {
-      personId: null,
-      purpose: ARCHIVE_PURPOSE,
-      value: { settings: "{}" },
-    }),
-  );
+  await write(RING, {
+    ...folderSettings(destDir()),
+    destinations: [{ kind: "s3", id: "bucket", bucket: BUCKET }],
+  });
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", Buffer.alloc(32, 7), iv);
   cipher.setAAD(Buffer.from(ARCHIVE_PURPOSE, "utf8"));
@@ -262,15 +256,24 @@ async function storeRaw(plaintext: string): Promise<void> {
 }
 
 const rowMeta = () =>
-  withTransaction(suite.db, (tx) => readCredentialMeta(tx, { purpose: ARCHIVE_PURPOSE }));
+  withTransaction(suite.db, async (tx) => {
+    const row = await readCredentialMeta(tx, { purpose: ARCHIVE_PURPOSE });
+    const archive = (await readSettings(tx, BACKUP_SETTINGS)).doc.archive!;
+    return {
+      ...row!,
+      updatedAt: archive.writtenAt,
+      digest: createHash("sha256").update(JSON.stringify(archive)).digest("hex"),
+    };
+  });
 
 const destDir = () => mkdtempSync(join(tmpdir(), "settings-evidence-dest-"));
 
 afterEach(async () => {
   for (const stop of cleanup.splice(0)) await stop().catch(() => {});
-  await withTransaction(suite.db, (tx) =>
-    deleteCredential(tx, { personId: null, purpose: ARCHIVE_PURPOSE }),
-  );
+  await withTransaction(suite.db, async (tx) => {
+    await tx.delete(settings).where(eq(settings.module, "backup"));
+    await deleteCredential(tx, { personId: null, purpose: ARCHIVE_PURPOSE });
+  });
 });
 
 describe("GET /api/backup/settings-evidence", () => {
@@ -279,7 +282,10 @@ describe("GET /api/backup/settings-evidence", () => {
   }, 180_000);
 
   it("a record locked with a key number this box no longer holds: both numbers, no destinations", async () => {
-    await write(RING, folderSettings(destDir()));
+    await write(RING, {
+      ...folderSettings(destDir()),
+      destinations: [{ kind: "s3", id: "bucket", bucket: BUCKET }],
+    });
     const meta = await recordNow();
     const sc = await scenario({ ring: ringOf(9, "3", { byte: 8, version: "2" }) });
     const sup = makeSupervisor(sc);
@@ -314,7 +320,10 @@ describe("GET /api/backup/settings-evidence", () => {
   }, 60_000);
 
   it("a record under this box's key number that its key does not open: the number, no destinations", async () => {
-    await write(RING, folderSettings(destDir()));
+    await write(RING, {
+      ...folderSettings(destDir()),
+      destinations: [{ kind: "s3", id: "bucket", bucket: BUCKET }],
+    });
     const meta = await recordNow();
     const sc = await scenario({ ring: ringOf(9, "1") });
     const sup = makeSupervisor(sc);
@@ -338,15 +347,14 @@ describe("GET /api/backup/settings-evidence", () => {
   }, 60_000);
 
   it("a record whose retention cannot be used: the part, no destinations", async () => {
-    const { json } = archiveRecord(folderSettings(destDir()));
-    const bad = { ...JSON.parse(json), retention: { count: 0, days: 30 } };
-    await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING, {
-        personId: null,
-        purpose: ARCHIVE_PURPOSE,
-        value: { settings: JSON.stringify(bad) },
-      }),
-    );
+    await write(RING, folderSettings(destDir()));
+    await withTransaction(suite.db, async (tx) => {
+      const { doc } = await readSettings(tx, BACKUP_SETTINGS);
+      await tx
+        .update(settings)
+        .set({ doc: { ...doc, archive: { ...doc.archive, retention: { count: 0, days: 30 } } } })
+        .where(eq(settings.module, "backup"));
+    });
     const sc = await scenario();
     const sup = makeSupervisor(sc);
     await sup.reload();
@@ -463,7 +471,7 @@ describe("GET /api/backup/settings-evidence", () => {
     const body = await evidence(app);
     expect(body.rewrittenSinceLastFailure).toBe(true);
     expect(body.record).toEqual({
-      keyVersion: 1,
+      keyVersion: null,
       writtenAt: meta!.writtenAt,
       digest: meta!.digest,
     });
@@ -583,9 +591,10 @@ describe("GET /api/backup/settings-evidence", () => {
     const sc = await scenario();
     const sup = makeSupervisor(sc);
     await sup.reload();
-    await withTransaction(suite.db, (tx) =>
-      deleteCredential(tx, { personId: null, purpose: ARCHIVE_PURPOSE }),
-    );
+    await withTransaction(suite.db, async (tx) => {
+      await tx.delete(settings).where(eq(settings.module, "backup"));
+      await deleteCredential(tx, { personId: null, purpose: ARCHIVE_PURPOSE });
+    });
 
     const body = await evidence(buildApp(sup, sc));
     expect(body).toMatchObject({

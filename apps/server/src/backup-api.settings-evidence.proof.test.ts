@@ -9,8 +9,9 @@ import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
+import { eq } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { settings, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
 import {
@@ -304,6 +305,7 @@ afterEach(async () => {
   recordRead.fail = undefined;
   for (const stop of cleanup.splice(0)) await stop().catch(() => {});
   await withTransaction(suite.db, async (tx) => {
+    await tx.delete(settings).where(eq(settings.module, "backup"));
     await deleteCredential(tx, { personId: null, purpose: ARCHIVE_PURPOSE });
     await deleteCredential(tx, { personId: null, purpose: STREAM_PURPOSE });
   });

@@ -218,6 +218,8 @@ Use the new main box. Older boxes may share an address: check which box you open
 Keep this box running with its data while it returns records. Reset remains available, but it
 deletes this box's venue data even if the return has stopped or is unfinished.
 
+After a box becomes the main box, open **Backups** and check that each backup folder is on this box.
+
 ## Turn remote staff access on or off {#remote-access}
 
 Turning remote access on asks for the [shared sign-in confirmation](staff.md#account-access).

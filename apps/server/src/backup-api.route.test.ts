@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { SingletonRole } from "@waitron/db";
-import { readActivityForSubject, withTransaction } from "@waitron/db";
+import { readActivityForSubject, settings, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin } from "@waitron/identity";
@@ -334,6 +334,7 @@ afterEach(async () => {
   for (const stop of cleanup.splice(0)) await stop().catch(() => {});
   // The suite shares one database, and both records are one per venue.
   await withTransaction(suite.db, async (tx) => {
+    await tx.delete(settings).where(eq(settings.module, "backup"));
     await deleteCredential(tx, { personId: null, purpose: ARCHIVE_PURPOSE });
     await deleteCredential(tx, { personId: null, purpose: "backup.stream" });
   });
@@ -702,12 +703,12 @@ describe("backup admin routes", () => {
       sql`select id from persons where email = ${MANAGER_EMAIL}`,
     )[0]!;
     const events = await readActivityForSubject(suite.db, {
-      kind: "credential",
-      id: ARCHIVE_PURPOSE,
+      kind: "settings",
+      id: "backup",
     });
     expect(events.slice(-2).map(({ kind, personId, data }) => ({ kind, personId, data }))).toEqual([
-      { kind: "credentials.saved", personId: manager.id, data: { keyVersion: 1 } },
-      { kind: "credentials.saved", personId: manager.id, data: { keyVersion: 1 } },
+      { kind: "settings.saved", personId: manager.id, data: { revision: 1 } },
+      { kind: "settings.saved", personId: manager.id, data: { revision: 2 } },
     ]);
 
     const body = await rot.json();

@@ -325,3 +325,15 @@ Watcher 01:12 cleared required `personId: string | null` on `writeStreamSettings
 `deleteStreamSettings`, preserving vb2's request actor through their credential and settings writes.
 Keep `writeArchiveSettings`'s existing actor argument and the existing actor assertions.
 No new mechanism or compatibility path is added.
+
+Watcher 02:13 cleared repointing the three archive metadata expectations from the sealed-row
+fingerprint to an independently computed hash of the stored archive part, as Interfaces specifies.
+All exact keyVersion, writtenAt and digest checks and the error assertions remain. List this under
+Changed test checks; stream credential revisions and evidence/recovery-pack assertions stay.
+
+The local-folder apply/rotate actor checks now read the two settings.saved entries (revisions 1
+and 2), because those writes seal nothing. Their exact actor and two-entry checks remain; the
+old credential-history check failed with no events before this port. Local-only evidence metadata
+uses keyVersion:null; unknown-key/decryption fixtures include a bucket to retain those failures.
+Malformed settings fixtures now damage the document, and credential failures still damage sealed
+keys. The same domain-code, written-time and independently computed digest assertions remain.
