@@ -4,9 +4,13 @@
 
 Fresh Claude read 2026-11-15: Ready after fixes; folded in (the commit after `72a7eba3f2`).
 
-Amended 2026-11-15: owner's Q1 answer folded in (option b).
+Amended 2026-11-15: owner's Q1 answer folded in (option b). Amended again: the watcher's P3
+answer (one new column, `working_order_lines.last_served_at`; lane L `questions.md`,
+`## WATCHER 2026-11-15 15:58`).
 
-Status: **awaiting the watcher. Build nothing before then.** Written at main `9f5b081084`.
+Status: **cleared by the watcher** (2026-11-15 11:13; P1, P2 and P4 at 14:58; P3 as amended at
+15:58). Build after #3342 (A1522 PR 2) lands: both rebuild the core starting migration. Written at
+main `9f5b081084`.
 **READ** = source read at that commit; **RUN** = a command was run and its output read.
 
 **Goal:** when an invoice is issued on a later venue calendar day than the moment the guest paid,
@@ -78,8 +82,8 @@ retry that crosses midnight gets the sale date too — stated, not built around.
 
 **The one rule (Q1, Task 6).** Each order issue path has a *payment close*: the acceptance moment
 on rows 5a and 6, otherwise the issue reading. The bill's *last served moment* is the latest
-`served_at` of its lines that still owe service (active quantity above zero after cancellations);
-it exists only when every such line has one. The close is the last served moment when its
+`last_served_at` (new, Task 6) of its lines that still owe service (active quantity above zero after
+cancellations); it exists only when every such line is fully served (`served_at` set). The close is the last served moment when its
 **business day** is earlier than the payment close's, otherwise the payment close. §2 then applies
 unchanged: a sale date only when the close's calendar day is earlier than the issue day, so nothing
 later than the issue day is ever filed and nothing is refused. The business day is the venue's
@@ -129,9 +133,23 @@ it counts a cancellation as service.
   never marked it, or no party holds the order, so nothing can mark it),
   there is no last served moment and the payment close stands: today's single date. The
   alternative, a never-marked line's `sent_at`, could file a day earlier than the dish was eaten.
-- **P3 (plan's):** a line part-served Monday whose rest is cancelled Wednesday carries Wednesday
-  (the re-stamp above), so that bill files Wednesday only: later than the meal, never later than the
-  issue.
+- **P3 (the watcher's, 15:58, inside the owner's «Monday, last dish»):** a line part-served Monday
+  whose rest is cancelled Wednesday was last served Monday, so that bill files Monday. `served_at`
+  cannot say so: it is set only once the whole line is served (`orders.ts:193-194`; `writeServed`
+  writes `null` while part-served, `working-order.ts:3776`), and the re-stamps above put Wednesday
+  on it. About twenty readers take `served_at` as "fully served", so its meaning stays. Task 6 adds
+  `working_order_lines.last_served_at`, the moment staff last marked a portion of the line served.
+  READ: the served count is written only at `writeServed` (`working-order.ts:3779`, its extras
+  `:3786`), `clampServed` (`:3946`), `writeServiceCancellations` (`line-service-cancel.ts:113`) and
+  `splitLineServiceState` (`line-service-state.ts:152`, `:159`); new and copied lines start at 0
+  (`working-order.ts:4790`, `:6430`, `:6449`). RUN: `git grep -n -E 'servedQuantity\s*:'` over
+  non-test `apps/` and `packages/` `.ts` at main `d40ca53541` found no other writer. So:
+  `writeServed` sets it to its reading on a line, and on each extra, whose served count rises, and
+  clears it on one whose count falls to zero, keeping it otherwise; `clampServed` and
+  `writeServiceCancellations` never touch it; `splitLineServiceState` gives each side the source's
+  value while that side keeps a served count above zero, else `null` (its `source.servedAt ??
+  nowIso()` re-stamp, `:148`, would otherwise put the move's time on a split part-served dish).
+  Unmarking one of two served portions keeps the time.
 - **P4 (plan's):** the unpaid departure (row 8) takes the rule too, so a departure recorded days
   after the last dish files that dish's day; in the ordinary case it is recorded the same business
   day and nothing changes.
@@ -184,7 +202,9 @@ la de expedición de la factura» (quoted in `docs/superpowers/plans/2026-10-15-
 
 - **Schema:** `sales_supply_day_ck` (`packages/db/src/schema/sales.ts:144`) becomes
   `supply_day is null or replaces_original = 1 or corrects_sale_id is null`; comment `:101-102`
-  updated; core starting migration rebuilt.
+  updated (Task 2). `working_order_lines.last_served_at` (`tsString`, nullable, no default; Task 6,
+  P3). Core starting migration rebuilt in each task that changes the schema. No data migration
+  (pre-live). The PR body names the new column plainly (the watcher, 15:58).
 - **Deliberately changed test checks** (named in the PR): `packages/db/src/schema/sales.test.ts:837-841`
   (an ordinary sale's supply day is now stored; the by-differences half `:843-853` stays);
   `packages/fiscal-verifactu/src/record-payload-admission.test.ts:108-118` (the F2 case moves to
@@ -200,12 +220,14 @@ la de expedición de la factura» (quoted in `docs/superpowers/plans/2026-10-15-
 - **Q1 (owner, answered 2026-11-15 ~12:05): a bill left open for days.** Asked: a table eats Monday
   evening and pays Thursday at 12:00 — which date does the invoice carry? Answer, picked in the
   watcher's window: «Monday, last dish (Recommended)», option (b): the sale date is the day the last
-  dish was served, the latest `served_at` of the bill's lines (`packages/db/src/schema/orders.ts:194`),
-  read at issue, no new column. The question said «The same answer settles a paid bill whose last
+  dish was served, read at issue. Built from the latest `last_served_at` of the bill's fully served
+  lines, a column added for P3 (the watcher, 15:58), since `served_at`
+  (`packages/db/src/schema/orders.ts:194`) is re-stamped when a part-served dish's rest is
+  cancelled or moved. The question said «The same answer settles a paid bill whose last
   unserved dish is cancelled days later». Record:
   `~/waitron-campaign-shared/desk/done/20261115-1113-L-later-sale-q1-open-bill.md`; relay
   `## WATCHER 2026-11-15 12:12` in `~/waitron-campaign-l/questions.md`. Built as §1's one rule
-  (Task 6); P1–P4 there are the plan's choices, for the watcher. A takeaway **invoiced before**
+  (Tasks 6a and 6); P1–P4 there were settled by the watcher (14:58; P3 changed at 15:58). A takeaway **invoiced before**
   collection still cannot carry a later sale date: the library refuses «FechaExpedicionFactura may
   precede FechaOperacion only for IVA/IGIC regimes 14 or 15» (`FECHA_EXPEDICION_BEFORE_OPERACION`,
   `dist/validate.js:614-619`, citing AEAT validation §3.1.3.1), so it files its issue date only and
@@ -231,6 +253,7 @@ la de expedición de la factura» (quoted in `docs/superpowers/plans/2026-10-15-
 3. Process zone ≠ venue zone (`TZ=UTC`; Canary venue `Atlantic/Canary`): the day comes from `readIssueZone`. Task 3.
 4. Year end across a rate change: paid 31 Dec 2026 23:50, recovered 1 Jan 2027 09:10 → `FechaOperacion` 31-12-2026, lines at 2026's rates, invoice identity and QR keep 01-01-2027, reconcile month 2026-12. Tasks 1 and 3.
 5. A reprint days later shows the same "Date of the sale" (from `sales.supply_day`); a refund credit note of that sale shows none. Task 3.
+6. Two croquetas, one served Monday 21:10, the other cancelled Wednesday, paid Wednesday → "Date of the sale: 16 March" (P3); the same dish moved to another bill after Monday's portion keeps Monday on the side holding it. Tasks 6a and 6.
 
 ---
 
@@ -314,6 +337,30 @@ answer (`bill-payments.ts:1730`), cash (`:1375`) and every edit caller do not. T
   D1's example moved to Task 6 with its flipped answer.
 - [ ] Run → FAIL. Implement. Re-run; fiscal gate. `git commit -s`.
 
+### Task 6a: a dish keeps the moment it was last served (P3)
+
+**Files:** `packages/db/src/schema/orders.ts:193-195` (`lastServedAt: tsString("last_served_at")`,
+nullable, no default; one comment line: when staff last marked a portion served, set while
+`served_quantity` is above zero), rebuilt `packages/db/drizzle/*`; `apps/server/src/working-order.ts`
+(`writeServed`, `:3755-3790`); `apps/server/src/line-service-state.ts` (`splitLineServiceState`,
+`:99-165`). Tests: extend `apps/server/src/served.test.ts` (its "served by quantity" block, `:453`)
+and `apps/server/src/line-service-split.test.ts` (`:286`, `:341`).
+
+**Produces:** the column §1's P3 describes. `writeServed`: on the line and on each extra, served
+count up → its reading; down to zero → `null`; otherwise unchanged. `clampServed` and
+`writeServiceCancellations` unchanged (they never set it). `splitLineServiceState`: each side takes
+the source's value while its own served count stays above zero, else `null`. No reader yet (Task 6),
+no error code, no refusal; `served_at` and its readers unchanged.
+
+- [ ] Failing tests, existing cases unedited: serve 1 of 2 at T1 → `last_served_at` T1,
+  `served_at` null; the other at T2 → both T2; unserve 1 → `last_served_at` T2, `served_at` null;
+  unserve the last → null; an extra follows its dish; part-served at T1, rest cancelled at T2 →
+  `served_at` T2, `last_served_at` T1; a part-served line split by a move at T2 → the side that
+  keeps the served portion has T1, a side with none has null.
+- [ ] `pnpm --filter @waitron/server exec vitest run src/served.test.ts src/line-service-split.test.ts` → FAIL on the new cases.
+- [ ] Implement; `pnpm --filter @waitron/db db:generate`. Re-run (Tests count > 0); `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/starting-migrations.test.ts scripts/classification-complete.test.ts`;
+  fiscal gate; db and server typecheck. `git commit -s`.
+
 ### Task 6: a bill left open takes the day of its last served dish (Q1)
 
 **Files:** `apps/server/src/sale-day.ts` (Task 3's) gains the helpers below. The five `issueMoment`
@@ -329,14 +376,15 @@ Tests: `apps/server/src/sale-day.test.ts` (extend), `apps/server/src/bill-left-o
 **Produces:** `lastServedAt(tx, workingOrderId): Promise<string | undefined>` — over the order's
 lines, active quantity from `serviceQuantities` with `readLineCancellations`
 (`line-service-state.ts:20-32`, `:51`); lines with none active are skipped; `undefined` when no line
-is left or any left has no `served_at`; never `serviceCompletedAt`. `closeOf(lastServed, paidAt,
+is left or any left has no `served_at` (P2), else the latest `last_served_at` (Task 6a) of the
+lines left; never `serviceCompletedAt`. `closeOf(lastServed, paidAt,
 clock: BusinessDayClock): string` — pure: `lastServed` when its `businessDayAt` is earlier than
 `paidAt`'s, else `paidAt`, and `paidAt` when `businessDayAt` throws. `saleCloseDay(tx, scope,
 workingOrderId, paidAt): Promise<string>` — `venueDayOf` of that close; reads `readVenueClock` only
-when `lastServedAt` is defined and takes `paidAt` on any `AppError` from it. No new column, error
+when `lastServedAt` is defined and takes `paidAt` on any `AppError` from it. No new error
 code or refusal; `finalizeCapture` changes only by this call.
 
-- [ ] Failing tests (Europe/Madrid, cutover 05:00, `useVenueDb`, `served_at` and `created_at` written
+- [ ] Failing tests (Europe/Madrid, cutover 05:00, `useVenueDb`, `served_at`, `last_served_at` and `created_at` written
   explicitly, fake issue clock; §1's examples): example 1 through cash `/api/sales` and through a
   cash bill payment → `supply_day` `2026-03-16`, ticket `saleDay` `2026-03-16`, lines at Monday's
   rates; example 1 through the real Veri\*Factu backend → `registros_facturacion.fecha_operacion`
@@ -346,7 +394,8 @@ code or refusal; `finalizeCapture` changes only by this call.
   a sent dish: `PUT /api/working-orders/:id/lines/:lineNo`, `till-api.ts:4051`, issuing at `:4080`)
   → `2026-03-16` (D1, was "none"); the 01:58 check (served Mon 23:30, cash Tue 01:00) → none; served
   Mon 22:30, cash Tue 07:00 → `2026-03-16`; one line owing service unmarked (P2) → none; a line
-  part-served Monday, its rest cancelled Wednesday, issued Wednesday (P3) → none; a placed takeaway
+  part-served Monday 21:10, its rest cancelled Wednesday through the real cancel route, issued
+  Wednesday (P3) → `2026-03-16`; a placed takeaway
   with no served marks collected Thursday (row 7) → none; an unpaid departure recorded Thursday for
   a Monday meal (P4) → `2026-03-16`. `closeOf`: earlier business day, same, later, and a clock `businessDayAt` refuses →
   `paidAt`.
