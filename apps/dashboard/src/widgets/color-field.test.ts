@@ -441,6 +441,22 @@ describe("colourValueField", () => {
       'wt-input[name="handSet.light.bg"]',
     )!;
 
+  it.each(["16px", "32px"])("shows a whole colour code with %s browser text", async (rootSize) => {
+    const rootStyle = document.documentElement.getAttribute("style");
+    try {
+      document.documentElement.style.fontSize = rootSize;
+      const { el } = await mountValue(options());
+      const field = codeField(el);
+      await field.updateComplete;
+      const input = field.shadowRoot!.querySelector("input")!;
+      expect(getComputedStyle(input).fontSize).toBe(rootSize);
+      expect(input.scrollWidth).toBeLessThanOrEqual(input.clientWidth);
+    } finally {
+      if (rootStyle === null) document.documentElement.removeAttribute("style");
+      else document.documentElement.setAttribute("style", rootStyle);
+    }
+  });
+
   it("draws a picker and a hidden-label code field named for the value", async () => {
     const { el } = await mountValue(options({ code: "#F8F1E", error: "Bad code" }));
     const input = picker(el);

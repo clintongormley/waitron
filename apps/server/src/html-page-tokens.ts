@@ -24,3 +24,6 @@ export const GUIDE_PAGE_TOKENS: Readonly<Record<string, readonly [string, string
   "--wt-font-size-lg": "1.125rem",
   "--wt-font-size-xl": "1.375rem",
 };
+
+export const fixedFontValue = (name: string, value: string): string =>
+  name.startsWith("--wt-font-size-") ? `${Number.parseFloat(value) * 16}px` : value;

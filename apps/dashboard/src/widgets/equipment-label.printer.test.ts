@@ -109,10 +109,8 @@ it("prints the browser name larger and bolder than the code", async () => {
   view.dispatchEvent(new Event("afterprint"));
 });
 it.each(["16px", "32px"])(
-  "the label prints Waitron's type under a theme at 130% at %s root text",
+  "the label prints Waitron's type under a theme at 130% with its own document at %s root text",
   async (rootSize) => {
-    const rootStyle = document.documentElement.getAttribute("style");
-    document.documentElement.style.fontSize = rootSize;
     const qr =
       "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
     document.adoptedStyleSheets = [...document.adoptedStyleSheets, TEXT_130_SHEET];
@@ -125,6 +123,9 @@ it.each(["16px", "32px"])(
         "1.125rem",
       );
       const root = view.document.documentElement.style;
+      root.fontSize = rootSize;
+      expect(view.getComputedStyle(view.document.body).fontSize).toBe("14px");
+      expect(view.getComputedStyle(view.document.querySelector("p")!).fontSize).toBe("22px");
       expect(root.getPropertyValue("--wt-font-size-md")).toBe("14px");
       expect(root.getPropertyValue("--wt-font-size-xl")).toBe("22px");
       expect(root.getPropertyValue("--wt-font-weight-bold")).toBe("600");
@@ -133,8 +134,6 @@ it.each(["16px", "32px"])(
       );
       view.dispatchEvent(new Event("afterprint"));
     } finally {
-      if (rootStyle === null) document.documentElement.removeAttribute("style");
-      else document.documentElement.setAttribute("style", rootStyle);
       document.adoptedStyleSheets = document.adoptedStyleSheets.filter(
         (sheet) => sheet !== TEXT_130_SHEET,
       );

@@ -58,7 +58,6 @@ export class SetupRestoreBucketScreen extends LitElement {
       }
       wt-textarea::part(control) {
         font-family: var(--wt-font-family-mono);
-        font-size: var(--wt-font-size-sm);
       }
     `,
   ];

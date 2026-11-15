@@ -646,8 +646,10 @@ Shared typing controls, including dropdown and table searches, use
 `--wt-text-control-font-size: max(1rem, 1em, var(--wt-font-size-md))`: at least 16px at that normal
 root, preserving larger inherited or venue text. Resting and floated labels keep their text roles;
 file controls and buttons keep theirs. Price boxes use 6rem, range boxes 10.5rem and number
-steppers 5.5rem, so enlarged typing text has room. Standalone server forms and connection-bootstrap
-keep their independent styling. A venue's theme
+steppers 5.5rem, so enlarged typing text has room. Standalone server pages and connection-bootstrap
+keep their independent styling. The copied font tokens match the shared rem defaults; the guide,
+legal pages and guest menu convert them back to pixels when rendering, including the printed guest
+menu, to keep those pages outside this change. A venue's theme
 can scale all four together, from 100% to 130% in 5% steps, rounded to whole reference pixels before conversion to rem (`fontSizes`,
 `packages/ui-core/src/theme/tokens.ts`); spacing, the tap minimum and every other token stay as
 they are. A theme can also set the typeface — the device's own or a serif, named in `TYPEFACES`
