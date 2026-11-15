@@ -843,6 +843,12 @@ export interface LateSend {
   override?: { personId: string; pin: string };
 }
 
+/** A table send or fire: `lateSend` confirms a stored set-lunch course whose period has ended, which
+ * is otherwise refused with `menu_period.ended` naming its lines in `workingOrderLineIds`. */
+export interface ReleaseCommand extends AllergyCommand {
+  lateSend?: LateSend;
+}
+
 /** A submission of lines of the draft at `draftRevision`, each group naming that revision's line
  * ids, in the order the groups go in the party's sequence. */
 export interface DraftSubmission extends GroupCommand {
@@ -4386,7 +4392,7 @@ export class TillApi {
   fireGroup(
     partyId: string,
     groupId: string,
-    command: AllergyCommand,
+    command: ReleaseCommand,
     options: ReadOptions = {},
   ): Promise<{ revision: number }> {
     return this.#request(
@@ -4506,7 +4512,7 @@ export class TillApi {
   fireHeldLine(
     partyId: string,
     lineId: string,
-    command: AllergyCommand,
+    command: ReleaseCommand,
     options: ReadOptions = {},
   ): Promise<{ revision: number }> {
     return this.#request(
@@ -4583,7 +4589,7 @@ export class TillApi {
     orderId: string,
     lineNos: number[],
     expectedEdit: BillEditExpected | null,
-    command?: AllergyCommand,
+    command?: ReleaseCommand,
     options: ReadOptions = {},
   ): Promise<void> {
     await this.#request<void>(

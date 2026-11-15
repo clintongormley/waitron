@@ -119,13 +119,27 @@ export function storedLateSendAsked(
   error: unknown,
   lines: readonly OrderLine[],
 ): LateSendAsked | undefined {
+  return storedLinesAsked(
+    error,
+    lines,
+    (line) => line.workingOrderLineId,
+    (line) => line.product.menuItemId,
+  );
+}
+
+/** {@link storedLateSendAsked} over any stored line, read through `idOf` and `offerOf`. */
+export function storedLinesAsked<L>(
+  error: unknown,
+  lines: readonly L[],
+  idOf: (line: L) => string | undefined,
+  offerOf: (line: L) => string | null | undefined,
+): { listed: L[]; periods: LateSendRefusal["menus"] } | undefined {
   const refusal = lateSendRefusalOf(error);
   if (refusal?.workingOrderLineIds === undefined) return undefined;
   const ids = new Set<string | undefined>(refusal.workingOrderLineIds);
-  const byId = lines.filter((line) => ids.has(line.workingOrderLineId));
-  const offers = new Set<string | undefined>(refusal.menuItemIds);
-  const listed =
-    byId.length > 0 ? byId : lines.filter((line) => offers.has(line.product.menuItemId));
+  const byId = lines.filter((line) => ids.has(idOf(line)));
+  const offers = new Set<string | null | undefined>(refusal.menuItemIds);
+  const listed = byId.length > 0 ? byId : lines.filter((line) => offers.has(offerOf(line)));
   return { listed, periods: refusal.menus };
 }
 
