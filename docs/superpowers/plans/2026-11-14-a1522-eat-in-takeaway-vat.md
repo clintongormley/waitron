@@ -151,6 +151,8 @@ Research, not code. It gates PR 2.
 
 **Produces:** `product-editor` property `takeawayVat: boolean`; a `wt-combobox name="takeawayTax"` labelled "VAT when taken away".
 
+**As built (2026-11-15):** `takeawayVat` rides on `GET /management-api/menu-settings` (`readMenuSettingsAnswer`, `apps/server/src/menu-api.ts`), not the venue-defaults read named above: a role with `menu.manage` but not `venue.view` would never have seen it. The field's name is `takeaway-tax`, matching the editor's other fields. Later tasks read the flag from menu settings.
+
 - [ ] **Step 1: failing tests.** With `takeawayVat` true: the field is drawn; its empty choice reads "Same as served here — <class and rate>" on a product, and on a variant names the class the spec's rule gives (own served class if set, else the product's takeaway class). Empty saves `null`; General saves `"general"`. Changing only this field enables Save and leaving asks about unsaved changes. With `takeawayVat` false: no field, and a save sends the stored value unchanged. `venue-settings-api.test.ts`: `ES-common` reads `takeawayVat: true`, `GB-vat` `false`.
 - [ ] **Step 2:** run (`pnpm --filter @waitron/dashboard exec vitest run <file>`; browser mode, check `memory_pressure | grep free` first); expect failures.
 - [ ] **Step 3:** implement. The hint is the placeholder. Update `{#vat}` in English and Spanish: one or two sentences on what the second field is for and that empty means the same as served here.

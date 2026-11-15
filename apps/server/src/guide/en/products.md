@@ -22,8 +22,9 @@ To correct the class on the live menu without publishing your other changes to t
 [Patch the live menu in an emergency](products.md#patch-live-menu).
 A line already on an order keeps the class it was added with.
 
-Where your region taxes takeaway food differently, **VAT when taken away** sets this product's class
-when it is taken away. Leave it empty to charge the same class as when it is served here.
+Where your region taxes takeaway food differently, **VAT when taken away** holds this product's
+class for when it is taken away. Left empty, the field shows the class that applies instead. The
+till cannot sell an order as taken away yet, so this class is not charged yet.
 
 ## Set how a product is sold {#selling}
 
@@ -325,7 +326,7 @@ change:
 - A section: its internal name, customer-facing name and image.
 
 Where your region taxes takeaway food differently, a dish, a variant and an extra also show **VAT
-when taken away**, with the class the live menu charges when it is taken away. Correct each class
+when taken away**, with the class the live menu holds for when it is taken away. Correct each class
 on its own: changing one never changes the other.
 
 Customer-facing names and descriptions show a field for each content language. Choose or remove an

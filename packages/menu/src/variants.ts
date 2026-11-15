@@ -69,7 +69,8 @@ function validateFlag(value: unknown, field: string): void {
 }
 
 /**
- * Every inherited field `written` does not set, stored blank so it reads the parent's. Explicitly
+ * Every inherited field `written` does not set, stored blank so it reads the parent's (a blank
+ * takeaway class reads the variant's own VAT class first). Explicitly
  * null rather than omitted: a column default (`dietary_declarations`' is `[]`) would be a value of
  * the variant's own.
  */

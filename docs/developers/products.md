@@ -522,8 +522,10 @@ may have any number of variants, one included.
 
 ### What a variant reads from its parent
 
-**Every field a variant leaves blank reads its parent's, except its three names.** Among them its
-tax rate, course, description, image and allergen and dietary declarations
+**Every field a variant leaves blank reads its parent's, except its three names and its takeaway
+VAT class.** A blank takeaway VAT class reads the variant's own VAT class when it sets one, and
+otherwise its parent's takeaway class, or failing that its parent's VAT class
+(`effectiveProductColumns.takeawayVatClass`). Among the others its VAT class, course, description, image and allergen and dietary declarations
 are its parent's while its own column is blank and its own once it sets them
 (`effectiveProductColumns`, whose keys are `INHERITED_KEYS`,
 `packages/menu/src/variant-fallback.ts`). Its main reporting category is always its parent's,

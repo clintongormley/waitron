@@ -22,8 +22,9 @@ publicó la carta. Para corregir la clase en la carta publicada sin volver a pub
 [Corrige la carta publicada en una emergencia](products.md#patch-live-menu). Una línea que ya
 está en un pedido conserva la clase con la que se añadió.
 
-Si tu región grava de otra forma la comida para llevar, **IVA para llevar** fija la clase de este
-producto cuando se lo llevan. Déjalo vacío para aplicar la misma clase que en el local.
+Si tu región grava de otra forma la comida para llevar, **IVA para llevar** guarda la clase de este
+producto para cuando se lo llevan. Si lo dejas vacío, el campo muestra la clase que se aplica. La
+caja todavía no puede vender un pedido para llevar, así que esta clase aún no se cobra.
 
 ## Decide cómo se vende un producto {#selling}
 
@@ -341,7 +342,7 @@ opciones**. Elige un elemento para ver lo que puedes cambiar:
 - Una sección: su nombre interno, su nombre para el cliente y su imagen.
 
 Si tu región grava de otra forma la comida para llevar, un plato, una variante y un extra también
-muestran **IVA para llevar**, con la clase que la carta publicada aplica cuando se lo llevan.
+muestran **IVA para llevar**, con la clase que la carta publicada guarda para cuando se lo llevan.
 Corrige cada clase por separado: cambiar una nunca cambia la otra.
 
 Los nombres para el cliente y las descripciones muestran un campo por cada idioma del contenido.
