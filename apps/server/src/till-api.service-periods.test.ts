@@ -2469,6 +2469,40 @@ describe("a dish whose period ended earlier today", () => {
       });
     });
 
+    const malformed = {
+      status: 400,
+      body: { error: { code: "management.request_invalid", params: { field: "lateSend" } } },
+    };
+
+    it("refuses a Send whose lateSend is null and sends nothing", async () => {
+      const { t, pie } = await pieStoredAtLunch("fire");
+      const before = await printed(t.printerId);
+      at(mondayAt("14:05"));
+      expect(await send(t, [pie.lineNo], { lateSend: null })).toMatchObject(malformed);
+      expect(await courseLine(t, "pie")).toEqual(pie);
+      expect(await printed(t.printerId)).toEqual(before);
+    });
+
+    it("refuses a Fire course whose lateSend is null and fires nothing", async () => {
+      const { t, groupId, pie } = await pieStoredAtLunch("hold");
+      const soup = await courseLine(t, "soup");
+      const before = await printed(t.printerId);
+      at(mondayAt("14:05"));
+      expect(await fireCourse(t, groupId, { lateSend: null })).toMatchObject(malformed);
+      expect(await courseLine(t, "pie")).toEqual(pie);
+      expect(await courseLine(t, "soup")).toEqual(soup);
+      expect(await printed(t.printerId)).toEqual(before);
+    });
+
+    it("refuses a Fire line whose lateSend is null and fires nothing", async () => {
+      const { t, pie } = await pieStoredAtLunch("hold");
+      const before = await printed(t.printerId);
+      at(mondayAt("14:05"));
+      expect(await fireLine(t, pie.id, { lateSend: null })).toMatchObject(malformed);
+      expect(await courseLine(t, "pie")).toEqual(pie);
+      expect(await printed(t.printerId)).toEqual(before);
+    });
+
     /** Choose, through the till's make-at route, the station that makes `lineId`. */
     const makeAt = async (t: LunchTable, lineId: string) => {
       const read = await sendAsTill(t.v, "GET", `/api/working-orders/${t.tabId}`);
