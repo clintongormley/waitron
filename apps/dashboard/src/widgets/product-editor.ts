@@ -1559,7 +1559,9 @@ export class ProductEditor extends LitElement {
   private pricingSummary(amount: string, unitLabel: string) {
     const price = amount.trim();
     const tax = this.taxes.find((tax) => tax.id === this.draft.vatClass);
-    const takeaway = this.draft.takeawayVatClass;
+    const takeaway = this.takeawayVat
+      ? this.taxes.find((tax) => tax.id === this.draft.takeawayVatClass)
+      : undefined;
     return [
       ...(price
         ? [
@@ -1572,9 +1574,7 @@ export class ProductEditor extends LitElement {
           ]
         : []),
       ...(tax ? [{ label: t("product.vat"), value: this.taxLabel(tax) }] : []),
-      ...(this.takeawayVat && takeaway !== null
-        ? [{ label: t("editor.takeaway_vat"), value: this.taxText(takeaway) }]
-        : []),
+      ...(takeaway ? [{ label: t("editor.takeaway_vat"), value: this.taxLabel(takeaway) }] : []),
     ];
   }
 

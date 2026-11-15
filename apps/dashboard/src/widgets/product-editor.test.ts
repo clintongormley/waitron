@@ -5643,6 +5643,22 @@ it("adds a takeaway VAT class of its own to the closed Pricing line, and leaves 
   ]);
 });
 
+it("leaves a takeaway VAT class the form does not offer off the closed Pricing line", async () => {
+  const el = await mountPricing(
+    { ...saved, variants: [small], takeawayVatClass: "general" },
+    { takeawayVat: true, taxChoices: twoTaxes },
+  );
+  expect(pricing(el).summaryFields.slice(1)).toEqual([
+    { label: t("product.vat"), value: "Reduced (10%)" },
+    { label: t("editor.takeaway_vat"), value: "General (21%)" },
+  ]);
+  el.value = { ...saved, id: "tea", variants: [small], takeawayVatClass: "super_reduced" };
+  await el.updateComplete;
+  expect(pricing(el).summaryFields.slice(1)).toEqual([
+    { label: t("product.vat"), value: "Reduced (10%)" },
+  ]);
+});
+
 it.each([
   { locale: "en-GB", line: "Base price: €9.00 each · VAT: Reduced (10%)" },
   { locale: "es-ES", line: "Precio base: 9,00 € la unidad · IVA: Reduced (10%)" },
