@@ -77,7 +77,7 @@ services:
   # browsers read captured messages through Waitron's authenticated management API.
   mailpit:
     profiles: [practice-inbox]
-    image: axllent/mailpit:v1.33.0
+    image: axllent/mailpit:v1.33.1
     restart: unless-stopped
     networks:
       - internal
