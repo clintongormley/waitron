@@ -3,13 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "CI, tests and developer tooling". This file holds
 their full text.
 
-## Retain failure screenshots for long browser test names
-
-A failed waiting-list refresh case
-in `apps/till/src/till-app.test.ts` logged `locator.screenshot: ENAMETOOLONG` during A743's
-fixture checks. Bound the generated screenshot filename and keep the complete test name in
-its metadata; verify with a deliberately failing case whose generated name is long.
-
 ## `apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe
 
 The
