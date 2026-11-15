@@ -61,7 +61,7 @@ import { createPrinter } from "@waitron/printing";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import { deviceRequestCfg, seedSessionDevice } from "./testing/session-device.js";
-import { createCourse, setProductCourse } from "./kitchen.js";
+import { createCourse, setProductCourse, readCourseFireNowZones } from "./kitchen.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { createTable } from "./testing/live-table.js";
 import { printedLines } from "./testing/decode-ticket.js";
@@ -1011,12 +1011,17 @@ describe("country starter courses in service", () => {
   it("fires the immediate starter course and holds later courses at a table", async () => {
     const v = await setupVenue(true);
     const s = await seated(v);
-    const courses = await db.select().from(kitchenCourses);
+    const fireNowZones = await inTx(readCourseFireNowZones);
+    const courses = (await db.select().from(kitchenCourses)).map((course) => ({
+      ...course,
+      fireNowZoneIds: fireNowZones.get(course.id) ?? [],
+    }));
     const productCourses = await db
       .select({ id: products.id, courseId: products.courseId })
       .from(products);
     const context = {
       courses,
+      zoneId: v.zoneId,
       held: [],
       firstOrder: true,
       placed: [] as { courseId: string | null; place: { kind: "fire" | "new" | "join" } }[],

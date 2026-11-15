@@ -15,6 +15,7 @@ export interface HeldGroupView {
 
 export interface PlaceContext {
   courses: readonly TillCourse[];
+  zoneId?: string;
   held: readonly HeldGroupView[];
   firstOrder: boolean;
   placed: readonly { courseId: string | null; place: Place }[];
@@ -25,7 +26,7 @@ export function placeFor(
   ctx: PlaceContext,
 ): { place: Place; shift?: { from: number } } {
   const course = ctx.courses.find((candidate) => candidate.id === courseId);
-  if (courseId === null || course === undefined || course.heldUntilFired === false)
+  if (courseId === null || course === undefined || course.fireNowZoneIds.includes(ctx.zoneId ?? ""))
     return { place: { kind: "fire" } };
 
   const slots = new Map<number, Extract<Place, { kind: "new" }>>();

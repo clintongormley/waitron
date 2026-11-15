@@ -1750,19 +1750,16 @@ export function mountManagementApi(
       const body = await readJsonBody<{
         name?: unknown;
         displayOrder?: unknown;
-        heldUntilFired?: unknown;
       }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
       if (typeof body.name !== "string")
         throw new AppError("management.request_invalid", { field: "name" });
-      if (body.heldUntilFired !== undefined && typeof body.heldUntilFired !== "boolean")
-        throw new AppError("management.request_invalid", { field: "heldUntilFired" });
       const displayOrder = parseDisplayOrder(body.displayOrder);
-      const { name, heldUntilFired } = body;
+      const { name } = body;
       const result = await withVenueAuth(deps, sessionId, (tx) =>
-        createCourse(tx, { name, displayOrder, heldUntilFired }),
+        createCourse(tx, { name, displayOrder }),
       );
       return c.json(result, 201);
     }),
@@ -1784,14 +1781,13 @@ export function mountManagementApi(
         name?: unknown;
         displayOrder?: unknown;
         active?: unknown;
-        heldUntilFired?: unknown;
       }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
       if (Object.hasOwn(body, "active"))
         throw new AppError("management.request_invalid", { field: "active" });
-      const patch: { name?: string; displayOrder?: number; heldUntilFired?: boolean } = {};
+      const patch: { name?: string; displayOrder?: number } = {};
       if (body.name !== undefined) {
         if (typeof body.name !== "string")
           throw new AppError("management.request_invalid", { field: "name" });
@@ -1799,11 +1795,6 @@ export function mountManagementApi(
       }
       if (body.displayOrder !== undefined) {
         patch.displayOrder = parseDisplayOrder(body.displayOrder);
-      }
-      if (body.heldUntilFired !== undefined) {
-        if (typeof body.heldUntilFired !== "boolean")
-          throw new AppError("management.request_invalid", { field: "heldUntilFired" });
-        patch.heldUntilFired = body.heldUntilFired;
       }
       await withVenueAuth(deps, sessionId, (tx) => updateCourse(tx, id, patch));
       return c.body(null, 204);

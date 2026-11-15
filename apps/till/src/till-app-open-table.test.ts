@@ -144,9 +144,9 @@ function state(version: string, liveFields = "lf-1"): MenuStateAnswer {
 }
 
 const courses = [
-  { id: "drinks", name: "Drinks", displayOrder: 0 },
-  { id: "mains", name: "Mains", displayOrder: 1 },
-  { id: "desserts", name: "Desserts", displayOrder: 2 },
+  { id: "drinks", name: "Drinks", displayOrder: 0, fireNowZoneIds: [] },
+  { id: "mains", name: "Mains", displayOrder: 1, fireNowZoneIds: [] },
+  { id: "desserts", name: "Desserts", displayOrder: 2, fireNowZoneIds: [] },
 ];
 
 function party(over: Partial<TableParty> = {}): TableParty {

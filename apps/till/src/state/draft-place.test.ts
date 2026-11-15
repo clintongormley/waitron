@@ -11,13 +11,14 @@ import { draftLayout, sendAllGroups } from "./draft-layout.js";
 import { DraftStore } from "./draft-sync.js";
 
 const courses: TillCourse[] = [
-  { id: "starters", name: "Starters", displayOrder: 1, heldUntilFired: false },
-  { id: "mains", name: "Mains", displayOrder: 2, heldUntilFired: true },
-  { id: "desserts", name: "Desserts", displayOrder: 3, heldUntilFired: true },
+  { id: "starters", name: "Starters", displayOrder: 1, fireNowZoneIds: ["dining"] },
+  { id: "mains", name: "Mains", displayOrder: 2, fireNowZoneIds: [] },
+  { id: "desserts", name: "Desserts", displayOrder: 3, fireNowZoneIds: [] },
 ];
 
 const context = (changes: Partial<PlaceContext> = {}): PlaceContext => ({
   courses,
+  zoneId: "dining",
   held: [],
   firstOrder: true,
   placed: [],
@@ -25,6 +26,16 @@ const context = (changes: Partial<PlaceContext> = {}): PlaceContext => ({
 });
 
 describe("placeFor: the first order", () => {
+  it("uses the current table's department choices only for a new placement", () => {
+    const courses = [{ id: "mains", name: "Mains", displayOrder: 1, fireNowZoneIds: ["deli"] }];
+    expect(placeFor("mains", context({ courses, zoneId: "deli" }))).toEqual({
+      place: { kind: "fire" },
+    });
+    expect(placeFor("mains", context({ courses, zoneId: "restaurant" }))).toEqual({
+      place: { kind: "new", slot: 1 },
+    });
+  });
+
   it("sends a switched-off product course first as Fire now, ahead of live held Mains", () => {
     const store = new DraftStore();
     store.placer = (courseId) => placeFor(courseId, context());
@@ -247,7 +258,7 @@ describe("placeFor: later additions", () => {
           firstOrder: false,
           courses: [
             ...courses,
-            { id: "another-main", name: "Another main", displayOrder: 2, heldUntilFired: true },
+            { id: "another-main", name: "Another main", displayOrder: 2, fireNowZoneIds: [] },
           ],
           held,
         }),

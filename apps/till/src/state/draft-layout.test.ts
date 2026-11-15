@@ -4,9 +4,9 @@ import type { OrderLine } from "./working-order.js";
 import { draftLayout, fireGroups, sendAllGroups, panelTotal } from "./draft-layout.js";
 
 const courses: TillCourse[] = [
-  { id: "starter", name: "Starters", displayOrder: 1, heldUntilFired: false },
-  { id: "main", name: "Mains", displayOrder: 2, heldUntilFired: true },
-  { id: "dessert", name: "Desserts", displayOrder: 3, heldUntilFired: true },
+  { id: "starter", name: "Starters", displayOrder: 1, fireNowZoneIds: ["dining"] },
+  { id: "main", name: "Mains", displayOrder: 2, fireNowZoneIds: [] },
+  { id: "dessert", name: "Desserts", displayOrder: 3, fireNowZoneIds: [] },
 ];
 const line = (
   name: string,
@@ -134,7 +134,7 @@ describe("New order layout (A773)", () => {
   });
 
   it("does not add a course heading to a single kind and uses matching retained course metadata", () => {
-    const retired = { id: "old", name: "Retired course", displayOrder: 4, heldUntilFired: true };
+    const retired = { id: "old", name: "Retired course", displayOrder: 4, fireNowZoneIds: [] };
     const data = [
       line("Z", { kind: "fire" }, "old", { course: retired }),
       line("A", { kind: "fire" }, "old", { course: retired }),

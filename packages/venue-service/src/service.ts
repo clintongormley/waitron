@@ -101,7 +101,7 @@ import {
 } from "./kitchen-notices.js";
 import { readTablesNeedingClearing } from "./table-clearing.js";
 import { readLateSendNeedsManager } from "./late-send.js";
-import { readReleaseReminderMinutesByZone } from "./release-reminders.js";
+import { readCourseSettingsByZone } from "./release-reminders.js";
 import {
   assertProfileZone,
   readProfileDepartments,
@@ -249,5 +249,5 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   listStationsNotices,
   acknowledgeKitchenNotice,
   readTablesNeedingClearing,
-  readReleaseReminderMinutesByZone,
+  readCourseSettingsByZone,
 };

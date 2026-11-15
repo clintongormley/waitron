@@ -198,15 +198,9 @@ describe("service steps", () => {
     const mains = await seedCourse("Mains", 2);
     const starters = await seedCourse("Starters", 1);
     await seedCourse("Retired", 0, false);
-    await scoped((tx) =>
-      tx
-        .update(kitchenCourses)
-        .set({ heldUntilFired: false })
-        .where(eq(kitchenCourses.id, starters)),
-    );
     expect(await scoped((tx) => listStepCourses(tx))).toEqual([
-      { id: starters, name: "Starters", heldUntilFired: false },
-      { id: mains, name: "Mains", heldUntilFired: true },
+      { id: starters, name: "Starters" },
+      { id: mains, name: "Mains" },
     ]);
   });
 

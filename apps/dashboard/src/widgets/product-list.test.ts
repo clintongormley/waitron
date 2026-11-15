@@ -169,14 +169,12 @@ const starters: Course = {
   name: "Starters",
   displayOrder: 1,
   active: true,
-  heldUntilFired: false,
 };
 const mains: Course = {
   id: "mains",
   name: "Mains",
   displayOrder: 2,
   active: true,
-  heldUntilFired: false,
 };
 
 /** The staff name and the customer-facing name deliberately DIFFER, so a test cannot pass by reading

@@ -40,7 +40,7 @@ async function resolve(name: string, ctx: DashboardModuleContext) {
   return destination!.kind === "setting" ? destination!.resolve(ctx) : [];
 }
 afterEach(() => setLocale("en-GB"));
-it("resolves only active departments to encoded Details, Service and Transfers addresses with passive reads", async () => {
+it("resolves only active departments to encoded Details, Tables and Transfers addresses with passive reads", async () => {
   const { ctx, request } = context();
   expect(await resolve("name", ctx)).toEqual([
     {
@@ -50,8 +50,8 @@ it("resolves only active departments to encoded Details, Service and Transfers a
     },
     { id: "d2", label: "Deli", path: "/manage/venue-operations/department/d2" },
   ]);
-  expect((await resolve("releaseReminderMinutes", ctx))[0]?.path).toBe(
-    "/manage/venue-operations/department/room%20%2F%20west/view/service",
+  expect((await resolve("courseSettings", ctx))[0]?.path).toBe(
+    "/manage/venue-operations/department/room%20%2F%20west/view/tables",
   );
   expect((await resolve("receivingProfileId", ctx))[0]?.path).toBe(
     "/manage/venue-operations/department/room%20%2F%20west/view/transfers",

@@ -75,7 +75,7 @@ it("successful Save closes before its host is asked to refresh", async () => {
         collectionNumber: "none",
         needsClearing: false,
         lateSendNeedsManager: false,
-        releaseReminderMinutes: null,
+        courseSettings: [],
         transfers: { receivingProfileId: null, destinationDepartmentIds: [] },
       },
     ],

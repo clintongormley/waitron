@@ -28,6 +28,8 @@ import {
   orderGroups,
   partyTables,
   kitchenCourses,
+  departmentCourses,
+  floorZones,
   serviceCommands,
   ticketItems,
   parties,
@@ -45,8 +47,11 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
-import { createDepartment, createServiceZone, departments } from "@waitron/venue-service";
-import { setReleaseReminderInEveryDepartment } from "./testing/release-reminder.js";
+import { createDepartment, createServiceZone } from "@waitron/venue-service";
+import {
+  setReleaseReminderInEveryDepartment,
+  setReleaseReminderInDepartment,
+} from "./testing/release-reminder.js";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import { submitDraft, type Draft, type DraftLineInput } from "./order-drafts.js";
@@ -390,8 +395,13 @@ async function fourGroups(v: Venue) {
   const s = await seated(v);
   const g1 = await group(v, s.partyId, "fire", [line(v, "croquetas")]);
   const g2 = await groupedGroup(v, s, "fire", [line(v, "steak", "2")]);
-  const g3 = await group(v, s.partyId, "hold", [line(v, "flan")]);
-  const g4 = await group(v, s.partyId, "hold", [line(v, "water")]);
+  const [course] = await suite.db
+    .select({ id: kitchenCourses.id })
+    .from(kitchenCourses)
+    .orderBy(kitchenCourses.displayOrder)
+    .limit(1);
+  const g3 = await group(v, s.partyId, "hold", [{ ...line(v, "flan"), courseId: course!.id }]);
+  const g4 = await group(v, s.partyId, "hold", [{ ...line(v, "water"), courseId: course!.id }]);
   return { ...s, g1, g2, g3, g4 };
 }
 
@@ -444,6 +454,31 @@ describe("releaseReminder (pure; D11)", () => {
     remindAt,
   });
 
+  it("skips an Off group without starting a later countdown until that earlier group is served", () => {
+    const groups = [fired("g1"), held("g2"), held("g3")];
+    const minutes = (id: string) => (id === "g2" ? null : 5);
+    expect(
+      releaseReminder(
+        groups,
+        [
+          { groupId: "g1", servedAt: T(0) },
+          { groupId: "g2", servedAt: null },
+        ],
+        minutes,
+      ),
+    ).toEqual({ groupId: "g3", dueAt: null });
+    expect(
+      releaseReminder(
+        groups,
+        [
+          { groupId: "g1", servedAt: T(0) },
+          { groupId: "g2", servedAt: T(3) },
+        ],
+        minutes,
+      ),
+    ).toEqual({ groupId: "g3", dueAt: T(8) });
+  });
+
   it("is due the interval after the latest served time of the fired groups before the first held one", () => {
     expect(
       releaseReminder(
@@ -453,7 +488,7 @@ describe("releaseReminder (pure; D11)", () => {
           { groupId: "g2", servedAt: T(5) },
           { groupId: "g2", servedAt: T(2) },
         ],
-        10,
+        () => 10,
       ),
     ).toEqual({ groupId: "g3", dueAt: T(15) });
   });
@@ -466,7 +501,7 @@ describe("releaseReminder (pure; D11)", () => {
           { groupId: "g1", servedAt: T(0) },
           { groupId: "g2", servedAt: T(5) },
         ],
-        0,
+        () => 0,
       ),
     ).toEqual({ groupId: "g3", dueAt: T(5) });
   });
@@ -479,20 +514,28 @@ describe("releaseReminder (pure; D11)", () => {
           { groupId: "g1", servedAt: T(0) },
           { groupId: "g2", servedAt: null },
         ],
-        10,
+        () => 10,
       ),
     ).toEqual({ groupId: "g3", dueAt: null });
   });
 
   it("keeps no time for a snooze while an earlier fired group is unserved", () => {
     expect(
-      releaseReminder([fired("g1"), held("g2", T(30))], [{ groupId: "g1", servedAt: null }], 10),
+      releaseReminder(
+        [fired("g1"), held("g2", T(30))],
+        [{ groupId: "g1", servedAt: null }],
+        () => 10,
+      ),
     ).toEqual({ groupId: "g2", dueAt: null });
   });
 
   it("is due at the snooze once the work before it is served", () => {
     expect(
-      releaseReminder([fired("g1"), held("g2", T(40))], [{ groupId: "g1", servedAt: T(0) }], 10),
+      releaseReminder(
+        [fired("g1"), held("g2", T(40))],
+        [{ groupId: "g1", servedAt: T(0) }],
+        () => 10,
+      ),
     ).toEqual({ groupId: "g2", dueAt: T(40) });
   });
 
@@ -501,17 +544,20 @@ describe("releaseReminder (pure; D11)", () => {
       releaseReminder(
         [fired("g1"), fired("empty"), held("g3")],
         [{ groupId: "g1", servedAt: T(0) }],
-        10,
+        () => 10,
       ),
     ).toEqual({ groupId: "g3", dueAt: T(10) });
   });
 
   it("names a first held group with no fired group before it, without a time unless snoozed", () => {
-    expect(releaseReminder([held("g1"), fired("g2")], [], 10)).toEqual({
+    expect(releaseReminder([held("g1"), fired("g2")], [], () => 10)).toEqual({
       groupId: "g1",
       dueAt: null,
     });
-    expect(releaseReminder([held("g1", T(20))], [], 10)).toEqual({ groupId: "g1", dueAt: T(20) });
+    expect(releaseReminder([held("g1", T(20))], [], () => 10)).toEqual({
+      groupId: "g1",
+      dueAt: T(20),
+    });
   });
 
   it("reads only the fired groups BEFORE the waiting one, and ignores lines in no group", () => {
@@ -523,18 +569,89 @@ describe("releaseReminder (pure; D11)", () => {
           { groupId: "g3", servedAt: null },
           { groupId: null, servedAt: null },
         ],
-        10,
+        () => 10,
       ),
     ).toEqual({ groupId: "g2", dueAt: T(10) });
   });
 
   it("is none with no held group, and none at all while reminders are off", () => {
-    expect(releaseReminder([fired("g1")], [{ groupId: "g1", servedAt: T(0) }], 10)).toBeNull();
-    expect(releaseReminder([fired("g1"), held("g2", T(20))], [], null)).toBeNull();
+    expect(
+      releaseReminder([fired("g1")], [{ groupId: "g1", servedAt: T(0) }], () => 10),
+    ).toBeNull();
+    expect(releaseReminder([fired("g1"), held("g2", T(20))], [], () => null)).toBeNull();
   });
 });
 
 describe("the reminder on the floor and in Current orders (D11)", () => {
+  it("uses stored reminders for table-held Fire-now courses and skips Off per group", async () => {
+    const v = await setupVenue();
+    const s = await servedUpToGroupTwo(v);
+    const [first] = await suite.db
+      .select()
+      .from(kitchenCourses)
+      .orderBy(kitchenCourses.displayOrder)
+      .limit(1);
+    const { id: later } = await inTx((tx) =>
+      createCourse(tx, { name: "Later course", displayOrder: 99 }),
+    );
+    const extra = await group(v, s.partyId, "hold", [{ ...line(v, "water"), courseId: later }]);
+    const [zone] = await suite.db.select().from(floorZones).where(eq(floorZones.id, v.zoneId));
+    await inTx(async (tx) => {
+      await tx
+        .insert(departmentCourses)
+        .values({ departmentId: zone!.departmentId, courseId: later, reminderMinutes: 25 });
+      await tx
+        .insert(departmentCourses)
+        .values({
+          departmentId: zone!.departmentId,
+          courseId: first!.id,
+          heldUntilFired: false,
+          reminderMinutes: 0,
+        })
+        .onConflictDoUpdate({
+          target: [departmentCourses.departmentId, departmentCourses.courseId],
+          set: { heldUntilFired: false, reminderMinutes: 0 },
+        });
+    });
+    expect(await floorReminder(s.tableId)).toEqual({ groupId: s.g3.id, dueAt: T(5) });
+    expect((await currentOrders(s.partyId)).reminder).toEqual({ groupId: s.g3.id, dueAt: T(5) });
+    await inTx((tx) =>
+      tx
+        .update(departmentCourses)
+        .set({ reminderMinutes: null })
+        .where(eq(departmentCourses.courseId, first!.id)),
+    );
+    expect(await floorReminder(s.tableId)).toEqual({ groupId: extra.id, dueAt: null });
+    expect((await currentOrders(s.partyId)).reminder).toEqual({ groupId: extra.id, dueAt: null });
+    expect(
+      (await inTx((tx) => listOrderGroups(tx, s.partyId))).groups
+        .filter((group) => group.state === "held")
+        .map((group) => group.id),
+    ).toEqual([s.g3.id, s.g4.id, extra.id]);
+  });
+
+  it("takes a mixed group's reminder from its lowest-ordered course, regardless of dish order", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const first = await group(v, s.partyId, "fire", [line(v, "croquetas")]);
+    await at(T(5), () => serveGroup(v, s.partyId, first.id));
+    const a = await inTx((tx) => createCourse(tx, { name: "Early course", displayOrder: 20 }));
+    const b = await inTx((tx) => createCourse(tx, { name: "Late course", displayOrder: 30 }));
+    const held = await group(v, s.partyId, "hold", [
+      { ...line(v, "flan"), courseId: b.id },
+      { ...line(v, "steak"), courseId: a.id },
+    ]);
+    const [zone] = await suite.db.select().from(floorZones).where(eq(floorZones.id, v.zoneId));
+    await inTx((tx) =>
+      tx.insert(departmentCourses).values([
+        { departmentId: zone!.departmentId, courseId: a.id, reminderMinutes: 25 },
+        { departmentId: zone!.departmentId, courseId: b.id, reminderMinutes: 0 },
+      ]),
+    );
+    expect(await floorReminder(s.tableId)).toEqual({ groupId: held.id, dueAt: T(30) });
+    expect((await currentOrders(s.partyId)).reminder).toEqual({ groupId: held.id, dueAt: T(30) });
+  });
+
   it("makes group 3 due at 20:15 when group 1 was fully served at 20:00 and group 2 at 20:05", async () => {
     const v = await setupVenue();
     const s = await servedUpToGroupTwo(v);
@@ -712,10 +829,7 @@ describe("the reminder follows the party's department", () => {
         name: `Zone ${randomUUID()}`,
         departmentId: department.id,
       });
-      await tx
-        .update(departments)
-        .set({ releaseReminderMinutes: minutes })
-        .where(eq(departments.id, department.id));
+      await setReleaseReminderInDepartment(tx, department.id, minutes);
       return zone.id;
     });
   }
@@ -775,10 +889,7 @@ describe("the reminder follows the party's department", () => {
     await inTx(async (tx) => {
       await setReleaseReminderInEveryDepartment(tx, 10);
       const department = await createDepartment(tx, { name: `No reminders ${randomUUID()}` });
-      await tx
-        .update(departments)
-        .set({ releaseReminderMinutes: null })
-        .where(eq(departments.id, department.id));
+      await setReleaseReminderInDepartment(tx, department.id, null);
       const zone = await seedZone(tx, {
         name: `No reminders ${randomUUID()}`,
         departmentId: department.id,
@@ -794,7 +905,7 @@ describe("the reminder follows the party's department", () => {
     const v = await setupVenue();
     await servedUpToGroupTwo(v);
     await servedUpToGroupTwo(v);
-    const spy = vi.spyOn(VENUE_SERVICE, "readReleaseReminderMinutesByZone");
+    const spy = vi.spyOn(VENUE_SERVICE, "readCourseSettingsByZone");
     try {
       await inTx((tx) => listTablesWithState(tx));
       expect(spy).toHaveBeenCalledTimes(1);
@@ -1243,9 +1354,7 @@ describe("readCurrentOrders (spec §4)", () => {
     const v = await setupVenue();
     const s = await seated(v);
     const mains = await inTx((tx) => createCourse(tx, { name: "Mains", displayOrder: 2 }));
-    const starter = await inTx((tx) =>
-      createCourse(tx, { name: "Starter", displayOrder: 1, heldUntilFired: false }),
-    );
+    const starter = await inTx((tx) => createCourse(tx, { name: "Starter", displayOrder: 1 }));
     const unused = await inTx((tx) => createCourse(tx, { name: "Unused", displayOrder: 0 }));
     await group(v, s.partyId, "hold", [
       { ...line(v, "steak"), courseId: mains.id },
@@ -1255,8 +1364,8 @@ describe("readCurrentOrders (spec §4)", () => {
     await inTx((tx) => deleteCourse(tx, starter.id));
     expect(await currentOrders(s.partyId)).toMatchObject({
       retainedCourses: [
-        { id: starter.id, name: "Starter", displayOrder: 1, heldUntilFired: false },
-        { id: mains.id, name: "Mains", displayOrder: 2, heldUntilFired: true },
+        { id: starter.id, name: "Starter", displayOrder: 1, fireNowZoneIds: [] },
+        { id: mains.id, name: "Mains", displayOrder: 2, fireNowZoneIds: [] },
       ],
     });
     expect(

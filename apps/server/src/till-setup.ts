@@ -38,7 +38,7 @@ async function readSetupFields(tx: Transaction, deps: TillSetupDeps, device: Dev
     id: course.id,
     name: course.name,
     displayOrder: course.displayOrder,
-    heldUntilFired: course.heldUntilFired,
+    fireNowZoneIds: course.fireNowZoneIds,
   }));
   let capabilities: CapabilityFlag[] = [];
   let inactivityTimeoutSeconds: number | null = null;

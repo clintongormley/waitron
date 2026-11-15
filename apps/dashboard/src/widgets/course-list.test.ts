@@ -1,8 +1,8 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { page, userEvent } from "vitest/browser";
-import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { middleWithin, textLines } from "@waitron/ui/src/test-helpers.js";
-import type { WtInput, WtSegmentedControl } from "@waitron/ui";
+import type { WtInput } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -19,16 +19,15 @@ const COURSES: Course[] = [
     displayOrder: 0,
     active: true,
     inUse: false,
-    heldUntilFired: false,
   },
-  { id: "c2", name: "Mains", displayOrder: 1, active: true, inUse: true, heldUntilFired: true },
-  { id: "c3", name: "Desserts", displayOrder: 5, active: true, inUse: false, heldUntilFired: true },
+  { id: "c2", name: "Mains", displayOrder: 1, active: true, inUse: true },
+  { id: "c3", name: "Desserts", displayOrder: 5, active: true, inUse: false },
 ];
 
 /** Deleted rows supplied to check that configuration choices omit them. */
 const DISABLED: Course[] = [
-  { id: "d1", name: "Brunch", displayOrder: 1, active: false, inUse: true, heldUntilFired: true },
-  { id: "d2", name: "Tapas", displayOrder: 3, active: false, inUse: false, heldUntilFired: true },
+  { id: "d1", name: "Brunch", displayOrder: 1, active: false, inUse: true },
+  { id: "d2", name: "Tapas", displayOrder: 3, active: false, inUse: false },
 ];
 
 /** A fixture mixing live and deleted rows in display order. */
@@ -1172,7 +1171,7 @@ describe("reordering", () => {
 });
 
 describe("layout", () => {
-  it("shows a name heading and compact rows with timing beside names", async () => {
+  it("shows a name heading and compact rows", async () => {
     const previous = [window.innerWidth, window.innerHeight] as const;
     try {
       await page.viewport(1280, 900);
@@ -1184,8 +1183,6 @@ describe("layout", () => {
       const row = q(el, 'tr[data-course="c1"]')!;
       const handle = q(el, '[data-test="drag-c1"]')!.getBoundingClientRect();
       expect(row.getBoundingClientRect().height).toBeLessThanOrEqual(handle.height * 1.25);
-      const timing = row.querySelector("wt-segmented-control")!.getBoundingClientRect();
-      expect(timing.left - nameButton(el, "c1")!.getBoundingClientRect().left).toBeLessThan(500);
     } finally {
       await page.viewport(...previous);
     }
@@ -1388,14 +1385,9 @@ describe("permanent delete lifecycle", () => {
       ).toEqual([t("kitchen.rename_course"), t("action.delete")]);
     expect(
       [...el.shadowRoot!.querySelectorAll("th")].map((h) =>
-        (h.querySelector(".timing-title") ?? h).textContent!.trim(),
+        (h.querySelector(".column-title") ?? h).textContent!.trim(),
       ),
-    ).toEqual([
-      t("kitchen.reorder_course"),
-      t("kitchen.course_name"),
-      t("courses.on_the_till"),
-      t("kitchen.course_actions"),
-    ]);
+    ).toEqual([t("kitchen.reorder_course"), t("kitchen.course_name"), t("kitchen.course_actions")]);
   });
 
   it("shows an empty state when no live course remains", async () => {
@@ -1785,106 +1777,13 @@ it("reorders only active courses when a fixture includes deleted rows", async ()
   expect(rowIds(el)).toEqual(["c1", "c3", "c2"]);
 });
 
-describe("On the till", () => {
-  let previousLocale: ReturnType<typeof currentLocale>;
-  beforeEach(() => {
-    previousLocale = currentLocale();
-    setLocale("en");
-  });
-  afterEach(() => setLocale(previousLocale));
-  it("saves the changed course setting and redraws its stored state", async () => {
-    const rows = copy(COURSES);
-    const updateCourse = vi.fn(async (id: string, patch: { heldUntilFired?: boolean }) => {
-      Object.assign(
-        rows.find((row) => row.id === id)!,
-        patch,
-      );
-    });
-    const { el } = await mount(
-      stubApi({
-        listCourses: vi.fn(async () => copy(rows)),
-        updateCourse,
-      }),
-    );
-    const control = q<WtSegmentedControl>(el, '[data-course="c2"] wt-segmented-control');
-    expect(control).not.toBeNull();
-    await page
-      .getByRole("radiogroup", { name: "On the till: Mains" })
-      .getByRole("radio", { name: "Fire now", exact: true })
-      .click();
-    await vi.waitFor(() => {
-      expect(updateCourse).toHaveBeenCalledExactlyOnceWith("c2", { heldUntilFired: false });
-      const checkbox = q<WtSegmentedControl>(
-        el,
-        '[data-course="c2"] wt-segmented-control',
-      )!.shadowRoot!.querySelector('[role="radio"][aria-checked="true"]')!;
-      expect(checkbox.textContent!.trim()).toBe("Fire now");
-      expect(el.shadowRoot!.querySelector(".held-note")).toBeNull();
-    });
-  });
-
-  it("shows held and immediate states on a read-only list without switches", async () => {
-    const { el } = await mount(stubApi());
-    el.readOnly = true;
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelectorAll("wt-segmented-control")).toHaveLength(0);
-    expect(q(el, '[data-course="c1"]')!.textContent).toContain("Fire now");
-    expect(q(el, '[data-course="c2"]')!.textContent).toContain("Hold for later");
-  });
-
-  it("restores the stored setting after a refusal and allows another attempt", async () => {
-    const updateCourse = vi
-      .fn()
-      .mockRejectedValueOnce({ code: "connection.failed" })
-      .mockResolvedValue(undefined);
-    const { el } = await mount(stubApi({ updateCourse }));
-    const control = q<WtSegmentedControl>(el, '[data-course="c2"] wt-segmented-control');
-    expect(control).not.toBeNull();
-    await page
-      .getByRole("radiogroup", { name: "On the till: Mains" })
-      .getByRole("radio", { name: "Fire now", exact: true })
-      .click();
-    await vi.waitFor(() => {
-      expect(alertLine(el)).not.toBeNull();
-      const input = q<WtSegmentedControl>(
-        el,
-        '[data-course="c2"] wt-segmented-control',
-      )!.shadowRoot!.querySelector('[role="radio"][aria-checked="true"]')!;
-      expect(input.textContent!.trim()).toBe("Hold for later");
-      expect((input as HTMLButtonElement).disabled).toBe(false);
-    });
-    await page
-      .getByRole("radiogroup", { name: "On the till: Mains" })
-      .getByRole("radio", { name: "Fire now", exact: true })
-      .click();
-    await vi.waitFor(() => expect(updateCourse).toHaveBeenCalledTimes(2));
-  });
-});
-
-it("keeps timing choices in place and focused while a change waits", async () => {
-  let answer!: () => void;
-  const pending = new Promise<void>((resolve) => {
-    answer = resolve;
-  });
-  const api = stubApi({ updateCourse: vi.fn(() => pending) });
-  const { el } = await mount(api);
-  const control = q<WtSegmentedControl>(el, '[data-course="c1"] wt-segmented-control')!;
-  expect(control).not.toBeNull();
-  await control.updateComplete;
-  const radios = [...control.shadowRoot!.querySelectorAll<HTMLButtonElement>("button")];
-  const before = control.getBoundingClientRect();
-  radios[0]!.focus();
-  await userEvent.keyboard("{ArrowRight}");
-  expect(api.updateCourse).toHaveBeenCalledExactlyOnceWith("c1", { heldUntilFired: true });
-  expect(control.shadowRoot!.activeElement).toBe(radios[1]);
-  expect(control.getBoundingClientRect().width).toBeCloseTo(before.width, 1);
-  await userEvent.keyboard("{ArrowLeft}");
-  expect(control.value).toBe("true");
-  expect(control.shadowRoot!.activeElement).toBe(radios[1]);
-  expect(radios[1]!.tabIndex).toBe(0);
-  expect(api.updateCourse).toHaveBeenCalledTimes(1);
-  answer();
-  await el.settled();
+it("leaves department firing choices to Tables and keeps the shared names", async () => {
+  const { el } = await mount(stubApi());
+  expect(el.shadowRoot!.querySelector("wt-segmented-control")).toBeNull();
+  expect(q(el, '[data-course="c1"]')!.textContent).toContain("Starters");
+  el.readOnly = true;
+  await el.updateComplete;
+  expect(q(el, '[data-course="c2"]')!.textContent!.trim()).toBe("Mains");
 });
 
 it("opens the course's confirmation from Delete in its row menu and returns focus on cancel", async () => {
@@ -1907,36 +1806,26 @@ it.each([
   [1280, "default", ""],
   [390, "wider", "Verdana, sans-serif"],
   [1280, "wider", "Verdana, sans-serif"],
-] as const)(
-  "keeps each timing choice within two readable lines at %ipx with the %s font",
-  async (width, _, font) => {
-    const locale = currentLocale();
-    const viewport = { width: window.innerWidth, height: window.innerHeight };
-    try {
-      await page.viewport(width, 900);
-      for (const language of ["en", "es"] as const) {
-        setLocale(language);
-        const { el, host } = await mount(stubApi());
-        host.style.paddingInline = "var(--wt-space-2)";
-        if (font) host.style.setProperty("--wt-font-family", font);
-        const control = q<WtSegmentedControl>(el, "wt-segmented-control")!;
-        await control.updateComplete;
-        await vi.waitFor(() => {
-          expect(el.scrollWidth).toBeLessThanOrEqual(el.clientWidth);
-          expect(textLines(nameButton(el, "c1")!).length).toBe(1);
-          for (const button of control.shadowRoot!.querySelectorAll("button"))
-            expect(
-              textLines(button).length,
-              `${language}: ${button.textContent!.trim()}`,
-            ).toBeLessThanOrEqual(2);
-        });
-      }
-    } finally {
-      setLocale(locale);
-      await page.viewport(viewport.width, viewport.height);
+] as const)("keeps course names readable at %ipx with the %s font", async (width, _, font) => {
+  const locale = currentLocale();
+  const viewport = { width: window.innerWidth, height: window.innerHeight };
+  try {
+    await page.viewport(width, 900);
+    for (const language of ["en", "es"] as const) {
+      setLocale(language);
+      const { el, host } = await mount(stubApi());
+      host.style.paddingInline = "var(--wt-space-2)";
+      if (font) host.style.setProperty("--wt-font-family", font);
+      await vi.waitFor(() => {
+        expect(el.scrollWidth).toBeLessThanOrEqual(el.clientWidth);
+        expect(textLines(nameButton(el, "c1")!).length).toBe(1);
+      });
     }
-  },
-);
+  } finally {
+    setLocale(locale);
+    await page.viewport(viewport.width, viewport.height);
+  }
+});
 
 it("holds live replacement rows after a real pointer crosses a row", async () => {
   const liveData = new LiveData();
@@ -1980,30 +1869,4 @@ it("holds live replacement rows after a real pointer crosses a row", async () =>
     expect(q(el, '[data-test="name-c1"]')!.textContent!.trim()).toBe("Starters updated"),
   );
   expect(api.moveCourse).toHaveBeenCalledTimes(1);
-});
-
-it("does not measure every timing group while a course name is typed", async () => {
-  const { el } = await mount(stubApi());
-  await openRename(el, "c1");
-  const groups = [...el.shadowRoot!.querySelectorAll("wt-segmented-control")].map((control) =>
-    control.shadowRoot!.querySelector<HTMLElement>('[role="radiogroup"]')!,
-  );
-  // Start measuring typing after the groups' initial resize delivery and deferred fitting.
-  await new Promise<void>((resolve) => {
-    const waiting = new Set<Element>(groups);
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) waiting.delete(entry.target);
-      if (waiting.size > 0) return;
-      observer.disconnect();
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-    });
-    onTestFinished(() => observer.disconnect());
-    for (const group of groups) observer.observe(group);
-  });
-  const reads = groups.map((group) => vi.spyOn(group, "getBoundingClientRect"));
-  await typeName(el, "Starters revised");
-  await new Promise<void>((resolve) =>
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-  );
-  for (const read of reads) expect(read).not.toHaveBeenCalled();
 });

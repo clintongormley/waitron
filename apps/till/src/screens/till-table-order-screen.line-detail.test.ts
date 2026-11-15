@@ -20,8 +20,8 @@ afterEach(async () => {
 async function holding() {
   const mounted = await mount({
     courses: [
-      { id: "mains", name: "Mains", displayOrder: 1, heldUntilFired: true },
-      { id: "dessert", name: "Dessert", displayOrder: 2, heldUntilFired: true },
+      { id: "mains", name: "Mains", displayOrder: 1, fireNowZoneIds: [] },
+      { id: "dessert", name: "Dessert", displayOrder: 2, fireNowZoneIds: [] },
     ],
   });
   mounted.host.style.width = "1280px";
@@ -280,7 +280,7 @@ it("shows a retained course without offering that retired course for a new choic
     id: "retired",
     name: "Recorded course",
     displayOrder: 3,
-    heldUntilFired: true,
+    fireNowZoneIds: [],
   });
   await el.updateComplete;
   const picker = await open(el);

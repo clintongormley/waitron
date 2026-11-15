@@ -198,7 +198,6 @@ describe("charged cancellation read projections", () => {
     const course = await inTx(venue, async (tx) => {
       const created = await createCourse(tx, {
         name: "Later mains",
-        heldUntilFired: true,
       });
       await tx
         .update(workingOrderLines)

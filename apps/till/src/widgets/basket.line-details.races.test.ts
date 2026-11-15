@@ -22,7 +22,7 @@ it("A738 a course removed before Save leaves every combined edit uncommitted", a
     id: "starter",
     name: "Starter",
     displayOrder: 1,
-    heldUntilFired: true,
+    fireNowZoneIds: [],
   };
   const store = new WorkingOrderStore();
   store.addProduct(dish, "2", { note: "Original note" });

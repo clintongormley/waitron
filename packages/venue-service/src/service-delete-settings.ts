@@ -5,6 +5,7 @@ import {
   floorPlanSets,
   departments,
   departmentSalePolicies,
+  departmentCourses,
   departmentTransferDesks,
   departmentTransferDestinations,
   deviceKitchenScreenRemovals,
@@ -388,6 +389,9 @@ export async function clearServiceDeleteSettings(
       .where(eq(menuPeriodStaffMenus.departmentId, selected.departmentId));
     await tx.delete(departmentDays).where(eq(departmentDays.departmentId, selected.departmentId));
     await tx.delete(menuPeriods).where(eq(menuPeriods.departmentId, selected.departmentId));
+    await tx
+      .delete(departmentCourses)
+      .where(eq(departmentCourses.departmentId, selected.departmentId));
     await tx
       .delete(departmentSalePolicies)
       .where(eq(departmentSalePolicies.departmentId, selected.departmentId));

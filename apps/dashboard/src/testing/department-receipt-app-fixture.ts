@@ -50,7 +50,7 @@ export function venueServiceModel(
       })),
       zones: [],
     },
-    releaseReminderMinutesByDepartment: {},
+    courseSettingsByDepartment: {},
     needsClearingDepartmentIds: [],
     lateSendManagerDepartmentIds: [],
     serviceSteps: [],

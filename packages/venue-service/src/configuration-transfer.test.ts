@@ -1791,3 +1791,30 @@ it("refuses a zone whose folded department is absent from the bundle", () => {
     }),
   ).toThrowError(refusal("floor_zones.department_id"));
 });
+
+it("refuses course overrides with invalid references and values", () => {
+  const validate = VENUE_SERVICE_CONFIGURATION_TRANSFER.validate!;
+  const base = {
+    departments: [{ id: "dept" }],
+    kitchen_courses: [{ id: "course" }],
+    department_sale_policies: [{ department_id: "dept" }],
+  };
+  const row = {
+    department_id: "dept",
+    course_id: "course",
+    held_until_fired: 0,
+    reminder_minutes: null,
+  };
+  expect(() => validate({ ...base, department_courses: [row] })).not.toThrow();
+  for (const [patch, field] of [
+    [{ department_id: "gone" }, "department_id"],
+    [{ course_id: "gone" }, "course_id"],
+    [{ held_until_fired: 2 }, "held_until_fired"],
+    [{ reminder_minutes: -1 }, "reminder_minutes"],
+    [{ reminder_minutes: 121 }, "reminder_minutes"],
+    [{ reminder_minutes: 2.5 }, "reminder_minutes"],
+  ] as const)
+    expect(() => validate({ ...base, department_courses: [{ ...row, ...patch }] })).toThrow(
+      refusal(`department_courses.${field}`),
+    );
+});

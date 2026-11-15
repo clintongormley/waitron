@@ -129,7 +129,7 @@ it.each([
           collectionNumber: "none",
           needsClearing: false,
           lateSendNeedsManager: false,
-          releaseReminderMinutes: null,
+          courseSettings: [],
           [field]: changed,
         },
       },

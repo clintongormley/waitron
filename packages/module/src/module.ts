@@ -1388,15 +1388,16 @@ export interface VenueServiceContribution {
     expectedRevision: number,
     note: string | null,
   ): Promise<KitchenNote>;
-  /**
-   * Each of these zones' department's minutes after the work ahead is served that a held group
-   * falls due; null where that department has reminders off. A zone with no department is absent.
-   * An inactive department still answers.
-   */
-  readReleaseReminderMinutesByZone(
+  /** Sparse course overrides from each active zone's department. Missing courses use held / 10. */
+  readCourseSettingsByZone(
     tx: Transaction,
-    zoneIds: readonly string[],
-  ): Promise<ReadonlyMap<string, number | null>>;
+    zoneIds?: readonly string[],
+  ): Promise<
+    ReadonlyMap<
+      string,
+      readonly { courseId: string; heldUntilFired: boolean; reminderMinutes: number | null }[]
+    >
+  >;
 }
 
 export type NonDbSource =

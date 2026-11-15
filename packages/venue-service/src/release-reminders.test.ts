@@ -1,14 +1,21 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, departments, kitchenStations, withTransaction } from "@waitron/db";
+import { sql } from "drizzle-orm";
+import {
+  CORE_MIGRATIONS,
+  kitchenStations,
+  kitchenCourses,
+  departmentCourses,
+  withTransaction,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedZone } from "@waitron/db/testing/seed.js";
-import { createDepartment, createServiceZone, updateDepartment } from "./operations.js";
+import { createDepartment, createServiceZone } from "./operations.js";
 import {
-  listDepartmentReminderMinutes,
-  readReleaseReminderMinutesByZone,
+  readCourseSettingsByZone,
+  listDepartmentCourseSettings,
+  saveDepartmentCourseSettings,
 } from "./release-reminders.js";
 
 const suite = useVenueDb({
@@ -30,11 +37,17 @@ async function seedFixtureVenue(name: string): Promise<void> {
   await db.insert(kitchenStations).values({ name: "Default prep", isDefault: true });
 }
 
-async function setMinutes(departmentId: string, minutes: number | null): Promise<void> {
-  await db
-    .update(departments)
-    .set({ releaseReminderMinutes: minutes })
-    .where(eq(departments.id, departmentId));
+async function setMinutes(departmentId: string, minutes: number | null): Promise<string> {
+  const [course] = await db
+    .insert(kitchenCourses)
+    .values({ name: `Course ${randomUUID()}` })
+    .returning();
+  await scoped((tx) =>
+    saveDepartmentCourseSettings(tx, departmentId, [
+      { courseId: course!.id, heldUntilFired: false, reminderMinutes: minutes },
+    ]),
+  );
+  return course!.id;
 }
 
 async function departmentWithZone(name: string) {
@@ -45,90 +58,44 @@ async function departmentWithZone(name: string) {
   });
 }
 
-describe("readReleaseReminderMinutesByZone", () => {
-  it("reads each zone's department's minutes, null where the department has reminders off", async () => {
-    await seedFixtureVenue("Reminders on and off");
-    const a = await departmentWithZone("A");
-    const b = await departmentWithZone("B");
-    await setMinutes(a.departmentId, 25);
-    await setMinutes(b.departmentId, null);
-    expect(
-      await scoped((tx) => readReleaseReminderMinutesByZone(tx, [a.zoneId, b.zoneId])),
-    ).toEqual(
+describe("department course settings", () => {
+  it("keeps each department's firing and reminder choices together", async () => {
+    await seedFixtureVenue("Independent courses");
+    const a = await departmentWithZone("A"),
+      b = await departmentWithZone("B");
+    const courseId = await setMinutes(a.departmentId, null);
+    expect(await scoped((tx) => readCourseSettingsByZone(tx, [a.zoneId, b.zoneId]))).toEqual(
       new Map([
-        [a.zoneId, 25],
-        [b.zoneId, null],
+        [a.zoneId, [{ courseId, heldUntilFired: false, reminderMinutes: null }]],
+        [b.zoneId, []],
       ]),
     );
-  });
-
-  it("reads 10 for a department nobody has changed", async () => {
-    await seedFixtureVenue("Reminder untouched");
-    const a = await departmentWithZone("A");
-    expect(await scoped((tx) => readReleaseReminderMinutesByZone(tx, [a.zoneId]))).toEqual(
-      new Map([[a.zoneId, 10]]),
+    await scoped((tx) =>
+      saveDepartmentCourseSettings(tx, a.departmentId, [
+        { courseId, heldUntilFired: true, reminderMinutes: 10 },
+      ]),
     );
+    expect(await db.select().from(departmentCourses)).toEqual([]);
+    expect(await scoped((tx) => listDepartmentCourseSettings(tx))).toEqual({});
   });
 
-  it("leaves out an inactive zone, and an id that is no zone", async () => {
-    await seedFixtureVenue("Reminder without department");
+  it("omits inactive and unknown zones and keeps an inactive department's choices", async () => {
+    await seedFixtureVenue("Inactive zone");
     const a = await departmentWithZone("A");
-    const bare = await seedZone(db, { name: "Inactive zone", active: false });
-    const unknown = randomUUID();
-    const found = await scoped((tx) =>
-      readReleaseReminderMinutesByZone(tx, [a.zoneId, bare!.id, unknown]),
-    );
-    expect(found.has(bare!.id)).toBe(false);
-    expect(found.has(unknown)).toBe(false);
-    expect(found.get(a.zoneId)).toBe(10);
-  });
-
-  it("still answers for a department that has been made inactive", async () => {
-    await seedFixtureVenue("Reminder inactive department");
-    const a = await departmentWithZone("A");
-    await setMinutes(a.departmentId, 25);
+    const courseId = await setMinutes(a.departmentId, 25);
+    const inactive = await seedZone(db, { name: "Inactive", active: false });
     await db.execute(sql`update departments set active = 0 where id = ${a.departmentId}`);
-    expect(await scoped((tx) => readReleaseReminderMinutesByZone(tx, [a.zoneId]))).toEqual(
-      new Map([[a.zoneId, 25]]),
-    );
+    expect(
+      await scoped((tx) => readCourseSettingsByZone(tx, [a.zoneId, inactive!.id, randomUUID()])),
+    ).toEqual(new Map([[a.zoneId, [{ courseId, heldUntilFired: false, reminderMinutes: 25 }]]]));
   });
 
-  it("answers an empty list with an empty map", async () => {
+  it("answers an empty list without a database read", async () => {
     const untouchable = new Proxy({} as Transaction, {
-      get(_target, key) {
-        throw new Error(`the transaction was used: ${String(key)}`);
+      get() {
+        throw new Error("database used");
       },
     });
-    expect((await readReleaseReminderMinutesByZone(untouchable, [])).size).toBe(0);
-  });
-});
-
-describe("listDepartmentReminderMinutes", () => {
-  it("lists every active department's minutes", async () => {
-    await seedFixtureVenue("Reminder list");
-    const a = await departmentWithZone("A");
-    const b = await departmentWithZone("B");
-    const c = await departmentWithZone("C");
-    await setMinutes(a.departmentId, 25);
-    await setMinutes(b.departmentId, null);
-    await setMinutes(c.departmentId, 5);
-    await db.execute(sql`update departments set active = 0 where id = ${c.departmentId}`);
-    expect(await scoped((tx) => listDepartmentReminderMinutes(tx))).toEqual({
-      [a.departmentId]: 25,
-      [b.departmentId]: null,
-    });
-  });
-});
-
-describe("updateDepartment", () => {
-  it("writes a reminder given alone", async () => {
-    await seedFixtureVenue("Reminder update");
-    const a = await departmentWithZone("A");
-    await scoped((tx) => updateDepartment(tx, a.departmentId, { releaseReminderMinutes: 5 }));
-    const [row] = await db
-      .select({ minutes: departments.releaseReminderMinutes })
-      .from(departments)
-      .where(eq(departments.id, a.departmentId));
-    expect(row!.minutes).toBe(5);
+    expect(await readCourseSettingsByZone(untouchable, [])).toEqual(new Map());
   });
 });

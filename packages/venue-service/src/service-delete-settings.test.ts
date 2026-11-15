@@ -3,6 +3,8 @@ import { eq, inArray } from "drizzle-orm";
 import { expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
+  departmentCourses,
+  kitchenCourses,
   menus,
   departmentDayRanges,
   departmentDays,
@@ -570,6 +572,15 @@ it("deletes a deleted department's service steps without listing them", async ()
         step(f.department, 2),
         step(f.alpha, 0),
       ]);
+    const [course] = await tx.insert(kitchenCourses).values({ name: "Mains" }).returning();
+    await tx.insert(departmentCourses).values([
+      { departmentId: f.department, courseId: course!.id, reminderMinutes: null },
+      { departmentId: f.alpha, courseId: course!.id, reminderMinutes: 25 },
+    ]);
+    const keptCourses = await tx
+      .select()
+      .from(departmentCourses)
+      .where(eq(departmentCourses.departmentId, f.alpha));
     const kept = await tx.select().from(serviceSteps).where(eq(serviceSteps.departmentId, f.alpha));
     expect(await readServiceDeleteSettings(tx, [], f.department)).toEqual([
       { key: "profile_zones", count: 2, targets: [] },
@@ -577,6 +588,7 @@ it("deletes a deleted department's service steps without listing them", async ()
     ]);
     await clearServiceDeleteSettings(tx, [], f.department);
     expect(await tx.select().from(serviceSteps)).toEqual(kept);
+    expect(await tx.select().from(departmentCourses)).toEqual(keptCourses);
   });
 });
 

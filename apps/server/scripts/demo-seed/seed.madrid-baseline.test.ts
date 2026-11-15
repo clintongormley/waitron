@@ -1361,6 +1361,30 @@ for (const locale of ["en", "es"] as const) {
             : row.name === STARTER_COURSE_NAMES.Desserts.es
               ? "desserts"
               : null;
+      const overrides = Object.values(expected[phase].tables.departments!.rows).flatMap(
+        (department) =>
+          Object.values(coursesNow.rows)
+            .filter((course) => course.held_until_fired === 0)
+            .map((course) => ({
+              department_id: department.id,
+              course_id: course.id,
+              held_until_fired: 0,
+              reminder_minutes: 10,
+            })),
+      );
+      expected[phase].tables.department_courses = {
+        ...structuredClone(canonical[phase].tables.department_courses!),
+        rows: Object.fromEntries(
+          overrides
+            .map((row) => [stable(row), row])
+            .sort(([a], [b]) => String(a).localeCompare(String(b))),
+        ),
+      };
+      phases[phase]!.department_courses = overrides.length;
+      expected[phase] = madridWithDroppedColumns(expected[phase], {
+        kitchen_courses: ["held_until_fired"],
+        departments: ["release_reminder_minutes"],
+      });
       const stepsNow = expected[phase].tables.service_steps!;
       stepsNow.columns.splice(
         stepsNow.columns.findIndex((column) => column.name === "course_id") + 1,

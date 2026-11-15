@@ -400,7 +400,7 @@ describe("fromDraftLine", () => {
       id: "retired",
       name: "Recorded dessert",
       displayOrder: 3,
-      heldUntilFired: true,
+      fireNowZoneIds: [],
     };
     const restored = fromDraftLine(
       { ...input, courseId: course.id, course, unavailable: false },
@@ -641,7 +641,7 @@ describe("rebuildReturned: a line kept while its dish was not offered", () => {
       id: "retired",
       name: "Recorded dessert",
       displayOrder: 3,
-      heldUntilFired: true,
+      fireNowZoneIds: [],
     };
     const missing = fromDraftLine(
       { ...saved(input, "2.000"), course, unavailable: true },
@@ -687,7 +687,7 @@ describe("rebuildReturned: a line kept while its dish was not offered", () => {
             id: "retired",
             name: "Recorded dessert",
             displayOrder: 3,
-            heldUntilFired: true,
+            fireNowZoneIds: [],
           },
         },
       ],

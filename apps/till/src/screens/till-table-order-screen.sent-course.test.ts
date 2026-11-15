@@ -18,7 +18,7 @@ const course: TillCourse = {
   id: "dessert",
   name: "Dessert $& $'",
   displayOrder: 3,
-  heldUntilFired: true,
+  fireNowZoneIds: [],
 };
 
 beforeEach(() => setLocale("en"));

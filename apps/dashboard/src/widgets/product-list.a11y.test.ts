@@ -371,9 +371,7 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
           { ...products[2]!, courseId: "gone" },
           { ...products[3]!, courseId: null },
         ],
-        courses: [
-          { id: "mains", name: "Mains", displayOrder: 1, active: true, heldUntilFired: false },
-        ],
+        courses: [{ id: "mains", name: "Mains", displayOrder: 1, active: true }],
       },
       theme,
     );

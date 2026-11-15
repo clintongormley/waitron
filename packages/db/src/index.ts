@@ -535,3 +535,5 @@ export {
   readStationPrinterPairs,
   withPrinter,
 } from "./station-printer-list.js";
+
+export { departmentCourses } from "./schema/venue-service/department-courses.js";

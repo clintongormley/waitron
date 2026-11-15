@@ -97,7 +97,7 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       floorZones: [],
       salePolicies: { departments: [], zones: [] },
       readiness: [],
-      releaseReminderMinutesByDepartment: {},
+      courseSettingsByDepartment: {},
       needsClearingDepartmentIds: [],
       lateSendManagerDepartmentIds: [],
       serviceSteps: [],

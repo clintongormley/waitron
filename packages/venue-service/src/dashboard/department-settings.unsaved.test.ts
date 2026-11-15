@@ -112,7 +112,7 @@ const model: VenueServiceView = {
       },
     ],
   },
-  releaseReminderMinutesByDepartment: {},
+  courseSettingsByDepartment: {},
   needsClearingDepartmentIds: [],
   lateSendManagerDepartmentIds: [],
   serviceSteps: [],
@@ -493,7 +493,7 @@ it.each(["tradingName", "receivingProfileId"] as const)(
           collectionNumber: "none",
           needsClearing: false,
           lateSendNeedsManager: false,
-          releaseReminderMinutes: null,
+          courseSettings: [],
           transfers: {
             receivingProfileId: kind === "receivingProfileId" ? "p1" : null,
             destinationDepartmentIds: [],
@@ -555,7 +555,7 @@ it.each(["tradingName", "receivingProfileId"] as const)(
           collectionNumber: "none",
           needsClearing: false,
           lateSendNeedsManager: false,
-          releaseReminderMinutes: null,
+          courseSettings: [],
           transfers: {
             receivingProfileId: kind === "receivingProfileId" ? "p1" : null,
             destinationDepartmentIds: [],
@@ -630,7 +630,7 @@ it("keeps native edits made during Save dirty against the submitted Settings sna
         collectionNumber: "none",
         needsClearing: false,
         lateSendNeedsManager: false,
-        releaseReminderMinutes: null,
+        courseSettings: [],
         transfers: { receivingProfileId: null, destinationDepartmentIds: [] },
       },
     ]);
@@ -718,7 +718,7 @@ it("a native receiving-profile edit during Save retains the submitted baseline a
           collectionNumber: "none",
           needsClearing: false,
           lateSendNeedsManager: false,
-          releaseReminderMinutes: null,
+          courseSettings: [],
           transfers: { receivingProfileId: "p1", destinationDepartmentIds: [] },
         },
       ],
@@ -889,9 +889,17 @@ it("toggling only the late-send switch dirties the form and toggling it back cle
 });
 it("choosing a reminder dirties the form, choosing the stored one again cleans it, and leaving asks only while dirty", async () => {
   const el = await mount();
-  await selectDepartmentTab(el, "service");
+  el.model = {
+    ...el.model!,
+    courses: [{ id: "mains", name: "Mains" }],
+    courseSettingsByDepartment: {
+      d1: [{ courseId: "mains", heldUntilFired: true, reminderMinutes: null }],
+    },
+  };
+  await el.updateComplete;
+  await selectDepartmentTab(el, "tables");
   const control = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-    "wt-combobox[name=releaseReminderMinutes]",
+    "wt-combobox[name=course-mains-reminder]",
   )!;
   expect(control).not.toBeNull();
   const choose = async (value: string) => {

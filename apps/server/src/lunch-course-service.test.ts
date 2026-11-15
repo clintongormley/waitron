@@ -10,6 +10,8 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { and, eq, sql, inArray } from "drizzle-orm";
 import {
   insertInChunks,
+  departmentCourses,
+  floorZones,
   ticketItems,
   printJobs,
   workingOrderLines,
@@ -54,6 +56,7 @@ import { partyRevision } from "./parties.js";
 import { cancelItemForTest } from "./testing/cancel-line.js";
 import {
   readCurrentOrders,
+  readReleaseReminders,
   fireHeldLine,
   fireGroup,
   readHeldCounts,
@@ -184,6 +187,46 @@ describe("set lunch course service", () => {
       expect(current.ungrouped.map((row) => row.lineId).sort()).toEqual(
         [cheese.id, chips.id].sort(),
       );
+    });
+  });
+  it("uses lunch dishes rather than the priced shell to choose a group reminder", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(suite.db, async (tx) => {
+      const { starter, main, picks } = await lunch(tx, venue, true);
+      await setProductCourse(tx, venue.products.burger, starter.id);
+      const offers = await offerProducts(tx, venue.cfg, {
+        zone: { zoneId: venue.tables.zoneId },
+        orderStart: "table",
+      });
+      await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [
+          {
+            release: "hold",
+            lines: [
+              {
+                menuItemId: offers.offerFor(venue.products.burger),
+                quantity: "1",
+                extras: picks([venue.products.chips]),
+              },
+            ],
+          },
+        ],
+      });
+      const [zone] = await tx
+        .select()
+        .from(floorZones)
+        .where(eq(floorZones.id, venue.tables.zoneId));
+      await tx.insert(departmentCourses).values([
+        { departmentId: zone!.departmentId, courseId: starter.id, reminderMinutes: null },
+        { departmentId: zone!.departmentId, courseId: main.id, reminderMinutes: 0 },
+      ]);
+      const groups = (await listOrderGroups(tx, venue.party.partyId)).groups;
+      const expected = { groupId: groups[1]!.id, dueAt: null };
+      expect(
+        (await readReleaseReminders(tx, [venue.party.partyId])).get(venue.party.partyId),
+      ).toEqual(expected);
+      expect((await readCurrentOrders(tx, venue.party.partyId)).reminder).toEqual(expected);
     });
   });
   it("replaces an unsent later choice while the starter is preparing, then explicitly sends the replacement", async () => {

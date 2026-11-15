@@ -4,6 +4,8 @@ import { expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   departments,
+  kitchenCourses,
+  departmentCourses,
   diningTables,
   floorPlanSets,
   floorZones,
@@ -26,7 +28,7 @@ import { resolveZoneClosedDays } from "./day-resolver.js";
 import { offerMenuThroughZone } from "./testing/zone-menus.js";
 import { deleteZone } from "./service-delete.js";
 import { dueFloorLayouts } from "./floor-layout-due.js";
-import { readReleaseReminderMinutesByZone } from "./release-reminders.js";
+import { readCourseSettingsByZone } from "./release-reminders.js";
 import { readTablesNeedingClearing } from "./table-clearing.js";
 import { routingModel } from "./routing-store.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -41,8 +43,12 @@ it("deleted zones leave active zone reads while their department is retained", a
     const department = await createDepartment(tx, { name: "Dining" });
     await tx
       .update(departments)
-      .set({ needsClearing: true, releaseReminderMinutes: 12 })
+      .set({ needsClearing: true })
       .where(eq(departments.id, department.id));
+    const [course] = await tx.insert(kitchenCourses).values({ name: "Mains" }).returning();
+    await tx
+      .insert(departmentCourses)
+      .values({ departmentId: department.id, courseId: course!.id, reminderMinutes: 12 });
     const gone = await createServiceZone(tx, {
       name: "Closed terrace",
       departmentId: department.id,
@@ -86,8 +92,8 @@ it("deleted zones leave active zone reads while their department is retained", a
     );
     expect(due.get(gone.id)?.planned).toBe(false);
     expect(due.get(kept.id)?.due.setId).toBe(set!.id);
-    expect(await readReleaseReminderMinutesByZone(tx, [gone.id, kept.id])).toEqual(
-      new Map([[kept.id, 12]]),
+    expect(await readCourseSettingsByZone(tx, [gone.id, kept.id])).toEqual(
+      new Map([[kept.id, [{ courseId: course!.id, heldUntilFired: true, reminderMinutes: 12 }]]]),
     );
     expect(
       await readTablesNeedingClearing(

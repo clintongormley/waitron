@@ -343,6 +343,7 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
 
   // venue-service
   classify("departments", "state", SERVICE_STATE),
+  classify("department_courses", "state", SERVICE_STATE),
   classify("service_steps", "state", SERVICE_STATE),
   classify("service_step_completions", "state", SERVICE_STATE),
   classify("department_receipts", "state", SERVICE_STATE),

@@ -19,6 +19,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
+import "@waitron/ui/src/components/wt-segmented-control.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "./service-settings-fields.js";
@@ -84,7 +85,7 @@ const fieldTab: Record<Field, DepartmentTab> = {
   collectionNumber: "service",
   needsClearing: "tables",
   lateSendNeedsManager: "service",
-  releaseReminderMinutes: "service",
+  courseSettings: "tables",
   serviceSteps: "tables",
   transfers: "transfers",
   receivingProfileId: "transfers",
@@ -98,7 +99,7 @@ export const departmentSettingFields = (
     ["orderStart", "venue.order_start"],
     ["paidWhen", "venue.counter_paid_when"],
     ["collectionNumber", "venue.print_collection_ticket"],
-    ["releaseReminderMinutes", "venue.release_reminder"],
+    ["courseSettings", "venue.release_reminder"],
     ["lateSendNeedsManager", "venue.late_send_needs_manager"],
     ["needsClearing", "venue.needs_clearing"],
     ["serviceSteps", "venue.service_steps"],
@@ -113,6 +114,7 @@ export const departmentSettingFields = (
 }));
 const copy = (value: DepartmentDraft): DepartmentDraft => ({
   ...value,
+  courseSettings: value.courseSettings.map((row) => ({ ...row })),
   serviceSteps: value.serviceSteps.map((step) => ({ ...step })),
   ...(value.transfers
     ? {
@@ -133,7 +135,15 @@ const settingsEqual = (a: DepartmentDraft, b: DepartmentDraft) =>
   a.collectionNumber === b.collectionNumber &&
   a.needsClearing === b.needsClearing &&
   a.lateSendNeedsManager === b.lateSendNeedsManager &&
-  a.releaseReminderMinutes === b.releaseReminderMinutes &&
+  a.courseSettings.length === b.courseSettings.length &&
+  a.courseSettings.every((row) =>
+    b.courseSettings.some(
+      (other) =>
+        row.courseId === other.courseId &&
+        row.heldUntilFired === other.heldUntilFired &&
+        row.reminderMinutes === other.reminderMinutes,
+    ),
+  ) &&
   stepsEqual(a.serviceSteps, b.serviceSteps) &&
   a.transfers?.receivingProfileId === b.transfers?.receivingProfileId &&
   (a.transfers?.destinationDepartmentIds.length ?? 0) ===
@@ -198,6 +208,10 @@ export class DepartmentSettings extends LitElement {
       .meal-course {
         border-color: var(--wt-color-warning);
         background: var(--wt-color-surface);
+      }
+      .meal-course wt-combobox {
+        flex-basis: 100%;
+        min-width: 0;
       }
       .meal-course wt-icon {
         color: var(--wt-color-warning);
@@ -410,9 +424,14 @@ export class DepartmentSettings extends LitElement {
       collectionNumber: policy?.collectionNumber ?? "none",
       needsClearing: this.model!.needsClearingDepartmentIds.includes(row.id),
       lateSendNeedsManager: this.model!.lateSendManagerDepartmentIds.includes(row.id),
-      // One model read lists the departments and keys every active one here, so the fallback only
-      // types the lookup.
-      releaseReminderMinutes: this.model!.releaseReminderMinutesByDepartment[row.id] ?? null,
+      courseSettings: this.model!.courses.map((course) => ({
+        courseId: course.id,
+        heldUntilFired: true,
+        reminderMinutes: 10,
+        ...this.model!.courseSettingsByDepartment[row.id]?.find(
+          (setting) => setting.courseId === course.id,
+        ),
+      })),
       serviceSteps: this.modelSteps(row.id),
     };
     if (this.opened !== row.id) {
@@ -626,6 +645,7 @@ export class DepartmentSettings extends LitElement {
   /** The latest saved value and the draft value are offered even when the list lacks them, so the
    * dropdown never shows a value it does not list. */
   private releaseReminder(
+    courseId: string,
     saved: number | null,
     minutes: number | null,
     error: string | undefined,
@@ -636,7 +656,7 @@ export class DepartmentSettings extends LitElement {
     ].sort((a, b) => a - b);
     return html`<wt-combobox
       ?preserve-order=${true /* Preserve off/at once/minute sequence. */}
-      name="releaseReminderMinutes"
+      name=${`course-${courseId}-reminder`}
       label=${t("venue.release_reminder")}
       hint=${t("venue.release_reminder_hint")}
       search="auto"
@@ -659,9 +679,20 @@ export class DepartmentSettings extends LitElement {
       @wt-change=${(e: CustomEvent<{ value: string }>) => {
         e.stopPropagation();
         const value = e.detail.value;
-        this.changed("releaseReminderMinutes", value === "" ? null : Number(value));
+        this.courseChanged(courseId, { reminderMinutes: value === "" ? null : Number(value) });
       }}
     ></wt-combobox>`;
+  }
+  private courseChanged(
+    courseId: string,
+    patch: Partial<DepartmentSettingsInput["courseSettings"][number]>,
+  ) {
+    this.changed(
+      "courseSettings",
+      this.draft!.courseSettings.map((row) =>
+        row.courseId === courseId ? { ...row, ...patch } : row,
+      ),
+    );
   }
   private stepsChanged(steps: ServiceStepDraft[]) {
     const before = new Map(this.draft!.serviceSteps.map((step) => [step.key, step]));
@@ -773,7 +804,7 @@ export class DepartmentSettings extends LitElement {
       "collectionNumber",
       "needsClearing",
       "lateSendNeedsManager",
-      "releaseReminderMinutes",
+      "courseSettings",
       ...(this.draft?.transfers
         ? (["receivingProfileId", "destinationDepartmentIds"] as const)
         : []),
@@ -1092,7 +1123,6 @@ export class DepartmentSettings extends LitElement {
           </section>
           <section aria-label=${t("venue.courses_and_kitchen")}>
             <h3>${t("venue.courses_and_kitchen")}</h3>
-            ${this.releaseReminder(this.model!.releaseReminderMinutesByDepartment[row.id] ?? null, draft.releaseReminderMinutes, errors.releaseReminderMinutes, disabled)}
             <div>
               <wt-switch
                 name="lateSendNeedsManager"
@@ -1128,28 +1158,34 @@ export class DepartmentSettings extends LitElement {
                 this.stepsChanged(e.detail.steps);
               }}
             ></department-service-steps>
-            ${this.model!.courses.map(
-              (course) =>
-                html`<div class="meal-course" data-course=${course.id}>
-                  <wt-icon name="section-service"></wt-icon><strong>${course.name}</strong>
-                  <span>${t(course.heldUntilFired ? "venue.meal_hold" : "venue.meal_fire")}</span>
-                  ${
-                    course.heldUntilFired
-                      ? html`<span
-                          >${t("venue.meal_reminder")}:
-                          ${
-                            draft.releaseReminderMinutes === null
-                              ? t("venue.release_reminder.off")
-                              : draft.releaseReminderMinutes === 0
-                                ? t("venue.release_reminder.at_once")
-                                : `${draft.releaseReminderMinutes} ${t("venue.service_step_min")}`
-                          }</span
-                        >`
-                      : nothing
-                  }
-                </div>`,
-            )}
-            ${this.model!.courses.some((course) => course.heldUntilFired) ? html`<p class="hint" data-test="course-reminder-hint">${t("venue.release_reminder_hint")}</p>` : nothing}
+            ${this.model!.courses.map((course) => {
+              const setting = draft.courseSettings.find((row) => row.courseId === course.id)!;
+              const saved = this.model!.courseSettingsByDepartment[row.id]?.find(
+                (setting) => setting.courseId === course.id,
+              );
+              return html`<div class="meal-course" data-course=${course.id}>
+                <wt-icon name="section-service"></wt-icon><strong>${course.name}</strong>
+                <wt-segmented-control
+                  hide-label
+                  name=${`course-${course.id}-held`}
+                  label=${course.name}
+                  .options=${[
+                    { value: "false", label: t("venue.meal_fire") },
+                    { value: "true", label: t("venue.meal_hold") },
+                  ]}
+                  .value=${String(setting.heldUntilFired)}
+                  ?disabled=${disabled}
+                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                    event.stopPropagation();
+                    this.courseChanged(course.id, {
+                      heldUntilFired: event.detail.value === "true",
+                    });
+                  }}
+                ></wt-segmented-control>
+                ${setting.heldUntilFired ? this.releaseReminder(course.id, saved?.reminderMinutes ?? 10, setting.reminderMinutes, errors.courseSettings, disabled) : nothing}
+              </div>`;
+            })}
+            ${errors.courseSettings ? html`<p class="error" data-field-error="courseSettings">${errors.courseSettings}</p>` : nothing}
             <p class="meal-fixed" data-moment="bill">
               <wt-icon name="floor-bill"></wt-icon>${t("venue.meal_bill")}
             </p>

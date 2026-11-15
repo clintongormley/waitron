@@ -232,7 +232,7 @@ describe("readTableSteps", () => {
 
   it("a course served reads the family's dishes of that course", async () => {
     const v = await setupPartyVenue(suite.db);
-    const mains = await inTx(v, (tx) => createCourse(tx, { name: "Mains", heldUntilFired: false }));
+    const mains = await inTx(v, (tx) => createCourse(tx, { name: "Mains" }));
     const [dessert] = await setSteps(v, await tablesDepartment(v), [
       { name: "Dessert?", start: "course_served", courseId: mains.id, minutes: 10 },
     ]);
@@ -255,7 +255,7 @@ describe("readTableSteps", () => {
 
   it("a cancelled dish and an abandoned bill's dishes are left out", async () => {
     const v = await setupPartyVenue(suite.db);
-    const mains = await inTx(v, (tx) => createCourse(tx, { name: "Mains", heldUntilFired: false }));
+    const mains = await inTx(v, (tx) => createCourse(tx, { name: "Mains" }));
     const [dessert] = await setSteps(v, await tablesDepartment(v), [
       { name: "Dessert?", start: "course_served", courseId: mains.id, minutes: 10 },
     ]);
@@ -552,7 +552,7 @@ describe("readTableSteps", () => {
 
   it("reads every fact once, whatever the number of parties", async () => {
     const v = await setupPartyVenue(suite.db);
-    const mains = await inTx(v, (tx) => createCourse(tx, { name: "Mains", heldUntilFired: false }));
+    const mains = await inTx(v, (tx) => createCourse(tx, { name: "Mains" }));
     const [setUp] = await setSteps(v, await tablesDepartment(v), [
       seated("Set up"),
       { name: "Dessert?", start: "course_served", courseId: mains.id, minutes: 10 },
@@ -1265,7 +1265,7 @@ describe("a party whose dishes arrived from another table or the counter", () =>
 
   it("the table's own first order clears a step that started when an arrived dish was served", async () => {
     const v = await setupPartyVenue(suite.db);
-    const mains = await inTx(v, (tx) => createCourse(tx, { name: "Mains", heldUntilFired: false }));
+    const mains = await inTx(v, (tx) => createCourse(tx, { name: "Mains" }));
     const [dessert] = await setSteps(v, await tablesDepartment(v), [
       { name: "Dessert?", start: "course_served", courseId: mains.id, minutes: 10 },
     ]);

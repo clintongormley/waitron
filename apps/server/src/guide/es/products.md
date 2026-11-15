@@ -137,9 +137,9 @@ guarda con el producto. En una mesa, organiza los platos en **Nuevo pedido**: pu
 curso de un plato sin enviar antes de enviarlo. Usa los grupos para elegir qué platos marchas juntos,
 en vez de tratar cada curso como una sección fija para toda la mesa.
 
-En **Cursos**, elige **Marchar ya** para colocar los platos nuevos directamente en ese grupo de
+En la pestaña **Mesas** del departamento, elige **Marchar ya** para colocar los platos nuevos directamente en ese grupo de
 la mesa. Elige **Dejar para después** para agrupar el primer pedido por curso. En pedidos posteriores,
-comprueba el grupo propuesto antes de enviar; puedes mover los platos entre grupos. Añade un curso
+comprueba el grupo propuesto antes de enviar; puedes mover los platos entre grupos. En **Cursos**, añade uno
 con **Añadir curso** y guarda su nombre con Intro o al salir del campo. Abre el menú ⋮ de la fila
 para renombrar o eliminar un curso.
 

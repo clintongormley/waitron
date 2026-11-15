@@ -373,8 +373,8 @@ it("names courses in course order while group numbers survive mutable firing pos
     ],
   );
   data.retainedCourses = [
-    { id: "dessert", name: "Desserts", displayOrder: 2, heldUntilFired: true },
-    { id: "main", name: "Mains", displayOrder: 1, heldUntilFired: true },
+    { id: "dessert", name: "Desserts", displayOrder: 2, fireNowZoneIds: [] },
+    { id: "main", name: "Mains", displayOrder: 1, fireNowZoneIds: [] },
   ];
   const el = await mount(data);
   await click(el, "[data-sent-toggle]");
@@ -457,8 +457,8 @@ it.each([
     ],
   );
   data.retainedCourses = [
-    { id: "d", name: "Desserts", displayOrder: 2, heldUntilFired: true },
-    { id: "m", name: "Mains", displayOrder: 1, heldUntilFired: true },
+    { id: "d", name: "Desserts", displayOrder: 2, fireNowZoneIds: [] },
+    { id: "m", name: "Mains", displayOrder: 1, fireNowZoneIds: [] },
   ];
   const el = await mount(data);
   await click(el, "[data-sent-toggle]");
@@ -805,7 +805,7 @@ it("defers a newly due banner until the pressed row is released", async () => {
 
 it("names the due group's courses and its due clock time in the collapsed reminder", async () => {
   const data = current([], [group("g", [row("held", { released: false, courseId: "main" })])]);
-  data.retainedCourses = [{ id: "main", name: "Mains", displayOrder: 1, heldUntilFired: true }];
+  data.retainedCourses = [{ id: "main", name: "Mains", displayOrder: 1, fireNowZoneIds: [] }];
   data.reminder = { groupId: "g", dueAt: "2026-10-18T12:00:00" };
   const el = await mount(data, { now: Date.parse("2026-10-18T12:00:00") });
   await click(el, "[data-sent-toggle]");

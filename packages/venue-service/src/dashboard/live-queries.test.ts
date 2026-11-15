@@ -68,6 +68,7 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
     "special_days",
     "special_day_dates",
     "service_steps",
+    "department_courses",
     "kitchen_courses",
   ]);
 });

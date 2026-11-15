@@ -6754,11 +6754,13 @@ files one and the Receipts tab is offered (`venue.configure`), the invoice opera
 receipt request the Receipts tab uses, with the saved receipt and not the Receipts tab's draft,
 after the department's settings; if that request is refused, the field shows the refusal and stays
 unsaved while the settings stand. Service holds “Orders and payment”, with the service settings
-and the zones that differ, and “Courses and stations”, with the shared reminder and the manager's
+and the zones that differ, and “Courses and stations”, with the manager's
 PIN switch for sending after a period ends. Tables follows Service: grey fixed moments for seating,
 bill requested and leaving, blue service-step rows placed by their named starts,
-Delete and Add step, and amber read-only course rows in course order with their current send/hold
-and reminder values. Needs clearing follows Party leaves. Receipts, between Tables and Transfers,
+Delete and Add step, and amber course rows in course order with Fire now / Hold for later
+and, while held, each course’s own reminder delay, including At once and Off. These choices join
+the department’s shared Save. Courses keeps shared names and ordering. New courses default to held
+with a ten-minute reminder; new departments copy the default department’s saved overrides. Needs clearing follows Party leaves. Receipts, between Tables and Transfers,
 holds the department's receipt
 editor, and is offered only to someone with `venue.configure`. Transfers holds the allowed
 destinations and the receiving desk profile, and is offered only while two or more departments are

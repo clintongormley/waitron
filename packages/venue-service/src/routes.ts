@@ -1,3 +1,4 @@
+import { listDepartmentCourseSettings, type DepartmentCourseSetting } from "./release-reminders.js";
 import { listDepartmentReceiptReadiness } from "./department-receipts.js";
 import { and, eq } from "drizzle-orm";
 import { readDepartmentDeleteImpact, deleteDepartment } from "./service-delete.js";
@@ -76,7 +77,6 @@ import { mountFloorPlanSetRoutes } from "./floor-plan-set-routes.js";
 import { onlyKeys } from "./request-keys.js";
 import { listNeedsClearingDepartmentIds } from "./table-clearing.js";
 import { listLateSendManagerDepartmentIds } from "./late-send.js";
-import { listDepartmentReminderMinutes } from "./release-reminders.js";
 import { listServiceSteps, listStepCourses, type ServiceStepInput } from "./service-steps.js";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -250,21 +250,6 @@ function requireServiceSteps(value: unknown): ServiceStepInput[] {
 function requireDisplayOrder(value: unknown): number {
   if (!int4InRange(value)) {
     throw new AppError("management.request_invalid", { field: "displayOrder" });
-  }
-  return value;
-}
-
-const MAX_RELEASE_REMINDER_MINUTES = 120;
-
-function requireReleaseReminderMinutes(value: unknown): number | null {
-  if (value === null) return null;
-  if (
-    typeof value !== "number" ||
-    !Number.isInteger(value) ||
-    value < 0 ||
-    value > MAX_RELEASE_REMINDER_MINUTES
-  ) {
-    throw new AppError("management.request_invalid", { field: "releaseReminderMinutes" });
   }
   return value;
 }
@@ -500,7 +485,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           ? await listDepartmentReceiptReadiness(tx)
           : []),
       ],
-      releaseReminderMinutesByDepartment: await listDepartmentReminderMinutes(tx),
+      courseSettingsByDepartment: await listDepartmentCourseSettings(tx),
       needsClearingDepartmentIds: await listNeedsClearingDepartmentIds(tx),
       lateSendManagerDepartmentIds: await listLateSendManagerDepartmentIds(tx),
       serviceSteps: await listServiceSteps(tx),
@@ -739,8 +724,8 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           "transfers",
           "needsClearing",
           "lateSendNeedsManager",
-          "releaseReminderMinutes",
           "serviceSteps",
+          "courseSettings",
         ]);
         if (body.needsClearing !== undefined && typeof body.needsClearing !== "boolean")
           throw new AppError("management.request_invalid", { field: "needsClearing" });
@@ -774,11 +759,9 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           ...(body.lateSendNeedsManager === undefined
             ? {}
             : { lateSendNeedsManager: body.lateSendNeedsManager }),
-          ...(body.releaseReminderMinutes === undefined
+          ...(body.courseSettings === undefined
             ? {}
-            : {
-                releaseReminderMinutes: requireReleaseReminderMinutes(body.releaseReminderMinutes),
-              }),
+            : { courseSettings: requireCourseSettings(body.courseSettings) }),
           ...(body.serviceSteps === undefined
             ? {}
             : { serviceSteps: requireServiceSteps(body.serviceSteps) }),
@@ -1166,3 +1149,37 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
     );
   },
 };
+
+function requireCourseSettings(value: unknown): DepartmentCourseSetting[] {
+  const refuse = (): never => {
+    throw new AppError("management.request_invalid", { field: "courseSettings" });
+  };
+  if (!Array.isArray(value)) return refuse();
+  const seen = new Set<string>();
+  return value.map((row: unknown) => {
+    if (row === null || typeof row !== "object" || Array.isArray(row)) return refuse();
+    const data = row as Record<string, unknown>;
+    if (
+      Object.keys(data).some(
+        (key) => !["courseId", "heldUntilFired", "reminderMinutes"].includes(key),
+      ) ||
+      typeof data.courseId !== "string" ||
+      seen.has(data.courseId) ||
+      typeof data.heldUntilFired !== "boolean" ||
+      !(
+        data.reminderMinutes === null ||
+        (typeof data.reminderMinutes === "number" &&
+          Number.isInteger(data.reminderMinutes) &&
+          data.reminderMinutes >= 0 &&
+          data.reminderMinutes <= 120)
+      )
+    )
+      return refuse();
+    seen.add(data.courseId);
+    return {
+      courseId: data.courseId,
+      heldUntilFired: data.heldUntilFired,
+      reminderMinutes: data.reminderMinutes,
+    } as DepartmentCourseSetting;
+  });
+}

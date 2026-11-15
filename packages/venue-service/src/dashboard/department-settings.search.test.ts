@@ -21,6 +21,7 @@ it.each(["en", "es"] as const)(
     const { el, form } = await mountDepartmentEditor();
     el.model = structuredClone(el.model);
     el.model.departments[2]!.active = true;
+    el.model.courses = [{ id: "mains", name: "Mains" }];
     el.model.serviceSteps = [
       {
         afterStepId: null,
@@ -52,7 +53,14 @@ it.each(["en", "es"] as const)(
       for (const element of root.children) {
         await (element as Element & { updateComplete?: Promise<unknown> }).updateComplete;
         const name = element.getAttribute("name");
-        if (name?.startsWith("transferDestination-")) {
+        if (name?.startsWith("course-") && name.endsWith("-held")) {
+          continue;
+        } else if (name?.startsWith("course-") && name.endsWith("-reminder")) {
+          actual.add(
+            JSON.stringify(["courseSettings", "label" in element ? element.label : null, tab]),
+          );
+          continue;
+        } else if (name?.startsWith("transferDestination-")) {
           const label = element.closest("fieldset")!.querySelector("legend")!.textContent!.trim();
           actual.add(JSON.stringify(["destinationDepartmentIds", label, tab]));
         } else if (

@@ -189,7 +189,7 @@ afterEach(() => {
 
 describe("A803 move dishes panel", () => {
   it("a dish in a held group, which the server moves and keeps in its group, carries the same mark as Split a table's, from its row alone", async () => {
-    const mains = { id: "c-mains", name: "Mains", displayOrder: 2, heldUntilFired: true };
+    const mains = { id: "c-mains", name: "Mains", displayOrder: 2, fireNowZoneIds: [] };
     const held = {
       id: "g-held",
       position: 1,

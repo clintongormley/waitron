@@ -370,8 +370,10 @@ de minutos después de marcar **Montar mesa** como hecho, o **¿Algo más?** cua
 todos los platos. Cada paso empieza en un momento así y vence unos minutos después. Tu local los
 configura en **Pasos de servicio**, en la pestaña **Mesas** del departamento, en el panel. Allí puedes
 leer la comida desde que se sienta el grupo hasta que se va, con sus momentos fijos, pasos y cursos.
-Las filas de los cursos muestran si se envían o se retienen y su recordatorio; cambia esa elección
-en **Cursos** y el recordatorio compartido en la pestaña **Servicio** del departamento.
+Elige **Marchar ya** o **Dejar para después** en cada fila de curso. Un curso retenido ofrece su
+propio tiempo de aviso, con **Al momento** y **Deshabilitado**. Pulsa **Guardar** para conservar
+estas opciones con los demás ajustes del departamento. Usa **Cursos** para cambiar los nombres
+y el orden compartidos.
 
 Elige por nombre cuándo empieza un paso, por ejemplo **Tras Montar mesa**, y ajusta su demora.
 La lista lo coloca junto a ese inicio. Cambiar el nombre de otro paso conserva el vínculo;

@@ -33,7 +33,7 @@ export const view: VenueServiceView = {
   floorZones: [{ id: "z1", name: "Patio", active: true }],
   salePolicies: { departments: [], zones: [] },
   readiness: [],
-  releaseReminderMinutesByDepartment: {},
+  courseSettingsByDepartment: {},
   needsClearingDepartmentIds: [],
   lateSendManagerDepartmentIds: [],
   serviceSteps: [],

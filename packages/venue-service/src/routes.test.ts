@@ -690,72 +690,86 @@ describe("whole service settings saves", () => {
     expect(await lateSendManagerIds(fx)).toEqual([]);
   });
 
-  async function reminderMinutes(fx: Awaited<ReturnType<typeof settingsFixture>>) {
-    const model = await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie);
-    expect(model.status).toBe(200);
-    return (
-      (await model.json()) as { releaseReminderMinutesByDepartment: Record<string, number | null> }
-    ).releaseReminderMinutesByDepartment;
-  }
-
-  it("saves a department's reminder and lists it in the model", async () => {
+  it("saves independent department course choices without changing another department", async () => {
     const fx = await settingsFixture();
-    for (const releaseReminderMinutes of [0, 15, null, 120]) {
+    const mains = await seedCourse("Mains");
+    const desserts = await seedCourse("Desserts");
+    await db.update(kitchenCourses).set({ displayOrder: 2 }).where(eq(kitchenCourses.id, desserts));
+    const other = await withTransaction(db, (tx) =>
+      createDepartment(tx, { name: "Deli", orderStart: "counter" }),
+    );
+    for (const reminderMinutes of [0, 15, null, 120]) {
+      const courseSettings = [
+        { courseId: mains, heldUntilFired: false, reminderMinutes: 10 },
+        { courseId: desserts, heldUntilFired: true, reminderMinutes },
+      ];
       const saved = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
         ...departmentSettings,
-        releaseReminderMinutes,
+        courseSettings,
       });
       expect(saved.status).toBe(200);
-      expect((await reminderMinutes(fx))[fx.departmentId]).toBe(releaseReminderMinutes);
+      const model = (await saved.json()) as {
+        courseSettingsByDepartment: Record<string, unknown[]>;
+      };
+      expect(model.courseSettingsByDepartment[fx.departmentId]).toEqual(courseSettings);
+      expect(model.courseSettingsByDepartment[other.id] ?? []).toEqual([]);
     }
-  });
-
-  it("leaves the reminder as it was when the save does not name it", async () => {
-    const fx = await settingsFixture();
-    await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
-      ...departmentSettings,
-      releaseReminderMinutes: 15,
-    });
-    const saved = await send(
+    const untouched = await send(
       fx.app,
       "PUT",
       fx.departmentPath,
       fx.managerCookie,
       departmentSettings,
     );
-    expect(saved.status).toBe(200);
-    expect((await reminderMinutes(fx))[fx.departmentId]).toBe(15);
+    expect(untouched.status).toBe(200);
+    expect((await untouched.json()).courseSettingsByDepartment[fx.departmentId]).toHaveLength(2);
   });
 
-  it("refuses a reminder outside whole minutes 0 to 120 or null, naming it, and writes nothing", async () => {
+  it("new departments copy the default department's course overrides", async () => {
     const fx = await settingsFixture();
-    for (const releaseReminderMinutes of [-5, 121, 2.5, "10", true, [10]]) {
+    const mains = await seedCourse("Mains");
+    await db.update(departments).set({ isDefault: false });
+    await db
+      .update(departments)
+      .set({ isDefault: true })
+      .where(eq(departments.id, fx.departmentId));
+    const saved = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      courseSettings: [{ courseId: mains, heldUntilFired: false, reminderMinutes: null }],
+    });
+    expect(saved.status).toBe(200);
+    const other = await withTransaction(db, (tx) => createDepartment(tx, { name: "Deli" }));
+    const model = await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie);
+    expect((await model.json()).courseSettingsByDepartment[other.id]).toEqual([
+      { courseId: mains, heldUntilFired: false, reminderMinutes: null },
+    ]);
+  });
+
+  it("refuses invalid course overrides and writes nothing", async () => {
+    const fx = await settingsFixture();
+    const courseId = await seedCourse("Mains");
+    for (const courseSettings of [
+      null,
+      {},
+      [null],
+      [{ courseId, heldUntilFired: "yes", reminderMinutes: 10 }],
+      ...[-1, 121, 1.5, "10", true, [10], undefined].map((reminderMinutes) => [
+        { courseId, heldUntilFired: true, reminderMinutes },
+      ]),
+      [{ courseId: randomUUID(), heldUntilFired: true, reminderMinutes: 10 }],
+      [1, 2].map(() => ({ courseId, heldUntilFired: true, reminderMinutes: 10 })),
+    ]) {
       const before = await rawSettingsSnapshot();
       const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
         ...departmentSettings,
-        releaseReminderMinutes,
+        courseSettings,
       });
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({
-        error: { code: "management.request_invalid", params: { field: "releaseReminderMinutes" } },
+        error: { code: "management.request_invalid", params: { field: "courseSettings" } },
       });
       expect(await rawSettingsSnapshot()).toEqual(before);
     }
-  });
-
-  it("changes only the department it saves", async () => {
-    const fx = await settingsFixture();
-    const other = await withTransaction(db, (tx) =>
-      createDepartment(tx, { name: "Terrace", orderStart: "table" }),
-    );
-    const saved = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
-      ...departmentSettings,
-      releaseReminderMinutes: 5,
-    });
-    expect(saved.status).toBe(200);
-    const minutes = await reminderMinutes(fx);
-    expect(minutes[fx.departmentId]).toBe(5);
-    expect(minutes[other.id]).toBe(10);
   });
 
   async function seedCourse(name: string, active = true) {
@@ -820,7 +834,7 @@ describe("whole service settings saves", () => {
         minutes: 10,
       },
     ]);
-    expect(model.courses).toEqual([{ id: mains, name: "Mains", heldUntilFired: true }]);
+    expect(model.courses).toEqual([{ id: mains, name: "Mains" }]);
   });
 
   it("leaves the steps as they were when the save does not name them", async () => {

@@ -17,7 +17,7 @@ import {
 import type { BumpMode, ChangesAfterSending, StationColour, TicketGrouping } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { assertProductWritable, productWithId, type ProductScope } from "@waitron/menu";
-import { assertStationDestination } from "@waitron/venue-service";
+import { assertStationDestination, readCourseSettingsByZone } from "@waitron/venue-service";
 export { COURSE_REFERENCES, coursesInUse } from "./course-delete.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { replaceStationPrinters } from "./station-printers.js";
@@ -252,7 +252,7 @@ export interface Course {
   name: string;
   displayOrder: number;
   active: boolean;
-  heldUntilFired: boolean;
+  fireNowZoneIds: string[];
 }
 
 /**
@@ -288,7 +288,7 @@ export async function requireCourse(tx: Transaction, courseId: string): Promise<
 /** Create a kitchen course. A duplicate live name is `course.name_taken`. */
 export async function createCourse(
   tx: Transaction,
-  input: { name: string; displayOrder?: number; heldUntilFired?: boolean },
+  input: { name: string; displayOrder?: number },
 ): Promise<{ id: string }> {
   try {
     const [row] = await tx
@@ -296,7 +296,6 @@ export async function createCourse(
       .values({
         name: input.name,
         displayOrder: input.displayOrder ?? 0,
-        heldUntilFired: input.heldUntilFired ?? true,
       })
       .returning({ id: kitchenCourses.id });
     return { id: row!.id };
@@ -310,17 +309,18 @@ export async function createCourse(
 
 /** Active courses in firing order: lowest `display_order` first, then `name`. */
 export async function listCourses(tx: Transaction): Promise<Course[]> {
-  return tx
+  const defaults = await readCourseFireNowZones(tx);
+  const rows = await tx
     .select({
       id: kitchenCourses.id,
       name: kitchenCourses.name,
       displayOrder: kitchenCourses.displayOrder,
       active: kitchenCourses.active,
-      heldUntilFired: kitchenCourses.heldUntilFired,
     })
     .from(kitchenCourses)
     .where(eq(kitchenCourses.active, true))
     .orderBy(kitchenCourses.displayOrder, kitchenCourses.name);
+  return rows.map((row) => ({ ...row, fireNowZoneIds: defaults.get(row.id) ?? [] }));
 }
 
 /**
@@ -354,16 +354,15 @@ export async function moveCourse(tx: Transaction, id: string, to: number): Promi
 export async function updateCourse(
   tx: Transaction,
   id: string,
-  patch: { name?: string; displayOrder?: number; heldUntilFired?: boolean },
+  patch: { name?: string; displayOrder?: number },
 ): Promise<void> {
   if (Object.hasOwn(patch, "active")) {
     throw new AppError("management.request_invalid", { field: "active" });
   }
   await requireLiveCourse(tx, id);
-  const set: { name?: string; displayOrder?: number; heldUntilFired?: boolean } = {};
+  const set: { name?: string; displayOrder?: number } = {};
   if (patch.name !== undefined) set.name = patch.name;
   if (patch.displayOrder !== undefined) set.displayOrder = patch.displayOrder;
-  if (patch.heldUntilFired !== undefined) set.heldUntilFired = patch.heldUntilFired;
   if (Object.keys(set).length === 0) return;
 
   let updated: { id: string }[];
@@ -401,4 +400,18 @@ export async function setProductCourse(
     await requireLiveCourse(tx, courseId);
   }
   await tx.update(products).set({ courseId }).where(productWithId(productId, scope));
+}
+
+export async function readCourseFireNowZones(tx: Transaction): Promise<Map<string, string[]>> {
+  const zones = await readCourseSettingsByZone(tx);
+  const result = new Map<string, string[]>();
+  for (const [zoneId, settings] of zones)
+    for (const setting of settings) {
+      if (setting.heldUntilFired) continue;
+      const ids = result.get(setting.courseId) ?? [];
+      ids.push(zoneId);
+      result.set(setting.courseId, ids);
+    }
+  for (const ids of result.values()) ids.sort();
+  return result;
 }

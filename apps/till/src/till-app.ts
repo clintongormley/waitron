@@ -12652,6 +12652,7 @@ export class TillApp extends LitElement {
     const placed: OrderLine[] = [];
     for (const line of lines) {
       const placement = placeFor(line.courseId ?? line.product.courseId ?? null, {
+        zoneId: this.#tableZoneId,
         courses: this.courses,
         held: [],
         firstOrder: true,
@@ -13057,6 +13058,7 @@ export class TillApp extends LitElement {
         ...this.courses.map((course) => [course.id, course] as const),
       ]);
       return placeFor(courseId, {
+        zoneId: this.#tableZoneId,
         courses: [...courses.values()],
         held: heldViews(this.currentOrders, this.tabGroups),
         firstOrder: this.currentOrders?.hasGroups === false,
@@ -13766,6 +13768,7 @@ export class TillApp extends LitElement {
         const line = sync.store.lines[index]!;
         const courseId = line.courseId ?? line.product.courseId ?? null;
         const { place } = placeFor(courseId, {
+          zoneId: this.#tableZoneId,
           courses: [...courses.values()],
           held,
           firstOrder: false,

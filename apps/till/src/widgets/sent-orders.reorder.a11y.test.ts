@@ -29,7 +29,7 @@ describe.each(["en", "es"] as const)("Sent heading reorder %s", (locale) => {
               ? "Mains from the seasonal menu"
               : "Platos principales de la carta de temporada",
           displayOrder: 1,
-          heldUntilFired: true,
+          fireNowZoneIds: [],
         },
       ];
       const { el, host } = await mountWidget<TillSentOrders>(

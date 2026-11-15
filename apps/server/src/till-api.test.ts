@@ -1,3 +1,4 @@
+import { departmentCourses } from "@waitron/db";
 import type { TradingContext } from "./trading-context.js";
 import { staffRoles, personStaffRoles } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -1830,10 +1831,20 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
         name: "Entrantes",
         displayOrder: 1,
         active: true,
-        heldUntilFired: false,
       },
       { name: "Retirado", displayOrder: 0, active: false },
     ]);
+    const [zone] = await suite.db
+      .select({ id: floorZones.id, departmentId: floorZones.departmentId })
+      .from(floorZones)
+      .where(eq(floorZones.active, true));
+    const [starter] = await suite.db
+      .select({ id: kitchenCourses.id })
+      .from(kitchenCourses)
+      .where(eq(kitchenCourses.name, "Entrantes"));
+    await suite.db
+      .insert(departmentCourses)
+      .values({ departmentId: zone!.departmentId, courseId: starter!.id, heldUntilFired: false });
     try {
       const app = new Hono();
       mountTillApi(app, deps(suite.db), collect([]));
@@ -1843,8 +1854,8 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       const body = (await res.json()) as { courses: { name: string; displayOrder: number }[] };
       // Active-only, by display_order: Entrantes (1) before Postres (2); the deactivated Retirado absent.
       expect(body.courses).toEqual([
-        { id: expect.any(String), name: "Entrantes", displayOrder: 1, heldUntilFired: false },
-        { id: expect.any(String), name: "Postres", displayOrder: 2, heldUntilFired: true },
+        { id: expect.any(String), name: "Entrantes", displayOrder: 1, fireNowZoneIds: [zone!.id] },
+        { id: expect.any(String), name: "Postres", displayOrder: 2, fireNowZoneIds: [] },
       ]);
     } finally {
       await suite.db.execute(sql`delete from kitchen_courses`);

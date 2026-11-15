@@ -50,14 +50,11 @@ export async function listServiceSteps(tx: Transaction): Promise<ServiceStep[]> 
     .orderBy(asc(serviceSteps.departmentId), asc(serviceSteps.position), asc(serviceSteps.id));
 }
 
-export async function listStepCourses(
-  tx: Transaction,
-): Promise<{ id: string; name: string; heldUntilFired: boolean }[]> {
+export async function listStepCourses(tx: Transaction): Promise<{ id: string; name: string }[]> {
   return tx
     .select({
       id: kitchenCourses.id,
       name: kitchenCourses.name,
-      heldUntilFired: kitchenCourses.heldUntilFired,
     })
     .from(kitchenCourses)
     .where(eq(kitchenCourses.active, true))

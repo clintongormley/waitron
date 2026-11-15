@@ -111,7 +111,7 @@ const lines: TabLine[] = [
   },
 ];
 
-const courses = [{ id: "c1", name: "Entrantes", displayOrder: 0, heldUntilFired: true }];
+const courses = [{ id: "c1", name: "Entrantes", displayOrder: 0, fireNowZoneIds: [] }];
 
 const weightProduct: TillProduct = {
   ...products[0]!,
