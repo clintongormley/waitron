@@ -366,17 +366,18 @@ Un paso de servicio te recuerda volver a una mesa en el momento adecuado, como *
 de minutos después de marcar **Montar mesa** como hecho, o **¿Algo más?** cuando ya se han servido
 todos los platos. Cada paso empieza en un momento así y vence unos minutos después. Tu local los
 configura en **Pasos de servicio**, en la pestaña **Mesas** del departamento, en el panel. Allí puedes
-leer la comida desde que se sienta el grupo hasta que se va, con sus momentos fijos, pasos y pases.
-Las filas de los pases muestran si se envían o se retienen y su recordatorio; cambia esa elección
+leer la comida desde que se sienta el grupo hasta que se va, con sus momentos fijos, pasos y cursos.
+Las filas de los cursos muestran si se envían o se retienen y su recordatorio; cambia esa elección
 en **Cursos** y el recordatorio compartido en la pestaña **Servicio** del departamento.
 
 Cuando vence un paso, la tarjeta de la mesa muestra su nombre, con un botón **Hecho** si puedes
-tomar pedidos. En el plano, si no hay nada más urgente, la mesa se vuelve azul con una campana y el
-nombre del paso, y los detalles de la mesa muestran el paso, con **Hecho** si puedes tomar pedidos.
+tomar pedidos. En el plano, si no hay nada más urgente, la mesa se vuelve azul con una campana. Los
+detalles de la mesa muestran el paso, con **Hecho** si puedes tomar pedidos.
 Una mesa muestra un paso cada vez: el último que ha vencido.
 
-Si un paso lleva cinco minutos esperando, el plano añade un contorno ámbar y muestra cuántos
-minutos lleva esperando. Pasa por la mesa y marca el paso como **Hecho** cuando lo hayas atendido.
+Usa el contorno ámbar y el tiempo de espera del paso para detectar una mesa que necesita atención.
+**5′** junto a la campana del plano significa cinco minutos; abre los detalles de la mesa para leer
+el nombre del paso.
 
 Toca **Hecho** cuando hayas pasado por la mesa y los clientes no quieran nada. Quita el paso que se
 ve y cualquier paso anterior que estuviera tapando. Muchas veces no hace falta tocarlo, porque estas

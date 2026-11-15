@@ -133,6 +133,16 @@ describe("mapLook", () => {
     expect(mapLook([tbl], now + 360_000).cue?.text).toBe("6′");
   });
 
+  it.each(["ready", "bill"] as const)("keeps a late step's outline beneath %s", (kind) => {
+    const late = dueStepSignal("Take order", inMinutes(-5));
+    const tbl = table({
+      signals: kind === "bill" ? [late, bill] : [late],
+      readyToServe: kind === "ready" ? 2 : 0,
+    });
+    expect(look([tbl])).toMatchObject({ outline: "waiting", pulse: null });
+    expect(mapLook([tbl], now).top).toBe(kind);
+  });
+
   it("keeps stronger floor warnings above a late step", () => {
     const late = dueStepSignal("Take order", inMinutes(-5));
     expect(look([table({ signals: [late], timingBand: "forgotten" })])).toMatchObject({

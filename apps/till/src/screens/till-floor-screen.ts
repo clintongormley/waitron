@@ -2791,10 +2791,9 @@ export class TillFloorScreen extends LitElement {
     if (needsMovingToday(table)) return this.#waitingCard(table, "move");
     const states = tableStates(table, this.#drawnAt);
     const top = states[0];
-    const lateStep = top === "step" && mapLook([table], this.#drawnAt).outline === "waiting";
     const ring =
       states.map((kind) => RING_OF[kind]).find((r) => r !== undefined) ??
-      (lateStep ? "waiting" : null);
+      (mapLook([table], this.#drawnAt).outline === "waiting" ? "waiting" : null);
     const moving = !this.#prefersReducedMotion();
     const edge = top === "forgotten" && !moving ? " edge-forgotten" : "";
     const calm = top === "held" || top === "nothing-needed" ? " calm" : "";

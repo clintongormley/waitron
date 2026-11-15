@@ -225,7 +225,7 @@ it("reads fixed moments, steps and current course firing in Tables without cours
   const courses = [...panel.querySelectorAll("[data-course]")];
   expect(courses.map((row) => row.textContent!.replace(/\s+/g, " ").trim())).toEqual([
     "Starters Fire now",
-    "Mains Hold for later 10 min",
+    "Mains Hold for later Shared reminder: 10 min",
   ]);
   expect(
     courses.every((row) => row.querySelector("wt-input, wt-combobox, wt-switch, button") === null),
@@ -242,6 +242,38 @@ it("reads fixed moments, steps and current course firing in Tables without cours
       Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
 });
+
+it.each([
+  { minutes: null, label: "Off" },
+  { minutes: 0, label: "At once" },
+])(
+  "reads a held course's $label reminder and an unsaved reminder change",
+  async ({ minutes, label }) => {
+    const view = structuredClone(model);
+    view.courses = [{ id: "mains", name: "Mains", heldUntilFired: true }];
+    view.releaseReminderMinutesByDepartment = { d1: minutes };
+    const { el } = await mount(view);
+    await selectDepartmentTab(el, "tables");
+    const row = () =>
+      shownPanel(el)
+        .querySelector('[data-course="mains"]')!
+        .textContent!.replace(/\s+/g, " ")
+        .trim();
+    expect(row()).toBe(`Mains Hold for later Shared reminder: ${label}`);
+    expect(
+      shownPanel(el).querySelector('[data-test="course-reminder-hint"]')!.textContent!.trim(),
+    ).toBe(VENUE_SERVICE_STRINGS.en["venue.release_reminder_hint"]);
+    await selectDepartmentTab(el, "service");
+    await chooseOption(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        "[name=releaseReminderMinutes]",
+      )!,
+      "5",
+    );
+    await selectDepartmentTab(el, "tables");
+    expect(row()).toBe("Mains Hold for later Shared reminder: 5 min");
+  },
+);
 
 it("opens quiet with Cancel before Save and sends all settings in one request", async () => {
   const { el, writes } = await mount();

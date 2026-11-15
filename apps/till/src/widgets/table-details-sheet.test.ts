@@ -576,6 +576,11 @@ describe("till-table-details-sheet", () => {
         ],
       });
 
+    it("reads the elapsed step wait from the sheet's supplied clock", async () => {
+      const el = await mount({ table: stepped(), canMarkSteps: true, now: stepNow + 300_000 });
+      expect(text(el, ".step-wait")).toBe("Waiting 5 min");
+    });
+
     it("draws the step's whole name with Done above the chips, and not again among them", async () => {
       const el = await mount({ table: stepped(longName), canMarkSteps: true, now: stepNow });
       const chip = find(el, '[data-chip="service-step"]')!;

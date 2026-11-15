@@ -378,6 +378,21 @@ describe("till-floor-screen: a table's due service step", () => {
     expect(cardOf(el).querySelector(".card-open")).toBeNull();
   });
 
+  it.each(["ready", "bill"] as const)(
+    "keeps the late step's card outline beneath %s",
+    async (kind) => {
+      const signals = [
+        dueStepSignal("Take order", inMinutes(-5)),
+        ...(kind === "bill"
+          ? [{ kind: "bill_requested" as const, requestedAt: inMinutes(0) }]
+          : []),
+      ];
+      const el = await mount([seated({ signals, readyToServe: kind === "ready" ? 2 : 0 })]);
+      expect(cardOf(el).querySelector('[data-ring="waiting"]')).not.toBeNull();
+      expect(stepChipOf(el)!.textContent).toContain("Waiting 5 min");
+    },
+  );
+
   it("keeps elapsed minutes fully visible inside the map table", async () => {
     const el = await mount(
       [seated({ today: today(), signals: [dueStepSignal("Take order", inMinutes(-5))] })],

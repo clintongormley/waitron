@@ -328,7 +328,7 @@ export class DepartmentServiceSteps extends LitElement {
 
   override render(): TemplateResult {
     return html`<h4 data-test="service-steps-heading">
-        <wt-icon name="bell"></wt-icon>${t("venue.service_steps")}
+        <wt-icon name="floor-step"></wt-icon>${t("venue.service_steps")}
       </h4>
       ${this.disabled ? nothing : this.#reorder.liveRegion()}
       ${

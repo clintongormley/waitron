@@ -365,6 +365,10 @@ describe.each(["light", "dark"] as const)("department-settings tabs (%s)", (them
       theme,
     )) as HTMLElementTagNameMap["department-settings"];
     el.model = structuredClone(model);
+    el.model.courses = [
+      { id: "first", name: "Starters", heldUntilFired: false },
+      { id: "next", name: "Mains", heldUntilFired: true },
+    ];
     el.departmentId = "d1";
     el.api = new VenueServiceApi((async (path) =>
       path.endsWith("/profiles")
@@ -380,6 +384,7 @@ describe.each(["light", "dark"] as const)("department-settings tabs (%s)", (them
       .not.toBeNull();
     await selectDepartmentTab(el, tab);
     expect(el.tab).toBe(tab);
+    if (tab === "tables") expect(el.shadowRoot!.querySelectorAll("[data-course]")).toHaveLength(2);
     await expectNoA11yViolations(host);
   });
 });

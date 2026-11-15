@@ -244,11 +244,11 @@ function outlineOf(
   if (has("overdue")) return "overdue";
   if (has("waiting") && !has("forgotten") && !has("fire")) return "waiting";
   if (
-    kinds[0] === "step" &&
-    members.some((member) => {
-      const step = currentStep(member.signals, now);
-      return step !== null && stepWaitMinutes(step, now) !== null;
-    })
+    has("step") &&
+    !has("forgotten") &&
+    !has("unavailable") &&
+    !has("fire") &&
+    stepWaitMinutes(latestStep(members, now), now) !== null
   )
     return "waiting";
   if (has("clearing") || has("moving")) return "clearing";

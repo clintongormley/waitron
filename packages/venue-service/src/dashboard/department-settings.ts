@@ -1128,7 +1128,8 @@ export class DepartmentSettings extends LitElement {
                   ${
                     course.heldUntilFired
                       ? html`<span
-                          >${
+                          >${t("venue.meal_reminder")}:
+                          ${
                             draft.releaseReminderMinutes === null
                               ? t("venue.release_reminder.off")
                               : draft.releaseReminderMinutes === 0
@@ -1140,8 +1141,9 @@ export class DepartmentSettings extends LitElement {
                   }
                 </div>`,
             )}
+            ${this.model!.courses.some((course) => course.heldUntilFired) ? html`<p class="hint" data-test="course-reminder-hint">${t("venue.release_reminder_hint")}</p>` : nothing}
             <p class="meal-fixed" data-moment="bill">
-              <wt-icon name="bell"></wt-icon>${t("venue.meal_bill")}
+              <wt-icon name="floor-bill"></wt-icon>${t("venue.meal_bill")}
             </p>
             <p class="meal-fixed" data-moment="leaves">
               <wt-icon name="person"></wt-icon>${t("venue.meal_leaves")}

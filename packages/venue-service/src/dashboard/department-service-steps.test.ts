@@ -149,7 +149,7 @@ it("marks waiter steps with the shared primary colour and a bell", async () => {
   const cell = rows(el)[0]!.firstElementChild!;
   expect(getComputedStyle(cell).borderInlineStartColor).toBe("rgb(1, 2, 3)");
   expect(parseFloat(getComputedStyle(cell).borderInlineStartWidth)).toBeGreaterThan(0);
-  expect(q(el, 'h4 wt-icon[name="bell"]')).not.toBeNull();
+  expect(q(el, 'h4 wt-icon[name="floor-step"]')).not.toBeNull();
 });
 
 it("draws each step's name, start and minutes under Step and Starts", async () => {

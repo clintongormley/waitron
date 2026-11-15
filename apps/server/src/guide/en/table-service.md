@@ -353,12 +353,12 @@ the current send or hold choice and reminder; change the course choice on **Cour
 shared reminder on the department's **Service** tab.
 
 When a step is due, the table's card shows its name, with a **Done** button if you may take orders.
-On the map, unless something more urgent is showing, the table turns blue with a bell and the step's
-name, and the table's details list the step, with **Done** if you may take orders. A table shows one
+On the map, unless something more urgent is showing, the table turns blue with a bell. Open its
+details to read the step and use **Done** if you may take orders. A table shows one
 step at a time: the one that fell due last.
 
-If a step waits five minutes, the floor adds an amber outline and shows how many minutes it has
-waited. Visit the table and mark the step **Done** when you have dealt with it.
+Use the amber outline and the step’s elapsed wait to spot a table needing a visit. Read **5′**
+beside the map’s bell as five minutes; open the table’s details for the step’s name.
 
 Tap **Done** when you have been to the table and the guests want nothing. It clears the step on show
 and any earlier step it was hiding. Often you don't need to tap it, because these clear a step too:
