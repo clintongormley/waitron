@@ -1011,7 +1011,8 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
 - **Restore and promotion start a new chain under a new installation name.**
   Setup/restore/promotion/conflict switch use five symbols for the box's UTC minute, after a second
   clock agrees within 30 seconds. The box's internet time service saying it is synchronised carries
-  on by itself, and AEAT's time is not read for it (owner, 2026-11-11: "Instead we rely on NTP");
+  on by itself, and AEAT's time is not read for it (owner, 2026-11-11: "Instead we rely on NTP";
+  2026-11-13: "b", AEAT no longer counts);
   another machine's clock counts only once the person proved on that page (the setup password on
   setup, the backup's node recovery key on restore, a `node.manage` sign-in on promotion, the box's
   current recovery key on the conflict switch) confirms both times or sets the box's clock from that
