@@ -1,6 +1,6 @@
 # Guest menu disclosure implementation plan
 
-**Authority.** Authored by separate Codex Sol-high for Lane F. Claude reviewed the plan (`receipts/guest-menu-disclosure-20261115/plan-review.md`); the watcher cleared it at 18:57 on 15 November 2026. No owner design approval is claimed. One PR; the watcher permitted build while POPOVER-FALLBACK CI runs at 20:51.
+**Authority.** Authored by separate Codex Sol-high for Lane F. Claude reviewed the plan (`~/waitron-campaign-f/receipts/guest-menu-disclosure-20261115/plan-review.md`); the watcher cleared it at 18:57 on 15 November 2026. No owner design approval is claimed. One PR after POPOVER-FALLBACK; at 20:51 the watcher permitted building while its CI runs.
 
 **Watcher queue ask, verbatim** (`~/waitron-campaign-f/queue.md`, GUEST-MENU-POPOVER):
 
@@ -20,4 +20,4 @@
 
 **Guidance receipt:** `~/waitron-campaign-f/receipts/popover-fallback-20261115/guest-disclosure-guidance.txt`, HTML disclosure guide: “use `<details>` and `<summary>` for a native disclosure pattern without JS.” Use native disclosure; avoid newer exclusive grouping/content pseudo-elements.
 
-**Review clarification, 2026-11-15.** At 21:01 the watcher cleared the full-row consequence: an opened symbol starts its own row with its explanation beneath, moving a later symbol from its closed position. Keep native disclosure, omit redundant tap instructions, and put local before/after capture paths in the PR without uploading images. This supersedes the earlier screenshot-attachment wording.
+**Review clarification, 2026-11-15.** At 21:01 the watcher cleared the full-row consequence: an opened symbol starts its own row with its explanation beneath, moving a later symbol from its closed position. Keep native disclosure, cut the redundant tap instructions flagged by the review, and put local before/after capture paths in the PR without uploading images. This replaces the watcher’s 18:57 instruction to put screenshots in the PR (`~/waitron-campaign-f/questions.md`, 21:01 clarification).
