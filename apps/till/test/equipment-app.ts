@@ -83,14 +83,12 @@ export async function mountEquipmentApp(
     listCounterWaiting: vi.fn().mockResolvedValue([]),
     listStations: vi.fn().mockResolvedValue([]),
     getStationQueue: vi.fn().mockResolvedValue({ items: [], notices: [] }),
-    getDevicePassBoard: vi
-      .fn()
-      .mockResolvedValue({
-        board: passBoard(),
-        stations: [],
-        zones: null,
-        display: { showNonPassStations: true },
-      }),
+    getDevicePassBoard: vi.fn().mockResolvedValue({
+      board: passBoard(),
+      stations: [],
+      zones: null,
+      display: { showNonPassStations: true },
+    }),
     getTablesState: vi.fn().mockResolvedValue([]),
     listZones: vi.fn().mockResolvedValue([]),
     listSentDepartmentTransfers: vi.fn().mockResolvedValue({ requests: [] }),

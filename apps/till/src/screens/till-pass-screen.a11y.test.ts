@@ -253,21 +253,17 @@ describe.each(["light", "dark"] as const)("till-pass-screen a11y (%s theme)", (t
 
   it("has no violations on a till's configured Pass board with Ready and both age extremes", async () => {
     const api = {
-      getDeviceIdentity: vi
-        .fn()
-        .mockResolvedValue({
-          kitchenScreens: [
-            { kind: "pass", available: true, stations: [], zones: null, showNonPassStations: true },
-          ],
-        }),
-      getDevicePassBoard: vi
-        .fn()
-        .mockResolvedValue({
-          board: populated(),
-          stations: [],
-          zones: null,
-          display: { showNonPassStations: true },
-        }),
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        kitchenScreens: [
+          { kind: "pass", available: true, stations: [], zones: null, showNonPassStations: true },
+        ],
+      }),
+      getDevicePassBoard: vi.fn().mockResolvedValue({
+        board: populated(),
+        stations: [],
+        zones: null,
+        display: { showNonPassStations: true },
+      }),
     } as unknown as TillApi;
     const { el, host } = await mount({ api, embedded: true, runsPass: true });
     expect(inBoard(el).querySelector(".age-forgotten")).not.toBeNull();
@@ -293,21 +289,17 @@ describe.each(["light", "dark"] as const)("till-pass-screen a11y (%s theme)", (t
       ],
     });
     const api = {
-      getDeviceIdentity: vi
-        .fn()
-        .mockResolvedValue({
-          kitchenScreens: [
-            { kind: "pass", available: true, stations: [], zones: null, showNonPassStations: true },
-          ],
-        }),
-      getDevicePassBoard: vi
-        .fn()
-        .mockResolvedValue({
-          board,
-          stations: [],
-          zones: null,
-          display: { showNonPassStations: true },
-        }),
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        kitchenScreens: [
+          { kind: "pass", available: true, stations: [], zones: null, showNonPassStations: true },
+        ],
+      }),
+      getDevicePassBoard: vi.fn().mockResolvedValue({
+        board,
+        stations: [],
+        zones: null,
+        display: { showNonPassStations: true },
+      }),
     } as unknown as TillApi;
     const { el, host } = await mount({ api, embedded: true, runsPass: true });
     expect(inBoard(el).querySelector(".ticket-head .number")!.textContent).toContain("28, 30");
@@ -316,21 +308,17 @@ describe.each(["light", "dark"] as const)("till-pass-screen a11y (%s theme)", (t
 
   it("has no violations on a party's group cards with the table-changed notice", async () => {
     const api = {
-      getDeviceIdentity: vi
-        .fn()
-        .mockResolvedValue({
-          kitchenScreens: [
-            { kind: "pass", available: true, stations: [], zones: null, showNonPassStations: true },
-          ],
-        }),
-      getDevicePassBoard: vi
-        .fn()
-        .mockResolvedValue({
-          board: party(),
-          stations: [],
-          zones: null,
-          display: { showNonPassStations: true },
-        }),
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        kitchenScreens: [
+          { kind: "pass", available: true, stations: [], zones: null, showNonPassStations: true },
+        ],
+      }),
+      getDevicePassBoard: vi.fn().mockResolvedValue({
+        board: party(),
+        stations: [],
+        zones: null,
+        display: { showNonPassStations: true },
+      }),
       bumpGroupReady: vi.fn().mockRejectedValue({ code: "party.out_of_date" }),
     } as unknown as TillApi;
     const { el, host } = await mount({ api, embedded: true, runsPass: true });
@@ -383,21 +371,17 @@ describe.each(["light", "dark"] as const)("till-pass-screen a11y (%s theme)", (t
 
   it("has no violations on an empty pass", async () => {
     const api = {
-      getDeviceIdentity: vi
-        .fn()
-        .mockResolvedValue({
-          kitchenScreens: [
-            { kind: "pass", available: true, stations: [], zones: null, showNonPassStations: true },
-          ],
-        }),
-      getDevicePassBoard: vi
-        .fn()
-        .mockResolvedValue({
-          board: passBoard(),
-          stations: [],
-          zones: null,
-          display: { showNonPassStations: true },
-        }),
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        kitchenScreens: [
+          { kind: "pass", available: true, stations: [], zones: null, showNonPassStations: true },
+        ],
+      }),
+      getDevicePassBoard: vi.fn().mockResolvedValue({
+        board: passBoard(),
+        stations: [],
+        zones: null,
+        display: { showNonPassStations: true },
+      }),
     } as unknown as TillApi;
     const { el, host } = await mount({ api, embedded: true });
     expect(el.shadowRoot!.querySelector("[data-empty]")).not.toBeNull();

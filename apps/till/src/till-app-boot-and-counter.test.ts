@@ -215,14 +215,12 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listCounterWaiting: vi.fn().mockResolvedValue([]),
     listStations: vi.fn().mockResolvedValue([]),
     getStationQueue: vi.fn().mockResolvedValue({ items: [], notices: [] }),
-    getDevicePassBoard: vi
-      .fn()
-      .mockResolvedValue({
-        board: passBoard(),
-        stations: [],
-        zones: null,
-        display: { showNonPassStations: true },
-      }),
+    getDevicePassBoard: vi.fn().mockResolvedValue({
+      board: passBoard(),
+      stations: [],
+      zones: null,
+      display: { showNonPassStations: true },
+    }),
     getTablesState: vi.fn().mockResolvedValue([]),
     listZones: vi.fn().mockResolvedValue([]),
     recordSale: vi.fn().mockResolvedValue(saleResult),

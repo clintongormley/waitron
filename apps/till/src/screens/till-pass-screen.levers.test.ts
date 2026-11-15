@@ -552,22 +552,18 @@ describe("A773 pass screen: levers on a till's configured Pass", () => {
   });
   const allApi = (board: PassBoard, overrides: Record<string, unknown> = {}) =>
     fakeApi({
-      getDeviceIdentity: vi
-        .fn()
-        .mockResolvedValue({
-          ...identity(),
-          kitchenScreens: [
-            { kind: "pass", available: true, stations: [], zones: null, showNonPassStations: true },
-          ],
-        }),
-      getDevicePassBoard: vi
-        .fn()
-        .mockResolvedValue({
-          board,
-          stations: [],
-          zones: null,
-          display: { showNonPassStations: true },
-        }),
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        ...identity(),
+        kitchenScreens: [
+          { kind: "pass", available: true, stations: [], zones: null, showNonPassStations: true },
+        ],
+      }),
+      getDevicePassBoard: vi.fn().mockResolvedValue({
+        board,
+        stations: [],
+        zones: null,
+        display: { showNonPassStations: true },
+      }),
       ...overrides,
     });
   const allBoard = () =>
@@ -682,22 +678,18 @@ describe("A773 pass screen: a party's group cards on a till's configured Pass", 
   const groupNamed = (n: string) => t("table.group_n").replace("{n}", n);
   const allApi = (board: PassBoard, overrides: Record<string, unknown> = {}) =>
     fakeApi({
-      getDeviceIdentity: vi
-        .fn()
-        .mockResolvedValue({
-          ...identity(),
-          kitchenScreens: [
-            { kind: "pass", available: true, stations: [], zones: null, showNonPassStations: true },
-          ],
-        }),
-      getDevicePassBoard: vi
-        .fn()
-        .mockResolvedValue({
-          board,
-          stations: [],
-          zones: null,
-          display: { showNonPassStations: true },
-        }),
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        ...identity(),
+        kitchenScreens: [
+          { kind: "pass", available: true, stations: [], zones: null, showNonPassStations: true },
+        ],
+      }),
+      getDevicePassBoard: vi.fn().mockResolvedValue({
+        board,
+        stations: [],
+        zones: null,
+        display: { showNonPassStations: true },
+      }),
       ...overrides,
     });
   const mountAll = async (api: FakeApi) => {
@@ -797,28 +789,24 @@ describe("A773 pass screen: a party's group cards on a till's configured Pass", 
     const card = groupCard({ items: [passItem({ id: "late", queuedAt: minutesAgo(20) })] });
     const el = await mountTill(
       fakeApi({
-        getDeviceIdentity: vi
-          .fn()
-          .mockResolvedValue({
-            ...identity(),
-            kitchenScreens: [
-              {
-                kind: "pass",
-                available: true,
-                stations: [],
-                zones: null,
-                showNonPassStations: true,
-              },
-            ],
-          }),
-        getDevicePassBoard: vi
-          .fn()
-          .mockResolvedValue({
-            board: passBoard({ inProgress: [card] }),
-            stations: [],
-            zones: null,
-            display: { showNonPassStations: true },
-          }),
+        getDeviceIdentity: vi.fn().mockResolvedValue({
+          ...identity(),
+          kitchenScreens: [
+            {
+              kind: "pass",
+              available: true,
+              stations: [],
+              zones: null,
+              showNonPassStations: true,
+            },
+          ],
+        }),
+        getDevicePassBoard: vi.fn().mockResolvedValue({
+          board: passBoard({ inProgress: [card] }),
+          stations: [],
+          zones: null,
+          display: { showNonPassStations: true },
+        }),
       }),
     );
     expect(cardOf(el, "group:g-1").classList).toContain("age-forgotten");

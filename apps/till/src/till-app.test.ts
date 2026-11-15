@@ -15818,14 +15818,12 @@ describe("persistent till destinations", () => {
         name: "Till",
         kitchenScreens: [],
       }),
-      getDevicePassBoard: vi
-        .fn()
-        .mockResolvedValue({
-          board: passBoard(),
-          stations: [],
-          zones: null,
-          display: { showNonPassStations: true },
-        }),
+      getDevicePassBoard: vi.fn().mockResolvedValue({
+        board: passBoard(),
+        stations: [],
+        zones: null,
+        display: { showNonPassStations: true },
+      }),
     });
     await toCounter(el);
     const expo = el.shadowRoot!.querySelector("till-pass-screen")!;

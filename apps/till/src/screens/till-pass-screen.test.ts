@@ -740,19 +740,17 @@ describe("A773 pass screen", () => {
       listening((reboot) =>
         withFakeTimers(async () => {
           const api = fakeApi({
-            getDeviceIdentity: vi
-              .fn()
-              .mockResolvedValue({
-                kitchenScreens: [
-                  {
-                    kind: "pass",
-                    available: true,
-                    stations: [],
-                    zones: null,
-                    showNonPassStations: true,
-                  },
-                ],
-              }),
+            getDeviceIdentity: vi.fn().mockResolvedValue({
+              kitchenScreens: [
+                {
+                  kind: "pass",
+                  available: true,
+                  stations: [],
+                  zones: null,
+                  showNonPassStations: true,
+                },
+              ],
+            }),
             getDevicePassBoard: vi
               .fn()
               .mockResolvedValueOnce({
@@ -1310,27 +1308,23 @@ describe("A773 pass screen", () => {
       ["an embedded card on configured Pass", "expo.watcher_empty", { embedded: true }],
     ] as const)("%s says %s in the board's status slot", async (_, key, props) => {
       const api = fakeApi({
-        getDeviceIdentity: vi
-          .fn()
-          .mockResolvedValue({
-            kitchenScreens: [
-              {
-                kind: "pass",
-                available: true,
-                stations: [],
-                zones: null,
-                showNonPassStations: true,
-              },
-            ],
-          }),
-        getDevicePassBoard: vi
-          .fn()
-          .mockResolvedValue({
-            board: passBoard(),
-            stations: [],
-            zones: null,
-            display: { showNonPassStations: true },
-          }),
+        getDeviceIdentity: vi.fn().mockResolvedValue({
+          kitchenScreens: [
+            {
+              kind: "pass",
+              available: true,
+              stations: [],
+              zones: null,
+              showNonPassStations: true,
+            },
+          ],
+        }),
+        getDevicePassBoard: vi.fn().mockResolvedValue({
+          board: passBoard(),
+          stations: [],
+          zones: null,
+          display: { showNonPassStations: true },
+        }),
       });
       const el = await mount({ api, ...props });
       expect(words(el)).toEqual([t(key)]);
@@ -1402,14 +1396,12 @@ describe("A773 pass screen", () => {
     it("says nothing while the pass is gone", async () => {
       const api = fakeApi({
         getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass", false)])),
-        getDevicePassBoard: vi
-          .fn()
-          .mockResolvedValue({
-            board: passBoard(),
-            stations: [],
-            zones: null,
-            display: { showNonPassStations: true },
-          }),
+        getDevicePassBoard: vi.fn().mockResolvedValue({
+          board: passBoard(),
+          stations: [],
+          zones: null,
+          display: { showNonPassStations: true },
+        }),
       });
       const el = await mount({ api });
       expect(el.shadowRoot!.querySelector("[data-empty]")).toBeNull();
@@ -1420,21 +1412,17 @@ describe("A773 pass screen", () => {
 describe("A773 pass screen: a till's configured Pass", () => {
   const mountAll = (board: PassBoard, props: Partial<TillPassScreen> = {}) => {
     const api = fakeApi({
-      getDeviceIdentity: vi
-        .fn()
-        .mockResolvedValue({
-          kitchenScreens: [
-            { kind: "pass", available: true, stations: [], zones: null, showNonPassStations: true },
-          ],
-        }),
-      getDevicePassBoard: vi
-        .fn()
-        .mockResolvedValue({
-          board,
-          stations: [],
-          zones: null,
-          display: { showNonPassStations: true },
-        }),
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        kitchenScreens: [
+          { kind: "pass", available: true, stations: [], zones: null, showNonPassStations: true },
+        ],
+      }),
+      getDevicePassBoard: vi.fn().mockResolvedValue({
+        board,
+        stations: [],
+        zones: null,
+        display: { showNonPassStations: true },
+      }),
     });
     return mount({ api, embedded: true, ...props }).then((el) => ({ api, el }));
   };
@@ -1578,21 +1566,17 @@ describe("A773 pass screen: a till's configured Pass", () => {
 describe("A773 pass screen: a till's configured Pass, its extras and portions", () => {
   const mountAll = async (board: PassBoard) => {
     const api = fakeApi({
-      getDeviceIdentity: vi
-        .fn()
-        .mockResolvedValue({
-          kitchenScreens: [
-            { kind: "pass", available: true, stations: [], zones: null, showNonPassStations: true },
-          ],
-        }),
-      getDevicePassBoard: vi
-        .fn()
-        .mockResolvedValue({
-          board,
-          stations: [],
-          zones: null,
-          display: { showNonPassStations: true },
-        }),
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        kitchenScreens: [
+          { kind: "pass", available: true, stations: [], zones: null, showNonPassStations: true },
+        ],
+      }),
+      getDevicePassBoard: vi.fn().mockResolvedValue({
+        board,
+        stations: [],
+        zones: null,
+        display: { showNonPassStations: true },
+      }),
     });
     const el = await mount({ api, embedded: true });
     expect(boardOf(el)!.mode).toBe("pass");
