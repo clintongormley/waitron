@@ -2,54 +2,33 @@
 
 ## PLAN FOR APPROVAL:
 
-Lane I request: `~/waitron-campaign-i/queue.md`, watcher 2026-11-15 20:20, SPARE-WAIT-LOOP; source: `docs/backlog/replication-cloud.md:724–751` and linked details. Draft only:
-the driver checks and commits it, Claude reviews it, then the watcher clears building; no owner design approval claimed.
+**Ask/authority:** Lane I queue, watcher 2026-11-15 20:20, SPARE-WAIT-LOOP; source: `docs/backlog/replication-cloud.md:724–751` and linked details. Separate Sol/high draft, driver corrections, Claude plan review, then watcher clearance before building. No owner design approval claimed.
+**Finish:** a waiting spare backs off repeated downloads/refusals, stops digest reads, bounds the integrity-check wait, shows a check-failure reason, and logs refused folder reads while continuing live handover work. One PR; residual bundle work stays open.
+**Reuse:** `runDuty`, `HeldCopy`, `recordWait`, `monotonicNow`, `CopyFileChecks`, the integrity worker and existing rigs. No new records, routes, protocols or process subsystem; no fiscal identity, chain, numbering, allocation, `alta`, `registerSif` or `restoreFiscal` changes. File SHA-256 stays identical.
 
-**Finish line:** a waiting spare retries less often, stops digest reads promptly, bounds its integrity-check wait,
-shows a copy-check failure reason, and logs unreadable cleanup folders. One PR for the five requested wait-loop behaviors; residual bundle work stays open.
-Reuse `runDuty`, `HeldCopy`, `recordWait`, `monotonicNow`, `CopyFileChecks`, the integrity worker and existing test rigs.
-No new records, protocols, process subsystem or framework; no fiscal identity, hash-chain, numbering, allocation, `alta`, `registerSif` or `restoreFiscal` changes. File SHA-256 calculation remains identical.
+- [ ] **Retries and reasons:** `apps/server/src/handover-destination-duty.ts`, `handover-fetch.test.ts`.
+  Back off only repeated indicator/download attempts after fetch failures, source refusals or fetched-copy rejection: 5, 10, 20, 40, then 60 seconds, scoped to the operation. A fetched-but-refused copy does not reset this deadline.
+  Keep status reads, `not_stepped_down` waits, acceptance posts and restart requests on today's five-second tick; source abandonment remains promptly visible. Local reads/wakes cannot bypass an unchanged download deadline; a new operation or accepted copy resets it.
+  Keep the existing 60-second minimum for retained-file comparisons, including throws. Clear an obsolete reason to the existing neutral `null` while checking fresh bytes; suppress repeated log events independently, keyed by event, operation id and classified code, not raw exception text. Reset suppression on phase progress; retry failed reason writes without repeating identical warnings.
+  Catch comparison throws only, record `handover.copy_check_failed`, retain the file and retry later; keep the diagnostic exception in the log. Test the duty's own `signal.aborted` for cancellation; it writes no failure reason. Acceptance failures remain outside that catch.
+  Duty tests own growing/capped refetch delays, wake/deadline behavior, unchanged status/acceptance cadence, progress reset, reason-write/log suppression, and thrown-check reason/recovery. Preserve abandonment, no-overlap and retained-file timing assertions.
 
-- [ ] **Retry and reasons.** Modify `apps/server/src/handover-destination-duty.ts` and `handover-fetch.test.ts`.
-  Keep an in-memory retry deadline per operation/phase: successive waits use 5, 10, 20, 40, then 60 seconds.
-  Gate peer requests, refetches, acceptance posts and repeated restart requests; keep local state reads on ticks/wakes.
-  A wake cannot bypass an unchanged wait; a new operation/phase or completed progress resets it. A fetched-but-refused copy is not progress.
-  Keep the existing 60-second minimum for retained-file comparisons. Do not clear a reason just because another download finished.
-  Suppress repeated equivalent fault logs, including when writing the reason fails; still retry the write. Keep diagnostic errors in the log.
-  Catch comparison throws specifically, store `handover.copy_check_failed`, retain the file and retry later;
-  cancellation writes no failure reason. Acceptance failures stay outside that catch.
-  Duty tests: “wait-loop: refetch and post delays grow and cap”, “wait-loop: wake preserves the deadline”,
-  “wait-loop: phase progress resets retries”, “wait-loop: repeated faults log once even when the reason write fails”,
-  and “wait-loop: a thrown comparison stores its reason and later recovers”. Preserve abandonment and no-overlap assertions.
+- [ ] **Stop/deadline:** `apps/server/src/handover-capture.ts`, `handover-compare.ts`, `handover-integrity.ts`, and their sibling test files.
+  Add optional `signal?: AbortSignal` to `digestFileIfPresent` and its private digest helper, passed to `createReadStream`. Both comparison digests receive the duty signal; unsignalled capture/placement callers keep their behavior.
+  Only controlled comparison supplies an integrity deadline (`CompareOptions.integrityLimitMs?: number`), combined with the duty stop signal. Reuse the existing five-second stop grace, clear timers/listeners, and unref a worker still present after the grace.
+  On timeout record `handover.copy_check_failed` and retain the file. Observe the worker's real exit in existing per-file check state: never start another check of that file while its earlier worker remains alive; after exit permit a later backed-off attempt. No permanent timed-out flag or “until process restart” rule. Start failure/pre-abort must not leave a fictitious live worker.
+  Before fixing the production limit, time the existing real integrity helper on an available disposable representative venue copy and record bytes, runtime/hardware and duration; choose at least five minutes and ten times that measured duration. This is a margin choice, not a claim all venues fit. If no representative timing is available, return that default decision to the watcher before building the deadline. Do not create a benchmark framework or alter shared state.
+  The deadline bounds the caller's wait, not SQLite execution/file closure; the synchronous-termination limitation is presently a source-comment claim, not an experiment from this item.
+  `handover-capture.test.ts` owns active-digest abort/close and unchanged unsignalled output. Existing stuck-worker cases in `handover-integrity.test.ts` own bounded rejection, unref, real-exit notification and timer cleanup.
+  `handover-compare.test.ts` owns deadline/stop distinction, no second worker before exit, later retry, cached-check safety and both digest signal paths. Preserve real sound-copy/dangling-row controls. Restore, upgrade and emergency callers remain unsignalled and unlimited.
 
-- [ ] **Stop and deadline.** Modify `apps/server/src/handover-capture.ts`, `handover-compare.ts`, `handover-integrity.ts`.
-  Add optional `signal?: AbortSignal` to `digestFileIfPresent` and its private digest helper; pass it to `createReadStream`.
-  Both comparison digests use the duty signal; unsignalled capture/placement callers keep their behavior.
-  Only controlled comparison gives `isCopyIntact` a combined stop/deadline signal: five minutes (`CompareOptions.integrityLimitMs?: number`).
-  Reuse its five-second stop grace; clear timers/listeners and unref a worker still present after that grace.
-  Timeout refuses with `handover.copy_check_failed` and sets `CopyFileChecks.integrityTimedOut?: true`:
-  do not check or accept it again until process restart, even if a late worker result says it passed.
-  Retain its file; cancellation rejects. This bounds the caller's wait, not SQLite execution or file closure; the termination limitation in `handover-integrity.ts`'s comment is not experimentally proved here.
-  In `handover-capture.test.ts`, “wait-loop: abort closes an active digest” owns stream cancellation and unchanged unsignalled digests.
-  In `handover-integrity.test.ts`, extend the existing stuck-worker cases to assert bounded rejection/unref, never guaranteed exit.
-  In `handover-compare.test.ts`, “wait-loop: timeout never accepts or starts another check” owns deadline wiring, late success and cached-check safety;
-  “wait-loop: both digests receive the stop signal” owns that wiring. Retain real dangling-row and sound-copy controls.
-  `restore-stream.ts`, `upgrade-checks.ts` and `handover-emergency-check.ts` keep their unsignalled, unlimited checks.
+- [ ] **Reason display and refused cleanup:** `apps/setup/src/screens/handover-screen.ts`, `apps/setup/src/i18n/strings/handover.ts`, `handover-screen.test.ts`; `apps/server/src/guide/{en,es}/servers.md`.
+  Add EN/ES wording for `handover.copy_check_failed`: the check could not finish, the spare has not taken over, and it retries automatically. For persistent failure, link the existing Servers guide's emergency procedure to review another copy, with its existing requirement to switch off the old main box. Do not promise a restart repairs an unreadable journal or change emergency admission/confirmation.
+  Extend the screen's existing wait-reason table for EN/ES text and the guide link; look in both themes at phone/desktop widths. Update only the matching guide action.
+  In `apps/server/src/handover-store.ts`, `destinationOperationFolders` treats only `ENOENT` as empty; other failures propagate. The duty's `removeClosedFolders` catches and logs a distinct error once, then lets live work continue; do not repeat the failed startup sweep on every pass.
+  `handover-store.test.ts` owns ENOENT versus EACCES. `handover-fetch.test.ts` proves logging plus live-operation progress despite EACCES. `handover-place-copy.test.ts` adds EACCES to its existing caller logging/recovery coverage. No general cleanup rescheduling.
 
-- [ ] **Readable reason and folder refusal.** In `apps/setup/src/screens/handover-screen.ts` and
-  `apps/setup/src/i18n/strings/handover.ts`, map `handover.copy_check_failed` to EN/ES wording: checking failed,
-  takeover has not happened; restart this box if the message persists. Extend `handover-screen.test.ts`'s “says what a handover waiting on %s is waiting for” for rendered EN/ES text.
-  Update `apps/server/src/guide/{en,es}/servers.md` with that action; look at the page in both themes and phone width. No general wording sweep.
-  In `apps/server/src/handover-store.ts`, swallow only `ENOENT` from `destinationOperationFolders`; propagate other failures.
-  `handover-store.test.ts`: “wait-loop: only a missing folder is empty”. In `handover-fetch.test.ts` and `handover-place-copy.test.ts`,
-  “wait-loop: an unreadable folder is logged” proves each caller's logging and existing recovery behavior.
+**Backlog:** edit `docs/backlog/replication-cloud.md` and both index references in `docs/backlog.md`. Delete the finished digest-signal, thrown-check-reason and readdir entries. Narrow the integrity entry to the still-unlimited bucket restore. Narrow the back-off entry/detail to closed-folder retry scheduling and full-disk reason persistence, retaining that rejected copies are still retried rather than repaired. Leave chart-post open: the ambiguous route boolean needs a ruling. Leave crash-after-swap plus missing `accepted.db` open: accepting changed live bytes needs a recovery decision and is outside the queue's smallest result. Watcher clearance explicitly settles these exclusions and the measurement/default choice.
 
-**Open scope:** leave chart-post unchanged: `handover-activation.ts` still receives an ambiguous boolean; diagnostics cannot finish that entry.
-Leave crash-after-swap plus lost `accepted.db` open: `handover-place-copy.ts` recognises the live copy by digest; accepting changed bytes needs a separate recovery decision. Driver asks watcher once at clearance: “Leave these two entries open, as recommended?”
-Also retain linked residuals for closed-folder retry scheduling, full-disk reason persistence and bucket-restore deadlines.
-Delete only finished entries/detail bullets in `docs/backlog/replication-cloud.md`; retain residual text and update both `docs/backlog.md` index references without closing the bundle.
-
-**Build/check:** observe new behavioral tests fail before implementation, then pass; keep assertions strict and reuse gates/clocks.
-Run named files via `pnpm --filter @waitron/server exec vitest run src/<file>.test.ts`, plus unchanged `restore-stream.test.ts`, `boot.upgrade.test.ts`, `handover-emergency-check.test.ts`.
-Run `pnpm --filter @waitron/setup exec vitest run src/screens/handover-screen.test.ts`. No package-wide local run; normal hook and current-head CI follow during finish-branch.
-Estimate added/removed lines: production 210/55; tests 330/55; test support 0/0; docs including plan 85/35: about 770 total. Target three hours to PR; watcher/outage waits excluded.
+**Build/check:** name each test for its behavior above, observe its expected failure before implementation, then pass. Keep existing assertions strict and reuse clocks/gates. Run all changed server test files with `pnpm --filter @waitron/server exec vitest run src/<file>.test.ts`; also focused unchanged `restore-stream.test.ts`, `boot.upgrade.test.ts`, `handover-emergency-check.test.ts`. Run `pnpm --filter @waitron/setup exec vitest run src/screens/handover-screen.test.ts`. No package-wide local suite; normal hook and selected current-head CI during finish-branch.
+**Size/time:** production +210/−55, tests +330/−55, support 0/0, docs including plan +85/−35: about 770 changed lines. Target three hours to PR, excluding watcher/outage waits. Claude reviews built work separately. A timing experiment needing unavailable resources goes to the watcher, not an invented tool or indefinite observation.
