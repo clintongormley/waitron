@@ -909,7 +909,7 @@ describe("management: a device's equipment", () => {
     });
     const read = await send(deviceApp, managerCookie, "GET", "/management-api/devices");
     expect(read.status).toBe(200);
-    const row = (read.json as { id: string; equipment: RoleEquipment[] }[]).find(
+    const row = (read.json as unknown as { id: string; equipment: RoleEquipment[] }[]).find(
       (d) => d.id === a,
     )!;
     expect(row.equipment.filter((role) => role.role !== "card_terminal")).toEqual([
