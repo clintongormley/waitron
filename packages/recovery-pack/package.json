@@ -18,7 +18,7 @@
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
-    "@napi-rs/canvas": "^1.1.0",
+    "@napi-rs/canvas": "^1.1.1",
     "@types/fontkit": "^2.0.9",
     "@types/node": "^26.6.6",
     "@types/pdfkit": "^0.17.7",

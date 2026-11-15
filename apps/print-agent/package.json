@@ -23,9 +23,9 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@hono/node-server": "^2.1.6",
+    "@hono/node-server": "^2.1.8",
     "@waitron/print-agent": "workspace:*",
-    "hono": "^4.13.16",
+    "hono": "^4.13.18",
     "undici": "^8.12.4"
   },
   "devDependencies": {

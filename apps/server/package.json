@@ -33,9 +33,9 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "3.1163.0",
-    "@fastify/busboy": "3.2.2",
-    "@hono/node-server": "^2.1.6",
+    "@aws-sdk/client-s3": "3.1167.0",
+    "@fastify/busboy": "3.2.5",
+    "@hono/node-server": "^2.1.8",
     "@waitron/adjustments": "workspace:*",
     "@waitron/bookings": "workspace:*",
     "@waitron/composition": "workspace:*",
@@ -77,11 +77,11 @@
     "drizzle-orm": "^0.45.4",
     "fflate": "^0.8.3",
     "fontkit": "2.0.4",
-    "hono": "^4.13.16",
-    "jose": "^6.2.15",
+    "hono": "^4.13.18",
+    "jose": "^6.2.17",
     "multicast-dns": "^7.2.5",
     "node-forge": "^1.4.3",
-    "nodemailer": "^10.3.1",
+    "nodemailer": "^10.5.0",
     "pdfkit": "0.20.2",
     "qrcode": "^1.5.4",
     "sharp": "0.35.5",
@@ -89,8 +89,8 @@
     "undici": "^8.12.4"
   },
   "devDependencies": {
-    "@napi-rs/canvas": "^1.1.0",
-    "@simplewebauthn/server": "^14.0.3",
+    "@napi-rs/canvas": "^1.1.1",
+    "@simplewebauthn/server": "^14.1.0",
     "@smithy/node-http-handler": "4.14.2",
     "@types/fontkit": "^2.0.9",
     "@types/multicast-dns": "^7.2.4",
