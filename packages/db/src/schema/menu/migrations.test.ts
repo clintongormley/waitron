@@ -140,7 +140,7 @@ describe("menu releases", () => {
     }
     for (const state of ["live", "queued", "superseded"]) await releaseVersion(id, ++number, state);
     await release(
-      await version(id, ++number),
+      await version(id, number + 1),
       id,
       "cancelled",
       "2026-11-15T09:00:00.000Z",
