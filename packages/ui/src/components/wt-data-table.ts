@@ -1216,9 +1216,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const at = path.findIndex(
       (node) => node instanceof HTMLTableRowElement && node.getRootNode() === this.renderRoot,
     );
-    if (path.slice(0, at).some((node) => node instanceof Element && node.matches(KEEPS_ARROWS)))
-      return;
     const row = path[at] as HTMLTableRowElement;
+    // A table nested in a cell keeps the arrow keys pressed anywhere inside it, not only in its rows.
+    const inner = path.slice(0, at);
+    if (inner.some((node) => node instanceof WtDataTable)) return;
+    if (inner.some((node) => node instanceof Element && node.matches(KEEPS_ARROWS))) return;
     const open = row.getAttribute("aria-expanded");
     const level = Number(row.getAttribute("aria-level"));
     const toggle = row.querySelector<HTMLButtonElement>(

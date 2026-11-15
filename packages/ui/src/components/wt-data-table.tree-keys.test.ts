@@ -1,6 +1,6 @@
 import { html } from "lit";
 import { userEvent } from "vitest/browser";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { cleanup, mount } from "../test-helpers.js";
 import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
 import "./wt-data-table.js";
@@ -8,6 +8,8 @@ import "./wt-input.js";
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
+  sessionStorage.clear();
   localStorage.clear();
 });
 
@@ -159,4 +161,62 @@ test("arrow keys typed in a field inside a cell, or with a modifier held, are le
     await userEvent.keyboard(`{${modifier}>}{ArrowDown}{ArrowLeft}{/${modifier}}`);
   expect(el.shadowRoot!.activeElement).toBe(toggle(el, "coffee"));
   expect(el.isExpanded("coffee")).toBe(true);
+});
+
+test("arrow keys on a control inside a table nested in a cell stay with that nested table", async () => {
+  const el = await tree({
+    columns: [
+      columns[0]!,
+      {
+        key: "nested",
+        label: "Nested",
+        cell: () =>
+          html`<wt-data-table
+            .rows=${[{ id: "inner" }]}
+            .columns=${[
+              {
+                key: "name",
+                label: "Name",
+                cell: () => html`<button data-inner>Inner action</button>`,
+              },
+            ]}
+            .rowKey=${(r: { id: string }) => r.id}
+          ></wt-data-table>`,
+      },
+    ],
+  });
+  const inner = shownRow(el, "coffee").querySelector("wt-data-table")!;
+  await inner.updateComplete;
+  const button = inner.shadowRoot!.querySelector<HTMLButtonElement>("[data-inner]")!;
+  button.focus();
+  await userEvent.keyboard("{ArrowDown}{ArrowLeft}");
+  expect(focusedRow(el)).toBe("coffee");
+  expect(el.isExpanded("coffee")).toBe(true);
+  expect(inner.shadowRoot!.activeElement).toBe(button);
+});
+
+test("arrow keys on a nested table's control outside its rows stay with that nested table", async () => {
+  const el = await tree({
+    columns: [
+      columns[0]!,
+      {
+        key: "nested",
+        label: "Nested",
+        cell: () =>
+          html`<wt-data-table
+            .rows=${[]}
+            .columns=${[{ key: "name", label: "Name", cell: () => "" }]}
+            ><button slot="empty-action" data-inner>Add one</button></wt-data-table
+          >`,
+      },
+    ],
+  });
+  const inner = shownRow(el, "coffee").querySelector("wt-data-table")!;
+  await inner.updateComplete;
+  const button = shownRow(el, "coffee").querySelector<HTMLButtonElement>("[data-inner]")!;
+  button.focus();
+  await userEvent.keyboard("{ArrowDown}{ArrowLeft}");
+  expect(focusedRow(el)).toBe("coffee");
+  expect(el.isExpanded("coffee")).toBe(true);
+  expect(el.shadowRoot!.activeElement).toBe(button);
 });
