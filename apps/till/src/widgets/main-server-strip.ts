@@ -38,17 +38,22 @@ export class TillMainServerStrip extends LitElement {
   @property({ type: Boolean }) spareAnswering = false;
   @property({ type: Boolean }) showSwitch = false;
   @property({ type: Boolean }) refused = false;
+  @property({ type: Boolean }) showCloud = false;
+  @property({ type: Boolean }) cloudBusy = false;
+  @property({ type: Boolean }) cloudRefused = false;
 
   override render() {
     const switchable = this.spareAnswering && this.showSwitch;
     return html`<div class="strip" role="alert" data-main-server-strip>
       <span class="words"
         >${t(
-          switchable && this.refused
-            ? "server.main_still_answering"
-            : this.spareAnswering
-              ? "server.main_silent"
-              : "server.none_answering",
+          this.showCloud && this.cloudRefused
+            ? "cloud_emergency.main_answering"
+            : switchable && this.refused
+              ? "server.main_still_answering"
+              : this.spareAnswering
+                ? "server.main_silent"
+                : "server.none_answering",
         )}</span
       >
       ${
@@ -61,6 +66,17 @@ export class TillMainServerStrip extends LitElement {
                   new CustomEvent("switch-to-spare", { bubbles: true, composed: true }),
                 )}
               >${t("server.switch_to_spare")}</wt-button
+            >`
+          : nothing
+      }
+      ${
+        this.showCloud
+          ? html`<wt-button
+              variant="secondary"
+              data-start-in-cloud
+              .loading=${this.cloudBusy}
+              @click=${() => this.dispatchEvent(new CustomEvent("start-in-cloud", { bubbles: true, composed: true }))}
+              >${t("cloud_emergency.start")}</wt-button
             >`
           : nothing
       }

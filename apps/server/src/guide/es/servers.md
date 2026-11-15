@@ -116,6 +116,8 @@ ofrece su página de progreso. Si responde el servidor principal anterior, abre 
 **Servidores** o apágalo y vuelve a comprobarlo. Si no se puede verificar la copia con la
 declaración, para y conserva los datos de ambos servidores.
 
+Si el alojamiento de emergencia está disponible para tu local, la franja también ofrece **Iniciar el local en la nube**, incluso sin servidor de reserva. La opción aparece en la pantalla de acceso y para todo el personal. [Comprueba qué necesitas](servers.md#cloud-emergency) antes de abrirla.
+
 ## Conservar los datos del servidor averiado {#old-box-returns}
 
 Usa el nuevo servidor principal cuando arranque. Conserva el servidor averiado y sus datos para la
@@ -300,3 +302,7 @@ Comprueba su fecha de emisión antes de usar una copia guardada. **Ocultar códi
 la tarjeta, igual que salir de esta pantalla. La dirección junto al código corresponde a ese código.
 La tarjeta también muestra quién tiene permiso y autenticador, y quién necesita configurarlo
 en su perfil. La tarjeta no inicia el local.
+
+Si la caja principal deja de responder, mantén el terminal abierto. Cuando la franja roja ofrezca **Iniciar el local en la nube**, elige la opción para ver la dirección de emergencia y un código QR. Escanéalo con el móvil o elige **Abrir aquí** para salir del terminal y abrirla en este navegador. **Cerrar** vuelve al terminal.
+
+Ten a mano el código de emergencia, tu contraseña de Waitron y un código del autenticador o de recuperación. El diálogo indica los roles que pueden iniciar el local; Cloud comprueba la disponibilidad antes de continuar. La opción permanece oculta hasta que Cloud habilite el alojamiento de emergencia para tu local.

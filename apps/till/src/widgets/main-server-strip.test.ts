@@ -83,3 +83,40 @@ it("paints with the danger colour", async () => {
   expect(getComputedStyle(strip).backgroundColor).toBe(danger);
   expect(danger).not.toBe("rgba(0, 0, 0, 0)");
 });
+
+it("keeps the spare first and offers Cloud independently of the spare permission", async () => {
+  const { el, host } = await mountWidget<TillMainServerStrip>("till-main-server-strip", {
+    spareAnswering: true,
+    showSwitch: true,
+    showCloud: true,
+  });
+  expect(
+    [...el.shadowRoot!.querySelectorAll("wt-button")].map((b) =>
+      b.getAttribute("data-start-in-cloud") !== null ? "cloud" : "spare",
+    ),
+  ).toEqual(["spare", "cloud"]);
+  el.showSwitch = false;
+  await el.updateComplete;
+  const cloud = el.shadowRoot!.querySelector<HTMLElement & LitElement>("[data-start-in-cloud]")!;
+  expect(cloud).not.toBeNull();
+  const started = vi.fn();
+  host.addEventListener("start-in-cloud", started);
+  await cloud.updateComplete;
+  cloud.shadowRoot!.querySelector("button")!.click();
+  expect(started).toHaveBeenCalledOnce();
+});
+
+it("shows the Cloud check's busy state and neutral refusal even without a spare", async () => {
+  const { el } = await mountWidget<TillMainServerStrip>("till-main-server-strip", {
+    showCloud: true,
+    cloudBusy: true,
+    cloudRefused: true,
+  });
+  const cloud = el.shadowRoot!.querySelector<HTMLElement & { loading: boolean }>(
+    "[data-start-in-cloud]",
+  )!;
+  expect(cloud).not.toBeNull();
+  expect(cloud.loading).toBe(true);
+  expect(el.shadowRoot!.textContent).toContain("The main server is answering again.");
+  expect(el.shadowRoot!.textContent).not.toContain(t("server.main_still_answering"));
+});

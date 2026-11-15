@@ -1321,3 +1321,117 @@ describe("ServerRouter — the main box and the spare", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
+
+describe("Cloud emergency main check", () => {
+  it("finds the main at the page address without changing routing or cached addresses", async () => {
+    const table: Record<string, Answer> = { [BOX]: "down", [CLOUD]: "down" };
+    const storage = memoryStorage();
+    const r = new ServerRouter({ origin: CLOUD, fetchImpl: probeFetch(table), storage });
+    r.setServers([{ nodeId: "b", url: BOX, standing: "serving-primary" }]);
+    await r.probeNow();
+    const before = {
+      current: r.current,
+      waiting: r.waiting,
+      states: r.statuses(),
+      cache: storage.getItem(SERVERS_STORAGE_KEY),
+    };
+    table[CLOUD] = { acceptingSales: false, term: 4, nodeId: "b" };
+    await expect(r.probeEmergencyMain()).resolves.toBe(true);
+    expect({
+      current: r.current,
+      waiting: r.waiting,
+      states: r.statuses(),
+      cache: storage.getItem(SERVERS_STORAGE_KEY),
+    }).toEqual(before);
+  });
+
+  it.each([false, true])(
+    "keeps the main identity when its address is the page origin (cached %s)",
+    async (cached) => {
+      const storage = memoryStorage();
+      const fetchImpl = probeFetch({ [BOX]: { acceptingSales: false, term: 1, nodeId: "b" } });
+      let r = new ServerRouter({ origin: BOX, fetchImpl, storage });
+      r.setServers([{ nodeId: "b", url: BOX, standing: "serving-primary" }]);
+      if (cached) r = new ServerRouter({ origin: BOX, fetchImpl, storage });
+      await expect(r.probeEmergencyMain()).resolves.toBe(true);
+    },
+  );
+
+  it.each(["another-node", "missing-node", "refusal", "malformed"])(
+    "does not identify %s as the main",
+    async (answer) => {
+      const fetchImpl = vi.fn(async () =>
+        answer === "malformed"
+          ? new Response("not json")
+          : Response.json(
+              { nodeId: answer === "another-node" ? "c" : answer === "refusal" ? "b" : null },
+              { status: answer === "refusal" ? 503 : 200 },
+            ),
+      );
+      const r = new ServerRouter({ origin: BOX, fetchImpl, storage: memoryStorage() });
+      r.setServers([{ nodeId: "b", url: BOX, standing: "serving-primary" }]);
+      await expect(r.probeEmergencyMain()).resolves.toBe(false);
+    },
+  );
+
+  it("bounds a response whose headers arrive but whose body never ends", async () => {
+    vi.useFakeTimers();
+    let stream!: ReadableStreamDefaultController<Uint8Array>;
+    try {
+      const r = new ServerRouter({
+        origin: BOX,
+        storage: memoryStorage(),
+        timeoutMs: 50,
+        fetchImpl: async () =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                stream = controller;
+              },
+            }),
+          ),
+      });
+      r.setServers([{ nodeId: "b", url: BOX, standing: "serving-primary" }]);
+      const check = r.probeEmergencyMain();
+      await vi.advanceTimersByTimeAsync(50);
+      await expect(check).resolves.toBe(false);
+    } finally {
+      stream?.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("ends an unanswered check at the configured deadline and leaves ordinary probing available", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn(
+        (_input: RequestInfo | URL, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) =>
+            init!.signal!.addEventListener("abort", () => reject(new Error("deadline")), {
+              once: true,
+            }),
+          ),
+      );
+      const r = new ServerRouter({
+        origin: BOX,
+        fetchImpl,
+        storage: memoryStorage(),
+        timeoutMs: 50,
+      });
+      r.setServers([{ nodeId: "b", url: BOX, standing: "serving-primary" }]);
+      const checked = r.probeEmergencyMain();
+      await vi.advanceTimersByTimeAsync(50);
+      await expect(checked).resolves.toBe(false);
+      const unknown = new ServerRouter({
+        origin: BOX,
+        fetchImpl: probeFetch({ [BOX]: { acceptingSales: true, term: 1 } }),
+        storage: memoryStorage(),
+      });
+      await expect(unknown.probeEmergencyMain()).resolves.toBe(false);
+      await unknown.probeNow();
+      expect(unknown.waiting).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

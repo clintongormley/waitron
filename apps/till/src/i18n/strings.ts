@@ -1995,6 +1995,16 @@ export const en = {
   "server.switched": "Moved to another server. Enter your PIN.",
   "server.main_silent": "The main server is not answering",
   "server.none_answering": "No server is answering. Check this device's network connection.",
+  "cloud_emergency.start": "Start the venue in the cloud",
+  "cloud_emergency.main_answering": "The main server is answering again.",
+  "cloud_emergency.requirements":
+    "Take the emergency code from your recovery pack. You will need your Waitron password and a code from an authenticator app set up beforehand, or a recovery code.",
+  "cloud_emergency.next":
+    "Enter the code on Cloud, then sign in and confirm that the old box is switched off. Cloud checks availability before starting the venue.",
+  "cloud_emergency.roles": "Roles that can start it:",
+  "cloud_emergency.qr": "Scan to open the emergency address",
+  "cloud_emergency.open": "Open here",
+  "cloud_emergency.close": "Close",
   "server.switch_to_spare": "Switch to the spare server",
   "server.main_still_answering":
     "The main server is still answering. To move to the spare, hand over from Servers on the dashboard.",
@@ -4047,6 +4057,16 @@ export const es: Record<StringKey, string> = {
   "server.main_silent": "El servidor principal no responde",
   "server.none_answering":
     "Ningún servidor responde. Revisa la conexión de red de este dispositivo.",
+  "cloud_emergency.start": "Iniciar el local en la nube",
+  "cloud_emergency.main_answering": "El servidor principal vuelve a responder.",
+  "cloud_emergency.requirements":
+    "Busca el código de emergencia en el paquete de recuperación. Necesitarás tu contraseña de Waitron y un código de una aplicación de autenticación configurada previamente, o un código de recuperación.",
+  "cloud_emergency.next":
+    "Introduce el código en Cloud, inicia sesión y confirma que la caja anterior está apagada. Cloud comprueba la disponibilidad antes de iniciar el local.",
+  "cloud_emergency.roles": "Roles que pueden iniciarlo:",
+  "cloud_emergency.qr": "Escanea para abrir la dirección de emergencia",
+  "cloud_emergency.open": "Abrir aquí",
+  "cloud_emergency.close": "Cerrar",
   "server.switch_to_spare": "Cambiar al servidor de reserva",
   "server.main_still_answering":
     "El servidor principal todavía responde. Para pasar al de reserva, haz el traspaso desde Servidores en el panel.",
