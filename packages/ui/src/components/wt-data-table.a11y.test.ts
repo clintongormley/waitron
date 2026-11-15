@@ -341,6 +341,35 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
+  test("a tree with a leaf row focused by the arrow keys", async () => {
+    type TreeRow = { id: string; parent: string | null; name: string };
+    const el = (await mountThemed(
+      '<wt-data-table aria-label="Categories"></wt-data-table>',
+      theme,
+    )) as WtDataTable<TreeRow>;
+    el.columns = [
+      { key: "name", label: "Name", cell: (row) => row.name, sortValue: (row) => row.name },
+    ] satisfies DataTableColumn<TreeRow>[];
+    el.rows = [
+      { id: "food", parent: null, name: "Food" },
+      { id: "eggs", parent: "food", name: "Eggs" },
+    ];
+    el.rowKey = (row) => row.id;
+    el.rowParent = (row) => row.parent;
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLButtonElement>("button.tree-toggle")!.focus();
+    await userEvent.keyboard("{ArrowDown}");
+    const leaf = el.shadowRoot!.querySelector<HTMLElement>('tbody tr[data-row-key="eggs"]')!;
+    expect(el.shadowRoot!.activeElement).toBe(leaf);
+    expect(leaf.matches(":focus-visible")).toBe(true);
+    // Chromium's own focus outline is "auto"; the table's token ring is solid and drawn inside the row.
+    expect(getComputedStyle(leaf).outlineStyle).toBe("solid");
+    expect(getComputedStyle(leaf).outlineOffset).toBe(
+      `-${getComputedStyle(el).getPropertyValue("--wt-focus-offset").trim()}`,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   test("tree mode with an always-open top branch", async () => {
     type TreeRow = { id: string; parent: string | null; name: string };
     const el = (await mountThemed(

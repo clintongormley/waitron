@@ -1675,8 +1675,15 @@ level rather than disappearing. A row that has children gets its own expand/coll
 (`collapseLabel`/`expandLabel` give it a localized accessible name, or `rowToggleLabel` one naming its own row),
 unless `rowCollapsible` refuses it, or the table holds it open with `collapseDescendants` off (below), when it draws none; where
 `rowActivation` returns `"toggle"`, the arrow is only a picture and a button over the whole row carries
-that name instead. Collapsed state lives inside the component, not the caller. The table renders `role="treegrid"` with `aria-level`/`aria-expanded` on
-each row, and a sortable column sorts each level of siblings independently rather than flattening the
+that name instead. Collapsed state lives inside the component, not the caller. A tree table is a tree grid: it renders `role="treegrid"` with `aria-level`/`aria-expanded` on
+each row and `aria-expanded` on its toggle, and the arrow keys do what that role promises. Down and Up
+move to the next and previous row shown, passing over the rows of a closed branch; Right opens a
+closed branch and, on an open one, moves to its first row; Left closes an open branch and, elsewhere,
+moves to its parent row. Focus lands on the row's toggle button or row button, or
+on the row itself when it has neither. The keys are left alone with a modifier held, or when they
+come from a field, list, menu or other control inside a cell that uses them itself (including one
+that cancels the key or names an arrow in `aria-keyshortcuts`, as Menu structure's grips do). Guard:
+`packages/ui/src/components/wt-data-table.tree-keys.test.ts`. A sortable column sorts each level of siblings independently rather than flattening the
 whole tree into one sort, except the children of a row `rowKeepsChildOrder` returns true for, which
 keep the order `rows` gives them. Leave `rowParent` unset for the ordinary flat table — the two modes share
 every other property. Set `initiallyCollapsed` when parent rows are summaries and children are
