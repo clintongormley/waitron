@@ -1581,57 +1581,126 @@ describe("a dish whose period ended earlier today", () => {
     );
   });
 
-  describe("an extra added to a stored dish sent in its period", () => {
-    const butterOnToast = async () => {
+  describe("an extra added to a stored dish", () => {
+    /** The Midday Toast sent from a table's draft at 13:50, its bill's id. */
+    const sentToast = async (v: Venue) => {
+      await suite.db
+        .update(departments)
+        .set({ orderStart: "table" })
+        .where(eq(departments.id, v.restaurant));
+      const { id: tableId } = await withTransaction(suite.db, (tx) =>
+        createTable(tx, v.cfg, { label: "Toast table", zoneId: v.diningZone }),
+      );
+      const seated = await sendAsTill(v, "POST", `/api/tables/${tableId}/seat`, {
+        guestCount: 2,
+      });
+      expect(seated.status).toBe(200);
+      const { partyId, tabId, revision } = seated.body as {
+        partyId: string;
+        tabId: string;
+        revision: number;
+      };
+      const saved = await sendAsTill(v, "PUT", `/api/parties/${partyId}/drafts`, {
+        billId: tabId,
+        draftId: null,
+        revision: 0,
+        lines: [{ menuItemId: v.toast.midday, quantity: "1" }],
+      });
+      expect(saved.status).toBe(200);
+      const { draft } = saved.body as {
+        draft: { id: string; revision: number; lines: { id: string }[] };
+      };
+      const sent = await sendAsTill(
+        v,
+        "POST",
+        `/api/parties/${partyId}/drafts/${draft.id}/submit`,
+        {
+          submissionId: randomUUID(),
+          draftRevision: draft.revision,
+          expectedPartyRevision: revision,
+          allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+          groups: [{ lineIds: draft.lines.map((line) => line.id), release: "fire" }],
+        },
+      );
+      expect(sent.status).toBe(200);
+      return tabId;
+    };
+    const butterOnToast = async (sent: boolean) => {
       at(mondayAt("13:50"));
       const v = await mealVenue();
       const { extraId, listId } = await butterOnMiddayToast(v);
-      const held = await park(v, v.diningZone, v.toast.midday);
-      expect(held.status).toBe(200);
+      let id: string;
+      if (sent) id = await sentToast(v);
+      else {
+        const held = await park(v, v.diningZone, v.toast.midday);
+        expect(held.status).toBe(200);
+        id = held.id;
+      }
       at(mondayAt("14:05"));
       const butter = [{ listId, picks: [{ productId: extraId, quantity: 1 }] }];
-      return { v, id: held.id, butter };
+      return { v, id, butter };
     };
     const lateSend = (v: Venue) => ({ lateSend: { menuIds: [v.menus["Midday menu"]] } });
+    const addButter = async (
+      v: Venue,
+      id: string,
+      route: "order" | "line",
+      butter: unknown,
+      confirmation: Record<string, unknown>,
+    ) => {
+      const read = await sendAsTill(v, "GET", `/api/working-orders/${id}`);
+      const order = read.body as {
+        revision: number;
+        lines: { workingOrderLineId: string; menuItemId: string; quantity: string }[];
+      };
+      return route === "line"
+        ? sendAsTill(v, "PUT", `/api/working-orders/${id}/lines/1`, {
+            portionLineNos: [],
+            revision: order.revision,
+            extras: butter,
+            ...confirmation,
+          })
+        : sendAsTill(v, "PUT", `/api/working-orders/${id}`, {
+            revision: order.revision,
+            lines: order.lines.map(({ workingOrderLineId, menuItemId, quantity }) => ({
+              workingOrderLineId,
+              menuItemId,
+              quantity,
+              extras: butter,
+            })),
+            ...confirmation,
+          });
+    };
 
     it.each(["order", "line"] as const)(
-      "is refused through the %s edit at 14:05 unconfirmed, and marked by the signed-in person once confirmed",
+      "is refused through the %s edit at 14:05 on a sent dish unconfirmed, and marked by the signed-in person once confirmed",
       async (route) => {
-        const { v, id, butter } = await butterOnToast();
+        const { v, id, butter } = await butterOnToast(true);
         const before = await marksOf(id);
-        const send = async (confirmation: Record<string, unknown>) => {
-          const read = await sendAsTill(v, "GET", `/api/working-orders/${id}`);
-          const order = read.body as {
-            revision: number;
-            lines: { workingOrderLineId: string; menuItemId: string; quantity: string }[];
-          };
-          return route === "line"
-            ? sendAsTill(v, "PUT", `/api/working-orders/${id}/lines/1`, {
-                portionLineNos: [],
-                revision: order.revision,
-                extras: butter,
-                ...confirmation,
-              })
-            : sendAsTill(v, "PUT", `/api/working-orders/${id}`, {
-                revision: order.revision,
-                lines: order.lines.map(({ workingOrderLineId, menuItemId, quantity }) => ({
-                  workingOrderLineId,
-                  menuItemId,
-                  quantity,
-                  extras: butter,
-                })),
-                ...confirmation,
-              });
-        };
-        expect(await send({})).toMatchObject(
+        expect(await addButter(v, id, route, butter, {})).toMatchObject(
           periodEnded(v, "Midday menu", "Lunch", v.toast.midday),
         );
         expect(await marksOf(id)).toEqual(before);
-        expect((await send(lateSend(v))).status).toBe(200);
+        expect((await addButter(v, id, route, butter, lateSend(v))).status).toBe(200);
         expect(await marksOf(id)).toEqual(
           expect.arrayContaining([
             { unitPriceGross: 400, latePeriodName: null, lateConfirmedBy: null },
             { unitPriceGross: 50, latePeriodName: "Lunch", lateConfirmedBy: v.personId },
+          ]),
+        );
+        expect(await marksOf(id)).toHaveLength(2);
+      },
+    );
+
+    it.each(["order", "line"] as const)(
+      "is taken through the %s edit at 14:05 on a parked dish not yet sent, unconfirmed and unmarked",
+      async (route) => {
+        const { v, id, butter } = await butterOnToast(false);
+        expect((await addButter(v, id, route, butter, {})).status).toBe(200);
+        expect(await marksOf(id)).toEqual(
+          expect.arrayContaining([
+            { unitPriceGross: 400, latePeriodName: null, lateConfirmedBy: null },
+            { unitPriceGross: 50, latePeriodName: null, lateConfirmedBy: null },
           ]),
         );
         expect(await marksOf(id)).toHaveLength(2);

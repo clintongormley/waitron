@@ -733,10 +733,12 @@ in the zone also sells its product and variant on its own, and otherwise refuses
 sender, or a manager's PIN (`apps/server/src/late-send.ts`). A confirmed dish's service context
 rows (`working_line_contexts.late_period_name` and `late_confirmed_by`) record the period and who
 confirmed; the kitchen ticket and the kitchen screen read them through `readLateSendMarks`. Plan
-D19–D28. Extras added later to a stored dish whose period ended earlier that day, through either
+D19–D28. Extras added later to a dish already sent (stamped sent or holding a ticket item, held or
+fired; for a set lunch, one of its courses) whose period ended earlier that day, through either
 order edit (`PUT /api/working-orders/:id` or `/lines/:lineNo`), take the same check and record
-their own confirmation, never the dish's; they are never refused `menu_period.not_running`, nor by
-a closed zone (A1085). The till learns which menus ended from each menu's `endedPeriodName` on the zone-offers and
+their own confirmation, never the dish's. Extras added to a dish not yet sent, such as a parked
+counter order's, are not checked. Neither is refused `menu_period.not_running` or by a closed zone
+(A1085). The till learns which menus ended from each menu's `endedPeriodName` on the zone-offers and
 menu-state reads, and marks such a dish; when its 15-second poll has not caught up, from a
 `menu_period.ended` refusal's params (`lateSendRefusalOf`, `apps/till/src/state/late-send.ts`). It
 sends `lateSend` only after the waiter chooses Kitchen agreed in its late-send window

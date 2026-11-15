@@ -578,6 +578,13 @@ async function readBasketOffers(
  * so it orders no new portion of the dish. A symbol, so no JSON body can set it.
  */
 const ADDED_EXTRAS_ONLY = Symbol("addedExtrasOnly");
+/**
+ * Marks an {@link ADDED_EXTRAS_ONLY} line whose stored dish, or one of its extras, has been sent:
+ * stamped sent or holding a ticket item, held or fired. A set lunch's own row is never either, so
+ * its courses answer for it. Only such extras take the period-ended check. A symbol, so no JSON
+ * body can set it.
+ */
+const ON_SENT_DISH = Symbol("onSentDish");
 const RECORDED_OFFER = Symbol("recordedOffer");
 
 /**
@@ -610,6 +617,7 @@ export async function priceOrderLines(
     [FROZEN_OPTIONS]?: OptionSnapshot[];
     [FROZEN_EXTRAS]?: ExtraChild[];
     [ADDED_EXTRAS_ONLY]?: true;
+    [ON_SENT_DISH]?: true;
     [RECORDED_OFFER]?: { offer: ZoneMenuOffer; versionId: string };
     [STORED_RISE]?: true;
   } & LineExtras &
@@ -670,15 +678,17 @@ export async function priceOrderLines(
     ));
   const offerById = new Map(offers.offers.map((offer) => [offer.id, offer]));
   let service: Awaited<ReturnType<typeof VENUE_SERVICE.resolveDepartmentService>> | null = null;
-  // New dishes, and extras added to stored ones, whose menu is not orderable but ended earlier
-  // today, each with its period's name.
+  // New dishes, and extras added to sent ones, whose menu is not orderable but ended earlier today,
+  // each with its period's name.
   const ended = new Map<(typeof requestedLines)[number], string>();
   let alsoSold: ReadonlySet<string> = new Set();
-  if (periodCheck === "added") {
+  const checked = (line: (typeof requestedLines)[number]) =>
+    line[ADDED_EXTRAS_ONLY] !== true || line[ON_SENT_DISH] === true;
+  if (periodCheck === "added" && requestedLines.some(checked)) {
     const context = await VENUE_SERVICE.resolveZoneContext(tx, zoneId!);
     const at = new Date();
     // Extras added to a stored dish are not new service, so a closed zone does not refuse them;
-    // after their dish's period they are late like a new dish of it.
+    // after a sent dish's period they are late like a new dish of it.
     if (requestedLines.some((line) => line[ADDED_EXTRAS_ONLY] !== true))
       await VENUE_SERVICE.assertZoneTakesNewOrders(tx, context.zoneId, at);
     service = await VENUE_SERVICE.resolveDepartmentService(tx, context.departmentId, at);
@@ -689,6 +699,7 @@ export async function priceOrderLines(
       const periodName = offer === undefined ? undefined : periodOf.get(offer.menuId);
       if (
         periodName === undefined ||
+        !checked(line) ||
         line[STORED_RISE] === true ||
         service.orderableMenuIds.includes(offer!.menuId)
       )
@@ -6109,6 +6120,11 @@ async function applyLineEdits(
         [FROZEN_OPTIONS]: [],
         [FROZEN_EXTRAS]: extras.added,
         [ADDED_EXTRAS_ONLY]: true,
+        ...([parent, ...parent.children].some(
+          (part) => part.sentAt !== null || part.ticket !== null,
+        )
+          ? { [ON_SENT_DISH]: true }
+          : {}),
         ...(lunches.has(parent.id) ? { [RECORDED_OFFER]: lunches.get(parent.id)! } : {}),
       });
       pricedAs.push({ kind: "extras" });
