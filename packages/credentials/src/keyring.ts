@@ -10,6 +10,22 @@ const PREVIOUS_VERSION = "WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION";
 /** Every variable `loadKeyRing` reads. */
 export const KEY_RING_VARIABLES = [CURRENT, CURRENT_VERSION, PREVIOUS, PREVIOUS_VERSION] as const;
 
+/**
+ * `env` with each key ring variable written on one line, in a form `loadKeyRing` reads exactly as it
+ * reads the original: a key as the base64 of the bytes it decodes to, a version as the number it
+ * reads. An env file line ends at a line break, which base64 decoding and `Number` both skip.
+ */
+export function singleLineKeyRingVariables(
+  env: Readonly<Record<string, string>>,
+): Record<string, string> {
+  const out = { ...env };
+  for (const name of [CURRENT, PREVIOUS])
+    if (env[name] !== undefined) out[name] = Buffer.from(env[name], "base64").toString("base64");
+  for (const name of [CURRENT_VERSION, PREVIOUS_VERSION])
+    if (env[name] !== undefined && env[name] !== "") out[name] = String(Number(env[name]));
+  return out;
+}
+
 export interface KeyEntry {
   key: Buffer;
   version: number;

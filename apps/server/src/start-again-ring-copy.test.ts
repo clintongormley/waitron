@@ -1,4 +1,4 @@
-import { cp, mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
@@ -313,3 +313,39 @@ it("with no secrets.env but a vault key in the environment, the Move's ring copy
     sumup: { value: SUMUP },
   });
 });
+
+const FILE_KEY = Buffer.alloc(32, 4).toString("base64");
+
+it.each([
+  [
+    "a key in secrets.env holding a `#`, with only the version from the environment",
+    `WAITRON_CREDENTIALS_KEY=${FILE_KEY.slice(0, 10)}#${FILE_KEY.slice(10)}\n`,
+    { WAITRON_CREDENTIALS_KEY_VERSION: "2" },
+  ],
+  [
+    "an environment key holding a line break",
+    `WAITRON_CREDENTIALS_KEY=${FILE_KEY}\n`,
+    {
+      WAITRON_CREDENTIALS_KEY: `${ENV_RING.WAITRON_CREDENTIALS_KEY.slice(0, 10)}\n${ENV_RING.WAITRON_CREDENTIALS_KEY.slice(10)}`,
+    },
+  ],
+] as const)(
+  "the Move's ring copy opens the rows a trading start sealed: %s",
+  async (_case, file, environmentKeys) => {
+    const attempt = await startAgainAttempt(await scratch());
+    const { stateDir } = attempt.roots;
+    await writeFile(join(stateDir, "secrets.env"), file, { mode: 0o600 });
+    const tradingRing = loadKeyRing(await loadBoxEnv(environmentKeys, stateDir));
+
+    const { signing, copied, movedVenue } = await moveSealedUnder(
+      attempt,
+      tradingRing,
+      environmentKeys,
+    );
+
+    expect(await readMoved(movedVenue, await ringIn(copied))).toEqual({
+      signingKey: { value: signing.privateKey },
+      sumup: { value: SUMUP },
+    });
+  },
+);

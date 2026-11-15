@@ -26,7 +26,8 @@ import {
 import { finishStartAgainDeletion } from "./first-setup-start-again-deletion.js";
 import { surveyStartAgainLeftovers } from "./first-setup-start-again-leftovers.js";
 import { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
-import { BACKUP_ROOM_NOTE_FILE } from "@waitron/store";
+import { BACKUP_ROOM_NOTE_FILE, parseEnvFile } from "@waitron/store";
+import { loadKeyRing } from "@waitron/credentials";
 import {
   moveStartAgainUnits,
   prepareSetAside,
@@ -1453,6 +1454,122 @@ it("the ring's copy keeps the original's mode 0640 under a umask of 077", async 
   const copy = join(stemFolderOnState(roots, record), "secrets.env");
   expect((await lstat(copy)).mode & 0o777).toBe(0o640);
 });
+
+const FILE_KEY = Buffer.alloc(32, 1).toString("base64");
+const ENVIRONMENT_KEY = Buffer.alloc(32, 2).toString("base64");
+
+/** The ring a trading start loads: `secrets.env` read as `loadBoxEnv` reads it, the environment's keys over it. */
+function tradingRing(file: string | null, environmentKeys: Record<string, string>) {
+  return loadKeyRing({ ...(file === null ? {} : parseEnvFile(file)), ...environmentKeys });
+}
+
+/** The ring the Move's copy holds, read as a restore or a start reads it. */
+async function copiedRing(roots: Roots, record: StartAgainChoiceRecord) {
+  const copy = join(stemFolderOnState(roots, record), "secrets.env");
+  return loadKeyRing(parseEnvFile(await readFile(copy, "utf8")));
+}
+
+it("with keys from the environment, the copy holds the file's other variables with the environment's in their place, mode 0600", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  await foundEverywhere(roots);
+  const file = `OTHER=kept#value\nWAITRON_CREDENTIALS_KEY=${FILE_KEY}\nWAITRON_CREDENTIALS_KEY_VERSION=1\n`;
+  await writeFile(join(roots.stateDir, "secrets.env"), file);
+  await fs.chmod(join(roots.stateDir, "secrets.env"), 0o640);
+  const environmentKeys = {
+    WAITRON_CREDENTIALS_KEY: ENVIRONMENT_KEY,
+    WAITRON_CREDENTIALS_KEY_VERSION: "4",
+  };
+
+  const record = await prepared(roots, attempt.administratorId);
+  await moveStartAgainUnits(roots, record, environmentKeys);
+
+  const copy = join(stemFolderOnState(roots, record), "secrets.env");
+  expect(parseEnvFile(await readFile(copy, "utf8"))).toEqual({
+    OTHER: "kept#value",
+    ...environmentKeys,
+  });
+  expect((await lstat(copy)).mode & 0o777).toBe(0o600);
+  expect(await readFile(join(roots.stateDir, "secrets.env"), "utf8")).toBe(file);
+});
+
+it("with no ring file and keys from the environment, the copy holds exactly those keys", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  await foundEverywhere(roots);
+  const environmentKeys = {
+    WAITRON_CREDENTIALS_KEY: ENVIRONMENT_KEY,
+    WAITRON_CREDENTIALS_KEY_VERSION: "4",
+  };
+
+  const record = await prepared(roots, attempt.administratorId);
+  await moveStartAgainUnits(roots, record, environmentKeys);
+
+  const copy = join(stemFolderOnState(roots, record), "secrets.env");
+  expect(parseEnvFile(await readFile(copy, "utf8"))).toEqual(environmentKeys);
+  expect((await lstat(copy)).mode & 0o777).toBe(0o600);
+});
+
+it("a resume given keys from the environment writes the copy a Move would", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  const before = await foundEverywhere(roots);
+  const file = `WAITRON_CREDENTIALS_KEY=${FILE_KEY}\n`;
+  await writeFile(join(roots.stateDir, "secrets.env"), file, { mode: 0o640 });
+  const environmentKeys = { WAITRON_CREDENTIALS_KEY: ENVIRONMENT_KEY };
+  const record = await prepared(roots, attempt.administratorId);
+  const cut: SetAsideIo = {
+    ...realIo,
+    writeRing: async () => {
+      throw errno("EIO");
+    },
+  };
+  await expect(moveStartAgainUnits(roots, record, environmentKeys, cut)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+  });
+
+  expect(await resumeStartAgainSetAside(roots, environmentKeys)).toBe("resumed");
+
+  const copy = join(stemFolderOnState(roots, record), "secrets.env");
+  expect(parseEnvFile(await readFile(copy, "utf8"))).toEqual(environmentKeys);
+  expect((await lstat(copy)).mode & 0o777).toBe(0o600);
+  await expectAllAside(roots, record, before);
+});
+
+it.each([
+  [
+    "a file key holding a `#`, with only the version from the environment",
+    `WAITRON_CREDENTIALS_KEY=${FILE_KEY.slice(0, 10)}#${FILE_KEY.slice(10)}\n`,
+    { WAITRON_CREDENTIALS_KEY_VERSION: "4" },
+  ],
+  [
+    "an environment key holding a line break",
+    `WAITRON_CREDENTIALS_KEY=${FILE_KEY}\nWAITRON_CREDENTIALS_KEY_VERSION=1\n`,
+    {
+      WAITRON_CREDENTIALS_KEY: `${ENVIRONMENT_KEY.slice(0, 10)}\n${ENVIRONMENT_KEY.slice(10)}`,
+      WAITRON_CREDENTIALS_KEY_VERSION: "\n4\n",
+    },
+  ],
+  [
+    "a file line whose `export` prefix makes it no ring variable to a start",
+    `INLINE=v #c\nexport WAITRON_CREDENTIALS_KEY_PREVIOUS=${FILE_KEY}\n`,
+    { WAITRON_CREDENTIALS_KEY: ENVIRONMENT_KEY },
+  ],
+] as const)(
+  "the copy opens with the ring a trading start loads: %s",
+  async (_case, file, environmentKeys) => {
+    const attempt = await startAgainAttempt(await scratch());
+    const { roots } = attempt;
+    await foundEverywhere(roots);
+    await writeFile(join(roots.stateDir, "secrets.env"), file, { mode: 0o600 });
+    const expected = tradingRing(file, environmentKeys);
+
+    const record = await prepared(roots, attempt.administratorId);
+    await moveStartAgainUnits(roots, record, environmentKeys);
+
+    expect(await copiedRing(roots, record)).toEqual(expected);
+  },
+);
 
 it("a cut while writing the ring's copy leaves no copy and moves nothing; the resume removes the half-written file and makes the copy before any further rename", async () => {
   const attempt = await startAgainAttempt(await scratch());

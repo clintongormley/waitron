@@ -34,7 +34,7 @@ if (!migrationsDir) {
   migrationsDir = join(pkgRoot, "dist", "drizzle");
 }
 
-// A copy of `src/env-file.ts`'s parser, which this plain-`.mjs` launcher cannot import without tsx.
+// A copy of `packages/store/src/env-file.ts`'s parser, which this plain-`.mjs` launcher cannot import without tsx.
 // Only this process's own read of `WAITRON_STATE_DIR`; `--env-file` parses for the child.
 function parseEnvFile(text) {
   const out = {};

@@ -7,13 +7,15 @@ import {
   WAL_SUFFIX,
   SHM_SUFFIX,
   JOURNAL_SUFFIX,
+  formatEnvFile,
+  parseEnvFile,
 } from "@waitron/store";
+import { singleLineKeyRingVariables } from "@waitron/credentials";
 import { mkdirDurable } from "./fs-atomic.js";
 
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
 import { basename, dirname, join, relative, sep } from "node:path";
-import { parseEnv } from "node:util";
 import { lockVenueDatabase } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { deleteBackupRoomNote } from "./backup-room-note-file.js";
@@ -372,12 +374,12 @@ async function deleteNoteFirst(stateDir: string): Promise<void> {
 /**
  * Copies the box's key ring into the Move's stem folder on the state root, before any piece moves:
  * the moved databases' sealed rows open only with it, and a later join replaces the ring whole.
- * The copy holds the ring in use: `environmentKeys` is the vault key variables the real environment sets
- * non-empty, which win over the file's at every start. With none, the file's bytes and permission
- * bits as they are; with some, the file's variables with those in their place, mode 0600. Written
- * under a temporary name, flushed, renamed and the folder synced, so a cut leaves no copy or a whole
- * one. A copy already there is left as it is; with no ring file and none set there is nothing to
- * copy.
+ * The copy holds the ring in use: `environmentKeys` is the vault key variables the real environment
+ * sets non-empty, which win over the file's at every start. With none, the file's bytes and
+ * permission bits as they are; with some, the file's variables as a start reads them, with those in
+ * their place, mode 0600. Written under a temporary name, flushed, renamed and the folder synced, so
+ * a cut leaves no copy or a whole one. A copy already there is left as it is; with no ring file and
+ * none set there is nothing to copy.
  */
 async function keepRingCopy(
   roots: Roots,
@@ -386,35 +388,32 @@ async function keepRingCopy(
   io: SetAsideIo,
 ) {
   let label = `state/${RING}`;
-  const fromEnvironment = Object.keys(environmentKeys).length > 0;
   try {
-    let bytes: Buffer | null = null;
-    let mode = 0o600;
+    let file: { bytes: Buffer; mode: number } | null = null;
     try {
       const handle = await fs.open(join(roots.stateDir, RING), "r");
       try {
-        mode = (await handle.stat()).mode & 0o777;
-        bytes = await handle.readFile();
+        const mode = (await handle.stat()).mode & 0o777;
+        file = { bytes: await handle.readFile(), mode };
       } finally {
         await handle.close();
       }
     } catch (error) {
       if (codeOf(error) !== "ENOENT") throw error;
-      if (!fromEnvironment) return;
     }
-    if (fromEnvironment) {
-      const merged = {
-        ...(bytes === null ? {} : parseEnv(bytes.toString("utf8"))),
-        ...environmentKeys,
-      };
-      bytes = Buffer.from(
-        Object.entries(merged)
-          .map(([name, value]) => `${name}=${value}\n`)
-          .join(""),
-      );
-      mode = 0o600;
-    }
-    if (bytes === null) return;
+    const ring =
+      Object.keys(environmentKeys).length === 0
+        ? file
+        : {
+            bytes: Buffer.from(
+              formatEnvFile({
+                ...(file === null ? {} : parseEnvFile(file.bytes.toString("utf8"))),
+                ...singleLineKeyRingVariables(environmentKeys),
+              }),
+            ),
+            mode: 0o600,
+          };
+    if (ring === null) return;
     const stemFolder = join(roots.stateDir, dirname(destinations.state));
     for (const folder of chain(roots.stateDir, stemFolder).slice(1)) {
       const found = await notAFolder(folder, io);
@@ -433,7 +432,7 @@ async function keepRingCopy(
     await io.mkdir(stemFolder, { recursive: true, mode: MODE });
     for (const folder of chain(roots.stateDir, stemFolder)) await syncFolder(folder);
     const temp = join(stemFolder, `${RING_TEMP}${process.pid}-${randomUUID()}`);
-    await (io.writeRing ?? writeRingFile)(temp, bytes, mode);
+    await (io.writeRing ?? writeRingFile)(temp, ring.bytes, ring.mode);
     await io.rename(temp, copy);
     await syncFolder(stemFolder);
   } catch (error) {
