@@ -358,6 +358,7 @@ it("a Move writes its choice under records/choices and its files under records/s
     choice: "move",
     listed: survey.digest,
     now: () => new Date("2026-10-26T10:00:00.000Z"),
+    environmentKeys: {},
   });
   expect((await readdir(join(roots.stateDir, "records"))).sort()).toEqual(["choices", "set-aside"]);
 });

@@ -23,6 +23,7 @@ import { afterAll, beforeAll, afterEach, describe, expect, it, vi } from "vitest
 import {
   deviceProfiles,
   openVenueDatabase,
+  readDeploymentEnvironment,
   stampDeployment,
   withTransaction,
   type Database,
@@ -32,6 +33,7 @@ import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules, parseModuleConfig } from "@waitron/module";
 import { savePrivacyContact } from "@waitron/provisioning";
+import { readStagedConfigurationImport } from "./configuration-import.js";
 import { SETUP_CLOCK_STEP_FILE } from "@waitron/store";
 import {
   assignMenuToVenue,
@@ -421,11 +423,14 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       beforeStart,
       onStarted,
       seams = {},
+      base = {},
     }: {
       extraPortCount?: number;
       beforeStart?: (stateDir: string) => Promise<void>;
       onStarted?: (server: StartedServer) => void;
       seams?: StartServerSeams;
+      /** The real environment, which `startServer` takes beside the merged one. */
+      base?: NodeJS.ProcessEnv;
     } = {},
   ): Promise<void> {
     const [port, ...drawn] = await freePorts(1 + extraPortCount);
@@ -471,7 +476,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             WAITRON_HTTP_LANDING_PORT: "0",
             ...env,
           },
-          {},
+          base,
           { testClock, ...seams },
         );
         onStarted?.(server);
@@ -1950,6 +1955,80 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     }
   }, 60_000);
 
+  it("refuses a join with mirror.vault_key_differs when the real environment sets a vault key the main box's ring does not hold", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    const primaryKeys = generateNodeKeyPair();
+    const primary = createHttpServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk: Buffer) => chunks.push(chunk));
+      req.on("end", () => {
+        const sent = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+          standbyNodeId: string;
+          standbyPublicKey: string;
+        };
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify(
+            bundleFor({
+              boxCaPem: MAIN_AUTHORITY.caCertPem,
+              boxCaKeyPem: MAIN_AUTHORITY.caKeyPem,
+              endorsement: endorseKey(
+                sent.standbyNodeId,
+                sent.standbyPublicKey,
+                MAIN_NODE_ID,
+                primaryKeys.privateKey,
+              ),
+              moduleOverrides: { "fiscal-verifactu": false },
+              primaryPublicKey: primaryKeys.publicKey,
+            }),
+          ),
+        );
+      });
+    });
+    await new Promise<void>((resolve) => primary.listen(0, "127.0.0.1", resolve));
+    const primaryUrl = `http://127.0.0.1:${(primary.address() as AddressInfo).port}`;
+    let restarts = 0;
+    try {
+      await withSetupBoot(
+        venue.directory,
+        {},
+        async ({ post, kills, stateDir }) => {
+          // A join writes its marker and the main box's authority under `tls/`, and its ring to `secrets.env`.
+          const written = async () => ({
+            tls: await readdir(join(stateDir, "tls")),
+            caCert: await readFile(join(stateDir, "tls/ca.crt"), "utf8"),
+            secrets: await readFile(join(stateDir, "secrets.env"), "utf8"),
+          });
+          const before = await written();
+          const response = await post("/setup-api/adopt", {
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              primaryUrl,
+              credential: { email: "owner@example.test", password: "x" },
+            }),
+          });
+          expect(response.status).toBe(409);
+          expect(((await response.json()) as { error?: { code: string } }).error?.code).toBe(
+            "mirror.vault_key_differs",
+          );
+          expect(await written()).toEqual(before);
+          expect(await readDeploymentEnvironment(venue.store.venue)).toBeNull();
+          expect(restarts).toBe(0);
+          expect(kills).toEqual([]);
+        },
+        {
+          seams: { restart: () => (restarts += 1) },
+          base: { WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64") },
+        },
+      );
+    } finally {
+      await new Promise((resolve) => primary.close(resolve));
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("a setup start's box-to-box call resolves a `.local` name through the injected lookup", async () => {
     beforeServerStarts();
     const venue = await freshVenue();
@@ -2168,6 +2247,66 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       ).toEqual([
         { privacy_notice_url: "https://example.com/privacy", privacy_email: "privacy@example.com" },
       ]);
+    } finally {
+      await source.store.close();
+      await target.store.close();
+      await rm(source.directory, { recursive: true, force: true });
+      await rm(target.directory, { recursive: true, force: true });
+      await rm(sourceStateDir, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  it("seals a staged configuration under the ring a trading start loads when the environment sets the vault key", async () => {
+    const TAX_ID = "60000013M";
+    const PASSPHRASE = "a long enough export passphrase";
+    const modules = enabledModules(ALL_MODULES, ES_MODULE_CONFIG);
+    const source = await freshVenue();
+    const target = await freshVenue();
+    const sourceStateDir = await mkdtemp(join(tmpdir(), "waitron-boot-config-source-"));
+    const base = {
+      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 21).toString("base64"),
+      WAITRON_CREDENTIALS_KEY_VERSION: "4",
+    };
+    try {
+      const sourceIds = await provisionVenue(
+        {
+          ownerDb: source.store.venue,
+          moduleConfig: ES_MODULE_CONFIG,
+          database: source.directory,
+          stateDir: sourceStateDir,
+        },
+        { environment: "preproduction", venue: hashedVenueRequest(TAX_ID) },
+      );
+      const [exporter] = await source.store.venue.select({ id: persons.id }).from(persons);
+      const artifact = encodeConfigurationBundle(
+        await buildConfigurationBundle(
+          source.store.venue,
+          { ...sourceIds, sourceOperatorId: exporter!.id },
+          modules,
+          new Date(),
+          await schemaVersionsByModule(source.store, modules),
+        ),
+        PASSPHRASE,
+      );
+      await withSetupBoot(
+        target.directory,
+        { WAITRON_ENV: "dev", ...base },
+        async ({ post, stateDir }) => {
+          const staged = await post("/setup-api/configuration", {
+            headers: {
+              "content-type": "application/octet-stream",
+              "x-waitron-export-passphrase": PASSPHRASE,
+            },
+            body: new Uint8Array(artifact),
+          });
+          expect(staged.status).toBe(200);
+          const tradingRing = loadKeyRing(await loadBoxEnv(base, stateDir));
+          const read = await readStagedConfigurationImport(stateDir, tradingRing);
+          expect(read?.passphrase).toBe(PASSPHRASE);
+          expect(read?.bundle.venue.taxId).toBe(TAX_ID);
+        },
+        { base },
+      );
     } finally {
       await source.store.close();
       await target.store.close();

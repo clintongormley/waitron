@@ -29,7 +29,7 @@ import {
 import { assertNotAhead } from "./upgrade-schema-check.js";
 export { assertNotAhead } from "./upgrade-schema-check.js";
 import { DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT, startServer } from "./boot.js";
-import { loadBoxEnv } from "./box-env.js";
+import { keyRingVariables, loadBoxEnv } from "./box-env.js";
 import { DEFAULT_HTTP_HOST, resolveConfigDir } from "./config.js";
 import { isUnset } from "./env-value.js";
 import { createLogger, type Logger } from "./logger.js";
@@ -508,6 +508,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
               startAgain: {
                 roots: admission.roots,
                 survey: admission.survey,
+                environmentKeys: keyRingVariables(deps.baseEnv),
                 onFinished: async () => {
                   exit(0);
                 },

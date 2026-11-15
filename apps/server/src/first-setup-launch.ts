@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { resolveLogDir } from "@waitron/db";
 import { DEFAULT_STATE_ROOT, startServer } from "./boot.js";
 import { DEFAULT_HTTP_HOST, resolveConfigDir } from "./config.js";
-import { loadBoxEnv } from "./box-env.js";
+import { keyRingVariables, loadBoxEnv } from "./box-env.js";
 import { finishTlsInstall } from "./box-tls-install.js";
 import { isUnset } from "./env-value.js";
 import { createLogger } from "./logger.js";
@@ -21,6 +21,10 @@ import { recoveryApp } from "./recovery-surface.js";
 
 export async function startServerOrFirstSetupResolution(
   env: NodeJS.ProcessEnv,
+  // Empty for `bin.ts`, the dev stack's entry: `dev-server.mjs` loads `secrets.env` into the
+  // process environment, so passing that here would count the file's own vault key as an
+  // environment key and refuse a spare join. A vault key the developer's shell exports still
+  // reaches a trading start, which reads `env`, but not setup, which reads `base`.
   base: NodeJS.ProcessEnv = {},
   seams: {
     startServer?: (
@@ -153,6 +157,7 @@ export async function startServerOrFirstSetupResolution(
                 startAgain: {
                   roots: admission.roots,
                   survey: admission.survey,
+                  environmentKeys: keyRingVariables(env),
                   onFinished: async () => {
                     requestRestart();
                   },

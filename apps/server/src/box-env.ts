@@ -1,3 +1,4 @@
+import { KEY_RING_VARIABLES } from "@waitron/credentials";
 import { SECRETS_ENV_FILE, TRADING_ENV_FILE, BACKUP_ENV_FILE } from "@waitron/store";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -33,4 +34,16 @@ export async function loadBoxEnv(
     if (!isUnset(v)) merged[k] = v;
   }
   return merged;
+}
+
+/** The vault key variables `env` sets non-empty: the ones that win over `secrets.env` at every start. */
+export function keyRingVariables(
+  env: Readonly<Record<string, string | undefined>>,
+): Record<string, string> {
+  const set: Record<string, string> = {};
+  for (const name of KEY_RING_VARIABLES) {
+    const value = env[name];
+    if (!isUnset(value)) set[name] = value;
+  }
+  return set;
 }

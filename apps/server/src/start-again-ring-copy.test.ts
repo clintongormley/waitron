@@ -1,4 +1,4 @@
-import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
@@ -26,6 +26,7 @@ import {
 import { isAppError } from "@waitron/shared";
 import { adoptFromPrimary, type AdoptHooks, type AdoptRequest } from "./adopt.js";
 import { ensureBoxSecrets, writeCredentialsRing } from "./box-secrets.js";
+import { loadBoxEnv } from "./box-env.js";
 import { parseEnvFile } from "./env-file.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { writeModuleConfig } from "./module-config.js";
@@ -95,6 +96,7 @@ async function joinAsSpare(stateDir: string, venueDir: string): Promise<void> {
         {
           ownerDb: store.venue,
           ownerNode: store.node,
+          environmentKeys: {},
           ring: await ringIn(join(stateDir, "secrets.env")),
           fetchBundle: async (_url, _credential, standby) => ({
             ...BUNDLE,
@@ -211,6 +213,7 @@ it("after a Move and a completed join as a spare, the moved rows open with the r
     choice: "move",
     listed: survey.digest,
     now: () => new Date(),
+    environmentKeys: {},
   });
   if (chosen.choice !== "move") throw new Error("expected a Move");
   const stemFolder = join(stateDir, chosen.setAside.state, "..");
@@ -233,3 +236,116 @@ it("after a Move and a completed join as a spare, the moved rows open with the r
     sumup: { code: "credentials.decrypt_failed" },
   });
 });
+
+const ENV_RING = {
+  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 3).toString("base64"),
+  WAITRON_CREDENTIALS_KEY_VERSION: "1",
+};
+
+/** A Move of a box whose rows were sealed under `ring`, choosing with the environment's key variables. */
+async function moveSealedUnder(
+  attempt: Awaited<ReturnType<typeof startAgainAttempt>>,
+  ring: KeyRing,
+  environmentKeys: Record<string, string>,
+) {
+  const { stateDir, venueDir } = attempt.roots;
+  const signing = generateNodeKeyPair();
+  await migrate(venueDir);
+  const found = await openVenueDatabase(venueDir);
+  try {
+    await withNodeTransaction(found.node, (tx) =>
+      sealNodeSigningKeyTx(tx, ring, MOVED_NODE_ID, signing.privateKey),
+    );
+    await withTransaction(found.venue, (tx) =>
+      putCredential(tx, ring, { personId: null, purpose: "payments.sumup", value: SUMUP }),
+    );
+  } finally {
+    await found.close();
+  }
+  const survey = await surveyStartAgainLeftovers(attempt.roots);
+  if (survey?.kind !== "choice") throw new Error(`expected choice, got ${JSON.stringify(survey)}`);
+  const chosen = await chooseStartAgainLeftovers({
+    roots: attempt.roots,
+    password: START_AGAIN_ADMIN_PASSWORD,
+    choice: "move",
+    listed: survey.digest,
+    now: () => new Date(),
+    environmentKeys,
+  });
+  if (chosen.choice !== "move") throw new Error("expected a Move");
+  return {
+    signing,
+    copied: join(stateDir, chosen.setAside.state, "..", "secrets.env"),
+    movedVenue: join(stateDir, chosen.setAside.venue),
+  };
+}
+
+it("on a box whose environment sets a vault key other than secrets.env's, the Move's ring copy opens the rows a trading start sealed, and secrets.env's ring does not", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { stateDir } = attempt.roots;
+  await ensureBoxSecrets({ stateDir, hostnames: ["localhost"], now: () => new Date() });
+  const fileRingFile = await readFile(join(stateDir, "secrets.env"));
+  const tradingRing = loadKeyRing(await loadBoxEnv(ENV_RING, stateDir));
+
+  const { signing, copied, movedVenue } = await moveSealedUnder(attempt, tradingRing, ENV_RING);
+
+  expect(await readMoved(movedVenue, await ringIn(copied))).toEqual({
+    signingKey: { value: signing.privateKey },
+    sumup: { value: SUMUP },
+  });
+  expect((await stat(copied)).mode & 0o777).toBe(0o600);
+  expect((await readFile(join(stateDir, "secrets.env"))).equals(fileRingFile)).toBe(true);
+  expect(await readMoved(movedVenue, await ringIn(join(stateDir, "secrets.env")))).toEqual({
+    signingKey: { code: "credentials.decrypt_failed" },
+    sumup: { code: "credentials.decrypt_failed" },
+  });
+});
+
+it("with no secrets.env but a vault key in the environment, the Move's ring copy holds the environment's ring", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const tradingRing = loadKeyRing(await loadBoxEnv(ENV_RING, attempt.roots.stateDir));
+
+  const { signing, copied, movedVenue } = await moveSealedUnder(attempt, tradingRing, ENV_RING);
+
+  expect(parseEnvFile(await readFile(copied, "utf8"))).toEqual(ENV_RING);
+  expect(await readMoved(movedVenue, await ringIn(copied))).toEqual({
+    signingKey: { value: signing.privateKey },
+    sumup: { value: SUMUP },
+  });
+});
+
+const FILE_KEY = Buffer.alloc(32, 4).toString("base64");
+
+it.each([
+  [
+    "a key in secrets.env holding a `#`, with only the version from the environment",
+    `WAITRON_CREDENTIALS_KEY=${FILE_KEY.slice(0, 10)}#${FILE_KEY.slice(10)}\n`,
+    { WAITRON_CREDENTIALS_KEY_VERSION: "2" },
+  ],
+  [
+    "an environment key holding a line break",
+    `WAITRON_CREDENTIALS_KEY=${FILE_KEY}\n`,
+    {
+      WAITRON_CREDENTIALS_KEY: `${ENV_RING.WAITRON_CREDENTIALS_KEY.slice(0, 10)}\n${ENV_RING.WAITRON_CREDENTIALS_KEY.slice(10)}`,
+    },
+  ],
+] as const)(
+  "the Move's ring copy opens the rows a trading start sealed: %s",
+  async (_case, file, environmentKeys) => {
+    const attempt = await startAgainAttempt(await scratch());
+    const { stateDir } = attempt.roots;
+    await writeFile(join(stateDir, "secrets.env"), file, { mode: 0o600 });
+    const tradingRing = loadKeyRing(await loadBoxEnv(environmentKeys, stateDir));
+
+    const { signing, copied, movedVenue } = await moveSealedUnder(
+      attempt,
+      tradingRing,
+      environmentKeys,
+    );
+
+    expect(await readMoved(movedVenue, await ringIn(copied))).toEqual({
+      signingKey: { value: signing.privateKey },
+      sumup: { value: SUMUP },
+    });
+  },
+);

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { hasCode } from "@waitron/shared";
-import { keyForVersion, loadKeyRing } from "./keyring.js";
+import {
+  KEY_RING_VARIABLES,
+  keyForVersion,
+  loadKeyRing,
+  singleLineKeyRingVariables,
+} from "./keyring.js";
 import { capturedSync as captured } from "./testing/captured.js";
 
 const K1 = Buffer.alloc(32, 1).toString("base64");
@@ -158,6 +163,89 @@ describe("loadKeyRing", () => {
       currentVariable: "WAITRON_CREDENTIALS_KEY_VERSION",
       previousVariable: "WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION",
     });
+  });
+});
+
+describe("KEY_RING_VARIABLES", () => {
+  const full = {
+    WAITRON_CREDENTIALS_KEY: K1,
+    WAITRON_CREDENTIALS_KEY_VERSION: "3",
+    WAITRON_CREDENTIALS_KEY_PREVIOUS: K2,
+    WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "2",
+  };
+
+  it("names every variable a full ring is read from, and nothing else", () => {
+    const listed = Object.fromEntries(KEY_RING_VARIABLES.map((name) => [name, full[name]]));
+    expect(loadKeyRing({ ...listed, UNLISTED: "x" })).toEqual(loadKeyRing(full));
+    expect(Object.keys(listed).sort()).toEqual(Object.keys(full).sort());
+  });
+
+  it.each(KEY_RING_VARIABLES.map((name) => [name]))("%s changes what loadKeyRing reads", (name) => {
+    const without: Record<string, string> = { ...full };
+    delete without[name];
+    let read: unknown;
+    try {
+      read = loadKeyRing(without);
+    } catch (error) {
+      read = error;
+    }
+    expect(read).not.toEqual(loadKeyRing(full));
+  });
+});
+
+describe("singleLineKeyRingVariables", () => {
+  function outcome(env: Record<string, string>) {
+    try {
+      return loadKeyRing(env);
+    } catch (error) {
+      return error;
+    }
+  }
+
+  it.each([
+    [
+      "line breaks and spaces in a key",
+      { WAITRON_CREDENTIALS_KEY: `${K1.slice(0, 9)}\n ${K1.slice(9)}\n` },
+    ],
+    [
+      "a key in the URL-safe alphabet",
+      { WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 251).toString("base64url") },
+    ],
+    [
+      "versions with line breaks around them",
+      {
+        WAITRON_CREDENTIALS_KEY: K1,
+        WAITRON_CREDENTIALS_KEY_VERSION: "\n4\n",
+        WAITRON_CREDENTIALS_KEY_PREVIOUS: K2,
+        WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: " 03\t",
+      },
+    ],
+    ["an empty version", { WAITRON_CREDENTIALS_KEY: K1, WAITRON_CREDENTIALS_KEY_VERSION: "" }],
+    [
+      "a version of spaces only",
+      { WAITRON_CREDENTIALS_KEY: K1, WAITRON_CREDENTIALS_KEY_VERSION: " \n" },
+    ],
+    [
+      "a version that is no number",
+      { WAITRON_CREDENTIALS_KEY: K1, WAITRON_CREDENTIALS_KEY_VERSION: "1\n2" },
+    ],
+    [
+      "a key that is not 32 bytes",
+      { WAITRON_CREDENTIALS_KEY: Buffer.alloc(31, 1).toString("base64") },
+    ],
+  ])("writes %s on one line, read as the original is", (_case, env) => {
+    const written: Record<string, string> = singleLineKeyRingVariables(env);
+    for (const value of Object.values(written)) expect(value).toBe(value.trim().replace(/\s/g, ""));
+    expect(outcome(written)).toEqual(outcome(env));
+  });
+
+  it("leaves a value that is already on one line as it is, and another variable alone", () => {
+    const env = {
+      WAITRON_CREDENTIALS_KEY: K1,
+      WAITRON_CREDENTIALS_KEY_VERSION: "4",
+      OTHER: " x\n",
+    };
+    expect(singleLineKeyRingVariables(env)).toEqual(env);
   });
 });
 

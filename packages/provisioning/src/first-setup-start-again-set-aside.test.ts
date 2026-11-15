@@ -26,7 +26,8 @@ import {
 import { finishStartAgainDeletion } from "./first-setup-start-again-deletion.js";
 import { surveyStartAgainLeftovers } from "./first-setup-start-again-leftovers.js";
 import { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
-import { BACKUP_ROOM_NOTE_FILE } from "@waitron/store";
+import { BACKUP_ROOM_NOTE_FILE, parseEnvFile } from "@waitron/store";
+import { loadKeyRing } from "@waitron/credentials";
 import {
   moveStartAgainUnits,
   prepareSetAside,
@@ -164,7 +165,7 @@ it("units move unchanged into a new folder: same bytes, same inode, same file ti
     state: `${START_AGAIN_SET_ASIDE_DIR}/${stemOf(record)}/state`,
     venue: `${START_AGAIN_SET_ASIDE_DIR}/${stemOf(record)}/venue`,
   });
-  await moveStartAgainUnits(roots, record);
+  await moveStartAgainUnits(roots, record, {});
 
   const stateAside = join(roots.stateDir, record.setAside!.state);
   const venueAside = join(roots.stateDir, record.setAside!.venue);
@@ -228,7 +229,7 @@ it("a database whose -wal holds committed rows moves whole, -wal first, and open
   };
   const record = await prepared(roots, attempt.administratorId, { io });
   renames.length = 0;
-  await moveStartAgainUnits(roots, record, io);
+  await moveStartAgainUnits(roots, record, {}, io);
 
   expect(renames).toEqual(["venue.db-wal", "venue.db"]);
   expect(count(join(roots.stateDir, record.setAside!.venue, "venue.db"))).toBe(50);
@@ -260,7 +261,7 @@ it("an existing destination file is never overwritten", async () => {
   const occupied = join(roots.stateDir, record.setAside!.state, "trading.env");
   await writeFile(occupied, "someone else's");
 
-  await expect(moveStartAgainUnits(roots, record)).rejects.toMatchObject({
+  await expect(moveStartAgainUnits(roots, record, {})).rejects.toMatchObject({
     code: "setup.start_again_incomplete",
     reason: "set-aside failed: EEXIST state/trading.env",
   });
@@ -351,7 +352,7 @@ it("venue units are set aside under the state folder beside state units", async 
   await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
   const record = await prepared(roots, attempt.administratorId);
   const paths = setAsideFolderPaths(roots, record.setAside!);
-  await moveStartAgainUnits(roots, record);
+  await moveStartAgainUnits(roots, record, {});
   expect(await readFile(join(paths.venue, "venue.db"), "utf8")).toBe("found database");
   expect(await readFile(join(paths.state, "trading.env"), "utf8")).toBe("X=1\n");
   expect(paths.venue).toBe(
@@ -405,7 +406,7 @@ it("a Move on a box holding a leftover note file leaves the file byte for byte a
   await fs.utimes(found, ahead, ahead);
 
   const record = await prepared(roots, attempt.administratorId);
-  await moveStartAgainUnits(roots, record);
+  await moveStartAgainUnits(roots, record, {});
 
   expect(await readFile(join(roots.stateDir, record.setAside!.state, "trading.env"), "utf8")).toBe(
     "X=1\n",
@@ -429,7 +430,7 @@ it("a found file dated before 1970 is recorded and moved", async () => {
   expect(record.listed.units.flatMap((unit) => unit.entries.map((each) => each.mtimeNs))).toEqual([
     recorded.toString(),
   ]);
-  await moveStartAgainUnits(roots, record);
+  await moveStartAgainUnits(roots, record, {});
 
   const moved = join(setAsideFolderPaths(roots, record.setAside!).state, "trading.env");
   expect((await lstat(moved, { bigint: true })).mtimeNs).toBe(recorded);
@@ -452,7 +453,7 @@ it("venue.lock, venue.holder.json and recovery.lock are never moved or unlinked"
     );
   const before = await inodes();
 
-  await moveStartAgainUnits(roots, await prepared(roots, attempt.administratorId));
+  await moveStartAgainUnits(roots, await prepared(roots, attempt.administratorId), {});
 
   expect(await inodes()).toEqual(before);
 });
@@ -465,7 +466,7 @@ it("after a move, finishStartAgainDeletion deletes only the marked files", async
   await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
   await writeFile(join(roots.venueDir, "venue.db"), "found database");
   const record = await prepared(roots, attempt.administratorId);
-  await moveStartAgainUnits(roots, record);
+  await moveStartAgainUnits(roots, record, {});
 
   await finishStartAgainDeletion(roots);
 
@@ -497,7 +498,7 @@ it("a keep record moves nothing and refuses setup.attempt_invalid", async () => 
   const before = await snapshot(base);
 
   await expect(
-    moveStartAgainUnits(roots, { ...record, choice: "keep", setAside: null }),
+    moveStartAgainUnits(roots, { ...record, choice: "keep", setAside: null }, {}),
   ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
   expect(await snapshot(base)).toEqual(before);
 });
@@ -517,7 +518,7 @@ it("a piece whose rename fails refuses setup.start_again_incomplete naming it, a
     },
   };
 
-  await expect(moveStartAgainUnits(roots, record, io)).rejects.toMatchObject({
+  await expect(moveStartAgainUnits(roots, record, {}, io)).rejects.toMatchObject({
     code: "setup.start_again_incomplete",
     reason: "set-aside failed: EIO venue/venue.db-wal",
   });
@@ -597,7 +598,7 @@ it("a destination folder that cannot be made, or a destination that cannot be lo
       throw errno("ENOSPC");
     }) as typeof fs.mkdir,
   };
-  await expect(moveStartAgainUnits(roots, record, mkdirFails)).rejects.toMatchObject({
+  await expect(moveStartAgainUnits(roots, record, {}, mkdirFails)).rejects.toMatchObject({
     code: "setup.start_again_incomplete",
     reason: `set-aside failed: ENOSPC state/${record.setAside!.state}`,
   });
@@ -608,7 +609,7 @@ it("a destination folder that cannot be made, or a destination that cannot be lo
       return fs.lstat(path, options as never);
     }) as typeof fs.lstat,
   };
-  await expect(moveStartAgainUnits(roots, record, lstatFails)).rejects.toMatchObject({
+  await expect(moveStartAgainUnits(roots, record, {}, lstatFails)).rejects.toMatchObject({
     code: "setup.start_again_incomplete",
     reason: "set-aside failed: EACCES state/trading.env",
   });
@@ -651,7 +652,7 @@ function cutAt(n: number): SetAsideIo {
 }
 
 async function cutMove(roots: Roots, record: StartAgainChoiceRecord, n: number) {
-  await expect(moveStartAgainUnits(roots, record, cutAt(n))).rejects.toMatchObject({
+  await expect(moveStartAgainUnits(roots, record, {}, cutAt(n))).rejects.toMatchObject({
     code: "setup.start_again_incomplete",
   });
 }
@@ -709,7 +710,7 @@ it("a cut after the record and before the first rename: the resume moves everyth
   const record = await prepared(roots, attempt.administratorId);
   await cutMove(roots, record, 1);
 
-  expect(await resumeStartAgainSetAside(roots)).toBe("resumed");
+  expect(await resumeStartAgainSetAside(roots, {})).toBe("resumed");
 
   await expectAllAside(roots, record, before);
 });
@@ -734,7 +735,7 @@ it("a cut after a database's -wal moved: the resume moves -shm and venue.db into
   const aside = setAsideFolderPaths(roots, record.setAside!).venue;
   expect(await readdir(aside)).toEqual(["venue.db-wal"]);
 
-  expect(await resumeStartAgainSetAside(roots)).toBe("resumed");
+  expect(await resumeStartAgainSetAside(roots, {})).toBe("resumed");
 
   expect((await readdir(aside)).sort()).toEqual(["venue.db", "venue.db-shm", "venue.db-wal"]);
   for (const suffix of ["", "-wal", "-shm"])
@@ -761,7 +762,7 @@ it.each([1, 2, 3, 4, 5, 6])(
     const record = await prepared(roots, attempt.administratorId);
     await cutMove(roots, record, n);
 
-    expect(await resumeStartAgainSetAside(roots)).toBe("resumed");
+    expect(await resumeStartAgainSetAside(roots, {})).toBe("resumed");
 
     await expectAllAside(roots, record, before);
   },
@@ -772,7 +773,7 @@ it("a resume after a move that finished finds everything already moved and renam
   const { roots } = attempt;
   const before = await foundEverywhere(roots);
   const record = await prepared(roots, attempt.administratorId);
-  await moveStartAgainUnits(roots, record);
+  await moveStartAgainUnits(roots, record, {});
   const renames: string[] = [];
   const io: SetAsideIo = {
     ...realIo,
@@ -782,7 +783,7 @@ it("a resume after a move that finished finds everything already moved and renam
     },
   };
 
-  expect(await resumeStartAgainSetAside(roots, io)).toBe("resumed");
+  expect(await resumeStartAgainSetAside(roots, {}, io)).toBe("resumed");
 
   expect(renames).toEqual([]);
   await expectAllAside(roots, record, before);
@@ -799,7 +800,7 @@ it("the resume removes leftover probe folders a cut left", async () => {
   );
   await mkdir(probe);
 
-  expect(await resumeStartAgainSetAside(roots)).toBe("resumed");
+  expect(await resumeStartAgainSetAside(roots, {})).toBe("resumed");
 
   await expect(lstat(probe)).rejects.toMatchObject({ code: "ENOENT" });
 });
@@ -821,7 +822,7 @@ it("a piece changed between the cut and the resume: the resume stops and moves n
     },
   };
 
-  expect(await resumeStartAgainSetAside(roots, io)).toBe("stopped");
+  expect(await resumeStartAgainSetAside(roots, {}, io)).toBe("stopped");
 
   expect(renames).toEqual([]);
   expect(await readFile(join(roots.venueDir, "venue.db-shm"), "utf8")).toBe("rewritten by someone");
@@ -842,12 +843,12 @@ it("a moved piece changed in the set-aside folder, or present at both ends, stop
   const folders = setAsideFolderPaths(roots, record.setAside!);
   await writeFile(join(folders.state, "trading.env"), "rewritten");
 
-  expect(await resumeStartAgainSetAside(roots)).toBe("stopped");
+  expect(await resumeStartAgainSetAside(roots, {})).toBe("stopped");
   expect(await readFile(join(roots.venueDir, "venue.db"), "utf8")).toBe("found database");
 
   // The original back at its source and a copy at the destination: neither end is clear.
   await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
-  expect(await resumeStartAgainSetAside(roots)).toBe("stopped");
+  expect(await resumeStartAgainSetAside(roots, {})).toBe("stopped");
   expect(await readFile(join(roots.venueDir, "venue.db"), "utf8")).toBe("found database");
 });
 
@@ -861,7 +862,7 @@ it("a piece still at its source with something else at its destination stops the
   const occupied = join(setAsideFolderPaths(roots, record.setAside!).state, "trading.env");
   await writeFile(occupied, "someone else's");
 
-  expect(await resumeStartAgainSetAside(roots)).toBe("stopped");
+  expect(await resumeStartAgainSetAside(roots, {})).toBe("stopped");
 
   expect(await readFile(occupied, "utf8")).toBe("someone else's");
   expect(await readFile(join(roots.stateDir, "trading.env"), "utf8")).toBe("X=1\n");
@@ -877,11 +878,11 @@ it("a piece gone from both ends, or one with an extra entry, stops the resume", 
   await cutMove(roots, record, 1);
   await writeFile(join(roots.venueDir, ".venue.db-litestream", "extra"), "new");
 
-  expect(await resumeStartAgainSetAside(roots)).toBe("stopped");
+  expect(await resumeStartAgainSetAside(roots, {})).toBe("stopped");
   expect(await readFile(join(roots.venueDir, "venue.db"), "utf8")).toBe("found database");
 
   await rm(join(roots.venueDir, ".venue.db-litestream"), { recursive: true });
-  expect(await resumeStartAgainSetAside(roots)).toBe("stopped");
+  expect(await resumeStartAgainSetAside(roots, {})).toBe("stopped");
   expect(await readFile(join(roots.venueDir, "venue.db"), "utf8")).toBe("found database");
 });
 
@@ -895,7 +896,7 @@ it("a piece replaced by a link stops the resume, and the link is not moved", asy
   await rm(join(roots.stateDir, "trading.env"));
   await fs.symlink(join(roots.venueDir, "venue.db"), join(roots.stateDir, "trading.env"));
 
-  expect(await resumeStartAgainSetAside(roots)).toBe("stopped");
+  expect(await resumeStartAgainSetAside(roots, {})).toBe("stopped");
 
   expect((await lstat(join(roots.stateDir, "trading.env"))).isSymbolicLink()).toBe(true);
   expect(await readFile(join(roots.venueDir, "venue.db"), "utf8")).toBe("found database");
@@ -919,7 +920,7 @@ it("a rename that fails at the resume refuses setup.start_again_incomplete with 
     },
   };
 
-  await expect(resumeStartAgainSetAside(roots, io)).rejects.toMatchObject({
+  await expect(resumeStartAgainSetAside(roots, {}, io)).rejects.toMatchObject({
     code: "setup.start_again_incomplete",
     reason: "set-aside failed: EXDEV venue/venue.db",
   });
@@ -928,7 +929,7 @@ it("a rename that fails at the resume refuses setup.start_again_incomplete with 
   expect(after.filter((line) => line.startsWith("venue/venue.lock:"))).toHaveLength(1);
   expect(after.filter((line) => !line.startsWith("venue/venue.lock:"))).toEqual(before);
   // The next start tries again.
-  expect(await resumeStartAgainSetAside(roots)).toBe("resumed");
+  expect(await resumeStartAgainSetAside(roots, {})).toBe("resumed");
   expect(
     await readFile(join(setAsideFolderPaths(roots, record.setAside!).venue, "venue.db"), "utf8"),
   ).toBe("found database");
@@ -949,7 +950,7 @@ it("a symlink put at the state folder's set-aside name after the record makes th
   await mkdir(join(elsewhere, stem!, `${PROBE}1-${randomUUID()}`));
   const before = await snapshot(elsewhere);
 
-  await expect(resumeStartAgainSetAside(roots)).rejects.toMatchObject({
+  await expect(resumeStartAgainSetAside(roots, {})).rejects.toMatchObject({
     code: "setup.start_again_incomplete",
     reason: `set-aside failed: symlink state/${START_AGAIN_SET_ASIDE_DIR}`,
   });
@@ -977,7 +978,7 @@ it.each(["", "/state", "/venue"])(
     await mkdir(join(elsewhere, `${PROBE}1-${randomUUID()}`));
     const before = await snapshot(elsewhere);
 
-    await expect(resumeStartAgainSetAside(roots)).rejects.toMatchObject({
+    await expect(resumeStartAgainSetAside(roots, {})).rejects.toMatchObject({
       code: "setup.start_again_incomplete",
       reason: `set-aside failed: symlink state/${stem}${below}`,
     });
@@ -999,7 +1000,7 @@ it("a symlink put at a nested piece's parent inside the destination makes the re
   await mkdir(elsewhere);
   await fs.symlink(elsewhere, join(setAsideFolderPaths(roots, record.setAside!).state, RECORDS));
 
-  await expect(resumeStartAgainSetAside(roots)).rejects.toMatchObject({
+  await expect(resumeStartAgainSetAside(roots, {})).rejects.toMatchObject({
     code: "setup.start_again_incomplete",
     reason: `set-aside failed: symlink state/${found}`,
   });
@@ -1034,7 +1035,7 @@ it("a link put in place of a piece's parent folder at its source makes the resum
   await fs.symlink(elsewhere, join(roots.stateDir, parent));
   const before = await snapshot(base);
 
-  await expect(resumeStartAgainSetAside(roots)).rejects.toMatchObject({
+  await expect(resumeStartAgainSetAside(roots, {})).rejects.toMatchObject({
     code: "setup.start_again_incomplete",
     reason: `set-aside failed: symlink state/${piece}`,
   });
@@ -1044,7 +1045,7 @@ it("a link put in place of a piece's parent folder at its source makes the resum
 
   await fs.unlink(join(roots.stateDir, parent));
   await fs.rename(elsewhere, join(roots.stateDir, parent));
-  expect(await resumeStartAgainSetAside(roots)).toBe("resumed");
+  expect(await resumeStartAgainSetAside(roots, {})).toBe("resumed");
   expect(
     await readFile(join(setAsideFolderPaths(roots, record.setAside!).state, piece), "utf8"),
   ).toBe("found bytes");
@@ -1053,14 +1054,14 @@ it("a link put in place of a piece's parent folder at its source makes the resum
 it("a link put in place of a moved piece's parent folder in the set-aside folder makes the resume refuse, though what it leads to matches the record; with the real folder back, the resume finds it moved", async () => {
   const base = await scratch();
   const { roots, record, parent, piece } = await nestedFoundMove(base);
-  await moveStartAgainUnits(roots, record);
+  await moveStartAgainUnits(roots, record, {});
   const moved = join(setAsideFolderPaths(roots, record.setAside!).state, parent);
   const elsewhere = join(base, "elsewhere");
   await fs.rename(moved, elsewhere);
   await fs.symlink(elsewhere, moved);
   const before = await snapshot(base);
 
-  await expect(resumeStartAgainSetAside(roots)).rejects.toMatchObject({
+  await expect(resumeStartAgainSetAside(roots, {})).rejects.toMatchObject({
     code: "setup.start_again_incomplete",
     reason: `set-aside failed: symlink state/${piece}`,
   });
@@ -1069,7 +1070,7 @@ it("a link put in place of a moved piece's parent folder in the set-aside folder
 
   await fs.unlink(moved);
   await fs.rename(elsewhere, moved);
-  expect(await resumeStartAgainSetAside(roots)).toBe("resumed");
+  expect(await resumeStartAgainSetAside(roots, {})).toBe("resumed");
   expect(await readFile(join(moved, "found.json"), "utf8")).toBe("found bytes");
 });
 
@@ -1081,7 +1082,7 @@ it("a link put in place of a piece's parent folder at its source makes the Move 
   await fs.symlink(elsewhere, join(roots.stateDir, parent));
   const before = await snapshot(base);
 
-  await expect(moveStartAgainUnits(roots, record)).rejects.toMatchObject({
+  await expect(moveStartAgainUnits(roots, record, {})).rejects.toMatchObject({
     code: "setup.start_again_incomplete",
     reason: `set-aside failed: symlink state/${piece}`,
   });
@@ -1098,7 +1099,7 @@ it("a link put in place of a folder above a piece in the set-aside folder makes 
   await fs.symlink(elsewhere, join(setAsideFolderPaths(roots, record.setAside!).state, RECORDS));
   const before = await snapshot(base);
 
-  await expect(moveStartAgainUnits(roots, record)).rejects.toMatchObject({
+  await expect(moveStartAgainUnits(roots, record, {})).rejects.toMatchObject({
     code: "setup.start_again_incomplete",
     reason: `set-aside failed: symlink state/${piece}`,
   });
@@ -1128,7 +1129,7 @@ it("a link put in place of the set-aside's state folder after its folders are ma
     }) as typeof fs.lstat,
   };
 
-  await expect(moveStartAgainUnits(roots, record, io)).rejects.toMatchObject({
+  await expect(moveStartAgainUnits(roots, record, {}, io)).rejects.toMatchObject({
     code: "setup.start_again_incomplete",
     reason: "set-aside failed: symlink state/trading.env",
   });
@@ -1152,7 +1153,7 @@ it("a piece that cannot be looked at refuses naming it", async () => {
     }) as typeof fs.lstat,
   };
 
-  await expect(resumeStartAgainSetAside(roots, io)).rejects.toMatchObject({
+  await expect(resumeStartAgainSetAside(roots, {}, io)).rejects.toMatchObject({
     code: "setup.start_again_incomplete",
     reason: "set-aside failed: EACCES state/trading.env",
   });
@@ -1161,7 +1162,7 @@ it("a piece that cannot be looked at refuses naming it", async () => {
 it("no move record, or only a keep record: none, and nothing touched", async () => {
   const none = await startAgainAttempt(await scratch());
   await rm(join(none.roots.venueDir, "first-setup-deleting.json"));
-  expect(await resumeStartAgainSetAside(none.roots)).toBe("none");
+  expect(await resumeStartAgainSetAside(none.roots, {})).toBe("none");
 
   const base = await scratch();
   const attempt = await startAgainAttempt(base);
@@ -1169,7 +1170,7 @@ it("no move record, or only a keep record: none, and nothing touched", async () 
   await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
   await mkdir(join(roots.stateDir, `${PROBE}1700000000000-${attempt.attemptId}`));
   const before = await snapshot(base);
-  expect(await resumeStartAgainSetAside(roots)).toBe("none");
+  expect(await resumeStartAgainSetAside(roots, {})).toBe("none");
   expect(await snapshot(base)).toEqual(before);
 
   const survey = choiceOf(await surveyStartAgainLeftovers(roots));
@@ -1185,7 +1186,7 @@ it("no move record, or only a keep record: none, and nothing touched", async () 
     setAside: null,
   });
   const kept = await snapshot(base);
-  expect(await resumeStartAgainSetAside(roots)).toBe("none");
+  expect(await resumeStartAgainSetAside(roots, {})).toBe("none");
   expect(await snapshot(base)).toEqual(kept);
 });
 
@@ -1199,7 +1200,7 @@ it("two move records: the latest is resumed, into its own folder", async () => {
   const later = await prepared(roots, attempt.administratorId);
   await cutMove(roots, later, 1);
 
-  expect(await resumeStartAgainSetAside(roots)).toBe("resumed");
+  expect(await resumeStartAgainSetAside(roots, {})).toBe("resumed");
 
   expect(
     await readFile(join(setAsideFolderPaths(roots, later.setAside!).state, "trading.env"), "utf8"),
@@ -1250,7 +1251,7 @@ it("a -wal that appears beside a recorded database after the record: the Move re
   expect(await mainFileOf(database)).toEqual(before);
   expect((await lstat(`${database}-wal`)).size).toBeGreaterThan(0);
 
-  await expect(moveStartAgainUnits(roots, record)).rejects.toMatchObject({
+  await expect(moveStartAgainUnits(roots, record, {})).rejects.toMatchObject({
     code: "setup.start_again_incomplete",
     reason: "set-aside failed: unrecorded venue/venue.db-wal",
   });
@@ -1270,7 +1271,7 @@ it("a -wal that appears beside a recorded database after a cut: the resume stops
   writeAndExitWithoutClosing(database);
   expect(await mainFileOf(database)).toEqual(before);
 
-  expect(await resumeStartAgainSetAside(roots)).toBe("stopped");
+  expect(await resumeStartAgainSetAside(roots, {})).toBe("stopped");
 
   for (const suffix of ["", "-wal", "-shm"])
     expect((await lstat(`${database}${suffix}`)).isFile()).toBe(true);
@@ -1294,7 +1295,7 @@ it("a rename that fails at the resume with later pieces still to move refuses na
     },
   };
 
-  await expect(resumeStartAgainSetAside(roots, io)).rejects.toMatchObject({
+  await expect(resumeStartAgainSetAside(roots, {}, io)).rejects.toMatchObject({
     code: "setup.start_again_incomplete",
     reason: "set-aside failed: EXDEV venue/venue.db-wal",
   });
@@ -1316,7 +1317,7 @@ it("a side file beside a database that cannot be looked at refuses naming it, an
     }) as typeof fs.lstat,
   };
 
-  await expect(moveStartAgainUnits(roots, record, io)).rejects.toMatchObject({
+  await expect(moveStartAgainUnits(roots, record, {}, io)).rejects.toMatchObject({
     code: "setup.start_again_incomplete",
     reason: "set-aside failed: EACCES venue/venue.db-shm",
   });
@@ -1329,7 +1330,7 @@ it("a Move deletes the backup room note first", async () => {
   const before = await foundEverywhere(roots);
   const record = await prepared(roots, attempt.administratorId);
   await writeFile(join(roots.stateDir, BACKUP_ROOM_NOTE_FILE), "{}");
-  await moveStartAgainUnits(roots, record);
+  await moveStartAgainUnits(roots, record, {});
   await expect(lstat(join(roots.stateDir, BACKUP_ROOM_NOTE_FILE))).rejects.toMatchObject({
     code: "ENOENT",
   });
@@ -1343,7 +1344,7 @@ it("a resumed Move deletes the backup room note first", async () => {
   const record = await prepared(roots, attempt.administratorId);
   await cutMove(roots, record, 1);
   await writeFile(join(roots.stateDir, BACKUP_ROOM_NOTE_FILE), "{}");
-  expect(await resumeStartAgainSetAside(roots)).toBe("resumed");
+  expect(await resumeStartAgainSetAside(roots, {})).toBe("resumed");
   await expect(lstat(join(roots.stateDir, BACKUP_ROOM_NOTE_FILE))).rejects.toMatchObject({
     code: "ENOENT",
   });
@@ -1379,14 +1380,14 @@ it("a backup room note that cannot be deleted stops a Move, and a resumed Move, 
   const reason = expect.stringMatching(
     /^set-aside failed: E(PERM|ISDIR) state\/backup-room-note\.json$/,
   );
-  await expect(moveStartAgainUnits(roots, record)).rejects.toMatchObject({
+  await expect(moveStartAgainUnits(roots, record, {})).rejects.toMatchObject({
     code: "setup.start_again_incomplete",
     reason,
   });
   expect(await snapshot(roots.venueDir)).toEqual(venueBefore);
   expect(withoutNote(await snapshot(roots.stateDir))).toEqual(stateBefore);
   expect(await stateFiles()).toEqual(stateBytesBefore);
-  await expect(resumeStartAgainSetAside(roots)).rejects.toMatchObject({
+  await expect(resumeStartAgainSetAside(roots, {})).rejects.toMatchObject({
     code: "setup.start_again_incomplete",
     reason,
   });
@@ -1424,7 +1425,7 @@ it.each([
     const original = await fingerprints(roots.stateDir, ["secrets.env"]);
 
     const record = await prepared(roots, attempt.administratorId);
-    await moveStartAgainUnits(roots, record);
+    await moveStartAgainUnits(roots, record, {});
 
     const copy = join(stemFolderOnState(roots, record), "secrets.env");
     expect(await readFile(copy, "utf8")).toBe(RING);
@@ -1445,7 +1446,7 @@ it("the ring's copy keeps the original's mode 0640 under a umask of 077", async 
   const record = await prepared(roots, attempt.administratorId);
   const previous = process.umask(0o077);
   try {
-    await moveStartAgainUnits(roots, record);
+    await moveStartAgainUnits(roots, record, {});
   } finally {
     process.umask(previous);
   }
@@ -1453,6 +1454,122 @@ it("the ring's copy keeps the original's mode 0640 under a umask of 077", async 
   const copy = join(stemFolderOnState(roots, record), "secrets.env");
   expect((await lstat(copy)).mode & 0o777).toBe(0o640);
 });
+
+const FILE_KEY = Buffer.alloc(32, 1).toString("base64");
+const ENVIRONMENT_KEY = Buffer.alloc(32, 2).toString("base64");
+
+/** The ring a trading start loads: `secrets.env` read as `loadBoxEnv` reads it, the environment's keys over it. */
+function tradingRing(file: string | null, environmentKeys: Record<string, string>) {
+  return loadKeyRing({ ...(file === null ? {} : parseEnvFile(file)), ...environmentKeys });
+}
+
+/** The ring the Move's copy holds, read as a restore or a start reads it. */
+async function copiedRing(roots: Roots, record: StartAgainChoiceRecord) {
+  const copy = join(stemFolderOnState(roots, record), "secrets.env");
+  return loadKeyRing(parseEnvFile(await readFile(copy, "utf8")));
+}
+
+it("with keys from the environment, the copy holds the file's other variables with the environment's in their place, mode 0600", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  await foundEverywhere(roots);
+  const file = `OTHER=kept#value\nWAITRON_CREDENTIALS_KEY=${FILE_KEY}\nWAITRON_CREDENTIALS_KEY_VERSION=1\n`;
+  await writeFile(join(roots.stateDir, "secrets.env"), file);
+  await fs.chmod(join(roots.stateDir, "secrets.env"), 0o640);
+  const environmentKeys = {
+    WAITRON_CREDENTIALS_KEY: ENVIRONMENT_KEY,
+    WAITRON_CREDENTIALS_KEY_VERSION: "4",
+  };
+
+  const record = await prepared(roots, attempt.administratorId);
+  await moveStartAgainUnits(roots, record, environmentKeys);
+
+  const copy = join(stemFolderOnState(roots, record), "secrets.env");
+  expect(parseEnvFile(await readFile(copy, "utf8"))).toEqual({
+    OTHER: "kept#value",
+    ...environmentKeys,
+  });
+  expect((await lstat(copy)).mode & 0o777).toBe(0o600);
+  expect(await readFile(join(roots.stateDir, "secrets.env"), "utf8")).toBe(file);
+});
+
+it("with no ring file and keys from the environment, the copy holds exactly those keys", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  await foundEverywhere(roots);
+  const environmentKeys = {
+    WAITRON_CREDENTIALS_KEY: ENVIRONMENT_KEY,
+    WAITRON_CREDENTIALS_KEY_VERSION: "4",
+  };
+
+  const record = await prepared(roots, attempt.administratorId);
+  await moveStartAgainUnits(roots, record, environmentKeys);
+
+  const copy = join(stemFolderOnState(roots, record), "secrets.env");
+  expect(parseEnvFile(await readFile(copy, "utf8"))).toEqual(environmentKeys);
+  expect((await lstat(copy)).mode & 0o777).toBe(0o600);
+});
+
+it("a resume given keys from the environment writes the copy a Move would", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  const before = await foundEverywhere(roots);
+  const file = `WAITRON_CREDENTIALS_KEY=${FILE_KEY}\n`;
+  await writeFile(join(roots.stateDir, "secrets.env"), file, { mode: 0o640 });
+  const environmentKeys = { WAITRON_CREDENTIALS_KEY: ENVIRONMENT_KEY };
+  const record = await prepared(roots, attempt.administratorId);
+  const cut: SetAsideIo = {
+    ...realIo,
+    writeRing: async () => {
+      throw errno("EIO");
+    },
+  };
+  await expect(moveStartAgainUnits(roots, record, environmentKeys, cut)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+  });
+
+  expect(await resumeStartAgainSetAside(roots, environmentKeys)).toBe("resumed");
+
+  const copy = join(stemFolderOnState(roots, record), "secrets.env");
+  expect(parseEnvFile(await readFile(copy, "utf8"))).toEqual(environmentKeys);
+  expect((await lstat(copy)).mode & 0o777).toBe(0o600);
+  await expectAllAside(roots, record, before);
+});
+
+it.each([
+  [
+    "a file key holding a `#`, with only the version from the environment",
+    `WAITRON_CREDENTIALS_KEY=${FILE_KEY.slice(0, 10)}#${FILE_KEY.slice(10)}\n`,
+    { WAITRON_CREDENTIALS_KEY_VERSION: "4" },
+  ],
+  [
+    "an environment key holding a line break",
+    `WAITRON_CREDENTIALS_KEY=${FILE_KEY}\nWAITRON_CREDENTIALS_KEY_VERSION=1\n`,
+    {
+      WAITRON_CREDENTIALS_KEY: `${ENVIRONMENT_KEY.slice(0, 10)}\n${ENVIRONMENT_KEY.slice(10)}`,
+      WAITRON_CREDENTIALS_KEY_VERSION: "\n4\n",
+    },
+  ],
+  [
+    "a file line whose `export` prefix makes it no ring variable to a start",
+    `INLINE=v #c\nexport WAITRON_CREDENTIALS_KEY_PREVIOUS=${FILE_KEY}\n`,
+    { WAITRON_CREDENTIALS_KEY: ENVIRONMENT_KEY },
+  ],
+] as const)(
+  "the copy opens with the ring a trading start loads: %s",
+  async (_case, file, environmentKeys) => {
+    const attempt = await startAgainAttempt(await scratch());
+    const { roots } = attempt;
+    await foundEverywhere(roots);
+    await writeFile(join(roots.stateDir, "secrets.env"), file, { mode: 0o600 });
+    const expected = tradingRing(file, environmentKeys);
+
+    const record = await prepared(roots, attempt.administratorId);
+    await moveStartAgainUnits(roots, record, environmentKeys);
+
+    expect(await copiedRing(roots, record)).toEqual(expected);
+  },
+);
 
 it("a cut while writing the ring's copy leaves no copy and moves nothing; the resume removes the half-written file and makes the copy before any further rename", async () => {
   const attempt = await startAgainAttempt(await scratch());
@@ -1470,7 +1587,7 @@ it("a cut while writing the ring's copy leaves no copy and moves nothing; the re
     },
   };
 
-  await expect(moveStartAgainUnits(roots, record, cut)).rejects.toMatchObject({
+  await expect(moveStartAgainUnits(roots, record, {}, cut)).rejects.toMatchObject({
     code: "setup.start_again_incomplete",
     reason: `set-aside failed: EIO state/${START_AGAIN_SET_ASIDE_DIR}/${stemOf(record)}/secrets.env`,
   });
@@ -1492,7 +1609,7 @@ it("a cut while writing the ring's copy leaves no copy and moves nothing; the re
       await fs.rename(from, to);
     },
   };
-  expect(await resumeStartAgainSetAside(roots, recording)).toBe("resumed");
+  expect(await resumeStartAgainSetAside(roots, {}, recording)).toBe("resumed");
 
   expect(order.slice(0, 2)).toEqual(["write .secrets.env.set-aside", "rename secrets.env"]);
   expect(order.length).toBeGreaterThan(2);
@@ -1540,7 +1657,7 @@ it("a copy already in the stem folder is left as it is", async () => {
   await writeFile(copy, "already here", { mode: 0o600 });
   const before = await fingerprints(stemFolderOnState(roots, record), ["secrets.env"]);
 
-  await moveStartAgainUnits(roots, record);
+  await moveStartAgainUnits(roots, record, {});
 
   expect(await fingerprints(stemFolderOnState(roots, record), ["secrets.env"])).toEqual(before);
 });
@@ -1558,7 +1675,7 @@ it("with no secrets.env in the state root the Move copies nothing and completes"
     },
   };
 
-  await moveStartAgainUnits(roots, record, io);
+  await moveStartAgainUnits(roots, record, {}, io);
 
   expect(writes).toEqual([]);
   expect((await readdir(stemFolderOnState(roots, record))).sort()).toEqual(["state", "venue"]);
@@ -1571,7 +1688,7 @@ it("a ring file that cannot be read, a copy that cannot be looked at, or a link 
   await mkdir(join(unreadable.roots.stateDir, "secrets.env"));
   const first = await prepared(unreadable.roots, unreadable.administratorId);
   const venueBefore = await snapshot(unreadable.roots.venueDir);
-  await expect(moveStartAgainUnits(unreadable.roots, first)).rejects.toMatchObject({
+  await expect(moveStartAgainUnits(unreadable.roots, first, {})).rejects.toMatchObject({
     code: "setup.start_again_incomplete",
     reason: "set-aside failed: EISDIR state/secrets.env",
   });
@@ -1589,7 +1706,7 @@ it("a ring file that cannot be read, a copy that cannot be looked at, or a link 
       return fs.lstat(path, options as never);
     }) as typeof fs.lstat,
   };
-  await expect(moveStartAgainUnits(hidden.roots, second, io)).rejects.toMatchObject({
+  await expect(moveStartAgainUnits(hidden.roots, second, {}, io)).rejects.toMatchObject({
     code: "setup.start_again_incomplete",
     reason: `set-aside failed: EACCES state/${START_AGAIN_SET_ASIDE_DIR}/${stemOf(second)}/secrets.env`,
   });
@@ -1604,7 +1721,7 @@ it("a ring file that cannot be read, a copy that cannot be looked at, or a link 
   const elsewhere = await scratch();
   await mkdir(join(roots.stateDir, START_AGAIN_SET_ASIDE_DIR), { recursive: true });
   await fs.symlink(elsewhere, stemFolderOnState(roots, third));
-  await expect(moveStartAgainUnits(roots, third)).rejects.toMatchObject({
+  await expect(moveStartAgainUnits(roots, third, {})).rejects.toMatchObject({
     code: "setup.start_again_incomplete",
     reason: `set-aside failed: symlink state/${START_AGAIN_SET_ASIDE_DIR}/${stemOf(third)}`,
   });

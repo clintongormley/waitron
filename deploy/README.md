@@ -530,7 +530,7 @@ re-pairs with Cloud and makes a new WireGuard key. Both forms clear the venue da
 - `records/`, the record of each Keep or Move choice made at Start again (`records/choices/`)
   and the files a Move set aside or unreadable module records that Start again kept
   (`records/set-aside/`). Each Move's folder also holds
-  `secrets.env`, a copy of the box's key ring file as it was at the Move, because the moved
+  `secrets.env`, a copy of the key ring the box was using at the Move, because the moved
   databases' sealed rows open only with it. Anyone who copies this folder off the box copies that
   key ring too.
 

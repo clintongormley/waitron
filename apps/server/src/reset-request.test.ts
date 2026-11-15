@@ -390,6 +390,7 @@ describe("runStagedReset", () => {
           {
             ownerDb: store.venue,
             ownerNode: store.node,
+            environmentKeys: {},
             ring: loadKeyRing({
               WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
               WAITRON_CREDENTIALS_KEY_VERSION: "1",

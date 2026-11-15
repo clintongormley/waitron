@@ -355,6 +355,7 @@ export function mountStartAgainChoice(
         choice: form.choice,
         listed: form.listed,
         now,
+        environmentKeys: deps.environmentKeys,
       });
     } catch (error) {
       if (isAppError(error) && hasCode(error, "setup.start_again_move_unfinished")) {

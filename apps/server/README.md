@@ -367,10 +367,9 @@ credential (`sk_test_…`). Demo always remains on the simulator.
 
 ### The four `WAITRON_CREDENTIALS_KEY*` variables, in full
 
-These are **not** parsed by this package's own `config.ts` — `src/boot.ts` passes the env it was
-given straight to `loadKeyRing` (`packages/credentials/src/keyring.ts`), which owns all four names
-and their validation, so this list exists here only so an operator does not have to go looking for
-it:
+These are **not** parsed by this package's own `config.ts`: `loadKeyRing`
+(`packages/credentials/src/keyring.ts`) owns all four names and their validation, so this list
+exists here only so an operator does not have to go looking for it:
 
 - **`WAITRON_CREDENTIALS_KEY`** (required) — base64-encoded, exactly 32 bytes decoded. The current
   encryption key every credential read/write uses.
@@ -380,6 +379,11 @@ it:
   but both-or-neither) — set only during a rotation window, so rows sealed under the previous key
   still decrypt while `rotate` re-seals them under the current one. Setting one without the other is
   a boot-time `credentials.key_ring_incomplete` failure, not a runtime surprise later.
+
+Any of the four set non-empty in the environment wins over `secrets.env` at every start, in setup
+mode as in trading (`loadBoxEnv`, `src/box-env.ts`). So joining another box as its spare refuses
+`mirror.vault_key_differs`, before writing anything, while one of them differs from the main
+box's ring, and a Start again Move's copy of the ring holds the environment's values.
 
 Use `packages/credentials`'s CLI to provision and rotate credentials (`fiscal.aeat`,
 `payments.stripe`, `payments.sumup`), for example

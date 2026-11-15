@@ -3,7 +3,7 @@ import { trimTrailingSlashes } from "./trim-trailing-slashes.js";
 import { disarmRestoreDiscard } from "./restore-flow.js";
 import { formerMainForReturn, startReturnRecordsDuty } from "./return-records.js";
 import { mountReturnRecordsApi } from "./return-records-api.js";
-import { CLOUD_STAFF_CERT_FILE, SECRETS_ENV_FILE, SERVER_PEM_FILE } from "@waitron/store";
+import { CLOUD_STAFF_CERT_FILE, SERVER_PEM_FILE } from "@waitron/store";
 import {
   boxHostClient,
   boxHostRequests,
@@ -53,7 +53,7 @@ import { mountCloudApi } from "./cloud-api.js";
 import { mountContentSuggestionsApi } from "./content-suggestions-api.js";
 import { liveResourceTypes } from "./live-resources.js";
 import { fileURLToPath } from "node:url";
-import { readFileSync, existsSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { serve } from "@hono/node-server";
@@ -163,7 +163,6 @@ import {
   VENUE_SERVICE,
 } from "./modules.js";
 import { readModuleConfig, writeModuleConfig, modulesForMigration } from "./module-config.js";
-import { parseEnvFile } from "./env-file.js";
 import {
   loadConfig,
   resolveDutyTimings,
@@ -484,7 +483,7 @@ import { recordStartDeletions } from "./start-backup-room-record.js";
 import { lowSpaceBackupDeletion, runningLocalBackends } from "./low-space-backups.js";
 import { BackupSupervisor } from "./backup-supervisor.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
-import { loadBoxEnv } from "./box-env.js";
+import { keyRingVariables, loadBoxEnv } from "./box-env.js";
 import { readOnlyGate } from "./read-only-gate.js";
 import { isReadOnlyExempt } from "./read-only-exemptions.js";
 import { isFenced } from "./membership-fence.js";
@@ -1539,11 +1538,9 @@ async function bootServer(
       now,
       listIpv4: boxAddresses,
     });
-    // `ensureBoxSecrets` wrote the vault key into `secrets.env` but did not load it into this
-    // process's env, so the setup ring is read back off disk.
-    const ring = loadKeyRing(
-      parseEnvFile(readFileSync(join(config.stateDir, SECRETS_ENV_FILE), "utf8")),
-    );
+    // `ensureBoxSecrets` may have just written `secrets.env`, so the ring is merged afresh, as a
+    // trading start merges it: an environment key wins, or what setup seals would not open there.
+    const ring = loadKeyRing(await loadBoxEnv(base, config.stateDir));
     setupKeyRing = ring;
     const accountKey = resolveAccountKey({}, ring);
     const persistTrading = async (cfg: TradingConfig): Promise<void> => {
@@ -1830,6 +1827,7 @@ async function bootServer(
               ownerDb: db,
               ownerNode: store.node,
               ring,
+              environmentKeys: keyRingVariables(base),
               persistCredentialsRing: (r) => writeCredentialsRing(config.stateDir, r),
               persistBackupSettings: (s) => replaceBackupSettings(config.stateDir, s),
               fetchBundle: (primaryUrl, credential, standby, confirmedCaPem) =>

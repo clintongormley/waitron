@@ -41,6 +41,7 @@ import type { PendingAdoption } from "./finish-adoption.js";
 import { verifyBreakGlass } from "./break-glass.js";
 import { keyRingEnv, writeCredentialsRing } from "./box-secrets.js";
 import { parseEnvFile } from "./env-file.js";
+import { keyRingVariables, loadBoxEnv } from "./box-env.js";
 import { MAIN_AUTHORITY } from "./testing/main-authority.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { tlsSetMatches } from "./testing/box-tls.js";
@@ -164,12 +165,14 @@ function deps(
     environment?: "production" | "preproduction";
     persistCredentialsRing?: (ring: MirrorBundle["credentialsRing"]) => Promise<void>;
     advertisedOrigin?: string;
+    baseEnv?: NodeJS.ProcessEnv;
   } = {},
 ) {
   return {
     ownerDb: suite.db,
     ownerNode: suite.node,
     ring: RING,
+    environmentKeys: keyRingVariables(extra.baseEnv ?? {}),
     advertisedOrigin: extra.advertisedOrigin ?? ADVERTISED_ORIGIN,
     spareStorePort: 7443,
     environment: extra.environment ?? ("preproduction" as const),
@@ -979,6 +982,110 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(isAppError(error) && error.params).toEqual({});
     expect(JSON.stringify(error)).not.toContain(BUNDLE_RING.key);
     expect(beforeFirstWrite).not.toHaveBeenCalled();
+    await writtenNothing();
+  });
+
+  const OTHER_KEY = Buffer.alloc(32, 0x7c).toString("base64");
+  it.each([
+    ["another key", { WAITRON_CREDENTIALS_KEY: OTHER_KEY }],
+    [
+      "the main box's key under another version",
+      { WAITRON_CREDENTIALS_KEY: BUNDLE_RING.key, WAITRON_CREDENTIALS_KEY_VERSION: "3" },
+    ],
+    ["only another version", { WAITRON_CREDENTIALS_KEY_VERSION: "3" }],
+    [
+      "a previous key the main box's ring does not hold",
+      { WAITRON_CREDENTIALS_KEY_PREVIOUS: OTHER_KEY },
+    ],
+    [
+      "a previous version the main box's ring does not hold",
+      { WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "2" },
+    ],
+    [
+      "the main box's key with one byte more",
+      {
+        WAITRON_CREDENTIALS_KEY: Buffer.concat([
+          Buffer.from(BUNDLE_RING.key, "base64"),
+          Buffer.of(0x6b),
+        ]).toString("base64"),
+      },
+    ],
+    ["a version that is not a whole number", { WAITRON_CREDENTIALS_KEY_VERSION: "1.5" }],
+  ] as const)(
+    "refuses mirror.vault_key_differs when the environment sets %s, writing nothing",
+    async (_case, baseEnv) => {
+      const beforeFirstWrite = vi.fn(async () => {});
+      const error = await adoptFromPrimary(deps({ baseEnv }), REQ, { beforeFirstWrite }).catch(
+        (e: unknown) => e,
+      );
+      expect(isAppError(error) && error.code).toBe("mirror.vault_key_differs");
+      expect(isAppError(error) && error.params).toEqual({});
+      expect(JSON.stringify(error)).not.toContain(BUNDLE_RING.key);
+      expect(JSON.stringify(error)).not.toContain(OTHER_KEY);
+      expect(beforeFirstWrite).not.toHaveBeenCalled();
+      await writtenNothing();
+    },
+  );
+
+  it.each([
+    [
+      "the main box's key and version",
+      { WAITRON_CREDENTIALS_KEY: BUNDLE_RING.key, WAITRON_CREDENTIALS_KEY_VERSION: "1" },
+    ],
+    [
+      "the main box's key and empty values elsewhere",
+      {
+        WAITRON_CREDENTIALS_KEY: BUNDLE_RING.key,
+        WAITRON_CREDENTIALS_KEY_VERSION: "",
+        WAITRON_CREDENTIALS_KEY_PREVIOUS: "",
+      },
+    ],
+  ] as const)(
+    "joins when the environment sets %s, and the spare's key opens under the ring the next start loads",
+    async (_case, baseEnv) => {
+      await adoptFromPrimary(deps({ baseEnv }), REQ, NO_HOOKS);
+      const nextStart = loadKeyRing(await loadBoxEnv(baseEnv, stateDir));
+      const sealed = await readNodeSigningKey(suite.node, nextStart, STANDBY.nodeId);
+      expect(sealed).not.toBeNull();
+      expect(nodeSigningPublicKey(sealed!)).toBe(STANDBY.publicKey);
+    },
+  );
+
+  // 0xfb bytes encode with both `+` and `/`, so the URL-safe alphabet spells this key differently.
+  const SLASHED_RING = { key: Buffer.alloc(32, 0xfb).toString("base64"), version: 4 };
+  const urlSafe = (key: string) => key.replaceAll("+", "-").replaceAll("/", "_");
+  it.each([
+    ["the version with a leading zero", { WAITRON_CREDENTIALS_KEY_VERSION: "04" }],
+    ["the key in the URL-safe alphabet", { WAITRON_CREDENTIALS_KEY: urlSafe(SLASHED_RING.key) }],
+    [
+      "the key broken across two lines",
+      {
+        WAITRON_CREDENTIALS_KEY: `${SLASHED_RING.key.slice(0, 20)}\n${SLASHED_RING.key.slice(20)}`,
+      },
+    ],
+  ] as const)(
+    "joins when the environment spells the main box's ring otherwise: %s",
+    async (_case, baseEnv) => {
+      await adoptFromPrimary(
+        deps({ baseEnv, fetchBundle: async () => makeBundle({ credentialsRing: SLASHED_RING }) }),
+        REQ,
+        NO_HOOKS,
+      );
+      const nextStart = loadKeyRing(await loadBoxEnv(baseEnv, stateDir));
+      const sealed = await readNodeSigningKey(suite.node, nextStart, STANDBY.nodeId);
+      expect(sealed).not.toBeNull();
+      expect(nodeSigningPublicKey(sealed!)).toBe(STANDBY.publicKey);
+    },
+  );
+
+  it("refuses mirror.vault_key_differs for another key in the URL-safe alphabet, writing nothing", async () => {
+    const baseEnv = { WAITRON_CREDENTIALS_KEY: urlSafe(Buffer.alloc(32, 0xfe).toString("base64")) };
+    const error = await adoptFromPrimary(
+      deps({ baseEnv, fetchBundle: async () => makeBundle({ credentialsRing: SLASHED_RING }) }),
+      REQ,
+      NO_HOOKS,
+    ).catch((e: unknown) => e);
+    expect(isAppError(error) && error.code).toBe("mirror.vault_key_differs");
     await writtenNothing();
   });
 

@@ -7,7 +7,10 @@ import {
   WAL_SUFFIX,
   SHM_SUFFIX,
   JOURNAL_SUFFIX,
+  formatEnvFile,
+  parseEnvFile,
 } from "@waitron/store";
+import { singleLineKeyRingVariables } from "@waitron/credentials";
 import { mkdirDurable } from "./fs-atomic.js";
 
 import { randomUUID } from "node:crypto";
@@ -371,27 +374,46 @@ async function deleteNoteFirst(stateDir: string): Promise<void> {
 /**
  * Copies the box's key ring into the Move's stem folder on the state root, before any piece moves:
  * the moved databases' sealed rows open only with it, and a later join replaces the ring whole.
- * Bytes and permission bits as they are; written under a temporary name, flushed, renamed and the
- * folder synced, so a cut leaves no copy or a whole one. A copy already there is left as it is; with
- * no ring file there is nothing to copy.
+ * The copy holds the ring in use: `environmentKeys` is the vault key variables the real environment
+ * sets non-empty, which win over the file's at every start. With none, the file's bytes and
+ * permission bits as they are; with some, the file's variables as a start reads them, with those in
+ * their place, mode 0600. Written under a temporary name, flushed, renamed and the folder synced, so
+ * a cut leaves no copy or a whole one. A copy already there is left as it is; with no ring file and
+ * none set there is nothing to copy.
  */
-async function keepRingCopy(roots: Roots, destinations: Destinations, io: SetAsideIo) {
+async function keepRingCopy(
+  roots: Roots,
+  destinations: Destinations,
+  environmentKeys: Readonly<Record<string, string>>,
+  io: SetAsideIo,
+) {
   let label = `state/${RING}`;
   try {
-    let bytes: Buffer;
-    let mode: number;
+    let file: { bytes: Buffer; mode: number } | null = null;
     try {
       const handle = await fs.open(join(roots.stateDir, RING), "r");
       try {
-        mode = (await handle.stat()).mode & 0o777;
-        bytes = await handle.readFile();
+        const mode = (await handle.stat()).mode & 0o777;
+        file = { bytes: await handle.readFile(), mode };
       } finally {
         await handle.close();
       }
     } catch (error) {
-      if (codeOf(error) === "ENOENT") return;
-      throw error;
+      if (codeOf(error) !== "ENOENT") throw error;
     }
+    const ring =
+      Object.keys(environmentKeys).length === 0
+        ? file
+        : {
+            bytes: Buffer.from(
+              formatEnvFile({
+                ...(file === null ? {} : parseEnvFile(file.bytes.toString("utf8"))),
+                ...singleLineKeyRingVariables(environmentKeys),
+              }),
+            ),
+            mode: 0o600,
+          };
+    if (ring === null) return;
     const stemFolder = join(roots.stateDir, dirname(destinations.state));
     for (const folder of chain(roots.stateDir, stemFolder).slice(1)) {
       const found = await notAFolder(folder, io);
@@ -410,7 +432,7 @@ async function keepRingCopy(roots: Roots, destinations: Destinations, io: SetAsi
     await io.mkdir(stemFolder, { recursive: true, mode: MODE });
     for (const folder of chain(roots.stateDir, stemFolder)) await syncFolder(folder);
     const temp = join(stemFolder, `${RING_TEMP}${process.pid}-${randomUUID()}`);
-    await (io.writeRing ?? writeRingFile)(temp, bytes, mode);
+    await (io.writeRing ?? writeRingFile)(temp, ring.bytes, ring.mode);
     await io.rename(temp, copy);
     await syncFolder(stemFolder);
   } catch (error) {
@@ -427,13 +449,14 @@ async function keepRingCopy(roots: Roots, destinations: Destinations, io: SetAsi
 export async function moveStartAgainUnits(
   roots: Roots,
   record: StartAgainChoiceRecord,
+  environmentKeys: Readonly<Record<string, string>>,
   io: SetAsideIo = defaultIo,
 ): Promise<void> {
   if (record.choice !== "move" || record.setAside === null)
     throw new AppError("setup.attempt_invalid", {});
   await deleteNoteFirst(roots.stateDir);
   const folders = await makeDestinationFolders(roots, { ...record, setAside: record.setAside }, io);
-  await keepRingCopy(roots, record.setAside, io);
+  await keepRingCopy(roots, record.setAside, environmentKeys, io);
   for (const unit of record.listed.units)
     for (const piece of unit.pieces) {
       const side = await unrecordedSideFile(roots, unit, piece, io);
@@ -509,6 +532,7 @@ export async function recordedStartAgainMove(
  */
 export async function resumeStartAgainSetAside(
   roots: Roots,
+  environmentKeys: Readonly<Record<string, string>>,
   io: SetAsideIo = defaultIo,
 ): Promise<"none" | "resumed" | "stopped"> {
   const canonical = await canonicalFirstSetupRoots(roots);
@@ -521,7 +545,7 @@ export async function resumeStartAgainSetAside(
     await deleteNoteFirst(canonical.stateDir);
     await removeLeftoverProbes(canonical, io);
     const folders = await makeDestinationFolders(canonical, record, io);
-    await keepRingCopy(canonical, record.setAside, io);
+    await keepRingCopy(canonical, record.setAside, environmentKeys, io);
     for (const unit of record.listed.units)
       for (const piece of unit.pieces) {
         const expected = JSON.stringify(recordedFor(unit, piece));

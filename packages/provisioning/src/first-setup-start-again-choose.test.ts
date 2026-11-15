@@ -200,6 +200,7 @@ it("a wrong guess does not change the list the page shows", async () => {
     choice: "move" as const,
     listed: survey.digest,
     now: () => new Date(T0),
+    environmentKeys: {},
   };
   await expect(chooseStartAgainLeftovers({ ...input, password: WRONG })).rejects.toMatchObject({
     code: "setup.owner_required",
@@ -232,6 +233,7 @@ it("a wrong password is refused setup.owner_required, counted, and changes no fi
       choice: "move",
       listed: f.listed,
       now: () => new Date(T0),
+      environmentKeys: {},
     }),
   ).rejects.toMatchObject({ code: "setup.owner_required" });
   expect(await counter(f.roots.stateDir)).toMatchObject({ failures: 1, waitUntil: null });
@@ -248,6 +250,7 @@ it("the sixth wrong password makes the next try wait, and a new call — a resta
       choice: "keep",
       listed: f.listed,
       now: () => new Date(T0 + ms),
+      environmentKeys: {},
       verify,
     });
   for (let n = 1; n <= 6; n += 1)
@@ -279,6 +282,7 @@ it("a digest from an older page is refused setup.start_again_files_changed and c
       choice: "move",
       listed: f.listed,
       now: () => new Date(T0),
+      environmentKeys: {},
       verify,
     }),
   ).rejects.toMatchObject({ code: "setup.start_again_files_changed" });
@@ -300,6 +304,7 @@ it("a guess counter that cannot be written refuses setup.attempt_invalid before 
       choice: "move",
       listed: f.listed,
       now: () => new Date(T0),
+      environmentKeys: {},
       verify,
     }),
   ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
@@ -327,6 +332,7 @@ it("files changed between the password and the lock: refused, nothing changed", 
       choice: "move",
       listed: f.listed,
       now: () => new Date(T0),
+      environmentKeys: {},
       verify: async () => {
         await writeFile(join(f.roots.venueDir, "venue.db"), "other bytes, longer than before");
         after = await folders(f.roots);
@@ -346,6 +352,7 @@ it("a correct password sets the counter back to 0", async () => {
       choice: "move",
       listed: f.listed,
       now: () => new Date(T0),
+      environmentKeys: {},
     }),
   ).rejects.toMatchObject({ code: "setup.owner_required" });
   await chooseStartAgainLeftovers({
@@ -354,6 +361,7 @@ it("a correct password sets the counter back to 0", async () => {
     choice: "keep",
     listed: f.listed,
     now: () => new Date(T0 + 1),
+    environmentKeys: {},
   }).catch(() => undefined);
   expect(await counter(f.roots.stateDir)).toMatchObject({ failures: 0, waitUntil: null });
 });
@@ -368,6 +376,7 @@ it("checks the password against the setup record's own verifier", async () => {
       choice: "move",
       listed: f.listed,
       now: () => new Date(T0),
+      environmentKeys: {},
       verify,
     }),
   ).rejects.toMatchObject({ code: "setup.owner_required" });
@@ -390,6 +399,7 @@ it("a box whose setup record changed refuses setup.not_ready", async () => {
       choice: "move",
       listed: f.listed,
       now: () => new Date(T0),
+      environmentKeys: {},
       verify,
     }),
   ).rejects.toMatchObject({ code: "setup.not_ready" });
@@ -409,6 +419,7 @@ it("a setup record changed after the survey refuses setup.not_ready and costs no
       choice: "move",
       listed: f.listed,
       now: () => new Date(T0),
+      environmentKeys: {},
       verify,
     }),
   ).rejects.toMatchObject({ code: "setup.not_ready" });
@@ -442,6 +453,7 @@ it("a setup record for another attempt, written after the survey, refuses setup.
       choice: "move",
       listed: f.listed,
       now: () => new Date(T0),
+      environmentKeys: {},
       verify,
     }),
   ).rejects.toMatchObject({ code: "setup.not_ready" });
@@ -459,6 +471,7 @@ it("a box with no Start again marker refuses setup.not_ready", async () => {
       choice: "move",
       listed: f.listed,
       now: () => new Date(T0),
+      environmentKeys: {},
     }),
   ).rejects.toMatchObject({ code: "setup.not_ready" });
 });
@@ -474,6 +487,7 @@ it("a kept box refuses setup.start_again_kept and costs no guess", async () => {
       choice: "move",
       listed: f.listed,
       now: () => new Date(T0),
+      environmentKeys: {},
       verify,
     }),
   ).rejects.toMatchObject({ code: "setup.start_again_kept" });
@@ -491,6 +505,7 @@ it("a Keep recorded between the password and the lock refuses setup.start_again_
       choice: "move",
       listed: f.listed,
       now: () => new Date(T0),
+      environmentKeys: {},
       verify: async () => {
         await keepRecord(f);
         after = await folders(f.roots);
@@ -512,6 +527,7 @@ it("another process holding the venue folder refuses provisioning.database_in_us
       choice: "move",
       listed: f.listed,
       now: () => new Date(T0),
+      environmentKeys: {},
     }),
   ).rejects.toMatchObject({ code: "provisioning.database_in_use" });
   expect(await folders(f.roots)).toEqual(before);
@@ -537,6 +553,7 @@ it("two tries sent at once are counted one after the other", async () => {
       choice: "keep",
       listed: f.listed,
       now: () => new Date(T0),
+      environmentKeys: {},
       verify,
     });
   const [right, wrong] = await Promise.allSettled([send(START_AGAIN_ADMIN_PASSWORD), send(WRONG)]);
@@ -568,6 +585,7 @@ const choose = (
     choice,
     listed: f.listed,
     now: () => new Date(T0),
+    environmentKeys: {},
     ...(options.io && { io: options.io }),
   });
 const choiceSurvey = async (f: StartAgainAttempt) => {
@@ -1045,6 +1063,7 @@ it("counts a wrong password while the venue folder is held and releases it on re
         choice: "keep",
         listed: f.listed,
         now: () => new Date(T0),
+        environmentKeys: {},
       }),
     ).rejects.toMatchObject({ code: "setup.owner_required" });
     expect(heldWhenCounted).toBe(true);

@@ -121,7 +121,6 @@ no design yet.
 - [Everything needing a third box or a Cloud peer](backlog/replication-cloud.md#bundle-everything-needing-a-third-box-or-a-cloud-peer)
 - [After A760: A877's one helper first](backlog/service-periods.md#bundle-after-a760-a877s-one-helper-first)
 - [One rule for what holds a table back at a reset](backlog/till.md#bundle-one-rule-for-what-holds-a-table-back-at-a-reset)
-- [The key ring after a join](backlog/setup.md#bundle-the-key-ring-after-a-join)
 - [Recheck that a spare gets later charts](backlog/replication-cloud.md#bundle-recheck-that-a-spare-gets-later-charts)
 - [Get ready for A1308's history rewrite (A1306 and CI's concurrency groups)](backlog/ci.md#bundle-get-ready-for-a1308s-history-rewrite-a1306-and-cis-concurrency-groups)
 
@@ -446,8 +445,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **A boot test's disk assertion reads the checkout's path**, so it fails in a worktree whose path
   holds "disk". [Detail](backlog/setup.md#a-boot-tests-disk-assertion-reads-the-checkouts-path)
-
-- **The key ring after a join** (bundle of 2, 1 important, size S, waits for another entry). Holds A1285, A1284. [Detail](backlog/setup.md#bundle-the-key-ring-after-a-join)
 
 - **Restore paths run** (bundle of 2, 2 important, size S). [Detail](backlog/setup.md#bundle-restore-paths-run)
 

@@ -23,6 +23,7 @@ import {
   listCredentials,
   loadKeyRing,
   sealNodeSigningKeyTx,
+  singleLineKeyRingVariables,
   writePairLinkTx,
   type KeyRing,
 } from "@waitron/credentials";
@@ -109,6 +110,9 @@ export interface AdoptDeps {
   ownerNode: NodeDatabase;
   /** The ring this box booted with. Adopt replaces it with the bundle's and seals nothing under it. */
   ring: KeyRing;
+  /** The vault key variables the real environment sets (`keyRingVariables`), which win over
+   * `secrets.env` at every start. */
+  environmentKeys: Readonly<Record<string, string>>;
   /** Replaces `secrets.env` whole with the main box's ring, so the next boot opens what it sealed. */
   persistCredentialsRing: (ring: EncodedKeyRing) => Promise<void>;
   /** Sends the standby identity so the primary can reserve and endorse it. */
@@ -225,7 +229,14 @@ export async function adoptFromPrimary(
     throw new AppError("mirror.bundle_fetch_failed", {});
   }
   assertAuthorityKeyMatches(bundle.boxCaPem, bundle.boxCaKeyPem);
-  const ring = loadKeyRing(keyRingEnv(bundle.credentialsRing));
+  const bundleEnv = keyRingEnv(bundle.credentialsRing);
+  // The ring persisted below would be hidden at the next start, and the keys sealed under it lost.
+  // Compared as `loadKeyRing` reads each side, so another spelling of the same ring joins.
+  const bundleRead = singleLineKeyRingVariables(bundleEnv);
+  for (const [name, set] of Object.entries(singleLineKeyRingVariables(deps.environmentKeys))) {
+    if (set !== bundleRead[name]) throw new AppError("mirror.vault_key_differs", {});
+  }
+  const ring = loadKeyRing(bundleEnv);
   const recovery = await makeBreakGlassSecret();
 
   await hooks.beforeFirstWrite();
