@@ -21,7 +21,7 @@ import {
   mountInvoiceCustomerDataApi,
   type InvoiceCustomerDataDeps,
 } from "./invoice-customer-data-api.js";
-import { readInvoiceDocument } from "./invoice-document.js";
+import { readCustomerInvoiceDocument } from "./invoice-document.js";
 import { ALL_MODULE_PERMISSIONS } from "./modules.js";
 import {
   provisionInvoiceCustomerVenue,
@@ -215,7 +215,7 @@ describe("both routes", () => {
         `refuses a %s asking for ${taxId} at ${route}, building nothing`,
         async (role) => {
           const render = vi.fn(stubPdf);
-          const readDocument = vi.fn(readInvoiceDocument);
+          const readDocument = vi.fn(readCustomerInvoiceDocument);
           await refused(
             await ask(withTaxId(route, taxId), callers()[role], { render, readDocument }),
             403,

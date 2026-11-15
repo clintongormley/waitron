@@ -17,7 +17,7 @@ import {
   mountInvoiceCustomerDataApi,
   type InvoiceCustomerDataDeps,
 } from "./invoice-customer-data-api.js";
-import { readInvoiceDocument } from "./invoice-document.js";
+import { readCustomerInvoiceDocument } from "./invoice-document.js";
 import { ALL_MODULE_PERMISSIONS } from "./modules.js";
 import { invoiceCustomerReadme } from "./personal-data-readme.js";
 import {
@@ -159,9 +159,9 @@ describe("the invoice customer download, end to end", () => {
   });
 
   it("answers an opaque 500 and no file when one invoice cannot be read", async () => {
-    const readDocument: typeof readInvoiceDocument = async (backend, tx, cfg, saleId) => {
+    const readDocument: typeof readCustomerInvoiceDocument = async (backend, tx, cfg, saleId) => {
       if (saleId === fixture.sales.j2) throw new AppError("invoice_delivery.not_found", {});
-      return readInvoiceDocument(backend, tx, cfg, saleId);
+      return readCustomerInvoiceDocument(backend, tx, cfg, saleId);
     };
     const response = await ask("12345678Z", { readDocument });
     expect(response.status).toBe(500);

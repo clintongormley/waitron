@@ -31,7 +31,11 @@ import {
   provisionAdjustmentVenue,
   type AdjustmentVenue,
 } from "./testing/adjustment-venue.js";
-import { readInvoiceDocument, readReceiptEmailDocument } from "./invoice-document.js";
+import {
+  readCustomerInvoiceDocument,
+  readInvoiceDocument,
+  readReceiptEmailDocument,
+} from "./invoice-document.js";
 import { applyAdjustment } from "./adjustments-apply.js";
 
 import { completeBillPayment } from "./bill-payments.js";
@@ -264,7 +268,9 @@ describe("stored invoice document projection", () => {
       insertCorrective(tx, sale.saleId, { replaces: true }),
     );
     const original = await read(venue.backend, sale.saleId);
-    const document = await read(venue.backend, replacement);
+    const document = await withTransaction(suite.db, (tx) =>
+      readCustomerInvoiceDocument(venue.backend, tx, venue.cfg, replacement),
+    );
     expect(document.result.invoiceType).toBe("R4");
     expect(document.result.recipient).toEqual(original.result.recipient);
     expect(document.result.corrects).toEqual({
@@ -485,6 +491,16 @@ describe("stored invoice document projection", () => {
     });
     await expect(read(backend, randomUUID())).rejects.toMatchObject({
       code: "invoice_delivery.not_found",
+    });
+  });
+
+  it("refuses a replacement of a full invoice, which names the customer but is a corrective", async () => {
+    const sale = await issue(venue.backend);
+    const replacement = await withTransaction(suite.db, (tx) =>
+      insertCorrective(tx, sale.saleId, { replaces: true }),
+    );
+    await expect(read(venue.backend, replacement)).rejects.toMatchObject({
+      code: "invoice_delivery.full_invoice_required",
     });
   });
   it("projects a simplified receipt for email without enabling its full-invoice document", async () => {

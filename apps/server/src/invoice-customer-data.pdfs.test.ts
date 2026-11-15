@@ -13,7 +13,7 @@ import {
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 import { zipArchive } from "./download-archive.js";
-import { readInvoiceDocument } from "./invoice-document.js";
+import { readCustomerInvoiceDocument } from "./invoice-document.js";
 import {
   INVOICE_CUSTOMER_FILE,
   buildInvoiceCustomerFiles,
@@ -266,7 +266,7 @@ describe("buildInvoiceCustomerFiles' PDFs", () => {
         readDocument: (backend, tx, tradingContext, saleId) =>
           saleId === j2
             ? Promise.reject(original)
-            : readInvoiceDocument(backend, tx, tradingContext, saleId),
+            : readCustomerInvoiceDocument(backend, tx, tradingContext, saleId),
       });
       expect(error).toBeInstanceOf(Error);
       expect(error).not.toBeInstanceOf(AppError);
@@ -300,7 +300,7 @@ describe("buildInvoiceCustomerFiles' PDFs", () => {
         readDocument: (backend, tx, tradingContext, saleId) =>
           saleId === j2
             ? Promise.reject(new AppError("storage.disk_full", {}))
-            : readInvoiceDocument(backend, tx, tradingContext, saleId),
+            : readCustomerInvoiceDocument(backend, tx, tradingContext, saleId),
       });
       expect(error).not.toBeInstanceOf(AppError);
       expect(diskFullIn(error)).toBe(true);
