@@ -5066,10 +5066,11 @@ commit with Save, bind it to that Save even when its preview updates as you type
 ### Worked-out prep-station times
 
 Choose a prep station in the Calendar's Month or Week Show picker to see its planned service
-times (see Calendar below). One chosen station has a row per sending department. All prep stations
-has a row per station, and Week’s Show all lists departments before stations. A date with no orders says so once, and the default station shows "Always open:
-this is the default station" in place of the dates. The station choices require
-`venue.configure`; a read-only Calendar keeps its department choices.
+hours (see Calendar below). One chosen station has a row per sending department and says No
+orders once on a date none sends; its default station shows Always open in place of the dates.
+All prep stations has a row per station, with No orders or Always open on that station's row.
+Week’s Show all lists departments before stations. Station choices require `venue.configure`;
+a read-only Calendar keeps its department choices.
 
 Prep stations itself has only Stations and Routes. Above its tabs, a warning names, zone by zone,
 each station no pass screen can fire there — one set to wait for the pass, or one with a dish

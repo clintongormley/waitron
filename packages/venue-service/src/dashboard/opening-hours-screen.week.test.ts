@@ -956,12 +956,24 @@ describe("a prep station in the Calendar", () => {
   });
 
   it.each([
-    ["fails", { code: "connection.failed" }],
-    ["is refused", REFUSED],
+    ["fails", { code: "connection.failed" }, grillWeek],
+    [
+      "fails for All prep stations",
+      { code: "connection.failed" },
+      "/manage/opening-hours/view/week/show/stations/week/2026-12-09",
+    ],
+    [
+      "fails for Show all",
+      { code: "connection.failed" },
+      "/manage/opening-hours/view/week/show/all/week/2026-12-09",
+    ],
+    ["is refused", REFUSED, grillWeek],
   ])(
     "a station list that %s leaves Show with departments only, and the page works",
-    async (_, error) => {
-      const { el, paths } = await mount(grillWeek, undefined, false, { stationsFail: error });
+    async (_, error, address) => {
+      const { el, paths } = await mount(address as string, undefined, false, {
+        stationsFail: error,
+      });
       await expect.poll(() => paths).toContain("/management-api/stations");
       await week(el)!.updateComplete;
       expect(showValues(el)).toEqual(["all", "rest", "bar"]);

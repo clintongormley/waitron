@@ -658,7 +658,13 @@ export class OpeningHoursScreen extends LitElement {
     return this.stationId !== "" && this.stationsWanted() && this.stations === undefined;
   }
   private shownGroup(): CalendarShow {
-    if (!this.stationsWanted() || this.shownStation() || this.stationListPending()) return "";
+    if (
+      !this.stationsWanted() ||
+      this.shownStation() ||
+      this.stationListPending() ||
+      this.stations?.length === 0
+    )
+      return "";
     if (this.show === "all" && this.view !== "week") return "";
     return this.show;
   }
