@@ -13,12 +13,6 @@ The **Enabled**, **Disabled** and **All** filters show a module's state separate
 configuration. **Add a module** shows disabled modules in the same list. Choose **All categories**
 to see all optional modules.
 
-## Add a card reader {#add-reader}
-
-Open **Card payments** in Hardware and choose **Add reader** above the readers table.
-Choose the provider if asked, then add a reader from its list or pair a new one.
-If no provider is connected, choose **Configure card providers** to set one up first.
-
 ## Disconnect a card provider {#disconnect-provider}
 
 To remove a provider's saved credentials, choose **Disconnect** in its Modules row menu,

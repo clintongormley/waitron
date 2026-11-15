@@ -79,7 +79,7 @@ async function mount(overrides: Partial<DashboardApi> = {}, discovery = false) {
   const screen = app.shadowRoot!.querySelector("dashboard-payments-screen")!;
   await expect.poll(() => q(screen, "[data-test=edit-r1]")).not.toBeNull();
   if (discovery) {
-    q(screen, "[data-test=add-reader-test]")!.click();
+    q(screen, "[data-test=add-reader]")!.click();
     await expect.poll(() => q(screen, "[data-test=name-a1]")).not.toBeNull();
   } else await open(screen);
   return { app, screen };
@@ -278,7 +278,7 @@ it("a departed discovery input cannot rename a reopened row", async () => {
   const old = q(screen, "[data-test=name-a1]")!;
   q(screen, "[data-test=cancel-discovery]")!.click();
   await expect.poll(() => dialog(screen, "reader-discovery")).toBeNull();
-  q(screen, "[data-test=add-reader-test]")!.click();
+  q(screen, "[data-test=add-reader]")!.click();
   await expect.poll(() => q(screen, "[data-test=name-a1]")).not.toBeNull();
   old.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Departed" } }));
   await screen.updateComplete;
@@ -308,7 +308,7 @@ for (const refuses of [false, true]) {
     change(screen, "Submitted", "name-a1");
     q(screen, "[data-test=adopt-a1]")!.click();
     await expect.poll(() => typeof finish).toBe("function");
-    q(screen, "[data-test=add-reader-test]")!.click();
+    q(screen, "[data-test=add-reader]")!.click();
     await expect
       .poll(() => (q(screen, "[data-test=name-a1]") as HTMLInputElement)?.value)
       .toBe("Counter");
@@ -448,7 +448,7 @@ for (const discovery of [false, true]) {
     await expect.poll(() => held).toBe(true);
     await expect.poll(() => dialog(screen, selector)).toBeNull();
     if (discovery) {
-      q(screen, "[data-test=add-reader-test]")!.click();
+      q(screen, "[data-test=add-reader]")!.click();
       await expect.poll(() => q(screen, "[data-test=name-a1]")).not.toBeNull();
     } else await open(screen, "r2");
     change(screen, "New name", discovery ? "name-a1" : "edit-reader-name");

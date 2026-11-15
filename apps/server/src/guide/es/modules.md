@@ -13,12 +13,6 @@ Los filtros **Habilitado**, **Deshabilitado** y **Todos** muestran el estado de 
 de su configuración. **Añadir un módulo** muestra los módulos deshabilitados en la misma lista.
 Elige **Todas las categorías** para ver todos los módulos opcionales.
 
-## Añadir un lector de tarjetas {#add-reader}
-
-Abre **Pagos con tarjeta** en Hardware y elige **Añadir lector** encima de la tabla de lectores.
-Elige el proveedor si se te pide y añade un lector de su lista o vincula uno nuevo.
-Si no hay ningún proveedor conectado, elige **Configurar proveedores de tarjeta** para configurar uno primero.
-
 ## Desconectar un proveedor de tarjetas {#disconnect-provider}
 
 Para quitar las credenciales guardadas de un proveedor, elige **Desconectar** en el menú de su

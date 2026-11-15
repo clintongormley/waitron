@@ -2214,12 +2214,7 @@ export class PaymentsScreen extends LitElement {
   }
 
   #startAddReader(): void {
-    if (
-      this.busy ||
-      this.providers === undefined ||
-      this.#listQueries.failing("listPaymentProviders")
-    )
-      return;
+    if (this.providers === undefined || this.#listQueries.failing("listPaymentProviders")) return;
     const connected = this.providers.filter((provider) => provider.state === "connected");
     if (connected.length === 1) void this.#onAddReader(connected[0]!.providerId);
     else if (connected.length > 1) this.choosingProvider = true;

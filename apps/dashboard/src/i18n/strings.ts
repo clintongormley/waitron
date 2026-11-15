@@ -3027,21 +3027,16 @@ export const en = {
   "payments.backup.note":
     "Matches use the same amount, including tips, within five minutes. This comparison does not change payments or send refunds.",
 
-  "payments.providers_heading": "Providers",
   "payments.readers_heading": "Card readers",
   "payments.readers_search": "Search card readers",
   "payments.filter_provider_all": "Any provider",
   "payments.filter_provider_count": "{count} providers",
   "payments.filter_status_all": "Any status",
   "payments.filter_status_count": "{count} statuses",
-  "payments.state.connected": "Connected",
-  "payments.state.not_connected": "Not connected",
-  "payments.state.simulator": "Simulator",
   "payments.simulator_banner":
     "This venue is running in demo mode — card payments are simulated and no real cards are charged.",
   "payments.disconnect": "Disconnect",
   "payments.disconnect_confirm": "Disconnect this provider?",
-  "payments.no_providers": "No payment providers are available.",
   "payments.add_reader": "Add reader",
   "payments.choose_provider": "Choose a card provider",
   "payments.readers_empty": "No card readers yet.",
@@ -7328,21 +7323,16 @@ export const es: Record<StringKey, string> = {
   "payments.backup.note":
     "Las coincidencias usan el mismo importe, incluida la propina, con un margen de cinco minutos. Esta comparación no cambia pagos ni envía devoluciones.",
 
-  "payments.providers_heading": "Proveedores",
   "payments.readers_heading": "Lectores de tarjetas",
   "payments.readers_search": "Buscar lectores de tarjetas",
   "payments.filter_provider_all": "Cualquier proveedor",
   "payments.filter_provider_count": "{count} proveedores",
   "payments.filter_status_all": "Cualquier estado",
   "payments.filter_status_count": "{count} estados",
-  "payments.state.connected": "Conectado",
-  "payments.state.not_connected": "Sin conectar",
-  "payments.state.simulator": "Simulador",
   "payments.simulator_banner":
     "Este local funciona en modo de demostración: los pagos con tarjeta se simulan y no se cobra ninguna tarjeta real.",
   "payments.disconnect": "Desconectar",
   "payments.disconnect_confirm": "¿Desconectar este proveedor?",
-  "payments.no_providers": "No hay proveedores de pago disponibles.",
   "payments.add_reader": "Añadir lector",
   "payments.choose_provider": "Elige un proveedor de tarjetas",
   "payments.readers_empty": "Todavía no hay lectores de tarjetas.",
