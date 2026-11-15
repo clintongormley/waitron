@@ -221,25 +221,11 @@ export function goneKeys(draft: SeasonDraft, baseline: SeasonDraft): string[] {
   return draft.rows.flatMap((row) => (row.id !== undefined && !held.has(row.key) ? [row.key] : []));
 }
 
-/** The remaining seasons holding the deleted season's stored days, in order round the year. */
-export function seasonReceivers(
-  season: SeasonRow,
-  stored: readonly SeasonRow[],
-  remaining: readonly SeasonRow[],
-): string[] {
-  const start = startOf(season)!;
-  const from = (row: SeasonRow) => (startOf(row)! >= start ? "0" : "1") + startOf(row);
-  const end = stored.reduce(
-    (soonest, row) => (row.key !== season.key && from(row) < soonest ? from(row) : soonest),
-    "2",
-  );
-  const proposed = remaining
-    .filter((row) => row.day && row.month)
-    .map((row) => ({ at: from(row), row }))
-    .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
-  const holding = proposed[0]?.at === `0${start}` ? proposed[0] : proposed.at(-1);
-  const inside = proposed.filter((each) => each.at > `0${start}` && each.at < end);
-  return [...new Set([holding, ...inside].flatMap((each) => (each ? [each.row] : [])))].flatMap(
-    (row) => row.name.trim() || [],
-  );
+export function seasonReceivers(season: SeasonRow, stored: readonly SeasonRow[]): string[] {
+  const remaining = stored
+    .filter((row) => row.key !== season.key)
+    .sort((a, b) => startOf(a)!.localeCompare(startOf(b)!));
+  const previous =
+    remaining.filter((row) => startOf(row)! < startOf(season)!).at(-1) ?? remaining.at(-1);
+  return previous ? [previous.name] : [];
 }

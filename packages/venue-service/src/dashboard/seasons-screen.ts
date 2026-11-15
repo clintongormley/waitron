@@ -102,11 +102,7 @@ export class SeasonsScreen extends LitElement {
     const deletion = {
       season,
       revision: this.model.clockRevision,
-      receivers: seasonReceivers(
-        season,
-        stored,
-        stored.filter((row) => row.key !== season.key),
-      ),
+      receivers: seasonReceivers(season, stored),
       loading: true,
       busy: false,
       error: "",
@@ -138,6 +134,14 @@ export class SeasonsScreen extends LitElement {
       if (this.deleting !== deletion || !this.isConnected) return;
       const refusal = refusalOf(error);
       deletion.error = clockChangeConflictText(refusal) ?? seasonRefusalText(refusal);
+      if (refusal.code === "hours.clock_changed") {
+        deletion.revision = this.model!.clockRevision;
+        deletion.receivers = seasonReceivers(deletion.season, draftOf(this.model!.seasons).rows);
+        deletion.error = t("season.delete_clock_changed");
+        deletion.loading = true;
+        deletion.impact = undefined;
+        await this.readImpact(deletion);
+      }
       if (refusal.code === "season.not_found") {
         this.actionError = deletion.error;
         this.deleting = undefined;

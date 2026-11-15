@@ -7,7 +7,6 @@ import {
   bottomMessage,
   saveActionState,
   submitOnEnter,
-  type LeaveCoordinator,
   type DraftScope,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-input.js";
@@ -106,7 +105,6 @@ export class SeasonsWindow extends LitElement {
   /** The opening a Save in flight was sent from. */
   @state() private saving?: object;
   private scope?: DraftScope<SeasonDraft>;
-  private leave?: LeaveCoordinator;
   private blank?: SeasonRow;
   private get targetKey() {
     return this.seasonId || this.blank?.key;
@@ -144,7 +142,7 @@ export class SeasonsWindow extends LitElement {
       this.follow(this.seasons);
     }
     if (this.isConnected && !this.scope) {
-      const { scope, coordinator } = draftScopeFor<SeasonDraft>(this, {
+      const { scope } = draftScopeFor<SeasonDraft>(this, {
         id: {},
         parent: this.draftParent,
         current: () => this.draft!,
@@ -159,7 +157,6 @@ export class SeasonsWindow extends LitElement {
       });
       scope.commit(this.scopeBaseline);
       this.scope = scope;
-      this.leave = coordinator;
       if (!scope.isDirty()) this.revision = this.clockRevision;
     } else if ((changed.has("clockRevision") || changed.has("seasons")) && !this.scope?.isDirty()) {
       this.revision = this.clockRevision;
@@ -229,10 +226,7 @@ export class SeasonsWindow extends LitElement {
     const generation = this.generation;
     const listed = this.seasons;
     const submitted = this.draft!;
-    const { change, keys } = seasonChange(
-      { ...submitted, rows: submitted.rows.filter((row) => row.key === this.targetKey) },
-      this.baseline!,
-    );
+    const { change, keys } = seasonChange(submitted, this.baseline!);
     this.saving = generation;
     try {
       const saved = await this.api.saveSeasons(change, this.revision);
@@ -313,14 +307,6 @@ export class SeasonsWindow extends LitElement {
     format("hours.colour_used_by", { colour, names });
   async requestClose(): Promise<boolean> {
     if (this.busy) return false;
-    if (this.scope && this.leave) {
-      const outcome = await this.leave.request({
-        scopes: [this.scope.id],
-        reason: "navigation",
-        proceed() {},
-      });
-      if (outcome !== "proceeded") return false;
-    }
     this.dispatchEvent(new CustomEvent("season-cancel", { bubbles: true, composed: true }));
     return true;
   }

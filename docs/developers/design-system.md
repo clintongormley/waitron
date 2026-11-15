@@ -6962,8 +6962,9 @@ refusals keep their existing wording.
 Delete opens a confirmation naming the season, the season receiving its days (`seasonReceivers`)
 and the departments losing hours, read through `readSeasonDeleteImpact`. Loading and failed reads
 say so; a failed read still permits deletion. Confirmation sends only that id and the clock
-revision captured on opening. A refusal stays beside Delete with retry available; Cancel and
-reopen capture a fresh revision. A missing-season refusal uses the existing wording and rereads
+revision captured on opening. A clock-change refusal refreshes the confirmation’s revision,
+receiving season and loss read, and asks for confirmation again; other refusals permit retry.
+Cancel and reopen also capture a fresh revision. A missing-season refusal uses the existing wording and rereads
 the list. After a confirmed deletion, focus goes to Add season. Delete is a confirmation without a draft scope.
 
 Tests live in `seasons-screen*.test.ts`, `seasons-window*.test.ts`, `season-draft.test.ts`
