@@ -30,8 +30,8 @@ export const handoverEn = {
   "handover.emergency.sign_in":
     "Sign in as an administrator to check this spare and start the venue here. Enter your password and current authenticator code, if set up. You only need a new code if this one expires.",
   "handover.emergency.sign_in_with": "Sign in with",
-  "handover.emergency.use_password": "Use my password",
-  "handover.emergency.use_passkey": "Use my passkey",
+  "handover.emergency.use_password": "Use your password",
+  "handover.emergency.use_passkey": "Use your passkey",
   "handover.emergency.sign_in_passkey":
     "Sign in with an administrator's passkey to check this spare and start the venue here.",
   "handover.emergency.passkey_failed":
@@ -184,8 +184,8 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.sign_in":
     "Identifícate como administrador para comprobar esta copia e iniciar el local aquí. Introduce tu contraseña y el código actual del autenticador, si está configurado. Solo necesitas un código nuevo si este caduca.",
   "handover.emergency.sign_in_with": "Identificarse con",
-  "handover.emergency.use_password": "Usar mi contraseña",
-  "handover.emergency.use_passkey": "Usar mi passkey",
+  "handover.emergency.use_password": "Usar tu contraseña",
+  "handover.emergency.use_passkey": "Usar tu passkey",
   "handover.emergency.sign_in_passkey":
     "Identifícate con la passkey de un administrador para comprobar esta copia e iniciar el local aquí.",
   "handover.emergency.passkey_failed":
