@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { withTransaction } from "@waitron/db";
+import { invoiceSeries, withTransaction } from "@waitron/db";
+import { seriesId } from "@waitron/shared";
 import { seatedWith, send } from "./testing/bill-venue.js";
 import {
+  billlessSale,
   parked,
   placedIssuedBill,
   credit,
@@ -121,6 +123,32 @@ describe("Orders table pages", () => {
       staff: [{ id: venue.operatorId, name: "Anna" }],
     });
     expect(credited.rows[0]!.creditNotes).toHaveLength(1);
+  });
+
+  it("sorts mixed-case series codes before the invoice number in either direction", async () => {
+    for (const code of ["UPPER", "lower", "Middle"]) {
+      const [series] = await withTransaction(venue.db, (tx) =>
+        tx
+          .insert(invoiceSeries)
+          .values({ nodeId: venue.cfg.nodeId, code })
+          .returning({ id: invoiceSeries.id }),
+      );
+      await billlessSale({ ...venue, seriesId: seriesId(series!.id) });
+    }
+    for (const direction of ["ascending", "descending"] as const) {
+      const page = await withTransaction(venue.db, (tx) =>
+        orders.listOrdersTablePage(tx, filter, {
+          ...request,
+          sortKey: "invoice",
+          sortDirection: direction,
+        }),
+      );
+      expect(page.rows.map((row) => row.invoiceNumber)).toEqual(
+        direction === "ascending"
+          ? ["lower/1", "Middle/1", "UPPER/1"]
+          : ["UPPER/1", "Middle/1", "lower/1"],
+      );
+    }
   });
 
   it("keeps relevance ahead of an explicit sort and filters matching totals before paging", async () => {

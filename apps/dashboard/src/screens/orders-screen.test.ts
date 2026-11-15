@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
-import type { DashboardApi, OrderRowDto, OrdersPageDto } from "../api/client.js";
+import type { DashboardApi, OrderRowDto, OrdersPageDto, OrdersPageQuery } from "../api/client.js";
 import "./orders-screen.js";
 import type { OrdersScreen } from "./orders-screen.js";
 
@@ -59,7 +60,9 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     ...api,
     background: {
       ...api,
-      listOrdersPage: vi.fn().mockResolvedValue(PAGE),
+      listOrdersPage: vi
+        .fn()
+        .mockImplementation(async (query: OrdersPageQuery) => ({ ...PAGE, page: query.page })),
       getOrder: vi.fn().mockResolvedValue({
         row: ROW,
         lines: [],
@@ -305,7 +308,7 @@ describe("dashboard Orders", () => {
     next();
     await vi.waitFor(() => expect(table.errorMessage).not.toBe(""));
     next();
-    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(read.mock.calls.map((call) => call[0].page)).toEqual([1, 1, 0]));
     await vi.waitFor(() => expect(table.serverPaging).toMatchObject({ page: 0, total: 1 }));
     expect(table.errorMessage).toBe("");
   });
@@ -371,8 +374,12 @@ describe("dashboard Orders", () => {
     const choose = (value: string) =>
       status.dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
-    choose("paid");
+    const header = table.shadowRoot!.querySelector<HTMLButtonElement>('button[data-sort="total"]')!;
+    await userEvent.click(header);
     await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    expect(table.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(1);
+    expect(header.isConnected).toBe(true);
+    expect(table.shadowRoot!.activeElement).toBe(header);
     expect(table.rows.map((row) => row.id)).toEqual([ROW.id]);
     choose("open");
     await vi.waitFor(() => expect(table.rows.map((row) => row.id)).toEqual(["newer"]));
@@ -380,6 +387,30 @@ describe("dashboard Orders", () => {
     await late;
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(table.rows.map((row) => row.id)).toEqual(["newer"]);
+  });
+
+  it("keeps live refreshes on the page returned after the server clamps it", async () => {
+    const { el, api } = await loaded();
+    const read = vi.mocked(api.background.listOrdersPage);
+    let total = 101;
+    read.mockImplementation(async (query) => ({
+      ...PAGE,
+      total,
+      page: Math.min(query.page, Math.ceil(total / 50) - 1),
+    }));
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    table.dispatchEvent(new CustomEvent("wt-page-change", { detail: { page: 2 } }));
+    await vi.waitFor(() => expect(table.serverPaging?.page).toBe(2));
+    total = 1;
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(table.serverPaging?.page).toBe(0));
+    await vi.waitFor(() => expect(read.mock.lastCall?.[0].page).toBe(0));
+    total = 101;
+    api.liveData.refresh();
+    await vi.waitFor(() =>
+      expect(read.mock.calls.map((call) => call[0].page)).toEqual([2, 2, 0, 0]),
+    );
+    expect(table.serverPaging?.page).toBe(0);
   });
 
   it("opens a bill's detail when its row is chosen", async () => {

@@ -118,7 +118,7 @@ export class OrdersScreen extends LitElement {
   readonly #pages = new TableRequestController<
     Omit<OrdersPageQuery, "q" | "page"> & { search: string }
   >(this, async (query, page) => {
-    this.loading = true;
+    this.loading = this.page === undefined;
     const { search, ...filters } = query;
     try {
       await this.#queries.watch(
@@ -129,7 +129,10 @@ export class OrdersScreen extends LitElement {
           this.#shownQuery = query;
           this.loading = false;
           this.refusal = null;
-          if (this.#pages.query === query) this.#pages.page = value.page;
+          if (this.#pages.query === query) {
+            this.#pages.page = value.page;
+            if (value.page !== page) void this.#pages.reload();
+          }
         },
       );
     } catch {

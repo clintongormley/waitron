@@ -163,7 +163,8 @@ comprueba el destino de **Reintentar original** o elige la impresora de recibos 
 Para buscar una cuenta anterior, elige **Cualquier fecha** o indica el intervalo de fechas. La búsqueda
 abarca todas las cuentas que coincidan, incluidas las de otras páginas. Usa **Página anterior** y
 **Página siguiente** para avanzar de 50 en 50. Pulsa **Apertura**, **Factura** o **Total** para ordenar;
-pulsa de nuevo el mismo encabezado para invertir el orden.
+pulsa de nuevo el mismo encabezado para invertir el orden. La búsqueda muestra primero las
+coincidencias más cercanas. Vacía **Buscar** para ordenar solo por la columna.
 
 Para obtener un documento más tarde, abre **Pedidos** en el panel y elige **Imprimir / Reimprimir**
 en la cuenta. Para una factura completa, elige **Ticket** para papel de tickets o **Factura** para
