@@ -68,3 +68,21 @@ test("outside forced colours the field's line is still its box-shadow", async ()
   expect(getComputedStyle(field).borderBottomStyle).toBe("none");
   expect(getComputedStyle(field, "::after").content).toBe("none");
 });
+
+test("the theme does not change a field's height", async () => {
+  await emulateForcedColours("none");
+  const field = fieldOf(await mount('<wt-input label="Name"></wt-input>'));
+  const without = field.offsetHeight;
+  await emulateForcedColours("active");
+  expect(field.offsetHeight).toBe(without);
+});
+
+test("a focused invalid field's bottom edge is still thicker than a focused valid one's", async () => {
+  const focusedEdge = async (markup: string) => {
+    const el = await mount(markup);
+    el.shadowRoot!.querySelector("input")!.focus();
+    return edgeRows(fieldOf(el));
+  };
+  const valid = await focusedEdge('<wt-input label="Name"></wt-input>');
+  expect(await focusedEdge('<wt-input label="Name" invalid></wt-input>')).toBeGreaterThan(valid);
+});

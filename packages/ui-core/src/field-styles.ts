@@ -159,9 +159,8 @@ export const fieldStyles = css`
   .hint {
     ${visuallyHiddenStyles}
   }
-  /* A contrast theme deletes box-shadows and the danger colour, so the line is drawn over the box
-     like the disabled one (a border would change the box's height), thicker when invalid, and the
-     focus mark becomes an outline. */
+  /* A contrast theme deletes box-shadows and repaints the danger colour, so the line is drawn over
+     the box (a border would change its height) and thickened to mark an invalid field. */
   @media (forced-colors: active) {
     .field::after {
       content: "";
@@ -177,6 +176,10 @@ export const fieldStyles = css`
     .field:focus-within {
       outline: var(--wt-field-line-width-active) solid Highlight;
       outline-offset: calc(-1 * var(--wt-field-line-width-active));
+    }
+    /* Above the outline's band, which would otherwise make a focused valid edge as thick. */
+    .field[data-invalid]:focus-within::after {
+      bottom: var(--wt-field-line-width-active);
     }
     .field[data-disabled]::after {
       border-bottom: var(--wt-field-line-width) dashed GrayText;

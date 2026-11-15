@@ -131,6 +131,9 @@ export class WtSwitch extends LitElement {
         :host([disabled]) {
           opacity: 1;
         }
+        :host([disabled]) label {
+          color: GrayText;
+        }
         input:focus-visible ~ .track {
           outline-color: Highlight;
         }
