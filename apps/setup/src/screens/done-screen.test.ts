@@ -434,8 +434,14 @@ describe("setup-done-screen", () => {
   );
 
   it.each([
-    ["en-GB", "Print a switch label for each server from Servers on the dashboard."],
-    ["es-ES", "Imprime una etiqueta de cambio para cada servidor desde Servidores en el panel."],
+    [
+      "en-GB",
+      "Print a switch label for each server: open the primary's dashboard, then System, then Servers, and choose Print switch label in each server's row menu.",
+    ],
+    [
+      "es-ES",
+      "Imprime una etiqueta de cambio para cada servidor: abre el panel del servidor principal, luego Sistema y luego Servidores, y elige Imprimir etiqueta de cambio en el menú de la fila de cada servidor.",
+    ],
   ] as const)(
     "tells the joining server's person to print switch labels (%s)",
     async (locale, words) => {

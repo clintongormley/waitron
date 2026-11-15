@@ -538,14 +538,14 @@ export class ServersScreen extends LitElement {
           return actions.length === 0 && !handover && !switchLabel
             ? nothing
             : html`<wt-row-actions label=${`${t("servers.actions")}: ${this.#rowName(row)}`}
-                >${handover ? html`<wt-button data-test=${`handover-${row.nodeId}`} @click=${() => this.#openHandover(row)}>${t("servers.hand_over")}</wt-button>` : nothing}${actions.map(
+                >${handover ? html`<wt-button data-test=${`handover-${row.nodeId}`} @click=${() => this.#openHandover(row)}>${t("servers.hand_over")}</wt-button>` : nothing}${switchLabel ? html`<wt-button data-test=${`switch-label-${row.nodeId}`} @click=${(event: Event) => this.#openSwitchLabel(row, event)}>${t("servers.switch_label")}</wt-button>` : nothing}${actions.map(
                   (action) =>
                     html`<wt-button
                       data-test=${`${action}-${row.nodeId}`}
                       @click=${(event: Event) => this.#open(action, row, event)}
                       >${t(ACTION_KEYS[action].verb)}</wt-button
                     >`,
-                )}${switchLabel ? html`<wt-button data-test=${`switch-label-${row.nodeId}`} @click=${(event: Event) => this.#openSwitchLabel(row, event)}>${t("servers.switch_label")}</wt-button>` : nothing}</wt-row-actions
+                )}</wt-row-actions
               >`;
         },
       },

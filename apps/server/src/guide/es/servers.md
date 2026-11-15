@@ -52,10 +52,10 @@ La campana y **Estado del servidor** avisan si se retrasa el envío o la aplicac
 ## Imprimir una etiqueta de cambio para cada servidor {#switch-label}
 
 Cuando un servidor de reserva haya terminado de unirse, abre **Sistema → Servidores** en el
-servidor principal. Para cada servidor, abre el menú de su fila, elige **Imprimir etiqueta de
-cambio**, imprímela y pégala en ese servidor. Si el servidor principal falla, escanea la etiqueta
-del servidor de reserva con cualquier caja o móvil conectado a la red del local para abrir su
-página de cambio.
+servidor principal. Para el servidor principal y para el de reserva, abre el menú de su fila,
+elige **Imprimir etiqueta de cambio** y después **Imprimir**, y pega la etiqueta en ese servidor. Si
+el servidor principal falla, escanea la etiqueta del servidor de reserva con cualquier caja o móvil
+conectado a la red del local para abrir su [página de cambio](servers.md#emergency).
 
 ## Retirar un servidor de reserva {#remove-a-spare}
 
@@ -80,7 +80,7 @@ página. Un reinicio del servidor principal de más de unos 20 segundos, por eje
 actualización, también trae aquí a un dispositivo que recargue; si no querías cambiar, no declares
 nada y recarga la página cuando el servidor principal vuelva. Desde cualquier otro dispositivo, abre la dirección HTTPS del
 servidor de reserva y añade `/handover/emergency`, por ejemplo
-`https://spare.example/handover/emergency`. Identifícate con la contraseña de una cuenta de
+`https://spare.example/handover/emergency`, o escanea la [etiqueta de cambio](servers.md#switch-label) del servidor de reserva. Identifícate con la contraseña de una cuenta de
 administrador y su código actual de autenticador, si está configurado, y elige **Comprobar esta
 copia**. Escribe la contraseña con cuidado: si es incorrecta, el servidor de reserva se reinicia y
 vuelve a poner al día su copia antes de que puedas intentarlo de nuevo. El servidor de reserva primero pone al día su copia y se reinicia; mantén la página

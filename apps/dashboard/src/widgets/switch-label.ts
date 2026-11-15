@@ -46,6 +46,9 @@ export class SwitchLabel extends LitElement {
   @property({ attribute: false }) opener: HTMLElement | null = null;
   /** Replaced in tests, which cannot answer a print dialog. */
   @property({ attribute: false }) printFrame: (view: Window) => void = (view) => view.print();
+  /** Replaced in tests, which hold a drawing back. */
+  @property({ attribute: false }) drawQr: (page: string) => Promise<string> = (page) =>
+    toDataURL(page, { margin: 2, width: 320 });
 
   @state() private qr = "";
 
@@ -61,7 +64,7 @@ export class SwitchLabel extends LitElement {
     if (!changed.has("address")) return;
     this.qr = "";
     const page = this.#switchPage();
-    void toDataURL(page, { margin: 2, width: 320 }).then((qr) => {
+    void this.drawQr(page).then((qr) => {
       if (this.#switchPage() === page) this.qr = qr;
     });
   }

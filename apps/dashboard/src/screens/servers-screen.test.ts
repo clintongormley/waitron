@@ -239,6 +239,12 @@ describe("servers screen list", () => {
   it("offers a switch label for the main server and the spare, and opens the row's label", async () => {
     const el = await mount();
     for (const other of [FORMER, REMOVED]) expect(inTable(el, `switch-label-${other}`)).toBeNull();
+    const order = [...rowMenu(el, STANDBY)!.querySelectorAll("wt-button")].map((button) =>
+      button.getAttribute("data-test"),
+    );
+    expect(order.indexOf(`switch-label-${STANDBY}`)).toBeLessThan(
+      order.indexOf(`remove-${STANDBY}`),
+    );
     for (const [nodeId, address] of [
       [SELF, "https://till.venue.example"],
       [STANDBY, "https://standby.venue.example:8443"],
@@ -395,6 +401,7 @@ describe("servers screen list", () => {
     expect(rowMenu(el, BLANK)!.getAttribute("label")).toBe(
       `${t("servers.actions")}: ${t("servers.machine")} 55555555`,
     );
+    expect(inTable(el, `switch-label-${BLANK}`)).toBeNull();
     await openRemove(el, BLANK);
     const body = dialog(el).textContent!.replace(/\s+/g, " ");
     expect(body).toContain(t("servers.no_address"));

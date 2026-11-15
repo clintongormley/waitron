@@ -45,12 +45,12 @@ check that the spare is connected to the restaurant's network. **Rebuilding the 
 A switch first brings this spare's copy up to date. Check the copy offered on the handover page before switching.
 The bell and **Box status** warn when sending or applying changes is delayed, or the spare cannot be reached for two minutes.
 
-## Print a switch label for each server {#switch-label}
+## Print a switch label for each box {#switch-label}
 
-When a spare has finished joining, open **System → Servers** on the main box. For each server, open
-its row menu, choose **Print switch label**, print it and stick it on that server. If the main
-server fails, scan the spare's label with any till or phone on the venue's network to open its
-switch page.
+When a spare has finished joining, open **System → Servers** on the main box. For the main box and
+for the spare, open its row menu, choose **Print switch label**, then **Print**, and stick the label
+on that box. If the main box fails, scan the spare's label with any till or phone on the venue's
+network to open its [switch page](servers.md#emergency).
 
 ## Remove a spare box {#remove-a-spare}
 
@@ -74,7 +74,7 @@ address also lands on this page. A main box that restarts for longer than about 
 an update for example, brings a reloading device here too; if you did not mean to switch, do not
 declare anything, and reload the page once the main box is back. From any other device,
 open the spare’s HTTPS address with `/handover/emergency` at the end, for example
-`https://spare.example/handover/emergency`. Sign in with an administrator account’s password and
+`https://spare.example/handover/emergency`, or scan the spare's [switch label](servers.md#switch-label). Sign in with an administrator account’s password and
 current authenticator code, if set up, then choose **Check this copy**. Type the password
 carefully: a wrong one restarts the spare, which then brings its copy up to date before you can try
 again. The spare first brings its
