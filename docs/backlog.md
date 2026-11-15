@@ -2162,6 +2162,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Local draft, party-seating, zone-refusal, tab, split-bill and move/merge fixtures use Daily menu
   for menus and Drinks or Dishes for renamed categories; the tab suite's category stays ES drinks.
   Other display samples in those files remain.
+  The published-menu sale fixture uses Dishes for its staff category and Desserts/House desserts
+  for its staff section; its Spanish customer section name and product/modifier text stay.
   The till API modifier fixture uses Cheese, Preparation, Cold and Hot for distinct staff
   names; the till-sale size option uses Size and Large. Their customer and kitchen wording stays.
   Local party-suite table, party, course and printer samples use English. Shared dish samples

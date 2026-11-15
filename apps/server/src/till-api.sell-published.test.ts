@@ -196,7 +196,7 @@ async function setupLunch(): Promise<Lunch> {
       });
 
     const lunch = await createMenu(tx, { name: "Lunch" });
-    const category = await createCategory(tx, { name: "Carta" });
+    const category = await createCategory(tx, { name: "Dishes" });
     const product = (name: string, unitPrice: string, vatClass: "general" | "reduced") =>
       createProduct(tx, {
         categoryId: category.id,
@@ -244,7 +244,7 @@ async function setupLunch(): Promise<Lunch> {
     const burgerOffer = await addProductToMenu(tx, { menuId: lunch.id, productId: burger.id });
 
     const rootId = await requireMenuRoot(tx, lunch.id);
-    const postres = await createSectionIn(tx, rootId, { internalName: "Postres" });
+    const postres = await createSectionIn(tx, rootId, { internalName: "Desserts" });
     await addProducts(tx, postres.id, [flan.id]);
     const zone = await tx.execute<{ id: string }>(sql`
       select id from floor_zones
@@ -384,7 +384,7 @@ describe("a basket that spans a publish (Review Focus 2)", () => {
 
     // v3 renames only the section holding Flan, which the basket holds nothing from.
     await withTransaction(suite.db, (tx) =>
-      updateSection(tx, v.postresId, { internalName: "Postres de la casa" }),
+      updateSection(tx, v.postresId, { internalName: "House desserts" }),
     );
     const v3 = await publish(v.menuId);
     expect(v3).not.toBe(v2);
@@ -1182,7 +1182,7 @@ describe("the Device Home Page each menu serves", () => {
           {
             kind: "section",
             sectionId: v.postresId,
-            internalName: "Postres",
+            internalName: "Desserts",
             names: { es: "Para terminar" },
             image: null,
             color: null,
