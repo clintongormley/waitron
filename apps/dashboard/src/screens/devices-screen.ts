@@ -1465,8 +1465,8 @@ export class DevicesScreen extends LitElement {
     const { name: label, profileId: deviceProfileId, approvedProfileIds } = sent;
     this.editing = {
       ...device,
-      receiptPrinterId: sent.receiptPrinterId,
-      paymentSlipPrinterId: sent.paymentSlipPrinterId,
+      receiptPrinterId: sent.receiptPrinterId ?? null,
+      paymentSlipPrinterId: sent.paymentSlipPrinterId ?? null,
       ...(sent.cashDrawerPrinterId === undefined
         ? {}
         : { cashDrawerPrinterId: sent.cashDrawerPrinterId }),
