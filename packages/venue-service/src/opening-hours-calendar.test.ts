@@ -195,22 +195,22 @@ describe("the Opening hours year read", () => {
     expect(year.area.readiness).toBe("ready");
   });
 
-  it("says 2027's public holidays are not available yet, and warns of no repeating date with no holiday of its name", async () => {
+  it("says 2028's public holidays are not available yet, and warns of no repeating date with no holiday of its name", async () => {
     await venue();
     await special({
       name: "Easter week",
       repeatsYearly: true,
       dates: [{ date: "2026-04-03", closedAllDay: true }],
     });
-    const now = await read(2026);
+    const now = await read(2027);
     expect(now).not.toHaveProperty("missingHolidays");
-    const next = await read(2027);
+    const next = await read(2028);
     expect(next.publicHolidaysAvailable).toBe(false);
     expect(next.holidayCoverage.map(({ nationalRegional }) => nationalRegional)).toEqual([
       "missing_year",
     ]);
     expect(next).not.toHaveProperty("missingHolidays");
-    const readiness = await run((tx) => listVenueReadiness(tx, new Date("2026-06-01T12:00:00Z")));
+    const readiness = await run((tx) => listVenueReadiness(tx, new Date("2027-06-01T12:00:00Z")));
     expect(readiness.map(({ code }) => code)).not.toContain("special_day.holiday_missing");
   });
 
