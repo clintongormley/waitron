@@ -53,8 +53,9 @@ function storedRecipient(sale: TypedSale): Pick<InvoiceTyping, "recipient"> {
 }
 
 /**
- * An ordinary sale is F1 when it names a customer and F2 otherwise; a corrective is R4 when it names a customer (only a replacement of a
- * full invoice does) and R5 otherwise, and names the invoice it corrects.
+ * An ordinary sale is F1 when it names a customer and F2 otherwise; a corrective is R4 when it
+ * names a customer (only a replacement of a full invoice does) and R5 otherwise, and names the
+ * invoice it corrects.
  */
 export async function readInvoiceTyping(tx: Transaction, sale: TypedSale): Promise<InvoiceTyping> {
   const recipient = storedRecipient(sale);
