@@ -136,6 +136,16 @@ packages are deprecated. Left behind by the esbuild upgrade (#439, 2026-09-19).
 
 ## Decisions and deliberate limits
 
+### fontkit stays on 2.0.4, 15 November 2026
+
+Dependabot's fontkit 3.0.0 bump (#3357) was closed and its major ignored. fontkit 3's
+unicode-properties 2.0.2 reads `./data.trie` beside itself at load, so every esbuild-bundled Node
+program that includes it failed with `ENOENT …/data.trie` (the relocated-bundle cases in
+`recovery-pdf-node.test.ts`, provisioning's `cli-entry.test.ts`, `backup-verification-runtime.test.mjs`).
+PDFKit 0.20.2 still embeds fonts through fontkit 2.0.4, and our PDFs rendered byte-identical on both.
+Taking 3 later needs `data.trie` shipped beside each bundle, or unicode-properties resolved to its
+browser build, plus pinned licence fallbacks for dfa 2.0.0 and brotli 2.1.0.
+
 ### Hono router security qualification, 1 November 2026
 
 Hono 4.13.16 replaces 4.13.14 in all ten declaring manifests and the lockfile.
