@@ -19,14 +19,12 @@ const MADRID: VenueDefaults = {
   receiptLanguageChoices: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
   fixedReceiptLanguage: null,
   defaultProductVatClass: "reduced",
-  takeawayVat: false,
 };
 const BARCELONA: VenueDefaults = {
   receiptLanguage: "es-ES",
   receiptLanguageChoices: ["ca-ES"],
   fixedReceiptLanguage: "ca-ES",
   defaultProductVatClass: "reduced",
-  takeawayVat: false,
 };
 const text = (node: Element | null | undefined) =>
   (node?.textContent ?? "").replace(/\s+/g, " ").trim();
@@ -1015,7 +1013,6 @@ it.each([
       receiptLanguageChoices: [],
       fixedReceiptLanguage: "B $& {stored}",
       defaultProductVatClass: "reduced",
-      takeawayVat: false,
     }).api,
   );
   expect(text(q(el, "[data-test=stored-differs]"))).toBe(sentence);

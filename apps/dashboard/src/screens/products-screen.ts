@@ -1,5 +1,5 @@
 import type { ProductEditorSaveBody } from "@waitron/shared";
-import type { MenuDefaults } from "../api/client.js";
+import type { MenuSettingsAnswer } from "../api/client.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { ContentLanguages } from "@waitron/shared";
@@ -87,8 +87,7 @@ export class ProductsScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
-  @state() private menuSettings: MenuDefaults | null = null;
-  @state() private takeawayVat = false;
+  @state() private menuSettings: MenuSettingsAnswer | null = null;
   @state() private contentLanguages: ContentLanguages | null = null;
   @state() private menus: MenuSummary[] = [];
   @state() private categories: CategorySummary[] = [];
@@ -183,14 +182,6 @@ export class ProductsScreen extends LitElement {
       this.routingFailed = true;
     },
   );
-  // Unreadable, the editor draws no takeaway class and saves the stored one as it was read.
-  readonly #regionQueries = new DashboardQueries(
-    this,
-    () => this.api,
-    () => {
-      this.takeawayVat = false;
-    },
-  );
   // A re-read that fails after the step's first load keeps the menus it already shows.
   readonly #placementQueries = new DashboardQueries(
     this,
@@ -254,13 +245,6 @@ export class ProductsScreen extends LitElement {
         this.#queries.watch("getMenuSettings", [], (value) => {
           this.menuSettings = value;
         }),
-        this.#regionQueries
-          .watch("getVenueDefaults", [], (value) => {
-            this.takeawayVat = value.takeawayVat;
-          })
-          .catch(() => {
-            this.takeawayVat = false;
-          }),
         this.#queries.watch("getContentLanguages", [], (value) => {
           this.contentLanguages = value;
           setContentLanguages(value);
@@ -786,7 +770,7 @@ export class ProductsScreen extends LitElement {
         .value=${this.editorValue}
         .initialField=${this.editorInitialField}
         .defaultVatClass=${this.menuSettings?.defaultProductVatClass ?? "general"}
-        .takeawayVat=${this.takeawayVat}
+        .takeawayVat=${this.menuSettings?.takeawayVat ?? false}
         .defaultColor=${this.menuSettings?.defaultColor ?? null}
         .newCategoryId=${this.newCategoryId}
         .fieldErrors=${this.editorFieldErrors}

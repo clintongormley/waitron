@@ -928,7 +928,6 @@ it.each([
           receiptLanguageChoices: ["en-GB"],
           fixedReceiptLanguage: null,
           defaultProductVatClass: "general",
-          takeawayVat: false,
         }),
         getVenuePrivacy: async () => ({ privacyNoticeUrl: null, privacyEmail: null }),
         getVenueDepartments: async () => [

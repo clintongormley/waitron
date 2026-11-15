@@ -142,7 +142,6 @@ export async function mountReceiptApp(
         receiptLanguageChoices: ["es-ES"],
         fixedReceiptLanguage: null,
         defaultProductVatClass: "general",
-        takeawayVat: false,
       } satisfies VenueDefaults,
       "/management-api/venue-privacy": { privacyNoticeUrl: null, privacyEmail: null },
       "/management-api/alerts": { visible: false, alerts: [] },

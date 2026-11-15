@@ -3572,8 +3572,16 @@ it("closing a guarded linked product retires its field query before opening anot
 });
 
 it("waits for the venue's VAT default before enabling Add product", async () => {
-  let resolve!: (value: { defaultProductVatClass: "reduced"; defaultColor: null }) => void;
-  const pending = new Promise<{ defaultProductVatClass: "reduced"; defaultColor: null }>((yes) => {
+  let resolve!: (value: {
+    defaultProductVatClass: "reduced";
+    defaultColor: null;
+    takeawayVat: false;
+  }) => void;
+  const pending = new Promise<{
+    defaultProductVatClass: "reduced";
+    defaultColor: null;
+    takeawayVat: false;
+  }>((yes) => {
     resolve = yes;
   });
   const api = stubApi({ getMenuSettings: vi.fn(() => pending) });
@@ -3589,7 +3597,7 @@ it("waits for the venue's VAT default before enabling Add product", async () => 
   (await add()).click();
   await el.updateComplete;
   expect(editor(el).open).toBe(false);
-  resolve({ defaultProductVatClass: "reduced", defaultColor: null });
+  resolve({ defaultProductVatClass: "reduced", defaultColor: null, takeawayVat: false });
   await pending;
   await flush(el);
   expect((await add()).disabled).toBe(false);
@@ -3648,6 +3656,7 @@ it("paints All products' square, an uncategorised product and a new product's in
   vi.mocked(api.getMenuSettings).mockResolvedValue({
     defaultProductVatClass: "general",
     defaultColor: "#256bb1",
+    takeawayVat: false,
   });
   liveData.refresh();
   await expect.poll(fills).toEqual(["rgb(37, 107, 177)", "rgb(37, 107, 177)"]);
@@ -3684,6 +3693,7 @@ it("reads the venue's default into a new editor without replacing an open draft"
   vi.mocked(api.getMenuSettings).mockResolvedValue({
     defaultProductVatClass: "reduced",
     defaultColor: null,
+    takeawayVat: false,
   });
   liveData.refresh();
   await expect.poll(() => vi.mocked(api.getMenuSettings).mock.calls.length).toBe(2);
@@ -3702,30 +3712,15 @@ it.each([true, false])(
   "hands the editor whether the venue's region charges a takeaway VAT class (%s)",
   async (takeawayVat) => {
     const api = stubApi({
-      getVenueDefaults: vi.fn().mockResolvedValue({
-        receiptLanguage: "es-ES",
-        receiptLanguageChoices: ["es-ES"],
-        fixedReceiptLanguage: null,
-        defaultProductVatClass: "general",
-        takeawayVat,
-      }),
+      getMenuSettings: vi
+        .fn()
+        .mockResolvedValue({ defaultProductVatClass: "general", defaultColor: null, takeawayVat }),
     });
     const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     expect(editor(el).takeawayVat).toBe(takeawayVat);
   },
 );
-
-it("hides the takeaway VAT class when the venue defaults cannot be read", async () => {
-  const api = stubApi({
-    getVenueDefaults: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
-  });
-  const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
-  await flush(el);
-  expect(editor(el).takeawayVat).toBe(false);
-  expect(list(el).products).toEqual(products);
-  expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
-});
 
 describe("archived product entry", () => {
   it("reads archived details passively from the existing background client", async () => {

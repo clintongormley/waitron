@@ -955,7 +955,7 @@ export class ProductEditor extends LitElement {
       errors.tax = t("editor.tax_required");
     const takeaway = this.draft.takeawayVatClass;
     if (this.takeawayVat && takeaway !== null && !this.taxes.some((tax) => tax.id === takeaway))
-      errors.takeawayTax = t("editor.tax_required");
+      errors.takeawayTax = t("editor.takeaway_vat_gone");
     if (!(variantPage && blankPrice) && !isProductPrice(this.draft.unitPrice ?? ""))
       errors["unit-price"] = t("editor.price_invalid");
     for (const [index, variant] of this.draft.variants.entries()) {
@@ -1429,10 +1429,11 @@ export class ProductEditor extends LitElement {
   private renderTakeawayTax() {
     const parent = this.inherited;
     const own = this.draft.vatClass;
+    // Only a variant may leave its served class empty; a product's is required.
     const empty =
-      parent !== null && own === null
+      own === null && parent !== null
         ? this.taxText(parent.takeawayVatClass)
-        : fill("editor.takeaway_vat_same", { tax: own === null ? "" : this.taxText(own) });
+        : fill("editor.takeaway_vat_same", { tax: this.taxText(own!) });
     const taxes = this.taxes.map((tax) => ({ value: tax.id, label: this.taxLabel(tax) }));
     return html`<wt-combobox
       name="takeawayTax"

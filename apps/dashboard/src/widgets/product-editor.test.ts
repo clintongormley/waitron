@@ -5323,6 +5323,9 @@ it("words the takeaway field as staff read it", () => {
   try {
     expect(t("editor.takeaway_vat")).toBe("VAT when taken away");
     expect(same("Reduced (10%)")).toBe("Same as served here — Reduced (10%)");
+    expect(t("editor.takeaway_vat_gone")).toBe(
+      "This class is no longer offered. Choose another, or leave it empty.",
+    );
   } finally {
     setLocale(before);
   }
@@ -5393,7 +5396,7 @@ it("refuses a takeaway class the venue does not offer, and points a server refus
   save(el);
   await el.updateComplete;
   expect(submit).not.toHaveBeenCalled();
-  expect(combobox(el, "takeawayTax")!.error).toBe(t("editor.tax_required"));
+  expect(combobox(el, "takeawayTax")!.error).toBe(t("editor.takeaway_vat_gone"));
   await chooseOption(combobox(el, "takeawayTax")!, "");
   await el.updateComplete;
   expect(combobox(el, "takeawayTax")!.error).toBe("");

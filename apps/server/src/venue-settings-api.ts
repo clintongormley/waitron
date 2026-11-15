@@ -2,7 +2,6 @@ import type { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { readMenuSettings, saveMenuSettings } from "@waitron/menu";
 import {
-  readTaxpayer,
   readVenue,
   saveVenueFields,
   withTransaction,
@@ -11,7 +10,6 @@ import {
   type Venue,
 } from "@waitron/db";
 import type { ReceiptLanguageRules } from "@waitron/country";
-import { chargesTakeawayVat } from "@waitron/country-packs";
 import type { FiscalContribution } from "@waitron/fiscal";
 import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
 import { readPrivacyContact, renameTaxpayer, savePrivacyContact } from "@waitron/provisioning";
@@ -119,7 +117,6 @@ async function readVenueDefaults(
     receiptLanguageChoices: [...rules.choices],
     fixedReceiptLanguage: rules.fixed?.locale ?? null,
     defaultProductVatClass,
-    takeawayVat: chargesTakeawayVat((await readTaxpayer(tx))?.country ?? "", venue.fiscalTerritory),
   };
 }
 

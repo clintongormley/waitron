@@ -994,7 +994,6 @@ const defaultsModel: VenueDefaults = {
   receiptLanguageChoices: ["es-ES", "ca-ES"],
   fixedReceiptLanguage: null,
   defaultProductVatClass: "general",
-  takeawayVat: false,
 };
 function storedDefaults() {
   let stored = defaultsModel;

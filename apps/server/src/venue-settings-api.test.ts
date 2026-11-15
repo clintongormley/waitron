@@ -594,7 +594,6 @@ describe("venue defaults", () => {
         receiptLanguageChoices: SPAIN_RECEIPT,
         fixedReceiptLanguage: "ca-ES",
         defaultProductVatClass: initialVatClass,
-        takeawayVat: true,
       });
     });
   });
@@ -606,26 +605,8 @@ describe("venue defaults", () => {
         receiptLanguageChoices: SPAIN_RECEIPT,
         fixedReceiptLanguage: null,
         defaultProductVatClass: initialVatClass,
-        takeawayVat: true,
       });
     });
-  });
-
-  it("answers whether the venue's region charges a takeaway VAT class (A1522)", async () => {
-    expect((await (await read()).json()).takeawayVat).toBe(true);
-    await suite.db.execute(sql`update taxpayer set country = 'GB'`);
-    await suite.db.execute(
-      sql`update settings set doc = json_set(doc, '$.fiscalTerritory', 'GB-vat') where module = 'venue'`,
-    );
-    try {
-      expect((await (await read()).json()).takeawayVat).toBe(false);
-    } finally {
-      await suite.db.execute(sql`update taxpayer set country = 'ES'`);
-      await suite.db.execute(
-        sql`update settings set doc = json_set(doc, '$.fiscalTerritory', 'ES-common') where module = 'venue'`,
-      );
-    }
-    expect((await (await read()).json()).takeawayVat).toBe(true);
   });
 
   it("answers a stored language outside the choices as it is", async () => {
@@ -643,7 +624,6 @@ describe("venue defaults", () => {
         receiptLanguageChoices: SPAIN_RECEIPT,
         fixedReceiptLanguage: null,
         defaultProductVatClass: initialVatClass,
-        takeawayVat: true,
       });
       expect(await stored()).toEqual({ languages: ["gl-ES"], vatClass: initialVatClass });
     });
