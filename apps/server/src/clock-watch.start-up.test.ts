@@ -116,6 +116,8 @@ function harness(
     logs,
     tick,
     host,
+    halt: () => watch.halt(),
+    writePending: correction.writePending,
     hostReadsInTurn,
     clockStatus,
     readTimeService,
@@ -238,6 +240,17 @@ describe("the clock watch's regular reading of the time service", () => {
     // The start check itself still asks nothing.
     expect(h.clockStatus).not.toHaveBeenCalled();
     expect(h.heads).not.toHaveBeenCalled();
+  });
+
+  it("does not read it when the watch is halted during the look", async () => {
+    const startState = startClockState();
+    startState.confirm("by_internet", {});
+    const h = harness({ host: async () => SYNCHRONISED, startState, readTimeService: true });
+    // The step just before the reading, which the look awaits.
+    h.writePending.mockImplementationOnce(async () => h.halt());
+    await h.tick();
+    expect(h.writePending).toHaveBeenCalledTimes(1);
+    expect(h.readTimeService).not.toHaveBeenCalled();
   });
 
   it("logs a reading that fails rather than failing the look", async () => {
