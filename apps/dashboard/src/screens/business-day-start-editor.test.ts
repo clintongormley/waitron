@@ -304,7 +304,9 @@ it("shows identifying conflict rows with localized reasons while keeping the tot
   expect(rows?.textContent).toContain("Restaurant");
   expect(rows?.textContent).toContain("Terrace");
   expect(rows?.textContent).toContain("Festival");
-  expect(rows?.textContent).toContain("2026-11-04");
+  expect(rows?.textContent).toContain("4 Nov");
+  expect(rows?.textContent).not.toContain("2026-11-04");
+  expect(rows?.textContent).not.toContain("Wed");
   expect(rows?.textContent).toContain("Dinner");
   expect(rows?.textContent).toContain("22:00–04:30");
   expect(rows?.textContent).toContain("Moves to another day");
@@ -452,8 +454,8 @@ it.each([
 });
 
 it.each([
-  ["en-GB", "2026-11-20 · Dinner · 22:00–04:30 · Moves to another day"],
-  ["es-ES", "2026-11-20 · Dinner · 22:00–04:30 · Pasa a otro día"],
+  ["en-GB", "20 Nov · Dinner · 22:00–04:30 · Moves to another day"],
+  ["es-ES", "20 nov · Dinner · 22:00–04:30 · Pasa a otro día"],
 ])("puts the special day's name before its conflict's line (%s)", async (locale, rest) => {
   setLocale(locale);
   const conflict = { ...seasonConflict(undefined), weekday: undefined };

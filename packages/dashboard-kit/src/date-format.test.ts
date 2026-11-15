@@ -3,6 +3,7 @@ import {
   dateTimeFormat,
   formatBusinessDate,
   formatChangeoverMoment,
+  formatDayAndMonth,
   formatDayLength,
   formatIsoMinute,
 } from "./date-format.js";
@@ -51,11 +52,19 @@ it("formats in the active locale when none is passed", () => {
     "Wed 21 Oct, 03:00",
   );
   expect(formatBusinessDate("2026-10-20")).toBe("Tue 20 Oct");
+  expect(formatDayAndMonth("2026-10-20")).toBe("20 Oct");
 });
 
 it("formats a business date as the calendar day it names, whatever the browser's zone", () => {
   expect(formatBusinessDate("2026-10-20", "en-GB")).toBe("Tue 20 Oct");
   expect(formatBusinessDate("2026-10-20", "es-ES")).toBe("mar 20 oct");
+});
+
+it("formats a date as its day and short month, with no weekday, whatever the browser's zone", () => {
+  expect(formatDayAndMonth("2026-10-20", "en-GB")).toBe("20 Oct");
+  expect(formatDayAndMonth("2026-10-20", "es-ES")).toBe("20 oct");
+  expect(formatDayAndMonth("2026-12-31", "en-GB")).toBe("31 Dec");
+  expect(formatDayAndMonth("2027-01-01", "en-GB")).toBe("1 Jan");
 });
 
 it("formats a day's length in whole hours and minutes, leaving out a zero part", () => {

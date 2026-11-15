@@ -5,6 +5,7 @@ import {
   dateTimeFormat,
   formatBusinessDate,
   formatChangeoverMoment,
+  formatDayAndMonth,
   formatDayLength,
 } from "@waitron/dashboard-kit";
 import {
@@ -447,7 +448,9 @@ export class BusinessDayStartEditor extends LitElement {
     const line = [
       conflict.departmentName ?? conflict.departmentId,
       conflict.zoneName ?? conflict.zoneId,
-      conflict.date ?? weekday,
+      // The date is the one the special day was saved on: a yearly day falls on another weekday in
+      // later years, and one saved on a moving public holiday on another date too.
+      conflict.date === undefined ? weekday : formatDayAndMonth(conflict.date),
       conflict.periodName ?? conflict.periodId,
       conflict.startsAt && conflict.endsAt ? `${conflict.startsAt}–${conflict.endsAt}` : undefined,
       reason,
