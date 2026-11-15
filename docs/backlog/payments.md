@@ -25,18 +25,6 @@ Stripe reader before using Stripe, and cover the on-device amount path if that a
 The approved implementation is in
 [the A1389 cut-back plan](../superpowers/plans/2026-11-08-a1389-actual-card-amounts.md).
 
-## The payments check ignores the currency Stripe reports
-
-`stripeReportClient`
-(`packages/payments-stripe/src/stripe-report-client.ts`) reads each balance transaction's
-`amount` and never its `currency`. Stripe's docs: "if you charge a customer 10.00 EUR, the
-PaymentIntent's `amount` is `1000` and `currency` is `eur`. If this converts to 12.34 USD in your
-Stripe account, the BalanceTransaction's `amount` is `1234`, its `currency` is `usd`"
-(https://docs.stripe.com/api/balance_transactions/object), and "If the charge currency differs
-from your settlement currency … Stripe converts the charge to your settlement currency"
-(https://docs.stripe.com/currencies/conversions). Waitron charges in euros, so an account whose
-settlement currency is not the euro would make every payment differ.
-
 ## A846's points for the owner at land: held card payments
 
 Each stays open until the owner answers it. "The picture" was a mock-up, removed from the repository on 2026-11-02.
@@ -364,9 +352,6 @@ Remaining Stripe qualification and maintenance.
   go-live provider (owner, 2026-10-21). A1389 reads the cloud reader's actual amount and tip;
   real-reader qualification and the on-device amount path remain.
   [Detail](payments.md#turn-off-stripes-on-reader-tip-screen-or-read-the-tip-back)
-- **The payments check ignores the currency Stripe reports.** `stripeReportClient` never reads
-  `bt.currency`. Left open by A846.
-  [Detail](payments.md#the-payments-check-ignores-the-currency-stripe-reports)
 - **Stripe does not fill `CardDetails`**, so a Stripe card sale prints `Tarjeta` with no scheme/PAN/
   auth. Gated on the deli having a Stripe account, which it does not.
 - **Check how real Stripe answers a malformed reader id, and one from another Stripe account** —
@@ -412,6 +397,13 @@ Remaining Stripe qualification and maintenance.
   [Detail](payments.md#the-w48-test-does-not-measure-a-real-silent-provider-or-the-boxs-http11-connection-limit)
 
 ## Decisions and deliberate limits
+
+- **The Stripe payments check reads amounts only; a Stripe account that settles in a currency other
+  than the euro is out of scope** (watcher, 2026-11-15, lane A's STRIPE-CURRENCY). Waitron charges
+  only in euros, and a eurozone venue's Stripe account settles in euros unless its owner chose
+  otherwise, so this is not a real venue event; Stripe is not the go-live provider either.
+  `stripeReportClient` (`packages/payments-stripe/src/stripe-report-client.ts`) never reads a
+  balance transaction's `currency`.
 
 - **Bank-payout reconciliation stays outside Waitron.** The owner asked on 21 October 2026 (A275),
   “Wouldn't this reconciliation be done by the accountant outside of waitron”. The watcher withdrew

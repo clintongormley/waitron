@@ -1257,7 +1257,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 
 
-- **Stripe adapter upkeep** (bundle of 5, size S). [Detail](backlog/payments.md#bundle-stripe-adapter-upkeep)
+- **Stripe adapter upkeep** (bundle of 4, size S). [Detail](backlog/payments.md#bundle-stripe-adapter-upkeep)
 
 - **A846's points for the owner at land: held card payments.** A kept payment has no invoice, the
   held alert comes back at midnight UTC, and smaller choices from the plan, the browser look and the review. Each stays open until the owner
