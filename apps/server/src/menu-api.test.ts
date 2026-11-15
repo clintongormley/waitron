@@ -1099,6 +1099,13 @@ describe("product archive route boundaries", () => {
     const app = mountApp();
     const productId = await createNamedProductVia(app, `Archived ${crypto.randomUUID()}`);
     await archive(app, productId);
+    expect(
+      (
+        await suite.db.execute(
+          sql`select person_id from activity_log where kind = 'product.archived' and subject_id = ${productId}`,
+        )
+      ).rows,
+    ).toEqual([{ person_id: managerPersonId }]);
     const response = await saveEditorFixture(app, productId, { active: true });
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({
