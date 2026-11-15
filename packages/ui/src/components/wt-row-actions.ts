@@ -196,7 +196,6 @@ export class WtRowActions extends LitElement {
         if (below) cap = Math.max(...middles) + border;
       }
     }
-    // Never "fit": sliding up to fit would cover the trigger, so a second tap there picks an action.
     const placement = popupPlacement(anchor, height, innerHeight, below ? "below" : "above");
     const scrollTop = this.popup.scrollTop;
     this.popup.style.maxHeight = this.opensBelow
