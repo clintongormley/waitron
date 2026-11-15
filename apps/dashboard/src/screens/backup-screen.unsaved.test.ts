@@ -808,7 +808,7 @@ it("Cancel does not carry a hidden edited folder into Turn on backups", async ()
     prefix: "",
     accessKeyId: "A",
     namespace: "waitron/",
-    credentialPresent: true,
+    credentialPresent: true as const,
   };
   const saved = { ...on, destinations: [bucket] };
   const disabled = { ...saved, enabled: false, storedDisabled: true };
