@@ -448,6 +448,97 @@ describe("server health recovery", () => {
     }
   });
 
+  it.each(["fresh", "missing", "empty", "refused", "malformed"])(
+    "chooses with fresh capacity or the retained snapshot: %s",
+    async (mode) => {
+      const directory = mkdtempSync(tmpdir() + "/capacity-read-");
+      const logged = vi.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        const f = fixture();
+        f.job.status = "in_progress";
+        f.job.runner_id = 7;
+        const env = {
+          GITHUB_REPOSITORY: "fixture/waitron",
+          GITHUB_REPOSITORY_ID: "42",
+          GITHUB_RUN_ID: "13",
+          GITHUB_RUN_ATTEMPT: "1",
+          GITHUB_OUTPUT: directory + "/output",
+          GITHUB_STEP_SUMMARY: directory + "/summary",
+          CAPACITY: JSON.stringify({
+            observedAt: now,
+            slots: 6,
+            serverRunning: 6,
+            serverWaiting: 50,
+          }),
+          ...(mode === "missing"
+            ? {}
+            : { CAPACITY_READ_TOKEN: mode === "empty" ? "" : "capacity-only" }),
+        };
+        const reads = [];
+        await health.main("route", env, async (path, options = {}) => {
+          if (path === "/repos/fixture/waitron/actions/variables/DISPOSABLE_TESTS_CAPACITY") {
+            reads.push(options);
+            if (mode === "refused") throw new Error("HTTP 403");
+            return {
+              name: "DISPOSABLE_TESTS_CAPACITY",
+              value:
+                mode === "malformed"
+                  ? '{"slots":6}'
+                  : JSON.stringify({
+                      observedAt: now,
+                      slots: 6,
+                      serverRunning: 0,
+                      serverWaiting: 0,
+                    }),
+            };
+          }
+          expect(options).not.toHaveProperty("token");
+          return f.request(path, options);
+        });
+        expect(reads).toEqual(
+          ["missing", "empty"].includes(mode) ? [] : [{ token: "capacity-only" }],
+        );
+        expect(readFileSync(directory + "/output", "utf8")).toBe(
+          `server_route=${mode === "fresh" ? "server" : "hosted"}\n`,
+        );
+        const source =
+          mode === "fresh"
+            ? "fresh"
+            : ["missing", "empty"].includes(mode)
+              ? "snapshot (no read token)"
+              : "snapshot (fresh read failed)";
+        expect(readFileSync(directory + "/summary", "utf8")).toContain(
+          `CI capacity source: ${source}`,
+        );
+        expect(logged).toHaveBeenCalledWith(`CI capacity source: ${source}`);
+      } finally {
+        logged.mockRestore();
+        rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("limits a capacity credential to the explicit child request and keeps its inherited environment", () => {
+    const calls = [];
+    const execute = (...args) => (calls.push(args), '{"value":"{}"}');
+    const originalToken = process.env.GH_TOKEN;
+    health.githubRequest(
+      "/repos/o/r/actions/variables/DISPOSABLE_TESTS_CAPACITY",
+      { token: "capacity-only" },
+      execute,
+    );
+    health.githubRequest("/repos/o/r/actions/runs", undefined, execute);
+    expect(calls[0][2].env?.GH_TOKEN === "capacity-only").toBe(true);
+    expect(calls[0][2].env?.PATH === process.env.PATH).toBe(true);
+    expect(
+      Object.entries(process.env).every(
+        ([key, value]) => key === "GH_TOKEN" || calls[0][2].env?.[key] === value,
+      ),
+    ).toBe(true);
+    expect("env" in calls[1][2]).toBe(false);
+    expect(process.env.GH_TOKEN === originalToken).toBe(true);
+  });
+
   it("sends bounded GitHub requests with structured dispatch inputs", () => {
     const calls = [],
       execute = (...args) => (calls.push(args), "");

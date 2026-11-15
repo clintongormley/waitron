@@ -427,7 +427,9 @@ The remaining work concerns live routing qualification and the action-repository
   `TMPDIR=/dev/shm`; this is that job’s receipt, not a full guest qualification.
   Retain runner identities and unchanged source heads for the unavailable-label and hosted-retry
   drills. Keep the corrected v41 controller; the existing routing job compares refreshed hosted counts
-  with the published server snapshot (watcher, 2026-11-09 10:01), except that idle positive
+  with the latest server variable through the owner-created read-only token, falling back to the
+  run-creation snapshot when the secret is absent or the read fails (watcher, 2026-11-15 09:55).
+  The job names the source it used. Idle positive
   server capacity needs no hosted read (watcher, 2026-11-12 20:47).
   The measured-memory pool is retained under the [13 November decision](#decisions-and-deliberate-limits).
   A1461 reduces run sizes. Per-job

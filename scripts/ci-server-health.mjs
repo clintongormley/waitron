@@ -161,6 +161,15 @@ export async function serverHealth(options, unavailable) {
   return { stuck: !options.plannersOnly && (running || progressing) ? [] : stuck, running, recent };
 }
 
+function validCapacity(capacity) {
+  return (
+    capacity &&
+    ["observedAt", "slots", "serverRunning", "serverWaiting"].every(
+      (key) => Number.isSafeInteger(capacity[key]) && capacity[key] >= 0,
+    )
+  );
+}
+
 export async function serverRoute(options) {
   // The run-created cutoff also omits queued retries of older runs.
   const since = new Date((options.now ?? Date.now()) - 86_400_000).toISOString();
@@ -209,13 +218,7 @@ export async function serverRoute(options) {
       reason: `CI inventory could not be verified; using GitHub: ${unavailable.join("; ")}`,
     };
   const capacity = typeof options.capacity === "function" ? options.capacity() : options.capacity;
-  assert.ok(
-    capacity &&
-      ["observedAt", "slots", "serverRunning", "serverWaiting"].every(
-        (key) => Number.isSafeInteger(capacity[key]) && capacity[key] >= 0,
-      ),
-    "Unknown server capacity",
-  );
+  assert.ok(validCapacity(capacity), "Unknown server capacity");
   if (capacity.slots > 0 && capacity.serverRunning === 0 && capacity.serverWaiting === 0)
     return {
       route: "server",
@@ -506,7 +509,7 @@ export async function healthCommand(command, options, { report, output }) {
   }
 }
 
-export function githubRequest(path, { method = "GET", body } = {}, execute = execFileSync) {
+export function githubRequest(path, { method = "GET", body, token } = {}, execute = execFileSync) {
   const args = ["api", path, "--method", method];
   if (body !== undefined) args.push("--input", "-");
   const options = {
@@ -514,6 +517,7 @@ export function githubRequest(path, { method = "GET", body } = {}, execute = exe
     timeout: 15000,
     maxBuffer: 2 * 1024 * 1024,
     input: body === undefined ? undefined : JSON.stringify(body),
+    ...(token ? { env: { ...process.env, GH_TOKEN: token } } : {}),
   };
   let result;
   for (let attempt = 0; ; attempt++) {
@@ -534,6 +538,29 @@ export function githubRequest(path, { method = "GET", body } = {}, execute = exe
 }
 
 export async function main(command, env = process.env, request = githubRequest) {
+  const report = (line) => {
+    console.log(line);
+    appendFileSync(env.GITHUB_STEP_SUMMARY, line + "\n");
+  };
+  let capacity = () => JSON.parse(env.CAPACITY);
+  if (command === "route") {
+    let source = "snapshot (no read token)";
+    if (env.CAPACITY_READ_TOKEN) {
+      try {
+        const response = await request(
+          `/repos/${env.GITHUB_REPOSITORY}/actions/variables/DISPOSABLE_TESTS_CAPACITY`,
+          { token: env.CAPACITY_READ_TOKEN },
+        );
+        const fresh = JSON.parse(response.value);
+        assert.ok(validCapacity(fresh), "Unknown server capacity");
+        capacity = fresh;
+        source = "fresh";
+      } catch {
+        source = "snapshot (fresh read failed)";
+      }
+    }
+    report(`CI capacity source: ${source}`);
+  }
   await healthCommand(
     command,
     {
@@ -542,7 +569,7 @@ export async function main(command, env = process.env, request = githubRequest) 
       repositoryId: Number(env.GITHUB_REPOSITORY_ID),
       runId: Number(env.GITHUB_RUN_ID),
       attempt: Number(env.GITHUB_RUN_ATTEMPT),
-      capacity: () => JSON.parse(env.CAPACITY),
+      capacity,
       hostedAttempts:
         command === "recover-planners" && env.HOSTED_ATTEMPTS
           ? JSON.parse(env.HOSTED_ATTEMPTS)
@@ -552,10 +579,7 @@ export async function main(command, env = process.env, request = githubRequest) 
     },
     {
       output: (line) => appendFileSync(env.GITHUB_OUTPUT, line + "\n"),
-      report: (line) => {
-        console.log(line);
-        appendFileSync(env.GITHUB_STEP_SUMMARY, line + "\n");
-      },
+      report,
     },
   );
 }
