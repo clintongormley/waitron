@@ -2868,6 +2868,8 @@ export const en = {
   "device_profiles.delete_confirm": "Delete",
   "device_profiles.name": "Name",
   "device_profiles.where_serves": "Where it serves",
+  "device_profiles.setting_unavailable":
+    "This profile does not offer that tab. Cancel returns to the profile list.",
   "device_profiles.tab.general": "General",
   "device_profiles.tab.kitchen": "Station screens",
   "device_profiles.tab.capabilities": "What it can do",
@@ -7160,6 +7162,8 @@ export const es: Record<StringKey, string> = {
   "device_profiles.delete_confirm": "Eliminar",
   "device_profiles.name": "Nombre",
   "device_profiles.where_serves": "Dónde atiende",
+  "device_profiles.setting_unavailable":
+    "Este perfil no ofrece esa pestaña. Cancelar vuelve a la lista de perfiles.",
   "device_profiles.tab.general": "General",
   "device_profiles.tab.kitchen": "Pantallas de estación",
   "device_profiles.tab.capabilities": "Qué puede hacer",

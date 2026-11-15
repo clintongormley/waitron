@@ -4,6 +4,8 @@ Usa **Usuarios** para mantener al día los datos y roles de acceso del equipo. L
 deciden qué puede hacer cada persona; los puestos la incluyen en el turno y en los dispositivos
 que admiten ese puesto.
 
+Para encontrar un ajuste, escribe su etiqueta en **Buscar páginas** y elige la ventana que quieres abrir; si varias filas lo ofrecen, elige la que necesitas.
+
 ## Nombres y datos de contacto {#staff-details}
 
 Como gerente, abre el menú de una persona y elige **Editar** para cambiar sus nombres y teléfono.

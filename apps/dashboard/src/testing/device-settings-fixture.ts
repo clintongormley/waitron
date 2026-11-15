@@ -111,3 +111,34 @@ export const deviceScreen = (app: Awaited<ReturnType<typeof mountDeviceApp>>["ap
     app.shadowRoot!,
     "dashboard-devices-screen",
   ) as HTMLElementTagNameMap["dashboard-devices-screen"];
+
+export function mountProfileApp(options: Parameters<typeof mountDeviceApp>[0] = {}) {
+  const profiles = options.profiles ?? [deviceProfile];
+  return mountDeviceApp({
+    path: "/manage/device-profiles",
+    permissions: ["venue.view", "venue.configure", "hardware.manage"],
+    ...options,
+    respond(path, init) {
+      const own = options.respond?.(path, init);
+      if (own) return own;
+      const profile = profiles.find((row) => path === `/management-api/device-profiles/${row.id}`);
+      const answers: Record<string, unknown> = {
+        "/management-api/staffing/staff-roles": {
+          staffRoles: [{ id: "waiter", name: "Waiter", colour: "grey", position: 0 }],
+        },
+        "/management-api/venue-service/departments-and-zones": {
+          departments: [{ id: "bar", name: "Bar", active: true }],
+          zones: [{ id: "z1", name: "Bar", departmentId: "bar", active: true }],
+        },
+      };
+      return profile || path in answers
+        ? Promise.resolve(new Response(JSON.stringify(profile ?? answers[path])))
+        : undefined;
+    },
+  });
+}
+export const profileScreen = (app: Awaited<ReturnType<typeof mountProfileApp>>["app"]) =>
+  deep(
+    app.shadowRoot!,
+    "dashboard-device-profiles-screen",
+  ) as HTMLElementTagNameMap["dashboard-device-profiles-screen"];
