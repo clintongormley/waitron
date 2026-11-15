@@ -383,8 +383,9 @@ it("hands over from built Servers through a real copy, placement restart and clo
     await page.clock.setFixedTime(Date.now());
     await page.goto(`${sourceUrl}/manage/`);
     await page
-      .getByRole("button", { name: /Actions|Acciones/ })
-      .first()
+      .getByRole("button", {
+        name: new RegExp(`^(Actions|Acciones): ${destinationUrl.replaceAll(".", "\\.")}$`),
+      })
       .click();
     await page.getByRole("button", { name: "Hand over the venue", exact: true }).click();
     await page.getByRole("button", { name: "Hand over the venue", exact: true }).click();
