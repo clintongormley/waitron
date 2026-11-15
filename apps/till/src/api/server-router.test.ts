@@ -1276,6 +1276,14 @@ describe("ServerRouter — the main box and the spare", () => {
     ]);
     expect(changed).toHaveBeenCalledTimes(1);
     expect(r.spare?.url).toBe(A);
+
+    const C = "https://box-c.deli.test";
+    r.setServers([...chartList, { nodeId: "c", url: C, standing: "sell-only" }]);
+    expect(changed).toHaveBeenCalledTimes(2);
+    const before = { main: r.mainSilentSince, spare: r.spare, statuses: r.statuses() };
+    r.setServers([...chartList, { nodeId: "c", url: C }]);
+    expect({ main: r.mainSilentSince, spare: r.spare, statuses: r.statuses() }).toEqual(before);
+    expect(changed).toHaveBeenCalledTimes(3);
   });
 
   it("probeMain answers true for any HTTP answer and false for a timeout or network error", async () => {
