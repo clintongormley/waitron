@@ -2658,11 +2658,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
                       : nothing
                 }
                 aria-sort=${
-                  column.sortValue === undefined
-                    ? nothing
-                    : this.sortKey === column.key
-                      ? this.sortDirection
-                      : "none"
+                  column.sortValue !== undefined && this.sortKey === column.key
+                    ? this.sortDirection
+                    : nothing
                 }
               >
                 ${this.#treeHeading(
