@@ -1,3 +1,5 @@
+import { waitForCopyCheck } from "./handover-integrity.js";
+import { errnoOf } from "./errno.js";
 import { trimTrailingSlashes } from "./trim-trailing-slashes.js";
 import { HANDOVER_DIR } from "@waitron/store";
 import { mkdir, rm, stat } from "node:fs/promises";
@@ -20,7 +22,7 @@ import {
   readOpenHandoverOperation,
   type HandoverOperation,
 } from "@waitron/node-db";
-import type { ErrorCode } from "@waitron/shared";
+import { isAppError, type ErrorCode } from "@waitron/shared";
 import { askPeerStatus, boxRefusal, isOperationStatus } from "./boot-peer-check.js";
 import {
   acceptedCopyPath,
@@ -177,7 +179,8 @@ interface DutyWork {
   operation: HandoverOperation;
 }
 
-async function discardCopy(path: string): Promise<void> {
+async function discardCopy(path: string, signal: AbortSignal): Promise<void> {
+  await waitForCopyCheck(path, signal);
   await rm(path, { force: true });
   await rm(`${path}.partial`, { force: true });
 }
@@ -231,6 +234,32 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
   let rouse: () => void = () => {};
   let held: HeldCopy | undefined;
   let sweptAtStart = false;
+  let phase: string | undefined;
+  let fetchDueAt = 0;
+  let fetchDelay = TICK_MS;
+  const logged = new Set<string>();
+
+  function logOnce(
+    level: "info" | "warn" | "error",
+    event: string,
+    code: string,
+    detail: Readonly<Record<string, unknown>>,
+  ): void {
+    const key = `${event}:${code}`;
+    if (logged.has(key)) return;
+    logged.add(key);
+    deps.log(level, event, detail);
+  }
+
+  function delayFetch(): void {
+    fetchDueAt = monotonicNow() + fetchDelay;
+    fetchDelay = Math.min(fetchDelay * 2, 60_000);
+  }
+
+  const errorCode = (error: unknown) =>
+    isAppError(error)
+      ? error.code
+      : (errnoOf(error) ?? (error instanceof Error ? error.name : typeof error));
 
   const wake = () => {
     woken = true;
@@ -292,7 +321,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
   ): Promise<void> {
     if (current.waitingReason === reason) return;
     if (reason !== null) {
-      deps.log("info", "handover-destination.waiting", {
+      logOnce("info", "handover-destination.waiting", reason, {
         operationId: current.operationId,
         reason,
         ...detail,
@@ -310,9 +339,9 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     if (current !== null) await recordWait(current, reason, detail);
   }
 
-  /** `operationId` must come from a stored row. A failure is logged and never thrown. */
   async function removeFolder(operationId: string): Promise<void> {
     const folder = dirname(receivedCopyPath(deps.stateDir, operationId));
+    await waitForCopyCheck(receivedCopyPath(deps.stateDir, operationId), signal);
     await rm(folder, { recursive: true, force: true }).catch((error: unknown) => {
       deps.log("error", "handover-destination.remove_failed", {
         operationId,
@@ -327,8 +356,15 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
    * operation.
    */
   async function removeClosedFolders(): Promise<void> {
-    for await (const { operationId, state } of destinationOperationFolders(deps, deps.stateDir)) {
-      if (state === "abandoned" || state === "replaced") await removeFolder(operationId);
+    try {
+      for await (const { operationId, state } of destinationOperationFolders(deps, deps.stateDir)) {
+        if (state === "abandoned" || state === "replaced") await removeFolder(operationId);
+      }
+    } catch (error) {
+      if (!signal.aborted)
+        logOnce("warn", "handover-destination.sweep_failed", errorCode(error), {
+          error: String(error),
+        });
     }
   }
 
@@ -361,7 +397,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     const path = receivedCopyPath(deps.stateDir, operationId);
     const trust = { ca, rejectUnauthorized: true };
     const routes = `${base}/api/node/handover/${operationId}`;
-    const discard = () => discardCopy(path);
+    const discard = () => discardCopy(path, signal);
     let indicator: unknown;
     try {
       await mkdir(dirname(path), { recursive: true, mode: 0o700 });
@@ -378,7 +414,11 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
         },
         MAX_INDICATOR_BYTES,
       );
-      if (answer.status !== 200) return await waitOn(operation, refusalReason(answer.text));
+      if (answer.status !== 200) {
+        const reason = refusalReason(answer.text);
+        if (reason !== "handover.not_stepped_down") delayFetch();
+        return await waitOn(operation, reason);
+      }
       indicator = JSON.parse(answer.text);
       const copy = await download(
         new URL(`${routes}/final-copy`),
@@ -390,12 +430,16 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
         },
         path,
       );
-      if (copy.status !== 200) return await waitOn(operation, refusalReason(copy.text));
+      if (copy.status !== 200) {
+        delayFetch();
+        return await waitOn(operation, refusalReason(copy.text));
+      }
     } catch (error) {
       // A download can throw with the whole file already at its final name.
       await discard();
       if (signal.aborted) return;
-      deps.log("warn", "handover-destination.fetch_failed", {
+      delayFetch();
+      logOnce("warn", "handover-destination.fetch_failed", errorCode(error), {
         operationId,
         sourceNodeId: operation.sourceNodeId,
         error: String(error),
@@ -416,14 +460,27 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
   async function compareHeld(copy: HeldCopy, operation: HandoverOperation): Promise<void> {
     if (monotonicNow() < copy.compareDueAt) return;
     copy.compareDueAt = monotonicNow() + compareRetryMs;
-    const outcome = await deps.compare(operation, copy.indicator, copy.path, {
-      found: copy.found,
-      signal,
-    });
+    await waitForCopyCheck(copy.path, signal);
+    await recordWait(operation, null);
+    let outcome: CompareOutcome;
+    try {
+      outcome = await deps.compare(operation, copy.indicator, copy.path, {
+        found: copy.found,
+        signal,
+      });
+    } catch (error) {
+      if (signal.aborted) return;
+      logOnce("warn", "handover-destination.compare_failed", errorCode(error), {
+        operationId: operation.operationId,
+        error: String(error),
+      });
+      return waitOn(operation, "handover.copy_check_failed");
+    }
     if (!outcome.ok) {
       if (REFUSALS_FETCHED_AGAIN.has(outcome.reason)) {
+        delayFetch();
         held = undefined;
-        await discardCopy(copy.path);
+        await discardCopy(copy.path, signal);
       }
       return waitOn(operation, outcome.reason, { detail: outcome.detail });
     }
@@ -488,7 +545,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
       );
     } catch (error) {
       if (signal.aborted) return;
-      deps.log("warn", "handover-destination.post_failed", {
+      logOnce("warn", "handover-destination.post_failed", errorCode(error), {
         operationId,
         sourceNodeId: operation.sourceNodeId,
         error: String(error),
@@ -563,7 +620,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
         return true;
       }
     }
-    await fetchCopy(operation, base, ca);
+    if (monotonicNow() >= fetchDueAt) await fetchCopy(operation, base, ca);
     return true;
   }
 
@@ -593,6 +650,13 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
       return false;
     }
     const { kind, operation } = work;
+    const nextPhase = `${operation.operationId}:${kind}`;
+    if (phase !== nextPhase) {
+      phase = nextPhase;
+      fetchDueAt = 0;
+      fetchDelay = TICK_MS;
+      logged.clear();
+    }
     if (kind === "place") {
       // A start that places records the event before this duty runs, and a start that refuses to
       // place is one this asks for no longer, so this cannot loop.
@@ -623,7 +687,9 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
       } catch (error) {
         // A stop ends a comparison under way by rejecting it.
         if (!signal.aborted) {
-          deps.log("error", "handover-destination.pass_failed", { error: String(error) });
+          logOnce("error", "handover-destination.pass_failed", errorCode(error), {
+            error: String(error),
+          });
         }
       }
       await sleep(more ? tickMs : undefined);

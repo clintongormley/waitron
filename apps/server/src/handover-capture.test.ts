@@ -2,11 +2,11 @@ import { seedModuleSettings } from "../test/module-settings.js";
 import { dirname } from "node:path";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { createReadStream, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq, sql } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   captureError,
   CORE_MIGRATIONS,
@@ -40,12 +40,15 @@ import {
   CAPTURE_REFUSAL_STATUS,
   captureFinalCopy,
   journalDigest,
+  digestFileIfPresent,
   type CaptureDeps,
 } from "./handover-capture.js";
 import { buildNodeLocalManifest } from "./handover-manifest.js";
 import { advanceHandover, beginHandover, HANDOVER_EVENT } from "./handover-store.js";
 import { ALL_MODULES } from "./modules.js";
 import { establishNodeIdentity } from "./node-identity.js";
+
+vi.mock("node:fs", { spy: true });
 
 const FINAL_STATE_EVENT = HANDOVER_EVENT.finalState;
 const RING: KeyRing = loadKeyRing({
@@ -671,5 +674,32 @@ describe("the journal digest", () => {
       createHash("sha256").update("a\nb", "utf8").digest("hex"),
     );
     expect(journalDigest(["b", "a"])).not.toBe(journalDigest(["a", "b"]));
+  });
+});
+
+describe("stopping a copy digest", () => {
+  it("stops an active read and closes its file, while an ordinary read keeps its digest", async () => {
+    const path = join(stateDir, "digest.db");
+    await writeFile(path, Buffer.alloc(1024 * 1024, 7));
+    const stopping = new AbortController();
+    const { createReadStream: realRead } =
+      await vi.importActual<typeof import("node:fs")>("node:fs");
+    let closed!: Promise<void>;
+    vi.mocked(createReadStream).mockImplementationOnce((...args) => {
+      const stream = realRead(...args);
+      closed = new Promise((resolve) => stream.once("close", resolve));
+      stream.once("data", () => stopping.abort());
+      return stream;
+    });
+    await expect(digestFileIfPresent(path, stopping.signal)).rejects.toMatchObject({
+      code: "ABORT_ERR",
+    });
+    await closed;
+    expect(await digestFileIfPresent(path)).toEqual({
+      sha256: createHash("sha256")
+        .update(Buffer.alloc(1024 * 1024, 7))
+        .digest("hex"),
+      bytes: 1024 * 1024,
+    });
   });
 });

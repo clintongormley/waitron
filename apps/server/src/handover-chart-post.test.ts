@@ -319,6 +319,16 @@ describe("the new main box tells the old box its chart, once per start", () => {
     );
   });
 
+  it("a connection failure logs the inner network codes", async () => {
+    const { start, log } = await boxes({ sourceUrl: "https://localhost:1" });
+    await start().settled;
+    expect(log).toHaveBeenCalledWith(
+      "warn",
+      "handover-activation.chart_post_failed",
+      expect.objectContaining({ errorCodes: expect.arrayContaining(["ECONNREFUSED"]) }),
+    );
+  });
+
   it("an old box switched off is logged, and nothing throws", async () => {
     const { start, events } = await boxes({ sourceUrl: "https://localhost:1" });
     await start().settled;

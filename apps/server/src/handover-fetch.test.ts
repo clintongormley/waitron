@@ -1,3 +1,6 @@
+import { EventEmitter } from "node:events";
+import type { Worker } from "node:worker_threads";
+import { isCopyIntact, waitForCopyCheck } from "./handover-integrity.js";
 import {
   createServer as createHttpServer,
   type RequestListener,
@@ -71,6 +74,7 @@ vi.mock("@waitron/db", async (importOriginal) => {
   };
 });
 vi.mock("./handover-store.js", { spy: true });
+vi.mock("./handover-integrity.js", { spy: true });
 vi.mock("node:fs/promises", { spy: true });
 
 const RING: KeyRing = loadKeyRing({
@@ -1431,23 +1435,25 @@ describe("a compare that throws", () => {
   });
 
   it.each(["handover.copy_mismatch", "handover.copy_damaged"] as const)(
-    "%s discards the file and fetches again on the next tick, whatever the limit",
+    "%s discards the file and fetches again after its back-off",
     async (reason) => {
       const r = await rig();
       await r.stepDownM1();
       await r.listen(r.m1App({ restricted: true }));
       let refuseAgain = true;
+      let clock = 1000;
       const held: boolean[] = [];
       const compare = vi.fn(async (_operation: unknown, _indicator: unknown, path: string) => {
         held.push(existsSync(path));
         return refuseAgain ? refusing(reason) : { ok: true as const };
       });
       // No tick of its own, so nothing can fetch again before the file's absence is read.
-      const duty = (await r.start({ compare, monotonicNow: () => 1000, tickMs: 3_600_000 }))!;
+      const duty = (await r.start({ compare, monotonicNow: () => clock, tickMs: 3_600_000 }))!;
       await vi.waitFor(async () => expect((await r.m2Row()).waitingReason).toBe(reason), {
         timeout: 10_000,
       });
       expect(existsSync(r.received())).toBe(false);
+      clock += 5000;
       const ticking = setInterval(() => duty.wake(), TICK_MS);
       onTestFinished(() => clearInterval(ticking));
       await vi.waitFor(() => expect(r.copyReads()).toBeGreaterThan(1), { timeout: 10_000 });
@@ -1455,6 +1461,7 @@ describe("a compare that throws", () => {
         timeout: 10_000,
       });
       refuseAgain = false;
+      clock += 10_000;
       await vi.waitFor(async () => expect((await r.m2Row()).waitingReason).toBeNull(), {
         timeout: 10_000,
       });
@@ -1478,23 +1485,33 @@ describe("a compare that throws", () => {
     "handover.summary_unreadable",
     "handover.copy_lacks_destination",
     "handover.authoriser_not_permitted",
-  ] as const)("%s keeps the file and writes its reason once", async (reason) => {
-    vi.mocked(waitHandover).mockClear();
-    const r = await rig();
-    await r.stepDownM1();
-    await r.listen(r.m1App({ restricted: true }));
-    const compare = vi.fn(async () => refusing(reason, { field: "a detail" }));
-    await r.start({ compare, compareRetryMs: TICK_MS });
-    await vi.waitFor(() => expect(compare.mock.calls.length).toBeGreaterThan(3), {
-      timeout: 10_000,
-    });
-    expect(await r.m2Row()).toMatchObject({ state: "prepared", waitingReason: reason });
-    expect(existsSync(r.received())).toBe(true);
-    expect(r.copyReads()).toBe(1);
-    const writes = vi.mocked(waitHandover).mock.calls.filter(([, , written]) => written === reason);
-    expect(writes).toHaveLength(1);
-    expect(JSON.stringify(logLines)).toContain("a detail");
-  });
+  ] as const)(
+    "%s keeps the file, refreshes its reason per check and logs it once",
+    async (reason) => {
+      vi.mocked(waitHandover).mockClear();
+      const r = await rig();
+      await r.stepDownM1();
+      await r.listen(r.m1App({ restricted: true }));
+      const compare = vi.fn(async () => refusing(reason, { field: "a detail" }));
+      const duty = (await r.start({ compare, compareRetryMs: TICK_MS }))!;
+      await vi.waitFor(() => expect(compare.mock.calls.length).toBeGreaterThan(3), {
+        timeout: 10_000,
+      });
+      expect(await r.m2Row()).toMatchObject({ state: "prepared", waitingReason: reason });
+      expect(existsSync(r.received())).toBe(true);
+      expect(r.copyReads()).toBe(1);
+      await duty.stop();
+      const writes = vi
+        .mocked(waitHandover)
+        .mock.calls.filter(([, , written]) => written === reason);
+      expect(writes).toHaveLength(compare.mock.calls.length);
+      expect(
+        vi.mocked(waitHandover).mock.calls.filter(([, , written]) => written === null),
+      ).toHaveLength(compare.mock.calls.length - 1);
+      expect(logLines.filter((line) => line[1] === "handover-destination.waiting")).toHaveLength(1);
+      expect(JSON.stringify(logLines)).toContain("a detail");
+    },
+  );
 
   it("a refusal that gives way to another writes the new reason, and success clears it", async () => {
     vi.mocked(waitHandover).mockClear();
@@ -1516,6 +1533,7 @@ describe("a compare that throws", () => {
     expect(existsSync(r.received())).toBe(true);
     expect(vi.mocked(waitHandover).mock.calls.map(([, , written]) => written)).toEqual([
       "handover.backup_settings_differ",
+      null,
       "handover.modules_differ",
       null,
     ]);
@@ -1596,4 +1614,141 @@ describe("a compare that throws", () => {
     await vi.waitFor(async () => expect((await r.m2Row()).state).toBe("abandoned"));
     expect(existsSync(join(r.stateDir, "handover", OP))).toBe(false);
   });
+});
+
+describe("bounded copy retries", () => {
+  it("backs off whole-copy refusals up to sixty seconds without slowing status or obeying wakes", async () => {
+    const r = await rig();
+    await r.stepDownM1();
+    await r.listen(r.m1App({ restricted: true }));
+    let clock = 0;
+    const compare = vi.fn(async () => ({
+      ok: false as const,
+      reason: "handover.copy_damaged" as const,
+      detail: {},
+    }));
+    const duty = (await r.start({ compare, monotonicNow: () => clock }))!;
+    await vi.waitFor(() => expect(compare).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+    for (const [index, delay] of [5000, 10000, 20000, 40000, 60000, 60000].entries()) {
+      clock += delay - 1;
+      const reads = r.statusReads();
+      duty.wake();
+      await vi.waitFor(() => expect(r.statusReads()).toBeGreaterThan(reads + 1));
+      expect(compare).toHaveBeenCalledTimes(index + 1);
+      expect(r.copyReads()).toBe(index + 1);
+      clock += 1;
+      duty.wake();
+      await vi.waitFor(() => expect(compare).toHaveBeenCalledTimes(index + 2), { timeout: 10_000 });
+    }
+  });
+
+  it("records a thrown comparison as a readable reason, clears it for retry and logs repeated faults once", async () => {
+    const r = await rig();
+    await r.stepDownM1();
+    await r.listen(r.m1App({ restricted: true }));
+    let clock = 0;
+    let succeed = false;
+    let retryReason: string | null | undefined;
+    const compare = vi.fn(async () => {
+      retryReason = (await r.m2Row()).waitingReason;
+      if (!succeed) throw new Error("unreadable journal");
+      return { ok: true as const };
+    });
+    await r.start({ compare, monotonicNow: () => clock });
+    await vi.waitFor(async () =>
+      expect((await r.m2Row()).waitingReason).toBe("handover.copy_check_failed"),
+    );
+    clock += 60_000;
+    await vi.waitFor(() => expect(compare).toHaveBeenCalledTimes(2));
+    expect(retryReason).toBeNull();
+    await vi.waitFor(async () =>
+      expect((await r.m2Row()).waitingReason).toBe("handover.copy_check_failed"),
+    );
+    expect(
+      logLines.filter((line) => line[1] === "handover-destination.compare_failed"),
+    ).toHaveLength(1);
+    succeed = true;
+    clock += 60_000;
+    await vi.waitFor(async () => expect((await r.m2Row()).waitingReason).toBeNull());
+    expect(r.copyReads()).toBe(1);
+  });
+
+  it("logs a refused startup folder enumeration and continues the live operation", async () => {
+    const r = await rig();
+    await r.stepDownM1();
+    await r.listen(r.m1App({ restricted: true }));
+    vi.mocked(readdir).mockRejectedValueOnce(
+      Object.assign(new Error("permission"), { code: "EACCES" }),
+    );
+    const compare = vi.fn(async () => ({ ok: true as const }));
+    await r.start({ compare });
+    await vi.waitFor(() => expect(compare).toHaveBeenCalledOnce(), { timeout: 10_000 });
+    expect(logLines).toContainEqual([
+      "warn",
+      "handover-destination.sweep_failed",
+      expect.objectContaining({ error: expect.stringContaining("permission") }),
+    ]);
+  });
+});
+
+it("persists a reason after failed writes without repeating waiting and error log lines", async () => {
+  const r = await rig();
+  const real = await vi.importActual<typeof import("./handover-store.js")>("./handover-store.js");
+  let failed = 0;
+  vi.mocked(waitHandover).mockImplementation(async (...args) => {
+    if (args[2] !== null && failed++ < 2) throw new Error("write refused");
+    return real.waitHandover(...args);
+  });
+  try {
+    const duty = (await r.start())!;
+    await vi.waitFor(async () =>
+      expect((await r.m2Row()).waitingReason).toBe("handover.source_unreachable"),
+    );
+    await duty.stop();
+    expect(failed).toBeGreaterThanOrEqual(3);
+    expect(logLines.filter((line) => line[1] === "handover-destination.waiting")).toHaveLength(1);
+    expect(logLines.filter((line) => line[1] === "handover-destination.pass_failed")).toHaveLength(
+      1,
+    );
+  } finally {
+    vi.mocked(waitHandover).mockImplementation(real.waitHandover);
+  }
+});
+
+it("waits for a stopped integrity thread before deleting a rejected copy", async () => {
+  const r = await rig();
+  await r.stepDownM1();
+  await r.listen(r.m1App({ restricted: true }));
+  const thread = Object.assign(new EventEmitter(), {
+    terminate: () => new Promise<number>(() => {}),
+    unref() {},
+  });
+  const compare = vi.fn(async (_operation: unknown, _indicator: unknown, path: string) => {
+    const stopping = new AbortController();
+    const pending = isCopyIntact(path, {
+      signal: stopping.signal,
+      startWorker: () => thread as unknown as Worker,
+      stopWaitMs: 1,
+    }).catch(() => {});
+    stopping.abort();
+    await pending;
+    return { ok: false as const, reason: "handover.copy_damaged" as const, detail: {} };
+  });
+  vi.mocked(waitForCopyCheck).mockClear();
+  const duty = (await r.start({ compare }))!;
+  try {
+    await vi.waitFor(
+      () =>
+        expect(
+          vi.mocked(waitForCopyCheck).mock.calls.filter(([path]) => path === r.received()).length,
+        ).toBeGreaterThanOrEqual(3),
+      { timeout: 10_000 },
+    );
+    expect(existsSync(r.received())).toBe(true);
+    thread.emit("exit", 1);
+    await vi.waitFor(() => expect(existsSync(r.received())).toBe(false));
+  } finally {
+    thread.emit("exit", 1);
+    await duty.stop();
+  }
 });

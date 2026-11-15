@@ -1741,7 +1741,7 @@ Not in any track until the standalone primary is done.
   new box is switched on; the stepping-down window just before answers 503 with its own words. Left
   open by A1018 Slice 5.
 
-- **The spare's wait loop: back-off, reasons, stop signals** (bundle of 7, 3 important, size M, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-the-spares-wait-loop-back-off-reasons-stop-signals)
+- **The spare's wait loop: back-off, reasons, stop signals** (4 remaining entries, size M). [Detail](backlog/replication-cloud.md#bundle-the-spares-wait-loop-back-off-reasons-stop-signals)
 
 - **No test holds "M1 is restricted before, during and after" at every state.** It is true now, but
   nothing holds it at `return_pending`, `return_complete` or `replaced`. Due before Slices 10 and 13

@@ -98,14 +98,17 @@ import { START_FREE_SPACE_FLOOR } from "./start-space.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { stopShortOfAccepting } from "./testing/stop-short-of-accepting.js";
 
-const integrityThreads = vi.hoisted(() => ({ paths: [] as string[] }));
+const integrityThreads = vi.hoisted(() => ({ paths: [] as string[], hang: false }));
 vi.mock("node:worker_threads", async (importOriginal) => {
   const real = await importOriginal<typeof import("node:worker_threads")>();
   class CountedWorker extends real.Worker {
     constructor(source: string | URL, options?: import("node:worker_threads").WorkerOptions) {
       const path = (options?.workerData as { path?: string } | undefined)?.path;
       if (path !== undefined) integrityThreads.paths.push(path);
-      super(source, options);
+      super(
+        integrityThreads.hang && path !== undefined ? "setInterval(() => {}, 1000)" : source,
+        options,
+      );
     }
   }
   return { ...real, Worker: CountedWorker };
@@ -128,11 +131,12 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   return { ...real, open };
 });
 
-const fileReads = vi.hoisted(() => ({ paths: [] as string[] }));
+const fileReads = vi.hoisted(() => ({ paths: [] as string[], signals: [] as unknown[] }));
 vi.mock("node:fs", async (importOriginal) => {
   const real = await importOriginal<typeof import("node:fs")>();
   const createReadStream = (...args: Parameters<typeof real.createReadStream>) => {
     fileReads.paths.push(String(args[0]));
+    fileReads.signals.push((args[1] as { signal?: AbortSignal } | undefined)?.signal);
     return real.createReadStream(...args);
   };
   return { ...real, createReadStream };
@@ -420,6 +424,38 @@ const revisionOf = (text: string, eventId = "event-1") => ({
 });
 
 describe("compareFinalCopy", () => {
+  it("a controlled check that outlasts its deadline refuses without caching a pass, then can retry", async () => {
+    const r = await rig();
+    const found: CopyFileChecks = {};
+    integrityThreads.hang = true;
+    try {
+      expect(
+        await compareFinalCopy(r.deps, await r.row(), r.indicator, r.path, {
+          found,
+          integrityLimitMs: 20,
+        }),
+      ).toEqual(refused("handover.copy_check_failed"));
+      expect(found).toEqual({});
+      expect(existsSync(r.path)).toBe(true);
+    } finally {
+      integrityThreads.hang = false;
+    }
+    expect(await r.compareRow(r.indicator, {}, found)).toEqual({ ok: true });
+  });
+
+  it("both the first digest and the remembered final digest carry the stop signal", async () => {
+    const r = await rig();
+    const found: CopyFileChecks = {};
+    const signal = new AbortController().signal;
+    fileReads.signals.length = 0;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      expect(
+        await compareFinalCopy(r.deps, await r.row(), r.indicator, r.path, { found, signal }),
+      ).toEqual({ ok: true });
+    }
+    expect(fileReads.signals).toEqual([signal, signal]);
+  });
+
   it("control: an untouched real capture is accepted, and comparing changes no byte", async () => {
     const r = await rig();
     const before = await readFile(r.path);

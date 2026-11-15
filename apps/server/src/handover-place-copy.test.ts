@@ -770,6 +770,25 @@ describe("placeAcceptedCopyAtStart", () => {
       expect(logged).toEqual([]);
     });
 
+    it("a refused folder enumeration is logged and does not stop the start", async () => {
+      const b = await box();
+      const folder = join(b.stateDir, "handover");
+      chmodSync(folder, 0);
+      try {
+        await sweep(b);
+      } finally {
+        chmodSync(folder, 0o700);
+      }
+      expect(b.logged).toEqual([
+        expect.objectContaining({
+          level: "error",
+          message: "handover-place-copy.sweep_failed",
+          detail: expect.objectContaining({ error: expect.stringContaining("EACCES") }) as unknown,
+        }),
+      ]);
+      expect(existsSync(b.accepted)).toBe(true);
+    });
+
     it("no handover folder at all is no failure", async () => {
       const logged: unknown[] = [];
       await sweep({ stateDir: scratch(), args: { log: (...line) => logged.push(line) } });

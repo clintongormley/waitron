@@ -1,3 +1,4 @@
+import { errnoOf } from "./errno.js";
 import { peerBodyLimit } from "./peer-route-limits.js";
 import "./errors.js";
 import type { Context, Hono } from "hono";
@@ -270,6 +271,9 @@ async function sendChartToSource(deps: ChartPostDeps, stopping: AbortSignal): Pr
       operationId,
       sourceNodeId,
       error: String(error),
+      errorCodes: (error instanceof AggregateError ? error.errors : [error]).map(
+        (inner: unknown) => errnoOf(inner) ?? "unknown",
+      ),
     });
     return;
   }
