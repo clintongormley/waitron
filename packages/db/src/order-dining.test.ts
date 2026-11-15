@@ -100,6 +100,18 @@ const SET_UPS: SetUp[] = [
   },
   { name: "a failed payment", arrange: payment("failed"), refusal: null, locked: null },
   {
+    name: "a sent line and a received payment",
+    arrange: async (tx, order) => {
+      await tx
+        .update(workingOrderLines)
+        .set({ sentAt: AT })
+        .where(eq(workingOrderLines.id, order.lineId));
+      await payment("received")(tx, order);
+    },
+    refusal: DINING_FIXED_REFUSAL,
+    locked: "sent",
+  },
+  {
     name: "a sale filed for the order",
     arrange: async (tx, { orderId }) => {
       const [series] = await tx

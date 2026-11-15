@@ -732,6 +732,36 @@ describe("working_order_lines — the draft line's links", () => {
     expect(stored.map((row) => row.vatClass)).toEqual(classes);
   });
 
+  it("refuses an order whose way of selling is neither eat_in nor takeaway", async () => {
+    const error = await captureError(() =>
+      db.insert(workingOrders).values({
+        ...DASHBOARD_ORDER,
+        orderNumber: ++orderNumberSeq,
+        status: "open",
+        openedAt: AT,
+        dining: "delivery" as "eat_in",
+      }),
+    );
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toBe("CHECK constraint failed: working_orders_dining_ck");
+  });
+
+  it("refuses a line whose takeaway VAT class is not one of the four", async () => {
+    const orderId = await openOrder(db);
+    const error = await captureError(() =>
+      db.insert(workingOrderLines).values({
+        ...LINE,
+        productId: productA,
+        workingOrderId: orderId,
+        takeawayVatClass: "luxury",
+      }),
+    );
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toBe(
+      "CHECK constraint failed: working_order_lines_takeaway_vat_class_ck",
+    );
+  });
+
   it("refuses a line with no VAT class", async () => {
     const orderId = await openOrder(db);
     const error = await captureError(() =>

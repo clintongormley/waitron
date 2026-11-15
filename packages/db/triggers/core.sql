@@ -530,6 +530,9 @@ BEGIN
   );
 END;
 --> statement-breakpoint
+-- Created before working_orders_enforce_transition, so that trigger (SQLite fires the newest-created
+-- first) answers for an order that is not open. Pinned by the per-column cases in
+-- scripts/behavioural-triggers.test.ts.
 CREATE TRIGGER working_orders_dining_fixed
 BEFORE UPDATE OF dining ON working_orders
 FOR EACH ROW
