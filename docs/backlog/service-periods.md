@@ -194,13 +194,6 @@ code, not run again here.
   when it turns read-only. The Defaults card drops its draft when it turns
   read-only (`willUpdate` in `venue-defaults-panel.ts`). Left open by A824.
 
-## A per-field department policy repair changes the trading-name default.
-
-With no policy row,
-readers show the trading name off; PATCH of `orderStart` inserts a row with it on. Left open by A493's review;
-align `setDepartmentSalePolicyField` repair defaults with the existing readers, with a failing
-authenticated route case first. The combined department editor preserves the off fallback.
-
 ## Loose ends left by A506-4 (#1597).
 
 - `assertOwnPeriods` names a refused slot by its sorted position, not its position in the request
@@ -272,13 +265,6 @@ its id. Left open by A789 slice 3, #2051 (plan D33).
   closed the same gap in the season painter. Found by reading, not run — left open by A506-9, #1651.
 - **A season painter save writes each edited week whole**
   [Detail](service-periods.md#a-season-painter-save-writes-each-edited-week-whole)
-
-## Bundle: Department dialog
-
-1 entry, size S.
-
-- **A per-field department policy repair changes the trading-name default.**
-  [Detail](service-periods.md#a-per-field-department-policy-repair-changes-the-trading-name-default)
 
 ## Bundle: Calendar marks
 
