@@ -70,7 +70,7 @@ When nothing is wrong, each row says:
 
 After a send to the tax agency has failed, the **Tax agency** row says how many records are
 waiting, and whether the box is retrying them by itself or a manager needs to sort some of them
-out.
+out. It also says **Unsent since** and when the oldest of them was made.
 
 If the alerts could not be read, the page still shows every row and says that a part may look
 fine when it is not. If some checks could not be made, the page says it may not show every

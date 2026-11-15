@@ -78,7 +78,8 @@ Cuando no pasa nada, cada fila dice:
   hasta que quedan libres unos 24 MB y el servidor ha vuelto a apartar los 8 MB.
 
 Después de que falle un envío a Hacienda, la fila **Hacienda** dice cuántos registros esperan, y si
-el servidor los reintenta solo o el encargado tiene que resolver alguno.
+el servidor los reintenta solo o el encargado tiene que resolver alguno. También dice **Sin enviar desde**
+y cuándo se hizo el más antiguo.
 
 Si no se han podido leer los avisos, la página sigue mostrando todas las filas y avisa de que una
 parte puede parecer bien aunque no lo esté. Si algunas comprobaciones no se han podido hacer, la

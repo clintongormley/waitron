@@ -29,22 +29,25 @@ export async function unsentNotices(
     held: number;
     failed: number;
     open: number | null;
+    since: string | null;
   }>(sql`
     select count(*) as n,
-           coalesce(sum(estado = 'retenido'), 0) as held,
-           coalesce(max(incidencia or technical_incidence), 0) as failed,
-           (select technical_incident_token is not null from envio_flujo where id = 1) as open
-    from envios
-    where estado in ('pendiente', 'enviando', 'detenido', 'retenido')
+           coalesce(sum(e.estado = 'retenido'), 0) as held,
+           coalesce(max(e.incidencia or e.technical_incidence), 0) as failed,
+           (select technical_incident_token is not null from envio_flujo where id = 1) as open,
+           min(r.creado_en) as since
+    from envios e
+    join registros_facturacion r on r.id = e.registro_id
+    where e.estado in ('pendiente', 'enviando', 'detenido', 'retenido')
   `);
-  const { n, held, failed, open } = rows[0]!;
+  const { n, held, failed, open, since } = rows[0]!;
   if (n === 0 || (failed !== 1 && open !== 1)) return [];
   return [
     {
       key: "fiscal.records_unsent",
       code: "fiscal.records_unsent",
       severity: "notice",
-      params: { count: n, held },
+      params: { count: n, held, since: new Date(since!).toISOString() },
     },
   ];
 }
