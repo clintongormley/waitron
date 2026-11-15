@@ -1048,6 +1048,7 @@ export class DeviceProfilesScreen extends LitElement {
       return zones === null ? [stations] : [stations, zones];
     });
     return FIELDS.filter((field) => {
+      if (kds && FIELD_TAB[field] === "equipment") return false;
       if (field === "inactivity") return !kds;
       if (KITCHEN_LIST_FIELDS.includes(field)) return listsShown.includes(field);
       if (["department", "zones", "startingZone", "roles", "startingScreen"].includes(field))
@@ -1119,7 +1120,9 @@ export class DeviceProfilesScreen extends LitElement {
           ]
         : [{ key: "kitchen" as const, label: "device_profiles.tab.kitchen" as const }]),
       { key: "capabilities", label: "device_profiles.tab.capabilities" },
-      { key: "equipment", label: "device_profiles.tab.equipment" },
+      ...(this.#ordering()
+        ? [{ key: "equipment" as const, label: "device_profiles.tab.equipment" as const }]
+        : []),
     ];
     return tabs.map(({ key, label }) => ({
       key,
@@ -1571,6 +1574,7 @@ export class DeviceProfilesScreen extends LitElement {
 
   /** The drawer and invoice lists and defaults this save sends: on an edit only those that changed. */
   #equipmentToSend(): Partial<ProfileEquipmentDefaults> {
+    if (!this.#ordering()) return {};
     const draft = this.draftPrinterLists;
     const loaded = this.#loadedEquipment ?? NO_EQUIPMENT;
     const sent: Partial<ProfileEquipmentDefaults> = {};
@@ -1785,8 +1789,8 @@ export class DeviceProfilesScreen extends LitElement {
         ? null
         : this.draftInactivityMinutes * 60;
     const printerLists: ProfilePrinterLists = {
-      receiptPrinterIds: this.draftPrinterLists.receiptPrinterIds,
-      paymentSlipPrinterIds: this.draftPrinterLists.paymentSlipPrinterIds,
+      receiptPrinterIds: this.#ordering() ? this.draftPrinterLists.receiptPrinterIds : [],
+      paymentSlipPrinterIds: this.#ordering() ? this.draftPrinterLists.paymentSlipPrinterIds : [],
     };
     const extras = this.#extrasToSend(formFactor);
     const extrasArg = extras === undefined ? [] : ([extras] as const);
@@ -2751,9 +2755,13 @@ export class DeviceProfilesScreen extends LitElement {
               : html`<section slot="kitchen">${this.#renderKitchenScreens(errors)}</section>`
           }
           <section slot="capabilities">${this.#renderCapabilities(errors)}</section>
-          <section slot="equipment">
-            ${this.#renderPrinterLists(errors)} ${ordering ? this.#renderReaders(errors) : nothing}
-          </section>
+          ${
+            ordering
+              ? html`<section slot="equipment">
+                  ${this.#renderPrinterLists(errors)} ${this.#renderReaders(errors)}
+                </section>`
+              : nothing
+          }
         </wt-tabs>
         <wt-form-actions .error=${message}>
           <wt-button

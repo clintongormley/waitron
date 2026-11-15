@@ -1178,6 +1178,35 @@ describe("the Edit dialog", () => {
     return el;
   }
 
+  it("a kitchen editor omits its printer controls and saves only the fields it offers", async () => {
+    const api = editApi();
+    const el = await openEdit(api, "k1");
+    for (const test of [
+      "edit-receipt-printer",
+      "edit-slip-printer",
+      "edit-cash-drawer",
+      "edit-invoice-printer",
+    ])
+      expect(q(el, `[data-test=${test}]`)).toBeNull();
+    await rename(el, "Kitchen pass");
+    await save(el);
+    expect(api.updateDevice).toHaveBeenCalledTimes(1);
+    const payload = vi.mocked(api.updateDevice).mock.calls[0]![1];
+    for (const key of [
+      "receiptPrinterId",
+      "paymentSlipPrinterId",
+      "cashDrawerPrinterId",
+      "invoicePrinterId",
+    ])
+      expect(payload).not.toHaveProperty(key);
+  });
+
+  it("kitchen rows leave every printer and drawer cell empty", async () => {
+    const el = await openEdit(editApi(), "k1");
+    for (const key of ["receipt", "slip", "drawer", "invoice"])
+      expect(dq(el.shadowRoot!, `[data-test=device-${key}-k1]`)!.textContent!.trim()).toBe("");
+  });
+
   function wtChange(el: DevicesScreen, sel: string, value: string): void {
     q(el, sel)!.dispatchEvent(
       new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
@@ -1442,7 +1471,13 @@ describe("the Edit dialog", () => {
   });
 
   it("shows None as the chosen printer of a device that has none", async () => {
-    const el = await openEdit(editApi(), "k1");
+    const el = await openEdit(
+      editApi({
+        listDevices: vi
+          .fn()
+          .mockResolvedValue([{ ...till, receiptPrinterId: null, paymentSlipPrinterId: null }]),
+      }),
+    );
     const shown = (id: string) =>
       q(el, `[data-test=${id}]`)!.shadowRoot!.querySelector("button.trigger .value")!;
     for (const id of ["edit-receipt-printer", "edit-slip-printer"]) {
@@ -2585,10 +2620,10 @@ describe("the Edit dialog", () => {
         device: "t1",
         shown: ["name", "profile", "receipt", "slip", "reader", "madeHere:s1", "madeHere:s2"],
       },
-      { device: "k1", shown: ["name", "profile", "receipt", "slip", "reader"] },
+      { device: "k1", shown: ["name", "profile", "reader"] },
       {
         device: "k2",
-        shown: ["name", "profile", "receipt", "slip", "reader"],
+        shown: ["name", "profile", "reader"],
         rows: [
           till,
           {

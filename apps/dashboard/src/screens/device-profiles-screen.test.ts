@@ -245,7 +245,7 @@ describe("device profile editor tabs", () => {
       expect(tabs!.items.map((item) => item.key)).toEqual(
         formFactor === "till"
           ? ["general", "where", "who", "capabilities", "equipment"]
-          : ["general", "kitchen", "capabilities", "equipment"],
+          : ["general", "kitchen", "capabilities"],
       );
       expect(tabs!.value).toBe("general");
       const name = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
@@ -270,7 +270,7 @@ describe("device profile editor tabs", () => {
         expect(control.closest("[slot]")!.getAttribute("slot")).toBe(tab);
         expect(control.checkVisibility()).toBe(true);
       }
-      await selectProfileTab(el, "equipment");
+      await selectProfileTab(el, formFactor === "till" ? "equipment" : "capabilities");
       expect(name.checkVisibility()).toBe(false);
       expect(el.shadowRoot!.querySelector("wt-form-actions")!.closest("wt-tabs")).toBeNull();
       await selectProfileTab(el, "general");
@@ -278,7 +278,7 @@ describe("device profile editor tabs", () => {
       expect(name.value).toBe("Draft counter");
       change(el, "profile-name", profiles[0]!.name);
       await flush(el);
-      await selectProfileTab(el, "equipment");
+      await selectProfileTab(el, formFactor === "till" ? "equipment" : "capabilities");
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-cancel]")!.click();
       await flush(el);
       await profileAction(el, "edit-p1");
@@ -2921,6 +2921,41 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
   function savedExtras(api: DashboardApi) {
     return vi.mocked(api.updateDeviceProfile).mock.calls[0]![6];
   }
+
+  it("a kitchen profile offers no payment or receipt equipment and saves empty printer lists", async () => {
+    const { api, el } = await editListed(
+      {},
+      {
+        ...listedProfile,
+        formFactor: "kds",
+        capabilities: ["prepare-orders"],
+        startingScreen: null,
+      },
+    );
+    for (const key of [
+      "receipt-printers",
+      "payment-slip-printers",
+      "cash-drawer-printers",
+      "invoice-printers",
+    ])
+      expect(el.shadowRoot!.querySelector(`[data-test=${key}]`)).toBeNull();
+    rename(el);
+    await save(el);
+    expect(api.updateDeviceProfile).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![5]).toEqual({
+      receiptPrinterIds: [],
+      paymentSlipPrinterIds: [],
+    });
+    for (const key of [
+      "cashDrawerPrinterIds",
+      "invoicePrinterIds",
+      "receiptPrinterDefaultId",
+      "paymentSlipPrinterDefaultId",
+      "cashDrawerPrinterDefaultId",
+      "invoicePrinterDefaultId",
+    ])
+      expect(savedExtras(api) ?? {}).not.toHaveProperty(key);
+  });
 
   it("offers each list's own printers as its default, None first, and shows the stored default", async () => {
     const { el } = await editListed();

@@ -16,6 +16,28 @@ const stationRefusal = expect.objectContaining({
 });
 
 describe("validateCoreConfiguration", () => {
+  it("refuses payment and receipt equipment on an imported kitchen profile, while accepting it for tills", () => {
+    const tables = {
+      device_profiles: [
+        { id: "kitchen", form_factor: "kds" },
+        { id: "till", form_factor: "till" },
+      ],
+      device_profile_printers: [{ device_profile_id: "kitchen", role: "receipt" }],
+    };
+    expect(() => validateCoreConfiguration(tables)).toThrowError(
+      expect.objectContaining({
+        code: "setup.request_invalid",
+        params: { field: "device_profile_printers.device_profile_id" },
+      }),
+    );
+    expect(() =>
+      validateCoreConfiguration({
+        ...tables,
+        device_profile_printers: [{ device_profile_id: "till", role: "receipt" }],
+      }),
+    ).not.toThrow();
+  });
+
   it.each([
     null,
     1,

@@ -86,7 +86,7 @@ function knownScreen(stored: string | null): NavigationScreen | null {
 }
 
 function toRow(row: StoredProfile, lists: ProfilePrinterLists): DeviceProfileRow {
-  return { ...toSettings(row), ...lists };
+  return { ...toSettings(row), ...(row.formFactor === "kds" ? emptyPrinterLists() : lists) };
 }
 
 const live = isNull(deviceProfiles.retiredAt);
@@ -268,8 +268,8 @@ export async function updateDeviceProfile(
   if (updated.length === 0) {
     throw new AppError("device_profile.not_found", {});
   }
-  if (input.printerLists !== undefined) {
-    await setProfilePrinterLists(tx, input.id, input.printerLists);
+  if (input.formFactor === "kds" || input.printerLists !== undefined) {
+    await setProfilePrinterLists(tx, input.id, input.printerLists ?? emptyPrinterLists());
   }
   return toRow(updated[0]!, await readProfilePrinterLists(tx, input.id));
 }

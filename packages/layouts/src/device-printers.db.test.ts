@@ -6,6 +6,7 @@ import {
   devices,
   pagePrinters,
   printers,
+  printerHolders,
   restrictRefused,
   withTransaction,
 } from "@waitron/db";
@@ -117,6 +118,54 @@ describe("a profile's printer lists and each device's current printers", () => {
         paymentSlipPrinterIds: [p3],
       }),
     );
+  });
+
+  it("kitchen profiles clear all lists, defaults, device choices and portable holds", async () => {
+    const { profileId, deviceId } = await seedDevice(suite.db);
+    await suite.db
+      .update(printers)
+      .set({ portable: true, hasCashDrawer: true })
+      .where(eq(printers.id, p1));
+    const populated = lists({
+      receiptPrinterIds: [p1],
+      paymentSlipPrinterIds: [p1],
+      cashDrawerPrinterIds: [p1],
+      invoicePrinterIds: [p1],
+      receiptPrinterDefaultId: p1,
+      paymentSlipPrinterDefaultId: p1,
+      cashDrawerPrinterDefaultId: p1,
+      invoicePrinterDefaultId: p1,
+    });
+    await inTx((tx) => setProfilePrinterLists(tx, profileId, populated));
+    for (const role of ["receipt", "payment_slip", "cash_drawer", "invoice"] as const)
+      await inTx((tx) =>
+        selectDevicePrinter(tx, { deviceId, role, selection: { id: p1 }, via: "manage" }),
+      );
+    await suite.db
+      .update(devices)
+      .set({ active: false })
+      .where(eq(devices.deviceProfileId, profileId));
+    await suite.db
+      .update(deviceProfiles)
+      .set({ formFactor: "kds" })
+      .where(eq(deviceProfiles.id, profileId));
+    await inTx((tx) => setProfilePrinterLists(tx, profileId, populated));
+    expect(await inTx((tx) => readProfilePrinterLists(tx, profileId))).toEqual(lists({}));
+    expect(
+      await suite.db
+        .select()
+        .from(deviceProfilePrinters)
+        .where(eq(deviceProfilePrinters.deviceProfileId, profileId)),
+    ).toEqual([]);
+    const [device] = await suite.db.select().from(devices).where(eq(devices.id, deviceId));
+    expect(device).toMatchObject({
+      receiptPrinterId: null,
+      paymentSlipPrinterId: null,
+      cashDrawerPrinterId: null,
+      invoicePrinterId: null,
+      invoicePagePrinterId: null,
+    });
+    expect(await suite.db.select().from(printerHolders)).toEqual([]);
   });
 
   it("replaces the lists rather than adding to them", async () => {

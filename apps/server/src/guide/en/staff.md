@@ -154,6 +154,8 @@ edit. Use its **⋮** menu to duplicate or delete it.
 
 Choose **What it can do** for actions and screens. Choose one kitchen screen and its stations and zones; every device using the profile inherits it. Open a marked tab to fix its field, then choose **Save**.
 
+For a kitchen display, choose its screen under **Station screens**. Its profile and device have no receipt, payment-slip, drawer or invoice-printer choices; those cells stay empty in **Devices**. Set station-ticket printers on the prep station.
+
 ## Who can sign in on a device {#device-profile-sign-in}
 
 Open **Device profiles** and edit the profile used by the device. Under **Who can sign in**,

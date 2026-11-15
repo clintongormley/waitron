@@ -2,6 +2,7 @@ import {
   CORE_MIGRATIONS,
   captureError,
   deviceProfilePrinters,
+  deviceProfiles,
   devices,
   pagePrinters,
   printerHolders,
@@ -160,6 +161,67 @@ describe("which printer each of a device's roles resolves to", () => {
     await seedPrinter("Handheld 2", { portable: true });
     drawer = await seedPrinter("Drawer", { hasCashDrawer: true });
     away = await seedPrinter("Other venue");
+  });
+
+  it("a kitchen device resolves no printer roles and cannot choose one, even with saved equipment", async () => {
+    await suite.db
+      .update(devices)
+      .set({ active: false })
+      .where(eq(devices.deviceProfileId, profile));
+    await suite.db
+      .update(deviceProfiles)
+      .set({ formFactor: "kds" })
+      .where(eq(deviceProfiles.id, profile));
+    await suite.db.insert(deviceProfilePrinters).values([
+      { deviceProfileId: profile, printerId: p1, role: "receipt", isDefault: true, position: 0 },
+      {
+        deviceProfileId: profile,
+        printerId: f1,
+        role: "payment_slip",
+        isDefault: true,
+        position: 0,
+      },
+      {
+        deviceProfileId: profile,
+        printerId: drawer,
+        role: "cash_drawer",
+        isDefault: true,
+        position: 0,
+      },
+      { deviceProfileId: profile, printerId: f2, role: "invoice", isDefault: true, position: 0 },
+    ]);
+    await suite.db
+      .update(devices)
+      .set({
+        receiptPrinterId: p1,
+        paymentSlipPrinterId: f1,
+        cashDrawerPrinterId: drawer,
+        invoicePrinterId: f2,
+      })
+      .where(eq(devices.id, a));
+    const emptyRoles = (["receipt", "payment_slip", "cash_drawer", "invoice"] as const).map(
+      (role) => ({
+        role,
+        chosenId: null,
+        chosenHolderDeviceId: null,
+        defaultId: null,
+        defaultHolderDeviceId: null,
+        resolvedId: null,
+      }),
+    );
+    expect(await inTx((tx) => readPrinterRoles(tx, a))).toEqual(emptyRoles);
+    const equipment = await inTx((tx) => readPrinterEquipment(tx, [a], { lists: true }));
+    expect(equipment.devices).toEqual([{ id: a, profileId: profile }]);
+    expect(equipment.roles.get(a)).toEqual(emptyRoles);
+    expect(equipment.listed).toEqual([]);
+    expect([...equipment.printers]).toEqual([]);
+    for (const role of ["receipt", "payment_slip", "cash_drawer", "invoice"] as const) {
+      expect(await resolve(a, role)).toBeNull();
+      expect((await inTx((tx) => resolveDevicePrinterIds(tx, [a], role))).get(a)).toBeNull();
+      expect(await choose(a, role, { id: p1 })).toEqual({ ok: false, refusal: "not_permitted" });
+    }
+    await inTx((tx) => settleDevicePrinters(tx, a, { acquire: true }));
+    expect(await holders()).toEqual([]);
   });
 
   it.each<[ProfilePrinterRole, "receipt" | "slip" | "drawer"]>([

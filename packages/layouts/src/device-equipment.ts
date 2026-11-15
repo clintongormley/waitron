@@ -2,6 +2,7 @@
 import "@waitron/printing";
 import {
   deviceProfilePrinters,
+  deviceProfiles,
   devices,
   nowIso,
   pagePrinters,
@@ -9,7 +10,7 @@ import {
   printers,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { and, asc, eq, inArray, isNotNull, isNull, notInArray, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, ne, notInArray, or } from "drizzle-orm";
 import { AppError, mayTakeOver } from "@waitron/shared";
 import type { EquipmentVia } from "@waitron/shared";
 import type { ProfilePrinterRole } from "./device-printers.js";
@@ -79,6 +80,7 @@ type DeviceState = {
   device: {
     id: string;
     profileId: string;
+    formFactor: string;
     receiptPrinterId: string | null;
     paymentSlipPrinterId: string | null;
     cashDrawerPrinterId: string | null;
@@ -140,6 +142,7 @@ async function readStatesWith(
     .select({
       id: devices.id,
       profileId: devices.deviceProfileId,
+      formFactor: deviceProfiles.formFactor,
       receiptPrinterId: devices.receiptPrinterId,
       paymentSlipPrinterId: devices.paymentSlipPrinterId,
       cashDrawerPrinterId: devices.cashDrawerPrinterId,
@@ -147,9 +150,14 @@ async function readStatesWith(
       invoicePagePrinterId: devices.invoicePagePrinterId,
     })
     .from(devices)
+    .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
     .where(inArray(devices.id, [...deviceIds]));
   if (deviceRows.length === 0) return { states: new Map(), printers: new Map(), listed: [] };
-  const profileIds = [...new Set(deviceRows.map((device) => device.profileId))];
+  const profileIds = [
+    ...new Set(
+      deviceRows.filter((device) => device.formFactor !== "kds").map((device) => device.profileId),
+    ),
+  ];
   const profileRows: ListedPrinter[] = (
     await tx
       .select({
@@ -183,10 +191,12 @@ async function readStatesWith(
   }
   const ids = [
     ...new Set([
-      ...deviceRows.flatMap((device) => [
-        ...ROLES.map((role) => chosenPrinterOf(device, role)),
-        ...defaultsOf.get(device.id)!.values(),
-      ]),
+      ...deviceRows
+        .filter((device) => device.formFactor !== "kds")
+        .flatMap((device) => [
+          ...ROLES.map((role) => chosenPrinterOf(device, role)),
+          ...defaultsOf.get(device.id)!.values(),
+        ]),
       ...(withLists ? profileRows.map((row) => row.id) : []),
     ]),
   ].filter((id): id is string => id !== null);
@@ -253,6 +263,15 @@ async function readState(tx: Transaction, deviceId: string): Promise<DeviceState
 }
 
 function roleState(state: DeviceState, role: ProfilePrinterRole): PrinterRoleState {
+  if (state.device.formFactor === "kds")
+    return {
+      role,
+      chosenId: null,
+      chosenHolderDeviceId: null,
+      defaultId: null,
+      defaultHolderDeviceId: null,
+      resolvedId: null,
+    };
   const held = isHeld(role);
   const holder = (id: string | null) =>
     id === null || !held ? null : (state.holderOf.get(id) ?? null);
@@ -358,10 +377,12 @@ export async function selectDevicePrinter(
   const { deviceId, role, selection } = input;
   if (selection !== "default") await refuseDeletedPrinters(tx, [selection.id]);
   const [device] = await tx
-    .select({ profileId: devices.deviceProfileId })
+    .select({ profileId: devices.deviceProfileId, formFactor: deviceProfiles.formFactor })
     .from(devices)
+    .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
     .where(eq(devices.id, deviceId));
-  if (device === undefined) return { ok: false, refusal: "not_permitted" };
+  if (device === undefined || device.formFactor === "kds")
+    return { ok: false, refusal: "not_permitted" };
   let previousHolderDeviceId: string | null = null;
   if (selection === "default") {
     await tx.update(devices).set(choiceColumns(role, null)).where(eq(devices.id, deviceId));
@@ -439,6 +460,11 @@ export async function settleDevicePrinters(
 ): Promise<void> {
   const state = await readState(tx, deviceId);
   if (state === undefined) return;
+  if (state.device.formFactor === "kds") {
+    await clearUnlisted(tx, state.device, []);
+    await releaseDevicePrinters(tx, deviceId);
+    return;
+  }
   const used: string[] = [];
   for (const role of HELD_ROLES) {
     const chosenId = state.device[COLUMN[role]];
@@ -506,7 +532,13 @@ async function listedAt(tx: Transaction, profileId: string): Promise<Listed[]> {
       isDefault: deviceProfilePrinters.isDefault,
     })
     .from(deviceProfilePrinters)
-    .where(eq(deviceProfilePrinters.deviceProfileId, profileId));
+    .innerJoin(deviceProfiles, eq(deviceProfiles.id, deviceProfilePrinters.deviceProfileId))
+    .where(
+      and(
+        eq(deviceProfilePrinters.deviceProfileId, profileId),
+        ne(deviceProfiles.formFactor, "kds"),
+      ),
+    );
   return rows.map(({ printerId, pagePrinterId, ...row }) => ({
     ...row,
     id: (printerId ?? pagePrinterId)!,

@@ -240,7 +240,7 @@ function pairTitle(request: JoinRequestRow): string {
   });
 }
 
-/** The table's equipment columns, one per role, drawn after Shows. */
+/** The table's equipment columns, one per role. */
 const EQUIPMENT_COLUMNS = [
   { key: "receipt", role: "receipt", label: "devices.receipt_printer_now" },
   { key: "slip", role: "payment_slip", label: "devices.slip_printer_now" },
@@ -255,6 +255,7 @@ function equipmentName(
   role: EquipmentRole,
   pagePrinters: readonly PagePrinterRow[],
 ): string {
+  if (device.kind === "kds_station" && role !== "card_terminal") return "";
   const equipment = device.equipment.find((entry) => entry.role === role);
   let name = equipment?.resolved?.name ?? t("equipment.none");
   if (role === "invoice" && pagePrinters.some((p) => p.id === equipment?.resolved?.id))
@@ -612,17 +613,23 @@ export class DevicesScreen extends LitElement {
     return {
       name: form.name.trim(),
       profileId: form.profileId,
-      receiptPrinterId: form.receiptPrinterId === "" ? null : form.receiptPrinterId,
-      paymentSlipPrinterId: form.paymentSlipPrinterId === "" ? null : form.paymentSlipPrinterId,
-      // Absent leaves the stored drawer and invoice choices alone, so only a changed one is sent.
-      ...(form.cashDrawerPrinterId === (this.editing!.cashDrawerPrinterId ?? "")
+      ...(this.#sharedDisplay(form.profileId)
         ? {}
         : {
-            cashDrawerPrinterId: form.cashDrawerPrinterId === "" ? null : form.cashDrawerPrinterId,
+            receiptPrinterId: form.receiptPrinterId === "" ? null : form.receiptPrinterId,
+            paymentSlipPrinterId:
+              form.paymentSlipPrinterId === "" ? null : form.paymentSlipPrinterId,
+            // Absent leaves the stored drawer and invoice choices alone, so only a changed one is sent.
+            ...(form.cashDrawerPrinterId === (this.editing!.cashDrawerPrinterId ?? "")
+              ? {}
+              : {
+                  cashDrawerPrinterId:
+                    form.cashDrawerPrinterId === "" ? null : form.cashDrawerPrinterId,
+                }),
+            ...(form.invoicePrinterId === (this.#editInvoiceId ?? "")
+              ? {}
+              : { invoicePrinterId: form.invoicePrinterId === "" ? null : form.invoicePrinterId }),
           }),
-      ...(form.invoicePrinterId === (this.#editInvoiceId ?? "")
-        ? {}
-        : { invoicePrinterId: form.invoicePrinterId === "" ? null : form.invoicePrinterId }),
       ...(this.#sharedDisplay(form.profileId)
         ? {}
         : { madeHereStationIds: this.#madeHereToSend() }),
@@ -2124,7 +2131,7 @@ export class DevicesScreen extends LitElement {
           },
           this.editSaving,
         )}
-        ${PRINTER_ROLES.map((role) => {
+        ${(kitchen ? [] : PRINTER_ROLES).map((role) => {
           const loading = this.printerListsRead.size < 2;
           return html`<wt-combobox
             data-test=${role.test}
