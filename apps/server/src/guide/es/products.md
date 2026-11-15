@@ -23,7 +23,7 @@ publicó la carta. Para corregir la clase en la carta publicada sin volver a pub
 está en un pedido conserva la clase con la que se añadió.
 
 Si tu región grava de otra forma la comida para llevar, **IVA para llevar** guarda la clase de este
-producto para cuando se lo llevan. Si lo dejas vacío, el campo muestra la clase que se aplica. La
+producto para cuando se lo llevan. Si lo dejas vacío, se usa la clase que muestra el campo vacío. La
 caja todavía no puede vender un pedido para llevar, así que esta clase aún no se cobra.
 
 ## Decide cómo se vende un producto {#selling}

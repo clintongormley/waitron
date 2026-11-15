@@ -65,7 +65,7 @@ function parentsAlways<C extends AnyColumn>(
 export const effectiveProductColumns = {
   description: inherited(products.description, parentProducts.description),
   vatClass: owned(products.vatClass, parentProducts.vatClass),
-  // A variant that sets only its main class is charged that class taken away too, ahead of the
+  // A variant that sets only its main class takes that class taken away too, ahead of the
   // parent's takeaway class. Non-null for the reason `owned` gives: the parent's `vat_class` is set.
   takeawayVatClass:
     sql`coalesce(${products.takeawayVatClass}, ${products.vatClass}, ${parentProducts.takeawayVatClass}, ${parentProducts.vatClass})`.mapWith(

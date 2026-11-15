@@ -1424,7 +1424,7 @@ export class ProductEditor extends LitElement {
     return tax ? this.taxLabel(tax) : id;
   }
 
-  /** Empty is charged the item's own served class, else, on a variant, its product's takeaway class
+  /** Empty resolves to the item's own served class, else, on a variant, its product's takeaway class
    * (packages/menu/src/variant-fallback.ts). */
   private renderTakeawayTax() {
     const parent = this.inherited;
