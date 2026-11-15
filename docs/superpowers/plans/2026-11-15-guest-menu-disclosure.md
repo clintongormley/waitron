@@ -1,6 +1,6 @@
 # Guest menu disclosure implementation plan
 
-**Authority.** Authored by separate Codex Sol-high for Lane F. Claude review comes later; watcher clearance is required before implementation. No owner design approval is claimed. One PR after POPOVER-FALLBACK.
+**Authority.** Authored by separate Codex Sol-high for Lane F. Claude reviewed the plan (`receipts/guest-menu-disclosure-20261115/plan-review.md`); the watcher cleared it at 18:57 on 15 November 2026. No owner design approval is claimed. One PR; the watcher permitted build while POPOVER-FALLBACK CI runs at 20:51.
 
 **Watcher queue ask, verbatim** (`~/waitron-campaign-f/queue.md`, GUEST-MENU-POPOVER):
 
@@ -19,3 +19,5 @@
 **Size:** 20–40 production lines; 30–60 test lines, additions/removals reported separately.
 
 **Guidance receipt:** `~/waitron-campaign-f/receipts/popover-fallback-20261115/guest-disclosure-guidance.txt`, HTML disclosure guide: “use `<details>` and `<summary>` for a native disclosure pattern without JS.” Use native disclosure; avoid newer exclusive grouping/content pseudo-elements.
+
+**Review clarification, 2026-11-15.** At 21:01 the watcher cleared the full-row consequence: an opened symbol starts its own row with its explanation beneath, moving a later symbol from its closed position. Keep native disclosure, omit redundant tap instructions, and put local before/after capture paths in the PR without uploading images. This supersedes the earlier screenshot-attachment wording.
