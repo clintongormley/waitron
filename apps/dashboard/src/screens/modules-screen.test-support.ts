@@ -15,6 +15,7 @@ export function modulesClient(overrides: Partial<DashboardApi> = {}): DashboardA
       { providerId: "sumup", state: "connected", canUnpair: true },
       { providerId: "stripe", state: "not_connected", canUnpair: false },
     ]),
+    listReaders: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as unknown as DashboardApi;
 }

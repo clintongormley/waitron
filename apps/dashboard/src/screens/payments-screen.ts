@@ -26,7 +26,6 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
-import "@waitron/ui/src/components/wt-toast.js";
 import { CARD_PROVIDER_PANELS } from "@waitron/dashboard-modules";
 import { centsToDecimal, formatMoney, stringToCents, type DeleteImpact } from "@waitron/shared";
 import {
@@ -283,16 +282,6 @@ export class PaymentsScreen extends LitElement {
         display: flex;
         gap: var(--wt-space-2);
       }
-      .disconnect-action {
-        position: relative;
-      }
-      .disconnect-action wt-toast {
-        position: absolute;
-        inset-block-start: 100%;
-        inset-inline-end: 0;
-        width: min(300px, calc(100vw - 2 * var(--wt-space-4)));
-        z-index: 4;
-      }
       .panel-slot {
         margin-top: var(--wt-space-3);
       }
@@ -409,8 +398,6 @@ export class PaymentsScreen extends LitElement {
     ReaderStatusView | "error" | "connection.timed_out"
   >();
   @state() private addingId: string | null = null;
-  @state() private armedDisconnectId: string | null = null;
-  @state() private refusedDisconnectId: string | null = null;
   @state() private discoveringId: string | null = null;
   @state() private available?: AvailableReader[];
   @state() private listingFailed = false;
@@ -765,16 +752,12 @@ export class PaymentsScreen extends LitElement {
 
   async #load(): Promise<void> {
     if (this.#readErrorShown) this.#showError(null);
-    this.armedDisconnectId = null;
     this.#statusesDue = true;
     // After this load's first readers read fails, only an automatic retry can succeed in its place.
     let attended = true;
     await Promise.allSettled([
       this.#listQueries.watch("listPaymentProviders", [], (providers) => {
         this.providers = providers;
-        const armed = this.armedDisconnectId;
-        if (!providers.some((p) => p.providerId === armed && p.state === "connected"))
-          this.armedDisconnectId = null;
       }),
       this.#listQueries.watch("listReaderHolders", [], (rows) => {
         this.holders = new Map(rows.map((row) => [row.readerId, row]));
@@ -840,43 +823,6 @@ export class PaymentsScreen extends LitElement {
         }),
     );
     if (version === this.#statusVersion) this.refreshing = false;
-  }
-
-  async #mutate(action: () => Promise<unknown>): Promise<void> {
-    if (this.busy) return;
-    this.busy = true;
-    this.#showError(null);
-    try {
-      await action();
-      await this.#load();
-    } catch (error) {
-      this.#showError(codeOf(error));
-    } finally {
-      this.busy = false;
-    }
-  }
-
-  #onDisconnect(providerId: string): void {
-    if (this.busy) return;
-    this.refusedDisconnectId = null;
-    if (this.readers?.some((reader) => reader.provider === providerId && reader.active)) {
-      this.armedDisconnectId = null;
-      this.refusedDisconnectId = providerId;
-      return;
-    }
-    if (this.armedDisconnectId === providerId) {
-      this.armedDisconnectId = null;
-      void this.#mutate(async () => {
-        try {
-          await this.api.disconnectPaymentProvider(providerId);
-        } catch (error) {
-          if (codeOf(error) !== "payment.provider_in_use") throw error;
-          this.refusedDisconnectId = providerId;
-        }
-      });
-      return;
-    }
-    this.armedDisconnectId = providerId;
   }
 
   async #onAddReader(providerId: string): Promise<void> {
@@ -2326,30 +2272,6 @@ export class PaymentsScreen extends LitElement {
                     @click=${() => void this.#onAddReader(provider.providerId)}
                     >${t("payments.add_reader")}</wt-button
                   >
-                  <span class="disconnect-action">
-                    <wt-button
-                      variant=${this.armedDisconnectId === provider.providerId ? "danger" : "ghost"}
-                      data-armed=${this.armedDisconnectId === provider.providerId ? "true" : nothing}
-                      ?disabled=${this.busy}
-                      data-test="disconnect-${provider.providerId}"
-                      @click=${() => this.#onDisconnect(provider.providerId)}
-                      >${
-                        this.armedDisconnectId === provider.providerId
-                          ? t("payments.disconnect_confirm")
-                          : t("payments.disconnect")
-                      }</wt-button
-                    >
-                    <wt-toast
-                      data-test="disconnect-notice-${provider.providerId}"
-                      tone="error"
-                      .open=${this.refusedDisconnectId === provider.providerId}
-                      .message=${codeMessage("payment.provider_in_use")}
-                      .closeLabel=${t("action.close")}
-                      @wt-close=${() => {
-                        this.refusedDisconnectId = null;
-                      }}
-                    ></wt-toast>
-                  </span>
                 `
               : nothing
           }

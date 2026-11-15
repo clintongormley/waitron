@@ -17,6 +17,7 @@ import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
+import "@waitron/ui/src/components/wt-toast.js";
 import { CARD_PROVIDER_PANELS, MODULE_LABEL_KEYS } from "@waitron/dashboard-modules";
 import {
   registerCatalogue,
@@ -25,7 +26,7 @@ import {
   type CardProviderPanel,
   type DashboardRequest,
 } from "@waitron/dashboard-kit";
-import type { DashboardApi, ModuleRow, PaymentProviderRow } from "../api/client.js";
+import type { DashboardApi, ModuleRow, PaymentProviderRow, ReaderRow } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { dashboardPath } from "../navigation.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -71,6 +72,9 @@ export class ModulesScreen extends LitElement {
         display: block;
         font-size: var(--wt-font-size-sm);
       }
+      wt-data-table::part(disconnect-notice) {
+        max-width: min(300px, calc(100vw - 4 * var(--wt-space-4)));
+      }
       a {
         color: var(--wt-color-primary-text);
       }
@@ -83,6 +87,11 @@ export class ModulesScreen extends LitElement {
   @property({ attribute: false }) panels: readonly CardProviderPanel[] = CARD_PROVIDER_PANELS;
   @state() private menu?: ModuleRow[];
   @state() private providers?: PaymentProviderRow[];
+  @state() private readers?: ReaderRow[];
+  @state() private readersError = "";
+  @state() private disconnectError = "";
+  @state() private armedDisconnectId: string | null = null;
+  @state() private refusedDisconnectId: string | null = null;
   @state() private menuError = "";
   @state() private providersError = "";
   @state() private category = "all";
@@ -119,6 +128,13 @@ export class ModulesScreen extends LitElement {
       this.providersError = codeOf(error);
     },
   );
+  readonly #readerQuery = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.readersError = codeOf(error);
+    },
+  );
   override connectedCallback(): void {
     super.connectedCallback();
     for (const panel of this.panels) registerCatalogue(panel.strings);
@@ -129,16 +145,67 @@ export class ModulesScreen extends LitElement {
     super.disconnectedCallback();
   }
   async #load(): Promise<void> {
+    this.armedDisconnectId = null;
     await Promise.all([
       this.#menuQuery.watch("listModules", [], (rows) => {
         this.menu = rows;
         this.menuError = "";
       }),
-      this.#providerQuery.watch("listPaymentProviders", [], (rows) => {
-        this.providers = rows;
-        this.providersError = "";
-      }),
+      this.#providerQuery.watch(
+        "listPaymentProviders",
+        [],
+        (rows) => {
+          this.providers = rows;
+          this.providersError = "";
+          if (
+            !rows.some(
+              (row) => row.providerId === this.armedDisconnectId && row.state === "connected",
+            )
+          )
+            this.armedDisconnectId = null;
+        },
+        { passive: true },
+      ),
+      this.#readerQuery.watch(
+        "listReaders",
+        [],
+        (rows) => {
+          this.readers = rows;
+          this.readersError = "";
+        },
+        { passive: true },
+      ),
     ]).catch(() => undefined);
+  }
+  #onDisconnect(providerId: string): void {
+    if (this.busy) return;
+    this.refusedDisconnectId = null;
+    if (this.readers?.some((reader) => reader.provider === providerId && reader.active)) {
+      this.armedDisconnectId = null;
+      this.refusedDisconnectId = providerId;
+      return;
+    }
+    if (this.armedDisconnectId === providerId) {
+      this.armedDisconnectId = null;
+      void this.#disconnect(providerId);
+    } else this.armedDisconnectId = providerId;
+  }
+  async #disconnect(providerId: string): Promise<void> {
+    this.busy = true;
+    this.disconnectError = "";
+    try {
+      try {
+        await this.api.disconnectPaymentProvider(providerId);
+      } catch (error) {
+        if (codeOf(error) !== "payment.provider_in_use") throw error;
+        this.refusedDisconnectId = providerId;
+      }
+      await this.#load();
+    } catch (error) {
+      this.disconnectError = codeOf(error);
+    } finally {
+      this.busy = false;
+    }
   }
   #filters(category: string, filter: string): void {
     this.category = category;
@@ -257,35 +324,80 @@ export class ModulesScreen extends LitElement {
                   >${text(row.enabled ? "modules.turn_off" : "modules.turn_on")}</wt-button
                 ></wt-row-actions
               >`
-            : row.category === "card-provider" &&
-                this.panels.some((panel) => panel.providerId === row.id)
-              ? html`<wt-row-actions label=${this.#name(row)}
-                  ><wt-button
-                    data-test=${`configure-${row.id}`}
-                    @click=${(event: Event) => this.#configure(row, event)}
-                    >${text("modules.configure")}</wt-button
-                  >${
-                    this.canManageProviders &&
-                    this.menu?.find(
-                      (module) => module.id === "payments" && module.category === "module",
-                    )?.enabled !== false
-                      ? html`<wt-button
-                          data-test=${`switch-${row.id}`}
-                          @click=${() => {
-                            this.switching = row;
-                            this.switchError = "";
-                            this.readerNames = [];
-                          }}
-                          >${text(row.enabled ? "modules.turn_off" : "modules.turn_on")}</wt-button
-                        >`
-                      : nothing
-                  }</wt-row-actions
-                >`
+            : row.category === "card-provider"
+              ? this.#providerActions(row)
               : nothing,
       },
     ];
   }
+  #providerActions(row: ModuleRow) {
+    const panel = this.panels.some((panel) => panel.providerId === row.id);
+    const connected = this.providers?.some(
+      (provider) => provider.providerId === row.id && provider.state === "connected",
+    );
+    if (!panel && !connected) return nothing;
+    return html`<wt-row-actions
+      label=${this.#name(row)}
+      @click=${(event: Event) => {
+        const menu = event.currentTarget as HTMLElement;
+        if (
+          event
+            .composedPath()
+            .some(
+              (node) =>
+                node instanceof HTMLElement &&
+                node.matches('button[part~="trigger"]') &&
+                node.getRootNode() === menu.shadowRoot,
+            )
+        )
+          this.armedDisconnectId = null;
+      }}
+    >
+      ${panel ? html`<wt-button data-test=${`configure-${row.id}`} @click=${(event: Event) => this.#configure(row, event)}>${text("modules.configure")}</wt-button>` : nothing}
+      ${
+        panel &&
+        this.canManageProviders &&
+        this.menu?.find((module) => module.id === "payments" && module.category === "module")
+          ?.enabled !== false
+          ? html`<wt-button
+              data-test=${`switch-${row.id}`}
+              @click=${() => {
+                this.switching = row;
+                this.switchError = "";
+                this.readerNames = [];
+              }}
+              >${text(row.enabled ? "modules.turn_off" : "modules.turn_on")}</wt-button
+            >`
+          : nothing
+      }
+      ${
+        connected
+          ? html`<wt-button
+                data-keep-open
+                data-test=${`disconnect-${row.id}`}
+                variant=${this.armedDisconnectId === row.id ? "danger" : "ghost"}
+                data-armed=${this.armedDisconnectId === row.id ? "true" : nothing}
+                ?disabled=${this.busy}
+                @click=${() => this.#onDisconnect(row.id)}
+                >${t(this.armedDisconnectId === row.id ? "payments.disconnect_confirm" : "payments.disconnect")}</wt-button
+              >
+              <wt-toast
+                part="disconnect-notice"
+                data-test=${`disconnect-notice-${row.id}`}
+                tone="error"
+                .open=${this.refusedDisconnectId === row.id}
+                .message=${codeMessage("payment.provider_in_use")}
+                .closeLabel=${t("action.close")}
+                @wt-close=${() => {
+                  this.refusedDisconnectId = null;
+                }}
+              ></wt-toast>`
+          : nothing
+      }
+    </wt-row-actions>`;
+  }
   override render() {
+    const readError = this.menuError || this.providersError || this.readersError;
     const editor = this.editor;
     const panel =
       editor?.category === "card-provider"
@@ -324,7 +436,8 @@ export class ModulesScreen extends LitElement {
           @wt-change=${(event: CustomEvent<{ value: string }>) => this.#filters(this.category, event.detail.value)}
         ></wt-combobox>
       </div>
-      ${this.menuError || this.providersError ? html`<p class="error" role="alert">${codeMessage(this.menuError || this.providersError)} <wt-button data-test="retry-modules" variant="secondary" @click=${() => void this.#load()}>${text("modules.retry")}</wt-button></p>` : nothing}
+      ${this.disconnectError ? html`<p class="error" role="alert">${codeMessage(this.disconnectError)}</p>` : nothing}
+      ${readError ? html`<p class="error" role="alert">${codeMessage(readError)} <wt-button data-test="retry-modules" variant="secondary" @click=${() => void this.#load()}>${text("modules.retry")}</wt-button></p>` : nothing}
       ${rows ? html`<wt-data-table aria-label=${text("nav.modules")} searchable searchLabel=${text("modules.search")} .emptyMessage=${tableNoMatches()} noMatchesMessage=${tableNoMatches()} .rows=${rows} .columns=${this.#columns()} .rowKey=${(row: ModuleRow) => `${row.category}:${row.id}`} .wrapToFit=${true}></wt-data-table>` : html`<p>${text("modules.loading")}</p>`}
       <p><a href=${guideHref("modules.set-up")}>${text("modules.guide")}</a></p>
       ${

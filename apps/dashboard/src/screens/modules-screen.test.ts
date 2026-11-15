@@ -372,3 +372,16 @@ it("keeps the Category and State choices on screen when no module matches them",
     expect(box.height).toBeGreaterThan(0);
   }
 });
+
+it("keeps Disconnect reachable without a provider panel or provider-switch permission", async () => {
+  const { el } = await mountWidget<ModulesScreen>("dashboard-modules-screen", {
+    api: modulesClient(),
+    panels: [],
+  });
+  await vi.waitFor(() => expect(rows(el).join()).toContain("Configured"));
+  const root = el.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!;
+  expect(root.querySelector("[data-test=disconnect-sumup]")).not.toBeNull();
+  expect(root.querySelector("[data-test=configure-sumup]")).toBeNull();
+  expect(root.querySelector("[data-test=switch-sumup]")).toBeNull();
+  expect(root.querySelector("[data-test=disconnect-stripe]")).toBeNull();
+});

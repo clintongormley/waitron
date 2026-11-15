@@ -217,9 +217,10 @@ it("opens the core Modules menu for hardware managers without relying on enabled
     modules: [],
   });
   Object.assign(api, {
+    listReaders: async () => [],
     listModules: async () => [{ id: "stripe", category: "card-provider", enabled: true }],
     listPaymentProviders: async () => [
-      { providerId: "stripe", state: "not_connected", canUnpair: false },
+      { providerId: "stripe", state: "connected", canUnpair: false },
     ],
   });
   const { el } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -229,6 +230,19 @@ it("opens the core Modules menu for hardware managers without relying on enabled
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("dashboard-modules-screen")).not.toBeNull(),
   );
+  const screen = el.shadowRoot!.querySelector("dashboard-modules-screen")!;
+  await vi.waitFor(() =>
+    expect(
+      screen.shadowRoot
+        ?.querySelector("wt-data-table")
+        ?.shadowRoot?.querySelector("[data-test=disconnect-stripe]"),
+    ).toBeTruthy(),
+  );
+  expect(
+    screen
+      .shadowRoot!.querySelector("wt-data-table")!
+      .shadowRoot!.querySelector("[data-test=switch-stripe]"),
+  ).toBeNull();
   expect(navItem(el, "modules")).not.toBeNull();
   expect(location.pathname).toBe("/manage/modules/view/card-providers/state/all");
 });
