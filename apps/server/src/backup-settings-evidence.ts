@@ -17,7 +17,6 @@ import {
 import { errnoOf } from "./errno.js";
 import "./errors.js";
 
-/** Every `reason` `parseArchiveSettings` and its helpers throw; `settingsInvalid` takes only these. */
 export const ARCHIVE_SETTINGS_REASONS = [
   "not_json",
   "keys",

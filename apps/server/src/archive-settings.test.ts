@@ -695,6 +695,23 @@ describe("stored archive settings", () => {
     expect(await readArchiveSettings(suite.db, ring)).toBeNull();
   });
 
+  it("refuses keys saved without archive settings", async () => {
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, ring, {
+        purpose: ARCHIVE_PURPOSE,
+        personId: null,
+        value: { accessKeyId: "AKIACUSTOM", secretAccessKey: "custom-secret" },
+      }),
+    );
+    await expect(readArchiveSettings(suite.db, ring)).rejects.toMatchObject({
+      code: "backup.archive_settings_invalid",
+      params: { reason: "keys" },
+    });
+    expect(await readHeldArchiveSettings(suite.db, ring)).toEqual({
+      unreadable: "backup.archive_settings_invalid",
+    });
+  });
+
   it("mints a new revision on every write and reads back the latest", async () => {
     const first = await withTransaction(suite.db, (tx) =>
       writeArchiveSettings(tx, ring, input, null),

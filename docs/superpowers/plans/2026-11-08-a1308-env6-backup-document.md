@@ -49,6 +49,13 @@ flight on `stream-api.ts`, stop and ask the watcher (rules §5.5).
 **Owner lands:** no. Read, not run: no sale, invoice number, fiscal record, fiscal identity, AEAT
 sending or hashed value is touched.
 
+> **2026-11-15 review correction (watcher cleared at 03:43):** the old-payload account in
+> **No venue reset** below is superseded. Reading a credential does not validate the purpose's
+> current field list. The archive reader refuses the old `{ settings }` shape as
+> `server.credential_unusable`; the stream reader refuses sealed keys without a stream part with
+> that same code. Backups shows its existing unreadable-settings state until the choices are saved
+> again. No conversion is added.
+
 **No venue reset:** no starting migration changes. A box that saved backup or bucket-copy settings
 before this lands holds sealed payloads in the old shape, which the narrowed purposes refuse
 (`credentials.invalid_payload`); the Backups screen then shows its existing "settings cannot be read"

@@ -7,6 +7,7 @@ import { sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   loadKeyRing,
+  putCredential,
   deleteCredential,
   sealNodeSigningKeyTx,
   writePairLinkTx,
@@ -408,6 +409,20 @@ describe("the live copy's wiring", () => {
     expect(logs).toContain("stream.not_configured");
   });
 
+  it("refuses bucket keys saved without their stream settings", async () => {
+    await withTransaction(db, (tx) =>
+      putCredential(tx, RING, {
+        purpose: STREAM_PURPOSE,
+        personId: null,
+        value: { accessKeyId: "AKIAEXAMPLE", secretAccessKey: "secret-example" },
+      }),
+    );
+    await expect(readStreamSettings(db, RING)).rejects.toMatchObject({
+      code: "server.credential_unusable",
+      params: { purpose: "backup.stream", field: "stream" },
+    });
+  });
+
   // With nothing set up there is no copy to hold, so the log and the status say "not set up".
   it("reads plain off, not held, when no bucket is stored and a restore's first start is unfinished", async () => {
     logs = [];
@@ -516,7 +531,7 @@ describe("the live copy's wiring", () => {
     });
 
     it.each(["endpoint", "region", "bucket", "prefix", "accessKeyId", "secretAccessKey"])(
-      "refuses an older sealed bucket missing %s",
+      "refuses stored bucket settings missing %s",
       async (field) => {
         await omitStoredStreamField(db, RING, field);
         await expect(readStreamSettings(db, RING)).rejects.toMatchObject({

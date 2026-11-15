@@ -42,6 +42,7 @@ const USAGE = [
   "",
   "There is no `get`: this tool never prints a decrypted credential.",
   "Save or remove SMTP settings through the dashboard's Email settings.",
+  "Save or remove backup settings through the dashboard's Backups settings.",
   "Writing fiscal.aeat here records no install, so the dashboard's AEAT certificate card keeps showing the previous one.",
 ].join("\n");
 
@@ -98,6 +99,11 @@ async function set(argv: string[], deps: CliDeps): Promise<number> {
 
   if (purpose === "email.smtp") {
     deps.io.stderr("Use the dashboard's Email settings to save or remove SMTP settings.");
+    return 2;
+  }
+
+  if (purpose === "backup.stream" || purpose === "backup.archive") {
+    deps.io.stderr("Use the dashboard's Backups settings to save or remove backup settings.");
     return 2;
   }
 
@@ -176,6 +182,10 @@ async function remove(argv: string[], deps: CliDeps): Promise<number> {
   }
   if (purpose === "email.smtp") {
     deps.io.stderr("Use the dashboard's Email settings to save or remove SMTP settings.");
+    return 2;
+  }
+  if (purpose === "backup.stream" || purpose === "backup.archive") {
+    deps.io.stderr("Use the dashboard's Backups settings to save or remove backup settings.");
     return 2;
   }
   const deleted = await withTransaction(deps.db, (tx) =>

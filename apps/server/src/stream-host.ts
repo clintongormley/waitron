@@ -119,8 +119,15 @@ export async function readStreamSettingsIn(
   ring: KeyRing,
 ): Promise<StreamSettings | null> {
   const { doc } = await readSettings(tx, BACKUP_SETTINGS);
-  if (doc.stream === null) return null;
   const value = await tryGetCredential(tx, ring, { purpose: STREAM_PURPOSE });
+  if (doc.stream === null) {
+    if (value !== null)
+      throw new AppError("server.credential_unusable", {
+        purpose: STREAM_PURPOSE,
+        field: "stream",
+      });
+    return null;
+  }
   const field = (name: "endpoint" | "region" | "bucket" | "prefix") => {
     const value = doc.stream![name];
     if (value === undefined)

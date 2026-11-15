@@ -39,7 +39,6 @@ export const BACKUP_SETTINGS = defineSettingsDocument<BackupDocument>({
       if (part !== null && (typeof part !== "object" || Array.isArray(part)))
         return { ok: false, field: key };
     }
-    // Each reader keeps its domain error codes when a stored part cannot be used.
     return { ok: true, doc: doc as unknown as BackupDocument };
   },
 });
