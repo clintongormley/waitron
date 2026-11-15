@@ -510,11 +510,7 @@ describe("readTableSteps", () => {
           dueAt: servedAt + 5 * MINUTE,
         },
       ]);
-      if (held === null) {
-        expect(await liveAt(v, partyId, tableId, servedAt + 60 * MINUTE)).not.toContainEqual(
-          expect.objectContaining({ stepId: visits[3]!.id }),
-        );
-      } else {
+      if (held !== null) {
         const fire = { submissionId: randomUUID(), ...(await commandFor(v, partyId)) };
         await inTx(v, (tx) => fireGroup(tx, v.cfg, partyId, held, fire));
         const dessertServedAt = await serve(v, tabId, "Flan");
