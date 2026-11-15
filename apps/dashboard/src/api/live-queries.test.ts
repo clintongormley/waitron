@@ -909,7 +909,6 @@ it("scopes department receipt subscriptions by department and refreshes passivel
   const query = dashboardQuery(api, "getDepartmentReceipt", ["bar"]);
   expect(query.dependencies).toEqual([
     { type: "department_receipts" },
-    { type: "department_sale_policies" },
     { type: "departments" },
     { type: "settings.business_day" },
     { type: "settings.venue" },
@@ -949,7 +948,6 @@ it("department receipt, policy, content and address refresh through the departme
   try {
     await vi.waitFor(() => expect(observed.snapshot.status).toBe("ready"));
     for (const [index, type] of [
-      "department_sale_policies",
       "settings.venue",
       "settings.business_day",
       "department_receipts",
@@ -1121,7 +1119,6 @@ it.each(["Zone", "Department"] as const)(
       "device_profile_kitchen_screen_zones",
       "routing_cells",
       "routing_cell_periods",
-      "department_sale_policies",
       "service_steps",
       "menu_periods",
       "menu_period_staff_menus",
@@ -1129,7 +1126,6 @@ it.each(["Zone", "Department"] as const)(
       "department_day_ranges",
       "zone_days",
       "zone_day_ranges",
-      "department_transfer_desks",
       "department_transfer_destinations",
       "department_transfer_requests",
       "floor_plan_sets",

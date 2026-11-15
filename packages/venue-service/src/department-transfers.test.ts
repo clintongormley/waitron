@@ -1384,6 +1384,12 @@ describe("combined department transfer settings", () => {
         receivingProfileId: v.profile,
         destinationDepartmentIds: [v.a],
       });
+      expect(
+        await tx
+          .select({ profileId: departments.transferDeskProfileId })
+          .from(departments)
+          .where(eq(departments.id, v.b)),
+      ).toEqual([{ profileId: v.profile }]);
       expect(await service.resolveSalePolicy(tx, v.bz)).toEqual({
         zoneId: v.bz,
         departmentId: v.b,

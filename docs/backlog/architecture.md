@@ -952,6 +952,7 @@ while retaining the dish-name, sale-count, record-count and open-status checks.
   its SMTP connection URL stays sealed. Archive and bucket-copy choices share a backup settings
   document, with only bucket keys sealed. The remaining environment slices stay open.
 
+  Department sale rules, receipt trading-name choices and receiving profiles live on the department row.
   Privacy contact details live in venue settings; legal-name changes and credential saves and
   removals leave activity entries.
 

@@ -10,8 +10,6 @@ import {
   departmentDays,
   departmentReceipts,
   departments,
-  departmentSalePolicies,
-  departmentTransferDesks,
   departmentTransferDestinations,
   deviceProfileKitchenScreens,
   deviceProfileKitchenScreenStations,
@@ -88,7 +86,6 @@ async function fixture(tx: Transaction, suffix = "") {
     string,
   ];
   const [department, beta, alpha] = ds.map((row) => row.id) as [string, string, string];
-  await tx.insert(departmentSalePolicies).values(ds.map((row) => ({ departmentId: row.id })));
   const ps = await seedDeviceProfiles(tx, [
     { name: "Explicit" + suffix, formFactor: "till" },
     { name: "Every" + suffix, formFactor: "till" },
@@ -271,10 +268,10 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
         .update(floorZones)
         .set({ keptOpenDay: "2026-10-12", keptOpenFrom: "17:00:00", keptOpenUntil: "18:00:00" })
         .where(eq(floorZones.id, zoneId));
-    await tx.insert(departmentTransferDesks).values([
-      { departmentId: f.department, receivingProfileId: f.explicit },
-      { departmentId: f.alpha, receivingProfileId: f.explicit },
-    ]);
+    await tx
+      .update(departments)
+      .set({ transferDeskProfileId: f.explicit })
+      .where(inArray(departments.id, [f.department, f.alpha]));
     await tx.insert(departmentTransferDestinations).values([
       { sourceDepartmentId: f.department, destinationDepartmentId: f.alpha },
       { sourceDepartmentId: f.beta, destinationDepartmentId: f.department },
@@ -289,14 +286,13 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
       periods: menuPeriods,
       staff: menuPeriodStaffMenus,
       policies: floorZones,
-      sales: departmentSalePolicies,
-      desks: departmentTransferDesks,
       routes: departmentTransferDestinations,
       receipts: departmentReceipts,
       menus: menus,
     };
     const before: Record<string, Record<string, unknown>[]> = {};
     for (const [key, table] of Object.entries(tables)) before[key] = await tx.select().from(table);
+    const departmentBefore = await tx.select().from(departments);
     expect(
       await readServiceDeleteSettings(tx, [f.gone, f.forbidden, f.allowed], f.department),
     ).toEqual([
@@ -316,6 +312,13 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
       { key: "counter_default", count: 1, targets: [{ id: f.elsewhere, name: "Elsewhere" }] },
     ]);
     await clearServiceDeleteSettings(tx, [f.gone, f.forbidden, f.allowed], f.department);
+    expect(await tx.select().from(departments)).toEqual(
+      departmentBefore.map((row) => ({
+        ...row,
+        isDefault: row.id === f.alpha,
+        transferDeskProfileId: row.id === f.department ? null : row.transferDeskProfileId,
+      })),
+    );
     expect(await tx.select().from(routingCells)).toEqual(
       before.cells!.filter((row) => row.id !== cells[0]!.id),
     );

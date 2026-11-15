@@ -6,7 +6,6 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { addProductToMenu, createMenu, createCategory, createProduct } from "@waitron/menu";
 import {
   departments,
-  departmentSalePolicies,
   CORE_MIGRATIONS,
   diningTables,
   floorZones,
@@ -222,9 +221,9 @@ async function settingsFixture() {
       orderStart: "table",
     });
     await tx
-      .update(departmentSalePolicies)
+      .update(departments)
       .set({ printTradingName: true })
-      .where(eq(departmentSalePolicies.departmentId, department.id));
+      .where(eq(departments.id, department.id));
     await configureZone(tx, {
       zoneId: fx.zoneId,
       departmentId: department.id,
@@ -340,12 +339,8 @@ describe("whole service settings saves", () => {
     const read = await settingsSnapshot(fx);
     expect(read.transfers).toEqual(transfers);
     expect(
-      (
-        await db
-          .select()
-          .from(departmentSalePolicies)
-          .where(eq(departmentSalePolicies.departmentId, fx.departmentId))
-      )[0]!.orderStart,
+      (await db.select().from(departments).where(eq(departments.id, fx.departmentId)))[0]!
+        .orderStart,
     ).toBe("table");
     expect(
       read.model.salePolicies.departments.find(
@@ -357,12 +352,8 @@ describe("whole service settings saves", () => {
     ).toBe(200);
 
     expect(
-      (
-        await db
-          .select()
-          .from(departmentSalePolicies)
-          .where(eq(departmentSalePolicies.departmentId, fx.departmentId))
-      )[0]!.orderStart,
+      (await db.select().from(departments).where(eq(departments.id, fx.departmentId)))[0]!
+        .orderStart,
     ).toBe("counter");
   });
 
@@ -1132,7 +1123,7 @@ describe("venue service management routes", () => {
       }),
     );
     const before = await db.all(
-      sql`select * from department_sale_policies where department_id = ${department.id}`,
+      sql`select id as department_id, order_start, paid_when, collection_number, print_trading_name from departments where id = ${department.id}`,
     );
     const response = await send(
       fx.app,
@@ -1147,7 +1138,7 @@ describe("venue service management routes", () => {
     ).toMatchObject([{ name: "Dining", tradingName: "New receipt", active: true }]);
     expect(
       await db.all(
-        sql`select * from department_sale_policies where department_id = ${department.id}`,
+        sql`select id as department_id, order_start, paid_when, collection_number, print_trading_name from departments where id = ${department.id}`,
       ),
     ).toEqual(before);
   });
@@ -1760,11 +1751,9 @@ describe("venue service management routes", () => {
         error: { code: "management.request_invalid", params: { field: "orderStart" } },
       });
     }
-    expect(
-      db.all(
-        sql`select p.order_start from departments d join department_sale_policies p on p.department_id=d.id where d.id=${department.id}`,
-      ),
-    ).toEqual([{ order_start: "table" }]);
+    expect(db.all(sql`select order_start from departments where id=${department.id}`)).toEqual([
+      { order_start: "table" },
+    ]);
     expect(db.all(sql`select order_start from floor_zones where id=${fx.zoneId}`)).toEqual([
       { order_start: "counter" },
     ]);
@@ -1799,7 +1788,7 @@ describe("venue service management routes", () => {
       const rows = () =>
         db.all(
           kind === "department"
-            ? sql`select * from department_sale_policies where department_id = ${department.id}`
+            ? sql`select id as department_id, order_start, paid_when, collection_number, print_trading_name from departments where id = ${department.id}`
             : sql`select id as zone_id, order_start, paid_when, collection_number from floor_zones where id = ${fx.zoneId}`,
         );
       const before = rows();
@@ -3717,9 +3706,9 @@ describe("department editor owns service settings separately from receipt policy
   it("accepts only department fields and keeps the current receipt policy", async () => {
     const fx = await settingsFixture();
     await db
-      .update(departmentSalePolicies)
+      .update(departments)
       .set({ printTradingName: false })
-      .where(eq(departmentSalePolicies.departmentId, fx.departmentId));
+      .where(eq(departments.id, fx.departmentId));
     const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
       name: "Service edit",
       tradingName: "Shop",
@@ -3766,16 +3755,13 @@ describe("department editor owns service settings separately from receipt policy
   );
 });
 
-it("repairing an absent department policy preserves the previously read receipt defaults", async () => {
+it("editing a department preserves its previously read receipt defaults", async () => {
   const fx = await settingsFixture();
-  await db
-    .delete(departmentSalePolicies)
-    .where(eq(departmentSalePolicies.departmentId, fx.departmentId));
   const before = await settingsSnapshot(fx);
   expect(
     before.model.salePolicies.zones.find((row: { zoneId: string }) => row.zoneId === fx.zoneId)
       .effective,
-  ).toMatchObject({ printTradingName: false });
+  ).toMatchObject({ printTradingName: true });
   const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
     name: "Repaired",
     tradingName: "Repair",
@@ -3794,7 +3780,7 @@ it("repairing an absent department policy preserves the previously read receipt 
     orderStart: "counter",
     paidWhen: "ticket_then_pay",
     collectionNumber: "numbered",
-    printTradingName: false,
+    printTradingName: true,
   });
 });
 

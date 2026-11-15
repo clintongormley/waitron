@@ -24,7 +24,6 @@ import {
   departmentDays,
   departments,
   departmentCourses,
-  departmentSalePolicies,
   floorZones,
   insertInChunks,
   menuPeriods,
@@ -113,14 +112,13 @@ export async function listServiceZones(
       departmentId: departments.id,
       departmentName: departments.name,
       zoneOrderStart: floorZones.orderStart,
-      departmentOrderStart: departmentSalePolicies.orderStart,
+      departmentOrderStart: departments.orderStart,
       zonePaidWhen: floorZones.paidWhen,
-      departmentPaidWhen: departmentSalePolicies.paidWhen,
+      departmentPaidWhen: departments.paidWhen,
       active: floorZones.active,
     })
     .from(floorZones)
     .innerJoin(departments, eq(departments.id, floorZones.departmentId))
-    .leftJoin(departmentSalePolicies, eq(departmentSalePolicies.departmentId, departments.id))
     .where(and(eq(floorZones.active, true), eq(departments.active, true)))
     .orderBy(floorZones.displayOrder, floorZones.name, floorZones.id);
   return rows.map(
@@ -183,6 +181,7 @@ export async function createDepartment(
     .values({
       name: input.name,
       tradingName: input.tradingName ?? input.name,
+      orderStart: input.orderStart ?? "counter",
     })
     .returning({
       id: departments.id,
@@ -190,9 +189,6 @@ export async function createDepartment(
       tradingName: departments.tradingName,
       active: departments.active,
     });
-  await tx
-    .insert(departmentSalePolicies)
-    .values({ departmentId: row!.id, orderStart: input.orderStart ?? "counter" });
   const defaults = await tx
     .select({
       courseId: departmentCourses.courseId,
@@ -231,6 +227,7 @@ export async function updateDepartment(
   if (
     input.name !== undefined ||
     input.tradingName !== undefined ||
+    input.orderStart !== undefined ||
     input.needsClearing !== undefined ||
     input.lateSendNeedsManager !== undefined
   )
@@ -239,17 +236,13 @@ export async function updateDepartment(
       .set({
         ...(input.name === undefined ? {} : { name: input.name }),
         ...(input.tradingName === undefined ? {} : { tradingName: input.tradingName }),
+        ...(input.orderStart === undefined ? {} : { orderStart: input.orderStart }),
         ...(input.needsClearing === undefined ? {} : { needsClearing: input.needsClearing }),
         ...(input.lateSendNeedsManager === undefined
           ? {}
           : { lateSendNeedsManager: input.lateSendNeedsManager }),
       })
       .where(eq(departments.id, departmentId));
-  if (input.orderStart === undefined) return;
-  await tx
-    .update(departmentSalePolicies)
-    .set({ orderStart: input.orderStart })
-    .where(eq(departmentSalePolicies.departmentId, departmentId));
 }
 
 export type VenueReadinessIssue =
@@ -473,13 +466,12 @@ export async function resolveZoneContext(
       departmentId: departments.id,
       departmentName: departments.name,
       zoneOrderStart: floorZones.orderStart,
-      departmentOrderStart: departmentSalePolicies.orderStart,
+      departmentOrderStart: departments.orderStart,
       zonePaidWhen: floorZones.paidWhen,
-      departmentPaidWhen: departmentSalePolicies.paidWhen,
+      departmentPaidWhen: departments.paidWhen,
     })
     .from(floorZones)
     .innerJoin(departments, eq(departments.id, floorZones.departmentId))
-    .leftJoin(departmentSalePolicies, eq(departmentSalePolicies.departmentId, departments.id))
     .where(
       and(eq(floorZones.id, zoneId), eq(departments.active, true), eq(floorZones.active, true)),
     );
@@ -495,7 +487,7 @@ export async function resolveZoneContext(
   };
 }
 
-type DepartmentSalePolicyRow = typeof departmentSalePolicies.$inferSelect;
+type DepartmentSalePolicyRow = typeof departments.$inferSelect;
 
 export interface EffectiveSalePolicy {
   orderStart: "table" | "counter";
@@ -518,18 +510,17 @@ export async function resolveSalePolicy(
       departmentId: departments.id,
       departmentName: departments.name,
       tradingName: departments.tradingName,
-      departmentOrderStart: departmentSalePolicies.orderStart,
-      departmentPaidWhen: departmentSalePolicies.paidWhen,
-      departmentCollectionNumber: departmentSalePolicies.collectionNumber,
-      printTradingName: departmentSalePolicies.printTradingName,
+      departmentOrderStart: departments.orderStart,
+      departmentPaidWhen: departments.paidWhen,
+      departmentCollectionNumber: departments.collectionNumber,
+      printTradingName: departments.printTradingName,
       zoneOrderStart: floorZones.orderStart,
       zonePaidWhen: floorZones.paidWhen,
       zoneCollectionNumber: floorZones.collectionNumber,
     })
     .from(floorZones)
     .innerJoin(departments, eq(departments.id, floorZones.departmentId))
-    .innerJoin(departmentSalePolicies, eq(departmentSalePolicies.departmentId, departments.id))
-    .where(eq(floorZones.id, zoneId));
+    .where(and(eq(floorZones.id, zoneId), eq(departments.active, true)));
   if (row === undefined) throw new AppError("service_zone.not_found", { zoneId });
   return {
     zoneId: row.zoneId,
@@ -584,9 +575,16 @@ export async function listSalePolicies(tx: Transaction) {
   const activeZones = await listServiceZones(tx);
   const departmentIds = new Set(activeDepartments.map((department) => department.id));
   const zoneIds = new Set(activeZones.map((zone) => zone.id));
-  const departmentRows = (await tx.select().from(departmentSalePolicies)).filter((row) =>
-    departmentIds.has(row.departmentId),
-  );
+  const departmentRows = await tx
+    .select({
+      departmentId: departments.id,
+      orderStart: departments.orderStart,
+      paidWhen: departments.paidWhen,
+      collectionNumber: departments.collectionNumber,
+      printTradingName: departments.printTradingName,
+    })
+    .from(departments)
+    .where(inArray(departments.id, [...departmentIds]));
   const zoneRows = await tx
     .select({
       zoneId: floorZones.id,
@@ -633,12 +631,9 @@ export async function setDepartmentSalePolicyField<K extends keyof DepartmentPol
     .where(and(eq(departments.id, departmentId), eq(departments.active, true)));
   if (department === undefined) throw new AppError("department.not_found", { departmentId });
   await tx
-    .insert(departmentSalePolicies)
-    .values({ departmentId, [field]: value })
-    .onConflictDoUpdate({
-      target: departmentSalePolicies.departmentId,
-      set: { [field]: value },
-    });
+    .update(departments)
+    .set({ [field]: value })
+    .where(eq(departments.id, departmentId));
 }
 
 export async function setZoneSalePolicyOverride<K extends keyof ZonePolicyField>(
@@ -687,14 +682,7 @@ export async function saveDepartmentEditSettings(
     paidWhen: input.paidWhen,
     collectionNumber: input.collectionNumber,
   };
-  await tx
-    .insert(departmentSalePolicies)
-    .values({
-      departmentId,
-      ...settings,
-      printTradingName: false,
-    })
-    .onConflictDoUpdate({ target: departmentSalePolicies.departmentId, set: settings });
+  await tx.update(departments).set(settings).where(eq(departments.id, departmentId));
   if (input.transfers !== undefined)
     await setDepartmentTransferSettings(tx, departmentId, input.transfers);
   if (input.courseSettings !== undefined)

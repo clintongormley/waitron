@@ -8,7 +8,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import {} from "@waitron/menu";
 import { startManagementSession } from "@waitron/identity";
-import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
+import { departments, departmentReceipts } from "@waitron/venue-service";
 import { type DepartmentReceiptWrite } from "@waitron/shared";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import { checkedDepartmentReceiptWrite } from "./department-receipt-draft.js";
@@ -39,7 +39,7 @@ async function fixture(role: "manager" | "staff" = "manager") {
     .insert(departments)
     .values({ name: randomUUID(), tradingName: "Deli" })
     .returning();
-  await suite.db.insert(departmentSalePolicies).values({ departmentId: department!.id, ...policy });
+  await suite.db.update(departments).set(policy).where(eq(departments.id, department!.id));
   await suite.db.insert(departmentReceipts).values({
     departmentId: department!.id,
     receipt: {
@@ -117,7 +117,7 @@ describe("checked department receipt write", () => {
     expect((await suite.db.select().from(departmentReceipts))[0]!.receipt).toEqual({
       operationDescription: "Deli meals",
     });
-    expect((await suite.db.select().from(departmentSalePolicies))[0]).toMatchObject(policy);
+    expect((await suite.db.select().from(departments))[0]).toMatchObject(policy);
   });
   it.each([{ printTradingName: true }, { printTradingName: false }] as const)(
     "refuses changed policy %j without its permission and leaves both rows unchanged",
@@ -129,7 +129,7 @@ describe("checked department receipt write", () => {
         params: { permission: "venue.configure" },
       });
       expect(await suite.db.select().from(departmentReceipts)).toEqual(before);
-      expect((await suite.db.select().from(departmentSalePolicies))[0]).toMatchObject(policy);
+      expect((await suite.db.select().from(departments))[0]).toMatchObject(policy);
     },
   );
   it("refuses changed hidden text and leaves receipt and policy unchanged", async () => {
@@ -147,21 +147,21 @@ describe("checked department receipt write", () => {
       params: { reason: "invalid_language", field: "footerMessage", language: "eu-ES" },
     });
     expect(await suite.db.select().from(departmentReceipts)).toEqual(before);
-    expect((await suite.db.select().from(departmentSalePolicies))[0]).toMatchObject(policy);
+    expect((await suite.db.select().from(departments))[0]).toMatchObject(policy);
   });
   it("preserves the current policy when venue permission is lost after an earlier read", async () => {
     const f = await fixture();
     await check(f, body());
     await setBuiltInRoleForTest(suite.db, f.personId, "staff");
     await suite.db
-      .update(departmentSalePolicies)
+      .update(departments)
       .set({ printTradingName: false })
-      .where(eq(departmentSalePolicies.departmentId, f.departmentId));
+      .where(eq(departments.id, f.departmentId));
     await expect(save(f, body())).rejects.toMatchObject({
       code: "authorization.not_permitted",
       params: { permission: "venue.configure" },
     });
-    expect((await suite.db.select().from(departmentSalePolicies))[0]!.printTradingName).toBe(false);
+    expect((await suite.db.select().from(departments))[0]!.printTradingName).toBe(false);
   });
   it("rechecks offered translations after content languages change", async () => {
     const f = await fixture();

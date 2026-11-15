@@ -240,8 +240,8 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
         sql`update floor_zones set department_id = ${departmentId}, is_counter_default = true where id = ${zoneId}`,
       );
       await tx.execute(sql`
-      insert into department_sale_policies (department_id, order_start, paid_when)
-      values (${departmentId}, 'counter', ${orderFlow === "ticket_then_pay" ? "ticket_then_pay" : "prepay"})`);
+      update departments set order_start = 'counter', paid_when = ${orderFlow === "ticket_then_pay" ? "ticket_then_pay" : "prepay"}
+      where id = ${departmentId}`);
 
       await offerMenuThroughZone(tx, zoneId, cat.id, {
         makeDefault: true,
@@ -1038,7 +1038,7 @@ describe("seating from order start", () => {
     const tableId = randomUUID();
     await withTransaction(db, async (tx) => {
       await tx.execute(
-        sql`update department_sale_policies set order_start = 'table' where department_id in (select id from departments )`,
+        sql`update departments set order_start = 'table' where id in (select id from departments )`,
       );
       await tx.execute(
         sql`insert into dining_tables (id, label, zone_id, created_at) values (${tableId}, 'New table service', ${zoneId}, ${nowIso()})`,
@@ -1060,7 +1060,7 @@ describe("seating from order start", () => {
     async (zoneOverride) => {
       const { cfg, zoneId } = await setupVenue();
       await db.execute(
-        sql`update department_sale_policies set order_start = 'table' where department_id in (select id from departments )`,
+        sql`update departments set order_start = 'table' where id in (select id from departments )`,
       );
       const tableId = randomUUID();
       await withTransaction(db, async (tx) => {
@@ -1070,7 +1070,7 @@ describe("seating from order start", () => {
           );
         } else {
           await tx.execute(
-            sql`update department_sale_policies set order_start = 'counter' where department_id in (select id from departments )`,
+            sql`update departments set order_start = 'counter' where id in (select id from departments )`,
           );
         }
         await tx.execute(
@@ -1092,8 +1092,8 @@ describe("openTab service context", () => {
   it("derives the service zone from the table and prices its menu offer", async () => {
     const { cfg, zoneId, premiumCoffeeOfferId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await tx.execute(sql`update department_sale_policies set order_start = 'table'
-        where department_id in (select id from departments )`);
+      await tx.execute(sql`update departments set order_start = 'table'
+        where id in (select id from departments )`);
       const table = await tx.execute<{ id: string }>(sql`
         insert into dining_tables (id, label, zone_id, created_at)
         values (${randomUUID()}, 'Offer table', ${zoneId}, ${nowIso()})
@@ -1128,8 +1128,8 @@ describe("openTab service context", () => {
         )
       ).rows;
       await insertRoute(tx, { zoneId, productId: offer!.product_id, stationId: station.id });
-      await tx.execute(sql`update department_sale_policies set order_start = 'table'
-        where department_id in (select id from departments )`);
+      await tx.execute(sql`update departments set order_start = 'table'
+        where id in (select id from departments )`);
       const table = await tx.execute<{ id: string }>(sql`
         insert into dining_tables (id, label, zone_id, created_at)
         values (${randomUUID()}, 'Round table', ${zoneId}, ${nowIso()})
@@ -1156,8 +1156,8 @@ describe("openTab service context", () => {
     await withTransaction(db, async (tx) => {
       const department = await tx.execute<{ id: string }>(sql`
         select id from departments `);
-      await tx.execute(sql`update department_sale_policies set order_start = 'table'
-        where department_id in (select id from departments )`);
+      await tx.execute(sql`update departments set order_start = 'table'
+        where id in (select id from departments )`);
       const downstairsZone = await tx.execute<{ id: string }>(sql`
         insert into floor_zones (id, name, department_id, created_at)
         values (${randomUUID()}, 'Downstairs', ${department.rows[0]!.id}, ${nowIso()}) returning id`);
@@ -1225,8 +1225,8 @@ describe("openTab service context", () => {
   it("stores an explicitly no-preparation offer without creating a kitchen ticket", async () => {
     const { cfg, zoneId, premiumCoffeeOfferId, coffeeId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await tx.execute(sql`update department_sale_policies set order_start = 'table'
-        where department_id in (select id from departments )`);
+      await tx.execute(sql`update departments set order_start = 'table'
+        where id in (select id from departments )`);
       await setRoutingCell(
         tx,
         { row: { kind: "product", productId: coffeeId }, zoneId },
@@ -3941,8 +3941,8 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
     // per line or per product on the shared transaction.
     const { cfg, zoneId, menuId, premiumCoffeeOfferId, coffeeId, waterId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      await tx.execute(sql`update department_sale_policies set order_start = 'table'
-        where department_id in (select id from departments )`);
+      await tx.execute(sql`update departments set order_start = 'table'
+        where id in (select id from departments )`);
       const bar = await createStation(tx, { name: "Bar", isDefault: true });
       const kitchen = await createStation(tx, { name: "Kitchen" });
       const product = await tx.execute<{ category_id: string }>(sql`

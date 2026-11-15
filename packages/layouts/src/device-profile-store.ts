@@ -6,6 +6,7 @@ import {
   constraintTarget,
   deviceProfilePrinters,
   deviceProfiles,
+  departments,
   devices,
   isUniqueViolation,
   nowIso,
@@ -303,6 +304,10 @@ export async function deleteDeviceProfile(
   }
   if (holders.length > 0) {
     const now = nowIso();
+    await tx
+      .update(departments)
+      .set({ transferDeskProfileId: null })
+      .where(eq(departments.transferDeskProfileId, input.id));
     await tx
       .update(deviceProfiles)
       .set({ retiredAt: now, updatedAt: now })

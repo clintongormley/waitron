@@ -3,7 +3,6 @@ import { getCountryPack, starterName } from "@waitron/country-packs";
 import {
   departments,
   departmentCourses,
-  departmentSalePolicies,
   deviceProfiles,
   deviceProfileServiceAccess,
   floorZones,
@@ -88,11 +87,6 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
           .set({ isDefault: true })
           .where(eq(departments.id, departmentId));
       }
-      await tx
-        .insert(departmentSalePolicies)
-        .values({ departmentId, orderStart: "counter" })
-        .onConflictDoNothing({ target: departmentSalePolicies.departmentId });
-
       const existing = await tx
         .select({ zoneId: floorZones.id })
         .from(floorZones)

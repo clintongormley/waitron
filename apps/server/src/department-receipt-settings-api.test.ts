@@ -20,7 +20,7 @@ import {
   readCurrentImage,
 } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
-import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
+import { departments, departmentReceipts } from "@waitron/venue-service";
 import { nodeId, type DepartmentReceiptWrite } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
@@ -71,7 +71,7 @@ async function fixture(role: "manager" | "staff" = "manager", withFiscal = true)
     .insert(departments)
     .values({ name: randomUUID(), tradingName: "Deli" })
     .returning();
-  await suite.db.insert(departmentSalePolicies).values({ departmentId: department!.id, ...policy });
+  await suite.db.update(departments).set(policy).where(eq(departments.id, department!.id));
   await suite.db
     .insert(departmentReceipts)
     .values({ departmentId: department!.id, receipt: savedReceipt });
@@ -113,7 +113,7 @@ const body = (extra: Partial<DepartmentReceiptWrite> = {}): DepartmentReceiptWri
 async function rows() {
   return {
     receipts: await suite.db.select().from(departmentReceipts),
-    policies: await suite.db.select().from(departmentSalePolicies),
+    policies: await suite.db.select().from(departments),
   };
 }
 async function refusal(
@@ -627,9 +627,9 @@ describe("replacement department receipt HTTP contract", () => {
           if (kind === "policy") {
             await setBuiltInRoleForTest(tx, f.personId, "staff");
             await tx
-              .update(departmentSalePolicies)
+              .update(departments)
               .set({ printTradingName: false })
-              .where(eq(departmentSalePolicies.departmentId, f.departmentId));
+              .where(eq(departments.id, f.departmentId));
           }
           if (kind === "hidden-text")
             await tx

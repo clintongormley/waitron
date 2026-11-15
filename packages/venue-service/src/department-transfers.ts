@@ -6,7 +6,6 @@ import type {
 import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import {
   departments,
-  departmentTransferDesks,
   departmentTransferDestinations,
   departmentTransferRequests,
   orderServiceContexts,
@@ -44,9 +43,9 @@ export async function readDepartmentTransferSettings(
 ): Promise<DepartmentTransferSettings> {
   await assertDepartment(tx, departmentId);
   const [desk] = await tx
-    .select()
-    .from(departmentTransferDesks)
-    .where(eq(departmentTransferDesks.departmentId, departmentId));
+    .select({ receivingProfileId: departments.transferDeskProfileId })
+    .from(departments)
+    .where(eq(departments.id, departmentId));
   const destinations = await tx
     .select()
     .from(departmentTransferDestinations)
@@ -129,12 +128,9 @@ export async function setDepartmentTransferSettings(
       });
   }
   await tx
-    .delete(departmentTransferDesks)
-    .where(eq(departmentTransferDesks.departmentId, departmentId));
-  if (input.receivingProfileId !== null)
-    await tx
-      .insert(departmentTransferDesks)
-      .values({ departmentId, receivingProfileId: input.receivingProfileId });
+    .update(departments)
+    .set({ transferDeskProfileId: input.receivingProfileId })
+    .where(eq(departments.id, departmentId));
   await tx
     .delete(departmentTransferDestinations)
     .where(eq(departmentTransferDestinations.sourceDepartmentId, departmentId));
@@ -189,11 +185,11 @@ export async function requestDepartmentTransfer(
     );
   if (direction === undefined) throw new AppError("department_transfer.not_allowed", {});
   const [desk] = await tx
-    .select()
-    .from(departmentTransferDesks)
-    .where(eq(departmentTransferDesks.departmentId, destinationDepartmentId));
+    .select({ receivingProfileId: departments.transferDeskProfileId })
+    .from(departments)
+    .where(eq(departments.id, destinationDepartmentId));
   if (
-    desk === undefined ||
+    desk?.receivingProfileId == null ||
     !(await usableProfile(tx, destinationDepartmentId, desk.receivingProfileId))
   )
     throw new AppError("department_transfer.desk_unavailable", {
@@ -303,9 +299,9 @@ async function receives(
   receiver: DepartmentTransferReceiver,
 ): Promise<boolean> {
   const [desk] = await tx
-    .select()
-    .from(departmentTransferDesks)
-    .where(eq(departmentTransferDesks.departmentId, departmentId));
+    .select({ receivingProfileId: departments.transferDeskProfileId })
+    .from(departments)
+    .where(eq(departments.id, departmentId));
   return (
     receiver.departmentId === departmentId &&
     desk?.receivingProfileId === receiver.profileId &&
@@ -437,14 +433,13 @@ export async function listDepartmentTransferDestinations(
     .select({
       id: departments.id,
       name: departments.name,
-      profileId: departmentTransferDesks.receivingProfileId,
+      profileId: departments.transferDeskProfileId,
     })
     .from(departmentTransferDestinations)
     .innerJoin(
       departments,
       eq(departments.id, departmentTransferDestinations.destinationDepartmentId),
     )
-    .innerJoin(departmentTransferDesks, eq(departmentTransferDesks.departmentId, departments.id))
     .where(
       and(
         eq(departmentTransferDestinations.sourceDepartmentId, sender.departmentId),
@@ -454,7 +449,7 @@ export async function listDepartmentTransferDestinations(
     .orderBy(asc(departments.name), asc(departments.id));
   const choices: { id: string; name: string }[] = [];
   for (const row of rows)
-    if (await usableProfile(tx, row.id, row.profileId))
+    if (row.profileId !== null && (await usableProfile(tx, row.id, row.profileId)))
       choices.push({ id: row.id, name: row.name });
   return choices;
 }

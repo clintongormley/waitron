@@ -361,7 +361,6 @@ export class DepartmentReceiptEditor extends LitElement {
           dependencies: [
             { type: "department_receipts" },
             { type: "departments" },
-            { type: "department_sale_policies" },
             { type: "settings.business_day" },
             { type: "settings.venue" },
           ],

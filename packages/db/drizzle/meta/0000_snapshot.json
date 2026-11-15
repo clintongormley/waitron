@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d3b59da6-6551-4f11-ab47-551aed4328e0",
+  "id": "2f75233f-e846-49d4-8b57-c0f974aa7bf1",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -14888,82 +14888,6 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "department_sale_policies": {
-      "name": "department_sale_policies",
-      "columns": {
-        "department_id": {
-          "name": "department_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "order_start": {
-          "name": "order_start",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'counter'"
-        },
-        "paid_when": {
-          "name": "paid_when",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'prepay'"
-        },
-        "collection_number": {
-          "name": "collection_number",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'none'"
-        },
-        "print_trading_name": {
-          "name": "print_trading_name",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "department_sale_policies_department_fk": {
-          "name": "department_sale_policies_department_fk",
-          "tableFrom": "department_sale_policies",
-          "tableTo": "departments",
-          "columnsFrom": [
-            "department_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "department_sale_policies_order_start_ck": {
-          "name": "department_sale_policies_order_start_ck",
-          "value": "\"department_sale_policies\".\"order_start\" in ('table', 'counter')"
-        },
-        "department_sale_policies_paid_when_ck": {
-          "name": "department_sale_policies_paid_when_ck",
-          "value": "\"department_sale_policies\".\"paid_when\" in ('prepay', 'ticket_then_pay')"
-        },
-        "department_sale_policies_collection_number_ck": {
-          "name": "department_sale_policies_collection_number_ck",
-          "value": "\"department_sale_policies\".\"collection_number\" in ('none', 'numbered')"
-        }
-      }
-    },
     "departments": {
       "name": "departments",
       "columns": {
@@ -15020,6 +14944,45 @@
           "autoincrement": false,
           "default": false
         },
+        "order_start": {
+          "name": "order_start",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'counter'"
+        },
+        "paid_when": {
+          "name": "paid_when",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'prepay'"
+        },
+        "collection_number": {
+          "name": "collection_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'none'"
+        },
+        "print_trading_name": {
+          "name": "print_trading_name",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "transfer_desk_profile_id": {
+          "name": "transfer_desk_profile_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "text",
@@ -15046,10 +15009,37 @@
           "where": "\"departments\".\"is_default\""
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "departments_transfer_desk_profile_fk": {
+          "name": "departments_transfer_desk_profile_fk",
+          "tableFrom": "departments",
+          "tableTo": "device_profiles",
+          "columnsFrom": [
+            "transfer_desk_profile_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "departments_order_start_ck": {
+          "name": "departments_order_start_ck",
+          "value": "\"departments\".\"order_start\" in ('table', 'counter')"
+        },
+        "departments_paid_when_ck": {
+          "name": "departments_paid_when_ck",
+          "value": "\"departments\".\"paid_when\" in ('prepay', 'ticket_then_pay')"
+        },
+        "departments_collection_number_ck": {
+          "name": "departments_collection_number_ck",
+          "value": "\"departments\".\"collection_number\" in ('none', 'numbered')"
+        }
+      }
     },
     "device_profile_service_access": {
       "name": "device_profile_service_access",
@@ -16288,57 +16278,6 @@
           "value": "\"menu_periods\".\"colour\" in ('red', 'orange', 'amber', 'yellow', 'lime', 'green', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'purple', 'magenta', 'pink', 'brown', 'grey')"
         }
       }
-    },
-    "department_transfer_desks": {
-      "name": "department_transfer_desks",
-      "columns": {
-        "department_id": {
-          "name": "department_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "receiving_profile_id": {
-          "name": "receiving_profile_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "department_transfer_desks_department_fk": {
-          "name": "department_transfer_desks_department_fk",
-          "tableFrom": "department_transfer_desks",
-          "tableTo": "departments",
-          "columnsFrom": [
-            "department_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "department_transfer_desks_profile_fk": {
-          "name": "department_transfer_desks_profile_fk",
-          "tableFrom": "department_transfer_desks",
-          "tableTo": "device_profiles",
-          "columnsFrom": [
-            "receiving_profile_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
     },
     "department_transfer_destinations": {
       "name": "department_transfer_destinations",

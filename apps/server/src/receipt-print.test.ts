@@ -46,7 +46,6 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  departmentSalePolicies,
   departments,
   saleReceiptHeaders,
   departmentReceipts,
@@ -498,9 +497,9 @@ it.each(["en-GB", "ca-ES"])(
     const printerId = await makePrinter();
     await configureReceipt(cfg, { printerId });
     await suite.db.execute(sql`
-    update department_sale_policies
+    update departments
     set order_start = 'counter', paid_when = 'ticket_then_pay', collection_number = 'numbered'
-    where department_id = (select department_id from floor_zones where id = ${zoneId})
+    where id = (select department_id from floor_zones where id = ${zoneId})
   `);
     const id = randomUUID();
     const { orderNumber } = await parkOrder({ db: suite.db }, cfg, {
@@ -525,9 +524,9 @@ it("prints one non-fiscal numbered collection ticket when a pay-on-collection or
   const printerId = await makePrinter();
   await configureReceipt(cfg, { printerId });
   await suite.db.execute(sql`
-    update department_sale_policies
+    update departments
     set order_start = 'counter', paid_when = 'ticket_then_pay', collection_number = 'numbered'
-    where department_id = (select department_id from floor_zones where id = ${zoneId})
+    where id = (select department_id from floor_zones where id = ${zoneId})
   `);
   const id = randomUUID();
   const { orderNumber } = await parkOrder({ db: suite.db }, cfg, {
@@ -574,7 +573,7 @@ it("a counter order paid at collection records its flow but prints no collection
   const printerId = await makePrinter();
   await configureReceipt(cfg, { printerId });
   await suite.db.execute(
-    sql`update department_sale_policies set order_start = 'counter', paid_when = 'ticket_then_pay', collection_number = 'none' where department_id = (select department_id from floor_zones where id = ${zoneId})`,
+    sql`update departments set order_start = 'counter', paid_when = 'ticket_then_pay', collection_number = 'none' where id = (select department_id from floor_zones where id = ${zoneId})`,
   );
   const id = randomUUID();
   await parkOrder({ db: suite.db }, cfg, {
@@ -600,9 +599,9 @@ it("prints a separate numbered collection ticket when a prepaid order is paid", 
   const printerId = await makePrinter();
   await configureReceipt(cfg, { printerId });
   await suite.db.execute(sql`
-    update department_sale_policies
+    update departments
     set paid_when = 'prepay', collection_number = 'numbered'
-    where department_id = (select department_id from floor_zones where id = ${zoneId})
+    where id = (select department_id from floor_zones where id = ${zoneId})
   `);
   const id = randomUUID();
   const { orderNumber } = await parkOrder({ db: suite.db }, cfg, {
@@ -648,9 +647,9 @@ it("a prepaid cash sale reads the device's printers once for its collection tick
   await configureReceipt(cfg, { printerId });
   async function collectionNumber(value: "numbered" | "none"): Promise<void> {
     await suite.db.execute(sql`
-      update department_sale_policies
+      update departments
       set paid_when = 'prepay', collection_number = ${value}
-      where department_id = (select department_id from floor_zones where id = ${zoneId})
+      where id = (select department_id from floor_zones where id = ${zoneId})
     `);
   }
   /** The reads a cash sale of a parked order takes; only a sale with an operator opens the drawer. */
@@ -2676,7 +2675,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
         receipt: departmentReceipts.receipt,
       })
       .from(departmentReceipts);
-    const policies = await suite.db.select().from(departmentSalePolicies);
+    const policies = await suite.db.select().from(departments);
     const framing = { x: 7500, y: 5000, zoom: 200 };
     const blackRasters = await drawLogoRasters(
       await renderRendition(black.bytes, "display", framing),
@@ -2699,7 +2698,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
         })
         .from(departmentReceipts),
     ).toEqual(saved);
-    expect(await suite.db.select().from(departmentSalePolicies)).toEqual(policies);
+    expect(await suite.db.select().from(departments)).toEqual(policies);
     const retained = await suite.db.select().from(departmentReceipts);
     expect(retained.length).toBeGreaterThanOrEqual(2);
     for (const row of retained)
@@ -3359,9 +3358,9 @@ describe("automatic F1 receipt delivery enrollment", () => {
   it("keeps a prepaid collection ticket separate from an emailed invoice", async () => {
     const { cfg, saleId, orderId, zoneId, ticket, personId } = await issued();
     await withTransaction(suite.db, async (tx) => {
-      await tx.execute(sql`update department_sale_policies
+      await tx.execute(sql`update departments
         set paid_when = 'prepay', collection_number = 'numbered'
-        where department_id = (select department_id from floor_zones where id = ${zoneId})`);
+        where id = (select department_id from floor_zones where id = ${zoneId})`);
       await tx
         .update(workingOrders)
         .set({
@@ -3488,9 +3487,9 @@ describe("department receipt presentation on thermal jobs", () => {
       .set({ tradingName: "Recorded brand" })
       .where(eq(departments.id, departmentId!));
     await suite.db
-      .update(departmentSalePolicies)
+      .update(departments)
       .set({ printTradingName: true })
-      .where(eq(departmentSalePolicies.departmentId, departmentId!));
+      .where(eq(departments.id, departmentId!));
     const sell = async () => {
       const workingOrderId = randomUUID();
       const ticket = await recordTillSale(
@@ -4108,7 +4107,7 @@ describe("A964 collection language", () => {
       const printerId = await makePrinter();
       await configureReceipt(cfg, { printerId });
       await suite.db.execute(
-        sql`update department_sale_policies set order_start = 'counter', paid_when = ${mode}, collection_number = 'numbered' where department_id = (select department_id from floor_zones where id = ${v.zoneId})`,
+        sql`update departments set order_start = 'counter', paid_when = ${mode}, collection_number = 'numbered' where id = (select department_id from floor_zones where id = ${v.zoneId})`,
       );
       for (const language of ["en", "es"] as const) {
         await withTransaction(suite.db, (tx) =>

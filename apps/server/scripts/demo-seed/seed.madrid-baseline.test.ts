@@ -1093,6 +1093,23 @@ for (const locale of ["en", "es"] as const) {
       for (const row of Object.values(live.rows)) row.on_floor = todayIds.has(row.id) ? 1 : 0;
       expected[phase] = madridWithFoldedTables(expected[phase], [
         {
+          from: "department_sale_policies",
+          into: "departments",
+          match: { from: "department_id", into: "id" },
+          columns: {
+            order_start: "order_start",
+            paid_when: "paid_when",
+            collection_number: "collection_number",
+            print_trading_name: "print_trading_name",
+          },
+        },
+        {
+          from: "department_transfer_desks",
+          into: "departments",
+          match: { from: "department_id", into: "id" },
+          columns: { receiving_profile_id: "transfer_desk_profile_id" },
+        },
+        {
           from: "department_floor_plan_sets",
           into: "floor_plan_sets",
           match: { from: "set_id", into: "id" },
@@ -1181,6 +1198,21 @@ for (const locale of ["en", "es"] as const) {
           },
         },
       ]);
+      const department = expected[phase].tables.departments!;
+      const policyColumns = department.columns.splice(-5);
+      department.columns.splice(
+        department.columns.findIndex((column) => column.name === "release_reminder_minutes"),
+        0,
+        ...policyColumns,
+      );
+      const deskColumn = department.columns.find(
+        (column) => column.name === "transfer_desk_profile_id",
+      )!;
+      deskColumn.notnull = 0;
+      department.foreignKeys.find((key) => key.from === "transfer_desk_profile_id")!.on_delete =
+        "SET NULL";
+      delete phases[phase]!.department_sale_policies;
+      delete phases[phase]!.department_transfer_desks;
       const frozenTickets = new Set(
         Object.values(expected[phase].tables.ticket_item_allergies!.rows).map(
           (row) => row.ticket_item_id,

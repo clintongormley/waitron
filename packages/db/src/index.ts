@@ -426,8 +426,6 @@ export {
   departmentDays,
   departmentReceipts,
   departments,
-  departmentSalePolicies,
-  departmentTransferDesks,
   departmentTransferDestinations,
   departmentTransferRequests,
   deviceProfileKitchenScreens,

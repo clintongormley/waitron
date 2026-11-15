@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
+import { departments, departmentReceipts } from "@waitron/venue-service";
 import { mountManagementApi, type ManagementApiDeps } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
@@ -18,10 +18,7 @@ beforeEach(async () => {
   venue = await setupVenue(suite.db);
   const [row] = await suite.db.select().from(departments);
   id = row!.id;
-  await suite.db
-    .update(departmentSalePolicies)
-    .set(policy)
-    .where(eq(departmentSalePolicies.departmentId, id));
+  await suite.db.update(departments).set(policy).where(eq(departments.id, id));
   await suite.db
     .insert(departmentReceipts)
     .values({ departmentId: id, receipt: { operationDescription: "Meals" } })
@@ -74,12 +71,7 @@ it("management saves the department receipt and policy through the replacement m
   expect((await request("PUT", path(), input)).status).toBe(204);
   expect((await (await request("GET", path())).json()).receipt).toEqual(input.receipt);
   expect(
-    (
-      await suite.db
-        .select()
-        .from(departmentSalePolicies)
-        .where(eq(departmentSalePolicies.departmentId, id))
-    )[0],
+    (await suite.db.select().from(departments).where(eq(departments.id, id)))[0],
   ).toMatchObject(input.policy);
 });
 it("management supplies the installed description validator before writing", async () => {

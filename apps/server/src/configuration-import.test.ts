@@ -44,7 +44,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 36,
+  version: 37,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -182,6 +182,7 @@ describe("staged configuration import", () => {
     ["pre-option-default-flag export", { version: 33 }],
     ["pre-menu-free-product export", { version: 34 }],
     ["pre-product-declared-facts export", { version: 35 }],
+    ["pre-department-columns export", { version: 36 }],
     ["future version", { version: bundle.version + 1 }],
     ["format-9 export", { version: 9, venue: bundle.venue }],
   ])("refuses %s through setup before replacing staged files", async (_label, change) => {
@@ -273,8 +274,8 @@ describe("staged configuration import", () => {
   });
 
   it.each([
-    ["department_sale_policies", "tab"],
-    ["department_sale_policies", null],
+    ["departments", "tab"],
+    ["departments", null],
     ["floor_zones", ["counter"]],
     ["floor_zones", 1],
   ])("refuses malformed %s order start %j before replacing staged files", async (table, value) => {
@@ -719,7 +720,6 @@ describe("routing cells in a staged import", () => {
     ["departments", "active", 0],
     ["floor_zones", "active", 0],
     ["floor_zones", "department_id", "absent-deleted-parent"],
-    ["department_sale_policies", "department_id", "absent-deleted-parent"],
   ])(
     "refuses a deleted hierarchy bundle at staging and import: %s.%s",
     async (table, field, value) => {

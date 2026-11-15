@@ -4,9 +4,7 @@ import {
   departmentDays,
   floorPlanSets,
   departments,
-  departmentSalePolicies,
   departmentCourses,
-  departmentTransferDesks,
   departmentTransferDestinations,
   deviceProfileKitchenScreenZones,
   deviceProfiles,
@@ -136,9 +134,9 @@ async function settings(
     .where(eq(floorPlanSets.departmentId, departmentId ?? ""));
   const desks = await tx
     .select()
-    .from(departmentTransferDesks)
-    .innerJoin(deviceProfiles, eq(deviceProfiles.id, departmentTransferDesks.receivingProfileId))
-    .where(eq(departmentTransferDesks.departmentId, departmentId ?? ""));
+    .from(departments)
+    .innerJoin(deviceProfiles, eq(deviceProfiles.id, departments.transferDeskProfileId))
+    .where(eq(departments.id, departmentId ?? ""));
   const routes = await tx
     .select()
     .from(departmentTransferDestinations)
@@ -354,9 +352,6 @@ export async function clearServiceDeleteSettings(
     await tx
       .delete(departmentCourses)
       .where(eq(departmentCourses.departmentId, selected.departmentId));
-    await tx
-      .delete(departmentSalePolicies)
-      .where(eq(departmentSalePolicies.departmentId, selected.departmentId));
     const steps = await tx
       .select({ id: serviceSteps.id })
       .from(serviceSteps)
@@ -366,8 +361,9 @@ export async function clearServiceDeleteSettings(
       steps.map((row) => row.id),
     );
     await tx
-      .delete(departmentTransferDesks)
-      .where(eq(departmentTransferDesks.departmentId, selected.departmentId));
+      .update(departments)
+      .set({ transferDeskProfileId: null })
+      .where(eq(departments.id, selected.departmentId));
     await tx
       .delete(departmentTransferDestinations)
       .where(

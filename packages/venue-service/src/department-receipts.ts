@@ -2,7 +2,6 @@ import { and, eq, sql, type SQL } from "drizzle-orm";
 import {
   departmentReceipts,
   departments,
-  departmentSalePolicies,
   nowIso,
   orderServiceContexts,
   saleReceiptHeaders,
@@ -334,14 +333,13 @@ export async function readDepartmentReceiptPolicy(
 ): Promise<DepartmentReceiptPolicy> {
   const [row] = await tx
     .select({
-      printTradingName: departmentSalePolicies.printTradingName,
+      printTradingName: departments.printTradingName,
     })
     .from(departments)
-    .leftJoin(departmentSalePolicies, eq(departmentSalePolicies.departmentId, departments.id))
     .where(and(rowQuery(departmentId), eq(departments.active, true)));
   if (!row) throw new AppError("department.not_found", { departmentId });
   return {
-    printTradingName: row.printTradingName ?? false,
+    printTradingName: row.printTradingName,
   };
 }
 
