@@ -4,13 +4,15 @@ import type { VatClass } from "@waitron/menu";
 
 /**
  * Products whose served-here and takeaway classes differ, for the A1522 suites: a cola served here
- * at `reduced` and taken away at `general`; a cheese with no takeaway class of its own; a burger
+ * at `reduced` and taken away at `general`; a cheese with no takeaway class of its own; a cheese
+ * board served here at `reduced` and taken away at `super_reduced`; a burger
  * whose extras list offers a lemon soda with two classes unlike the burger's; and a set lunch.
  * Call before `offerProducts`, which publishes them.
  */
 export async function seedTakeawayProducts(tx: Transaction): Promise<{
   cola: string;
   cheese: string;
+  cheeseBoard: string;
   burger: string;
   lemonSoda: string;
   setLunch: string;
@@ -38,6 +40,7 @@ export async function seedTakeawayProducts(tx: Transaction): Promise<{
     ).id;
   const cola = await product("Cola", "1.80", "reduced", "general");
   const cheese = await product("Cheese", "4.00", "super_reduced", null);
+  const cheeseBoard = await product("Cheese board", "4.00", "reduced", "super_reduced");
   const burger = await product("Burger", "10.00", "general", "general");
   const lemonSoda = await product("Lemon soda", "2.00", "reduced", "zero");
   const setLunch = await product("Set lunch", "15.00", "reduced", null, true);
@@ -55,5 +58,5 @@ export async function seedTakeawayProducts(tx: Transaction): Promise<{
     "es-ES",
   );
   await writeProductModifiers(tx, burger, [{ kind: "extras", id: extras.id }]);
-  return { cola, cheese, burger, lemonSoda, setLunch, burgerExtras: extras.id };
+  return { cola, cheese, cheeseBoard, burger, lemonSoda, setLunch, burgerExtras: extras.id };
 }

@@ -1133,7 +1133,10 @@ const storedLineColumns = {
   listUnitPriceGross: workingOrderLines.listUnitPriceGross,
   quantity: workingOrderLines.quantity,
   priceQuantity: workingOrderLines.priceQuantity,
-  vatClass: workingOrderLines.vatClass,
+  // A line files at the class for its order's way of selling, so both readers join the order.
+  vatClass: sql<GetColumnData<typeof workingOrderLines.vatClass>>`case
+    when ${workingOrders.dining} = 'takeaway' then ${workingOrderLines.takeawayVatClass}
+    else ${workingOrderLines.vatClass} end`,
   name: workingOrderLines.name,
   descriptions: workingOrderLines.descriptions,
   optionSnapshots: workingOrderLines.optionSnapshots,
@@ -1148,7 +1151,9 @@ const storedLineColumns = {
 };
 
 type StoredLineRow = {
-  [K in keyof typeof storedLineColumns]: GetColumnData<(typeof storedLineColumns)[K]>;
+  [K in keyof typeof storedLineColumns]: (typeof storedLineColumns)[K] extends SQL<infer T>
+    ? T
+    : GetColumnData<Exclude<(typeof storedLineColumns)[K], SQL>>;
 };
 
 /**
@@ -1167,6 +1172,7 @@ export async function readLockedLines(
   const rows = await tx
     .select({ ...storedLineColumns, ...portionColumns })
     .from(workingOrderLines)
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .leftJoin(workingLinePortions, eq(workingLinePortions.workingOrderLineId, workingOrderLines.id))
     .leftJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
     .where(eq(workingOrderLines.workingOrderId, workingOrderId))
@@ -1188,6 +1194,7 @@ async function readLockedLinesForIssuance(
       active: productActive,
     })
     .from(workingOrderLines)
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
     .leftJoin(parentProducts, parentJoin)
     .leftJoin(workingLinePortions, eq(workingLinePortions.workingOrderLineId, workingOrderLines.id))

@@ -5,9 +5,9 @@ import { addTabRound } from "./testing/order-writer-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { diningTables, saleLines, sales, withTransaction } from "@waitron/db";
+import { diningTables, saleLines, sales, withTransaction, workingOrders } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -183,6 +183,16 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     const burger = await product("Hamburguesa", "10.00", "reduced");
     const cheese = await product("Queso", "0.75", "reduced");
     const wine = await product("Vino", "3.63", "general");
+    // Served here at `general`, taken away at `reduced`: the class whose rate the release changes.
+    const juice = await createProduct(tx, {
+      menuId: menu.id,
+      categoryId: null,
+      name: "Juice",
+      pricingUnit: "each",
+      unitPrice: "2.50",
+      vatClass: "general",
+      takeawayVatClass: "reduced",
+    });
     const extras = await createExtraList(
       tx,
       {
@@ -203,6 +213,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
       burger: burger.id,
       cheese: cheese.id,
       wine: wine.id,
+      juice: juice.id,
       extrasListId: extras.id,
     };
   });
@@ -487,6 +498,36 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
     });
 
     expect(await rates(id)).toEqual([400]);
+  });
+});
+
+describe("a takeaway order's class is rated on the day its invoice is issued", () => {
+  it("a takeaway order parked on the eve files its takeaway class's rate of the day it is paid", async () => {
+    const v = await setupVenue();
+    at(EVE);
+    const eve = await park(v, one(v, v.products.juice));
+    const newYear = await park(v, one(v, v.products.juice));
+    await withTransaction(suite.db, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ dining: "takeaway" })
+        .where(inArray(workingOrders.id, [eve, newYear])),
+    );
+    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
+      workingOrderId: eve,
+      lines: [],
+      tender: { method: "cash", amount: "2.50" },
+    });
+
+    at(NEW_YEAR);
+    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
+      workingOrderId: newYear,
+      lines: [],
+      tender: { method: "cash", amount: "2.50" },
+    });
+
+    expect(await filed(eve)).toMatchObject({ total: 250, vatBreakdown: BEER_AT_10_PERCENT });
+    expect(await filed(newYear)).toMatchObject({ total: 250, vatBreakdown: BEER_AT_4_PERCENT });
   });
 });
 
