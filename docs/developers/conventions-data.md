@@ -1725,7 +1725,8 @@ are tried as a token; a new login table is seen by nothing.
 **The rule.** `requireManagementChangeFromOwnPage` (`apps/server/src/own-page.ts`) judges every
 request whose method is not `GET`, `HEAD` or `OPTIONS` and that carries a
 `waitron_management_session`, `waitron_till_session` or `waitron_device` cookie, as read by the authentication cookie readers, including an empty value or a value with
-the wrong credential shape. It takes the request when it came from the box's own page or a trusted one.
+the wrong credential shape. It takes the request when it came from the box's own page or a
+trusted one.
 Otherwise it answers 403 `management.origin_refused` when the dashboard cookie is present, or
 `till.origin_refused` for the till/device cookies, and logs a
 warning with the method, `origin` and `site` (the `Sec-Fetch-Site` value), and `lookupFailed: true`

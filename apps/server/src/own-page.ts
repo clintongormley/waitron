@@ -34,7 +34,7 @@ async function sentFromOwnPage(c: Context, trusted: OriginAllowlist): Promise<bo
   return trusted(origin);
 }
 
-/** Use the authentication readers so page checks and routes agree on cookie presence. */
+/** Presence as read by the authentication readers, not validity, gates page checks. */
 export function requireManagementChangeFromOwnPage(
   trusted: OriginAllowlist,
   log: Logger,
