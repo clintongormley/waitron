@@ -519,6 +519,21 @@ describe("department Closed", () => {
     });
   });
 
+  it("a hand-painted all-day closure locks its column until Closed is unticked", async () => {
+    const { painter } = await mount();
+    chip(painter, "paint-closed").click();
+    await drag(painter, DEC_14, 0, 1440);
+    expect(tick(painter, DEC_14).checked).toBe(true);
+    expect(grid(painter).closedAllDay.has(DEC_14)).toBe(true);
+    chip(painter, "paint-p2").click();
+    await drag(painter, DEC_14, at("19:00"), at("22:00"));
+    expect(grid(painter).days.get(DEC_14)).toEqual([closed("06:00", "06:00")]);
+    tick(painter, DEC_14).click();
+    await settle(painter);
+    await drag(painter, DEC_14, at("19:00"), at("22:00"));
+    expect(grid(painter).days.get(DEC_14)).toEqual([dinner("19:00", "22:00")]);
+  });
+
   it("a whole-venue closure checks and disables department Closed, which is absent for zones", async () => {
     const { painter } = await mount();
     expect(tick(painter, DEC_25).checked).toBe(true);
