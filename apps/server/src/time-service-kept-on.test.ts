@@ -1,7 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import type { BoxHostClient, ClockServiceStatus, TimeServiceOnAnswer } from "./box-host-client.js";
 import type { Logger } from "./logger.js";
-import { keepTimeServiceOn, SWITCH_ON_BACK_OFF_MS } from "./time-service-kept-on.js";
+import {
+  keepTimeServiceOn,
+  SWITCH_ON_FIRST_WAIT_MS,
+  SWITCH_ON_LONGEST_WAIT_MS,
+} from "./time-service-kept-on.js";
+
+const MINUTE = 60_000;
+const SYNC_ON_FAILED = {
+  available: false as const,
+  reason: "refused" as const,
+  refusal: "sync_on_failed",
+};
 
 const OFF: ClockServiceStatus = {
   available: true,
@@ -86,10 +97,10 @@ describe("keepTimeServiceOn", () => {
     const log = vi.fn<Logger>();
     const clock = testClock();
     const kept = keepTimeServiceOn(host, log, clock.now);
-    // Each reading past the back-off, so every one asks.
+    // Each reading past the longest wait, so every one asks.
     for (let i = 0; i < 6; i++) {
       await kept.clockStatus();
-      clock.advance(SWITCH_ON_BACK_OFF_MS);
+      clock.advance(SWITCH_ON_LONGEST_WAIT_MS);
     }
     expect(host.timeServiceOn).toHaveBeenCalledTimes(6);
     expect(log.mock.calls).toEqual([
@@ -127,23 +138,65 @@ describe("keepTimeServiceOn", () => {
     expect(log.mock.calls).toEqual([["warn", "time_service.switch_on_failed", { reason: "lost" }]]);
   });
 
-  it("asks no more for an hour after a failed switch-on, then asks again", async () => {
-    const host = fakeHost(OFF, [
-      { available: false, reason: "refused", refusal: "sync_on_failed" },
-      { available: false, reason: "refused", refusal: "sync_on_failed" },
-    ]);
+  it("asks again a minute after a single failed switch-on, not before", async () => {
+    const host = fakeHost(OFF, [SYNC_ON_FAILED, { available: true }]);
     const clock = testClock();
     const kept = keepTimeServiceOn(host, vi.fn<Logger>(), clock.now);
     expect(await kept.clockStatus()).toEqual(OFF);
     expect(host.timeServiceOn).toHaveBeenCalledTimes(1);
-    clock.advance(SWITCH_ON_BACK_OFF_MS - 1);
+    clock.advance(MINUTE - 1);
     // Still answered as read.
     expect(await kept.clockStatus()).toEqual(OFF);
     expect(host.timeServiceOn).toHaveBeenCalledTimes(1);
     clock.advance(1);
     await kept.clockStatus();
     expect(host.timeServiceOn).toHaveBeenCalledTimes(2);
-    expect(SWITCH_ON_BACK_OFF_MS).toBe(60 * 60_000);
+    expect(SWITCH_ON_FIRST_WAIT_MS).toBe(MINUTE);
+  });
+
+  it("doubles the wait after each further failure in a row, up to an hour", async () => {
+    const host = fakeHost(
+      OFF,
+      Array.from({ length: 9 }, () => SYNC_ON_FAILED),
+    );
+    const clock = testClock();
+    const kept = keepTimeServiceOn(host, vi.fn<Logger>(), clock.now);
+    await kept.clockStatus();
+    const waits = [];
+    for (let asked = 1; asked < 9; asked++) {
+      let waited = 0;
+      while (host.timeServiceOn.mock.calls.length === asked) {
+        clock.advance(MINUTE);
+        waited += MINUTE;
+        await kept.clockStatus();
+      }
+      waits.push(waited / MINUTE);
+    }
+    expect(waits).toEqual([1, 2, 4, 8, 16, 32, 60, 60]);
+    expect(SWITCH_ON_LONGEST_WAIT_MS).toBe(60 * MINUTE);
+  });
+
+  it("starts again at a minute after a success", async () => {
+    const host = fakeHost(OFF, [
+      SYNC_ON_FAILED,
+      SYNC_ON_FAILED,
+      { available: true },
+      SYNC_ON_FAILED,
+    ]);
+    const clock = testClock();
+    const kept = keepTimeServiceOn(host, vi.fn<Logger>(), clock.now);
+    await kept.clockStatus();
+    clock.advance(MINUTE);
+    await kept.clockStatus();
+    clock.advance(2 * MINUTE);
+    await kept.clockStatus();
+    expect(host.timeServiceOn).toHaveBeenCalledTimes(3);
+    // The success leaves no wait: the next reading asks, and fails.
+    await kept.clockStatus();
+    expect(host.timeServiceOn).toHaveBeenCalledTimes(4);
+    clock.advance(MINUTE);
+    await kept.clockStatus();
+    expect(host.timeServiceOn).toHaveBeenCalledTimes(5);
   });
 
   it.each([
@@ -165,13 +218,31 @@ describe("keepTimeServiceOn", () => {
     expect(host.timeServiceOn).toHaveBeenCalledTimes(2);
   });
 
-  it("asks again within the hour once the service has been read as not off in between", async () => {
+  it("does not lengthen the wait for a busy refusal between failures", async () => {
+    const busy = { available: false as const, reason: "refused" as const, refusal: "busy" };
+    const host = fakeHost(OFF, [SYNC_ON_FAILED, busy, SYNC_ON_FAILED, SYNC_ON_FAILED]);
+    const clock = testClock();
+    const kept = keepTimeServiceOn(host, vi.fn<Logger>(), clock.now);
+    await kept.clockStatus();
+    clock.advance(MINUTE);
+    await kept.clockStatus();
+    await kept.clockStatus();
+    expect(host.timeServiceOn).toHaveBeenCalledTimes(3);
+    // The second failure in a row, the busy refusal not counted: two minutes.
+    clock.advance(2 * MINUTE - 1);
+    await kept.clockStatus();
+    expect(host.timeServiceOn).toHaveBeenCalledTimes(3);
+    clock.advance(1);
+    await kept.clockStatus();
+    expect(host.timeServiceOn).toHaveBeenCalledTimes(4);
+  });
+
+  it("asks again at once, and starts again at a minute, once the service has been read as not off in between", async () => {
     let status: ClockServiceStatus = OFF;
-    const host = fakeHost(OFF, [
-      { available: false, reason: "refused", refusal: "sync_on_failed" },
-    ]);
+    const host = fakeHost(OFF, [SYNC_ON_FAILED, SYNC_ON_FAILED, SYNC_ON_FAILED, SYNC_ON_FAILED]);
     host.clockStatus.mockImplementation(async () => status);
-    const kept = keepTimeServiceOn(host, vi.fn<Logger>(), testClock().now);
+    const clock = testClock();
+    const kept = keepTimeServiceOn(host, vi.fn<Logger>(), clock.now);
     await kept.clockStatus();
     status = { available: false, reason: "missing" };
     await kept.clockStatus();
@@ -184,6 +255,18 @@ describe("keepTimeServiceOn", () => {
     status = OFF;
     await kept.clockStatus();
     expect(host.timeServiceOn).toHaveBeenCalledTimes(2);
+    // Two failures in a row, then a reading of it on: the next failure waits a minute, not four.
+    clock.advance(2 * MINUTE);
+    await kept.clockStatus();
+    expect(host.timeServiceOn).toHaveBeenCalledTimes(3);
+    status = ON;
+    await kept.clockStatus();
+    status = OFF;
+    await kept.clockStatus();
+    expect(host.timeServiceOn).toHaveBeenCalledTimes(4);
+    clock.advance(MINUTE);
+    await kept.clockStatus();
+    expect(host.timeServiceOn).toHaveBeenCalledTimes(5);
   });
 
   it("does not stretch the back-off when the clock is set back", async () => {
