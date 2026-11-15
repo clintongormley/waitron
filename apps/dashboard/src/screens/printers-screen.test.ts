@@ -11094,6 +11094,7 @@ describe.each(["en", "es-ES"] as const)(
       first.dispatchEvent(
         new KeyboardEvent("keydown", { key: "End", bubbles: true, cancelable: true }),
       );
+      await userEvent.keyboard("{Enter}");
       await flush(el);
       await new Promise(requestAnimationFrame);
       expectOneLine("End key", measure(el, host, "agents"));

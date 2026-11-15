@@ -432,6 +432,8 @@ it("keyboard tab navigation holds the edited panel until Discard", async () => {
   const { input } = await draftVenueDetails(app);
   tabs(app).shadowRoot!.querySelector<HTMLButtonElement>("[data-key=venue-details]")!.focus();
   await userEvent.keyboard("{End}");
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  await userEvent.keyboard("{Enter}");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   expect(selected(app)).toBe("venue-details");
   expect(input.checkVisibility()).toBe(true);
