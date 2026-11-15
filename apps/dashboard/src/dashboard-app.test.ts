@@ -36,6 +36,7 @@ import {
 import { MenuPreviewPanel } from "./widgets/menu-preview.js";
 import { DashboardApp } from "./dashboard-app.js";
 import type { ProfileScreen } from "./screens/profile-screen.js";
+import type { CloudServicesScreen } from "./screens/cloud-services-screen.js";
 import type { AboutDialog } from "./widgets/about-dialog.js";
 import { diag } from "./diagnostics.js";
 import indexHtml from "../index.html?raw";
@@ -7701,10 +7702,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     const face = el.shadowRoot!.querySelector<HTMLElement & { api: DashboardApi }>(tag);
     expect(face).not.toBeNull();
     expect(face!.api).toBe(api);
-    if (screen === "cloud")
-      expect((face as HTMLElement & { canManageEmergency: boolean }).canManageEmergency).toBe(
-        false,
-      );
+    if (screen === "cloud") expect((face as CloudServicesScreen).canManageEmergency).toBe(false);
     expect(location.pathname).toMatch(new RegExp(`^/manage/${screen}(/|$)`));
   });
 
