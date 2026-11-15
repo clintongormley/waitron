@@ -1315,9 +1315,13 @@ for (const theme of ["light", "dark"] as const)
   });
 
 describe("a special day's run", () => {
-  function withSpecialDays(marks: Record<string, { id: string; name: string }>) {
+  function withSpecialDays(marks: Record<string, { id: string; name: string }>, purple = false) {
     const { api } = fakeApi(async (month) => {
       const read = staffingMonth(month);
+      if (purple)
+        read.seasons.forEach((season) => {
+          season.colour = "purple";
+        });
       return {
         ...read,
         days: read.days.map((day) => ({ ...day, specialDay: marks[day.date] ?? null })),
@@ -1355,6 +1359,10 @@ describe("a special day's run", () => {
       expect(runs(el, date)).toHaveLength(1);
       expect(getComputedStyle(mark!).borderTopColor).toBe(purple);
       expect(getComputedStyle(mark!).borderTopStyle).toBe("dashed");
+      expect(getComputedStyle(mark!).backgroundColor).toBe(probe(el, "var(--wt-color-surface)"));
+      expect(getComputedStyle(mark!).borderTopColor).not.toBe(
+        getComputedStyle(mark!).backgroundColor,
+      );
       const box = day(el, date);
       expect(run(el, date).top).toBeCloseTo(box.getBoundingClientRect().top, 1);
       expect(run(el, date).height).toBeGreaterThanOrEqual(
@@ -1377,10 +1385,16 @@ describe("a special day's run", () => {
     expect(runs(el, "2026-12-18")).toHaveLength(0);
   }
 
-  it("marks a special day's dates in the special-day colour along their tops, as one run", async () => {
-    const { el } = await mount({ api: fairDays });
-    await expectOneRun(el);
-  });
+  it.each(["light", "dark"])(
+    "marks a purple season's special-day dates as one dashed run in %s",
+    async (theme) => {
+      const { el } = await mount({
+        api: withSpecialDays({ "2026-12-15": fair, "2026-12-16": fair, "2026-12-17": fair }, true),
+      });
+      el.parentElement!.dataset.theme = theme;
+      await expectOneRun(el);
+    },
+  );
 
   it("a run breaks at a week's end", async () => {
     const { el } = await mount({

@@ -682,14 +682,17 @@ export class OpeningHoursWeekView extends LitElement {
   }
 
   #openBarDay(date: LocalDate, event: MouseEvent): void {
-    const rect = this.#dayButton(date)!.getBoundingClientRect();
+    const pointer = this.station && event.detail > 0;
+    const anchor = pointer
+      ? ((event.currentTarget as HTMLElement).closest<HTMLElement>(".row") ??
+        (event.currentTarget as HTMLElement))
+      : this.#dayButton(date)!;
+    const rect = anchor.getBoundingClientRect();
     this.#emit<CalendarDayOpen>("calendar-day-open", {
       date,
       returnTo: () => this.#dayButton(date),
-      point:
-        event.detail > 0
-          ? { x: event.clientX - rect.left, y: event.clientY - rect.top }
-          : undefined,
+      anchor: pointer ? anchor : undefined,
+      point: pointer ? { x: event.clientX - rect.left, y: event.clientY - rect.top } : undefined,
     });
   }
 
@@ -700,7 +703,7 @@ export class OpeningHoursWeekView extends LitElement {
         class="row"
         data-row=${row.key}
         ?data-station-child=${row.stationGroup !== undefined}
-        @click=${(event: MouseEvent) => this.#openBarDay(day.date, event)}
+        @click=${this.station ? (event: MouseEvent) => this.#openBarDay(day.date, event) : nothing}
       >
         <span class="row-name ${row.strong ? "strong" : ""}"
           >${row.station && row.stationGroup === undefined ? stationIcon() : nothing}${row.name}</span
@@ -711,6 +714,7 @@ export class OpeningHoursWeekView extends LitElement {
             (block) =>
               html`<span
                 class="block"
+                @click=${this.station ? nothing : (event: MouseEvent) => this.#openBarDay(day.date, event)}
                 data-colour=${names.period(block.periodId).colour || nothing}
                 ?data-faded=${block.faded}
                 style=${styleMap({
@@ -792,7 +796,7 @@ export class OpeningHoursWeekView extends LitElement {
         class="row"
         data-row=${row.key}
         ?data-station-child=${row.stationGroup !== undefined}
-        @click=${(event: MouseEvent) => this.#openBarDay(day.date, event)}
+        @click=${this.station ? (event: MouseEvent) => this.#openBarDay(day.date, event) : nothing}
       >
         <span class="row-name ${row.zone ? "" : "strong"}" aria-hidden="true"
           >${row.station && row.stationGroup === undefined ? stationIcon() : nothing}${row.name}</span
@@ -812,6 +816,7 @@ export class OpeningHoursWeekView extends LitElement {
                     (block) =>
                       html`<span
                         class="block"
+                        @click=${this.station ? nothing : (event: MouseEvent) => this.#openBarDay(day.date, event)}
                         data-colour=${names.period(block.periodId).colour || nothing}
                         ?data-faded=${block.faded}
                         style=${styleMap({

@@ -1399,9 +1399,9 @@ it("retains department rows while Show all's station read is loading", async () 
   expect(cell(el, "2026-12-01").querySelectorAll(".segment").length).toBeGreaterThan(0);
 });
 
-it.each([1280, 390])(
-  "draws dashed special-day runs with separate ids and week ends at %i px",
-  async (width) => {
+it.each([1280, 390].flatMap((width) => ["light", "dark"].map((theme) => ({ width, theme }))))(
+  "draws dashed special-day runs with separate ids and week ends at $width px in $theme",
+  async ({ width, theme }) => {
     await page.viewport(width, 844);
     const model = monthModel();
     model.seasons = model.seasons.map((season) => ({ ...season, colour: "purple" }));
@@ -1412,12 +1412,19 @@ it.each([1280, 390])(
           ? { id: "next", name: "Next fair" }
           : null;
     const el = await mount(model);
+    el.dataset.theme = theme;
     applyTokens(el);
     const run = (date: string) =>
       cell(el, date).querySelector<HTMLElement>('[data-test="special-run"]')!;
     const mark = run("2026-12-19");
     expect(mark).not.toBeNull();
     expect(getComputedStyle(mark).borderTopStyle).toBe("dashed");
+    const surface = document.createElement("span");
+    surface.style.background = "var(--wt-color-surface)";
+    el.shadowRoot!.append(surface);
+    expect(getComputedStyle(mark).backgroundColor).toBe(getComputedStyle(surface).backgroundColor);
+    expect(getComputedStyle(mark).borderTopColor).not.toBe(getComputedStyle(mark).backgroundColor);
+    surface.remove();
     expect(mark.hasAttribute("data-joins-previous")).toBe(true);
     expect(mark.hasAttribute("data-joins-next")).toBe(true);
     expect(

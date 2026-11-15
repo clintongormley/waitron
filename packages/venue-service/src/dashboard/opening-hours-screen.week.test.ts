@@ -180,7 +180,10 @@ async function mount(
   hosts.push(el);
   document.body.append(el);
   if (hold) await expect.poll(() => el.shadowRoot?.querySelector("h1")).not.toBeNull();
-  else await expect.poll(() => week(el)?.model).toBeDefined();
+  else
+    await expect
+      .poll(() => week(el)?.model ?? monthView(el)?.model ?? yearView(el)?.model)
+      .toBeDefined();
   await el.updateComplete;
   return { el, months, paths };
 }
@@ -1289,11 +1292,8 @@ it.each(["year", "month", "week"])(
   async (view) => {
     const suffix =
       view === "year" ? "year/2026" : view === "month" ? "month/2026-12" : "week/2026-12-09";
-    const { el, paths } = await mount("/manage/opening-hours/view/week/week/2026-12-09");
-    if (view !== "week") {
-      history.pushState(null, "", `/manage/opening-hours/view/${view}/${suffix}`);
-      window.dispatchEvent(new PopStateEvent("popstate"));
-    }
+    const { el, paths } = await mount(`/manage/opening-hours/view/${view}/${suffix}`);
+    if (view === "year") expect(paths.filter((path) => path.includes("/stations"))).toEqual([]);
     await expect.poll(() => el.shadowRoot!.querySelector(`opening-hours-${view}`)).not.toBeNull();
     const calendar = el.shadowRoot!.querySelector(`opening-hours-${view}`)!;
     const anchor = document.createElement("button");
@@ -1364,4 +1364,35 @@ it("a fully closed station day opens its box from the closed stretch", async () 
   await userEvent.click(closed);
   await expect.poll(() => boxOpen(el)).toBe(true);
   expect(dayBox(el)!.name).toBe("Christmas Day");
+});
+
+it("keeps a clicked station row anchored while its date heading is above a phone viewport", async () => {
+  const stations = Array.from({ length: 12 }, (_, index) => ({
+    ...STATIONS[0]!,
+    id: `s${index}`,
+    name: `Kitchen ${index}`,
+    isDefault: index === 0,
+  }));
+  const { el } = await mount(
+    "/manage/opening-hours/view/week/show/all/week/2026-12-09",
+    undefined,
+    false,
+    { stations },
+  );
+  await toPhone(el);
+  await expect.poll(() => week(el)!.station?.state).toBe("ready");
+  await week(el)!.updateComplete;
+  const rows = week(el)!.shadowRoot!.querySelectorAll<HTMLElement>(".row");
+  const row = rows[rows.length - 1]!;
+  row.scrollIntoView({ block: "center" });
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  const heading = dayName(el, "2026-12-09");
+  expect(heading.getBoundingClientRect().bottom).toBeLessThan(0);
+  await userEvent.click(row);
+  await expect.poll(() => boxOpen(el)).toBe(true);
+  window.scrollBy(0, -2);
+  window.dispatchEvent(new Event("scroll"));
+  expect(boxOpen(el)).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  expect(focused()).toBe(heading);
 });

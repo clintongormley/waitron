@@ -4,7 +4,7 @@
 
 Abre una fecha para ver cuándo abre cada departamento y zona. Mes y la ventana del día unen los periodos contiguos: **09:00–00:00** indica una apertura continua. Las horas en gris y cursiva siguen el horario del departamento.
 
-Para consultar el detalle por periodo, elige **Abrir esta semana** en la ventana del día. En Semana, pulsa el encabezado de un día o cualquier punto de su fila para abrir su horario. Un hueco en las barras de una zona indica que está cerrada durante ese tramo.
+Para consultar el detalle por periodo, elige **Abrir esta semana** en la ventana del día. En Semana, pulsa el encabezado de un día o cualquiera de sus barras para abrir su horario. Un hueco en las barras de una zona indica que está cerrada durante ese tramo.
 
 Para cambiar el horario habitual, sigue el enlace **Horario habitual** de la temporada, arriba de la ventana. Para una excepción, elige **Crear un día especial** abajo.
 
@@ -22,7 +22,7 @@ Pinta todo el tramo de **Cerrado** de la zona, aunque termine después del cierr
 
 ## Compara los horarios de las estaciones {#station-hours}
 
-En Mes o Semana, elige **Todas las estaciones de preparación** en **Mostrar** para comparar las estaciones por los departamentos que les envían pedidos, o una estación para ver qué departamentos le envían pedidos. Elige **Mostrar todo** para ver los departamentos seguidos de las estaciones. El icono de estación las distingue de las zonas con nombres parecidos.
+En Mes o Semana, elige **Todas las estaciones de preparación** en **Mostrar** para comparar las estaciones por los departamentos que les envían pedidos, o una estación para ver qué departamentos le envían pedidos. Elige **Mostrar todo** para ver los departamentos seguidos de las estaciones. El icono de estación las distingue de las zonas con nombres parecidos. Pulsa cualquier punto de la fila de una estación, incluidos los tramos cerrados, para abrir la ventana del día junto a ese punto.
 
 Los horarios de las estaciones siguen los periodos pintados, sus cartas, las rutas y los cierres de las zonas que envían. Para cambiar cuándo recibe pedidos una estación, edita sus periodos y cartas en **Periodos**, sus rutas en **Estaciones de preparación** o los horarios de cierre de las zonas que envían. La estación predeterminada también muestra los periodos que le envían pedidos. Abre una fecha para consultar los departamentos y sus zonas, seguidos de las estaciones seleccionadas, o de todas si no has filtrado por estación.
 

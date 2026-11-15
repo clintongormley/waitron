@@ -548,3 +548,13 @@ it("gives sender ranges the row width beneath a long station name on a phone", a
   expect(ranges[0]!.getBoundingClientRect().height).toBeLessThan(25);
   expect(ranges[1]!.getBoundingClientRect().left).toBe(ranges[0]!.getBoundingClientRect().left);
 });
+
+it("keeps flat Staffing boxes content-sized while sectioned boxes get the wider layout", async () => {
+  box.rows = [{ name: "Kitchen", text: "Closed" }];
+  await box.updateComplete;
+  box.show(anchor);
+  expect(popup().getBoundingClientRect().width).toBeLessThan(400);
+  box.sectioned = true;
+  await box.updateComplete;
+  expect(popup().getBoundingClientRect().width).toBeGreaterThan(400);
+});

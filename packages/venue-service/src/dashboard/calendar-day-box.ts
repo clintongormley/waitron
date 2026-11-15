@@ -30,8 +30,8 @@ export class CalendarDayBox extends LitElement {
         top: 0;
         margin: 0;
         box-sizing: border-box;
-        width: var(--wt-modal-standard-width);
-        max-width: min(var(--wt-modal-standard-width), calc(100vw - 2 * var(--wt-space-2)));
+        width: max-content;
+        max-width: min(var(--wt-modal-compact-width), calc(100vw - 2 * var(--wt-space-2)));
         max-height: calc(100vh - 2 * var(--wt-space-2));
         overflow: auto;
         padding: var(--wt-space-3);
@@ -41,6 +41,10 @@ export class CalendarDayBox extends LitElement {
         color: var(--wt-color-text);
         box-shadow: var(--wt-shadow-2);
         overflow-wrap: anywhere;
+      }
+      [popover].sectioned {
+        width: var(--wt-modal-standard-width);
+        max-width: min(var(--wt-modal-standard-width), calc(100vw - 2 * var(--wt-space-2)));
       }
       wt-icon {
         margin-inline-end: var(--wt-space-1);
@@ -151,17 +155,19 @@ export class CalendarDayBox extends LitElement {
 
   #anchor: HTMLElement | undefined;
   #point?: DayPoint;
+  #returnTo?: HTMLElement;
   #focusWasInside = false;
   #scrollTargets: EventTarget[] = [];
 
-  /** A pointer point is relative to the real anchor, which still owns focus and clipping.
+  /** A pointer point is relative to the real anchor, which owns clipping; `returnTo` owns focus.
    *  Opens below `anchor`, else above it, else beside it, covering it only when none of those fit,
    *  kept on screen; called again after the content changes, it places the box again without
    *  moving focus. While open, on each window resize and each scroll of the page or of a box
    *  `anchor` is drawn inside, slots included, it places itself again, or closes when no part of
    *  `anchor` is left inside the window and inside every such ancestor whose overflow is not
    *  visible, in the directions it limits. */
-  show(anchor: HTMLElement, point?: DayPoint): void {
+  show(anchor: HTMLElement, point?: DayPoint, returnTo: HTMLElement = anchor): void {
+    this.#returnTo = returnTo;
     this.#point = point;
     this.#anchor = anchor;
     const opening = !this.popup.matches(":popover-open");
@@ -248,7 +254,7 @@ export class CalendarDayBox extends LitElement {
 
   #toggle(event: ToggleEvent): void {
     if (event.newState !== "closed") return;
-    if (this.#focusWasInside) this.#anchor?.focus({ preventScroll: true });
+    if (this.#focusWasInside) this.#returnTo?.focus({ preventScroll: true });
     this.dispatchEvent(
       new CustomEvent("calendar-day-box-close", { bubbles: true, composed: true }),
     );
@@ -297,6 +303,7 @@ export class CalendarDayBox extends LitElement {
   protected override render() {
     return html`<div
       popover="auto"
+      class=${this.sectioned ? "sectioned" : ""}
       role="dialog"
       aria-labelledby="heading"
       @beforetoggle=${this.#beforeToggle}

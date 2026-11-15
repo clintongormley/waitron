@@ -45,6 +45,8 @@ export interface CalendarDayOpen {
   date: LocalDate;
   returnTo: () => HTMLElement | null;
   point?: DayPoint;
+  /** The clicked row when it differs from the date that takes focus back. */
+  anchor?: HTMLElement;
 }
 
 /** The trigger date and exact selected dates, sorted without duplicates. */
@@ -149,6 +151,7 @@ export class OpeningHoursMonthView extends LitElement {
         white-space: nowrap;
       }
       .special-run {
+        background: var(--wt-color-surface);
         position: absolute;
         inset-block-start: 0;
         inset-inline: 0;

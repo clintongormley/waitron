@@ -1078,7 +1078,7 @@ it.each([1280, 390])(
   "opens from closed row stretches at the clicked point at %i px",
   async (width) => {
     await page.viewport(width, 844);
-    const el = await mount();
+    const el = await mount({ stations: STATIONS, station: grill() });
     const sent = events<CalendarDayOpen>(el, "calendar-day-open");
     const closed = root(el).querySelector<HTMLElement>(".row .track")!;
     const trigger = root(el).querySelector<HTMLElement>('[data-test="day-name"]')!;
@@ -1094,9 +1094,23 @@ it.each([1280, 390])(
     );
     expect(sent).toHaveLength(1);
     expect(sent[0]!.returnTo()).toBe(trigger);
+    const anchor = closed.closest<HTMLElement>(".row")!;
+    expect(sent[0]!.anchor).toBe(anchor);
     expect(sent[0]!.point).toEqual({
-      x: rect.left + 3 - trigger.getBoundingClientRect().left,
-      y: rect.top + 3 - trigger.getBoundingClientRect().top,
+      x: rect.left + 3 - anchor.getBoundingClientRect().left,
+      y: rect.top + 3 - anchor.getBoundingClientRect().top,
     });
   },
 );
+
+it("keeps department bars anchored to the date and leaves closed stretches alone", async () => {
+  const el = await mount();
+  const sent = events<CalendarDayOpen>(el, "calendar-day-open");
+  const bar = root(el).querySelector<HTMLElement>(".block")!;
+  await userEvent.click(bar);
+  expect(sent).toHaveLength(1);
+  expect(sent[0]!.point).toBeUndefined();
+  const closed = bar.closest(".row")!.querySelector<HTMLElement>(".track")!;
+  closed.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+  expect(sent).toHaveLength(1);
+});

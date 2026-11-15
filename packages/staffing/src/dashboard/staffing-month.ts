@@ -129,6 +129,7 @@ export class StaffingMonthView extends LitElement {
         overflow: hidden;
       }
       .run {
+        background: var(--wt-color-surface);
         position: absolute;
         inset-block-start: 0;
         inset-inline: 0;

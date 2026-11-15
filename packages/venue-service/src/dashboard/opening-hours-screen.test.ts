@@ -1893,6 +1893,24 @@ describe("Month view", () => {
     expect(location.pathname).toMatch(/^\/manage\/opening-hours\/view\/season\/season\/winter/);
   });
 
+  it("the season link and its plain click both drop an inactive selected department", async () => {
+    const { el, view } = await monthMount(
+      "/manage/opening-hours/view/month/department/bar/month/2026-12",
+      false,
+      (data) => {
+        withWinter(data);
+        data.departments.find((department) => department.id === "bar")!.active = false;
+      },
+    );
+    await openBox(el, await shown(view));
+    const link = dayBox(el)!.querySelector<HTMLAnchorElement>("a[data-test=edit-week]")!;
+    expect(link.href).not.toContain("department/bar");
+    await userEvent.click(link);
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("season-painter")?.departmentId)
+      .toBe("rest");
+  });
+
   it("Escape closes the box and focus returns to the date", async () => {
     const { el, view } = await monthMount("/manage/opening-hours/view/month/month/2026-12");
     const month = await shown(view);

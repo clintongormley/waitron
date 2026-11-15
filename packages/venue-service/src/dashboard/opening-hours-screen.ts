@@ -1182,14 +1182,15 @@ export class OpeningHoursScreen extends LitElement {
       ),
     );
     if (!this.isConnected || this.dayBox !== open || !open) return;
-    const anchor = open.returnTo();
+    const returnTo = open.returnTo();
+    const anchor = open.anchor ?? returnTo;
     const box = this.shadowRoot?.querySelector("calendar-day-box");
-    if (!anchor || !box) {
+    if (!anchor || !returnTo || !box) {
       this.dayBox = undefined;
       return;
     }
     if (this.dayBoxPlaced === open && !box.shown) return;
-    box.show(anchor, open.point);
+    box.show(anchor, open.point, returnTo);
     this.dayBoxPlaced = open;
   }
   private dayBoxClosed(event: Event) {
@@ -1270,6 +1271,7 @@ export class OpeningHoursScreen extends LitElement {
     const { shown, day, holidays } = content;
     const specialDayId = day?.specialDay?.id ?? null;
     const season = content.seasons.find(({ id }) => id === day?.seasonId);
+    const department = this.department();
     const act = (run: () => unknown) => () => {
       this.afterDayBox = run;
       this.shadowRoot?.querySelector("calendar-day-box")?.hide();
@@ -1311,7 +1313,7 @@ export class OpeningHoursScreen extends LitElement {
           ? html`<a
               data-test="edit-week"
               slot="season-action"
-              href=${this.painterUrl({ seasonId: season.id, departmentId: this.department()?.id ?? "", zoneId: "" }).href}
+              href=${this.painterUrl({ seasonId: season.id, departmentId: department?.active ? department.id : "", zoneId: "" }).href}
               @click=${(event: MouseEvent) => {
                 if (
                   event.button !== 0 ||

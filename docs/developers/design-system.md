@@ -5597,6 +5597,8 @@ Opening hours' Year.
   A failed station-list read leaves department choices available. The explanation remains beneath
   Show while stations are offered; both management pages remain available in the sidebar.
   Station dates open the day box but cannot select a run for an hours edit.
+  Special dates carry dashed purple runs in place of their season line, with opaque surface-colour
+  gaps, joining only adjacent dates of the same special-day id within one week.
 - **Week.** `/view/week[/department/<id>|/station/<id>][/week/<yyyy-mm-dd>]` (`opening-hours-week.ts`) draws,
   when the Week itself is 560 px wide or more, the Monday-to-Sunday week holding the `week` date,
   which need not be a Monday. A missing, malformed
@@ -5616,8 +5618,7 @@ Opening hours' Year.
   and unlabelled, and a piece of its own is labelled. Zone closures leave gaps, with their joined
   times kept in the phone and spoken words. A row with no hours is an empty track in
   `--wt-color-track`; only a day closed all day writes "Closed all day", in its departments'
-  tracks. Screen readers read each row's whole text. A day's name or any point on its row, including closed stretches, opens the
-  day box, returning focus to the date heading when it closes; bars show no hover or click tip. Nothing is painted in the Week. When the
+  tracks. Screen readers read each row's whole text. A day's name or bar opens the day box; station rows also open it from closed stretches. Focus returns to the date heading when it closes; bars show no hover or click tip. Nothing is painted in the Week. When the
   Week itself is narrower than 560 px (`PHONE_WIDTH`) it draws the `week` date alone: its special
   day's and public holiday's names over a card holding the same rows, each its name, its times in
   words and a thin bar of its blocks, with no ruler and no tips. Its title ("Tue 1 Dec") has no
@@ -5631,8 +5632,6 @@ Opening hours' Year.
   day none of them sends on reads "Closed" once in place of its rows, and a station-only week whose
   times have not arrived draws no days. Show all retains loaded departments while station times load or fail. All prep stations keeps every station row, including
   Closed rows, without replacing department rows in Show all.
-  Special dates also carry dashed purple runs above their season line, joining only adjacent
-  dates of the same special-day id within one week.
 - **Picking days.** `DayPicker` (`day-picking.ts`) picks exact dates in Year and Month.
   A click picks one day and opens its day box; a drag replaces the selection with its run.
   Shift extends the anchored run, keeping separate picks; Cmd-click on Mac or Ctrl-click elsewhere
@@ -5653,7 +5652,7 @@ Opening hours' Year.
   italic, with hidden “as <department>” context; own zone hours use normal text. Department and
   zone hours merge touching periods. Range entries wrap between entries, each “·” kept with the
   preceding range by a non-breaking space. The box uses `--wt-modal-standard-width`, constrained
-  to the viewport, and scrolls vertically when needed. Staffing retains its flat rows and slots.
+  to the viewport, and scrolls vertically when needed. Staffing retains its compact content-sized box, flat rows and slots.
   Managers then see a bold Prep stations section: the selected station, or all active stations
   when no station filter is set, in Year, Month and Week. Station names are normal weight; a
   station fed by several departments has one line per sender, retaining period names and times.
@@ -5668,8 +5667,9 @@ Opening hours' Year.
   A Year date reads its month while the box is open; Loading… lasts until that read answers and
   a failed read is shown beside retained hours. Station views open beside the clicked point,
   including clicks on closed stretches. Keyboard openings use the date anchor. Placement flips
-  above or beside the anchor when needed, staying on screen. The point stays relative to the real
-  anchor while scrolling; when that anchor is clipped out of view, the box closes. Escape and
+  above or beside the anchor when needed, staying on screen. The point stays relative to its
+  clicked row while scrolling; when that row is clipped out of view, the box closes. Focus still
+  returns to the date heading. Escape and
   outside clicks close it; focus returns to the date if it was inside. A special day is deleted
   from its painter, which asks first.
 - **Seasons.** The Year's season chips (`season-chips.ts`) are a key: in start order, each is
