@@ -4,7 +4,7 @@
 queued server planning job by run id, attempt and job id, and see why this pass
 left it waiting. This diagnoses a recurrence; it does not repair the earlier incident.
 
-**Request:** Lane I queue, UNASSIGNED-PLANNER-REASON, watcher 2026-11-15 11:52:
+**Request:** Lane I queue, UNASSIGNED-PLANNER-REASON (queued 2026-11-15 11:52):
 “Make Waitron's existing recovery pass log, for each old unassigned planner job it
 declines to rescue, the job and run id and the reason (server full, PR link missing,
 head mismatch, not stalled long enough…).” The watcher cleared diagnostic scope,
@@ -40,11 +40,12 @@ closed/foreign PR, newly assigned jobs and other started/completed work.
 fixture; keep every behavioral assertion. `docs/developers/ci-and-gates.md`
 explains that no line does not prove eligibility: inventories, run-list status,
 earlier errors, deadlines and a pass that never runs limit what it sees/reaches.
+Fork and non-PR planning is hosted, so those runs stay quiet.
 `docs/backlog.md` and `docs/backlog/ci.md` add one clause to the existing routing
 bundle; keep the historical diagnosis and qualification work open.
 
 **Build and verification:**
-- [ ] The controller examples for lane G are already written, outside Git, in
+- [x] The controller examples for lane G are already written, outside Git, in
   `/Users/clintongormley/waitron-campaign-i/receipts/reorient-20261115-1140/controller-ask.md`:
   `CI planner skipped: repository=… run=… attempt=… job=…; PR link missing.` and
   equivalent head-differs/full-pool lines. No controller implementation here.
@@ -53,10 +54,12 @@ bundle; keep the historical diagnosis and qualification work open.
   minimal logging, then cover other decline reasons in the existing case table.
   Assert no POST after awaited recovery. Marked/retry cases must not print
   `Preserved` or `Recovering`; existing successful cancellation/retry checks stay.
+  A cancelled run found obsolete prints its existing outcome without a skip line.
 - [ ] Run `pnpm exec vitest run scripts/ci-server-health.test.mjs
   scripts/ci-hosted-route.test.mjs scripts/ci-server-first.test.mjs` and read counts.
   Exercise a plain diagnostic-read error on full capacity: command resolves,
-  full-server reason remains, no POST. Keep existing general recovery reports.
+  full-server reason remains, no POST. Assert the existing general recovery
+  `Preserved runs …` line is unchanged.
 - [ ] Update current docs from measured cases, then finish-branch, current-head CI
   and land-branch. No live cancellation, dispatch, deployment or recurrence wait.
 
