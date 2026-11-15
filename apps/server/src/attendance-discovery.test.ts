@@ -3,43 +3,66 @@ import { seedBusinessDay, seedVenue } from "@waitron/db/testing/seed.js";
 
 import { beforeEach, expect, it } from "vitest";
 import { asc, eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, dayCutoverChanges, newId, withTransaction, type Transaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  dayCutoverChanges,
+  newId,
+  withTransaction,
+  type Transaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { WORKFORCE_MIGRATIONS, attendanceDayWork, rosterVersions, shifts, recordStaffActivity } from "@waitron/workforce";
+import {
+  WORKFORCE_MIGRATIONS,
+  attendanceDayWork,
+  rosterVersions,
+  shifts,
+  recordStaffActivity,
+} from "@waitron/workforce";
 import { nextAttendanceDay } from "./attendance-discovery.js";
 import { markAttendanceSourceChanged } from "./attendance-source-changes.js";
-
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS] });
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
 let personId: string;
 const now = new Date("2026-01-09T12:00:00Z");
 const next = (at = now) => run((tx) => nextAttendanceDay(tx, { now: at }));
-const rows = () => suite.db.select().from(attendanceDayWork).orderBy(asc(attendanceDayWork.businessDay));
+const rows = () =>
+  suite.db.select().from(attendanceDayWork).orderBy(asc(attendanceDayWork.businessDay));
 const activity = (at: string) => run((tx) => recordStaffActivity(tx, personId, new Date(at)));
 async function evaluate() {
- for (const work of await rows()) await suite.db.update(attendanceDayWork).set({ evaluatedRevision: work.dirtyRevision }).where(eq(attendanceDayWork.id, work.id));
+  for (const work of await rows())
+    await suite.db
+      .update(attendanceDayWork)
+      .set({ evaluatedRevision: work.dirtyRevision })
+      .where(eq(attendanceDayWork.id, work.id));
 }
 
 beforeEach(async () => {
- await seedVenue(suite.db, { name: "Madrid", timeZone: "Europe/Madrid", dayCutover: "04:00", invoiceLocales: ["es"] });
- personId = (await seedPersons(suite.db, { displayName: "Anna", pinHash: "scrypt$00$00", role: "admin" }))[0]!.id;
+  await seedVenue(suite.db, {
+    name: "Madrid",
+    timeZone: "Europe/Madrid",
+    dayCutover: "04:00",
+    invoiceLocales: ["es"],
+  });
+  personId = (
+    await seedPersons(suite.db, { displayName: "Anna", pinHash: "scrypt$00$00", role: "admin" })
+  )[0]!.id;
 });
 
 it("allows deferred evaluated work only at its saved due instant", async () => {
-    await activity("2026-01-05T12:00:00Z");
-    const [work] = await rows();
-    await suite.db
-      .update(attendanceDayWork)
-      .set({
-        evaluatedRevision: work!.dirtyRevision,
-        deferredShiftIds: ["overnight"],
-        nextDueAt: "2026-01-06T05:00:00.000Z",
-      })
-      .where(eq(attendanceDayWork.id, work!.id));
-    expect(await next(new Date("2026-01-06T04:59:59Z"))).toBeNull();
-    expect((await next(new Date("2026-01-06T05:00:00Z")))?.businessDay).toBe("2026-01-05");
-  });
+  await activity("2026-01-05T12:00:00Z");
+  const [work] = await rows();
+  await suite.db
+    .update(attendanceDayWork)
+    .set({
+      evaluatedRevision: work!.dirtyRevision,
+      deferredShiftIds: ["overnight"],
+      nextDueAt: "2026-01-06T05:00:00.000Z",
+    })
+    .where(eq(attendanceDayWork.id, work!.id));
+  expect(await next(new Date("2026-01-06T04:59:59Z"))).toBeNull();
+  expect((await next(new Date("2026-01-06T05:00:00Z")))?.businessDay).toBe("2026-01-05");
+});
 
 it("refreshes unprocessed future bounds after a scheduled cutover change", async () => {
   await activity("2026-01-10T12:00:00Z");

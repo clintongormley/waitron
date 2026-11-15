@@ -22,7 +22,6 @@ import { mountTillApi } from "./till-api.js";
 import { parkOrder } from "./working-order.js";
 import { provisionBillVenue, seatedWith, send, type BillVenue } from "./testing/bill-venue.js";
 
-
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
@@ -129,9 +128,9 @@ describe("direct line service attendance", () => {
     const order = await prepare(action);
     expect(await command(api(recordAttendanceFact), action, order)).toMatchObject({ status: 200 });
     const after = await state();
-    expect(
-      after.facts.map((row) => [row.personId, row.lastAt]),
-    ).toEqual([[v.operatorId, "2026-01-05T16:40:00.000Z"]]);
+    expect(after.facts.map((row) => [row.personId, row.lastAt])).toEqual([
+      [v.operatorId, "2026-01-05T16:40:00.000Z"],
+    ]);
     expect(after.days.map((r) => [r.businessDay, r.dirtyRevision])).toEqual([["2026-01-05", 1]]);
     const line = after.lines.find((r) => r.id === order.lineId)!;
     if (action === "course") expect(line.courseId).toBe(courseId);
@@ -142,7 +141,3 @@ describe("direct line service attendance", () => {
       ).toBe(false);
   });
 });
-
-describe("A773 waiter request", () => {
-});
-

@@ -18,7 +18,6 @@ import {
 import { WORKFORCE_ES_MIGRATIONS, convenioConfig } from "@waitron/workforce-es";
 import { mountWorkforceApi } from "./workforce-api.js";
 
-
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
 });
@@ -78,7 +77,6 @@ async function cleanQueue() {
 }
 
 describe("accepted rota writes invalidate attendance in their transaction", () => {
-
   it("adds the shift's business day with venue bounds", async () => {
     await add(await version());
     expect(await days()).toEqual([
@@ -218,7 +216,6 @@ describe("accepted rota writes invalidate attendance in their transaction", () =
       ).status,
     ).toBe(204);
     expect((await days()).map((row) => row.businessDay)).toEqual(["2026-01-05", "2026-01-06"]);
-    await cleanQueue();
     expect((await send("DELETE", `roster/shifts/${row!.id}`)).status).toBe(204);
     expect((await days()).map((row) => row.businessDay)).toEqual(["2026-01-05", "2026-01-06"]);
   });

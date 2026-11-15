@@ -212,7 +212,9 @@ describe("own clock reconciliation at the business-day boundary", () => {
       },
     ]);
     expect(state).toMatchObject({ state: "out", firstClockIn: true, businessDay: "2026-01-06" });
-    expect(await suite.db.select().from(attendanceDayWork)).toEqual(work.map((row) => ({ ...row, dirtyRevision: row.dirtyRevision + 1 })));
+    expect(await suite.db.select().from(attendanceDayWork)).toEqual(
+      work.map((row) => ({ ...row, dirtyRevision: row.dirtyRevision + 1 })),
+    );
     expect(await suite.db.select().from(attendanceQuestions)).toMatchObject([
       { personId: venue.personId, automaticEntryId: state.lastEntryId },
     ]);

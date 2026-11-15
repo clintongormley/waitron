@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { kitchenStations, withTransaction } from "@waitron/db";
 import { businessDayBounds } from "@waitron/shared";
+import { enqueueAttendanceDay } from "@waitron/workforce";
 import { readScopedPassBoard } from "../../src/pass-board.js";
 import { JOBS_WAITING_MS } from "../../src/print-job-trouble.js";
 import { stationPrintersDown } from "../../src/station-outputs-down.js";
@@ -89,7 +90,7 @@ describe("tradeDay", () => {
       expect(counts.sale_lines).toBeGreaterThanOrEqual(40);
       expect(counts.order_groups).toBeGreaterThanOrEqual(20);
       expect(counts.order_groups).toBeLessThanOrEqual(30);
-      expect(counts.attendance_operation_facts).toBeGreaterThan(0);
+      expect(counts.staff_activity).toBeGreaterThan(0);
       expect(counts.daily_closes).toBe(1);
       for (const route of PAYMENT_ROUTES) expect(result.routes[route], route).toBeGreaterThan(0);
       const filingStates = rows(
@@ -301,6 +302,20 @@ describe("tradeDay", () => {
     "lets a timer run between the overnight attendance passes",
     async () => {
       const venue = await freshVenue("2025-11-03T04:00:00Z");
+      await withTransaction(venue.db, async (tx) => {
+        for (const businessDay of ["2025-11-01", "2025-11-02"])
+          await enqueueAttendanceDay(tx, {
+            businessDay,
+            ...businessDayBounds(
+              {
+                timeZone: BENCH_PROFILE.timeZone,
+                dayCutover: BENCH_PROFILE.dayCutover,
+                cutoverChanges: [],
+              },
+              businessDay,
+            ),
+          });
+      });
       const turnsAtPass: number[] = [];
       let turns = 0;
       attendance.beforePass = () => turnsAtPass.push(turns);
@@ -345,18 +360,14 @@ describe("tradeDay", () => {
   );
 
   it(
-    "carries on a reopened folder's attendance scan rather than starting it again",
+    "keeps recorded staff activity when a traded folder reopens",
     async () => {
       const venue = await freshVenue("2025-11-03T08:00:00Z");
       await tradeDay(venue, "2025-11-03", 2);
-      const scans = (from: BenchVenue) =>
-        rows(
-          from,
-          sql`select source, key, generation, cursor, endpoint, completed
-              from attendance_source_state where record_kind = 'scan' order by source, key`,
-        );
-      const before = scans(venue);
-      expect(before.some((scan) => (scan.cursor as number) > 0)).toBe(true);
+      const activity = (from: BenchVenue) =>
+        rows(from, sql`select * from staff_activity order by id`);
+      const before = activity(venue);
+      expect(before.length).toBeGreaterThan(0);
       const cookies = venue.deviceCookies();
       const { dir } = opened.pop()!;
       await venue.close();
@@ -364,7 +375,7 @@ describe("tradeDay", () => {
       const reopened = await openBenchVenue(dir, { seed: 1, deviceCookies: cookies });
       opened.push({ venue: reopened, dir });
 
-      expect(scans(reopened)).toEqual(before);
+      expect(activity(reopened)).toEqual(before);
     },
     CASE_TIMEOUT_MS,
   );

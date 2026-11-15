@@ -169,48 +169,10 @@ async function frozen() {
 }
 
 describe("Discard resolves the whole owned draft atomically", () => {
-  it("captures the final draft discard once under its acting owner", async () => {
-    const p = await setup();
-    const body = await request(p);
-    const attendance = { recorder: recordAttendanceFact, clock: venue.clock };
-    const answer = await inTx(venue, (tx) =>
-      discardDraft(
-        tx,
-        venue.cfg,
-        p.partyId,
-        p.draft.id,
-        venue.staffId,
-        { ...body, admission: testTradingAdmission() },
-        attendance,
-      ),
-    );
-    
-    const own = facts.filter((f) => f.key === `${p.draft.id}:${answer.revision}:discard`);
-    expect(own).toHaveLength(1);
-    expect(own[0]).toMatchObject({
-      personId: venue.staffId,
-      kind: "order",
-    });
-    expect(
-      await inTx(venue, (tx) =>
-        discardDraft(
-          tx,
-          venue.cfg,
-          p.partyId,
-          p.draft.id,
-          venue.staffId,
-          { ...body, admission: testTradingAdmission() },
-          attendance,
-        ),
-      ),
-    ).toEqual(answer);
-    
-  });
-
   it("rolls back the fresh discard and attendance together if final capture refuses", async () => {
     const p = await setup();
     const body = await request(p);
-    
+
     const before = await frozen();
     await expect(
       inTx(venue, (tx) =>
@@ -233,7 +195,6 @@ describe("Discard resolves the whole owned draft atomically", () => {
       ),
     ).rejects.toMatchObject({ code: "attendance.invalid" });
     expect(await frozen()).toEqual(before);
-    
   });
 
   it.each(["foreign-owner", "paying"] as const)(

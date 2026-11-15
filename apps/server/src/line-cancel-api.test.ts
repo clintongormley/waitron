@@ -1468,12 +1468,8 @@ describe("the public cancellation read and command", () => {
     );
     const first = await post(p, body, venue.cookie.staff, app);
     expect(first.status).toBe(200);
-    const key = `service:${p.billId}:party:${p.partyId}:${body.submissionId}`;
-    
-    
-    
+
     expect((await post(p, body, venue.cookie.staff, app)).json).toEqual(first.json);
-    
   });
 
   it("refuses take-orders revoked during a manager PIN check", async () => {

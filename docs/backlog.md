@@ -1371,14 +1371,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 - **Give the built close step a caller, then its cadence rule** (bundle of 2, 1 important, size M, needs the owner). [Detail](backlog/workforce.md#bundle-give-the-built-close-step-a-caller-then-its-cadence-rule)
 
-- **Audit attendance discovery invalidation for late attribution and rule changes.** A direct-insert
-  experiment finds activity that becomes attributable after its initial scan without dirtying its day;
-  route reachability is unverified. [Detail](backlog/workforce.md#attendance-discovery-invalidation).
-
-- **Read attendance facts by the requested day.** Narrow the source queries in
-  `apps/server/src/attendance-facts.ts` while preserving late corrections, original request times
-  and pending payment outcomes.
-
 - **Workforce period reads still load complete history.** Narrow them without losing late or
   cross-period corrections; retain the new latest-instant and person-scoped reads. The remaining query paths are in
   [workforce detail](backlog/workforce.md#a10-period-read-cost).

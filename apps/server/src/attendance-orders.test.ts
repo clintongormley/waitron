@@ -79,9 +79,9 @@ async function line(id: string) {
 }
 
 async function expectActivity(_id: string, _revision: number, _action: string, personId = worker) {
-  expect(
-    (await operations()).map((row) => [row.personId, row.lastAt]),
-  ).toEqual([[personId, "2026-01-05T16:40:00.000Z"]]);
+  expect((await operations()).map((row) => [row.personId, row.lastAt])).toEqual([
+    [personId, "2026-01-05T16:40:00.000Z"],
+  ]);
   expect(
     (await suite.db.select().from(attendanceDayWork)).map((r) => [r.businessDay, r.dirtyRevision]),
   ).toEqual([["2026-01-05", 1]]);
@@ -292,4 +292,3 @@ describe("accepted order attendance", () => {
     },
   );
 });
-

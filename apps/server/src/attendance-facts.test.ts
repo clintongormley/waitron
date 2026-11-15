@@ -1,22 +1,14 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import {
-  CORE_MIGRATIONS,
-  appendOrderAmendment,
-  newId,
-  parties,
-  withTransaction,
-  type Transaction,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, newId, parties, withTransaction, type Transaction } from "@waitron/db";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { sessions, hashSessionToken, registerModulePermissions } from "@waitron/identity";
-import { jobOrigin } from "@waitron/shared";
+import { registerModulePermissions } from "@waitron/identity";
+
 import {
   WORKFORCE_MIGRATIONS,
   WORKFORCE_PERMISSIONS,
-  WorkforceBackend,
   rosterVersions,
   shifts,
   requestSwap,
@@ -24,7 +16,6 @@ import {
   decideSwap,
   type AttendanceDay,
 } from "@waitron/workforce";
-
 
 registerModulePermissions(WORKFORCE_PERMISSIONS);
 
@@ -34,7 +25,7 @@ const suite = useVenueDb({
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
 
 let anna: string, beth: string, carol: string, david: string;
-let nodeId: string, deviceId: string, orderId: string, partyId: string;
+let nodeId: string, orderId: string, partyId: string;
 const day = (): AttendanceDay => ({
   businessDay: "2026-01-05",
   startAt: "2026-01-05T03:00:00.000Z",
@@ -46,8 +37,6 @@ async function planned(scope = day()) {
   return run((tx) => readPlannedAttendanceShifts(tx, scope));
 }
 
-
-
 beforeEach(async () => {
   await seedVenue(suite.db, {
     name: "Madrid",
@@ -56,7 +45,7 @@ beforeEach(async () => {
     invoiceLocales: ["es"],
   });
   nodeId = await seedNode(suite.db);
-  deviceId = (await seedDevice(suite.db)).deviceId;
+  await seedDevice(suite.db);
   const people = await seedPersons(
     suite.db,
     ["Anna", "Beth", "Carol", "David"].map((displayName) => ({
@@ -76,9 +65,6 @@ beforeEach(async () => {
     orderNumber: 1,
     partyId,
   });
-});
-
-describe("attendance source facts", () => {
 });
 
 describe("planned attendance shifts", () => {

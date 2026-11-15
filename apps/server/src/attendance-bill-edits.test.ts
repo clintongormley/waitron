@@ -119,11 +119,13 @@ describe("accepted bill edits as order activity", () => {
         .mockReturnValue({ ...reading, instant: new Date("2026-01-05T18:00:00Z") });
       const answer = await command(api(recordAttendanceFact), action, p);
       expect(answer.status).toBe(answersBill(action) ? 200 : 204);
-      
+
       if (action === "move-dishes-to-bill") expect(answer.json.billId).toBe(p.otherBillId);
       const saved = await state();
-      expect(saved.facts.map((row) => [row.personId, row.lastAt])).toEqual([[v.operatorId, "2026-01-05T16:40:00.000Z"]]);
-      
+      expect(saved.facts.map((row) => [row.personId, row.lastAt])).toEqual([
+        [v.operatorId, "2026-01-05T16:40:00.000Z"],
+      ]);
+
       expect(await command(api(recordAttendanceFact), action, p)).toMatchObject({
         status: 409,
         json: { code: "party.out_of_date" },
@@ -132,4 +134,3 @@ describe("accepted bill edits as order activity", () => {
     },
   );
 });
-

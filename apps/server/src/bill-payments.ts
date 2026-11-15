@@ -1594,7 +1594,6 @@ export async function failBillPayment(
   billPaymentId: string,
   failedAt: Date,
   attestation?: Attestation,
-  _attendance?: AttendanceRecorder,
 ): Promise<PaymentRow> {
   const [payment] = await tx
     .update(billPayments)
@@ -1674,7 +1673,7 @@ export async function takeReaderBillPayment(
     const { payment } = begun;
     if (deps.disk?.noted() === true) {
       await withTransaction(deps.db, (tx) =>
-        failBillPayment(tx, payment.id, deps.clock.now().instant, undefined, deps.attendance),
+        failBillPayment(tx, payment.id, deps.clock.now().instant, undefined),
       );
       refuseForDiskStop(deps.log, workingOrderId);
     }
@@ -1696,13 +1695,7 @@ export async function takeReaderBillPayment(
       if (isAppError(error) && REFUSED_START.has(error.code)) {
         await withTransaction(deps.db, async (tx) => {
           await requireEconomicWrite(tx, cfg, deps.admission);
-          return failBillPayment(
-            tx,
-            payment.id,
-            deps.clock.now().instant,
-            undefined,
-            deps.attendance,
-          );
+          return failBillPayment(tx, payment.id, deps.clock.now().instant, undefined);
         });
       }
       throw collectFailure(deps, workingOrderId, error);
@@ -1753,13 +1746,7 @@ export async function takeReaderBillPayment(
         const answer = await resultOf(tx, deps, cfg, payment, null);
         return { ...answer, outcome: "timeout" };
       }
-      const failed = await failBillPayment(
-        tx,
-        payment.id,
-        deps.clock.now().instant,
-        undefined,
-        deps.attendance,
-      );
+      const failed = await failBillPayment(tx, payment.id, deps.clock.now().instant, undefined);
       return {
         ...(await resultOf(tx, deps, cfg, failed, null)),
         outcome: result.state === "network_unavailable" ? "network_unavailable" : "declined",

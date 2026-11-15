@@ -4,7 +4,7 @@
   "scope": "Reviewed by Claude and CLEARED by the watcher in Lane H questions.md, 2026-11-15 23:01 including its amendment; not owner plan approval. PR 1: first/latest per planned shift and removal of per-action tracking. PR 2: fixed 30-day activity-log pruning beside the 7-day print rule, no calendar-month helper or print-payload compression. Lists below inventory existing consumers, not a rewrite of every listed test.",
   "testOwnership": {
     "groupingAndFirstLatest": "Test once in the workforce package.",
-    "captureBoundaries": "One records-activity test per existing capture boundary in apps/server/src/attendance-capture.test.ts.",
+    "captureBoundaries": "One admitted-person/time records-activity case per boundary in its existing attendance-*.test.ts capture suite (watcher clarification, 2026-11-15 23:18).",
     "otherRouteFiles": "Delete per-action checks instead of rewriting them; preserve independent route behavior assertions."
   },
   "production": [

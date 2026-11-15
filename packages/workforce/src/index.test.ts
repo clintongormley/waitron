@@ -17,6 +17,8 @@ describe("the public surface", () => {
         "WORKFORCE_PERSONAL_DATA",
         "attendanceDayWork",
         "staffActivity",
+        "recordStaffActivity",
+        "readStaffActivityFacts",
         "attendanceQuestions",
         "enqueueAttendanceDay",
         "processAttendanceDay",

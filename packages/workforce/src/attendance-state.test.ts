@@ -1,4 +1,3 @@
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
@@ -7,10 +6,7 @@ import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 
 import { seedFixtureVenue } from "../test/fixtures.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
-import {
-  attendanceDayWork,
-  enqueueAttendanceDay,
-} from "./index.js";
+import { attendanceDayWork, enqueueAttendanceDay } from "./index.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],

@@ -753,9 +753,7 @@ describe("unpaid departure stops kitchen work", () => {
         .collectedAt,
     ).toBe(before!.collectedAt);
     expect(await cancellations(line!.id)).toEqual([]);
-    
-    
-    
+
     const placements = await venue.db
       .select()
       .from(orderAmendments)
@@ -766,7 +764,6 @@ describe("unpaid departure stops kitchen work", () => {
         ),
       );
     expect(placements).toHaveLength(1);
-    
   });
 
   it("refuses unfired uninvoiced work before changing any kitchen state or print job", async () => {

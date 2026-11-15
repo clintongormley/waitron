@@ -66,9 +66,17 @@ export async function nextAttendanceDay(
     throw new AppError("attendance.invalid", { reason: "invalid attendance instant" });
   const clock = await readVenueClock(tx);
   const markMovedShifts = async (work: AttendanceDay) => {
-    const planned = await tx.select({ id: shifts.id, startsAt: shifts.startsAt })
-      .from(shifts).innerJoin(rosterVersions, eq(rosterVersions.id, shifts.rosterVersionId))
-      .where(and(eq(rosterVersions.status, "published"), gte(shifts.startsAt, work.startAt), lt(shifts.startsAt, work.endAt)));
+    const planned = await tx
+      .select({ id: shifts.id, startsAt: shifts.startsAt })
+      .from(shifts)
+      .innerJoin(rosterVersions, eq(rosterVersions.id, shifts.rosterVersionId))
+      .where(
+        and(
+          eq(rosterVersions.status, "published"),
+          gte(shifts.startsAt, work.startAt),
+          lt(shifts.startsAt, work.endAt),
+        ),
+      );
     for (const shift of planned)
       if (businessDayAt(clock, new Date(shift.startsAt)) !== work.businessDay)
         await markAttendanceSourceChanged(tx, "shift", shift.id);

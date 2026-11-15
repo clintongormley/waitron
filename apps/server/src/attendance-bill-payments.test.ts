@@ -2,7 +2,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { newId, withTransaction } from "@waitron/db";
+import { newId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
@@ -10,7 +10,6 @@ import { SimulatorPaymentProvider } from "@waitron/payments";
 
 import { staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
-import { readAttendanceFacts } from "./attendance-facts.js";
 
 import {
   takeBillPayment,
@@ -20,7 +19,6 @@ import {
 
 import { setupPartyVenue, seat, order, OPERATOR, type PartyVenue } from "./testing/party-venue.js";
 import { openTillSession } from "./testing/session-device.js";
-
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -79,7 +77,9 @@ function at(instant: string) {
 const operations = () => suite.db.select().from(staffActivity);
 const provider = () => new SimulatorPaymentProvider(suite.db);
 
-function evidence(paymentId: string, outcome: string) { return { personId: collector.personId, lastAt: "2026-01-05T11:00:00.000Z" }; }
+function evidence(_paymentId: string, _outcome: string) {
+  return { personId: collector.personId, lastAt: "2026-01-05T11:00:00.000Z" };
+}
 
 describe("accepted bill payment attendance", () => {
   it.each(["cash", "manual"] as const)(
@@ -96,24 +96,10 @@ describe("accepted bill payment attendance", () => {
       );
       expect(result.payment.state).toBe("received");
       expect(result.balance.outstanding).toBe("11.00");
-      expect(await operations()).toMatchObject([
-        { ...evidence(result.payment.id, "qualifying") },
-      ]);
-      const facts = await withTransaction(suite.db, (tx) =>
-        readAttendanceFacts(tx, {
-          businessDay: "2026-01-05",
-          startAt: "2026-01-05T04:00:00.000Z",
-          endAt: "2026-01-06T04:00:00.000Z",
-        }),
-      );
-      expect(facts.filter((f) => f.kind === "payment")).toEqual([{ personId: collector.personId, lastAt: "2026-01-05T11:00:00.000Z" }]);
+      expect(await operations()).toMatchObject([{ ...evidence(result.payment.id, "qualifying") }]);
     },
   );
 });
-
-describe("bill payments refused before the reader", () => {
-});
-
 
 it("a reader initiation records its collector once and completion adds no activity", async () => {
   at("2026-01-05T11:00:00Z");

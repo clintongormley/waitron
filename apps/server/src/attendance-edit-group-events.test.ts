@@ -212,15 +212,9 @@ describe("group events from draft submission and order editing", () => {
               ? ["removed"]
               : [],
       );
-      expect(
-        saved.facts
-          .filter((f) => f.key.startsWith("group:"))
-          .map((f) => [f.key, f.personId, f.at])
-          .sort(),
-      ).toEqual(
-        events.map((e) => [`group:${e.id}`, v.operatorId, "2026-01-05T16:40:00.000Z"]).sort(),
-      );
+      expect(saved.facts).toMatchObject([
+        { personId: v.operatorId, lastAt: "2026-01-05T16:40:00.000Z" },
+      ]);
     },
   );
 });
-

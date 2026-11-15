@@ -13,7 +13,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
 import { attendanceDayWork, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
-import { readAttendanceFacts } from "./attendance-facts.js";
+
 import { readBillEditState } from "./bill-editing.js";
 import { discardPartyDrafts, moveDraftsToBill, submitDraft } from "./order-drafts.js";
 import { OPERATOR, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
@@ -93,17 +93,11 @@ const state = async () => ({
   facts: await suite.db.select().from(staffActivity),
   days: await suite.db.select().from(attendanceDayWork),
 });
-async function factsAt() {
-  return run((tx) =>
-    readAttendanceFacts(tx, {
-      businessDay: "2026-01-05",
-      startAt: "2026-01-05T00:00:00Z",
-      endAt: "2026-01-06T00:00:00Z",
-    }),
-  );
-}
+
 async function assertSnapshots(_events: unknown, at: string, actor: string) {
-  expect((await state()).facts.filter((row) => row.personId === actor)).toMatchObject([{ personId: actor, lastAt: at }]);
+  expect((await state()).facts.filter((row) => row.personId === actor)).toMatchObject([
+    { personId: actor, lastAt: at },
+  ]);
 }
 
 describe("natural draft-event attendance snapshots", () => {
@@ -203,8 +197,7 @@ describe("natural draft-event attendance snapshots", () => {
     );
     const saved = await state();
     const events = saved.events.filter((e) => !before.events.some((old) => old.id === e.id));
-    
+
     await assertSnapshots(events, "2026-01-05T16:00:00.000Z", other);
   });
 });
-

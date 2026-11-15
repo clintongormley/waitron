@@ -548,24 +548,20 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
     createdAt: "2026-04-19T08:30:00.000Z",
   });
 
-  await db
-    .insert(staffActivity)
-    .values({
-      personId: marta,
-      businessDay: "2026-04-18",
-      shiftKey: `gap:${"2026-04-18"}:start`,
-      firstAt: "2026-04-18T22:58:00.000Z",
-      lastAt: "2026-04-18T22:58:00.000Z",
-    });
-  await db
-    .insert(staffActivity)
-    .values({
-      personId: marta,
-      businessDay: "2026-03-07",
-      shiftKey: `gap:${"2026-03-07"}:start`,
-      firstAt: "2026-03-07T21:30:00.000Z",
-      lastAt: "2026-03-07T21:30:00.000Z",
-    });
+  await db.insert(staffActivity).values({
+    personId: marta,
+    businessDay: "2026-04-18",
+    shiftKey: `gap:${"2026-04-18"}:start`,
+    firstAt: "2026-04-18T22:58:00.000Z",
+    lastAt: "2026-04-18T22:58:00.000Z",
+  });
+  await db.insert(staffActivity).values({
+    personId: marta,
+    businessDay: "2026-03-07",
+    shiftKey: `gap:${"2026-03-07"}:start`,
+    firstAt: "2026-03-07T21:30:00.000Z",
+    lastAt: "2026-03-07T21:30:00.000Z",
+  });
 
   const colleagueQuestion = "00000000-0000-4000-8000-0000000000c1";
   await db.insert(attendanceQuestions).values({
@@ -605,15 +601,13 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
     entryIds: [automaticEntry],
     createdAt: "2026-04-27T09:11:00.000Z",
   });
-  await db
-    .insert(staffActivity)
-    .values({
-      personId: colleague,
-      businessDay: "2026-04-25",
-      shiftKey: `gap:${"2026-04-25"}:start`,
-      firstAt: "2026-04-25T20:47:00.000Z",
-      lastAt: "2026-04-25T20:47:00.000Z",
-    });
+  await db.insert(staffActivity).values({
+    personId: colleague,
+    businessDay: "2026-04-25",
+    shiftKey: `gap:${"2026-04-25"}:start`,
+    firstAt: "2026-04-25T20:47:00.000Z",
+    lastAt: "2026-04-25T20:47:00.000Z",
+  });
 
   return { nodeId };
 }

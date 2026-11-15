@@ -1989,7 +1989,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         // The provider's own record says nothing was charged, so the reservation is released.
         await gated(sessionId, async (tx) => {
           await requireStuckBillPayment(tx, id);
-          await failBillPayment(tx, id, now, undefined, deps.attendance);
+          await failBillPayment(tx, id, now, undefined);
         });
         return c.json({ outcome: "not_charged" });
       }
@@ -2028,7 +2028,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const attestation = { attestedBy: personId, note };
         const now = deps.clock.now().instant;
         if (outcome === "failed") {
-          await failBillPayment(tx, id, now, attestation, deps.attendance);
+          await failBillPayment(tx, id, now, attestation);
           return { outcome: "not_charged" as const };
         }
         // Dated when the provider settled it, as the work loop does.

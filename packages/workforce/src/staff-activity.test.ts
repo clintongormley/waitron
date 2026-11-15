@@ -1,7 +1,9 @@
 import { beforeEach, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
-import { dayCutoverChanges } from "@waitron/db";
+import { dayCutoverChanges, newId } from "@waitron/db";
+import { executeAttendanceCommand } from "./attendance-response-commands.js";
+import { readAttendanceRevision } from "./attendance-responses.js";
 import { attendanceFixture } from "../test/attendance-fixture.js";
 import { shifts } from "./schema/shifts.js";
 import { recordStaffActivity, readStaffActivityFacts } from "./staff-activity.js";
@@ -184,5 +186,35 @@ it("questions retain only current endpoints as the latest activity moves", async
       `order:staff:${row!.id}:first:2026-01-05T09:00:00.000Z`,
       `order:staff:${row!.id}:latest:2026-01-05T20:00:00.000Z`,
     ],
+  ]);
+});
+
+it("a changed latest endpoint after confirmation asks about the newly uncovered work", async () => {
+  await f.open();
+  await record("2026-01-05T17:00:00Z");
+  await f.process({ facts: await facts() });
+  const [question] = await f.questions();
+  await f.run(async (tx) =>
+    executeAttendanceCommand(tx, {
+      nodeId: f.nodeId,
+      requestedByPersonId: f.personId,
+      authorizedByPersonId: f.personId,
+      origin: f.event("").origin,
+      now: new Date("2026-01-06T05:00:00Z"),
+      command: {
+        action: "confirm",
+        questionId: question!.id,
+        commandId: newId(),
+        expectedRevision: await readAttendanceRevision(tx, f.personId),
+      },
+    }),
+  );
+  expect(await f.questions()).toEqual([]);
+  await f.process({ facts: await facts() });
+  expect(await f.questions()).toEqual([]);
+  await record("2026-01-05T18:00:00Z");
+  await f.process({ facts: await facts() });
+  expect(await f.questions()).toMatchObject([
+    { kind: "missing-times", evidenceKeys: [expect.stringContaining(":2026-01-05T18:00:00.000Z")] },
   ]);
 });

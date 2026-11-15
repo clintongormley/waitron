@@ -8,16 +8,9 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { venueFiscalSelection } from "@waitron/provisioning";
-import {
-  attendanceDayWork,
-  staffActivity,
-  rosterVersions,
-  shifts,
-} from "@waitron/workforce";
+import { attendanceDayWork, staffActivity, rosterVersions, shifts } from "@waitron/workforce";
 import { recordAttendanceFact } from "./attendance-capture.js";
-import {
-  nextAttendanceDay,
-} from "./attendance-discovery.js";
+import { nextAttendanceDay } from "./attendance-discovery.js";
 import { markAttendanceSourceChanged } from "./attendance-source-changes.js";
 import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import { ALL_MODULES } from "./modules.js";
@@ -56,7 +49,7 @@ it("an admitted future cutover change does not block activity on its already dis
     startsOffsetMinutes: 60,
     endsOffsetMinutes: 60,
   });
-  const now = new Date("2026-01-05T12:00:00Z");
+
   await withTransaction(suite.db, (tx) => markAttendanceSourceChanged(tx, "rota", version!.id));
   const [before] = await suite.db.select().from(attendanceDayWork);
   expect(before).toMatchObject({
@@ -100,7 +93,9 @@ it("an admitted future cutover change does not block activity on its already dis
   expect(await suite.db.select().from(attendanceDayWork)).toEqual([
     { ...before, dirtyRevision: before!.dirtyRevision + 1 },
   ]);
-  expect(await suite.db.select().from(staffActivity)).toMatchObject([{ personId: worker!.id, lastAt: "2026-01-07T16:40:00.000Z" }]);
+  expect(await suite.db.select().from(staffActivity)).toMatchObject([
+    { personId: worker!.id, lastAt: "2026-01-07T16:40:00.000Z" },
+  ]);
 });
 
 it("a Save that moves today's end makes attendance evaluate today up to the new end", async () => {
@@ -185,5 +180,7 @@ it("a Save that moves today's end makes attendance evaluate today up to the new 
   expect(await suite.db.select().from(attendanceDayWork)).toEqual([
     expect.objectContaining({ businessDay: "2026-01-07", endAt: "2026-01-08T05:00:00.000Z" }),
   ]);
-  expect(await suite.db.select().from(staffActivity)).toMatchObject([{ personId: worker!.id, lastAt: "2026-01-08T04:30:00.000Z" }]);
+  expect(await suite.db.select().from(staffActivity)).toMatchObject([
+    { personId: worker!.id, lastAt: "2026-01-08T04:30:00.000Z" },
+  ]);
 });

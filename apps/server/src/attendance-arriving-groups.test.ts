@@ -19,7 +19,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
 import { attendanceDayWork, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
-import { readAttendanceFacts } from "./attendance-facts.js";
 import { joinTables } from "./testing/table-action-fixture.js";
 import { groupArrivingDishes } from "./order-groups.js";
 import { createCourse } from "./kitchen.js";
@@ -148,15 +147,7 @@ async function state() {
     days: await suite.db.select().from(attendanceDayWork),
   };
 }
-async function factsAt() {
-  return run((tx) =>
-    readAttendanceFacts(tx, {
-      businessDay: "2026-01-05",
-      startAt: "2026-01-05T00:00:00Z",
-      endAt: "2026-01-06T00:00:00Z",
-    }),
-  );
-}
+
 describe("attendance for dishes arriving in a party", () => {
   it("captures both held and fired arrivals at the supplied command instant", async () => {
     const p = await seatedWith(v, "House salad", "Tarta");
@@ -195,9 +186,9 @@ describe("attendance for dishes arriving in a party", () => {
     const saved = await state();
     const events = saved.events.filter((e) => !before.events.some((old) => old.id === e.id));
     expect(events).toHaveLength(2);
-    expect(saved.facts.map((f) => [f.key, f.personId, f.at])).toEqual(
-      events.map((e) => [`group:${e.id}`, v.operatorId, "2026-01-05T16:40:00.000Z"]),
-    );
+    expect(saved.facts).toMatchObject([
+      { personId: v.operatorId, lastAt: "2026-01-05T16:40:00.000Z" },
+    ]);
   });
   it.each(actions)(
     "%s snapshots the admitted mover at the trusted command instant",
@@ -216,11 +207,10 @@ describe("attendance for dishes arriving in a party", () => {
       clock.mockReturnValue({ ...reading, instant: new Date("2026-01-05T17:00:00Z") });
       expect(await command(api(recordAttendanceFact), action, p)).toMatchObject({ status: 200 });
       const saved = await state();
-      const events = saved.events.filter((e) => !before.events.some((old) => old.id === e.id));
-      
-      expect(saved.facts).toMatchObject([{ personId: v.operatorId, lastAt: "2026-01-05T16:40:00.000Z" }]);
-      expect((await factsAt()).filter((f) => f.key === `group:${events[0]!.id}`)).toEqual([
-        expect.objectContaining({ personId: v.operatorId, at: "2026-01-05T16:40:00.000Z" }),
+      saved.events.filter((e) => !before.events.some((old) => old.id === e.id));
+
+      expect(saved.facts).toMatchObject([
+        { personId: v.operatorId, lastAt: "2026-01-05T16:40:00.000Z" },
       ]);
       expect(saved.days.map((d) => d.dirtyRevision)).toEqual([1]);
     },
@@ -228,4 +218,3 @@ describe("attendance for dishes arriving in a party", () => {
 });
 
 const send = observedRelocationSender(() => suite.db, rawSend);
-

@@ -265,7 +265,7 @@ describe("a running shift across a clock days off", () => {
         offsetMinutes: 60,
         outcome: "qualified",
       });
-      });
+    });
   };
   const settleAt = async (at: Date) => {
     const { runAttendancePass } = await import("./attendance-loop.js");

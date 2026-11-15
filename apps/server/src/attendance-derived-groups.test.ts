@@ -19,7 +19,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
 import { attendanceDayWork, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
-import { readAttendanceFacts } from "./attendance-facts.js";
+
 import { createCourse, createStation } from "./kitchen.js";
 
 import { placeGroupedRound } from "./testing/group-submit-fixture.js";
@@ -129,7 +129,6 @@ async function state() {
 }
 
 describe("group events derived from accepted commands", () => {
-
   it.each(["empty-move"] as const)(
     "%s uses one trusted instant for the whole accepted command",
     async (action) => {
@@ -139,10 +138,11 @@ describe("group events derived from accepted commands", () => {
         .mockReturnValueOnce({ ...reading, instant: new Date("2026-01-05T16:40:00.987Z") })
         .mockReturnValue({ ...reading, instant: new Date("2026-01-05T17:00:00Z") });
       expect(await command(api(recordAttendanceFact), action, p)).toMatchObject({ status: 200 });
-      expect((await state()).facts).toMatchObject([{ personId: v.operatorId, lastAt: "2026-01-05T16:40:00.000Z" }]);
+      expect((await state()).facts).toMatchObject([
+        { personId: v.operatorId, lastAt: "2026-01-05T16:40:00.000Z" },
+      ]);
     },
   );
 });
 
 const send = observedGroupSender(() => v.db, rawGroupSend);
-

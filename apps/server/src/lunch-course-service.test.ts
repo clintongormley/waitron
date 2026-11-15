@@ -269,7 +269,7 @@ describe("set lunch course service", () => {
       });
       const [afterSend] = await tx.select().from(workingOrders).where(eq(workingOrders.id, id));
       expect(afterSend!.revision).toBe(beforeSend!.revision + 1);
-      
+
       expect(
         (await tickets(tx, id)).find((item) => item.workingOrderLineId === rings.id),
       ).toMatchObject({

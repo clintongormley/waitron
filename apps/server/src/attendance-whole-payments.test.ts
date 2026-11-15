@@ -2,14 +2,13 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { newId, sales, withTransaction } from "@waitron/db";
+import { newId, sales } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
-
 import { staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
-import { readAttendanceFacts } from "./attendance-facts.js";
+
 import { collectOrder, recordTillSale } from "./testing/whole-payment-fixture.js";
 import {
   setupPartyVenue,
@@ -74,7 +73,9 @@ const request = (id: string = newId()) => ({
   lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
   tender: tender("cash"),
 });
-function evidence(key: string) { return { personId: collector.personId, lastAt: "2026-01-05T11:00:00.000Z" }; }
+function evidence(_key: string) {
+  return { personId: collector.personId, lastAt: "2026-01-05T11:00:00.000Z" };
+}
 async function bill(issued = false) {
   const { tabId } = await seat(v, await v.table("Attendance collection"));
   await order(v, tabId, "Burger");
@@ -90,7 +91,6 @@ async function bill(issued = false) {
 }
 
 describe("accepted whole-order payment attendance", () => {
-
   it.each(["cash", "card"] as const)(
     "captures a %s counter sale from the collector",
     async (method) => {
@@ -141,15 +141,6 @@ describe("accepted whole-order payment attendance", () => {
       const after = await suite.db.select().from(sales);
       expect(after).toHaveLength(1);
       if (issued) expect(after).toEqual(before);
-      const facts = await withTransaction(suite.db, (tx) =>
-        readAttendanceFacts(tx, {
-          businessDay: "2026-01-05",
-          startAt: "2026-01-05T04:00:00.000Z",
-          endAt: "2026-01-06T04:00:00.000Z",
-        }),
-      );
-      expect(facts.filter((f) => f.kind === "payment").map((row) => [row.personId, row.lastAt])).toEqual([[collector.personId, "2026-01-05T11:00:00.000Z"]]);
     },
   );
 });
-

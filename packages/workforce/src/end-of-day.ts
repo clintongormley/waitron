@@ -205,6 +205,19 @@ export async function processAttendanceDay(
     const effective = effectiveClockEntries(entries).sort(compareEvents);
     const intervals = intervalsFor(entries);
     const ownFacts = facts.filter((f) => f.personId === personId);
+    const answered = new Set(
+      (
+        await tx
+          .select({ id: attendanceQuestions.automaticEntryId })
+          .from(attendanceQuestions)
+          .where(
+            and(
+              eq(attendanceQuestions.personId, personId),
+              sql`${attendanceQuestions.resolvedByEntryId} is not null`,
+            ),
+          )
+      ).map((q) => q.id),
+    );
     const covered = new Set<AttendanceFact>();
     const ownPlans = planned.filter((p) => p.personId === personId);
     const matches = new Map<string, Interval>();
@@ -227,7 +240,10 @@ export async function processAttendanceDay(
         deferred.push({ id: plan.id, at: new Date(plan.endsAt).toISOString() });
         continue;
       }
-      const automatic = next?.entryKind === "out" && next.extension?.authorKind === "automatic";
+      const automatic =
+        next?.entryKind === "out" &&
+        next.extension?.authorKind === "automatic" &&
+        !answered.has(next.entryId);
       const dayLimit = plan && instant(plan.endsAt) > instant(endAt) ? plan.endsAt : endAt;
       const laterPlan = plan && ownPlans.find((p) => instant(p.startsAt) > instant(plan.startsAt));
       // Later evidence can extend this day's question, but later days remain separate gaps.
@@ -240,7 +256,10 @@ export async function processAttendanceDay(
           ? laterPlan.startsAt
           : clockLimit;
       const intervalFacts = ownFacts.filter(
-        (f) => instant(f.at) >= instant(start.eventAt) && instant(f.at) < instant(limit),
+        (f) =>
+          instant(f.at) >= instant(start.eventAt) &&
+          (instant(f.at) < instant(limit) ||
+            (next?.entryKind === "out" && !automatic && instant(f.at) === instant(next.eventAt))),
       );
       for (const f of intervalFacts) covered.add(f);
       if (start.eventAt < startAt || start.eventAt >= endAt) continue;

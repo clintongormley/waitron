@@ -4,31 +4,18 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import {
-  newId,
-  orderAmendments,
-  parties,
-  sales,
-  ticketItems,
-  unpaidDepartures,
-  withTransaction,
-  workingOrders,
-} from "@waitron/db";
+import { newId, orderAmendments, withTransaction, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPinThrottle } from "@waitron/identity";
-import { AppError } from "@waitron/shared";
+
 import { attendanceDayWork, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { readAttendanceFacts } from "./attendance-facts.js";
 import { cancelPlacedOrder, markOrderPlaced, parkOrder } from "./working-order.js";
 
 import { overridePinAttempts } from "./till-api.js";
-import {
-  setupPartyVenue,
-  OPERATOR,
-  type PartyVenue,
-} from "./testing/party-venue.js";
+import { setupPartyVenue, OPERATOR, type PartyVenue } from "./testing/party-venue.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -103,7 +90,6 @@ async function expectFact(id: string, kind: "order_placed" | "order_cancelled", 
       endAt: "2026-01-06T03:00:00.000Z",
     }),
   );
-  
 }
 
 async function act(
@@ -157,14 +143,3 @@ describe("amendment attendance in the command transaction", () => {
     await expectFact(id, "order_placed");
   });
 });
-
-describe("amendments without workforce installed", () => {
-  useVenueDb({
-    migrations: migrationOptionsFor(
-      manifestSets().filter((set) => set.name !== "workforce" && set.name !== "staffing"),
-      null,
-    ),
-    timeoutMs: 60_000,
-  });
-});
-

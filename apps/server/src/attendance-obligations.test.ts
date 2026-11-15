@@ -15,9 +15,7 @@ import {
   upsertAttendanceQuestion,
   shifts,
 } from "@waitron/workforce";
-import {
-  nextAttendanceDay,
-} from "./attendance-discovery.js";
+import { nextAttendanceDay } from "./attendance-discovery.js";
 import { markAttendanceSourceChanged } from "./attendance-source-changes.js";
 
 const suite = useVenueDb({

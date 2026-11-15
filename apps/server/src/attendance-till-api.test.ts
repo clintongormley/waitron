@@ -6,16 +6,10 @@ import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.j
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import {
-  devices,
-  newId,
-  withTransaction,
-} from "@waitron/db";
+import { devices, newId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashPin, sessions } from "@waitron/identity";
-
-
 
 import { SimulatorPaymentProvider } from "@waitron/payments";
 import type { PaymentProvider } from "@waitron/payments";
@@ -160,8 +154,7 @@ describe("till attendance recorder admission", () => {
       expect(response.status).toBe(200);
       expect(await response.json()).toMatchObject({ state: "closed" });
       expect(
-        (await suite.db.select().from(staffActivity))
-          .map((row) => [row.personId, row.lastAt]),
+        (await suite.db.select().from(staffActivity)).map((row) => [row.personId, row.lastAt]),
       ).toEqual([[OPERATOR, "2026-10-14T13:00:00.000Z"]]);
     },
   );
@@ -209,8 +202,7 @@ describe("till attendance recorder admission", () => {
         tender: { method: "cash", change: "8.00" },
       });
       expect(
-        (await suite.db.select().from(staffActivity))
-          .map((row) => [row.personId, row.lastAt]),
+        (await suite.db.select().from(staffActivity)).map((row) => [row.personId, row.lastAt]),
       ).toEqual([[OPERATOR, "2026-10-14T13:00:00.000Z"]]);
     },
   );
@@ -235,8 +227,7 @@ describe("till attendance recorder admission", () => {
     expect(paid.status).toBe(200);
     expect(await paid.json()).toMatchObject({ outcome: "captured", ticket: { total: "12.00" } });
     expect(
-      (await suite.db.select().from(staffActivity))
-        .map((row) => [row.personId, row.lastAt]),
+      (await suite.db.select().from(staffActivity)).map((row) => [row.personId, row.lastAt]),
     ).toEqual([[OPERATOR, "2026-10-14T13:00:00.000Z"]]);
   });
 
@@ -265,10 +256,10 @@ describe("till attendance recorder admission", () => {
       }),
     });
     expect(paid.status).toBe(200);
-    
+
     expect(
       (await suite.db.select().from(staffActivity)).map((row) => [row.personId, row.lastAt]),
-    ).toEqual([[OPERATOR, "2026-10-14T12:00:00.000Z"], [OPERATOR, "2026-10-14T13:00:00.000Z"]]);
+    ).toEqual([[OPERATOR, "2026-10-14T13:00:00.000Z"]]);
   });
   it("captures only the admitted successful PIN session at its stored opening time", async () => {
     const api = app();
@@ -278,7 +269,9 @@ describe("till attendance recorder admission", () => {
     const opened = await login(api);
     expect(opened.status).toBe(200);
     await suite.db.select().from(sessions).where(eq(sessions.deviceId, deviceId));
-    expect(await suite.db.select().from(staffActivity)).toMatchObject([{ personId: OPERATOR, lastAt: "2026-10-14T12:00:00.000Z" }]);
+    expect(await suite.db.select().from(staffActivity)).toMatchObject([
+      { personId: OPERATOR, lastAt: "2026-10-14T12:00:00.000Z" },
+    ]);
   });
   it("passes the recorder to the actual draft save route after its admission checks", async () => {
     const { partyId, tabId } = await seat(v, await v.table("Draft attendance"));
@@ -311,10 +304,10 @@ describe("till attendance recorder admission", () => {
       }),
     });
     expect(saved.status).toBe(200);
-    
+
     expect(
       (await suite.db.select().from(staffActivity)).map((row) => [row.personId, row.lastAt]),
-    ).toEqual([[OPERATOR, "2026-10-14T12:00:00.000Z"], [OPERATOR, "2026-10-14T13:00:00.000Z"]]);
+    ).toEqual([[OPERATOR, "2026-10-14T13:00:00.000Z"]]);
   });
 });
 
@@ -380,10 +373,11 @@ describe("till refund attendance", () => {
       expect(refunded.status).toBe(200);
       const body = (await refunded.json()) as { refund: { id: string; state: string } };
       expect(body.refund.state).toBe("completed");
-      const moneyFacts = (await suite.db.select().from(staffActivity)).filter(
-        (r) => r.kind === "payment",
-      );
-      expect(moneyFacts.map((row) => [row.personId, row.lastAt])).toEqual([[OPERATOR, "2026-10-14T13:00:00.000Z"], [paid.workerId, "2026-10-14T15:00:00.000Z"]]);
+      const moneyFacts = await suite.db.select().from(staffActivity);
+      expect(moneyFacts.map((row) => [row.personId, row.lastAt])).toEqual([
+        [OPERATOR, "2026-10-14T13:00:00.000Z"],
+        [paid.workerId, "2026-10-14T15:00:00.000Z"],
+      ]);
       vi.setSystemTime(new Date("2026-10-14T18:00:00Z"));
       const before = await suite.db.select().from(staffActivity);
       expect((await submit()).status).toBe(200);
@@ -391,4 +385,3 @@ describe("till refund attendance", () => {
     },
   );
 });
-

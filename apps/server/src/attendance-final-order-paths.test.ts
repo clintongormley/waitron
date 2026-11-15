@@ -112,11 +112,12 @@ describe("remaining accepted order attendance", () => {
           json: { state: "closed", departures: [{ workingOrderId: p.tabId, amount: "12.00" }] },
         });
         const saved = await state();
-        expect(saved.facts).toMatchObject([{ personId: v.operatorId, lastAt: "2026-01-05T16:40:00.000Z" }]);
+        expect(saved.facts).toMatchObject([
+          { personId: v.operatorId, lastAt: "2026-01-05T16:40:00.000Z" },
+        ]);
         expect(saved.amendments).toEqual(before.amendments);
         expect(saved.departures[0]!.recordedBy).toBe(v.operatorId);
       }
     },
   );
 });
-

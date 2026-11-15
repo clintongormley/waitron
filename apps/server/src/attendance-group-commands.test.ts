@@ -18,7 +18,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
 import { attendanceDayWork, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
-import { readAttendanceFacts } from "./attendance-facts.js";
+
 import { mountTillApi } from "./till-api.js";
 
 import { placeGroupedRound } from "./testing/group-submit-fixture.js";
@@ -147,19 +147,11 @@ describe("accepted group attendance snapshots", () => {
         app = api(recordAttendanceFact);
       expect(await command(app, action, p)).toMatchObject({ status: 200 });
       const saved = await state();
-      const event = saved.events.find((e) => e.actorId === v.operatorId)!;
-      expect(saved.facts).toMatchObject([{ personId: v.operatorId, lastAt: "2026-01-05T16:40:00.000Z" }]);
-      expect(saved.days.map((r) => r.dirtyRevision)).toEqual([1]);
-      const facts = await withTransaction(suite.db, (tx) =>
-        readAttendanceFacts(tx, {
-          businessDay: "2026-01-05",
-          startAt: "2026-01-05T00:00:00Z",
-          endAt: "2026-01-06T00:00:00Z",
-        }),
-      );
-      expect(facts.filter((f) => f.personId === v.operatorId && f.kind === "order")).toEqual([
-        expect.objectContaining({ key: `group:${event.id}`, at: "2026-01-05T16:40:00.000Z" }),
+
+      expect(saved.facts).toMatchObject([
+        { personId: v.operatorId, lastAt: "2026-01-05T16:40:00.000Z" },
       ]);
+      expect(saved.days.map((r) => r.dirtyRevision)).toEqual([1]);
       vi.spyOn(v.clock, "now").mockImplementation(() => {
         throw new Error("replay clock read");
       });
@@ -170,4 +162,3 @@ describe("accepted group attendance snapshots", () => {
 });
 
 const send = observedGroupSender(() => v.db, rawGroupSend);
-

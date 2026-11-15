@@ -141,7 +141,7 @@ describe("accepted till order command attendance", () => {
     async (action) => {
       const id = await prepare(action);
       expect(await command(api(recordAttendanceFact), id, action)).toMatchObject({ status: 200 });
-      
+
       if (action === "place" || action === "cancel") {
         const rows = await suite.db
           .select()
@@ -152,9 +152,9 @@ describe("accepted till order command attendance", () => {
         )!;
         expect(amendment.actorId).toBe(v.operatorId);
       }
-      expect(
-        (await state()).facts.map((row) => [row.personId, row.lastAt]),
-      ).toEqual([[v.operatorId, "2026-01-05T16:40:00.000Z"]]);
+      expect((await state()).facts.map((row) => [row.personId, row.lastAt])).toEqual([
+        [v.operatorId, "2026-01-05T16:40:00.000Z"],
+      ]);
       expect((await state()).days.map((r) => [r.businessDay, r.dirtyRevision])).toEqual([
         ["2026-01-05", 1],
       ]);
@@ -206,9 +206,10 @@ describe("accepted till order command attendance", () => {
           (row) => row.workingOrderId === party.tabId && row.kind === "order_placed",
         );
         expect(amendment!.actorId).toBe(v.operatorId);
-        expect((await state()).facts.map((row) => [row.personId, row.lastAt])).toEqual([[v.operatorId, "2026-01-05T16:40:00.000Z"]]);
+        expect((await state()).facts.map((row) => [row.personId, row.lastAt])).toEqual([
+          [v.operatorId, "2026-01-05T16:40:00.000Z"],
+        ]);
       }
     },
   );
 });
-

@@ -286,8 +286,6 @@ describe("releaseHeldWorkOf", () => {
         [removed.partyId, "removed"],
       ].sort(),
     );
-    
-    
   });
 });
 

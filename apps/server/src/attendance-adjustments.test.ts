@@ -139,8 +139,10 @@ describe("an adjustment that empties a held group", () => {
       .where(eq(orderGroupEvents.kind, "removed"));
     expect(event!.actorId).toBe(v.supervisorId);
     const facts = (await state()).facts;
-    expect(facts.map((row) => [row.personId, row.lastAt])).toEqual([[v.supervisorId, "2026-01-05T16:40:00.000Z"]]);
-    
+    expect(facts.map((row) => [row.personId, row.lastAt])).toEqual([
+      [v.supervisorId, "2026-01-05T16:40:00.000Z"],
+    ]);
+
     const before = await state();
     vi.spyOn(v.clock, "now").mockImplementation(() => {
       throw new Error("replay clock");
@@ -171,9 +173,9 @@ describe("adjustment order activity", () => {
         .from(workingOrders)
         .where(eq(workingOrders.id, billId));
       expect(order!.revision).toBe(revision + 1);
-      expect(
-        (await state()).facts.map((row) => [row.personId, row.lastAt]),
-      ).toEqual([[v.supervisorId, "2026-01-05T16:40:00.000Z"]]);
+      expect((await state()).facts.map((row) => [row.personId, row.lastAt])).toEqual([
+        [v.supervisorId, "2026-01-05T16:40:00.000Z"],
+      ]);
       const [recorded] = await suite.db
         .select()
         .from(adjustments)
@@ -189,4 +191,3 @@ describe("adjustment order activity", () => {
     },
   );
 });
-

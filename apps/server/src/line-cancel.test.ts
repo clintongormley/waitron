@@ -14,7 +14,6 @@ import {
 } from "@waitron/adjustments";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 
-import { recordAttendanceFact } from "./attendance-capture.js";
 import {
   kitchenStations,
   lineServiceCancellations,
@@ -1429,38 +1428,6 @@ describe("Cancel item service command", () => {
     expect(await inTx(venue, (tx) => tx.select().from(printJobs))).toEqual(jobs);
     await cancel(order, ask);
     expect((await snapshot(order)).cancellations[0]!.quantity).toBe(2000);
-  });
-
-  it("records the keep-charge activity once under the admitted actor", async () => {
-    const order = await fixture();
-    await startExtra(order);
-    const ask = await askFor(order);
-    const attendance = { recorder: recordAttendanceFact, clock: venue.clock };
-    const command = () =>
-      inTx(venue, (tx) =>
-        cancelItem(
-          tx,
-          venue.cfg,
-          order.partyId,
-          order.parent.id,
-          { ...ask, admission: testTradingAdmission() },
-          venue.staffId,
-          attendance,
-        ),
-      );
-    await command();
-    
-    const accepted = facts.filter(
-      (row) => row.key === `service:${order.billId}:party:${order.partyId}:${ask.submissionId}`,
-    );
-    expect(accepted).toHaveLength(1);
-    expect(accepted[0]).toMatchObject({
-      source: "order",
-      personId: venue.staffId,
-      kind: "order",
-    });
-    await command();
-    
   });
 
   it("uses the existing cancel approval policy and records the manager without storing the PIN", async () => {

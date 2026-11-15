@@ -2,11 +2,11 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { newId, workingOrderLines, workingOrders } from "@waitron/db";
+import { newId, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
-import { attendanceDayWork, staffActivity } from "@waitron/workforce";
+import { staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { mountTillApi } from "./till-api.js";
 import { parkOrder } from "./working-order.js";
@@ -103,7 +103,6 @@ async function prepare(kind: Action) {
   return id;
 }
 
-
 describe("till order attendance admission", () => {
   it.each(["park", "save", "line", "label", "discard"] as const)(
     "%s captures the admitted operator and clock, ignoring supplied attribution",
@@ -117,4 +116,3 @@ describe("till order attendance admission", () => {
     },
   );
 });
-

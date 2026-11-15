@@ -248,16 +248,17 @@ describe("kitchen service attendance", () => {
       ),
     );
     const facts = (await state()).facts;
-    expect(facts.map((row) => [row.personId, row.lastAt])).toEqual([[v.operatorId, "2026-01-05T16:40:00.000Z"]]);
-    
+    expect(facts.map((row) => [row.personId, row.lastAt])).toEqual([
+      [v.operatorId, "2026-01-05T16:40:00.000Z"],
+    ]);
   });
   it.each(actions)("%s captures the admitted human activity with its command", async (action) => {
     const order = await prepare(action);
     expect(await command(api(recordAttendanceFact), action, order)).toMatchObject({ status: 200 });
     const after = await state();
-    expect(
-      after.facts.map((row) => [row.personId, row.lastAt]),
-    ).toEqual([[v.operatorId, "2026-01-05T16:40:00.000Z"]]);
+    expect(after.facts.map((row) => [row.personId, row.lastAt])).toEqual([
+      [v.operatorId, "2026-01-05T16:40:00.000Z"],
+    ]);
     expect(after.days.map((r) => [r.businessDay, r.dirtyRevision])).toEqual([["2026-01-05", 1]]);
     const ticket = after.tickets.find((r) => r.id === order.ticketId)!;
     const line = after.lines.find((r) => r.id === order.lineId)!;
@@ -273,4 +274,3 @@ describe("kitchen service attendance", () => {
 });
 
 const send = observedOrderSender(() => suite.db, rawSend);
-

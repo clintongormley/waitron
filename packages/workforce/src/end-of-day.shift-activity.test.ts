@@ -68,3 +68,25 @@ it("an overnight clock-in waits for its planned end before asking or closing", a
   ).toEqual({ automaticEntryIds: [], questionIds: [] });
   expect(await f.questions()).toEqual([]);
 });
+
+it("a later clock-in keeps the earlier automatic finish separate from the dinner finish", async () => {
+  await f.open();
+  const planned = [
+    f.plan("lunch", "2026-01-05T09:00:00Z", "2026-01-05T13:00:00Z"),
+    f.plan("dinner", "2026-01-05T18:00:00Z", "2026-01-05T22:00:00Z"),
+  ];
+  const lunch = [f.fact("2026-01-05T13:30:00Z", "lunch-overrun")];
+  await f.process({ planned, facts: lunch });
+  await f.open("2026-01-05T18:00:00Z");
+  await f.process({ planned, facts: [...lunch, f.fact("2026-01-05T22:30:00Z", "dinner-overrun")] });
+  expect((await f.entries()).filter((e) => e.entryKind === "out").map((e) => e.eventAt)).toEqual([
+    "2026-01-05T13:30:00.000Z",
+    "2026-01-05T22:30:00.000Z",
+  ]);
+  expect(
+    (await f.questions())
+      .filter((q) => q.kind === "automatic-out")
+      .map((q) => q.evidenceKeys)
+      .sort((a, b) => a.join().localeCompare(b.join())),
+  ).toEqual([["order:dinner-overrun"], ["order:lunch-overrun"]]);
+});

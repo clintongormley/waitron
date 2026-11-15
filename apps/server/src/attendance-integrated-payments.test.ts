@@ -1,30 +1,21 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { newId, withTransaction } from "@waitron/db";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { newId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-
 
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 
 import { staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
-import { readAttendanceFacts } from "./attendance-facts.js";
 
 import {
   payWorkingOrderIntegrated,
   type IntegratedPayRequest,
 } from "./testing/whole-payment-fixture.js";
-import {
-  setupPartyVenue,
-  seat,
-  order,
-  placeByHand,
-  OPERATOR,
-  type PartyVenue,
-} from "./testing/party-venue.js";
-import { issueOrderInvoice } from "./testing/issue-order.js";
+import { setupPartyVenue, OPERATOR, type PartyVenue } from "./testing/party-venue.js";
+
 import { openTillSession } from "./testing/session-device.js";
 
 const suite = useVenueDb({
@@ -77,23 +68,6 @@ const request = (): IntegratedPayRequest => ({
   zoneId: v.counter.zoneId,
   lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
 });
-
-
-
-
-describe("integrated whole-order attendance", () => {
-
-  describe("workforce never migrated", () => {
-    useVenueDb({
-      migrations: migrationOptionsFor(
-        manifestSets().filter((set) => set.name !== "workforce" && set.name !== "staffing"),
-        null,
-      ),
-      timeoutMs: 60_000,
-    });
-  });
-});
-
 
 it("a card initiation records its collector without keeping per-attempt discovery state", async () => {
   at("2026-01-05T11:00:00Z");

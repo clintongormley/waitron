@@ -1,5 +1,10 @@
 # A1308 pp12 — the attendance scan and its million bookkeeping rows go; recent days are re-checked after a restore or migration: implementation plan
 
+> **2026-11-16, DB-GROWTH supersedes the attendance design below.** The owner's first/latest
+> per-planned-shift decision replaces per-action copies and source discovery. Follow the
+> [cleared DB-GROWTH plan](2026-11-15-db-growth.md) for attendance; this historical plan no longer
+> directs that work. The separate one-payment-route decision remains in force.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to build this plan task by task. Steps use checkbox
 > (`- [ ]`) syntax. Every step also follows

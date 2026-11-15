@@ -30,14 +30,14 @@ import {
   timeEntries,
 } from "@waitron/workforce";
 import { ALL_MODULES } from "./modules.js";
-import { schemaVersionsByModule } from "./backup-manifest.js";
+
 import type { StartedServer } from "./boot.js";
 import { createClockVenue } from "./testing/clock-venue.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { copyMigrationsRoot, awaitListening } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
 import { DEVICE_COOKIE } from "./device-session.js";
-import * as discovery from "./attendance-discovery.js";
+
 import * as attendance from "./attendance-loop.js";
 import * as mailSender from "./mail-sender.js";
 import type { MailTransport } from "./mail-sender.js";
@@ -175,6 +175,7 @@ describe("attendance boot with permanent workforce", () => {
         const deviceCookie = f.venue.cookie
           .split("; ")
           .find((cookie) => cookie.startsWith(`${DEVICE_COOKIE}=`))!;
+        const beforeLogin = await suite.db.select().from(staffActivity);
         const login = await fetch(`http://127.0.0.1:${httpPort()}/api/session`, {
           method: "POST",
           headers: { cookie: deviceCookie, "Content-Type": "application/json" },
@@ -210,7 +211,9 @@ describe("attendance boot with permanent workforce", () => {
           });
           expect(
             (await suite.db.select().from(staffActivity)).some(
-              (fact) => fact.personId === f.venue.personId,
+              (fact) =>
+                fact.personId === f.venue.personId &&
+                !beforeLogin.some((row) => row.id === fact.id),
             ),
           ).toBe(true);
           expect(
@@ -295,7 +298,7 @@ describe("attendance boot with permanent workforce", () => {
             await server?.close();
             loopSpy.mockRestore();
             mailSpy.mockRestore();
-                await rm(f.scratch, { recursive: true, force: true });
+            await rm(f.scratch, { recursive: true, force: true });
           }
         },
       );

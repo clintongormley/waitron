@@ -1,13 +1,11 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 
-
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { newId, tenders, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-
 
 import { updateProduct } from "@waitron/menu";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
@@ -79,7 +77,9 @@ const request = (id: string = newId()) => ({
   lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
   tender: tender("cash"),
 });
-function evidence(key: string) { return { personId: collector.personId, lastAt: "2026-01-05T11:00:00.000Z" }; }
+function evidence(_key: string) {
+  return { personId: collector.personId, lastAt: "2026-01-05T11:00:00.000Z" };
+}
 async function bill(issued = false) {
   const { tabId } = await seat(v, await v.table("Attendance collection"));
   await order(v, tabId, "Burger");
@@ -190,4 +190,3 @@ describe("a human zero-owing command remains attendance evidence", () => {
     },
   );
 });
-

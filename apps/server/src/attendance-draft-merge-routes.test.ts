@@ -21,7 +21,6 @@ import { attendanceDayWork, staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { readAttendanceFacts } from "./attendance-facts.js";
 
-
 import { mountTillApi } from "./till-api.js";
 import {
   provisionBillVenue,
@@ -139,10 +138,11 @@ describe("draft-event attendance in table combines", () => {
         status: 204,
       });
       const saved = await state();
-      const events = saved.events.filter((e) => !before.events.some((old) => old.id === e.id));
-      
-      expect(saved.facts.filter((fact) => fact.source === "draft")).toMatchObject([{ personId: v.operatorId, lastAt: "2026-01-05T16:40:00.000Z" }]);
-      expect(saved.facts.filter((fact) => fact.source !== "draft")).toMatchObject([{ personId: v.operatorId, lastAt: "2026-01-05T16:40:00.000Z" }]);
+      saved.events.filter((e) => !before.events.some((old) => old.id === e.id));
+
+      expect(saved.facts).toMatchObject([
+        { personId: v.operatorId, lastAt: "2026-01-05T16:40:00.000Z" },
+      ]);
       await run((tx) =>
         readAttendanceFacts(tx, {
           businessDay: "2026-01-05",
@@ -150,7 +150,6 @@ describe("draft-event attendance in table combines", () => {
           endAt: "2026-01-06T00:00:00Z",
         }),
       );
-      
     },
   );
   it.each([false, true])(
@@ -191,15 +190,14 @@ describe("draft-event attendance in table combines", () => {
       } else {
         expect(response.status).toBe(204);
         const saved = await state();
-        const events = saved.events.filter(
-          (event) => !before.events.some((old) => old.id === event.id),
-        );
-        
-        expect(saved.facts.filter((fact) => fact.source === "draft")).toMatchObject([{ personId: v.operatorId, lastAt: "2026-01-05T16:40:00.000Z" }]);
+        saved.events.filter((event) => !before.events.some((old) => old.id === event.id));
+
+        expect(saved.facts).toMatchObject([
+          { personId: v.operatorId, lastAt: "2026-01-05T16:40:00.000Z" },
+        ]);
       }
     },
   );
 });
 
 const send = observedRelocationSender(() => suite.db, rawSend);
-
