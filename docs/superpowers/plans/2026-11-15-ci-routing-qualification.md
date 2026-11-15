@@ -22,3 +22,5 @@
 **Size/time:** source +0/−0; tests +0/−0; final docs about +20–40/−20–40 lines, plus this page. Within three hours from recorded 18:49 start, reserve the final 45 minutes for docs/findings and authorised finish/land. Stop passive observation at that checkpoint; unseen stale-count, scheduled-idle and full-coverage cases stay open. Report before any second slice, which is not cleared here. Outside waits follow RUNNER.md.
 
 **Excluded:** routing redesign, pool/image activation, Cloud/controller edits, draining lanes, credentials/variables/global settings, shared-process changes and the separate A935 October checkout-incident entry. Keep full-day, per-job, remaining-workflow, image-guest and historical-planner requirements until their own evidence closes them. Use/clean only owned resources. Claude reviews built changes separately.
+
+**Clearance, 15 November 19:06:** the watcher cleared this first slice as a partial, docs-only evidence audit, keeping the bundle open and requiring one real-run description per remaining gap. No source change or second experiment slice is cleared.

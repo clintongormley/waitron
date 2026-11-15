@@ -406,47 +406,25 @@ freeze. A760 part 3 corrected the guard's two wrong sentences.
 
 ## Bundle: Qualify CI's server routing and action setup
 
-The remaining work concerns live routing qualification and the action-repository download at setup.
+The [checked routing records](../developers/ci-and-gates.md#disposable-server-test-runners)
+cover guest tools/history/API, real PR planner pickup, scheduled unavailable-label rescue,
+one untouched-run overflow and a natural blind hosted choice. Fresh-capacity server/hosted
+choices are reconciled with their workflow commits. The bundle stays open; these records
+supply no full-day queue or speed result. Keep the corrected v41 controller and the
+[13 November measured-memory decision](#decisions-and-deliberate-limits).
 
-- **A1424 / A1440: finish qualifying server routing and recovery on real workloads.**
-  CI compares server and GitHub `(running + waiting) / slots`, with server ties
-  and the owner’s stipulated 20 hosted slots;
-  ordinary same-repository jobs are eligible for the measured global pool. Family caps
-  have been removed; recovery, image smoke, the final aggregate and publication stay hosted.
-  Image smoke remains hosted until a disposable guest is qualified (watcher, 2026-11-09 08:20);
-  both retained failures, runs 42550200310 and 42525659420, stop at the Bluetooth check
-  with `dbus_unreachable`. Guest diagnosis remains open.
-  The health check chooses hosted while the server queue is stuck, and the independent
-  watchdog dispatches trusted-main health recovery for untouched queued PR planners, with run/job skip reasons in its log;
-  other stuck work is reported without moving runs. First-attempt PR planners use published
-  spare capacity; non-PR planning remains hosted. A1473’s reviewed controller is installed. Each router list restarts once after an empty page or changed valid total. Only its queued
-  CI-workflow list accepts agreeing row sets ending on empty pages, provided the second
-  read's count stays consistent, and logs IDs, row count, starting counts and date cutoff (watcher, 2026-11-15 15:10); different rows remain unknown. Natural
-  qualification of that exception at its actual workflow commit remains open.
-  Routing uses date-bounded queued-run reads from the last 24 hours, so older records
-  are absent from the server-side count and rows; all other lists retain count completeness. Health recovery and cancellation retain full lists (watcher, 2026-11-14 10:24).
-  Duplicate/excess refusals take precedence even when totals change (watcher, 2026-11-13 05:43). Run 43278084012’s first planner never ran the ratio during
-  its 32-minute wait; the historical admission/recovery cause remains unproved.
-  Qualify the idle probe, browser guest
-  requirements and current-head coverage/aggregate results.
-  The successful stream job in main run 42506794616 applied loopback MTU 1500 and
-  `TMPDIR=/dev/shm`; this is that job’s receipt, not a full guest qualification.
-  Retain runner identities and unchanged source heads for the unavailable-label and hosted-retry
-  drills. Keep the corrected v41 controller; the existing routing job compares refreshed hosted counts
-  with the latest server variable through the owner-created read-only token, falling back to the
-  run-creation snapshot when the secret is absent or the read fails (watcher, 2026-11-15 09:55).
-  The job names the source it used. Idle positive
-  server capacity needs no hosted read (watcher, 2026-11-12 20:47).
-  The measured-memory pool is retained under the [13 November decision](#decisions-and-deliberate-limits).
-  A1461 reduces run sizes. Per-job
-  overflow, the remaining workflows and queue measurements remain open. Lane I reports
-  existing-record observations on 15 November; episodic status reads cannot prove the full-day
-  no-avoidable-wait target. Never drain other lanes' work for a drill.
-  [Procedure and limits](../developers/ci-and-gates.md#disposable-server-test-runners).
+- **A1424 / A1440: remaining real-run qualification.** Each line names the evidence that would close that gap; do not drain other lanes or repeat the completed rescue drill.
+  - Agreeing-row inventory exception: one natural ordinary CI run logs `Stale queued CI inventory count` with IDs, rows, both starting counts and cutoff, then completes on its selected runners at the recorded workflow/module commit. Every other list stays strict.
+  - Idle probe: one scheduled Server health run dispatches a probe during genuine idle capacity, followed by its first-attempt server pickup and successful aggregate; a manual probe or hosted retry cannot close it.
+  - Browser guest/workload: one server-scoped PR finishes its selected server and browser families with runner identities, full Chromium/system-library and deadline logs, `/proc` and cache checks, and aggregate. Venue-service also needs its `/dev/shm` and `sudo dmesg` checks. Run 43742448917's till shard 2 passed, but its cancelled server shard and aggregate do not complete this proof. The earlier stream job 42506794616 proved its MTU 1500 and `/dev/shm` setup only.
+  - Server coverage: one natural full main/nightly/release run selects server, completes its selected coverage merges and aggregate at the recorded head. Inspected nightly 43545365252 passed on hosted runners; 43667121845 also used hosted merges and failed overall.
+  - Image guest: one separately cleared disposable-guest image-smoke run passes the Bluetooth check and full smoke. Retained runs 42550200310 and 42525659420 stop at `dbus_unreachable`; keep image smoke hosted meanwhile (watcher, 2026-11-09 08:20).
+  - Per-job overflow: one untouched mixed-workload run demonstrates the remaining per-job behavior with controller source, run/attempt/job and runner identities; the 13 November no-op forward-move drill did not run product checks. Reverse movement was dropped by the owner.
+  - Remaining workflows: retain a real selected run for each still-unqualified workflow with source, runner, selected checks and aggregate; a CI-only record cannot qualify other workflows.
+  - Full-day capacity/queue target: one full-day ordinary-traffic measurement must account for waits and available capacity throughout; no single isolated CI run or episodic status sample can close it. A1461's smaller run sizes do not replace this measurement.
+  - Historical planner 43278084012: recover that run's contemporaneous admission/recovery logs; a new run cannot establish why its untouched planner waited 32 minutes without running the ratio.
 
-- **The runner's action-repository download at job setup remains unqualified (A935).**
-  Cache, Docker and CodeQL action limits do not reach that phase.
-  [Detail](#the-runners-action-repository-download-at-job-setup-remains-unqualified-a935).
+- **A935: setup action-download bound.** One separately cleared, selectively stalled action-transfer run on a single owned runner must retain the successful-download control, actual version/action/source/job limit, listener cancellation and worker-exit logs, with an independent safety stop and cleanup. Keep control traffic reachable. Fast refusal or manual cancellation does not qualify the job limit. [Source trace and limits](#the-runners-action-repository-download-at-job-setup-remains-unqualified-a935).
 
 ## Bundle: One small pull request for rule lines
 
@@ -958,12 +936,25 @@ from the comment.
 
 ## The runner's action-repository download at job setup remains unqualified (A935)
 
-The 13 November 2026 [action limits](../developers/ci-and-gates.md#cache-docker-and-codeql-steps-have-measured-limits)
-cover cache, Docker and CodeQL steps. They do not reach the earlier “Download action
-repository …” phase. On runner v2.337.0, ActionManager.cs L1647–1658 allows three attempts,
-each under 20 minutes (`retryCount < 3`, `int timeoutSeconds = 20 * 60;`). Whether the job's
-own limit bounds that setup phase has not been measured. Retain a setup stall's own log
-and runner version before changing this path.
+Step limits for cache, Docker and CodeQL do not qualify the earlier “Download action
+repository” phase. The inspected 12 and 15 November hosted and disposable job logs report
+runner **2.338.2**. The source trace below narrows the question; it is not a live setup-stall
+or job-timeout measurement. `ActionManager.cs` is byte-identical in the downloaded
+v2.337.0 and v2.338.2 sources, but this does not establish either version's runtime bound.
+
+| Source, read 15 November 2026 | Source words | What to test |
+| --- | --- | --- |
+| [JobExtension v2.338.2](https://github.com/actions/runner/blob/v2.338.2/src/Runner.Worker/JobExtension.cs#L63-L77) and [preparation](https://github.com/actions/runner/blob/v2.338.2/src/Runner.Worker/JobExtension.cs#L298-L301) | `context.CancelToken()`; `PrepareActionsAsync(context, message.Steps)` | Setup receives root cancellation; measure its arrival during a stalled transfer. |
+| [ActionManager v2.338.2](https://github.com/actions/runner/blob/v2.338.2/src/Runner.Worker/ActionManager.cs#L1644-L1684) | `retryCount < 3`; `20 * 60`; `httpClient.GetAsync(downloadUrl)` | The linked token reaches copy/flush, but is not an argument to the initial GET. Do not describe the 20-minute token as a measured transfer bound. |
+| [JobDispatcher v2.338.2](https://github.com/actions/runner/blob/v2.338.2/src/Runner.Listener/JobDispatcher.cs#L626-L690) and [Worker](https://github.com/actions/runner/blob/v2.338.2/src/Runner.Worker/Worker.cs#L102-L125) | `MessageType.CancelRequest`; `workerProcessCancelTokenSource.Cancel()` | The listener has a cancellation/kill path; measure whether the job limit invokes it during setup and when the worker exits. |
+
+Read-only inspection of Cloud `6cfbabb374f8cc94dc02188f36f63824526ad9cb`'s
+`deploy/disposable-tests/{guest-exec.py,operations.py,session.py,host.py,runner-tools.sh}`
+found command/deadline and VM-network controls, not a ready selective action-transfer stall
+entry point. No live guest/tool check or fault injection ran. A guest-local interception
+mechanism would need its own concrete clearance; no source change or new fault tool is
+cleared by this audit. The [bundle](#bundle-qualify-cis-server-routing-and-action-setup)
+keeps the required real-run control and cleanup evidence open.
 
 ## Whether the 2026-10-20 checkout stalls were a GitHub-side incident was not checked (A935)
 

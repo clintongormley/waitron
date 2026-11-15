@@ -261,6 +261,7 @@ External provenance, read 2026-11-09:
 
 | Claim | Source's words | Application here |
 | --- | --- | --- |
+| PR workflow identity can be reconstructed from a local reusable call | [Reuse workflows](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows#calling-a-reusable-workflow), read 15 November: “the called workflow is from the same commit as the caller workflow” | Match `referenced_workflows[].sha` to the inspected `./.github/workflows/image-smoke.yml` call; retain the source head separately. |
 | The routing script uses its workflow commit | [GitHub contexts](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#github-context): “The commit SHA for the workflow file.” | Read the routing module at `GITHUB_WORKFLOW_SHA`, so an older candidate checkout cannot supply a different input contract. |
 | The repository run list uses the existing read permission | [GitHub workflow runs](https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-repository): “Anyone with read access to the repository can use this endpoint” | Routing reads this repository without another credential. |
 | Routing omits queued runs created over 24 hours ago | [GitHub Actions limits](https://docs.github.com/en/actions/reference/limits), read 2026-11-14: self-hosted job queue time is “24 hours” | This routing cutoff uses run creation time; it is not evidence that GitHub cancelled an old record. Recovery keeps its full lists. |
@@ -389,16 +390,34 @@ watch list passed the older local model but failed actionlint 1.7.12. The unchan
 corrected workflow both passed that validator.
 
 
-Before activation, have I confirm Linux tools, `/proc`, Node/pnpm/cache support, measured
-global capacity and ordinary PR admission. Server jobs need Chromium headless-shell
-libraries; all browser families need full Chromium and its system libraries. Venue-service
-also uses `TMPDIR=/dev/shm` and `sudo dmesg`. Qualify an actual till browser-family job,
-including its existing deadline, before enabling that family. Read back
-`all_external_contributors`. Qualify an actual server-scoped PR on the rented runner,
-retaining its runner ID/name/labels, source head and coverage/aggregate results. Use a controlled unavailable-label drill without stopping other lanes' server work. Read the visible
-first-attempt failure or cancellation and an unchanged-head second attempt finishing on
-GitHub. The independent health check reports a stalled queue even before the controller admits it. These live qualifications remain open; local shell tests do not establish
-GitHub scheduling, VM isolation or a speed improvement.
+Use the checked runs below before repeating a qualification drill. The 15 November audit
+reused the existing tool, planner-rescue and overflow records without dispatching work.
+All listed job logs report runner `2.338.2`. Source heads and workflow commits are distinct:
+for PRs, the latter is reconstructed from the run API's referenced image workflow and the
+local call in `ci.yml`, rather than substituting the checked-out PR head.
+
+| Evidence | Run / attempt and source head | Workflow commit; job / runner | What it establishes |
+| --- | --- | --- | --- |
+| Guest tools, full history and authenticated API | [43183718354/1](https://github.com/clintongormley/waitron/actions/runs/43183718354), `51217fde718fcc93baf1eedf17e0624efbb37d80` | Same commit; `131065668299` / `8987` | gh 2.46.0, Node 26.13.0, pnpm 9.15.0, timeout, merge-base and API checks passed. |
+| PR planner pickup | [43190152811/1](https://github.com/clintongormley/waitron/actions/runs/43190152811), `08481a352ead01ae6060d50c178082f909fff29b` | `453dd7b7542246f7ff552fb55906550863385481`; `131087112395` / `9030` | Server planner and all five selected jobs passed; no package-wide coverage or speed claim. |
+| Scheduled unavailable-label rescue | [43185958559/1](https://github.com/clintongormley/waitron/actions/runs/43185958559), `7b1fd5394317f74a2e5ab9cdea6b3615bb3e7cf0` | Same commit; hosted health | Rescued [43184702181](https://github.com/clintongormley/waitron/actions/runs/43184702181): unassigned first-attempt planner `131068875477` cancelled; attempt 2 planner `131073681469` passed on hosted runner `1000323354`, unchanged head `c86d47f74e81d34930cceb01ed2c33a0b33f5113`. Its later aggregate did not pass. |
+| Natural unreadable-inventory fallback | [43715014403/1](https://github.com/clintongormley/waitron/actions/runs/43715014403), `0c10fb8cd2e6c2926c971418f7fe9c0e379f03d7` | Same commit; `132814545360` / `1000346848` | Empty page after 2 of 3 entries logged a blind hosted choice; aggregate `132815831908` passed. Predates the agreeing-row exception. |
+| Fresh capacity, hosted choice | [43740649924/1](https://github.com/clintongormley/waitron/actions/runs/43740649924), `90668e930077704686aa83944a1e828e0926385a` | `96fc128aa6277932d52b3ee0c24aabcb6d69205d`; `132892837492` / `21409` | Server 1+0/12 versus hosted 0+0/20 chose hosted, age 56011 ms; all 46 selected jobs passed. |
+| Fresh capacity, server choice | [43742448917/1](https://github.com/clintongormley/waitron/actions/runs/43742448917), `ce594453da69dec8bd272db17aea7365a49ad611` | `b36d5ec7e2cd21f8968e4debe179193cb451b01d`; `132898361561` / `21452` | Server 1+0/12 versus hosted 4+0/20 chose server, age 59316 ms. Till shard 2 (`132898828059`, runner `21487`) passed 2519 tests; the run was cancelled. |
+
+API runner names for the disposable jobs above are `dt-1314919489-RUN-1-JOB`;
+labels are `self-hosted` plus the job-family label, not that runner name. The health
+revision's checked-out recovery module matches the tool and planner revisions byte for byte. Today's
+two routing revisions also have identical workflow and module bytes; neither choosing log
+exercises stale-count acceptance. The contributor-approval API returned
+`all_external_contributors` on 15 November. These receipts do not establish VM isolation.
+
+Keep server coverage and automatic idle pickup open. Successful nightly
+[43545365252](https://github.com/clintongormley/waitron/actions/runs/43545365252) ran its seven
+coverage merges and aggregate on GitHub. Three executed idle checks in six scheduled health
+runs `43743762173` through `43747449175` reported recent server traffic and dispatched no
+probe. A manual successful probe is a different proof. The [remaining qualification runs](../backlog/ci.md#bundle-qualify-cis-server-routing-and-action-setup)
+name what is still needed; no queue-time improvement is claimed.
 
 The public repository still exposes the runner VM, host and reachable network to code that
 obtains admission. Labels are routing information, not isolation. Lane I owns disposable VMs
