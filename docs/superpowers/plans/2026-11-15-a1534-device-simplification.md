@@ -85,7 +85,7 @@ Forecast physical additions/removals, unmeasured:
 | 1 | +55/−10 | +75/−0 | 0/0 | 0/0 | +10/−0 | 150 |
 | 2 | +220/−160 | +190/−95 | +35/−20 | 0/0 | +35/−25 | 780 |
 | 3 | +160/−1500 | +220/−1400 | +45/−130 | +25/−820 | +65/−95 | 4460 |
-| 4 | +280/−260 | +180/−120 | +20/−15 | +25/−45 | +35/−30 | 1110 |
+| 4 | +280/−260 | +180/−120 | +20/−15 | +25/−45 | +35/−30 | 1010 |
 | 5, proposed | +90/−450 | +200/−750 | +20/−30 | +15/−150 | +35/−45 | 1785 |
 
 Slice 3 removes substantial obsolete code/tests; generated counts include baseline SQL/snapshot/journal/epoch. At 1.5× size or three working hours, stop and refer growth/splitting to watcher; never weaken tests. Driver arranges Claude review, at most one corrections read, RUNNER clearance before publication/build, then finish-branch per slice.
