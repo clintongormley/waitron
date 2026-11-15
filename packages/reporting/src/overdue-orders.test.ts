@@ -440,6 +440,60 @@ describe("computeOverdueOrders", () => {
     expect(await run()).toEqual([expect.objectContaining({ orderId, stationName: "Counter" })]);
   });
 
+  it("does not list a held dish, however long ago it was queued, but lists a fired one", async () => {
+    const { orderId: heldOrder } = await seedOpenOrder(
+      suite.db,
+      { deviceId: venue.deviceId, nodeId: venue.nodeId },
+      1,
+    );
+    await seedFiredLine(
+      suite.db,
+      { nodeId: venue.nodeId, stationId },
+      { orderId: heldOrder, lineNo: 1, ageMinutes: 25, held: true },
+    );
+    const { orderId: firedOrder } = await seedFiredOrder(
+      suite.db,
+      { deviceId: venue.deviceId, nodeId: venue.nodeId, stationId },
+      { orderNumber: 2, ageMinutes: 25 },
+    );
+
+    expect((await run()).map((r) => r.orderId)).toEqual([firedOrder]);
+  });
+
+  it("ages a pass-controlled dish from when it was requested, not when it was queued", async () => {
+    const { orderId } = await seedOpenOrder(
+      suite.db,
+      { deviceId: venue.deviceId, nodeId: venue.nodeId },
+      1,
+    );
+    await seedFiredLine(
+      suite.db,
+      { nodeId: venue.nodeId, stationId },
+      { orderId, lineNo: 1, ageMinutes: 40, requestedAgeMinutes: 12 },
+    );
+
+    expect(await run()).toEqual([
+      expect.objectContaining({ orderId, band: "overdue", ageMinutes: 12 }),
+    ]);
+  });
+
+  it("keeps ageing a released pass-controlled dish from when it was requested", async () => {
+    const { orderId } = await seedOpenOrder(
+      suite.db,
+      { deviceId: venue.deviceId, nodeId: venue.nodeId },
+      1,
+    );
+    await seedFiredLine(
+      suite.db,
+      { nodeId: venue.nodeId, stationId },
+      { orderId, lineNo: 1, ageMinutes: 2, requestedAgeMinutes: 12, released: true },
+    );
+
+    expect(await run()).toEqual([
+      expect.objectContaining({ orderId, band: "overdue", ageMinutes: 12 }),
+    ]);
+  });
+
   it("returns [] when there are no ticket items at all", async () => {
     expect(await run()).toEqual([]);
   });

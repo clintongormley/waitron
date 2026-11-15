@@ -1,4 +1,4 @@
-import { and, eq, isNull, ne } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import {
   kitchenStations,
@@ -22,11 +22,13 @@ function minutesSince(stamp: string, nowMs: number): number {
 /**
  * The manager overview's "orders taking too long" query — the venue's currently-open kitchen
  * orders, whichever box took them, whose worst UNSERVED kitchen line has crossed into `overdue` or
- * `forgotten`, worst-first. Items made at the till do not age in this report. A line ages from
- * `ticket_items.queued_at` until it is served (`working_order_lines.served_at`) or the order is
- * collected (`working_orders.collected_at`), and an order stays "open" while it is not abandoned and
- * not yet collected — wider than `status = 'open'` (a `settled` walk-up awaiting counter handover
- * still ages). Bands come from the shared `classifyBand`/`worstBand`, never a hand-rolled SQL CASE.
+ * `forgotten`, worst-first. Items made at the till do not age in this report, nor do held dishes
+ * (neither fired nor requested). A line ages from `ticket_items.queued_at` — a pass-controlled one
+ * from `requested_at` once requested, as the floor's table colour does — until it is served
+ * (`working_order_lines.served_at`) or the order is collected (`working_orders.collected_at`), and
+ * an order stays "open" while it is not abandoned and not yet collected — wider than
+ * `status = 'open'` (a `settled` walk-up awaiting counter handover still ages). Bands come from the
+ * shared `classifyBand`/`worstBand`.
  *
  * Among the lines tied at an order's WORST band, the one with the GREATEST age is named — the most
  * urgent line to show.
@@ -34,13 +36,16 @@ function minutesSince(stamp: string, nowMs: number): number {
 export async function computeOverdueOrders(tx: Transaction): Promise<OverdueOrder[]> {
   // Read ONCE, so every row in this run is aged and classified against the SAME instant.
   const nowMs = Date.now();
+  // A copy of `apps/server/src/table-signals.ts`'s wait start and fired-or-requested filter (D65),
+  // which this package cannot import.
+  const waitStart = sql<string>`case when ${ticketItems.passControlled} then coalesce(${ticketItems.requestedAt}, ${ticketItems.queuedAt}) else ${ticketItems.queuedAt} end`;
   const rows = await tx
     .select({
       orderId: workingOrders.id,
       orderNumber: workingOrders.orderNumber,
       stationName: kitchenStations.name,
       servedAt: workingOrderLines.servedAt,
-      queuedAt: ticketItems.queuedAt,
+      queuedAt: waitStart,
       warmAfterMinutes: kitchenStations.warmAfterMinutes,
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
@@ -58,11 +63,12 @@ export async function computeOverdueOrders(tx: Transaction): Promise<OverdueOrde
         eq(ticketItems.madeHere, false),
         ne(workingOrders.status, "abandoned"),
         isNull(workingOrders.collectedAt),
+        or(isNotNull(ticketItems.firedAt), isNotNull(ticketItems.requestedAt)),
       ),
     )
-    // Lines fired together can share a `queued_at`, so `line_no` breaks the tie; without it, the
+    // Lines fired together can share a wait start, so `line_no` breaks the tie; without it, the
     // station named for a tied order could change from one read of the same data to the next.
-    .orderBy(ticketItems.queuedAt, workingOrderLines.lineNo);
+    .orderBy(waitStart, workingOrderLines.lineNo);
 
   interface Line {
     stationName: string;
@@ -107,7 +113,7 @@ export async function computeOverdueOrders(tx: Transaction): Promise<OverdueOrde
   for (const [orderId, order] of byOrder) {
     const band = worstBand(order.lines.map((line) => line.band));
     if (band !== "overdue" && band !== "forgotten") continue;
-    // A tie on band AND age keeps the first such line in the query's `queued_at, line_no` order.
+    // A tie on band AND age keeps the first such line in the query's wait-start, `line_no` order.
     // `band` is computed from `order.lines`, so at least one line matches and `worstLine` is set.
     let worstLine: Line | undefined;
     for (const line of order.lines) {

@@ -403,14 +403,22 @@ export async function seedFiredLine(
   opts: {
     orderId: string;
     lineNo: number;
-    /** Backdates `ticket_items.queued_at` by this many minutes — the age the classifier sees. Ignored
-     *  when `queuedAt` is given. */
+    /** Backdates `ticket_items.queued_at` by this many minutes — the age the classifier sees unless
+     *  `requestedAgeMinutes` is given. Ignored when `queuedAt` is given. */
     ageMinutes: number;
     /** Marks the LINE served (drops it off the age clock). Defaults to unserved. */
     served?: boolean;
     /** An explicit ISO timestamp for `ticket_items.queued_at`, overriding `ageMinutes`, so two lines
      *  can share one exactly; two calls each backdating from their own clock reading need not tie. */
     queuedAt?: string;
+    /** Leaves the dish held: neither `fired_at` nor `requested_at` is set. Ignored when
+     *  `requestedAgeMinutes` is given. */
+    held?: boolean;
+    /** Makes the dish pass-controlled and requested this many minutes ago, with `fired_at` unset
+     *  unless `released` is set. */
+    requestedAgeMinutes?: number;
+    /** With `requestedAgeMinutes`, also sets `fired_at`: the pass has released the dish. */
+    released?: boolean;
   },
 ): Promise<void> {
   // One clock reading for this line's three stamps, so they agree.
@@ -444,7 +452,11 @@ export async function seedFiredLine(
     workingOrderLineId: line!.id,
     stationId: seed.stationId,
     queuedAt: opts.queuedAt ?? new Date(firedAtMs - opts.ageMinutes * 60_000).toISOString(),
-    firedAt,
+    firedAt: (opts.requestedAgeMinutes !== undefined ? opts.released : !opts.held) ? firedAt : null,
+    ...(opts.requestedAgeMinutes !== undefined && {
+      passControlled: true,
+      requestedAt: new Date(firedAtMs - opts.requestedAgeMinutes * 60_000).toISOString(),
+    }),
   });
 }
 
