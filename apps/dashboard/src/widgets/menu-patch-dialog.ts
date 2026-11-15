@@ -857,10 +857,16 @@ export class MenuPatchDialog extends LitElement {
     );
   }
 
-  /** A variant's price and VAT class, as putting the draft live would leave them. */
+  /** A variant's price and VAT class, and its takeaway class where that differs, as putting the
+   * draft live would leave them. */
   #variantValues(target: MenuPatchTarget): string {
     const price = formatMoney(this.#putValue(target, "price") as string, currentLocale());
-    return `${price} · ${vatClassName(this.#putValue(target, "vatClass") as string)}`;
+    const served = this.#putValue(target, "vatClass") as string;
+    const takeaway = this.#putValue(target, "takeawayVatClass") as string;
+    const values = `${price} · ${vatClassName(served)}`;
+    return this.takeawayVat && takeaway !== served
+      ? `${values} · ${t("editor.takeaway_vat")}: ${vatClassName(takeaway)}`
+      : values;
   }
 
   /** The field's value as putting the draft live would leave it: its staged change's, else the

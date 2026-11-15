@@ -728,6 +728,39 @@ it("lists each variant with its price and VAT class beside its link, as a patch 
   expect(variantRows(el)[1]).toEqual({ link: "Large", values: "2,50 € · General" });
 });
 
+it.each([true, false])(
+  "adds a variant's takeaway class beside its link only where it differs and the region charges one (%s)",
+  async (takeawayVat) => {
+    const document = lunch();
+    // Small charges Reduced either way; Large charges General here and Reduced taken away.
+    document.offers["mi-lemonade"]!.variants[1]!.vatClass = "general";
+    const api = stubApi({ getLiveMenu: vi.fn(async () => live(3, document)) });
+    const el = takeawayVat ? await mountTakeaway(api) : await mount(api);
+    await pick(el, "Lemonade");
+    expect(variantRows(el)).toEqual([
+      { link: "Small", values: "€2.00 · Reduced" },
+      {
+        link: "Large",
+        values: takeawayVat ? "€2.00 · General · VAT when taken away: Reduced" : "€2.00 · General",
+      },
+    ]);
+    if (!takeawayVat) return;
+    await pick(el, "Small");
+    await chooseOption(combobox(el, "takeaway-tax"), "zero");
+    await pick(el, "Lemonade");
+    expect(variantRows(el)[0]).toEqual({
+      link: "Small",
+      values: "€2.00 · Reduced · VAT when taken away: No tax",
+    });
+    setLocale("es");
+    await el.updateComplete;
+    expect(variantRows(el)[0]).toEqual({
+      link: "Small",
+      values: "2,00\u00a0€ · Reducido · IVA para llevar: Sin impuestos",
+    });
+  },
+);
+
 it(`fits a dish's variants and their values in the form at 390 px`, async () => {
   const before = { width: window.innerWidth, height: window.innerHeight };
   await page.viewport(390, 844);

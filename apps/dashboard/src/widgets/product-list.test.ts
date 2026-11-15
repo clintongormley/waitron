@@ -232,7 +232,7 @@ function product(
         allergens: base.allergens,
         unitPrice: variant.unitPrice ?? base.unitPrice,
         vatClass: base.vatClass,
-        takeawayVatClass: base.vatClass,
+        takeawayVatClass: base.takeawayVatClass ?? base.vatClass,
         primaryCategoryId: base.primaryCategoryId,
         courseId: variant.courseId ?? base.courseId,
       },
