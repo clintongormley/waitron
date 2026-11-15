@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "8edc54e2-5d4d-4267-8117-a14b692518cd",
+  "id": "d3eb9d39-6102-4b74-8300-20f023d51a6e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -13334,13 +13334,42 @@
           "autoincrement": false,
           "default": true
         },
-        "folder_overrides": {
-          "name": "folder_overrides",
+        "folder_names": {
+          "name": "folder_names",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "folder_image": {
+          "name": "folder_image",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "folder_image_fixed": {
+          "name": "folder_image_fixed",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'{}'"
+          "default": false
+        },
+        "folder_color": {
+          "name": "folder_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "folder_color_fixed": {
+          "name": "folder_color_fixed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         }
       },
       "indexes": {
@@ -13385,10 +13414,10 @@
         "section_members_folder_image_idx": {
           "name": "section_members_folder_image_idx",
           "columns": [
-            "\"folder_overrides\" ->> '$.image'"
+            "folder_image"
           ],
           "isUnique": false,
-          "where": "\"section_members\".\"folder_overrides\" ->> '$.image' is not null"
+          "where": "\"section_members\".\"folder_image\" is not null"
         }
       },
       "foreignKeys": {
@@ -13438,6 +13467,18 @@
         "section_members_one_ref_ck": {
           "name": "section_members_one_ref_ck",
           "value": "(\"section_members\".\"product_id\" is null or \"section_members\".\"child_section_id\" is null) and ((\"section_members\".\"product_id\" is null and \"section_members\".\"child_section_id\" is null) = (\"section_members\".\"missing_name\" is not null))"
+        },
+        "section_members_folder_names_ck": {
+          "name": "section_members_folder_names_ck",
+          "value": "json_valid(\"section_members\".\"folder_names\") and json_type(\"section_members\".\"folder_names\") = 'object'"
+        },
+        "section_members_folder_image_ck": {
+          "name": "section_members_folder_image_ck",
+          "value": "\"section_members\".\"folder_image\" is null or \"section_members\".\"folder_image_fixed\" = 1"
+        },
+        "section_members_folder_color_ck": {
+          "name": "section_members_folder_color_ck",
+          "value": "\"section_members\".\"folder_color\" is null or \"section_members\".\"folder_color_fixed\" = 1"
         }
       }
     },
@@ -13455,7 +13496,7 @@
           "name": "internal_name",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
         "names": {
@@ -13512,6 +13553,14 @@
             "owner_menu_id"
           ],
           "isUnique": false
+        },
+        "sections_image_idx": {
+          "name": "sections_image_idx",
+          "columns": [
+            "image"
+          ],
+          "isUnique": false,
+          "where": "\"sections\".\"image\" is not null"
         }
       },
       "foreignKeys": {
@@ -13535,6 +13584,10 @@
         "sections_role_ck": {
           "name": "sections_role_ck",
           "value": "\"sections\".\"role\" in ('section', 'menu_root', 'home_layout')"
+        },
+        "sections_root_name_ck": {
+          "name": "sections_root_name_ck",
+          "value": "(\"sections\".\"role\" = 'menu_root') = (\"sections\".\"internal_name\" is null)"
         }
       }
     },
@@ -19226,13 +19279,6 @@
       "persons_tenant_pending_email_uq": {
         "columns": {
           "case when \"pending_email_folded\" is null then lower(\"pending_email\") else \"pending_email_folded\" end": {
-            "isExpression": true
-          }
-        }
-      },
-      "section_members_folder_image_idx": {
-        "columns": {
-          "\"folder_overrides\" ->> '$.image'": {
             "isExpression": true
           }
         }
