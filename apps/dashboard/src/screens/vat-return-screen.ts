@@ -2,7 +2,7 @@ import "../widgets/handover-report-warning.js";
 import { LitElement, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { capitaliseFirst } from "@waitron/shared";
-import { baseStyles, pageTitleStyles, focusFirstInvalid, type ComboboxOption } from "@waitron/ui";
+import { baseStyles, pageTitleStyles, FormFeedback, type ComboboxOption } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -80,7 +80,7 @@ export class VatReturnScreen extends LitElement {
   @state() private year: string;
   @state() private period: string;
   @state() private declarationType = "";
-  @state() private attempted = false;
+  readonly #feedback = new FormFeedback(this);
   @state() private busy = false;
   /** A refusal's sentence under the field it names, until that field changes or the next press. */
   @state() private refused: Partial<Record<Field, string>> = {};
@@ -97,7 +97,7 @@ export class VatReturnScreen extends LitElement {
   }
 
   get #typeMissing(): boolean {
-    return this.attempted && this.declarationType === "";
+    return this.#feedback.attempted && this.declarationType === "";
   }
 
   #change(field: Field, value: string): void {
@@ -109,11 +109,11 @@ export class VatReturnScreen extends LitElement {
 
   async #download(): Promise<void> {
     if (this.busy) return;
-    this.attempted = true;
+    this.#feedback.press();
     this.refused = {};
     this.refusal = "";
     if (this.declarationType === "") {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.#feedback.focus(this.shadowRoot!);
       return;
     }
     // The fields stay editable while the file is asked for.
@@ -127,13 +127,13 @@ export class VatReturnScreen extends LitElement {
       link.download = `modelo-303-${sent.year}-${sent.period}.txt`;
       link.click();
       URL.revokeObjectURL(url);
-      this.attempted = false;
+      this.#feedback.reset();
     } catch (error) {
       const code = codeOf(error);
       const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
       if (code === "management.request_invalid" && isField(field) && this[field] === sent[field]) {
         this.refused = { [field]: t(REFUSED[field]) };
-        void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+        void this.#feedback.focus(this.shadowRoot!);
       } else this.refusal = codeMessage(code);
     } finally {
       this.busy = false;
