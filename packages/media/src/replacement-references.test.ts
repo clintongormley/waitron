@@ -1,3 +1,4 @@
+import { columnsFromOverrides } from "@waitron/menu";
 import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
@@ -69,7 +70,7 @@ it("changes presentation without rewriting product, variant, section, folder, re
       childSectionId: includedRoot,
       position: 1,
       showAsFolder: true,
-      folderOverrides: { image: image.filename },
+      ...columnsFromOverrides({ image: image.filename }),
     });
     await publishMenu(tx, menu.id, (await previewMenu(tx, menu.id)).hash, "manager");
     await updateProduct(tx, product.id, {

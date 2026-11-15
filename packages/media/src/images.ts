@@ -8,6 +8,7 @@ import {
   readContentLanguages,
   sectionMembers,
   sections,
+  SECTION_NAME,
   staffPresentationName,
   validateContentTranslations,
 } from "@waitron/menu";
@@ -114,9 +115,9 @@ export function themeLogoName(side: "light" | "dark") {
     case when json_type(${customThemes.theme}) = 'object' and json_type(${customThemes.theme}, ${path}) = 'text'
     then json_extract(${customThemes.theme}, ${path}) end end`;
 }
-// The expression `section_members_folder_image_idx` indexes.
-const folderImage = sql<string | null>`${sectionMembers.folderOverrides} ->> '$.image'`;
+const folderImage = sectionMembers.folderImage;
 const includedRoots = alias(sections, "included_roots");
+const includedMenus = alias(menus, "included_menus");
 
 export interface UploadImageOptions {
   fallbackLanguage?: string;
@@ -202,10 +203,11 @@ async function listImageUsagesForFilename(
   const sectionRows = await tx
     .select({
       id: sections.id,
-      internalName: sections.internalName,
+      internalName: SECTION_NAME,
       ownerMenuId: sections.ownerMenuId,
     })
     .from(sections)
+    .innerJoin(menus, eq(menus.id, sections.ownerMenuId))
     .where(eq(sections.image, filename))
     .orderBy(sections.id);
   const includeRows = await tx
@@ -215,12 +217,13 @@ async function listImageUsagesForFilename(
       menuName: menus.name,
       // Left-joined so a member that names no section is still listed, as `countUsages` and the
       // delete trigger still see it, under its own missing name.
-      includedMenuName: sql<string>`coalesce(${includedRoots.internalName}, ${sectionMembers.missingName}, '')`,
+      includedMenuName: sql<string>`coalesce(${includedRoots.internalName}, ${includedMenus.name}, ${sectionMembers.missingName}, '')`,
     })
     .from(sectionMembers)
     .innerJoin(sections, eq(sections.id, sectionMembers.sectionId))
     .innerJoin(menus, eq(menus.id, sections.ownerMenuId))
     .leftJoin(includedRoots, eq(includedRoots.id, sectionMembers.childSectionId))
+    .leftJoin(includedMenus, eq(includedMenus.id, includedRoots.ownerMenuId))
     .where(eq(folderImage, filename))
     .orderBy(menus.name, sectionMembers.id);
   const versionRows = await tx

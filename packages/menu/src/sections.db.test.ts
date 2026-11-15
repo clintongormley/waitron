@@ -1,3 +1,4 @@
+import { columnsFromOverrides } from "./include-folder.js";
 import { createIncludedMenu as createSection } from "../test/included-menu.js";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -56,7 +57,7 @@ async function fixture() {
 const insertSection = async (role: string, owner: string | null) =>
   fx.db.execute(sql`
     insert into sections (id, internal_name, names, role, owner_menu_id)
-    values (${crypto.randomUUID()}, 'Row', '{}', ${role}, ${owner})`);
+    values (${crypto.randomUUID()}, ${role === "menu_root" ? null : "Row"}, '{}', ${role}, ${owner})`);
 
 const insertMember = async (
   sectionId: string,
@@ -110,7 +111,7 @@ describe("section ownership", () => {
     expect(
       (
         await fx.db.execute<{ n: number }>(
-          sql`select count(*) as n from sections where internal_name='Row'`,
+          sql`select count(*) as n from sections where owner_menu_id in (select id from menus where name in ('Owner section', 'Owner menu_root', 'Owner home_layout'))`,
         )
       ).rows[0]!.n,
     ).toBe(3);
@@ -196,12 +197,12 @@ describe("an include's folder setting", () => {
     const member = await app((tx) => addMember(tx, a.id, { kind: "section", sectionId: b.id }));
     await fx.db
       .update(sectionMembers)
-      .set({ showAsFolder: false, folderOverrides: { names: { en: "Bar" } } })
+      .set({ showAsFolder: false, ...columnsFromOverrides({ names: { en: "Bar" } }) })
       .where(eq(sectionMembers.id, member.id));
     return { rootA: a.id, memberId: member.id };
   }
 
-  it("loads show_as_folder and folder_overrides through loadSectionGraph", async () => {
+  it("loads show_as_folder and folder columns through loadSectionGraph", async () => {
     const { memberId } = await includeB();
     expect((await app(loadSectionGraph)).folder(memberId)).toEqual({
       showAsFolder: false,
@@ -213,10 +214,17 @@ describe("an include's folder setting", () => {
     const { rootA, memberId } = await includeB();
     const c = await app((tx) => createSection(tx, { internalName: "C" }));
     await app((tx) => replaceMember(tx, rootA, memberId, { kind: "section", sectionId: c.id }));
-    const rows = await fx.db.execute<{ show_as_folder: number; folder_overrides: string }>(
-      sql`select show_as_folder, folder_overrides from section_members where id = ${memberId}`,
+    const rows = await fx.db.execute<{
+      show_as_folder: number;
+      folder_names: string | null;
+      folder_image_fixed: number;
+      folder_color_fixed: number;
+    }>(
+      sql`select show_as_folder, folder_names, folder_image_fixed, folder_color_fixed from section_members where id = ${memberId}`,
     );
-    expect(rows.rows).toEqual([{ show_as_folder: 1, folder_overrides: "{}" }]);
+    expect(rows.rows).toEqual([
+      { show_as_folder: 1, folder_names: null, folder_image_fixed: 0, folder_color_fixed: 0 },
+    ]);
   });
 
   it("an include replaced by the same menu keeps its folder setting", async () => {
@@ -379,7 +387,7 @@ describe("moving and removing several members", () => {
     );
     await fx.db
       .update(sectionMembers)
-      .set({ showAsFolder: false, folderOverrides: { names: { en: "Bar" } } })
+      .set({ showAsFolder: false, ...columnsFromOverrides({ names: { en: "Bar" } }) })
       .where(eq(sectionMembers.id, include));
     await app((tx) => moveMembersInto(tx, f.b, [{ listId: f.a, memberId: include }]));
     expect(await ids(f.b)).toEqual([f.bBeer, include]);

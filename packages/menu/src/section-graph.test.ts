@@ -1,3 +1,4 @@
+import { columnsFromOverrides } from "./include-folder.js";
 import { describe, expect, it } from "vitest";
 import {
   buildSectionGraph,
@@ -264,7 +265,7 @@ describe("folder", () => {
     const [row] = list("lunch", ["s:drinks"]);
     const graph = buildSectionGraph(
       [root("lunch", "menu-lunch"), root("drinks", "menu-drinks")],
-      [{ ...row!, showAsFolder: false, folderOverrides: { color: "#112233" } }],
+      [{ ...row!, showAsFolder: false, ...columnsFromOverrides({ color: "#112233" }) }],
     );
     expect(graph.folder(row!.id)).toEqual({
       showAsFolder: false,

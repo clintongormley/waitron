@@ -157,7 +157,7 @@ async function checkMedia(query: BackupQuery): Promise<boolean> {
   for (const [table, column, nested] of [
     ["products", "image", null],
     ["sections", "image", null],
-    ["section_members", "folder_overrides", "image"],
+    ["section_members", "folder_image", null],
     ["menu_version_images", "filename", null],
   ] as const) {
     if (!(await has(query, table))) continue;

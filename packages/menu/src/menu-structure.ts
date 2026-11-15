@@ -29,12 +29,11 @@ const HOME_SECTION_NAME = "Home";
 export async function createMenuShell(
   tx: Transaction,
   menuId: string,
-  menuName: string,
   presentation: Partial<SectionInput> = {},
 ): Promise<{ rootSectionId: string; homeSectionId: string }> {
   const [root] = await tx
     .insert(sections)
-    .values({ ...presentation, internalName: menuName, role: "menu_root", ownerMenuId: menuId })
+    .values({ ...presentation, internalName: null, role: "menu_root", ownerMenuId: menuId })
     .returning({ id: sections.id });
   const [home] = await tx
     .insert(sections)

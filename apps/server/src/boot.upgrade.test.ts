@@ -212,7 +212,7 @@ describe("contained upgrade data checks", () => {
     {
       paymentsOff: false,
       name: "a menu with missing structure",
-      sql: "update sections set role = 'section' where role in ('menu_root', 'home_layout')",
+      sql: "update sections set role = 'section', internal_name = coalesce(internal_name, 'Lost root') where role in ('menu_root', 'home_layout')",
       code: "menu.not_found",
     },
     {

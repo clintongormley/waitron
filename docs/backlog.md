@@ -490,6 +490,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 ### Menus and the menu
 
+- **Loose ends left by A322 (#1372, an included menu can show its sections directly).** Folder photos,
+  shortcut placement and fixed values remain open.
+  [Detail](backlog/menu.md#an-included-menu-can-show-its-sections-directly-a322-1372-left-open)
+
 - **Extras list forms still have two layout limits.** [Detail](backlog/menu.md#what-1151-left-open-2026-10-03)
 
 - **A1522. One product, the right VAT eaten here or taken away (owner, 2026-11-14).** Each product
@@ -2012,7 +2016,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#a1308-rationalise-the-tables-background-jobs-environment-variables-and-files)
   What it retires, listed until each slice lands: [What A1308 retires](backlog/architecture.md#what-a1308-retires).
 
-- **Small checks and indexes that are cheap only inside A1308's fresh tables** (bundle of 12, 7 important, size M, waits for the A1308 table hold to lift). Holds A1368. [Detail](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables)
+- **Small checks and indexes that are cheap only inside A1308's fresh tables** (bundle of 11, 7 important, size M, waits for the A1308 table hold to lift). Holds A1368. [Detail](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables)
 
 - **Cloud's shared UI release still needs dependency updates and portal qualification.**
   Waitron's [release workflow](../.github/workflows/publish-ui.yml) checks and publishes

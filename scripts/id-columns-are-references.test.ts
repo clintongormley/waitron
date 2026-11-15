@@ -32,7 +32,10 @@ const NOT_REFERENCES: Readonly<Record<string, string>> = {
 };
 
 const ID_SHAPED = /_ids?$/;
-const JSON_WITHOUT_IDS: Readonly<Record<string, string>> = {};
+const JSON_WITHOUT_IDS: Readonly<Record<string, string>> = {
+  "section_members.folder_names":
+    "language-to-display-text pairs parsed through isNamesMap (`packages/menu/src/include-folder.ts`), never row ids",
+};
 
 interface TableSchema {
   readonly columns: readonly string[];

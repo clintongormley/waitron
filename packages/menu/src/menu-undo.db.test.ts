@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it, beforeEach } from "vitest";
 import {
+  menus,
   menuItems,
   menuItemVariantOverrides,
   products,
@@ -19,7 +20,7 @@ import { previewMenu, publishMenu } from "./menu-publication.js";
 import { menuChangeActions, type MenuChangeAction, type MenuUndoCommand } from "./menu-undo.js";
 import { updateMenuDetails, updateMenuItem, updateProduct } from "./operations.js";
 import { setIncludeFolder } from "./include-folder.js";
-import { createSectionIn, updateSection } from "./sections.js";
+import { createSectionIn, updateSection, SECTION_NAME } from "./sections.js";
 import { setMenuVariantPrice, setProductVariants } from "./variants.js";
 import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
 
@@ -114,12 +115,13 @@ async function undoAndCheck(
 async function sectionRow(sectionId: string) {
   const [row] = await fx.db
     .select({
-      internalName: sections.internalName,
+      internalName: SECTION_NAME,
       names: sections.names,
       image: sections.image,
       color: sections.color,
     })
     .from(sections)
+    .innerJoin(menus, eq(menus.id, sections.ownerMenuId))
     .where(eq(sections.id, sectionId));
   return row!;
 }

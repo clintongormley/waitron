@@ -1,3 +1,4 @@
+import { SECTION_NAME } from "./sections.js";
 import { storedMenuParts } from "../test/menu-parts.js";
 import { readSavedContentLanguages } from "./content-languages.js";
 import { readVenueInvoiceLocales } from "@waitron/db";
@@ -371,8 +372,9 @@ it.each(STARTER_VENUES)(
       .where(eq(menus.id, venueMenu.menuId!));
     expect(menuRows).toEqual([{ name }]);
     const owned = await suite.db
-      .select({ role: sections.role, internalName: sections.internalName, names: sections.names })
+      .select({ role: sections.role, internalName: SECTION_NAME, names: sections.names })
       .from(sections)
+      .innerJoin(menus, eq(menus.id, sections.ownerMenuId))
       .where(eq(sections.ownerMenuId, venueMenu.menuId!))
       .orderBy(asc(sections.role));
     // The home layout is shown nowhere, so it keeps its English name in code (A918 slice 4, decision 5).

@@ -1,3 +1,4 @@
+import { columnsFromOverrides } from "./include-folder.js";
 import { storedMenuParts } from "../test/menu-parts.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
@@ -352,7 +353,7 @@ describe("translation peer baseline projection", () => {
         const member = await addMember(tx, parentRoot, { kind: "section", sectionId: childRoot });
         await tx
           .update(sectionMembers)
-          .set({ folderOverrides: { names: { en: "CLIENT Folder" }, color: "red" } })
+          .set({ ...columnsFromOverrides({ names: { en: "CLIENT Folder" }, color: "red" }) })
           .where(eq(sectionMembers.id, member.id));
         const [unit] = await tx
           .insert(units)
@@ -412,7 +413,7 @@ describe("translation peer baseline projection", () => {
           .where(eq(sections.id, childRoot));
         await tx
           .update(sectionMembers)
-          .set({ folderOverrides: { names: { ca: "CLIENT Carpeta" }, color: "red" } })
+          .set({ ...columnsFromOverrides({ names: { ca: "CLIENT Carpeta" }, color: "red" }) })
           .where(eq(sectionMembers.id, member.id));
         await tx
           .update(units)

@@ -5,11 +5,12 @@ import { venueMenus } from "../../src/testing/venue-menus.js";
  */
 
 import { describe, expect, it } from "vitest";
-import { sql } from "drizzle-orm";
-import { kitchenStations, withTransaction } from "@waitron/db";
+import { eq, getTableColumns, sql } from "drizzle-orm";
+import { kitchenStations, menus, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  SECTION_NAME,
   foldName,
   listAvailableProducts,
   listMenuOffers,
@@ -146,7 +147,10 @@ describe("seedMenus", () => {
         locale: LOCALE,
         dataSet: CASA_DELGADO_ES,
       });
-      const sections = await tx.select().from(sectionsTable);
+      const sections = await tx
+        .select({ ...getTableColumns(sectionsTable), internalName: SECTION_NAME })
+        .from(sectionsTable)
+        .innerJoin(menus, eq(menus.id, sectionsTable.ownerMenuId));
       const sectionNames = new Map(sections.map((row) => [row.id, row.internalName]));
       const topLevel = async (menuId: string) =>
         (await readMenuStructure(tx, menuId)).nodes.map(({ ref }) =>
@@ -215,7 +219,7 @@ describe("seedMenus", () => {
         dataSet: CASA_DELGADO_ES,
       });
       const { rows } = await tx.execute<{ menu: string; root: string }>(sql`
-        select c.name as menu, s.internal_name as root
+        select c.name as menu, coalesce(s.internal_name, c.name) as root
         from menus d
         join menus c on c.id = d.id
         join sections s on s.owner_menu_id = d.id and s.role = 'menu_root'

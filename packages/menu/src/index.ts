@@ -129,7 +129,7 @@ export * from "./section-graph.js";
 export * from "./menu-inclusion.js";
 export * from "./sections.js";
 export * from "./include-folder-presentation.js";
-export { setIncludeFolder } from "./include-folder.js";
+export { setIncludeFolder, columnsFromOverrides, overridesFromRow } from "./include-folder.js";
 export * from "./menu-home.js";
 export {
   HOME_DEVICES,

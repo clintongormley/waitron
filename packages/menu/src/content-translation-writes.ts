@@ -9,7 +9,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { TranslationItem, TranslationField } from "./content-translation-types.js";
 import { validateOptionalTranslations } from "./optional-translations.js";
 import "./errors.js";
@@ -70,7 +70,7 @@ export async function writeTranslationMaps(
       await tx
         .update(sectionMembers)
         .set({
-          folderOverrides: sql`json_set(${sectionMembers.folderOverrides}, '$.names', json(${JSON.stringify(names)}))`,
+          folderNames: customerName,
         })
         .where(eq(sectionMembers.id, item.id));
       break;

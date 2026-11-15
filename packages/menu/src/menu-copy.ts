@@ -70,7 +70,7 @@ export async function duplicateMenu(
         ...section,
         id: sectionIds.get(section.id)!,
         ownerMenuId: copy.id,
-        internalName: section.role === "menu_root" ? copy.name : section.internalName,
+        internalName: section.role === "menu_root" ? null : section.internalName,
       })),
     );
   for (const batch of batches(copiedMembers)) await tx.insert(sectionMembers).values(batch);

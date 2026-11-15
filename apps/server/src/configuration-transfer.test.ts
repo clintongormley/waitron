@@ -1,3 +1,4 @@
+import { columnsFromOverrides, overridesFromRow } from "@waitron/menu";
 import { STARTER_STEP_NAMES } from "@waitron/venue-service";
 import { departmentCourses } from "@waitron/db";
 import type { TradingContext } from "./trading-context.js";
@@ -468,7 +469,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 39,
+  version: 40,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -1804,11 +1805,11 @@ it("an include's folder photo travels with the configuration", async () => {
     const overrides = { image: image.filename, names: { en: "Bar", es: "" }, color: "#112233" };
     await tx
       .update(sectionMembers)
-      .set({ folderOverrides: overrides })
+      .set({ ...columnsFromOverrides(overrides) })
       .where(eq(sectionMembers.id, folder.id));
     await tx
       .update(sectionMembers)
-      .set({ showAsFolder: false, folderOverrides: { image: null } })
+      .set({ showAsFolder: false, ...columnsFromOverrides({ image: null }) })
       .where(eq(sectionMembers.id, direct.id));
     return overrides;
   });
@@ -1830,14 +1831,24 @@ it("an include's folder photo travels with the configuration", async () => {
       .select({
         staffName: menus.name,
         showAsFolder: sectionMembers.showAsFolder,
-        overrides: sectionMembers.folderOverrides,
+        folderNames: sectionMembers.folderNames,
+        folderImage: sectionMembers.folderImage,
+        folderImageFixed: sectionMembers.folderImageFixed,
+        folderColor: sectionMembers.folderColor,
+        folderColorFixed: sectionMembers.folderColorFixed,
       })
       .from(sectionMembers)
       .innerJoin(sections, eq(sections.id, sectionMembers.childSectionId))
       .innerJoin(menus, eq(menus.id, sections.ownerMenuId))
       .where(eq(sections.role, "menu_root"))
       .orderBy(menus.name);
-    expect(included).toEqual([
+    expect(
+      included.map((row) => ({
+        staffName: row.staffName,
+        showAsFolder: row.showAsFolder,
+        overrides: overridesFromRow(row),
+      })),
+    ).toEqual([
       { staffName: "Desserts (staff)", showAsFolder: false, overrides: { image: null } },
       { staffName: "Drinks (staff)", showAsFolder: true, overrides: fixed },
     ]);
@@ -5560,7 +5571,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(39);
+  expect(exported.version).toBe(40);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)

@@ -1,3 +1,4 @@
+import { columnsFromOverrides } from "./include-folder.js";
 import { storedMenuParts } from "../test/menu-parts.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import type { TranslationTarget } from "./content-translation-targets.js";
@@ -265,8 +266,7 @@ describe("atomic content translations", () => {
     for (const rows of [after.products, after.lists, after.labels, after.extras])
       for (const row of rows) if (row.customerName) delete row.customerName.en;
     for (const row of after.sections) delete row.names.en;
-    for (const row of after.members)
-      if (row.folderOverrides.names) delete row.folderOverrides.names.en;
+    for (const row of after.members) if (row.folderNames) delete row.folderNames.en;
     for (const row of after.units) delete row.name.en;
     expect(after).toEqual(before);
   });
@@ -625,7 +625,7 @@ describe("atomic content translations", () => {
           .select()
           .from(sectionMembers)
           .where(eq(sectionMembers.id, ids.included_menu));
-        expect(member!.folderOverrides).toEqual({ names: { ca: "CA only" } });
+        expect(member!.folderNames).toEqual({ ca: "CA only" });
       }
       if (mode === "unset") {
         await expect(
@@ -949,7 +949,7 @@ describe("atomic content translations", () => {
           case "included_menu":
             await tx
               .update(sectionMembers)
-              .set({ folderOverrides: { names: { es: "" } } })
+              .set({ ...columnsFromOverrides({ names: { es: "" } }) })
               .where(eq(sectionMembers.id, ids[kind]));
             break;
         }
@@ -969,8 +969,7 @@ describe("atomic content translations", () => {
       for (const rows of [after.products, after.lists, after.labels, after.extras])
         for (const row of rows) if (row.id === ids[kind]) row.customerName = null;
       for (const row of after.sections) if (row.id === ids[kind]) row.names = {};
-      for (const row of after.members)
-        if (row.id === ids[kind]) row.folderOverrides.names = { es: "" };
+      for (const row of after.members) if (row.id === ids[kind]) row.folderNames = { es: "" };
       for (const row of after.units) if (row.id === ids[kind]) row.name = {};
       expect(after).toEqual(before);
     },

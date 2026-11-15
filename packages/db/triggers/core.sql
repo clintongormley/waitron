@@ -790,20 +790,20 @@ BEFORE INSERT ON section_members
 FOR EACH ROW
 BEGIN
   SELECT raise(abort, 'section_members_media_image_fk')
-  WHERE json_extract(new.folder_overrides, '$.image') IS NOT NULL
+  WHERE new.folder_image IS NOT NULL
     AND NOT exists (
-      SELECT 1 FROM media_images WHERE filename = json_extract(new.folder_overrides, '$.image')
+      SELECT 1 FROM media_images WHERE filename = new.folder_image
     );
 END;
 --> statement-breakpoint
 CREATE TRIGGER section_members_media_image_fk_update
-BEFORE UPDATE OF folder_overrides ON section_members
+BEFORE UPDATE OF folder_image ON section_members
 FOR EACH ROW
 BEGIN
   SELECT raise(abort, 'section_members_media_image_fk')
-  WHERE json_extract(new.folder_overrides, '$.image') IS NOT NULL
+  WHERE new.folder_image IS NOT NULL
     AND NOT exists (
-      SELECT 1 FROM media_images WHERE filename = json_extract(new.folder_overrides, '$.image')
+      SELECT 1 FROM media_images WHERE filename = new.folder_image
     );
 END;
 --> statement-breakpoint
@@ -813,7 +813,7 @@ FOR EACH ROW
 BEGIN
   SELECT raise(abort, 'section_members_media_image_fk')
   WHERE exists (
-    SELECT 1 FROM section_members WHERE folder_overrides ->> '$.image' = old.filename
+    SELECT 1 FROM section_members WHERE folder_image = old.filename
   );
 END;
 --> statement-breakpoint
@@ -824,7 +824,7 @@ BEGIN
   SELECT raise(abort, 'section_members_media_image_fk')
   WHERE new.filename IS NOT old.filename
     AND exists (
-      SELECT 1 FROM section_members WHERE folder_overrides ->> '$.image' = old.filename
+      SELECT 1 FROM section_members WHERE folder_image = old.filename
     );
 END;
 

@@ -1,3 +1,4 @@
+import { madridWithSectionColumns } from "./madrid-documents.js";
 import * as documents from "./madrid-documents.js";
 import { expect, it } from "vitest";
 import { madridWithDocument } from "./madrid-documents.js";
@@ -365,4 +366,70 @@ it("moves captured option defaults onto their own labels without changing the ca
     c: { id: "c", list_id: "other", is_default: 0 },
   });
   expect(captured).toEqual(before);
+});
+
+it("moves the captured root name and three include states into the section columns without changing the capture", () => {
+  const capture = {
+    tables: {
+      sections: {
+        columns: [{ name: "internal_name", type: "TEXT", notnull: 1, pk: 0, dflt_value: null }],
+        foreignKeys: [],
+        rows: {
+          root: { id: "root", role: "menu_root", internal_name: "Lunch" },
+          plain: { id: "plain", role: "section", internal_name: "Starters" },
+        },
+      },
+      section_members: {
+        columns: [
+          { name: "folder_overrides", type: "TEXT", notnull: 1, pk: 0, dflt_value: "'{}'" },
+        ],
+        foreignKeys: [],
+        rows: {
+          follow: { folder_overrides: {} },
+          none: { folder_overrides: { image: null, color: null } },
+          fixed: {
+            folder_overrides: { names: { es: "Desserts" }, image: "photo.webp", color: "#112233" },
+          },
+        },
+      },
+    },
+  };
+  const actual = madridWithSectionColumns(capture);
+  expect(actual.tables.sections!.rows).toEqual({
+    root: { id: "root", role: "menu_root", internal_name: null },
+    plain: { id: "plain", role: "section", internal_name: "Starters" },
+  });
+  expect(actual.tables.sections!.columns[0]!.notnull).toBe(0);
+  expect(actual.tables.section_members!.rows).toEqual({
+    follow: {
+      folder_names: null,
+      folder_image: null,
+      folder_image_fixed: 0,
+      folder_color: null,
+      folder_color_fixed: 0,
+    },
+    none: {
+      folder_names: null,
+      folder_image: null,
+      folder_image_fixed: 1,
+      folder_color: null,
+      folder_color_fixed: 1,
+    },
+    fixed: {
+      folder_names: { es: "Desserts" },
+      folder_image: "photo.webp",
+      folder_image_fixed: 1,
+      folder_color: "#112233",
+      folder_color_fixed: 1,
+    },
+  });
+  expect(actual.tables.section_members!.columns.map((column) => column.name)).toEqual([
+    "folder_names",
+    "folder_image",
+    "folder_image_fixed",
+    "folder_color",
+    "folder_color_fixed",
+  ]);
+  expect(capture.tables.sections.rows.root.internal_name).toBe("Lunch");
+  expect(capture.tables.section_members.rows.follow).toEqual({ folder_overrides: {} });
 });

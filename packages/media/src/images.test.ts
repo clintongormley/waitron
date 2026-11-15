@@ -1,3 +1,4 @@
+import { columnsFromOverrides } from "@waitron/menu";
 import { storedMenuParts } from "@waitron/menu/test/menu-parts.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
@@ -713,13 +714,13 @@ it("protects an image used by sections, a menu's own list among them, and counts
   await seedTaxpayer(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const { image } = await uploadImage(tx, { image: photo, names: { en: "Drinks" } }, {});
-    const [menu] = await tx.insert(menus).values({ name: "Lunch" }).returning({
+    const [menu] = await tx.insert(menus).values({ name: "Lunch root" }).returning({
       id: menus.id,
     });
     const [root] = await tx
       .insert(sections)
       .values({
-        internalName: "Lunch root",
+        internalName: null,
         role: "menu_root",
         ownerMenuId: menu!.id,
         image: image.filename,
@@ -757,17 +758,17 @@ it("protects the photo an include's folder names, even switched off, and counts 
     const [lunch] = await tx.insert(menus).values({ name: "Lunch Menu" }).returning({
       id: menus.id,
     });
-    const [drinksMenu] = await tx.insert(menus).values({ name: "Drinks menu" }).returning({
+    const [drinksMenu] = await tx.insert(menus).values({ name: "Drinks" }).returning({
       id: menus.id,
     });
     const [lunchRoot] = await tx
       .insert(sections)
-      .values({ internalName: "Lunch root", role: "menu_root", ownerMenuId: lunch!.id })
+      .values({ internalName: null, role: "menu_root", ownerMenuId: lunch!.id })
       .returning({ id: sections.id });
     const [drinksRoot] = await tx
       .insert(sections)
       .values({
-        internalName: "Drinks",
+        internalName: null,
         names: { en: "Drinks (customer)" },
         role: "menu_root",
         ownerMenuId: drinksMenu!.id,
@@ -779,7 +780,7 @@ it("protects the photo an include's folder names, even switched off, and counts 
         sectionId: lunchRoot!.id,
         position: 0,
         childSectionId: drinksRoot!.id,
-        folderOverrides: { names: { en: "Wines (folder)" }, image: image.filename },
+        ...columnsFromOverrides({ names: { en: "Wines (folder)" }, image: image.filename }),
       })
       .returning({ id: sectionMembers.id });
     const uses = [
@@ -803,7 +804,7 @@ it("protects the photo an include's folder names, even switched off, and counts 
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
     await tx
       .update(sectionMembers)
-      .set({ folderOverrides: { image: null } })
+      .set({ ...columnsFromOverrides({ image: null }) })
       .where(eq(sectionMembers.id, member!.id));
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(0);
     expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
@@ -820,7 +821,7 @@ it("lists a folder photo held by a member that includes no section, under its mi
     });
     const [lunchRoot] = await tx
       .insert(sections)
-      .values({ internalName: "Lunch root", role: "menu_root", ownerMenuId: lunch!.id })
+      .values({ internalName: null, role: "menu_root", ownerMenuId: lunch!.id })
       .returning({ id: sections.id });
     const [member] = await tx
       .insert(sectionMembers)
@@ -828,7 +829,7 @@ it("lists a folder photo held by a member that includes no section, under its mi
         sectionId: lunchRoot!.id,
         position: 0,
         missingName: "Old drinks",
-        folderOverrides: { image: image.filename },
+        ...columnsFromOverrides({ image: image.filename }),
       })
       .returning({ id: sectionMembers.id });
     const uses = [

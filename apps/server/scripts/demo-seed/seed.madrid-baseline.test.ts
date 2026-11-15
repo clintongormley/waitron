@@ -8,6 +8,7 @@ import {
   madridWithMenuSettings,
   madridWithProductUnits,
   madridWithOptionDefaults,
+  madridWithSectionColumns,
 } from "./testing/madrid-documents.js";
 import { stable } from "./testing/madrid-semantics.js";
 import {
@@ -426,6 +427,25 @@ for (const locale of ["en", "es"] as const) {
       seeded: await canonicalMadridSemantics(seeded),
     };
     const historicalSeeded = madridWithRenamedTables(canonical.seeded, { menus: "catalogues" });
+    for (const row of Object.values(historicalSeeded.tables.sections!.rows))
+      if (row.role === "menu_root")
+        row.internal_name =
+          historicalSeeded.tables.catalogues!.rows[String(row.owner_menu_id)]!.name;
+    for (const row of Object.values(historicalSeeded.tables.section_members!.rows)) {
+      row.folder_overrides = {
+        ...(row.folder_names === null ? {} : { names: row.folder_names }),
+        ...(row.folder_image_fixed === 1 ? { image: row.folder_image } : {}),
+        ...(row.folder_color_fixed === 1 ? { color: row.folder_color } : {}),
+      };
+      for (const column of [
+        "folder_names",
+        "folder_image",
+        "folder_image_fixed",
+        "folder_color",
+        "folder_color_fixed",
+      ])
+        delete row[column];
+    }
     const root = DEMO_BASELINE_FIXTURE_ROOTS[CASA_DELGADO_ES.id];
     expect(root).toBeInstanceOf(URL);
     const fixtureName = `madrid-before-move.${locale}.json`;
@@ -1806,6 +1826,7 @@ for (const locale of ["en", "es"] as const) {
       expected[phase] = madridWithDroppedColumns(expected[phase], { menus: ["version"] });
       delete phases[phase]!.menu_details;
       delete phases[phase]!.category_details;
+      expected[phase] = madridWithSectionColumns(expected[phase]);
 
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(expected[phase].tables));
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(phases[phase]!));

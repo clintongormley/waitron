@@ -282,7 +282,7 @@ describe("menu display and root checks", () => {
       await insertMenu("roots");
       const insert = (id: string, role: string) =>
         suite.db.run(
-          sql`insert into sections(id,internal_name,role,owner_menu_id) values (${id},${id},${role},'roots')`,
+          sql`insert into sections(id,internal_name,role,owner_menu_id) values (${id},${role === "menu_root" ? null : id},${role},'roots')`,
         );
       await insert("first", role);
       const error = await captureError(() => insert("second", role));

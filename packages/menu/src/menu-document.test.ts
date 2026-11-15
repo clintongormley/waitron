@@ -1,3 +1,4 @@
+import { columnsFromOverrides } from "./include-folder.js";
 import { storedMenuParts } from "../test/menu-parts.js";
 import type {
   DocumentMember,
@@ -2120,7 +2121,7 @@ describe("an include shown as a folder or directly", () => {
           .where(eq(sections.id, f.drinks));
         await tx
           .update(sectionMembers)
-          .set({ folderOverrides: { image } })
+          .set({ ...columnsFromOverrides({ image }) })
           .where(eq(sectionMembers.id, memberId));
       });
     await fixPhoto(libraryImageName("bar.jpg"));

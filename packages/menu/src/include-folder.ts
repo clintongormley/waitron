@@ -6,6 +6,7 @@ import {
   FALLBACK_LOCALE,
   type ContentLanguages,
   isStoredColor,
+  MEDIA_FILENAME,
 } from "@waitron/shared";
 import { readContentLanguages } from "./content-languages.js";
 import {
@@ -19,6 +20,31 @@ import { sectionColorOf, sectionImageOf, writableMember } from "./sections.js";
 import "./errors.js";
 
 type Rows = readonly Record<string, unknown>[];
+
+type FolderColumns = Pick<
+  typeof sectionMembers.$inferSelect,
+  "folderNames" | "folderImage" | "folderImageFixed" | "folderColor" | "folderColorFixed"
+>;
+
+export function overridesFromRow(row: Partial<FolderColumns>): IncludeFolderOverrides {
+  return {
+    ...(row.folderNames === undefined || row.folderNames === null
+      ? {}
+      : { names: row.folderNames }),
+    ...(row.folderImageFixed ? { image: row.folderImage ?? null } : {}),
+    ...(row.folderColorFixed ? { color: row.folderColor ?? null } : {}),
+  };
+}
+
+export function columnsFromOverrides(overrides: IncludeFolderOverrides): FolderColumns {
+  return {
+    folderNames: overrides.names && Object.keys(overrides.names).length ? overrides.names : null,
+    folderImage: overrides.image ?? null,
+    folderImageFixed: overrides.image !== undefined,
+    folderColor: overrides.color ?? null,
+    folderColorFixed: overrides.color !== undefined,
+  };
+}
 
 const OVERRIDE_FIELDS: readonly string[] = ["names", "image", "color"];
 
@@ -102,47 +128,54 @@ export async function setIncludeFolder(
   }
   await tx
     .update(sectionMembers)
-    .set({ showAsFolder, folderOverrides: overrides })
+    .set({ showAsFolder, ...columnsFromOverrides(overrides) })
     .where(eq(sectionMembers.id, memberId));
   return { showAsFolder, overrides };
 }
 
-/** The member's `folder_overrides` as an object, or the column refused. */
-function importedOverrides(row: Record<string, unknown>): Record<string, unknown> {
-  const refuse = (): never => {
-    throw new AppError("setup.request_invalid", { field: "section_members.folder_overrides" });
+function importedOverrides(row: Record<string, unknown>): IncludeFolderOverrides {
+  const refuse = (column: string): never => {
+    throw new AppError("setup.request_invalid", { field: `section_members.${column}` });
   };
-  const text = row.folder_overrides;
-  if (text === undefined) return {};
-  if (typeof text !== "string") return refuse();
-  let value: unknown;
-  try {
-    value = JSON.parse(text);
-  } catch {
-    return refuse();
+  let names: Record<string, string> | undefined;
+  if (row.folder_names !== undefined && row.folder_names !== null) {
+    if (typeof row.folder_names !== "string") refuse("folder_names");
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(row.folder_names as string);
+    } catch {
+      refuse("folder_names");
+    }
+    if (!isNamesMap(parsed) || Object.keys(parsed).length === 0) refuse("folder_names");
+    names = parsed as Record<string, string>;
   }
-  if (overridesShapeProblem(value) !== null) return refuse();
-  const { names, image, color } = value as Record<string, unknown>;
-  // `setIncludeFolder` never stores an empty map. Patched with one, `json_patch` answers the
-  // included menu's own names, so the content-language queries would count that menu's gap a
-  // second time.
-  if (names !== undefined && Object.keys(names as object).length === 0) return refuse();
-  if (image !== undefined && image !== null && typeof image !== "string") return refuse();
-  if (color !== undefined && color !== null && !isStoredColor(color)) return refuse();
-  return value as Record<string, unknown>;
+  for (const column of ["folder_image_fixed", "folder_color_fixed"])
+    if (row[column] !== undefined && row[column] !== 0 && row[column] !== 1) refuse(column);
+  const image = row.folder_image ?? null;
+  const color = row.folder_color ?? null;
+  if (
+    image !== null &&
+    (row.folder_image_fixed !== 1 || typeof image !== "string" || !MEDIA_FILENAME.test(image))
+  )
+    refuse("folder_image");
+  if (color !== null && (row.folder_color_fixed !== 1 || !isStoredColor(color)))
+    refuse("folder_color");
+  return {
+    ...(names === undefined ? {} : { names }),
+    ...(row.folder_image_fixed === 1 ? { image: image as string | null } : {}),
+    ...(row.folder_color_fixed === 1 ? { color: color as string | null } : {}),
+  };
 }
 
-/**
- * Refuses (`setup.request_invalid`) an imported member whose folder setting is malformed: a
- * `show_as_folder` other than a flag, `folder_overrides` that are not the JSON text of a sound
- * `IncludeFolderOverrides` or that hold an empty `names` map, or any setting but the default on a
- * member that is not an include of a menu in a list. Whether a named photo is in the library is the
- * media triggers' to refuse.
- */
 export function checkIncludeFolderRows(
   members: Rows | undefined,
   sections: Rows | undefined,
 ): void {
+  for (const row of sections ?? [])
+    if (
+      row.role === "menu_root" ? row.internal_name != null : typeof row.internal_name !== "string"
+    )
+      throw new AppError("setup.request_invalid", { field: "sections.internal_name" });
   const roles = new Map((sections ?? []).map((row) => [row.id, row.role]));
   for (const row of members ?? []) {
     const show = row.show_as_folder;
@@ -158,7 +191,12 @@ export function checkIncludeFolderRows(
     if (isInclude) continue;
     if (show === 0 || show === false)
       throw new AppError("setup.request_invalid", { field: "section_members.show_as_folder" });
-    if (Object.keys(overrides).length > 0)
-      throw new AppError("setup.request_invalid", { field: "section_members.folder_overrides" });
+    for (const [key, column] of [
+      ["names", "folder_names"],
+      ["image", "folder_image_fixed"],
+      ["color", "folder_color_fixed"],
+    ] as const)
+      if (Object.hasOwn(overrides, key))
+        throw new AppError("setup.request_invalid", { field: `section_members.${column}` });
   }
 }

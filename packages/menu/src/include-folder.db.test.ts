@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   captureError,
@@ -11,7 +11,7 @@ import {
 import { useMenuDb } from "../test/fixtures.js";
 import { menusFixture, type MenusFixture } from "../test/menus-fixture.js";
 import { writeContentLanguages } from "./content-languages.js";
-import { setIncludeFolder } from "./include-folder.js";
+import { setIncludeFolder, overridesFromRow } from "./include-folder.js";
 import { readMenuHome } from "./menu-home.js";
 import { readMenuStructure } from "./menu-structure.js";
 import type { IncludeFolderInput } from "@waitron/shared";
@@ -44,18 +44,67 @@ async function fixture(): Promise<MenusFixture & { include: string; soupMember: 
   };
 }
 
-const storedRow = async (memberId: string) =>
-  (
-    await fx.db
-      .select({
-        showAsFolder: sectionMembers.showAsFolder,
-        overrides: sectionMembers.folderOverrides,
-      })
-      .from(sectionMembers)
-      .where(eq(sectionMembers.id, memberId))
-  )[0];
+const storedRow = async (memberId: string) => {
+  const [row] = await fx.db.select().from(sectionMembers).where(eq(sectionMembers.id, memberId));
+  return row && { showAsFolder: row.showAsFolder, overrides: overridesFromRow(row) };
+};
 
 describe("setIncludeFolder", () => {
+  it("keeps fixed-none apart from follow in the dedicated folder columns", async () => {
+    const f = await fixture();
+    await app((tx) =>
+      writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] }),
+    );
+    for (const [overrides, columns] of [
+      [
+        {},
+        {
+          folder_names: null,
+          folder_image: null,
+          folder_image_fixed: 0,
+          folder_color: null,
+          folder_color_fixed: 0,
+        },
+      ],
+      [
+        { image: null, color: null },
+        {
+          folder_names: null,
+          folder_image: null,
+          folder_image_fixed: 1,
+          folder_color: null,
+          folder_color_fixed: 1,
+        },
+      ],
+      [
+        { image: libraryImageName("drinks.jpg"), color: "#112233", names: { es: "Desserts" } },
+        {
+          folder_names: '{"es":"Desserts"}',
+          folder_image: libraryImageName("drinks.jpg"),
+          folder_image_fixed: 1,
+          folder_color: "#112233",
+          folder_color_fixed: 1,
+        },
+      ],
+    ] as const) {
+      await app((tx) =>
+        setIncludeFolder(tx, f.lunchRoot, f.include, { showAsFolder: true, overrides }),
+      );
+      expect(
+        (
+          await fx.db
+            .execute(sql`select folder_names, folder_image, folder_image_fixed, folder_color, folder_color_fixed
+        from section_members where id = ${f.include}`)
+        ).rows,
+      ).toEqual([columns]);
+      const structure = await app((tx) => readMenuStructure(tx, f.lunch));
+      expect(structure.nodes.find((node) => node.memberId === f.include)!.folder).toEqual({
+        showAsFolder: true,
+        overrides,
+      });
+    }
+  });
+
   it("stores the switch and the overrides, and readMenuStructure answers them on the include", async () => {
     const f = await fixture();
     const folder = { showAsFolder: false, overrides: { names: { en: "Bar" } } };

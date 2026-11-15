@@ -173,7 +173,15 @@ describe("validateMenuConfiguration: colours", () => {
   const coloured = (table: string, color: unknown) =>
     table === "products"
       ? { products: [{ id: "p1", name: "Water", active: 1, parent_id: null, color }] }
-      : { [table]: [{ name: "Category", color }] };
+      : {
+          [table]: [
+            {
+              name: "Category",
+              color,
+              ...(table === "sections" ? { internal_name: "Section" } : {}),
+            },
+          ],
+        };
 
   it.each(["products", "categories", "sections"])(
     "refuses a %s colour that is not lowercase #rrggbb",
@@ -253,8 +261,8 @@ describe("validateMenuConfiguration: include folders", () => {
   const sections = [
     { id: "lunch-root", role: "menu_root" },
     { id: "drinks-root", role: "menu_root" },
-    { id: "home", role: "home_layout" },
-    { id: "beer", role: "section" },
+    { id: "home", role: "home_layout", internal_name: "Home" },
+    { id: "beer", role: "section", internal_name: "Beer" },
   ];
   const include = { id: "m1", section_id: "lunch-root", child_section_id: "drinks-root" };
   const bundle = (member: Record<string, unknown>) => ({
@@ -264,43 +272,65 @@ describe("validateMenuConfiguration: include folders", () => {
   const refusedAs = (field: string) =>
     expect.objectContaining({ code: "setup.request_invalid", params: { field } });
 
-  it("refuses imported folder overrides that are not an object or carry a bad colour", () => {
-    for (const folder_overrides of [
+  it.each([
+    ...[
       "not json",
       "[]",
       '"Bar"',
       "5",
-      "null",
-      { names: { en: "Bar" } },
-      '{"color":"#ABCDEF"}',
-      '{"color":5}',
-      '{"image":5}',
-      '{"image":true}',
-      '{"names":"Bar"}',
-      '{"names":{"en":7}}',
-      '{"names":["Bar"]}',
-      '{"names":{"not a language":"Bar"}}',
-      '{"names":{"EN":"Bar"}}',
-      '{"names":{"en":"Bar"},"note":"x"}',
-      '{"names":{}}',
-      '{"names":{},"color":null}',
-      null,
+      "{}",
+      '{"en":7}',
+      '{"not a language":"Bar"}',
+      '{"EN":"Bar"}',
+      { en: "Bar" },
       7,
-    ])
-      expect(
-        () => validateMenuConfiguration(bundle({ folder_overrides })),
-        JSON.stringify(folder_overrides),
-      ).toThrowError(refusedAs("section_members.folder_overrides"));
+    ].map((value): [string, unknown] => ["folder_names", value]),
+    ...[2, "1", true, null].flatMap((value): [string, unknown][] => [
+      ["folder_image_fixed", value],
+      ["folder_color_fixed", value],
+    ]),
+    ["folder_image", "bad.jpg"],
+    ["folder_image", 5],
+    ["folder_color", "#ABCDEF"],
+    ["folder_color", 5],
+  ])("refuses malformed imported %s of %j", (field, value) => {
+    expect(() =>
+      validateMenuConfiguration(
+        bundle({
+          [field as string]: value,
+          folder_image_fixed: field === "folder_image_fixed" ? value : 1,
+          folder_color_fixed: field === "folder_color_fixed" ? value : 1,
+        }),
+      ),
+    ).toThrowError(refusedAs(`section_members.${field}`));
   });
 
-  it("accepts a well-formed folder on an include, and a row without the columns", () => {
+  it.each(["image", "color"])("refuses a fixed folder %s without its flag", (field) => {
+    expect(() =>
+      validateMenuConfiguration(
+        bundle({ [`folder_${field}`]: field === "image" ? `${"a".repeat(64)}.webp` : "#112233" }),
+      ),
+    ).toThrowError(refusedAs(`section_members.folder_${field}`));
+  });
+
+  it("accepts following, fixed-none and fixed-value folders on an include", () => {
     for (const member of [
       {
         show_as_folder: 0,
-        folder_overrides: '{"names":{"en":"Bar","es":""},"image":"bar.jpg","color":"#112233"}',
+        folder_names: '{"en":"Bar","es":""}',
+        folder_image: `${"a".repeat(64)}.webp`,
+        folder_image_fixed: 1,
+        folder_color: "#112233",
+        folder_color_fixed: 1,
       },
-      { show_as_folder: 1, folder_overrides: '{"image":null,"color":null}' },
-      { show_as_folder: false, folder_overrides: "{}" },
+      {
+        show_as_folder: 1,
+        folder_image: null,
+        folder_image_fixed: 1,
+        folder_color: null,
+        folder_color_fixed: 1,
+      },
+      { show_as_folder: false, folder_names: null },
       { show_as_folder: true },
       {},
     ])
@@ -313,35 +343,48 @@ describe("validateMenuConfiguration: include folders", () => {
     );
   });
 
-  it("refuses a folder setting on a member that is not an include, and accepts the defaults there", () => {
-    const placements = [
+  it("refuses folder settings on non-includes and accepts their defaults", () => {
+    for (const placement of [
       { section_id: "lunch-root", child_section_id: null, product_id: "p1" },
       { section_id: "lunch-root", child_section_id: "beer" },
       { section_id: "home", child_section_id: "drinks-root" },
       { section_id: "lunch-root", child_section_id: "not-in-bundle" },
       { section_id: "not-in-bundle", child_section_id: "drinks-root" },
       { section_id: "home", child_section_id: null, missing_name: "Gone" },
-    ];
-    for (const placement of placements) {
+    ]) {
       for (const [folder, field] of [
         [{ show_as_folder: 0 }, "show_as_folder"],
-        [{ folder_overrides: '{"color":null}' }, "folder_overrides"],
+        [{ folder_color_fixed: 1 }, "folder_color_fixed"],
+        [{ folder_image_fixed: 1 }, "folder_image_fixed"],
+        [{ folder_names: '{"en":"Bar"}' }, "folder_names"],
       ] as const)
-        expect(
-          () => validateMenuConfiguration(bundle({ ...placement, ...folder })),
-          JSON.stringify({ ...placement, ...folder }),
-        ).toThrowError(refusedAs(`section_members.${field}`));
-      for (const folder of [{}, { show_as_folder: 1, folder_overrides: "{}" }])
+        expect(() => validateMenuConfiguration(bundle({ ...placement, ...folder }))).toThrowError(
+          refusedAs(`section_members.${field}`),
+        );
+      for (const folder of [
+        {},
+        { show_as_folder: 1, folder_names: null, folder_image_fixed: 0, folder_color_fixed: 0 },
+      ])
         expect(() => validateMenuConfiguration(bundle({ ...placement, ...folder }))).not.toThrow();
     }
+  });
+
+  it.each([
+    ["menu_root", "Duplicate"],
+    ["section", null],
+    ["home_layout", null],
+  ])("refuses an imported %s with stored name %j", (role, internal_name) => {
+    expect(() =>
+      validateMenuConfiguration({ sections: [{ id: "bad", role, internal_name }] }),
+    ).toThrowError(refusedAs("sections.internal_name"));
   });
 });
 
 describe("validateMenuConfiguration: Inactive products stay off menus", () => {
   const sections = [
     { id: "lunch-root", role: "menu_root" },
-    { id: "home", role: "home_layout" },
-    { id: "beer", role: "section" },
+    { id: "home", role: "home_layout", internal_name: "Home" },
+    { id: "beer", role: "section", internal_name: "Beer" },
   ];
   const bundle = (active: 0 | 1, variantActive: 0 | 1, sectionId: string) => ({
     sections,

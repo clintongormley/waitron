@@ -1,3 +1,4 @@
+import { nameOf } from "./section-members.js";
 import { combineOffer } from "./menu-combine.js";
 import { includedMenus, placesOf } from "./menu-inclusion.js";
 import { readOfferedModifiers } from "./offered-modifiers.js";
@@ -332,7 +333,7 @@ export async function createMenu(
     color: input.color,
   });
   const row = await insertMenu(tx, presentation.internalName!);
-  await createMenuShell(tx, row.id, row.name, presentation);
+  await createMenuShell(tx, row.id, presentation);
   return row;
 }
 
@@ -840,10 +841,10 @@ export async function updateMenuDetails(
           .select({ names: sections.names })
           .from(sections)
           .where(eq(sections.id, rootSectionId));
+  const internalName = patch.name === undefined ? undefined : nameOf(patch.name, "internalName");
   const presentation = await sectionPatchValues(
     tx,
     {
-      internalName: patch.name,
       names: patch.names,
       image: patch.image,
       color: patch.color,
@@ -851,11 +852,11 @@ export async function updateMenuDetails(
     undefined,
     stored?.names,
   );
-  if (presentation.internalName !== undefined) {
-    await assertMenuNameFree(tx, presentation.internalName, menuId);
+  if (internalName !== undefined) {
+    await assertMenuNameFree(tx, internalName, menuId);
     await tx
       .update(menus)
-      .set({ name: presentation.internalName, updatedAt: now() })
+      .set({ name: internalName, updatedAt: now() })
       .where(eq(menus.id, menuId));
   }
   if (Object.keys(presentation).length > 0)

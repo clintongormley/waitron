@@ -1,3 +1,4 @@
+import { columnsFromOverrides } from "./include-folder.js";
 import { storedMenuParts } from "../test/menu-parts.js";
 import { countingSettingsReads } from "../test/fixtures.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -101,7 +102,7 @@ async function fixture(tx: Transaction) {
   );
   await tx
     .update(sectionMembers)
-    .set({ folderOverrides: { names: { en: "" }, color: "#123456" } })
+    .set({ ...columnsFromOverrides({ names: { en: "" }, color: "#123456" }) })
     .where(eq(sectionMembers.id, member.id));
   const [unit] = await tx
     .insert(units)
@@ -251,6 +252,17 @@ describe("inline translation targets", () => {
         ["missing", false, "missing"],
         ["present", false, "role"],
       ]);
+      const rootAsSection = await resolveTranslationTargets(
+        tx,
+        "en",
+        [{ kind: "section", id: ids.root }],
+        context,
+      );
+      expect(rootAsSection.targets[0]!.target).toMatchObject({
+        name: "STAFF Lunch",
+        eligible: false,
+        unavailableReason: "role",
+      });
       await tx
         .update(sectionMembers)
         .set({ sectionId: ids.section })
@@ -437,7 +449,10 @@ describe("inline translation targets", () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const ids = await fixture(tx);
-      await tx.update(sections).set({ role: "section" }).where(eq(sections.id, ids.root));
+      await tx
+        .update(sections)
+        .set({ role: "section", internalName: "Temporary list" })
+        .where(eq(sections.id, ids.root));
       const resolved = await resolveTranslationTargets(
         tx,
         "en",
@@ -448,7 +463,10 @@ describe("inline translation targets", () => {
         eligible: false,
         unavailableReason: "role",
       });
-      await tx.update(sections).set({ role: "menu_root" }).where(eq(sections.id, ids.root));
+      await tx
+        .update(sections)
+        .set({ role: "menu_root", internalName: null })
+        .where(eq(sections.id, ids.root));
       expect(
         (await resolveTranslationTargets(tx, "en", [{ kind: "menu", id: ids.root }], context))
           .targets[0]!.target.eligible,

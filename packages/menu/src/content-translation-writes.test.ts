@@ -1,3 +1,4 @@
+import { columnsFromOverrides } from "./include-folder.js";
 import { storedMenuParts } from "../test/menu-parts.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
@@ -479,7 +480,11 @@ describe("menu translation writes", () => {
           .update(sectionMembers)
           .set({
             showAsFolder: false,
-            folderOverrides: { color: "#123456", image: null, names: { ca: "CLIENT CA drinks" } },
+            ...columnsFromOverrides({
+              color: "#123456",
+              image: null,
+              names: { ca: "CLIENT CA drinks" },
+            }),
           })
           .where(eq(sectionMembers.id, member.id));
         return { menu: root, section: section!.id, included_menu: member.id };
@@ -506,13 +511,13 @@ describe("menu translation writes", () => {
           const row = afterMembers.find((row) => row.id === ids[kind])!;
           expect(row).toMatchObject({
             showAsFolder: false,
-            folderOverrides: {
-              names: { ca: "CLIENT CA drinks", en: "English" },
-              color: "#123456",
-              image: null,
-            },
+            folderNames: { ca: "CLIENT CA drinks", en: "English" },
+            folderColor: "#123456",
+            folderColorFixed: true,
+            folderImage: null,
+            folderImageFixed: true,
           });
-          delete row.folderOverrides.names!.en;
+          delete row.folderNames!.en;
         } else {
           const row = afterSections.find((row) => row.id === ids[kind])!;
           expect(row.names).toEqual({ en: "English" });

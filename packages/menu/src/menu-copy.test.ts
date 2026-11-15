@@ -1,5 +1,5 @@
 import { storedMenuParts } from "../test/menu-parts.js";
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, eq, inArray, getTableColumns } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   menus,
@@ -14,6 +14,7 @@ import {
 } from "@waitron/db";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
+import { SECTION_NAME } from "./sections.js";
 import { duplicateMenu } from "./menu-copy.js";
 import { createMenu, createProduct, updateMenuItem } from "./operations.js";
 import { addShortcut, readMenuHome, setHomeDisplay } from "./menu-home.js";
@@ -156,12 +157,12 @@ async function itemOf(tx: Transaction, menuId: string, productId: string): Promi
   return rows.find((row) => row.productId === productId)!.id;
 }
 
-/** Every row the menu owns, as stored. */
 async function rowsOf(menuId: string) {
   return app(async (tx) => {
     const owned = await tx
-      .select()
+      .select({ ...getTableColumns(sections), internalName: SECTION_NAME })
       .from(sections)
+      .innerJoin(menus, eq(menus.id, sections.ownerMenuId))
       .where(eq(sections.ownerMenuId, menuId))
       .orderBy(asc(sections.id));
     const members = await tx
@@ -232,6 +233,13 @@ describe("duplicateMenu", () => {
     expect(copy.name).toBe("Lunch (copy)");
     const [stored] = await fx.db.select().from(menus).where(eq(menus.id, copy.id));
     expect(stored!.name).toBe("Lunch (copy)");
+    const copiedStructure = await app((tx) => readMenuStructure(tx, copy.id));
+    expect(copiedStructure.root.internalName).toBe("Lunch (copy)");
+    const [root] = await fx.db
+      .select({ name: sections.internalName })
+      .from(sections)
+      .where(eq(sections.id, copiedStructure.rootSectionId));
+    expect(root!.name).toBeNull();
 
     const source = await rowsOf(f.lunch);
     expect(source).toEqual(before);
@@ -287,7 +295,11 @@ describe("duplicateMenu", () => {
       expect.objectContaining({
         child: f.dessertsRoot,
         showAsFolder: false,
-        folderOverrides: { names: { en: "Sweets" }, color: "#445566" },
+        folderNames: { en: "Sweets" },
+        folderColor: "#445566",
+        folderColorFixed: true,
+        folderImage: null,
+        folderImageFixed: false,
       }),
     );
     for (const member of copied.members)

@@ -1,3 +1,4 @@
+import { columnsFromOverrides } from "./include-folder.js";
 import { storedMenuParts } from "../test/menu-parts.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
@@ -87,7 +88,7 @@ async function fixture(tx: Transaction, names: Record<string, string> | null) {
   const member = await addMember(tx, root, { kind: "section", sectionId: childRoot });
   await tx
     .update(sectionMembers)
-    .set({ folderOverrides: { names: names ?? {} } })
+    .set({ ...columnsFromOverrides({ names: names ?? {} }) })
     .where(eq(sectionMembers.id, member.id));
   const [unit] = await tx
     .insert(units)
