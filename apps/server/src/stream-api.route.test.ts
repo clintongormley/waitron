@@ -7,7 +7,6 @@ import { eq, sql } from "drizzle-orm";
 import {
   readActivityForSubject,
   readSettings,
-  saveSettings,
   saveVenueFields,
   readStreamId,
   nodes,
@@ -17,7 +16,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  credentialRevision,
   deleteCredential,
   deletePairLinkTx,
   loadKeyRing,
@@ -101,6 +99,13 @@ const BUCKET: BucketConfig = {
   secretAccessKey: "not-a-real-secret-0123456789",
 };
 const BODY = { ...BUCKET };
+const ARCHIVES = {
+  enabled: false,
+  destinations: [{ kind: "local-fs" as const, id: "primary", dir: "/tmp/archives" }],
+  schedule: { kind: "interval" as const, ms: 3_600_000 },
+  retention: { count: 7, days: 30 },
+  destinationTimeoutMs: 900_000,
+};
 const STREAMING: StreamStatus = {
   state: "streaming",
   generation: "gen-0-n-20260923T101500Z",
@@ -268,76 +273,28 @@ const json = (cookie: string, body: unknown) => ({
 });
 
 describe("stream settings routes", () => {
-  it("keeps choices in the backup document and re-seals every stream save without changing archives", async () => {
+  it("keeps choices in the backup document and seals only keys without changing archives", async () => {
     await clearBucket();
-    await withTransaction(suite.db, (tx) =>
-      writeArchiveSettings(
-        tx,
-        RING,
-        {
-          enabled: false,
-          destinations: [{ kind: "local-fs", id: "primary", dir: "/tmp/archives" }],
-          schedule: { kind: "interval", ms: 3_600_000 },
-          retention: { count: 7, days: 30 },
-          destinationTimeoutMs: 900_000,
-        },
-        null,
-      ),
-    );
+    await withTransaction(suite.db, (tx) => writeArchiveSettings(tx, RING, ARCHIVES, null));
     const archive = (await readSettings(suite.db, BACKUP_SETTINGS)).doc.archive;
     const { app } = harness({}, "recovery-key-one-strong");
     const cookie = await login(app);
-    const revisions = new Set<string | null>();
-    let streamId: string | null = null;
-    for (const body of [
-      BODY,
-      { ...BODY, secretAccessKey: "changed-secret" },
-      { ...BODY, bucket: "other-copy" },
-      { ...BODY, prefix: "different/" },
-    ]) {
-      const res = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, body) });
-      expect(res.status).toBe(200);
-      expect(await storedBucket()).toEqual({
-        accessKeyId: body.accessKeyId,
-        secretAccessKey: body.secretAccessKey,
-      });
-      const doc = (await readSettings(suite.db, BACKUP_SETTINGS)).doc;
-      expect(doc).toEqual({
-        archive,
-        stream: {
-          endpoint: body.endpoint,
-          region: body.region,
-          bucket: body.bucket,
-          prefix: body.prefix,
-        },
-      });
-      const saved = await readStreamSettings(suite.db, RING);
-      expect(saved?.bucket).toEqual(body);
-      streamId ??= await readStreamId(suite.db);
-      expect(streamId).toMatch(/^[0-9a-f-]{36}$/);
-      expect(saved?.streamId).toBe(streamId);
-      revisions.add(
-        await withTransaction(suite.db, (tx) =>
-          credentialRevision(tx, { purpose: STREAM_PURPOSE }),
-        ),
-      );
-    }
-    expect(revisions.size).toBe(4);
-    const off = await app.request("/api/backup/stream", { method: "DELETE", headers: { cookie } });
-    expect(off.status).toBe(200);
-    expect(await storedBucket()).toBeNull();
-    expect((await readSettings(suite.db, BACKUP_SETTINGS)).doc).toEqual({ archive, stream: null });
-    const again = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
-    expect(again.status).toBe(200);
-    expect((await readStreamSettings(suite.db, RING))?.streamId).toBe(streamId);
-    await withTransaction(suite.db, async (tx) => {
-      const saved = await readSettings(tx, BACKUP_SETTINGS);
-      await saveSettings(tx, BACKUP_SETTINGS, {
-        doc: { ...saved.doc, archive: null },
-        expectedRevision: saved.revision,
-        personId: null,
-      });
+    const res = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
+    expect(res.status).toBe(200);
+    expect(await storedBucket()).toEqual({
+      accessKeyId: BODY.accessKeyId,
+      secretAccessKey: BODY.secretAccessKey,
     });
+    expect((await readSettings(suite.db, BACKUP_SETTINGS)).doc).toEqual({
+      archive,
+      stream: {
+        endpoint: BODY.endpoint,
+        region: BODY.region,
+        bucket: BODY.bucket,
+        prefix: BODY.prefix,
+      },
+    });
+    await withTransaction(suite.db, (tx) => storeArchivePart(tx, null));
     await clearBucket();
   });
 
@@ -997,6 +954,8 @@ describe("stream settings routes", () => {
   it("switching off removes the bucket and stops streaming", async () => {
     const { app, reload, seenByReload } = harness({}, "recovery-key-one-strong");
     const cookie = await login(app);
+    await withTransaction(suite.db, (tx) => writeArchiveSettings(tx, RING, ARCHIVES, null));
+    const archive = (await readSettings(suite.db, BACKUP_SETTINGS)).doc.archive;
     await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
     const res = await app.request("/api/backup/stream", { method: "DELETE", headers: { cookie } });
     expect(res.status).toBe(200);
@@ -1012,6 +971,8 @@ describe("stream settings routes", () => {
     // The second reload found the settings already gone.
     expect(seenByReload.at(-1)).toBeNull();
     expect(await storedBucket()).toBeNull();
+    expect((await readSettings(suite.db, BACKUP_SETTINGS)).doc).toEqual({ archive, stream: null });
+    await withTransaction(suite.db, (tx) => storeArchivePart(tx, null));
   });
 
   // A key under the archive's length floor still counts as held, as the backup routes count it.
@@ -1057,7 +1018,7 @@ describe("stream settings routes", () => {
     expect(reload).not.toHaveBeenCalled();
   });
 
-  it("a Save that changes only the secret changes the revision, which reveals neither secret nor ciphertext", async () => {
+  it("a Save changing only a secret, bucket or prefix moves the revision, which reveals no secret or ciphertext", async () => {
     await clearBucket();
     const { app } = harness({}, "recovery-key-one-strong");
     const cookie = await login(app);
@@ -1087,6 +1048,17 @@ describe("stream settings routes", () => {
     expect(text).not.toContain(BODY.secretAccessKey);
     expect(text).not.toContain(ciphertext.toString("hex"));
     expect(text).not.toContain(ciphertext.toString("base64"));
+    let previous = view.revision;
+    for (const change of [{ bucket: "other-copy" }, { prefix: "different/" }]) {
+      const saved = await app.request("/api/backup/stream", {
+        method: "PUT",
+        ...json(cookie, { ...BODY, secretAccessKey: newSecret, ...change }),
+      });
+      expect(saved.status).toBe(200);
+      const next = (await saved.json()).revision;
+      expect(next).not.toBe(previous);
+      previous = next;
+    }
   });
 
   it("the settings view pairs the settings it shows with their own revision, while a Save lands", async () => {

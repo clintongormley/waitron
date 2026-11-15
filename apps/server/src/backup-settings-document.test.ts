@@ -15,6 +15,9 @@ it("defaults backup choices to empty parts without transferring this box's desti
 });
 
 it.each([
+  [null, "archive"],
+  [[], "archive"],
+  [3, "archive"],
   [{ archive: 3, stream: null }, "archive"],
   [{ archive: null, stream: false }, "stream"],
   [{ archive: null, stream: null, x: 1 }, "x"],

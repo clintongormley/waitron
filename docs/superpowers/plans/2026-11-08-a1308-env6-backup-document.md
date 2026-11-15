@@ -349,3 +349,7 @@ No other widget behavior changes.
 > objects; every passed/unavailable, key-version, frozen/no-write and refusal assertion stays.
 > An old whole-archive payload remains an invalid input. No runtime backup-verification or
 > compatibility change is included.
+
+> **2026-11-15 03:24, watcher clearance:** same scope up to about 1,800 gross lines;
+> move DELETE, stream-id and revision checks into their existing route cases, retaining the new
+> split-storage assertions. No new production idea. The implementation follows that reduction.
