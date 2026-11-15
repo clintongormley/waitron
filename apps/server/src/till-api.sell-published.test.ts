@@ -993,7 +993,7 @@ describe("who may order a product on its own (spec §9, D12)", () => {
 });
 
 describe("each fact reaches the till at its own moment (Review Focus 1, server half)", () => {
-  it("serves the PUBLISHED allergens of a dish and its extra until the menu is republished", async () => {
+  it("serves current allergens of a dish and its extra without republishing", async () => {
     const v = await setupLunch();
     await publish(v.menuId);
     const sulphites = { sulphites: {} };
@@ -1020,7 +1020,7 @@ describe("each fact reaches the till at its own moment (Review Focus 1, server h
       const extra = lemonade.offeredModifiers.find((entry) => entry.kind === "extras")!.items![0]!;
       return { dish: lemonade.allergens, extra: extra.addAllergens };
     };
-    expect(await served()).toEqual({ dish: null, extra: null });
+    expect(await served()).toEqual({ dish: sulphites, extra: sulphites });
     await publish(v.menuId);
     expect(await served()).toEqual({ dish: sulphites, extra: sulphites });
   });

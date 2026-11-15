@@ -4338,6 +4338,8 @@ async function modifierOfferFixture() {
       price: "0.35",
       quantity: 2,
       listId: data.extrasList.id,
+      addAllergens: null,
+      suitableFor: [],
     },
   ];
   const app = new Hono();
