@@ -174,7 +174,7 @@ describe("collecting a presented bill follows its invoice, not its zone (spec §
 describe("collecting an invoice that carries a corrective invoice", () => {
   // Tarta's 18.00 invoice (21% VAT), corrected by default by a credit note of -2.00 base (-2.42):
   // the customer owes 15.58.
-  async function correctedTarta(
+  async function correctedCake(
     credit: { base: string; total: string } = { base: "2.00", total: "-2.42" },
   ): Promise<{ billId: string; saleId: string }> {
     const billId = await placedCake(ticketThenPayZone, true);
@@ -236,7 +236,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
   }
 
   it("settles a cash collection at the corrected amount the customer owes", async () => {
-    const { billId, saleId } = await correctedTarta();
+    const { billId, saleId } = await correctedCake();
 
     const ticket = await collectCash(billId);
 
@@ -247,7 +247,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
   });
 
   it("settles a manual card collection, and its payment row, at the corrected amount", async () => {
-    const { billId, saleId } = await correctedTarta();
+    const { billId, saleId } = await correctedCake();
 
     await collectOrder(
       {
@@ -296,7 +296,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
   const wholeInvoice = { base: "14.88", total: "-18.00" };
 
   it("opens the cash drawer when a corrected bill is collected in cash", async () => {
-    const { billId, saleId } = await correctedTarta();
+    const { billId, saleId } = await correctedCake();
 
     await collectCash(billId);
 
@@ -304,7 +304,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
   });
 
   it("closes a cash collection of a bill that owes nothing, with no tender and no drawer", async () => {
-    const { billId, saleId } = await correctedTarta(wholeInvoice);
+    const { billId, saleId } = await correctedCake(wholeInvoice);
 
     const ticket = await collectCash(billId);
 
@@ -318,7 +318,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
   });
 
   it("closes a card collection of a bill that owes nothing, with no tender and no payment row", async () => {
-    const { billId, saleId } = await correctedTarta(wholeInvoice);
+    const { billId, saleId } = await correctedCake(wholeInvoice);
 
     await collectOrder(
       {
@@ -348,7 +348,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
   });
 
   it("refuses a cash collection with a malformed amount on a bill that owes nothing, and leaves it open", async () => {
-    const { billId, saleId } = await correctedTarta(wholeInvoice);
+    const { billId, saleId } = await correctedCake(wholeInvoice);
 
     await expect(
       collectOrder(
