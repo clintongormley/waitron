@@ -1438,7 +1438,7 @@ describe("TillApi", () => {
     ]);
   });
 
-  it("the who-can-approve reads hand a caller's abort signal to fetch", async () => {
+  it("the who-can-approve and station-today reads hand a caller's abort signal to fetch", async () => {
     const fetchStub = vi.fn<typeof fetch>(async () => jsonResponse([]));
     const api = new TillApi("", fetchStub);
     const signal = new AbortController().signal;
@@ -1450,6 +1450,7 @@ describe("TillApi", () => {
     await api.listDrawerAuthorizers({ signal });
     await api.serviceDayAuthorizers({ signal });
     await api.deviceStationToday("st 1", { signal });
+    await api.stationToday("st 1", { signal });
 
     expect(fetchStub.mock.calls.map(([url, init]) => [url, init?.signal])).toEqual([
       ["/api/refund-authorizers", signal],
@@ -1459,6 +1460,7 @@ describe("TillApi", () => {
       ["/api/drawer/authorizers", signal],
       ["/api/service-day/authorizers", signal],
       ["/api/device/stations/st%201/today", signal],
+      ["/api/stations/st%201/today", signal],
     ]);
   });
 

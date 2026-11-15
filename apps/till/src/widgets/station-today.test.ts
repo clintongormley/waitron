@@ -629,6 +629,41 @@ it("device opening gives up reading its managers at the time limit and shows the
   }
 });
 
+it("till station read gives up at the time limit and frees the action", async () => {
+  let asked!: () => void;
+  const sent = new Promise<void>((resolve) => (asked = resolve));
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const { el } = await mount({}, (_path, init) => {
+      asked();
+      return new Promise<Response>((_resolve, reject) =>
+        init.signal?.addEventListener("abort", () =>
+          reject(new DOMException("aborted", "AbortError")),
+        ),
+      );
+    });
+    const action = () =>
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-action]")!;
+    act(el);
+    await sent;
+    await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
+    await el.updateComplete;
+    expect(action().disabled).toBe(true);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(1);
+    await el.updateComplete;
+
+    expect(action().disabled).toBe(false);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toBe(
+      codeMessage("network.error"),
+    );
+    expect(el.shadowRoot!.querySelector("till-station-today-dialog")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it("device permission refusal gives up re-reading its managers at the time limit", async () => {
   const { reply, sent } = stalledDeviceRead(2);
   const { el, calls } = await mount(

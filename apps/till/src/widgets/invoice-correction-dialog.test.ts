@@ -753,6 +753,30 @@ describe("never sending what staff did not confirm (review fix round 1)", () => 
     expect(root(el).querySelector("[data-still-lost]")).toBeNull();
   });
 
+  it("says who can approve could not be read when Send again needs approval, not that answers are still lost", async () => {
+    const api = sendingApi();
+    api.openInvoiceCorrection
+      .mockRejectedValueOnce(lost())
+      .mockRejectedValueOnce(
+        refused("authorization.not_permitted", { permission: "sale.rectify" }),
+      );
+    api.listApprovers.mockRejectedValueOnce(lost());
+    const { el } = await mountSending(api);
+
+    await confirmCorrection(el);
+    await vi.waitFor(() => expect(root(el).querySelector("[data-saved]")).not.toBeNull());
+    resend(el).click();
+    await vi.waitFor(() =>
+      expect(root(el).querySelector("wt-form-actions")!.error).toBe(
+        t("invoice_correction.approvers_failed"),
+      ),
+    );
+    expect(api.listApprovers).toHaveBeenCalledOnce();
+    expect(root(el).querySelector("[data-saved]")).not.toBeNull();
+    expect(root(el).querySelector("[data-still-lost]")).toBeNull();
+    expect(root(el).querySelector("till-supervisor-override-dialog")).toBeNull();
+  });
+
   it("opens a saved Open with focus on Send again", async () => {
     const session = new InvoiceCorrectionSession(SCOPE, {
       openInvoiceCorrection: () => Promise.reject(lost()),

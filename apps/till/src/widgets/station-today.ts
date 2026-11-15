@@ -123,10 +123,11 @@ export class TillStationToday extends LitElement {
     authorizers?: StaffMember[];
     openDishCount: number;
   }> {
-    if (!this.deviceMode) return this.api!.stationToday(id);
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      return await this.api!.deviceStationToday(id, { signal: limit.signal });
+      return this.deviceMode
+        ? await this.api!.deviceStationToday(id, { signal: limit.signal })
+        : await this.api!.stationToday(id, { signal: limit.signal });
     } finally {
       limit.done();
     }

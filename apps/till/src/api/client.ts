@@ -3455,8 +3455,14 @@ export class TillApi {
 
   stationToday(
     stationId: string,
+    options: ReadOptions = {},
   ): Promise<{ destinations: StationDestination[]; openDishCount: number }> {
-    return this.#request(`/api/stations/${encodeURIComponent(stationId)}/today`, "GET");
+    return this.#request(
+      `/api/stations/${encodeURIComponent(stationId)}/today`,
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 
   setStationToday(stationId: string, body: StationTodayWrite): Promise<void> {
