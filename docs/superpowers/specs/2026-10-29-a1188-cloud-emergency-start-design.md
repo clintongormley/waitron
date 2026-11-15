@@ -594,6 +594,15 @@ put to Cloud's builders as a question:
    lease (`:802-806`); version 1 must be opened to production installations for this, and to issue
    for the emergency name, which is not the installation's configured staff hostname (the exchange
    takes "hostname and revision from the current installation configuration", `:825`).
+
+   **Dated amendment, 2026-11-15:** Cloud agreed launcher-delivered certificate/key PEM
+   files for the emergency hostname, with Waitron terminating TLS. This replaces the
+   staff-certificate exchange proposed above; staff-certificate-v1 stays unchanged.
+
+   | Source | Source's words | Meaning here |
+   | --- | --- | --- |
+   | [Cloud contract, merged as #1227](https://github.com/waitron-io/waitron-cloud/blob/3dfb8520cf2f0864ef6227e829adf0bd24c84f34/docs/waitron-integration-contract.md#agreed-part-3-values-15-november-2026) | “accept launcher-delivered certificate/key PEM files” | Delivery and hostname are agreed for future implementation; production qualification remains open. |
+
 6. **"Is it still open?"** (§6 step 2), asked by the copy, authenticated as the copy's installation,
    answered from the owner's setting and the venue's level.
 7. **"Box last heard"**: the last time Cloud heard from the box, for the page and §8's refusal,
