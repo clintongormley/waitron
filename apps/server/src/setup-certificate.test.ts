@@ -52,10 +52,7 @@ it.each([false, true])(
       environment: {},
       modules: ALL_MODULES,
     });
-    const venue = {
-      ...request,
-      operationDescription: "Restaurant",
-    };
+    const venue = request;
     const claim = owned
       ? await host.owner.claimFirstSetup({ environment: "production", request: venue })
       : undefined;

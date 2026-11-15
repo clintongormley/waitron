@@ -31,11 +31,17 @@ vi.mock("@waitron/country-packs", async (importOriginal) => {
 });
 
 import { INSTALLED_DEMO_SALES_DAYS, demoSeedLocale, seedInstalledDemo } from "./demo-seed.js";
+import { ALL_MODULES } from "./modules.js";
 import { DEMO_DATA_SETS } from "../scripts/demo-seed/data-set.js";
+
+const operationDescription = ALL_MODULES.find((module) => module.fiscal?.id === "verifactu")!
+  .fiscal!.venueFields!.defaults!.operationDescription;
+
 
 function venueWithLocales(invoiceLocales: string[], country = "ES"): VenueRequest {
   return {
     country,
+    fiscalTerritory: "ES-common",
     invoiceLocales,
     admin: { locale: invoiceLocales[0] },
   } as unknown as VenueRequest;
@@ -114,6 +120,7 @@ describe("seedInstalledDemo", () => {
     expect(seedDemoRestaurant.mock.calls[0]![0]).toBe(db);
     expect(seedDemoRestaurant.mock.calls[0]![1]).toStrictEqual({
       venue: {
+        operationDescription,
         nodeId: RESULT.nodeId,
         seriesId: RESULT.seriesIds[0],
       },
@@ -170,6 +177,7 @@ describe("seedInstalledDemo", () => {
     expect(seedDemoRestaurant).toHaveBeenCalledTimes(1);
     expect(seedDemoRestaurant.mock.calls[0]![1]).toStrictEqual({
       venue: {
+        operationDescription,
         nodeId: RESULT.nodeId,
         seriesId: RESULT.seriesIds[0],
       },

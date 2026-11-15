@@ -137,6 +137,7 @@ describe("saved-zone script callers", () => {
     const before = suite.db.all(sql`select * from menus`);
     const refusal = await seedInstalledDemo(suite.db, venue, {
       country: "ES",
+      fiscalTerritory: "ES-common",
       admin: { locale: "en" },
     } as never).then(
       () => null,
