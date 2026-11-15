@@ -269,6 +269,8 @@ describe("the selection follows each package's own stryker config", () => {
       "src/a11y-helpers.ts",
       "src/icon-button-test-helpers.ts",
       "src/test-helpers.ts",
+      "src/vitest-park-pointer.ts",
+      "src/vitest-pointer-gestures.ts",
     ]);
   });
 

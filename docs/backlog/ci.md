@@ -232,17 +232,6 @@ never pushes with `--no-verify`"; the hook's hint (`.husky/pre-push`) says "agen
 sometimes drives and reads `CLAUDE.md`, so the docs may need "no agent". **Next action:** the owner
 decides whether the rule covers every agent, then the two docs follow.
 
-## `packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests
-
-It is test-only plumbing
-the Vitest config loads — the same class as `src/test-helpers.ts`, `src/a11y-helpers.ts` and
-`src/icon-button-test-helpers.ts`, which `packages/ui/stryker.config.json` excludes from `mutate`.
-Adding it to those exclusions is the consistent move and also shrinks the denominator the ui caller’s aggregate bar of 90 in `mutation-sharded.yml` is measured against.
-Owner's call. `packages/ui/src/vitest-pointer-gestures.ts` (A720 Part 4) is in the same position:
-in `packages/ui`'s coverage and `mutate` lists, loaded only by `packages/venue-service`'s Vitest
-config, so no ui test reaches it. Excluding it also needs a change to the exclusion list
-`scripts/mutation-shard.test.mjs` pins.
-
 ## P7's leftovers (#533)
 
 - `no-tenant-column`'s SQL check still passed with one set's SQL dropped,
@@ -493,18 +482,15 @@ The remaining work concerns live routing qualification and the action-repository
   A1125's CI (#2238, 2026-10-29), while the merge still used the download action.
   [Detail](ci.md#a1213-does-a-re-run-till-shards-report-reach-test-till-merge).
 
-## Bundle: What the mutation score counts: db static mutants, the pointer test helper
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **`packages/db`'s static mutants are not in its mutation score** — OPEN. Owner's call.
-  [Detail](ci.md#packagesdbs-static-mutants-are-not-in-its-mutation-score).
-- **`packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests** — left behind by raising
-  the `packages/ui` mutation score (#466, 2026-09-20). Adding it to the test-helper exclusions is the consistent
-  move and also shrinks the denominator the ui caller’s aggregate bar of 90 in `mutation-sharded.yml` is measured against.
-  Owner's call. `packages/ui/src/vitest-pointer-gestures.ts` (A720 Part 4) is in the same position.
-
 ## Decisions and deliberate limits
+
+### UI pointer command helpers stay outside the mutation score
+
+On 15 November 2026 the owner chose “Leave them out”: UI's `vitest-park-pointer.ts`
+and `vitest-pointer-gestures.ts` join the existing test-helper exclusions in
+`packages/ui/stryker.config.json`. They provide Node-side browser test commands.
+This changes only mutation selection; the coverage configuration and 90 aggregate
+mutation floor stay unchanged.
 
 ### A1398-2: slow browser test files
 

@@ -1979,7 +1979,7 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **A throwaway script found six comments that described code that was no longer there, and it is not a guard yet**
   [Detail](backlog/ci.md#a-throwaway-script-found-six-comments-that-described-code-that-was-no-longer-there-and-it-is-not-a-guard-yet).
 
-- **What the mutation score counts: db static mutants, the pointer test helper** (bundle of 2, size S, needs the owner). [Detail](backlog/ci.md#bundle-what-the-mutation-score-counts-db-static-mutants-the-pointer-test-helper)
+- **`packages/db`'s static mutants are not in its mutation score** (needs the owner). [Detail](backlog/ci.md#packagesdbs-static-mutants-are-not-in-its-mutation-score).
 
 - **`apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe**
   [Detail](backlog/ci.md#appsserversrcrejoin-commandtesttss-sidecar-assertions-do-not-test-the-wipe).
