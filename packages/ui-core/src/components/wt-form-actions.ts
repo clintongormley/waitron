@@ -54,13 +54,13 @@ export class WtFormActions extends LitElement {
         container-type: scroll-state;
       }
 
-      :host([data-empty]) {
+      :host([data-actions-empty]) {
         display: none;
       }
 
       /* For the one call of the row's own scrollIntoView. Important, so a screen's own position
          for the row does not hold it during that call. */
-      :host([data-placing]) {
+      :host([data-actions-placing]) {
         position: static !important;
       }
 
@@ -92,7 +92,7 @@ export class WtFormActions extends LitElement {
 
         /* In the row's own box for that call, so the scroll also brings in the padding a held row
            stops above, and the row lands where it is held. */
-        :host([data-placing]) .below {
+        :host([data-actions-placing]) .below {
           position: static;
         }
       }
@@ -208,11 +208,11 @@ export class WtFormActions extends LitElement {
    * This scrolls to where the row rests at the form's end instead; with `block: "nearest"` or
    * `"end"`, what is said just above the row comes into view above it. */
   override scrollIntoView(arg?: boolean | ScrollIntoViewOptions): void {
-    this.toggleAttribute("data-placing", true);
+    this.toggleAttribute("data-actions-placing", true);
     try {
       super.scrollIntoView(arg);
     } finally {
-      this.removeAttribute("data-placing");
+      this.removeAttribute("data-actions-placing");
     }
   }
 
@@ -245,7 +245,7 @@ export class WtFormActions extends LitElement {
       [...this.renderRoot.querySelectorAll("slot")].some(
         (slot) => slot.assignedElements({ flatten: true }).length > 0,
       );
-    this.toggleAttribute("data-empty", !filled);
+    this.toggleAttribute("data-actions-empty", !filled);
   }
 
   override updated(changed: Map<string, unknown>): void {

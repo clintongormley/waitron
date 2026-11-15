@@ -897,6 +897,9 @@ test("on a browser without custom states, still takes no room when empty, shows 
   const row = scroller.querySelector<WtFormActions>("wt-form-actions")!;
   await row.updateComplete;
   expect(row.getBoundingClientRect().height).toBe(0);
+  // Named for this row, so a screen's own [data-empty] search does not find an empty Save row.
+  expect(row.hasAttribute("data-actions-empty")).toBe(true);
+  expect(row.hasAttribute("data-empty")).toBe(false);
   const seen: string[] = [];
   host.addEventListener("wt-form-error", (event) => seen.push(event.detail.message));
 
@@ -908,7 +911,21 @@ test("on a browser without custom states, still takes no room when empty, shows 
     "The routing could not be saved.",
   );
 
+  expect(row.hasAttribute("data-actions-empty")).toBe(false);
+
+  const placing: boolean[] = [];
+  const scroll = Element.prototype.scrollIntoView;
+  const spy = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(function (
+    this: Element,
+    arg,
+  ) {
+    placing.push(this.hasAttribute("data-actions-placing"));
+    scroll.call(this, arg);
+  });
+  onTestFinished(() => spy.mockRestore());
   row.scrollIntoView({ block: "nearest" });
+  expect(placing).toEqual([true]);
+  expect(row.hasAttribute("data-actions-placing")).toBe(false);
   expect(scroller.scrollTop).toBeGreaterThan(0);
   expect(getComputedStyle(row).position, "held again afterwards").toBe("sticky");
 });
