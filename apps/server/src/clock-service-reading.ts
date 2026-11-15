@@ -20,14 +20,21 @@ export function answersSynchronised(answer: ClockServiceStatus): boolean {
   return answer.available && answer.synchronised;
 }
 
+/** `clockStatus`'s answer; a host that throws answers as lost. */
+export async function clockServiceAnswerOf(
+  clockStatus: () => Promise<ClockServiceStatus>,
+): Promise<ClockServiceStatus> {
+  try {
+    return await clockStatus();
+  } catch {
+    return { available: false, reason: "lost" };
+  }
+}
+
 /** {@link answersSynchronised} of `status`'s answer; a host that does not answer, or throws,
  * counts as not synchronised. */
 export async function clockServiceSynchronised(
   status: () => Promise<ClockServiceStatus>,
 ): Promise<boolean> {
-  try {
-    return answersSynchronised(await status());
-  } catch {
-    return false;
-  }
+  return answersSynchronised(await clockServiceAnswerOf(status));
 }

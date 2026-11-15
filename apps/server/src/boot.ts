@@ -3083,7 +3083,7 @@ async function bootServer(
           deviceSources: async (deviceId) => [
             ...printerNotices(deviceId),
             await deviceClockNoticeSource(
-              { witnesses: () => clockWitnesses.witnesses(), status: readClockService },
+              { witness: (id) => clockWitnesses.witness(id), status: readClockService },
               deviceId,
             ),
           ],

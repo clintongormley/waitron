@@ -55,6 +55,7 @@ import { clockSyncAlertSource } from "./clock-sync-alert.js";
 import { createClockWitnessStore } from "./clock-witnesses.js";
 import { createAlertRegistry } from "./alerts.js";
 import { expectWriteRunsWhileHostHeld, heldClockStatus } from "./testing/held-clock-status.js";
+import { clockServiceAnswer } from "./testing/synchronised-box-host.js";
 import { ALL_ALERT_CLAIMS } from "./modules.js";
 import "./errors.js";
 
@@ -807,13 +808,7 @@ describe("ongoing alert sources through the route", () => {
       ],
     });
     const response = get(appFor(registry), "/management-api/alerts", v.admin);
-    await expectWriteRunsWhileHostHeld(db, held, {
-      available: true,
-      service: "on",
-      unit: "systemd-timesyncd.service",
-      synchronised: false,
-      lastSyncAt: null,
-    });
+    await expectWriteRunsWhileHostHeld(db, held, clockServiceAnswer(false));
     const res = await response;
     expect(res.status).toBe(200);
     const body = (await res.json()) as { alerts: { code: string }[] };

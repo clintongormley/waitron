@@ -40,6 +40,7 @@ import {
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { ServerConfig } from "./config.js";
 import { boxHostClient } from "./box-host-client.js";
+import { answersSynchronised } from "./clock-service-reading.js";
 import { startServer } from "./boot.js";
 import { startServerOrFirstSetupResolution } from "./first-setup-launch.js";
 import { checkUpgradeData } from "./upgrade-checks.js";
@@ -154,7 +155,7 @@ export async function checkUpgradeSale(
   const before = await checkUpgradeData(config, env);
   const clock = boxHostClient(options);
   const status = await clock.clockStatus();
-  if (!status.available || !status.synchronised) throw new Error("Upgrade sale clock.unconfirmed");
+  if (!answersSynchronised(status)) throw new Error("Upgrade sale clock.unconfirmed");
   const fixture = await prepareSale(config);
   const server = await startServerOrFirstSetupResolution(env, env, {
     startServer: (effective, base) => startServer(effective, base, { boxHost: clock }),

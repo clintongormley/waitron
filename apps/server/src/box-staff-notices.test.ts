@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { ClockWitness } from "@waitron/fiscal";
 import type { StaffNoticeReadContext } from "@waitron/module";
 import {
   BOX_CLOCK_NOTICE_OWNER,
@@ -14,6 +15,7 @@ import {
 import type { FreeSpaceReading } from "./free-space-watch.js";
 import type { PrinterInTrouble } from "./print-job-trouble.js";
 import { ALL_MODULES } from "./modules.js";
+import { clockServiceAnswer } from "./testing/synchronised-box-host.js";
 import { readStaffNotices } from "./staff-notices.js";
 
 const AT = new Date("2026-10-22T10:00:00.000Z");
@@ -378,6 +380,11 @@ describe("printer notices", () => {
 });
 
 describe("this device's own clock", () => {
+  it("has an owner of its own, which no module is named", () => {
+    expect(DEVICE_CLOCK_NOTICE_OWNER).toBe("device-clock");
+    expect(ALL_MODULES.map((module) => module.name)).not.toContain(DEVICE_CLOCK_NOTICE_OWNER);
+  });
+
   const witness = (id: string, differenceMs: number) => ({
     id,
     boxAt: AT.toISOString(),
@@ -385,13 +392,9 @@ describe("this device's own clock", () => {
     uncertaintyMs: 0,
   });
   const WITNESSES = [witness("till-a", 60_001), witness("till-b", 60_000)];
-  const SYNCED = {
-    available: true,
-    service: "on",
-    unit: "systemd-timesyncd.service",
-    synchronised: true,
-    lastSyncAt: null,
-  } as const;
+  const lookUp = (witnesses: readonly ClockWitness[]) => (id: string) =>
+    witnesses.find((w) => w.id === id);
+  const SYNCED = clockServiceAnswer(true);
   const status = () => Promise.resolve(SYNCED);
   const WRONG = {
     key: "clock.device_wrong",
@@ -413,7 +416,7 @@ describe("this device's own clock", () => {
   ])(
     "tells a device $name what the box's synchronised time service makes of it",
     async ({ witnesses, id, expected }) => {
-      const off = await deviceClockNoticeSource({ witnesses: () => witnesses, status }, id);
+      const off = await deviceClockNoticeSource({ witness: lookUp(witnesses), status }, id);
       expect(off.owner).toBe(DEVICE_CLOCK_NOTICE_OWNER);
       expect(await off.source.read(CTX)).toEqual(expected);
     },
@@ -426,7 +429,7 @@ describe("this device's own clock", () => {
       () => Promise.resolve({ available: false as const, reason: "missing" as const }),
       () => Promise.reject(new Error("host gone")),
     ]) {
-      const off = await deviceClockNoticeSource({ witnesses: () => WITNESSES, status }, "till-a");
+      const off = await deviceClockNoticeSource({ witness: lookUp(WITNESSES), status }, "till-a");
       expect(await off.source.read(CTX)).toEqual([]);
     }
   });
@@ -434,7 +437,7 @@ describe("this device's own clock", () => {
   it("judges synchronised as the start check does, whatever the service reports", async () => {
     for (const service of ["off", "stopped"] as const) {
       const off = await deviceClockNoticeSource(
-        { witnesses: () => WITNESSES, status: () => Promise.resolve({ ...SYNCED, service }) },
+        { witness: lookUp(WITNESSES), status: () => Promise.resolve({ ...SYNCED, service }) },
         "till-a",
       );
       expect(await off.source.read(CTX)).toEqual([WRONG]);
@@ -445,7 +448,7 @@ describe("this device's own clock", () => {
     const failing = new Error("witnesses gone");
     const source = await deviceClockNoticeSource(
       {
-        witnesses: () => {
+        witness: () => {
           throw failing;
         },
         status,

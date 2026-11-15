@@ -5,7 +5,7 @@ import {
   type FutureDateRefusal,
 } from "@waitron/fiscal";
 import type { ClockServiceStatus } from "./box-host-client.js";
-import { answersSynchronised } from "./clock-service-reading.js";
+import { answersSynchronised, clockServiceAnswerOf } from "./clock-service-reading.js";
 
 /** How close two devices' clocks must be to the box's, and to each other, to confirm a start. */
 export const START_CLOCK_MARGIN_MS = 5_000;
@@ -108,16 +108,6 @@ export interface StartClockCheckDeps {
   readonly state: StartClockState;
   clockStatus(): Promise<ClockServiceStatus>;
   heads(): Promise<ChainHeads>;
-}
-
-async function clockServiceAnswerOf(
-  clockStatus: () => Promise<ClockServiceStatus>,
-): Promise<ClockServiceStatus> {
-  try {
-    return await clockStatus();
-  } catch {
-    return { available: false, reason: "lost" };
-  }
 }
 
 /** Sends the box back to waiting unless the time service answers synchronised; a host that

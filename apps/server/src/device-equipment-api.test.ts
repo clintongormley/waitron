@@ -1,6 +1,7 @@
 import { attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { expectWriteRunsWhileHostHeld, heldClockStatus } from "./testing/held-clock-status.js";
+import { clockServiceAnswer } from "./testing/synchronised-box-host.js";
 import { randomUUID } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import { tmpdir, type networkInterfaces } from "node:os";
@@ -1877,28 +1878,21 @@ describe("GET /api/device/equipment's notices", () => {
 
   it("a device whose clock is off waits for the box's time service without holding the write lock", async () => {
     const boxAt = READING.instant;
-    const witnesses = () => [
-      {
-        id: venue.deviceId,
-        boxAt: boxAt.toISOString(),
-        witnessAt: new Date(boxAt.getTime() + 2 * 3_600_000).toISOString(),
-        uncertaintyMs: 0,
-      },
-    ];
+    const reading = {
+      id: venue.deviceId,
+      boxAt: boxAt.toISOString(),
+      witnessAt: new Date(boxAt.getTime() + 2 * 3_600_000).toISOString(),
+      uncertaintyMs: 0,
+    };
+    const witness = (id: string) => (id === reading.id ? reading : undefined);
     const held = heldClockStatus();
     const app = noticeApp([], {
       deviceSources: async (deviceId) => [
-        await deviceClockNoticeSource({ witnesses, status: held.status }, deviceId),
+        await deviceClockNoticeSource({ witness, status: held.status }, deviceId),
       ],
     });
     const body = read(app);
-    await expectWriteRunsWhileHostHeld(suite.db, held, {
-      available: true,
-      service: "on",
-      unit: "systemd-timesyncd.service",
-      synchronised: true,
-      lastSyncAt: null,
-    });
+    await expectWriteRunsWhileHostHeld(suite.db, held, clockServiceAnswer(true));
     expect((await body).notices.map(({ key, owner }) => ({ key, owner }))).toEqual([
       { key: "clock.device_wrong", owner: DEVICE_CLOCK_NOTICE_OWNER },
     ]);

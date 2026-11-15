@@ -3268,16 +3268,7 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
         {
           timings: { minTickMs: 50, maxTickMs: 200, skipRetryMs: 100 },
           requestFromBox: () => false,
-          boxHost: {
-            clockStatus: async () => ({
-              available: true,
-              service: "on",
-              unit: "systemd-timesyncd.service",
-              synchronised: true,
-              lastSyncAt: null,
-            }),
-            setClock: async () => ({ available: false, reason: "missing" }),
-          },
+          boxHost: synchronisedBoxHost(),
         },
       );
       try {

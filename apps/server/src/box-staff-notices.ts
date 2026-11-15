@@ -114,36 +114,46 @@ export function deviceNoticeSources(
 /** Owner name of the device's own clock notice; no module is named this. */
 export const DEVICE_CLOCK_NOTICE_OWNER = "device-clock";
 
+const DEVICE_WRONG: StaffNotice = {
+  key: "clock.device_wrong",
+  code: "clock.device_wrong",
+  severity: "warning",
+  params: {},
+};
+
 /** `clock.device_wrong` while the box's time service is synchronised and `deviceId`'s latest fresh
  * reading is more than a minute from the box's clock. The time service is asked here, before the
  * read's write-lock turns, and only for a device that is off; the source answers what was found
  * then. A failed look fails the source's read, never this call. */
 export async function deviceClockNoticeSource(
   deps: {
-    witnesses: () => readonly ClockWitness[];
+    witness: (deviceId: string) => ClockWitness | undefined;
     status: () => Promise<ClockServiceStatus>;
   },
   deviceId: string,
 ): Promise<OwnedStaffNoticeSource> {
-  const read = await deviceClockNotices(deps, deviceId).then(
-    (notices) => () => Promise.resolve(notices),
-    (error: unknown) => () => Promise.reject(error as Error),
-  );
-  return { owner: DEVICE_CLOCK_NOTICE_OWNER, source: { read } };
+  let notices: StaffNotice[];
+  try {
+    notices = await deviceClockNotices(deps, deviceId);
+  } catch (error) {
+    return {
+      owner: DEVICE_CLOCK_NOTICE_OWNER,
+      source: { read: () => Promise.reject(error as Error) },
+    };
+  }
+  return { owner: DEVICE_CLOCK_NOTICE_OWNER, source: { read: () => Promise.resolve(notices) } };
 }
 
 async function deviceClockNotices(
   deps: Parameters<typeof deviceClockNoticeSource>[0],
   deviceId: string,
 ): Promise<StaffNotice[]> {
-  const mine = deps.witnesses().find((w) => w.id === deviceId);
+  const mine = deps.witness(deviceId);
   if (mine === undefined) return [];
   const differenceMs = Date.parse(mine.witnessAt) - Date.parse(mine.boxAt);
   if (Math.abs(differenceMs) - mine.uncertaintyMs <= CLOCK_WITNESS_MARGIN_MS) return [];
   if (!(await clockServiceSynchronised(deps.status))) return [];
-  return [
-    { key: "clock.device_wrong", code: "clock.device_wrong", severity: "warning", params: {} },
-  ];
+  return [DEVICE_WRONG];
 }
 
 /** Owner name of the printer notices; no module is named this. */
