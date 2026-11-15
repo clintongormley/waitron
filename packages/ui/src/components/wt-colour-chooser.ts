@@ -214,23 +214,25 @@ export class WtColourChooser extends LitElement {
   private positionPopup(): void {
     const anchor = this.trigger.getBoundingClientRect();
     const popup = this.popup!;
+    // Read before the cap and columns change below, either of which can clamp it.
+    const scrollTop = popup.scrollTop;
     // The width is set before measuring, because it decides how the names wrap and so the height.
     popup.style.width = "max-content";
     popup.style.minWidth = `${anchor.width}px`;
     popup.style.maxWidth = `${innerWidth - 16}px`;
     popup.style.maxHeight = `${innerHeight - 16}px`;
-    // Trying four columns can shorten the panel's content, and the browser then clamps its scroll position.
-    const scrollTop = popup.scrollTop;
     const group = popup.querySelector<HTMLElement>('[role="radiogroup"]')!;
     // Set here, not through render(): the line count below reads this layout at once.
     group.dataset.columns = "4";
     if ([...group.querySelectorAll(".colour-name")].some((name) => lineCount(name) > 1))
       group.dataset.columns = "2";
-    popup.scrollTop = scrollTop;
     const box = popup.getBoundingClientRect();
+    const placement = popupPlacement(anchor, box.height, innerHeight, "above");
+    popup.style.maxHeight = `${placement.maxHeight}px`;
+    popup.scrollTop = scrollTop;
     const maxLeft = Math.max(0, innerWidth - box.width - 8);
     popup.style.left = `${Math.max(0, Math.min(anchor.left, maxLeft))}px`;
-    popup.style.top = `${popupPlacement(anchor, box.height, innerHeight, "fit").top}px`;
+    popup.style.top = `${placement.top}px`;
   }
 
   private readonly onWindowResize = (): void => this.positionPopup();
