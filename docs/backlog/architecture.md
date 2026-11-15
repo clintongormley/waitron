@@ -585,8 +585,9 @@ The comment (`packages/db/src/schema/drawer-opens.ts:50-51`) omits a cash refund
 
 ## A974. Finish the remaining English names in general code.
 
-- **A974. Finish the remaining English names in general code.** Other private person and dish bindings
-  remain. Protected fiscal and receipt helpers still need their boundary audit.
+- **A974. Finish the remaining English names in general code.** Private dish helpers remain in
+  `collect-by-invoice.test.ts` and `take-payment-permission.test.ts`.
+  Protected fiscal and receipt helpers still need their boundary audit.
   Counter-group display text in `today-names.test.ts` and station display samples in
   `former-numbers.test.ts` stay with A976.
   Other split-suite comments, shared helper consumers and file names remain.

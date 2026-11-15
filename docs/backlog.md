@@ -2152,7 +2152,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   local Mailpit start refused the absent Docker socket. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A974. Finish the remaining English names in general code.**
-  Other private person and dish bindings remain.
+  Private dish helpers remain in `collect-by-invoice.test.ts` and `take-payment-permission.test.ts`.
   Protected fiscal and receipt helpers still need their boundary audit.
   Counter-group display text in `today-names.test.ts` and station display samples in
   `former-numbers.test.ts` stay with A976.

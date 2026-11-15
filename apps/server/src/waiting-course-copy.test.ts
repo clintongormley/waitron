@@ -2212,7 +2212,7 @@ describe("A803 waiting copy: kitchen paper", () => {
       return t;
     }
 
-    async function releaseTarta(t: Awaited<ReturnType<typeof paperTable>>) {
+    async function releaseCake(t: Awaited<ReturnType<typeof paperTable>>) {
       const mark = (await printed(t.grill.printer)).length;
       await release(t.grill.id, (await lineOf(t.bill2, "Tarta")).id);
       return (await printed(t.grill.printer)).slice(mark);
@@ -2233,7 +2233,7 @@ describe("A803 waiting copy: kitchen paper", () => {
         ]),
       ]);
       await answerNoAllergies(partyId);
-      expect(await releaseTarta(t)).toEqual([
+      expect(await releaseCake(t)).toEqual([
         fireTicket(t.grill.name, table8, await orderNumberOf(t.bill2), 2, "1 x TARTA"),
       ]);
     });
@@ -2254,7 +2254,7 @@ describe("A803 waiting copy: kitchen paper", () => {
           "1 x TARTA",
         ]),
       ]);
-      expect(await releaseTarta(t)).toEqual([
+      expect(await releaseCake(t)).toEqual([
         fireTicket(t.grill.name, label, await orderNumberOf(t.bill2), 3, "1 x TARTA"),
       ]);
     });
@@ -2270,7 +2270,7 @@ describe("A803 waiting copy: kitchen paper", () => {
         movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, table8, ["1 x BURG"]),
       ]);
       await answerNoAllergies(partyId);
-      const released = await releaseTarta(t);
+      const released = await releaseCake(t);
       expect(released).toEqual([expect.arrayContaining(["1 x TARTA"])]);
       expect(released[0]![0]).not.toMatch(/\*\*\*/);
     });
@@ -2287,7 +2287,7 @@ describe("A803 waiting copy: kitchen paper", () => {
         movedSlip(t.grill.name, await orderLineOf(t.bill2), t.label, table8, ["1 x BURG"]),
       ]);
       await answerNoAllergies(partyId);
-      const released = await releaseTarta(t);
+      const released = await releaseCake(t);
       expect(released).toEqual([expect.arrayContaining(["1 x TARTA"])]);
       expect(released[0]![0]).not.toMatch(/\*\*\*/);
     });
@@ -2331,7 +2331,7 @@ describe("A803 waiting copy: kitchen paper", () => {
         ]),
       ]);
       await answerNoAllergies(second.partyId);
-      expect(await releaseTarta(t)).toEqual([
+      expect(await releaseCake(t)).toEqual([
         fireTicket(t.grill.name, table9, await orderNumberOf(t.bill2), 2, "1 x TARTA"),
       ]);
     });
@@ -2372,7 +2372,7 @@ describe("A803 waiting copy: kitchen paper", () => {
           .filter((text) => text.includes(words.hold)),
       ).toEqual([]);
 
-      expect(await releaseTarta(t)).toEqual([
+      expect(await releaseCake(t)).toEqual([
         fireTicket(t.grill.name, table8, await orderNumberOf(t.bill2), 2, "1 x TARTA"),
       ]);
 
@@ -2396,7 +2396,7 @@ describe("A803 waiting copy: kitchen paper", () => {
       expect(
         (await movedNotices([t.bill2])).filter((notice) => !noticesBefore.has(notice.id)),
       ).toEqual([{ id: expect.any(String), lineName: "BURG", stationId: t.grill.id }]);
-      expect(await releaseTarta(t)).toEqual([
+      expect(await releaseCake(t)).toEqual([
         [
           t.grill.name,
           t.label,
@@ -2437,7 +2437,7 @@ describe("A803 waiting copy: kitchen paper", () => {
         { id: expect.any(String), lineName: "BURG", stationId: t.grill.id },
         { id: expect.any(String), lineName: "TARTA", stationId: t.grill.id },
       ]);
-      expect(await releaseTarta(t)).toEqual([
+      expect(await releaseCake(t)).toEqual([
         [
           t.grill.name,
           t.label,
@@ -2505,7 +2505,7 @@ describe("A803 waiting copy: kitchen paper", () => {
       expect((await printed(t.grill.printer)).slice(beforeVoid.grill)).toEqual([]);
       expect((await printed(t.pastry.printer)).slice(beforeVoid.pastry)).toEqual([]);
 
-      expect(await releaseTarta(t)).toEqual([
+      expect(await releaseCake(t)).toEqual([
         fireTicket(t.grill.name, table8, await orderNumberOf(t.bill2), 2, "1 x TARTA"),
       ]);
     });
@@ -2592,7 +2592,7 @@ describe("A803 waiting copy: kitchen paper", () => {
         { id: expect.any(String), lineName: "TARTA", stationId: t.grill.id },
       ]);
       await answerNoAllergies(partyId);
-      expect(await releaseTarta(t)).toEqual([
+      expect(await releaseCake(t)).toEqual([
         fireTicket(t.grill.name, table8, await orderNumberOf(t.bill2), 2, "1 x TARTA"),
       ]);
     });
@@ -2646,7 +2646,7 @@ describe("A803 waiting copy: kitchen paper", () => {
       expect(slips).toHaveLength(1);
       expect(slips[0]!.slice(6)).toEqual(["1 x BURG", ""]);
       await answerNoAllergies(partyId);
-      const released = await releaseTarta(t);
+      const released = await releaseCake(t);
       expect(released).toEqual([expect.arrayContaining(["1 x TARTA"])]);
       expect(released[0]![0]).not.toMatch(/\*\*\*/);
     });
@@ -2726,7 +2726,7 @@ describe("A803 waiting copy: kitchen paper", () => {
           "1 x TARTA",
         ]),
       ]);
-      expect(await releaseTarta(t)).toEqual([
+      expect(await releaseCake(t)).toEqual([
         fireTicket(t.grill.name, label, fromNumber, 3, "1 x TARTA"),
       ]);
     });
