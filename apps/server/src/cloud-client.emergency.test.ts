@@ -4,7 +4,9 @@ import { afterEach, expect, it, vi } from "vitest";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
 import { emergencyReply } from "../test/cloud-emergency-fixture.js";
 import { createCloudConnection } from "./cloud-client.js";
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+});
 it("shares display reads separately from billing and keeps dated facts only in memory", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   let reads = 0,
