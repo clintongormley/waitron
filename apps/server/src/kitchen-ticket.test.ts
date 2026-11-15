@@ -1816,22 +1816,21 @@ describe("a dish sent after its period", () => {
     },
   );
 
-  it("does not merge an agreed dish with the same dish sent without asking", () => {
+  it("does not merge an agreed dish with the same dish sent without asking when combined", () => {
+    const agreed: KitchenTicketItem = { qty: "1.000", name: "Steak", afterPeriod: "Lunch" };
+    const unasked: KitchenTicketItem = { ...agreed, afterPeriodUnasked: true };
     const lines = printedLines(
       formatKitchenTicket(
-        ticket([
-          { qty: 1, name: "Steak", afterPeriod: "Lunch" },
-          { qty: 1, name: "Steak", afterPeriod: "Lunch", afterPeriodUnasked: true },
-        ]),
+        ticket(arrangeTicketItems([agreed, unasked, agreed, unasked], "combined")),
         KITCHEN_80,
         TEST_TIME_ZONE,
       ),
     );
     expect(lines.slice(4)).toEqual([
       "** AFTER LUNCH — AGREED **",
-      "1 x Steak",
+      "2 x Steak",
       "** AFTER LUNCH **",
-      "1 x Steak",
+      "2 x Steak",
       "",
     ]);
   });
