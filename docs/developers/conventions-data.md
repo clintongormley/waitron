@@ -6686,4 +6686,4 @@ Your department's receipt text, logo image id, raster cache and last-save time l
 `receipt_logo_image_id`, whose foreign key refuses deleting that image. Media usage reads that key,
 and image edits refresh the department's cached pictures. A null `receipt_updated_at` means no
 receipt has been saved. Configuration format 38 carries these columns and rewrites the image key;
-format 37 is refused as outdated. The raster cache remains pending the reference-box timing.
+format 37 is refused as outdated. The raster cache stays with the department until its separate removal change.
