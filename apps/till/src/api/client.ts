@@ -3218,14 +3218,24 @@ export class TillApi {
    * The eligible authorizers for a manual drawer open → `GET /api/drawer/authorizers`: the active persons
    * whose role holds `cash.drawer`, with no secrets.
    */
-  listDrawerAuthorizers(): Promise<StaffMember[]> {
-    return this.#request<StaffMember[]>("/api/drawer/authorizers", "GET");
+  listDrawerAuthorizers(options: ReadOptions = {}): Promise<StaffMember[]> {
+    return this.#request<StaffMember[]>(
+      "/api/drawer/authorizers",
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 
   /** Who may approve a bill refund → `GET /api/refund-authorizers`: the active holders of the refund
    * permission, by id and name. */
-  listRefundAuthorizers(): Promise<StaffMember[]> {
-    return this.#request<StaffMember[]>("/api/refund-authorizers", "GET");
+  listRefundAuthorizers(options: ReadOptions = {}): Promise<StaffMember[]> {
+    return this.#request<StaffMember[]>(
+      "/api/refund-authorizers",
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 
   /**
@@ -3445,20 +3455,34 @@ export class TillApi {
 
   stationToday(
     stationId: string,
+    options: ReadOptions = {},
   ): Promise<{ destinations: StationDestination[]; openDishCount: number }> {
-    return this.#request(`/api/stations/${encodeURIComponent(stationId)}/today`, "GET");
+    return this.#request(
+      `/api/stations/${encodeURIComponent(stationId)}/today`,
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 
   setStationToday(stationId: string, body: StationTodayWrite): Promise<void> {
     return this.#request(`/api/stations/${encodeURIComponent(stationId)}/today`, "PUT", body);
   }
 
-  deviceStationToday(stationId: string): Promise<{
+  deviceStationToday(
+    stationId: string,
+    options: ReadOptions = {},
+  ): Promise<{
     destinations: StationDestination[];
     authorizers: StaffMember[];
     openDishCount: number;
   }> {
-    return this.#request(`/api/device/stations/${encodeURIComponent(stationId)}/today`, "GET");
+    return this.#request(
+      `/api/device/stations/${encodeURIComponent(stationId)}/today`,
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 
   deviceSetStationToday(
@@ -3484,8 +3508,8 @@ export class TillApi {
     );
   }
 
-  serviceDayAuthorizers(): Promise<StaffMember[]> {
-    return this.#request("/api/service-day/authorizers", "GET");
+  serviceDayAuthorizers(options: ReadOptions = {}): Promise<StaffMember[]> {
+    return this.#request("/api/service-day/authorizers", "GET", undefined, options.signal);
   }
 
   moveDishStation(
@@ -3782,8 +3806,13 @@ export class TillApi {
   }
 
   /** Who may approve cancelling and crediting an invoiced bill → `GET /api/cancel-credit-authorizers`. */
-  listCancelCreditAuthorizers(): Promise<StaffMember[]> {
-    return this.#request<StaffMember[]>("/api/cancel-credit-authorizers", "GET");
+  listCancelCreditAuthorizers(options: ReadOptions = {}): Promise<StaffMember[]> {
+    return this.#request<StaffMember[]>(
+      "/api/cancel-credit-authorizers",
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 
   // --- Live floor. ---
@@ -3862,8 +3891,13 @@ export class TillApi {
   }
 
   /** Who may approve an unpaid departure → `GET /api/unpaid-departure-authorizers`. */
-  listUnpaidDepartureAuthorizers(): Promise<StaffMember[]> {
-    return this.#request<StaffMember[]>("/api/unpaid-departure-authorizers", "GET");
+  listUnpaidDepartureAuthorizers(options: ReadOptions = {}): Promise<StaffMember[]> {
+    return this.#request<StaffMember[]>(
+      "/api/unpaid-departure-authorizers",
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 
   closeDeferred(billId: string, request: CloseDeferredRequest): Promise<CloseDeferredResult> {
@@ -4605,10 +4639,13 @@ export class TillApi {
 
   listApprovers(
     permission: "adjustment.approve" | "sale.refund" | "sale.rectify" | "system.box_admin",
+    options: ReadOptions = {},
   ): Promise<StaffMember[]> {
     return this.#request<StaffMember[]>(
       `/api/adjustment-approvers?permission=${encodeURIComponent(permission)}`,
       "GET",
+      undefined,
+      options.signal,
     );
   }
 

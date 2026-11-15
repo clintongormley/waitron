@@ -211,6 +211,7 @@ export const en = {
     "Still no answer. Check this till's connection to the server, then send again.",
   "invoice_correction.unknown_end":
     "The server's answer did not arrive. Press Check again to see whether it was done before pressing anything else.",
+  "invoice_correction.approvers_failed": "Could not read who can approve this. Try again.",
   "tender_refund.left": "{amount} left to refund from another payment",
 
   "kitchen_note.changed": "Station note changed",
@@ -2294,6 +2295,8 @@ export const es: Record<StringKey, string> = {
     "Sigue sin respuesta. Comprueba la conexión de esta caja con el servidor y vuelve a enviar.",
   "invoice_correction.unknown_end":
     "No ha llegado la respuesta del servidor. Pulsa Volver a consultar para ver si se hizo antes de pulsar nada más.",
+  "invoice_correction.approvers_failed":
+    "No se pudo leer quién puede aprobarlo. Inténtalo de nuevo.",
   "tender_refund.left": "Quedan {amount} por devolver de otro pago",
 
   "kitchen_note.changed": "Nota para la estación cambiada",

@@ -15,8 +15,10 @@ import type {
 } from "../api/invoice-correction-types.js";
 import { InvoiceCorrectionSession } from "../state/invoice-correction.js";
 import { REASON_MAX } from "../state/bill-payment.js";
+import { TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 import "./invoice-correction-dialog.js";
 import type {
+  InvoiceCorrectionApi,
   InvoiceCorrectionCardLeg,
   TillInvoiceCorrectionDialog,
 } from "./invoice-correction-dialog.js";
@@ -423,7 +425,9 @@ function sendingApi() {
       ...OPEN,
       state: "discarded",
     })),
-    listApprovers: vi.fn(async () => [{ personId: "manager", displayName: "Marta" }]),
+    listApprovers: vi.fn<InvoiceCorrectionApi["listApprovers"]>(async () => [
+      { personId: "manager", displayName: "Marta" },
+    ]),
   };
 }
 
@@ -478,7 +482,9 @@ describe("sending a correction", () => {
 
     await confirmCorrection(el);
     const pin = await pinDialog(el);
-    expect(api.listApprovers).toHaveBeenCalledWith("sale.rectify");
+    expect(api.listApprovers).toHaveBeenCalledWith("sale.rectify", {
+      signal: expect.any(AbortSignal),
+    });
     signIn(pin);
 
     await vi.waitFor(() =>
@@ -747,6 +753,30 @@ describe("never sending what staff did not confirm (review fix round 1)", () => 
     expect(root(el).querySelector("[data-still-lost]")).toBeNull();
   });
 
+  it("says who can approve could not be read when Send again needs approval, not that answers are still lost", async () => {
+    const api = sendingApi();
+    api.openInvoiceCorrection
+      .mockRejectedValueOnce(lost())
+      .mockRejectedValueOnce(
+        refused("authorization.not_permitted", { permission: "sale.rectify" }),
+      );
+    api.listApprovers.mockRejectedValueOnce(lost());
+    const { el } = await mountSending(api);
+
+    await confirmCorrection(el);
+    await vi.waitFor(() => expect(root(el).querySelector("[data-saved]")).not.toBeNull());
+    resend(el).click();
+    await vi.waitFor(() =>
+      expect(root(el).querySelector("wt-form-actions")!.error).toBe(
+        t("invoice_correction.approvers_failed"),
+      ),
+    );
+    expect(api.listApprovers).toHaveBeenCalledOnce();
+    expect(root(el).querySelector("[data-saved]")).not.toBeNull();
+    expect(root(el).querySelector("[data-still-lost]")).toBeNull();
+    expect(root(el).querySelector("till-supervisor-override-dialog")).toBeNull();
+  });
+
   it("opens a saved Open with focus on Send again", async () => {
     const session = new InvoiceCorrectionSession(SCOPE, {
       openInvoiceCorrection: () => Promise.reject(lost()),
@@ -884,7 +914,9 @@ describe("never sending what staff did not confirm (review fix round 1)", () => 
 
     root(el).querySelector<HTMLElement>("[data-choice=cash]")!.click();
     await pinDialog(el);
-    expect(api.listApprovers).toHaveBeenCalledExactlyOnceWith("sale.refund");
+    expect(api.listApprovers).toHaveBeenCalledExactlyOnceWith("sale.refund", {
+      signal: expect.any(AbortSignal),
+    });
   });
 
   it("reads the correction again when its split changed, saying so", async () => {
@@ -925,6 +957,33 @@ describe("never sending what staff did not confirm (review fix round 1)", () => 
       ),
     );
     expect(root(el).querySelector("[data-choice=check]")).not.toBeNull();
+  });
+
+  it("says who can approve could not be read when filing needs approval, not that the answer was lost", async () => {
+    const api = sendingApi();
+    api.getInvoiceCorrection.mockResolvedValue({
+      ...OPEN,
+      moneyBack: "2.00",
+      left: "4.05",
+      fileNow: { gross: "2.00", vatBreakdown: SPLIT },
+    });
+    api.fileInvoiceCorrection.mockRejectedValueOnce(
+      refused("authorization.not_permitted", { permission: "sale.rectify" }),
+    );
+    api.listApprovers.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    const { el } = await mountSending(api, "correction-1");
+
+    root(el).querySelector<HTMLElement>("[data-choice=file]")!.click();
+    await vi.waitFor(() =>
+      expect(root(el).querySelector("wt-form-actions")!.error).toBe(
+        t("invoice_correction.approvers_failed"),
+      ),
+    );
+    expect(api.listApprovers).toHaveBeenCalledExactlyOnceWith("sale.rectify", {
+      signal: expect.any(AbortSignal),
+    });
+    expect(root(el).querySelector("till-supervisor-override-dialog")).toBeNull();
+    expect(el.busy).toBe(false);
   });
 
   it("reads the correction again after a step that was under way when a card refund ended", async () => {
@@ -1319,6 +1378,39 @@ describe("the correction window's other paths", () => {
       expect(actionsError(el)).toBe(codeMessage("sale.correction_unsupported")),
     );
     expect(root(el).querySelector("till-supervisor-override-dialog")).toBeNull();
+  });
+
+  it("gives up reading the people who may sign in at the time limit, offering no sign-in", async () => {
+    const api = sendingApi();
+    api.giveInvoiceCorrectionCash.mockRejectedValueOnce(
+      refused("authorization.not_permitted", { permission: "sale.refund" }),
+    );
+    api.listApprovers.mockImplementationOnce(
+      (_permission, options) =>
+        new Promise((_resolve, reject) =>
+          options?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("aborted", "AbortError")),
+          ),
+        ),
+    );
+    const { el } = await mountSending(api, "correction-1");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      root(el).querySelector<HTMLElement>("[data-choice=cash]")!.click();
+      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
+      await el.updateComplete;
+      expect(api.listApprovers).toHaveBeenCalledOnce();
+      expect(el.busy).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await el.updateComplete;
+
+      expect(el.busy).toBe(false);
+      expect(actionsError(el)).toBe(t("invoice_correction.approvers_failed"));
+      expect(root(el).querySelector("till-supervisor-override-dialog")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("drops the sign-in when it is cancelled, sending nothing more", async () => {

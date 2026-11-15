@@ -38,7 +38,7 @@ import type { TillDeadEndsSection } from "./widgets/dead-ends-section.js";
 import { TillApp } from "./till-app.js";
 import { EquipmentPoll } from "./state/equipment-poll.js";
 import { TillApi as CollectApi } from "./api/client.js";
-import { SUBMIT_RETRY_PAUSE_MS } from "./state/draft-sync.js";
+import { SUBMIT_RETRY_PAUSE_MS, TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import { nextFloorMoment } from "./state/floor-today.js";
 import { ServerRouter } from "./api/server-router.js";
 import { diag } from "./diagnostics.js";
@@ -6349,6 +6349,43 @@ describe("till-app", () => {
     const banner = el.shadowRoot!.querySelector('[role="alert"]');
     expect(banner).not.toBeNull();
     expect(banner!.textContent).toContain(t("drawer.error"));
+  });
+
+  it("gives up reading the drawer's supervisors at the time limit and shows the drawer.error banner", async () => {
+    const { el } = await mountApp({
+      openDrawer: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+      listDrawerAuthorizers: vi.fn(
+        (options?: { signal?: AbortSignal }) =>
+          new Promise((_resolve, reject) =>
+            options?.signal?.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError")),
+            ),
+          ),
+      ),
+    });
+    await toTicket(el);
+    const strip = el.shadowRoot!.querySelector<HTMLElement & { drawerBusy: boolean }>(
+      "till-notice-strip",
+    )!;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      emit(ticket(el)!, "open-drawer");
+      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
+      await el.updateComplete;
+      expect(currentApi.listDrawerAuthorizers).toHaveBeenCalledOnce();
+      expect(strip.drawerBusy).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await el.updateComplete;
+
+      expect(strip.drawerBusy).toBe(false);
+      expect(overrideDialog(el)).toBeNull();
+      expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
+        t("drawer.error"),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("reprint: a rejection surfaces the reprint.error banner, never an unhandled rejection", async () => {
@@ -25223,6 +25260,48 @@ describe("A737 post-invoice refund integration", () => {
     expect(approval(el)).toBeNull();
     expect(refundTransaction).not.toHaveBeenCalled();
     expect(refundKeys()).toEqual([]);
+  });
+  it("gives up reading who can approve a manual return at the time limit, and says it could not be read", async () => {
+    const refundTransaction = vi.fn();
+    const { el } = await open({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        capabilities: [...till.capabilities, "hand-keyed-card-payment"],
+      }),
+      getRefundableTenders: vi.fn().mockResolvedValue([{ ...cash, manual: true, method: "card" }]),
+      listRefundAuthorizers: vi.fn(
+        (options?: { signal?: AbortSignal }) =>
+          new Promise((_resolve, reject) =>
+            options?.signal?.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError")),
+            ),
+          ),
+      ),
+      refundTransaction,
+    });
+    const form = await openRefund(el);
+    emit(form.shadowRoot!.querySelector('[name="reason"]')!, "wt-change", { value: "r-return" });
+    emit(form.shadowRoot!.querySelector('[name="manualConfirmed"]')!, "wt-change", {
+      checked: true,
+    });
+    await form.updateComplete;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      form.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
+      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
+      await el.updateComplete;
+      expect(dialog(el)!.busy).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await el.updateComplete;
+
+      expect(dialog(el)!.busy).toBe(false);
+      expect(dialog(el)!.refusal).toEqual({ code: "approvers" });
+      expect(approval(el)).toBeNull();
+      expect(refundTransaction).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
   it("rejects a discovered refund belonging to another sale without exposing its result", async () => {
     const { el, refundTransaction } = await open({

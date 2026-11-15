@@ -4,8 +4,9 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import type { BoxClockConfirmed, StaffMember } from "../api/client.js";
+import type { BoxClockConfirmed, ReadOptions, StaffMember } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
+import { limited, TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 import { clockDateTime, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { trackDialog } from "./track-dialog.js";
@@ -26,6 +27,7 @@ export interface BoxTimeApi {
   }): Promise<BoxClockConfirmed>;
   listApprovers(
     permission: "adjustment.approve" | "sale.refund" | "system.box_admin",
+    options?: ReadOptions,
   ): Promise<StaffMember[]>;
 }
 
@@ -231,10 +233,13 @@ export class TillBoxTimeDialog extends LitElement {
   }
 
   async #askAdmin(): Promise<void> {
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      this.admins = await this.api.listApprovers("system.box_admin");
+      this.admins = await this.api.listApprovers("system.box_admin", { signal: limit.signal });
     } catch (error) {
       this.#refused(error);
+    } finally {
+      limit.done();
     }
   }
 

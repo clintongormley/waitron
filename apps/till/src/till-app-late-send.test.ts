@@ -20,7 +20,7 @@ import type {
   ZoneOffers,
 } from "./api/client.js";
 import type { WorkingOrderStore } from "./state/working-order.js";
-import { DRAFT_SAVE_DELAY_MS } from "./state/draft-sync.js";
+import { DRAFT_SAVE_DELAY_MS, TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import type { AllergySendTarget } from "@waitron/module";
 import {
@@ -946,6 +946,45 @@ describe("a manager's PIN", () => {
       codeMessage("connection.failed"),
     );
     expect(submissions()).toHaveLength(1);
+  });
+
+  it("gives up reading the managers at the time limit, frees Send and shows the refusal", async () => {
+    const el = await lateTable({
+      submitDraft: vi.fn(drafts.submitDraft).mockRejectedValueOnce(MANAGER_NEEDED),
+      serviceDayAuthorizers: vi.fn(
+        (options?: { signal?: AbortSignal }) =>
+          new Promise((_resolve, reject) =>
+            options?.signal?.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError")),
+            ),
+          ),
+      ),
+    });
+    await act(el, "send-all");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    try {
+      windowOf(el)!.shadowRoot!.querySelector<HTMLElement>("[data-late-agreed]")!.click();
+      await vi.advanceTimersByTimeAsync(0);
+      await showView(allergyOrder(el)!, "order", { scripted: true });
+      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
+      await el.updateComplete;
+      expect(api.serviceDayAuthorizers).toHaveBeenCalledOnce();
+      const send = () => screen(el).querySelector<HTMLElement>('[data-draft-action="send-all"]')!;
+      expect(send().hasAttribute("disabled")).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await el.updateComplete;
+      await allergyOrder(el)!.updateComplete;
+
+      expect(send().hasAttribute("disabled")).toBe(false);
+      expect(approval(el)).toBeNull();
+      expect(el.shadowRoot!.querySelector(".error")?.textContent?.trim()).toBe(
+        codeMessage("server.internal"),
+      );
+      expect(submissions()).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("opens no dialog for a refusal naming another permission", async () => {

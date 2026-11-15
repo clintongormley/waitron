@@ -15,7 +15,7 @@ import {
   type DraftServer,
 } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
-import { DraftStore } from "./state/draft-sync.js";
+import { DraftStore, TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import { lineAdjustTarget } from "./state/adjust-target.js";
 import {
   openSentMore,
@@ -545,7 +545,9 @@ describe("till-app: an adjustment someone must approve", () => {
     );
 
     await press(el, inDialog(el, "[data-adjust-confirm]"));
-    expect(api.listApprovers).toHaveBeenCalledWith("adjustment.approve");
+    expect(api.listApprovers).toHaveBeenCalledWith("adjustment.approve", {
+      signal: expect.any(AbortSignal),
+    });
     expect(api.applyAdjustment).not.toHaveBeenCalled();
     expect(approval(el)!.authorizers).toEqual([{ personId: "m-1", displayName: "Marta" }]);
 
@@ -642,7 +644,9 @@ describe("till-app: an adjustment someone must approve", () => {
     const order = await openTable4(el);
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
-    expect(api.listApprovers).toHaveBeenCalledExactlyOnceWith("adjustment.approve");
+    expect(api.listApprovers).toHaveBeenCalledExactlyOnceWith("adjustment.approve", {
+      signal: expect.any(AbortSignal),
+    });
     expect(api.listRefundAuthorizers).not.toHaveBeenCalled();
     expect(approval(el)!.authorizers).toEqual([{ personId: "m-1", displayName: "Marta" }]);
   });
@@ -662,7 +666,9 @@ describe("till-app: an adjustment someone must approve", () => {
     const order = await openTable4(el);
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
-    expect(api.listApprovers).toHaveBeenCalledExactlyOnceWith("adjustment.approve");
+    expect(api.listApprovers).toHaveBeenCalledExactlyOnceWith("adjustment.approve", {
+      signal: expect.any(AbortSignal),
+    });
     expect(api.listRefundAuthorizers).not.toHaveBeenCalled();
   });
 });
@@ -846,6 +852,42 @@ describe("till-app: a refused adjustment", () => {
     const order = await openTable4(el);
     await previewComp(el, order);
     expect(bottomMessage(el)).toBe(codeMessage("server.internal"));
+  });
+
+  it("gives up reading the approvers at the time limit, and says so above the action", async () => {
+    const { el } = await mountApp({
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),
+      listApprovers: vi.fn(
+        (_permission: string, options?: { signal?: AbortSignal }) =>
+          new Promise((_resolve, reject) =>
+            options?.signal?.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError")),
+            ),
+          ),
+      ),
+    });
+    const order = await openTable4(el);
+    await previewComp(el, order);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      inDialog(el, "[data-adjust-confirm]").click();
+      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
+      await el.updateComplete;
+      expect(dialog(el)!.busy).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await el.updateComplete;
+      await dialog(el)!.updateComplete;
+
+      expect(dialog(el)!.busy).toBe(false);
+      expect(approval(el)).toBeNull();
+      expect(bottomMessage(el)).toBe(codeMessage("server.internal"));
+      expect(
+        (inDialog(el, "[data-adjust-confirm]") as HTMLElement & { disabled: boolean }).disabled,
+      ).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("says so above the action when the approvers cannot be read", async () => {
@@ -1462,7 +1504,9 @@ describe("till-app: cancelling a dish", () => {
     );
 
     await press(el, inDialog(el, "[data-adjust-confirm]"));
-    expect(api.listApprovers).toHaveBeenCalledExactlyOnceWith("sale.refund");
+    expect(api.listApprovers).toHaveBeenCalledExactlyOnceWith("sale.refund", {
+      signal: expect.any(AbortSignal),
+    });
     expect(api.listRefundAuthorizers).not.toHaveBeenCalled();
     expect(api.applyAdjustment).not.toHaveBeenCalled();
     expect(approval(el)!.authorizers).toEqual([
@@ -1810,6 +1854,40 @@ describe("till-app: service cancellation consent", () => {
     expect(methods.cancelItem).not.toHaveBeenCalled();
     await submitOffBill(el);
     expect(methods.cancelItem).toHaveBeenCalledOnce();
+  });
+  it("gives up reading who can approve a cancellation at the time limit, and keeps it retryable", async () => {
+    const methods = apiFor(consent(), {
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byRefund })),
+      listRefundAuthorizers: vi.fn(
+        (options?: { signal?: AbortSignal }) =>
+          new Promise((_resolve, reject) =>
+            options?.signal?.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError")),
+            ),
+          ),
+      ),
+    });
+    const { el } = await mountApp(methods);
+    await openTable4(el);
+    await openCancel(el);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      emit(cancelDialog(el)!, "cancel-item-choice", offBillChoice());
+      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
+      await el.updateComplete;
+      expect(api.listRefundAuthorizers).toHaveBeenCalledOnce();
+      expect(cancelDialog(el)?.busy).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await el.updateComplete;
+
+      expect(cancelDialog(el)?.busy).toBe(false);
+      expect(cancelDialog(el)?.refusal).toBe(codeMessage("server.internal"));
+      expect(approval(el)).toBeNull();
+      expect(methods.cancelItem).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
   it("does not open old cancellation approval after its authorizer read completes for a new dialog", async () => {
     let answer!: (rows: { personId: string; displayName: string }[]) => void;
@@ -3285,6 +3363,44 @@ describe("till-app: service cancellation consent", () => {
       await clickChoice(el, "[data-confirm]");
       expect(approval(el)?.authorizers).toEqual([]);
       expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+    });
+
+    it("gives up reading refund approvers at the time limit and leaves paid cancellation open", async () => {
+      const methods = paidMethods({
+        cancelItem: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+        listRefundAuthorizers: vi.fn(
+          (options?: { signal?: AbortSignal }) =>
+            new Promise((_resolve, reject) =>
+              options?.signal?.addEventListener("abort", () =>
+                reject(new DOMException("aborted", "AbortError")),
+              ),
+            ),
+        ),
+      });
+      const { el } = await mountApp(methods);
+      await openTable4(el);
+      await openCancel(el);
+      await clickChoice(el, 'input[name="refund"]');
+      await chooseChargedReason(el);
+      await cancelDialog(el)!.updateComplete;
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        cancelDialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!.click();
+        await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
+        await el.updateComplete;
+        expect(api.listRefundAuthorizers).toHaveBeenCalledOnce();
+        expect(cancelDialog(el)?.busy).toBe(true);
+
+        await vi.advanceTimersByTimeAsync(1);
+        await el.updateComplete;
+
+        expect(cancelDialog(el)?.busy).toBe(false);
+        expect(cancelDialog(el)?.refusal).toBe(codeMessage("server.internal"));
+        expect(approval(el)).toBeNull();
+        expect(methods.cancelItem).toHaveBeenCalledOnce();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("ignores a refund authorizer read after closing and reopening cancellation", async () => {

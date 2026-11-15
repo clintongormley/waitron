@@ -2257,7 +2257,9 @@ describe("till-app: comping a stored counter order", () => {
 
     await previewComp(el);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
-    expect(api.listApprovers).toHaveBeenCalledWith("adjustment.approve");
+    expect(api.listApprovers).toHaveBeenCalledWith("adjustment.approve", {
+      signal: expect.any(AbortSignal),
+    });
     await pinPad(el, "7777");
 
     expect(applied()).toEqual([

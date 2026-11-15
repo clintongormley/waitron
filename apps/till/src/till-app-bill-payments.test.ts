@@ -54,7 +54,7 @@ import {
   mountWidget,
 } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
-import { SUBMIT_RETRY_PAUSE_MS } from "./state/draft-sync.js";
+import { SUBMIT_RETRY_PAUSE_MS, TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
@@ -7248,6 +7248,40 @@ describe("till-app: giving back a bill payment", () => {
 
     expect(approval(el)).toBeNull();
     expect(inRefund(el, "wt-form-actions")!.error).toBe(t("bill_refund.approvers_failed"));
+  });
+
+  it("gives up reading who can approve at the time limit, and says it could not be read", async () => {
+    let refuse: (error: unknown) => void = () => {};
+    const refundBillPayment = vi.fn(
+      () => new Promise<BillRefundResult>((_resolve, reject) => (refuse = reject)),
+    );
+    const listRefundAuthorizers = vi.fn(
+      (options?: { signal?: AbortSignal }) =>
+        new Promise((_resolve, reject) =>
+          options?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("aborted", "AbortError")),
+          ),
+        ),
+    );
+    const el = await askRefund({ refundBillPayment, listRefundAuthorizers }, cashPaid);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      refuse(notPermitted);
+      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
+      await el.updateComplete;
+      expect(listRefundAuthorizers).toHaveBeenCalledOnce();
+      expect(refundDialog(el)!.busy).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await el.updateComplete;
+      await refundDialog(el)!.updateComplete;
+
+      expect(refundDialog(el)!.busy).toBe(false);
+      expect(approval(el)).toBeNull();
+      expect(inRefund(el, "wt-form-actions")!.error).toBe(t("bill_refund.approvers_failed"));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("offers the Void reasons read for Give back, and reads them again after a failed read", async () => {

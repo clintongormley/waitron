@@ -4,6 +4,8 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { page } from "vitest/browser";
 import { TillApi } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
+import { TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 import type { TillStationToday } from "./station-today.js";
 import type { TillStationTodayDialog } from "./station-today-dialog.js";
 import "./station-today.js";
@@ -339,6 +341,46 @@ it("an authorizer read failure returns a localized refusal without hiding the cl
   );
 });
 
+it("gives up reading the managers at the time limit and shows the read's refusal", async () => {
+  let asked!: () => void;
+  const managersAsked = new Promise<void>((resolve) => (asked = resolve));
+  const { el } = await mount({}, (path, init) => {
+    if (!path.endsWith("authorizers"))
+      return init.method === "PUT"
+        ? refused("authorization.not_permitted")
+        : json({ destinations, openDishCount: 0 });
+    asked();
+    return new Promise((_resolve, reject) =>
+      init.signal?.addEventListener("abort", () =>
+        reject(new DOMException("aborted", "AbortError")),
+      ),
+    );
+  });
+  const read = vi.spyOn(el.api!, "serviceDayAuthorizers");
+  act(el);
+  const d = await dialog(el);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    confirm(d);
+    await managersAsked;
+    await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
+    await el.updateComplete;
+    await d.updateComplete;
+    expect(read).toHaveBeenCalledOnce();
+    expect(d.busy).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await el.updateComplete;
+    await d.updateComplete;
+
+    expect(d.busy).toBe(false);
+    expect(d.refusal).toBe("network.error");
+    expect(el.shadowRoot!.querySelector("till-supervisor-override-dialog")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 const managers = [{ personId: "manager", displayName: "Ana" }];
 async function pinStep(el: TillStationToday) {
   await expect
@@ -540,6 +582,116 @@ it("device permission refusal refreshes its managers without a session request",
     "/api/device/stations/grill/today",
     "/api/device/stations/grill/today",
   ]);
+});
+
+/** A handheld whose station read waits until its limit aborts it; `asked` settles once it is sent. */
+function stalledDeviceRead(nth: number) {
+  let reads = 0;
+  let asked!: () => void;
+  const sent = new Promise<void>((resolve) => (asked = resolve));
+  const reply = (_path: string, init: RequestInit) => {
+    if (init.method === "PUT") return refused("authorization.not_permitted");
+    if (++reads < nth) return json({ destinations, authorizers: managers, openDishCount: 0 });
+    asked();
+    return new Promise<Response>((_resolve, reject) =>
+      init.signal?.addEventListener("abort", () =>
+        reject(new DOMException("aborted", "AbortError")),
+      ),
+    );
+  };
+  return { reply, sent };
+}
+
+it("device opening gives up reading its managers at the time limit and shows the refusal", async () => {
+  const { reply, sent } = stalledDeviceRead(1);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const { el } = await mount({ deviceMode: true, station: { ...station, open: false } }, reply);
+    const action = () =>
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-action]")!;
+    act(el);
+    await sent;
+    await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
+    await el.updateComplete;
+    expect(action().disabled).toBe(true);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(1);
+    await el.updateComplete;
+
+    expect(action().disabled).toBe(false);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toBe(
+      codeMessage("network.error"),
+    );
+    expect(el.shadowRoot!.querySelector("till-supervisor-override-dialog")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("till station read gives up at the time limit and frees the action", async () => {
+  let asked!: () => void;
+  const sent = new Promise<void>((resolve) => (asked = resolve));
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const { el } = await mount({}, (_path, init) => {
+      asked();
+      return new Promise<Response>((_resolve, reject) =>
+        init.signal?.addEventListener("abort", () =>
+          reject(new DOMException("aborted", "AbortError")),
+        ),
+      );
+    });
+    const action = () =>
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-action]")!;
+    act(el);
+    await sent;
+    await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
+    await el.updateComplete;
+    expect(action().disabled).toBe(true);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(1);
+    await el.updateComplete;
+
+    expect(action().disabled).toBe(false);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toBe(
+      codeMessage("network.error"),
+    );
+    expect(el.shadowRoot!.querySelector("till-station-today-dialog")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("device permission refusal gives up re-reading its managers at the time limit", async () => {
+  const { reply, sent } = stalledDeviceRead(2);
+  const { el, calls } = await mount(
+    { deviceMode: true, station: { ...station, open: false } },
+    reply,
+  );
+  act(el);
+  const pin = await pinStep(el);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    pin.dispatchEvent(
+      new CustomEvent("override-confirm", { detail: { personId: "manager", pin: "1234" } }),
+    );
+    await sent;
+    await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(1);
+    await el.updateComplete;
+
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toBe(
+      codeMessage("network.error"),
+    );
+    expect(calls.filter((c) => c.method === "PUT")).toHaveLength(1);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it.each(["answer", "refusal"])(

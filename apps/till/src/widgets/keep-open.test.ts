@@ -3,6 +3,7 @@ import type { WtButton } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillApi } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
+import { TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 import type { TillKeepOpen } from "./keep-open.js";
 import type { TillKeepOpenDialog } from "./keep-open-dialog.js";
 import "./keep-open.js";
@@ -251,6 +252,41 @@ it("a manager read finishing after the zone changes cannot reopen the old PIN st
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("till-supervisor-override-dialog")).toBeNull();
+});
+it("gives up reading the managers at the time limit and shows the read's refusal", async () => {
+  const { el } = await mount({}, (path, init) =>
+    path.endsWith("authorizers")
+      ? new Promise((_resolve, reject) =>
+          init.signal?.addEventListener("abort", () =>
+            reject(new DOMException("aborted", "AbortError")),
+          ),
+        )
+      : init.method === "PUT"
+        ? refusal("authorization.not_permitted")
+        : json({ zone }),
+  );
+  const read = vi.spyOn(el.api!, "serviceDayAuthorizers");
+  act(el);
+  const d = await dialog(el);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    await save(d);
+    await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
+    await el.updateComplete;
+    await d.updateComplete;
+    expect(read).toHaveBeenCalledOnce();
+    expect(d.busy).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await el.updateComplete;
+    await d.updateComplete;
+
+    expect(d.busy).toBe(false);
+    expect(d.refusal).toBe("network.error");
+    expect(el.shadowRoot!.querySelector("till-supervisor-override-dialog")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
 });
 it("manager approval retains a null endpoint when ending the extension", async () => {
   let writes = 0;
