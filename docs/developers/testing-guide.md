@@ -2083,6 +2083,13 @@ array as one argument. The disposable `attendance-table.probe.test.ts` asserted 
 and reported `2 passed (2)`. The attendance parser's tables use one-element rows, including their
 valid-pair controls.
 
+For a parameterized case needing `ctx.skip`, use `it.for` and destructure an array row in its
+callback rather than separate arguments. On Vitest 4.1.12, the remaining full-disk read cases’
+`it.each(["floor", "delivery"])` callback passed with the small `hdiutil` filesystem available,
+but crashed at `ctx.skip` when that filesystem was unavailable. Server typecheck guards the
+callback type (TS2345); changing to `it.for` passed that check, the skip control and the real-disk
+cases in `start-full-disk.e2e.test.ts`.
+
 **Shelling out to git from a test**
 
 ## A test that shells out to `git` must clear `GIT_DIR` and its family

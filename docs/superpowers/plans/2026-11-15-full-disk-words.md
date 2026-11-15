@@ -38,3 +38,8 @@ for the connection page's existing controls: “Once more space is free, choose 
 set up the secure connection.” Keep the existing explanation of what the disk holds and the
 reinstall data-loss warning, with a Spanish twin. Read space on each page load so freeing space
 clears the warning. No new control or endpoint; no owner design approval is claimed.
+
+**2026-11-15 13:12 supersession:** the watcher cleared the
+[remaining-read plan](2026-11-15-full-disk-remaining-reads.md), including the transaction delivery
+status sibling. No-due floor and delivery reads now use no-drain turns; due reconciliation
+retains the existing write transaction. This replaces cut 2’s blanket delivery-status limit.

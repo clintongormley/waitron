@@ -259,6 +259,19 @@ export async function claimInvoiceDelivery(
   return row === undefined ? undefined : { deliveryId, generation: row.generation, token, holder };
 }
 
+function expiringClaims(now: Date, restart = false) {
+  return and(eq(invoiceDeliveries.status, "sending"), restart ? undefined : claimLapsed(now));
+}
+
+export async function invoiceDeliveryClaimsDue(tx: Transaction, now: Date): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: invoiceDeliveries.id })
+    .from(invoiceDeliveries)
+    .where(expiringClaims(now))
+    .limit(1);
+  return row !== undefined;
+}
+
 export async function expireInvoiceDeliveryClaims(
   tx: Transaction,
   now = new Date(),
@@ -271,7 +284,7 @@ export async function expireInvoiceDeliveryClaims(
       expiredAt: now.toISOString(),
       failureCode: restart ? "restart" : "timeout",
     })
-    .where(and(eq(invoiceDeliveries.status, "sending"), restart ? undefined : claimLapsed(now)))
+    .where(expiringClaims(now, restart))
     .returning({ id: invoiceDeliveries.id, printJobId: invoiceDeliveries.printJobId });
   const jobIds = expired.flatMap((row) => (row.printJobId === null ? [] : [row.printJobId]));
   if (jobIds.length > 0) {

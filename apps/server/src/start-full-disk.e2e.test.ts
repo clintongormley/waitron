@@ -29,6 +29,12 @@ import {
   outgoingMail,
   drawerOpens,
   invoiceSeries,
+  invoiceDeliveries,
+  floorPlans,
+  floorPlanTables,
+  installChangeFeed,
+  CORE_CHANGE_SOURCES,
+  subscribeToChanges,
   openVenueDatabase,
   printAgents,
   sales,
@@ -119,7 +125,15 @@ import {
   readStaffNoticesInTurns,
   type OwnedStaffNoticeSource,
 } from "./staff-notices.js";
-import { provisionBillVenue, seatedWith, tabWith, send } from "./testing/bill-venue.js";
+import {
+  provisionBillVenue,
+  seatedWith,
+  tabWith,
+  send,
+  type BillVenue,
+} from "./testing/bill-venue.js";
+import { defaultLayout } from "./testing/floor-sets.js";
+import { reserveInvoiceDelivery, claimInvoiceDelivery } from "./invoice-delivery.js";
 import { parkOrder } from "./working-order.js";
 import { kitchenScreenDevice, profile as kitchenProfile } from "./testing/kitchen-screen-device.js";
 import sharp from "sharp";
@@ -131,6 +145,31 @@ import { setupVenue } from "./testing/venue-fixtures.js";
 import { waitingDish } from "./testing/waiting-dish.js";
 import { stationScreensDark, passScreensDark } from "./station-outputs-down.js";
 import { SESSION_COOKIE } from "./till-session.js";
+
+async function orderlessInvoice(venue: BillVenue): Promise<string> {
+  const orderlessId = randomUUID();
+  await withTransaction(venue.db, (tx) =>
+    tx.insert(sales).values({
+      id: orderlessId,
+      source: "device",
+      deviceId: venue.deviceId,
+      seriesId: venue.seriesId,
+      nodeId: venue.cfg.nodeId,
+      invoiceNumber: 900101,
+      issuedAt: "2026-11-15T12:00:00.000Z",
+      issuedOffsetMinutes: 60,
+      total: 1210,
+      vatBreakdown: [{ rate: "21.00", base: "10.00", tax: "2.10" }],
+      locale: "es-ES",
+      invoiceLocales: ["es-ES"],
+      fiscalBackend: "verifactu",
+      fiscalState: "not_applicable",
+      counterpartyTaxId: "B00000000",
+      counterpartyLegalName: "Stored recipient",
+    }),
+  );
+  return orderlessId;
+}
 
 const MiB = 1024 * 1024;
 const FLOOR = 8 * MiB;
@@ -1710,7 +1749,118 @@ describe("a start on a real full disk", () => {
       await store.close();
     }
   });
-  it("pure till reads answer with a change waiting while reconciliation keeps its transaction", async (ctx) => {
+  it.for(["floor", "delivery", "transaction"] as const)(
+    "due %s work still refuses on a full disk, then reconciles after space returns",
+    async (kind, ctx) => {
+      const small = needDisk(ctx);
+      const dir = realpathSync(small.folder(`due-${kind}`));
+      await applyMigrations(dir, migrationOptionsFor(manifestSets(), null));
+      const store = await openVenueDatabase(dir);
+      const db = store.venue;
+      let stop = () => {};
+      try {
+        const venue = await provisionBillVenue(db);
+        let path = "/api/tables/state";
+        let deliveryId: string | undefined;
+        if (kind === "floor") {
+          await withTransaction(db, async (tx) => {
+            const ref = await defaultLayout(tx, venue.cfg, venue.zoneId);
+            await tx.insert(floorPlans).values({
+              zoneId: venue.zoneId,
+              setId: ref.setId,
+              savedAt: new Date().toISOString(),
+            });
+            await tx
+              .insert(floorPlanTables)
+              .values({ zoneId: venue.zoneId, label: "New layout table" });
+          });
+        } else {
+          let saleId: string;
+          if (kind === "transaction") {
+            saleId = await orderlessInvoice(venue);
+            path = `/api/transactions/${saleId}/deliveries`;
+          } else {
+            const orderId = await tabWith(venue, "Steak");
+            expect(
+              (
+                await send(
+                  venue.app,
+                  venue.cookie,
+                  "POST",
+                  `/api/working-orders/${orderId}/payments`,
+                  {
+                    submissionId: randomUUID(),
+                    kind: "contribution",
+                    amount: "25.00",
+                    method: "cash",
+                    tendered: "25.00",
+                    applied: "25.00",
+                    tip: "0.00",
+                  },
+                )
+              ).status,
+            ).toBe(200);
+            const [sale] = await db.select({ id: sales.id }).from(sales);
+            saleId = sale!.id;
+            path = `/api/sales/${orderId}/deliveries?medium=email`;
+          }
+          await withTransaction(db, async (tx) => {
+            const delivery = await reserveInvoiceDelivery(tx, saleId, {
+              medium: "email",
+              requestKey: randomUUID(),
+              personId: venue.operatorId,
+              recipient: "guest@example.com",
+            });
+            deliveryId = delivery.id;
+            const at = new Date(Date.now() - 61_000);
+            await tx
+              .update(invoiceDeliveries)
+              .set({ nextAttemptAt: at.toISOString() })
+              .where(eq(invoiceDeliveries.id, delivery.id));
+            expect(await claimInvoiceDelivery(tx, delivery.id, "silent-worker", at)).toBeDefined();
+          });
+        }
+        await installChangeFeed(db, CORE_CHANGE_SOURCES);
+        const seen: unknown[] = [];
+        stop = subscribeToChanges((change) => seen.push(change));
+        const snapshot = () => ({
+          zones: db.all(sql`select * from floor_zones order by id`),
+          tables: db.all(sql`select * from dining_tables order by id`),
+          deliveries: db.all(sql`select * from invoice_deliveries order by id`),
+        });
+        const before = snapshot();
+        expect(db.all(sql`select id from change_log`)).toEqual([]);
+        db.all(sql`pragma wal_checkpoint(truncate)`);
+        small.fill(0);
+        const refused = await send(venue.app, venue.cookie, "GET", path);
+        expect(refused.status).toBe(507);
+        expect(refused.json).toMatchObject({ code: "storage.disk_full" });
+        expect(snapshot()).toEqual(before);
+        expect(db.all(sql`select id from change_log`)).toEqual([]);
+        expect(seen).toEqual([]);
+        small.unfill();
+        expect((await send(venue.app, venue.cookie, "GET", path)).status).toBe(200);
+        if (kind === "floor")
+          expect(
+            db.all(sql`select label from dining_tables where label = 'New layout table'`),
+          ).toHaveLength(1);
+        else
+          expect(
+            db.all(
+              sql`select status, failure_code from invoice_deliveries where id = ${deliveryId}`,
+            ),
+          ).toEqual([{ status: "unknown", failure_code: "timeout" }]);
+        expect(seen.length).toBeGreaterThan(0);
+      } finally {
+        stop();
+        small.unfill();
+        await store.close();
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("till reads answer with a change waiting when no reconciliation is due", async (ctx) => {
     const small = needDisk(ctx);
     const dir = realpathSync(small.folder("till-read-audit"));
     await applyMigrations(dir, migrationOptionsFor(manifestSets(), null));
@@ -1749,6 +1899,10 @@ describe("a start on a real full disk", () => {
         },
       );
       expect(paid.status).toBe(200);
+      await withTransaction(db, (tx) =>
+        tx.insert(floorPlanTables).values({ zoneId: venue.zoneId, label: "No saved layout" }),
+      );
+      const orderlessId = await orderlessInvoice(venue);
       const stationId = db.all<{ id: string }>(
         sql`select id from kitchen_stations where active = 1 order by id limit 1`,
       )[0]!.id;
@@ -1810,6 +1964,8 @@ describe("a start on a real full disk", () => {
         `/api/sales/${paidId}`,
         `/api/sales/${paidId}/receipt`,
         `/api/sales/${paidId}/deliveries`,
+        `/api/sales/${paidId}/deliveries?medium=email`,
+        `/api/transactions/${orderlessId}/deliveries`,
         "/api/invoice-delivery-options",
       ];
       const read = async (path: string, cookie = venue.cookie) => {
@@ -1847,12 +2003,7 @@ describe("a start on a real full disk", () => {
       expect(full.map(({ path, status }) => ({ path, status }))).toEqual(
         paths.map((path) => ({
           path,
-          status:
-            path === "/api/tables/state" || path.endsWith("/deliveries")
-              ? 507
-              : path === "/api/device/stations"
-                ? 401
-                : 200,
+          status: path === "/api/device/stations" ? 401 : 200,
         })),
       );
       expect(full.find(({ path }) => path === "/api/working-orders")!.body).toEqual(
@@ -1861,6 +2012,16 @@ describe("a start on a real full disk", () => {
       expect(
         full.find(({ path }) => path === `/api/working-orders/${parkedId}`)!.body,
       ).toMatchObject({ id: parkedId });
+      for (const path of [
+        "/api/tables/state",
+        `/api/sales/${paidId}/deliveries`,
+        `/api/sales/${paidId}/deliveries?medium=email`,
+        `/api/transactions/${orderlessId}/deliveries`,
+      ]) {
+        expect(full.find((row) => row.path === path)).toEqual(
+          before.find((row) => row.path === path),
+        );
+      }
       expect(db.all(sql`select id from change_log`)).toEqual([{ id: "audit-pending" }]);
       expect(
         db.all(sql`select last_seen_at as at from devices where id = ${venue.deviceId}`),

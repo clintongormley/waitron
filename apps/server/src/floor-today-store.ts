@@ -964,18 +964,7 @@ function mergedWith(
   return new Set(members.filter((m) => joins.has(m.joinId)).map((m) => m.tableId));
 }
 
-/**
- * For each zone with a table or a layout: resets it onto its due layout when its today's plan is
- * for an earlier business day (or it has none), else catchUpZone when it has pending rows; one
- * query finds those zones. A zone whose due layout has no saved row is left as it is. A caught-up
- * zone whose plan changed moves its revision by one. Answers the business day, null when the
- * venue's clock names none.
- */
-export async function ensureToday(
-  tx: Transaction,
-  removals: readonly TableRemoval[],
-  now: Date,
-): Promise<string | null> {
+async function todayWork(tx: Transaction, now: Date) {
   const day = await todayBusinessDay(tx, now);
   if (day === null) return null;
   const zones = await tx
@@ -1009,6 +998,30 @@ export async function ensureToday(
   const resetting = zones.flatMap((z) => (resets(z.businessDay) ? [z.zoneId] : []));
   const catchingUp = zones.flatMap((z) => (resets(z.businessDay) ? [] : [z.zoneId]));
   const layouts = await zoneLayoutsOn(tx, resetting, now, day);
+  return { day, zones, resets, catchingUp, layouts };
+}
+
+/** Conservative for catch-up: a candidate can still wait for guests or its name. */
+export async function todayReconciliationDue(tx: Transaction, now: Date): Promise<boolean> {
+  const work = await todayWork(tx, now);
+  return (
+    work !== null &&
+    work.zones.some(
+      ({ zoneId, businessDay }) =>
+        !work.resets(businessDay) ||
+        (work.layouts.rows.has(zoneId) && dueOnto(work.layouts.states.get(zoneId)!) !== null),
+    )
+  );
+}
+
+export async function ensureToday(
+  tx: Transaction,
+  removals: readonly TableRemoval[],
+  now: Date,
+): Promise<string | null> {
+  const work = await todayWork(tx, now);
+  if (work === null) return null;
+  const { day, zones, resets, catchingUp, layouts } = work;
   const before = catchingUp.length === 0 ? null : await roomPrints(tx, catchingUp);
   for (const { zoneId, businessDay } of zones) {
     if (resets(businessDay)) {

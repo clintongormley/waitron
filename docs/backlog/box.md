@@ -1343,9 +1343,6 @@ once released. Belongs with A1016.
 Remaining work from the 6 November backlog bundle. The four-cut plan is
 [Full disk: reads and words](../superpowers/plans/2026-11-15-full-disk-words.md).
 
-- **The floor-state and invoice-delivery status reads still answer 507 on a full disk while a
-  notification waits, even when no reconciliation is due.** Their write-capable transactions remain;
-  the pure-read cut does not close this part of the original read entry.
 - **The strip draws no tinted background and no coloured words, unlike picture 2.** No token is
   named for the tints and `color-mix()` is refused; tint tokens with their contrast checks would let
   it. Left open by A798-B slice 6 (#1977).
@@ -1437,6 +1434,9 @@ except the last, added 2026-11-14.
 
 The watcher retained invoice-delivery status’s existing claim-expiry transaction and its 507 refusal
 on 15 November 2026 at 06:10 in Lane K’s `questions.md`.
+A later watcher clearance at 13:12 supersedes that limit for status reads with no expiry due;
+see the [remaining-read plan](../superpowers/plans/2026-11-15-full-disk-remaining-reads.md).
+Due expiry and floor reconciliation keep their write paths.
 
 ### Retry after a full-disk stop
 

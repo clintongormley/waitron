@@ -3102,9 +3102,14 @@ basket readers, menu/zone reads, kitchen displays, station queues, paid-sale/rec
 schedule reads use write-lock turns without a change-log drain. These are explicit exceptions to the
 usual draining transaction per route. The theme list and logo preview retain ordinary session
 activity on a healthy disk; only after `storage.disk_full` do they repeat their authorization with
-`touch: false` inside a no-drain turn. The floor-state and invoice-delivery status reads keep their
-write-capable transactions; their drains still refuse a pending notification even when no
-reconciliation is due. The real small-filesystem cases in `start-full-disk.e2e.test.ts` check
+`touch: false` inside a no-drain turn. The floor-state and the two till invoice-delivery status
+reads now check for due reconciliation inside a no-drain turn. Without due work they return
+from that turn; otherwise they enter their existing draining transaction and reconcile there.
+Floor eligibility shares the saved-layout selection with `ensureToday`; delivery eligibility
+shares the sending-claim lease condition with expiry. The zone-refusal case for
+`GET /api/sales/:id/deliveries` leaves another sale’s claim unchanged.
+The delivery routes keep wall-clock expiry; the floor keeps its supplied clock.
+The real small-filesystem cases in `start-full-disk.e2e.test.ts` check
 pending rows, overdue stamps, permissions, a populated bill, a paid receipt and an actual logo
 image; they do not qualify every GET route.
 
@@ -3161,11 +3166,14 @@ has already thrown (inferred, not isolated).
 
 - Other routes that still use a draining `withTransaction` can also answer 507 while a change
   waits, even if their bodies only read; this audit does not qualify those routes.
-- The floor-state read (`GET /api/tables/state`) and invoice-delivery status
-  (`GET /api/sales/:id/deliveries`) retain write-capable transactions. Their closing change-log
-  drains still answer 507 on a full disk with a pending row, even when no reconciliation is due.
-  The real-disk control in `start-full-disk.e2e.test.ts` answers 200 with no pending row and 507
-  with one for both routes.
+- Due floor reset/catch-up and delivery-claim expiry still need a draining transaction. A floor
+  zone whose catch-up waits for guests or a name can still take that path: `catchUpDue` is weaker
+  than “will apply”. Management-order, printer-offer and transaction receipt-print reads remain
+  outside this cut and can still refuse on a pending change.
+  The real-disk cases in `start-full-disk.e2e.test.ts` check successful floor-state and both till
+  delivery-status reads with a pending row, including a stale floor without a saved layout.
+  With no pending notification, due reset and expired-email-claim controls refuse 507, roll back
+  without notification, then reconcile and notify after space returns.
 - PIN sign-in, from its own session write: a refused sign-in writes no session.
 - While the disk is full, no device's last-seen time moves, so anything that reads it as a sign of
   life sees the device go quiet.

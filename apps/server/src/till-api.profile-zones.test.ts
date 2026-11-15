@@ -9,6 +9,8 @@ import { sql, eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   billPayments,
+  invoiceDeliveries,
+  sales,
   deviceProfilePrinters,
   deviceProfiles,
   kitchenStations,
@@ -53,12 +55,14 @@ import { createStation } from "./kitchen.js";
 import { moveDishesToStation } from "./testing/order-writer-fixture.js";
 import { createPairingMode } from "./pairing-mode.js";
 import type { StationQueueGroup } from "./working-order.js";
+import { claimInvoiceDelivery, reserveInvoiceDelivery } from "./invoice-delivery.js";
 import { parkOrder } from "./working-order.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import {
   OPERATOR,
+  counterOrder,
   inTx,
   order,
   partyRow,
@@ -1359,6 +1363,49 @@ const ROUTES: readonly Row[] = [
     deliOrderZone,
   ],
 ];
+
+it("a refused foreign-zone delivery read leaves another sale's claim untouched", async () => {
+  const orderId = await counterOrder(v, "Water");
+  await pay(v, orderId, "2.00");
+  const deliveryId = await inTx(v, async (tx) => {
+    const [sale] = await tx
+      .select({ id: sales.id })
+      .from(sales)
+      .where(eq(sales.workingOrderId, orderId));
+    const delivery = await reserveInvoiceDelivery(tx, sale!.id, {
+      medium: "email",
+      requestKey: randomUUID(),
+      personId: OPERATOR,
+      recipient: "guest@example.com",
+    });
+    const at = new Date(Date.now() - 61_000);
+    await tx
+      .update(invoiceDeliveries)
+      .set({ nextAttemptAt: at.toISOString() })
+      .where(eq(invoiceDeliveries.id, delivery.id));
+    expect(await claimInvoiceDelivery(tx, delivery.id, "silent-worker", at)).toBeDefined();
+    return delivery.id;
+  });
+  const before = await suite.db
+    .select()
+    .from(invoiceDeliveries)
+    .where(eq(invoiceDeliveries.id, deliveryId));
+  expect(await send(restaurant, "GET", `/api/sales/${f.deliOrder}/deliveries`)).toEqual(
+    notAllowed(f.deliCounter),
+  );
+  expect(
+    await suite.db.select().from(invoiceDeliveries).where(eq(invoiceDeliveries.id, deliveryId)),
+  ).toEqual(before);
+  expect((await send(plain, "GET", `/api/sales/${orderId}/deliveries?medium=email`)).status).toBe(
+    200,
+  );
+  expect(
+    await suite.db
+      .select({ status: invoiceDeliveries.status })
+      .from(invoiceDeliveries)
+      .where(eq(invoiceDeliveries.id, deliveryId)),
+  ).toEqual([{ status: "unknown" }]);
+});
 
 describe("a kitchen display", () => {
   it("receives the Restaurant's and the Deli's work at its station, and cannot browse either department's orders", async () => {

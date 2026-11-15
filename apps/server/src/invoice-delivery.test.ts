@@ -51,6 +51,7 @@ import {
   reserveInvoiceDelivery,
   claimInvoiceDelivery,
   expireInvoiceDeliveryClaims,
+  invoiceDeliveryClaimsDue,
   reportInvoiceDelivery,
   reportInvoiceEmailDelivery,
   INVOICE_DELIVERY_LEASE_MS,
@@ -511,6 +512,22 @@ async function expire(restart = false) {
 }
 
 describe("invoice delivery claims", () => {
+  it("detects only sending claims outside their lease without changing them", async () => {
+    const { delivery } = await queued();
+    const due = (now: Date) =>
+      suite.db.withWriteLock(() => invoiceDeliveryClaimsDue(suite.db, now));
+    expect(await due(start)).toBe(false);
+    await claim(delivery.id);
+    const before = await rows();
+    expect(await due(new Date(start.getTime() + 59_999))).toBe(false);
+    expect(await due(expired)).toBe(true);
+    expect(await due(new Date(start.getTime() - 60_000))).toBe(false);
+    expect(await due(new Date(start.getTime() - 60_001))).toBe(true);
+    expect(await rows()).toEqual(before);
+    expect(await expire()).toBe(1);
+    expect(await due(expired)).toBe(false);
+  });
+
   it("claims once, hashes its fresh token and excludes another worker before expiry", async () => {
     const { delivery } = await queued();
     const held = await claim(delivery.id);
