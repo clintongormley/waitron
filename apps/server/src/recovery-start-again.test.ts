@@ -404,7 +404,7 @@ type StartAgainDeps = NonNullable<RecoveryDeps["startAgain"]>;
 const ROOTS = { stateDir: "/box/state", venueDir: "/box/venue" };
 const ROUTE_SURVEY = survey([fileUnit("venue", "venue.db"), folderUnit("state", "extra")]);
 const FORM = { password: "the-password", choice: "keep", listed: ROUTE_SURVEY.digest };
-const RING_IN_USE = { WAITRON_CREDENTIALS_KEY: "ZW52aXJvbm1lbnQ=" };
+const ENVIRONMENT_KEYS = { WAITRON_CREDENTIALS_KEY: "ZW52aXJvbm1lbnQ=" };
 
 function mounted(overrides: Partial<StartAgainDeps> = {}) {
   const choose = vi.fn<NonNullable<StartAgainDeps["choose"]>>(() =>
@@ -416,7 +416,7 @@ function mounted(overrides: Partial<StartAgainDeps> = {}) {
   const deps: StartAgainDeps = {
     roots: ROOTS,
     survey: ROUTE_SURVEY,
-    ringInUse: RING_IN_USE,
+    environmentKeys: ENVIRONMENT_KEYS,
     onFinished,
     choose,
     now: () => NOW,
@@ -767,7 +767,7 @@ describe("mountStartAgainChoice", () => {
       choice: "keep",
       listed: FORM.listed,
       now: expect.any(Function),
-      ringInUse: RING_IN_USE,
+      environmentKeys: ENVIRONMENT_KEYS,
     });
     const now = choose.mock.calls[0]![0].now;
     expect(now()).toBe(NOW);
@@ -910,7 +910,7 @@ describe("mountStartAgainChoice", () => {
       {
         roots: ROOTS,
         survey: ROUTE_SURVEY,
-        ringInUse: {},
+        environmentKeys: {},
         onFinished: () => Promise.resolve(),
         choose: row.choose,
       },
@@ -957,7 +957,7 @@ describe("mountStartAgainChoice", () => {
       {
         roots: attempt.roots,
         survey: found,
-        ringInUse: {},
+        environmentKeys: {},
         onFinished: () => Promise.resolve(),
       },
       (view) => OPERATOR_WORDS[view.code]![view.locale].title,
@@ -1002,7 +1002,7 @@ describe("mountStartAgainChoice", () => {
       {
         roots: ROOTS,
         survey: ROUTE_SURVEY,
-        ringInUse: {},
+        environmentKeys: {},
         onFinished,
         choose: () =>
           Promise.resolve({
@@ -1071,7 +1071,14 @@ describe("mountStartAgainChoice", () => {
         const app = new Hono();
         mountStartAgainChoice(
           app,
-          { roots: ROOTS, survey: ROUTE_SURVEY, ringInUse: {}, onFinished, choose, now: () => NOW },
+          {
+            roots: ROOTS,
+            survey: ROUTE_SURVEY,
+            environmentKeys: {},
+            onFinished,
+            choose,
+            now: () => NOW,
+          },
           render,
           log,
         );
@@ -1100,7 +1107,7 @@ describe("mountStartAgainChoice", () => {
       {
         roots: ROOTS,
         survey: ROUTE_SURVEY,
-        ringInUse: {},
+        environmentKeys: {},
         onFinished: () => Promise.reject(new Error("exit failed")),
         choose: MOVED,
         now: () => NOW,
@@ -1128,7 +1135,7 @@ describe("mountStartAgainChoice", () => {
         {
           roots: ROOTS,
           survey: ROUTE_SURVEY,
-          ringInUse: {},
+          environmentKeys: {},
           onFinished: () => Promise.resolve(),
           choose,
         },

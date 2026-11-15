@@ -2013,11 +2013,11 @@ describe("setup-app", () => {
   it.each([
     [
       "en-GB",
-      "This server's own settings set a vault key that is not the primary server's, so after joining it could not open the keys it holds. Nothing was changed. Remove the WAITRON_CREDENTIALS_KEY settings from this server, or set them to the primary server's, then restart it and join again.",
+      "This server's own settings give WAITRON_CREDENTIALS_KEY a value that is not the primary server's, so after joining it could not open its saved keys. Nothing was changed. Remove the WAITRON_CREDENTIALS_KEY settings from this server, or set them to the primary server's, then restart it and join again.",
     ],
     [
       "es-ES",
-      "La configuración propia de este servidor fija una clave de la caja fuerte que no es la del servidor principal, así que, tras unirse, no podría abrir las claves que guarda. No se ha cambiado nada. Quita los ajustes WAITRON_CREDENTIALS_KEY de este servidor o pon los del servidor principal; después reinícialo y vuelve a unirlo.",
+      "La configuración propia de este servidor da a WAITRON_CREDENTIALS_KEY un valor que no es el del servidor principal, así que, tras unirse, no podría abrir sus claves guardadas. No se ha cambiado nada. Quita los ajustes WAITRON_CREDENTIALS_KEY de este servidor o pon los del servidor principal; después reinícialo y vuelve a unirlo.",
     ],
   ] as const)(
     "says a server whose own settings set another vault key cannot join, and how to join (%s)",
@@ -2025,7 +2025,7 @@ describe("setup-app", () => {
       try {
         const adopt = vi
           .fn()
-          .mockRejectedValue({ code: "mirror.environment_key_differs", params: {}, status: 409 });
+          .mockRejectedValue({ code: "mirror.vault_key_differs", params: {}, status: 409 });
         const el = await mountSetupApp(stubApi({ adopt }));
         setLocale(locale);
         adoptRequest(el);

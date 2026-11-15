@@ -2504,10 +2504,10 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     expect(requestRestart).not.toHaveBeenCalled();
   });
 
-  it("maps a mirror.environment_key_differs from adopt to HTTP 409", async () => {
+  it("maps a mirror.vault_key_differs from adopt to HTTP 409", async () => {
     const app = new Hono();
     const adopt = vi.fn(async () => {
-      throw new AppError("mirror.environment_key_differs", {});
+      throw new AppError("mirror.vault_key_differs", {});
     });
     const { deps, requestRestart } = makeAdoptDeps({ adopt });
     mountSetup(app, deps, noopLog);
@@ -2515,7 +2515,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     const res = await postAdopt(app, adoptBody());
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({
-      error: { code: "mirror.environment_key_differs", params: {} },
+      error: { code: "mirror.vault_key_differs", params: {} },
     });
     await tick();
     expect(requestRestart).not.toHaveBeenCalled();

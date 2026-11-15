@@ -232,7 +232,7 @@ export async function adoptFromPrimary(
   const bundleEnv = keyRingEnv(bundle.credentialsRing);
   // The ring persisted below would be hidden at the next start, and the keys sealed under it lost.
   for (const [name, set] of Object.entries(keyRingVariables(deps.baseEnv))) {
-    if (set !== bundleEnv[name]) throw new AppError("mirror.environment_key_differs", {});
+    if (set !== bundleEnv[name]) throw new AppError("mirror.vault_key_differs", {});
   }
   const ring = loadKeyRing(bundleEnv);
   const recovery = await makeBreakGlassSecret();

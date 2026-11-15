@@ -38,7 +38,7 @@ async function movedBox() {
     choice: "move",
     listed: survey.digest,
     now: () => new Date(),
-    ringInUse: {},
+    environmentKeys: {},
   });
   expect(chosen.choice).toBe("move");
   expect(await readStartAgainMarker(attempt.roots.venueDir)).toBeNull();

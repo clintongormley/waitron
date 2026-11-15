@@ -1002,13 +1002,13 @@ describe("adoptFromPrimary (mirror adopt)", () => {
       { WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "2" },
     ],
   ] as const)(
-    "refuses mirror.environment_key_differs when the environment sets %s, writing nothing",
+    "refuses mirror.vault_key_differs when the environment sets %s, writing nothing",
     async (_case, baseEnv) => {
       const beforeFirstWrite = vi.fn(async () => {});
       const error = await adoptFromPrimary(deps({ baseEnv }), REQ, { beforeFirstWrite }).catch(
         (e: unknown) => e,
       );
-      expect(isAppError(error) && error.code).toBe("mirror.environment_key_differs");
+      expect(isAppError(error) && error.code).toBe("mirror.vault_key_differs");
       expect(isAppError(error) && error.params).toEqual({});
       expect(JSON.stringify(error)).not.toContain(BUNDLE_RING.key);
       expect(JSON.stringify(error)).not.toContain(OTHER_KEY);

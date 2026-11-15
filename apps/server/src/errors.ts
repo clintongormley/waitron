@@ -1356,7 +1356,7 @@ declare module "@waitron/shared" {
      * the main box's ring. That variable wins over `secrets.env` at every start, so the ring the join
      * writes would be hidden; nothing has been written. No params: a key is never echoed.
      */
-    "mirror.environment_key_differs": Record<string, never>;
+    "mirror.vault_key_differs": Record<string, never>;
     /**
      * A spare was asked to join a main box over https before the person confirmed that box's
      * authority certificate, or with something other than one authority certificate as the

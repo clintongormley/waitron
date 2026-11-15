@@ -1440,9 +1440,11 @@ folders (`writeStartAgainChoice`,
 the record it makes those folders and renames an empty probe folder from each source root into
 them; a probe that fails with `EXDEV` removes the empty folders it made and refuses
 `setup.start_again_set_aside_unavailable`, and Keep stays available. Then it writes the record,
-copies the box's key ring file `<state>/secrets.env`, when there is one, to
-`<state>/records/set-aside/<stem>/secrets.env` (`keepRingCopy`, the same file; the moved
-databases' sealed rows open only with that ring, and a later join replaces the box's own), renames
+copies the key ring the box uses to `<state>/records/set-aside/<stem>/secrets.env`
+(`keepRingCopy`: `<state>/secrets.env` as it is, when there is one; where the real environment sets
+any `WAITRON_CREDENTIALS_KEY*` variable non-empty, the file's variables with the environment's in
+their place, or the environment's alone with no `secrets.env`; the moved databases' sealed rows
+open only with that ring, and a later join replaces the box's own), renames
 the pieces (a database's main file last, never over anything) and runs
 A1042's finisher. Any failure after the record is written refuses
 `setup.start_again_move_unfinished`, keeping the cause as the error's `reason`: a Waitron

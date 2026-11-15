@@ -69,7 +69,7 @@ export interface RecoveryDeps {
     roots: { stateDir: string; venueDir: string };
     survey: Extract<StartAgainSurvey, { kind: "choice" }>;
     /** `keyRingVariables` of the real environment, for the Move's ring copy. */
-    ringInUse: Readonly<Record<string, string>>;
+    environmentKeys: Readonly<Record<string, string>>;
     onFinished: () => Promise<void>;
     choose?: typeof chooseStartAgainLeftovers;
     now?: () => Date;

@@ -508,7 +508,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
               startAgain: {
                 roots: admission.roots,
                 survey: admission.survey,
-                ringInUse: keyRingVariables(deps.baseEnv),
+                environmentKeys: keyRingVariables(deps.baseEnv),
                 onFinished: async () => {
                   exit(0);
                 },

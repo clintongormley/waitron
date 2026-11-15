@@ -213,7 +213,7 @@ it("after a Move and a completed join as a spare, the moved rows open with the r
     choice: "move",
     listed: survey.digest,
     now: () => new Date(),
-    ringInUse: {},
+    environmentKeys: {},
   });
   if (chosen.choice !== "move") throw new Error("expected a Move");
   const stemFolder = join(stateDir, chosen.setAside.state, "..");
@@ -246,7 +246,7 @@ const ENV_RING = {
 async function moveSealedUnder(
   attempt: Awaited<ReturnType<typeof startAgainAttempt>>,
   ring: KeyRing,
-  ringInUse: Record<string, string>,
+  environmentKeys: Record<string, string>,
 ) {
   const { stateDir, venueDir } = attempt.roots;
   const signing = generateNodeKeyPair();
@@ -270,7 +270,7 @@ async function moveSealedUnder(
     choice: "move",
     listed: survey.digest,
     now: () => new Date(),
-    ringInUse,
+    environmentKeys,
   });
   if (chosen.choice !== "move") throw new Error("expected a Move");
   return {

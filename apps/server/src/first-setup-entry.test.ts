@@ -579,7 +579,7 @@ async function moveRecordedNothingMoved() {
       choice: "move",
       listed: f.survey.digest,
       now: () => new Date(),
-      ringInUse: {},
+      environmentKeys: {},
       io: {
         lstat: fs.lstat,
         mkdir: fs.mkdir,
@@ -642,7 +642,7 @@ it("a keep record for the marker is refused setup.start_again_kept even after th
     choice: "keep",
     listed: f.survey.digest,
     now: () => new Date(),
-    ringInUse: {},
+    environmentKeys: {},
   });
   await rm(join(f.venueDir, "venue.db"));
   const before = await boxTree(f);

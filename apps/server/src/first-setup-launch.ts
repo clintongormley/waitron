@@ -153,7 +153,7 @@ export async function startServerOrFirstSetupResolution(
                 startAgain: {
                   roots: admission.roots,
                   survey: admission.survey,
-                  ringInUse: keyRingVariables(env),
+                  environmentKeys: keyRingVariables(env),
                   onFinished: async () => {
                     requestRestart();
                   },
