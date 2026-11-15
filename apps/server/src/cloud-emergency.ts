@@ -99,7 +99,7 @@ export function readEmergencyDisplay(
   }
   return {
     ...value,
-    prices: readPrices(value.prices),
+    prices: readPrices(value.prices, null),
   } as unknown as EmergencyDisplay;
 }
 export function fetchEmergencyDisplay(

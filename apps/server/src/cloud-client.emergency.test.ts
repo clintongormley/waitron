@@ -120,7 +120,7 @@ it("respects display Retry-After, retains dated hints for unknown state and drop
       const value = emergencyReply(
         r.installationId,
         r.venueId,
-        new Date(Date.now() + (mode === "older" ? -60000 : 30000)).toISOString(),
+        new Date(Date.now() + (mode === "older" ? -45000 : 30000)).toISOString(),
       );
       if (mode === "limited") {
         res.writeHead(429, { "retry-after": "120" });
