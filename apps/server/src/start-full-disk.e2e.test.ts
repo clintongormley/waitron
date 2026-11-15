@@ -1393,7 +1393,10 @@ describe("a start on a real full disk", () => {
       mkdirSync(join(stateDir, "tls"), { recursive: true });
       writeFileSync(join(stateDir, "tls", "ca.crt"), "unusable retained certificate");
       small.fill(0);
-      const d = entryDeps(stateDir, { spareBytes: 0 });
+      const served = vi.fn<(app: Hono, opts: RecoveryServeOptions) => Promise<unknown>>(() =>
+        Promise.resolve(),
+      );
+      const d = entryDeps(stateDir, { spareBytes: 0, serveRecovery: served });
       const source =
         mode === "source"
           ? await startServerOrFirstSetupResolution(
@@ -1413,8 +1416,8 @@ describe("a start on a real full disk", () => {
           : undefined;
       if (mode === "image") await runEntry(d);
       expect(d.startServer).not.toHaveBeenCalled();
-      expect(d.serveRecovery).toHaveBeenCalledOnce();
-      const [app, opts] = d.serveRecovery.mock.calls[0]!;
+      expect(served).toHaveBeenCalledOnce();
+      const [app, opts] = served.mock.calls[0]!;
       const listener = await serveRecovery(app, {
         ...opts,
         port: 0,
@@ -1475,7 +1478,11 @@ describe("a start on a real full disk", () => {
         );
       }
       const app = new Hono();
-      mountDeviceApi(app, { db, pairingMode: createPairingMode() }, () => {});
+      mountDeviceApi(
+        app,
+        { db, cfg: venue.cfg, secureCookies: false, pairingMode: createPairingMode() },
+        () => {},
+      );
       const dark = (at: Date) =>
         db.withWriteLock(async () => [
           ...(await stationScreensDark(db, at)),

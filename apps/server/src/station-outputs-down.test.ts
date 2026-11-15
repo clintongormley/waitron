@@ -828,7 +828,7 @@ it.each(["station", "pass", "pass_monitor"] as const)(
       { kind, stationIds: [f.grill], zoneIds: null },
     );
     const dark = (now: Date) =>
-      suite.db.withWriteLock(() =>
+      suite.db.withWriteLock(async () =>
         kind === "station" ? stationScreensDark(suite.db, now) : passScreensDark(suite.db, now),
       );
     expect(await dark(at)).toHaveLength(1);
