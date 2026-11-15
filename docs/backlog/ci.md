@@ -189,6 +189,15 @@ searched for beyond this file. The full log is kept at
 `~/waitron-campaign-l/ci-logs/pr2664-run42690313010-test-server-2.log`. On the next sighting keep
 that log too and locate what the hooks were waiting on before changing a deadline.
 
+**Server shard 19 ran silent to the job limit (PR #3342, 2026-11-15).** Run
+[43721700167](https://github.com/clintongormley/waitron/actions/runs/43721700167), job
+`132835178034`: the shard step started at 14:01:02Z and the job was cancelled at its 10-minute
+limit ("The job has exceeded the maximum execution time of 10m0s"); the jobs-logs API answered
+`BlobNotFound`, so no file progress survives. The same branch passed shard 19 in about two minutes on
+its two previous heads. Locally on macOS the same 60-file shard (`--shard=19/24`, CI's excludes and
+the file-progress reporter) passed every file. Unlike the browser shards, the server shard has no
+diagnostic process deadline, so a hang here leaves nothing once the log is lost.
+
 ## A sixth: a CI shard exited 1 with every test passing (PR #414)
 
 - **The exit-1 path closed by the
